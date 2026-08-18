@@ -1,0 +1,9 @@
+ICON 1.5.pdf
+node_modules/
+dist/
+dist-server/
+.env
+.env.local
+coverage/
+*.log
+.DS_Store
