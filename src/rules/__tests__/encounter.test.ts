@@ -86,8 +86,8 @@ describe('ICON encounter reducer', () => {
     const legacyActor = { ...hero } as Record<string, unknown>;
     for (const key of ['chapter', 'abilityIds', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn']) delete legacyActor[key];
     const migrated = migrateEncounter({ ...original, schemaVersion: 1, actors: { [hero.id]: legacyActor } });
-    expect(migrated.schemaVersion).toBe(2);
-    expect(migrated.actors[hero.id]).toMatchObject({ chapter: 1, abilityIds: [], usedAbilityIds: [], interruptUses: {}, interruptUsedThisTurn: false, slashedTriggeredThisTurn: false });
+    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.actors[hero.id]).toMatchObject({ chapter: 1, abilityIds: [], usedAbilityIds: [], interruptUses: {}, interruptUsedThisTurn: false, slashedTriggeredThisTurn: false, conditions: [], resources: {}, activeEffects: [], marks: [], stance: null, onBattlefield: true });
   });
 
   it('creates typed foes from source profiles and inherits variant abilities', () => {
@@ -99,6 +99,30 @@ describe('ICON encounter reducer', () => {
     expect(legend.hp).toBe(150);
     expect(legend.abilityIds).toHaveLength(10);
     expect(() => createFoeFromProfile('basic:basic-mob:300', { x: 0, y: 0 })).toThrow(/member-level state/);
+  });
+
+  it('executes a fully compiled foe source program as replayable atomic mutations', () => {
+    let state = createEncounter('Compiled foe ability');
+    const hero = actorFromCharacter(validCharacter(), { x: 1, y: 1 });
+    const soldier = createFoeFromProfile('basic:soldier:300', { x: 2, y: 1 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: soldier }).state;
+    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: soldier.id,
+      sourceId: 'basic:soldier:300:slash',
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+      attackTargetId: hero.id,
+    }, scriptedDice(12, 5));
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({ type: 'RULE_MUTATIONS_APPLIED', sourceId: 'basic:soldier:300:slash', tags: expect.arrayContaining(['attack']) });
+    expect(result.state.actors[hero.id]).toMatchObject({ hp: 33, statuses: ['slashed'] });
+    expect(result.state.actors[soldier.id]).toMatchObject({ actionsRemaining: 1, attackedThisTurn: true });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
   it('executes Interact and Rescue as costed basic abilities', () => {

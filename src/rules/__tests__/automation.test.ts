@@ -1,0 +1,160 @@
+import { describe, expect, it } from 'vitest';
+import { executeRuleProgram, RuleProgramViolation } from '../automation/runtime.js';
+import type { RuleActorView, RuleExecutionContext, RuleProgram, RuleRuntimeState } from '../automation/types.js';
+import { scriptedDice } from './fixtures.js';
+
+const actor = (id: string, side: RuleActorView['side'], x: number, overrides: Partial<RuleActorView> = {}): RuleActorView => ({
+  id,
+  side,
+  position: { x, y: 0 },
+  hp: 20,
+  maxHp: 40,
+  vitality: 10,
+  vigor: 0,
+  defense: 8,
+  armor: 0,
+  speed: 4,
+  dash: 2,
+  fray: 3,
+  damageDie: 8,
+  actions: 2,
+  size: 1,
+  defeated: false,
+  conditions: new Set(),
+  resources: {},
+  state: {},
+  ...overrides,
+});
+
+const state: RuleRuntimeState = {
+  round: 3,
+  actors: {
+    hero: actor('hero', 'heroes', 0, { resources: { aether: 4 } }),
+    ally: actor('ally', 'heroes', 1),
+    foe: actor('foe', 'foes', 2, { conditions: new Set(['slashed']) }),
+    far: actor('far', 'foes', 8),
+  },
+  entities: {},
+  terrainAt: () => new Set(),
+};
+
+const program: RuleProgram = {
+  schemaVersion: 1,
+  rulesVersion: '1.5',
+  id: 'program:test-strike',
+  sourceId: 'test-strike',
+  source: { page: 1, sectionId: 'test' },
+  name: 'Test Strike',
+  classification: 'encounter',
+  dependencies: [],
+  actions: [{
+    id: 'use',
+    name: 'Test Strike',
+    timing: 'use',
+    costs: [
+      { kind: 'action', amount: { kind: 'constant', value: 1 } },
+      { kind: 'aether', amount: { kind: 'constant', value: 2 } },
+    ],
+    tags: ['attack'],
+    range: { kind: 'constant', value: 3 },
+    area: null,
+    choices: [],
+    steps: [{
+      id: 'hit',
+      timing: 'use',
+      effects: [{
+        kind: 'damage',
+        target: { kind: 'attack-target' },
+        amount: { kind: 'add', values: [
+          { kind: 'damage-die', actor: { kind: 'self' }, count: { kind: 'constant', value: 1 } },
+          { kind: 'stat', actor: { kind: 'self' }, stat: 'fray' },
+        ] },
+        damageType: 'normal',
+      }, {
+        kind: 'if',
+        predicate: { kind: 'has-condition', target: { kind: 'attack-target' }, conditionId: 'slashed' },
+        then: [{ kind: 'condition', target: { kind: 'attack-target' }, conditionId: 'stunned', operation: 'apply' }],
+      }],
+    }],
+  }],
+};
+
+const context = (overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContext => ({
+  state,
+  actorId: 'hero',
+  sourceId: 'test-strike',
+  actionId: 'use',
+  timing: 'use',
+  input: {},
+  dice: scriptedDice(5),
+  attackTargetId: 'foe',
+  triggers: new Set(),
+  ...overrides,
+});
+
+describe('declarative ICON rule runtime', () => {
+  it('resolves attack, evasion, hit, critical, miss, and Exceed timing in the VM', () => {
+    const attackProgram: RuleProgram = {
+      ...program,
+      id: 'program:attack',
+      sourceId: 'attack',
+      actions: [{ ...program.actions[0], costs: [], steps: [{ id: 'attack', timing: 'use', effects: [{
+        kind: 'attack',
+        target: { kind: 'attack-target' },
+        boons: { kind: 'constant', value: 0 },
+        onHit: [{ kind: 'damage', target: { kind: 'attack-target' }, amount: { kind: 'constant', value: 5 }, damageType: 'normal' }, {
+          kind: 'if',
+          predicate: { kind: 'trigger', trigger: 'exceed' },
+          then: [{ kind: 'condition', target: { kind: 'attack-target' }, conditionId: 'shattered', operation: 'apply' }],
+        }],
+        onMiss: [{ kind: 'damage', target: { kind: 'attack-target' }, amount: { kind: 'constant', value: 3 }, damageType: 'normal' }],
+        onCritical: [{ kind: 'condition', target: { kind: 'attack-target' }, conditionId: 'stunned', operation: 'apply' }],
+      }] }] }],
+    };
+    const critical = executeRuleProgram(attackProgram, context({ sourceId: 'attack', dice: scriptedDice(20) }));
+    expect(critical.mutations).toMatchObject([
+      { kind: 'attack', d20: 20, hit: true, critical: true },
+      { kind: 'damage', amount: 5 },
+      { kind: 'condition', conditionId: 'shattered' },
+      { kind: 'condition', conditionId: 'stunned' },
+    ]);
+
+    const evasionState: RuleRuntimeState = { ...state, actors: { ...state.actors, foe: actor('foe', 'foes', 2, { conditions: new Set(['evasion']) }) } };
+    const evaded = executeRuleProgram(attackProgram, context({ sourceId: 'attack', state: evasionState, dice: scriptedDice(4) }));
+    expect(evaded.mutations).toMatchObject([{ kind: 'attack', d20: null, evasionRoll: 4, hit: false }, { kind: 'damage', amount: 3 }]);
+  });
+
+  it('emits deterministic costs, expressions, damage, and conditional effects', () => {
+    const result = executeRuleProgram(program, context());
+    expect(result.mutations).toEqual([
+      { kind: 'actions', sourceId: 'test-strike', actorId: 'hero', operation: 'spend', amount: 1 },
+      { kind: 'resource', sourceId: 'test-strike', actorId: 'hero', resourceId: 'aether', operation: 'spend', amount: 2, minimum: 0, maximum: null },
+      { kind: 'damage', sourceId: 'test-strike', sourceActorId: 'hero', actorId: 'foe', amount: 8, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false },
+      { kind: 'condition', sourceId: 'test-strike', sourceActorId: 'hero', actorId: 'foe', conditionId: 'stunned', operation: 'apply', potency: 'normal' },
+    ]);
+  });
+
+  it('validates actor input cardinality and range', () => {
+    const selectorProgram: RuleProgram = {
+      ...program,
+      id: 'program:selector',
+      sourceId: 'selector',
+      actions: [{ ...program.actions[0], steps: [{ id: 'move', timing: 'use', effects: [{ kind: 'move', target: { kind: 'input', key: 'target', relation: 'ally', minimum: 1, maximum: 1, range: { kind: 'constant', value: 2 } }, movement: 'shove', distance: { kind: 'constant', value: 2 }, directionInput: 'direction' }] }] }],
+    };
+    expect(() => executeRuleProgram(selectorProgram, context({ sourceId: 'selector', input: { actorIds: { target: ['far'] }, directions: { direction: { x: 1, y: 0 } } } }))).toThrow(RuleProgramViolation);
+    expect(executeRuleProgram(selectorProgram, context({ sourceId: 'selector', input: { actorIds: { target: ['ally'] }, directions: { direction: { x: 1, y: 0 } } } })).mutations.at(-1)).toMatchObject({ kind: 'move', actorId: 'ally', distance: 2 });
+  });
+
+  it('branches saves deterministically and emits the roll before its outcome', () => {
+    const saveProgram: RuleProgram = {
+      ...program,
+      id: 'program:save',
+      sourceId: 'save',
+      actions: [{ ...program.actions[0], costs: [], steps: [{ id: 'save', timing: 'use', effects: [{ kind: 'save', target: { kind: 'attack-target' }, onSuccess: [{ kind: 'damage', target: { kind: 'trigger-targets' }, amount: { kind: 'constant', value: 2 }, damageType: 'piercing' }], onFailure: [{ kind: 'condition', target: { kind: 'trigger-targets' }, conditionId: 'stunned', operation: 'apply' }] }] }] }],
+    };
+    const failed = executeRuleProgram(saveProgram, context({ sourceId: 'save', dice: scriptedDice(9) }));
+    expect(failed.mutations).toMatchObject([{ kind: 'save', roll: 9, success: false }, { kind: 'condition', actorId: 'foe', conditionId: 'stunned' }]);
+    const passed = executeRuleProgram(saveProgram, context({ sourceId: 'save', dice: scriptedDice(10) }));
+    expect(passed.mutations).toMatchObject([{ kind: 'save', roll: 10, success: true }, { kind: 'damage', actorId: 'foe', amount: 2 }]);
+  });
+});

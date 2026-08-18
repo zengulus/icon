@@ -1,8 +1,13 @@
 import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type EncounterActor, type EncounterCommand, type EncounterEvent, type EncounterState, type IconCharacter, type Position, type StatusId } from './types.js';
-import { findAbility, findJob } from './catalog.js';
+import { findAbility, findClass, findJob } from './catalog.js';
 import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
 import { randomDice, rollBoonOrCurse, rollDamage, type DiceSource } from './dice.js';
+import { compileRuleSourceUnit } from './automation/compiler.js';
+import { applyRuleMutations, encounterRuleState } from './automation/encounter-adapter.js';
+import { executeRuleProgram } from './automation/runtime.js';
+import { RULE_RESOLVERS } from './automation/resolvers.js';
+import { findRuleSourceUnit } from './source-units.js';
 
 export class RuleViolation extends Error {
   constructor(public readonly code: string, message: string) {
@@ -29,6 +34,8 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
     activeActorId: null,
     lastSide: null,
     partyResolve: 0,
+    entities: {},
+    terrainEffects: [],
     revision: 0,
     eventLog: [],
   };
@@ -37,7 +44,7 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
 export function migrateEncounter(input: unknown): EncounterState {
   if (!input || typeof input !== 'object') throw new RuleViolation('encounter.invalid', 'Encounter data must be an object.');
   const candidate = input as Omit<Partial<EncounterState>, 'schemaVersion'> & { schemaVersion?: number };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
     throw new RuleViolation('encounter.schema', `Unsupported encounter schema version: ${String(candidate.schemaVersion)}`);
   }
   const base = createEncounter(typeof candidate.name === 'string' ? candidate.name : 'Migrated encounter');
@@ -47,8 +54,19 @@ export function migrateEncounter(input: unknown): EncounterState {
       ...actor,
       id,
       foeProfileId: actor.foeProfileId ?? null,
+      roleId: actor.roleId ?? (actor.foeProfileId ? findFoeProfile(actor.foeProfileId)?.roleId ?? null : null),
+      actorKind: actor.actorKind ?? (actor.side === 'heroes' ? 'hero' : 'foe'),
+      size: actor.size ?? 1,
       chapter: actor.chapter ?? 1,
       abilityIds: [...(actor.abilityIds ?? [])],
+      conditions: [...(actor.conditions ?? [])],
+      resources: { ...(actor.resources ?? {}) },
+      ruleState: { ...(actor.ruleState ?? {}) },
+      activeEffects: [...(actor.activeEffects ?? [])],
+      marks: [...(actor.marks ?? [])],
+      stance: actor.stance ? { ...actor.stance } : null,
+      traitIds: [...(actor.traitIds ?? [])],
+      onBattlefield: actor.onBattlefield ?? true,
       usedAbilityIds: [...(actor.usedAbilityIds ?? [])],
       interruptUses: { ...(actor.interruptUses ?? {}) },
       interruptUsedThisTurn: actor.interruptUsedThisTurn ?? false,
@@ -62,6 +80,8 @@ export function migrateEncounter(input: unknown): EncounterState {
     rulesVersion: RULES_VERSION,
     grid: { ...base.grid, ...(candidate.grid ?? {}), terrain: [...(candidate.grid?.terrain ?? [])] },
     actors,
+    entities: clone(candidate.entities ?? {}),
+    terrainEffects: clone(candidate.terrainEffects ?? []),
     eventLog: [...(candidate.eventLog ?? [])],
   };
 }
@@ -69,6 +89,7 @@ export function migrateEncounter(input: unknown): EncounterState {
 export function actorFromCharacter(character: IconCharacter, position: Position, controllerId: string | null = null): EncounterActor {
   const stats = characterStats(character);
   const job = character.primaryJobId ? findJob(character.primaryJobId) : undefined;
+  const jobClass = job ? findClass(job.classId) : undefined;
   if (!stats || !job) throw new RuleViolation('character.job-required', 'A valid primary Job is required before entering combat.');
   return {
     id: `actor:${character.id}`,
@@ -77,6 +98,9 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     controllerId,
     characterId: character.id,
     foeProfileId: null,
+    roleId: null,
+    actorKind: 'hero',
+    size: 1,
     tokenUrl: character.portraitUrl,
     classId: job.classId,
     chapter: stats.chapter as 1 | 2 | 3,
@@ -95,6 +119,14 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     damageDie: stats.damageDie,
     basicAttackRange: stats.basicAttackRange,
     statuses: [],
+    conditions: [],
+    resources: { aether: 0, vigilance: 0, blessing: 0, combo: 0, 'personal-resolve': character.personalResolve },
+    ruleState: {},
+    activeEffects: [],
+    marks: [],
+    stance: null,
+    traitIds: [...(jobClass?.traits.map(({ id }) => id) ?? []), ...job.traits.map(({ id }) => id)],
+    onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
     standardMoveUsed: false,
@@ -115,6 +147,9 @@ export function createFoe(name: string, position: Position): EncounterActor {
     controllerId: null,
     characterId: null,
     foeProfileId: null,
+    roleId: null,
+    actorKind: 'foe',
+    size: 1,
     tokenUrl: '',
     classId: 'foe',
     chapter: 1,
@@ -133,6 +168,14 @@ export function createFoe(name: string, position: Position): EncounterActor {
     damageDie: 8,
     basicAttackRange: 4,
     statuses: [],
+    conditions: [],
+    resources: {},
+    ruleState: {},
+    activeEffects: [],
+    marks: [],
+    stance: null,
+    traitIds: [],
+    onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
     standardMoveUsed: false,
@@ -155,16 +198,27 @@ export function foeAbilityIds(profileId: string): string[] {
   return [...new Set([...inherited, ...profile.abilities.map(({ id }) => id), ...components])];
 }
 
+export function foeTraitIds(profileId: string): string[] {
+  const profile = findFoeProfile(profileId);
+  if (!profile) throw new RuleViolation('foe.profile-unknown', 'That foe profile does not exist in ICON 1.5.');
+  const inherited = profile.kind === 'variant' && profile.parentId ? foeTraitIds(profile.parentId) : [];
+  const components = profile.kind === 'legend'
+    ? FOE_PROFILES.filter(({ parentId }) => parentId === profile.id).flatMap(({ id }) => foeTraitIds(id))
+    : [];
+  return [...new Set([...inherited, ...profile.traits.map(({ id }) => id), ...components])];
+}
+
 export function createFoeFromProfile(profileId: string, position: Position, playerCount = 4, chapter: 1 | 2 | 3 = 1): EncounterActor {
   const profile = findFoeProfile(profileId);
   if (!profile) throw new RuleViolation('foe.profile-unknown', 'That foe profile does not exist in ICON 1.5.');
+  if (chapter < profile.minimumChapter) throw new RuleViolation('foe.chapter', `${profile.name} requires Chapter ${profile.minimumChapter}.`);
   const role = findFoeRole(profile.roleId);
   if (!role || profile.roleId === 'special') throw new RuleViolation('foe.role-special', 'Special foe components require a parent profile.');
   if (role.id === 'mob') throw new RuleViolation('foe.mob-unsupported', 'Mob profiles require member-level state that is not executable yet.');
 
   const listedHp = Number(profile.traitsText.match(/\bHP\s*:\s*(\d+)/i)?.[1] ?? 0);
   const roleHp = role.id === 'legend' ? Math.max(role.minimumHp ?? 0, (role.hpPerPlayer ?? 0) * Math.max(1, playerCount)) : role.hp ?? 1;
-  const maxHp = listedHp || (profile.kind === 'elite' ? roleHp * 2 : roleHp);
+  const maxHp = profile.stats.hp ?? (listedHp || (profile.kind === 'elite' ? roleHp * 2 : roleHp));
   return {
     id: `foe:${makeId()}`,
     name: profile.name,
@@ -172,24 +226,35 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     controllerId: null,
     characterId: null,
     foeProfileId: profile.id,
+    roleId: profile.roleId,
+    actorKind: 'foe',
+    size: profile.stats.size ?? 1,
     tokenUrl: '',
     classId: 'foe',
     chapter,
     abilityIds: foeAbilityIds(profile.id),
     position,
-    vitality: role.vitality ?? Math.max(1, Math.ceil(maxHp / 4)),
+    vitality: profile.stats.vitality ?? role.vitality ?? Math.max(1, Math.ceil(maxHp / 4)),
     baseMaxHp: maxHp,
     hp: maxHp,
     vigor: 0,
     wounds: 0,
-    defense: role.defense,
-    armor: role.id === 'heavy' ? 2 : 0,
-    speed: role.speed,
-    dash: role.dash,
-    fray: role.fray,
-    damageDie: role.damageDie,
+    defense: profile.stats.defense ?? role.defense,
+    armor: profile.stats.armor ?? (role.id === 'heavy' ? 2 : 0),
+    speed: profile.stats.speed ?? role.speed,
+    dash: profile.stats.dash ?? role.dash,
+    fray: profile.stats.fray ?? role.fray,
+    damageDie: profile.stats.damageDie ?? role.damageDie,
     basicAttackRange: 1,
     statuses: [],
+    conditions: [],
+    resources: {},
+    ruleState: { phaseId: profile.phases[0]?.id ?? null },
+    activeEffects: [],
+    marks: [],
+    stance: null,
+    traitIds: foeTraitIds(profile.id),
+    onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
     standardMoveUsed: false,
@@ -224,8 +289,9 @@ function nextActor(state: EncounterState, current: EncounterActor) {
   return { actor: preferred, round: state.round + 1 };
 }
 
-function saveStatuses(statuses: StatusId[], dice: DiceSource) {
-  return statuses.map((status) => {
+function saveStatuses(actor: EncounterActor, dice: DiceSource, excluded: StatusId[] = []) {
+  const ongoing = new Set(actor.conditions.filter(({ potency }) => potency === 'plus').map(({ id }) => id));
+  return actor.statuses.filter((status) => !excluded.includes(status) && !ongoing.has(status)).map((status) => {
     const roll = dice.die(20);
     return { status, roll, cleared: roll >= 10 };
   });
@@ -472,7 +538,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     const acting = intermediate.actors[actor.id];
     if (!acting.defeated) {
       const next = nextActor(intermediate, acting);
-      events.push({ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(acting.statuses.filter((status) => status !== 'stunned'), dice) });
+      events.push({ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(acting, dice, ['stunned']) });
     }
   }
   return events;
@@ -511,6 +577,52 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
     case 'USE_ABILITY':
       events = abilityEvents(state, command, dice);
       break;
+    case 'EXECUTE_RULE': {
+      if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
+      const actor = state.actors[command.actorId];
+      if (!actor || actor.defeated) throw new RuleViolation('actor.unavailable', 'That actor cannot execute a rule program.');
+      if (command.timing === 'use' && state.activeActorId !== actor.id) throw new RuleViolation('turn.not-active-actor', 'Only the active actor can use this rule action.');
+      if (actor.usedAbilityIds.includes(command.sourceId) && command.timing === 'use') throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
+      const unit = findRuleSourceUnit(command.sourceId);
+      if (!unit) throw new RuleViolation('rule.source-unknown', 'That ICON source rule does not exist.');
+      if ((unit.kind === 'job-ability' || unit.kind === 'foe-ability') && !actor.abilityIds.includes(unit.id)) throw new RuleViolation('rule.not-owned', `${unit.name} is not available to this actor.`);
+      if ((unit.kind === 'class-trait' || unit.kind === 'job-trait' || unit.kind === 'foe-trait') && !actor.traitIds.includes(unit.id)) throw new RuleViolation('rule.not-owned', `${unit.name} is not active on this actor.`);
+      const compilation = compileRuleSourceUnit(unit);
+      if (compilation.unsupportedClauses.length > 0) throw new RuleViolation('rule.not-executable', `${unit.name} still has ${compilation.unsupportedClauses.length} unsupported source clause${compilation.unsupportedClauses.length === 1 ? '' : 's'}.`);
+      const action = compilation.program.actions.find(({ id, timing }) => id === command.actionId && timing === command.timing);
+      if (!action) throw new RuleViolation('rule.action-unknown', 'That rule action is not available at this timing.');
+      if (action.tags.includes('attack') && actor.attackedThisTurn) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
+      if (command.attackTargetId) {
+        const target = state.actors[command.attackTargetId];
+        if (!target || target.defeated || !target.onBattlefield) throw new RuleViolation('attack.invalid-target', 'That rule target is unavailable.');
+        if (action.tags.includes('attack') && target.side === actor.side) throw new RuleViolation('attack.invalid-target', 'Attacks can only target foes.');
+        const maximumRange = action.range?.kind === 'constant' ? action.range.value : 1;
+        if (distance(actor.position, target.position) > maximumRange) throw new RuleViolation('ability.range', `${target.name} is outside this rule action’s range.`);
+        if (!hasLineOfSight(state, actor.position, target.position)) throw new RuleViolation('ability.line-of-sight', `${target.name} is outside line of sight.`);
+      }
+      const result = executeRuleProgram(compilation.program, {
+        state: encounterRuleState(state),
+        actorId: actor.id,
+        sourceId: unit.id,
+        actionId: command.actionId,
+        timing: command.timing,
+        input: command.input,
+        dice,
+        ...(command.attackTargetId ? { attackTargetId: command.attackTargetId } : {}),
+        ...(command.triggerSourceId ? { triggerSourceId: command.triggerSourceId } : {}),
+        ...(command.triggerTargetIds ? { triggerTargetIds: command.triggerTargetIds } : {}),
+        triggers: new Set(command.triggers ?? []),
+      }, RULE_RESOLVERS);
+      for (const mutation of result.mutations) {
+        if (mutation.kind === 'actions' && mutation.operation === 'spend' && mutation.amount > actor.actionsRemaining) throw new RuleViolation('action.insufficient', `${unit.name} costs more actions than are available.`);
+        if (mutation.kind === 'resource' && mutation.operation === 'spend') {
+          const available = mutation.resourceId === 'resolve' ? state.partyResolve + (actor.resources['personal-resolve'] ?? 0) : actor.resources[mutation.resourceId] ?? 0;
+          if (mutation.amount > available) throw new RuleViolation('resource.insufficient', `${unit.name} requires ${mutation.amount} ${mutation.resourceId}.`);
+        }
+      }
+      events = [{ type: 'RULE_MUTATIONS_APPLIED', actorId: actor.id, sourceId: unit.id, actionId: command.actionId, timing: command.timing, tags: [...action.tags], mutations: result.mutations }];
+      break;
+    }
     case 'INTERACT': {
       const actor = assertActive(state, command.actorId);
       if (actor.actionsRemaining < 1) throw new RuleViolation('action.insufficient', 'Interact costs one action.');
@@ -534,7 +646,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const actor = assertActive(state, command.actorId);
       if (actor.actionsRemaining < 2) throw new RuleViolation('action.insufficient', 'Recover costs two actions.');
       if (actor.usedAbilityIds.includes('basic:recover')) throw new RuleViolation('ability.repeat', 'Recover cannot be repeated during the same turn.');
-      const saves = saveStatuses(actor.statuses, dice);
+      const saves = saveStatuses(actor, dice);
       const cap = actor.vitality;
       const vigorGained = actor.statuses.includes('shattered') ? 0 : Math.max(0, Math.min(cap, actor.vigor + (actor.hp <= actor.baseMaxHp / 2 ? cap : 4)) - actor.vigor);
       events = [{ type: 'ACTOR_RECOVERED', actorId: actor.id, vigorGained, saves }];
@@ -551,7 +663,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
     case 'END_TURN': {
       const actor = assertActive(state, command.actorId);
       const next = nextActor(state, actor);
-      events = [{ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(actor.statuses, dice) }];
+      events = [{ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(actor, dice) }];
       break;
     }
     case 'END_ENCOUNTER':
@@ -565,7 +677,16 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
     if (!actor.defeated) {
       const next = nextActor(intermediate, actor);
       events.push({ type: 'STATUS_REMOVED', actorId: actor.id, status: 'stunned' });
-      events.push({ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(actor.statuses.filter((status) => status !== 'stunned'), dice) });
+      events.push({ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(actor, dice, ['stunned']) });
+    }
+  }
+  if (command.type === 'EXECUTE_RULE' && command.timing === 'use') {
+    const intermediate = applyEvents(state, events);
+    const actor = intermediate.actors[command.actorId];
+    if (actor && !actor.defeated && (state.actors[command.actorId]?.statuses.includes('stunned') || actor.ruleState['end-turn-requested'] === true)) {
+      const next = nextActor(intermediate, actor);
+      if (actor.statuses.includes('stunned')) events.push({ type: 'STATUS_REMOVED', actorId: actor.id, status: 'stunned' });
+      events.push({ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(actor, dice, ['stunned']) });
     }
   }
   return { state: applyEvents(state, events), events };
@@ -590,6 +711,13 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         state.round = 1;
         state.partyResolve = 1;
         state.activeActorId = event.firstActorId;
+        for (const actor of Object.values(state.actors)) {
+          actor.resources.aether = 0;
+          actor.resources.combo = 0;
+          actor.resources.blessing = 0;
+          actor.ruleState['damage-immune'] = false;
+          if (actor.traitIds.includes('stalwart:trait:armor-2')) actor.armor = Math.max(2, actor.armor);
+        }
         break;
       case 'ACTOR_MOVED': {
         const actor = state.actors[event.actorId];
@@ -642,6 +770,14 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         }
         break;
       }
+      case 'RULE_MUTATIONS_APPLIED': {
+        applyRuleMutations(state, event.mutations);
+        const actor = state.actors[event.actorId];
+        if (event.timing === 'use' || event.timing === 'interrupt') actor.usedAbilityIds.push(event.sourceId);
+        actor.attackedThisTurn ||= event.tags.includes('attack');
+        if (event.timing === 'interrupt') actor.interruptUsedThisTurn = true;
+        break;
+      }
       case 'ACTOR_INTERACTED': {
         const actor = state.actors[event.actorId];
         actor.actionsRemaining -= 1;
@@ -690,6 +826,12 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
       case 'TURN_ENDED': {
         const actor = state.actors[event.actorId];
         actor.statuses = actor.statuses.filter((status) => !event.saves.some((save) => save.status === status && save.cleared));
+        actor.conditions = actor.conditions.filter((condition) => !event.saves.some((save) => save.status === condition.id && save.cleared && condition.potency !== 'plus'));
+        actor.statuses = actor.statuses.filter((status) => status !== 'hatred');
+        actor.conditions = actor.conditions.filter(({ id }) => id !== 'hatred');
+        actor.ruleState['end-turn-requested'] = false;
+        if (actor.traitIds.includes('stalwart:trait:fortify')) actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
+        if (actor.conditions.some(({ id }) => id === 'regeneration') && actor.hp <= actor.baseMaxHp / 2 && !actor.statuses.includes('shattered')) actor.vigor = Math.min(actor.vitality, actor.vigor + 4);
         actor.turnTaken = true;
         if (event.round > state.round) {
           for (const candidate of Object.values(state.actors)) candidate.turnTaken = false;
@@ -700,10 +842,12 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         next.standardMoveUsed = false;
         next.attackedThisTurn = false;
         next.interruptUses = {};
+        if (next.traitIds.includes('wright:trait:aether')) next.resources.aether = (next.resources.aether ?? 0) + 1;
         for (const candidate of Object.values(state.actors)) {
           candidate.usedAbilityIds = [];
           candidate.interruptUsedThisTurn = false;
           candidate.slashedTriggeredThisTurn = false;
+          candidate.ruleState['damage-immune'] = false;
         }
         state.round = event.round;
         state.activeActorId = event.nextActorId;
@@ -717,7 +861,15 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         for (const actor of Object.values(state.actors)) {
           actor.vigor = 0;
           actor.statuses = [];
+          actor.conditions = actor.conditions.filter(({ duration }) => duration?.kind === 'expedition');
+          actor.activeEffects = actor.activeEffects.filter(({ duration }) => duration.kind === 'expedition');
+          actor.marks = [];
+          actor.stance = null;
+          actor.resources.aether = 0;
+          actor.resources.combo = 0;
+          actor.resources.blessing = 0;
         }
+        state.entities = Object.fromEntries(Object.entries(state.entities).filter(([, entity]) => entity.type === 'object'));
         break;
     }
     state.revision += 1;

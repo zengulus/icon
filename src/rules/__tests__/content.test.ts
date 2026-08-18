@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import sourcebook from '../../content/generated/icon-1.5.json';
 import { ABILITIES, BONDS, JOBS, PHASE_TWO_READY, RELICS, RULES_COVERAGE } from '../catalog.js';
 import { FOE_ABILITIES, FOE_PROFILES, FOE_ROLES } from '../foes.js';
+import { CAMP_FIXTURES, GENERAL_TROPHIES, REWARD_RULES } from '../rewards.js';
+import { auditRuleSourceUnits } from '../source-units.js';
 
 describe('ICON 1.5 content artifact', () => {
   it('contains the complete extracted source and required credit', () => {
@@ -17,6 +19,9 @@ describe('ICON 1.5 content artifact', () => {
     expect(BONDS.flatMap(({ powerDetails }) => powerDetails)).toHaveLength(120);
     expect(BONDS.find(({ id }) => id === 'mender')?.effort).toBe(6);
     expect(JOBS).toHaveLength(16);
+    expect(JOBS.flatMap(({ traits }) => traits)).toHaveLength(65);
+    expect(JOBS.every(({ limitBreak }) => limitBreak && limitBreak.resolveCost > 0)).toBe(true);
+    expect(JOBS.filter(({ summonRulesText }) => summonRulesText)).toHaveLength(6);
     expect(new Set(JOBS.map(({ id }) => id)).size).toBe(JOBS.length);
     expect(new Set(ABILITIES.map(({ id }) => id)).size).toBe(ABILITIES.length);
     expect(ABILITIES).toHaveLength(144);
@@ -40,7 +45,7 @@ describe('ICON 1.5 content artifact', () => {
   it('structures every color-coded foe role, profile, variant, and legend component', () => {
     expect(FOE_ROLES.map(({ id }) => id)).toEqual(['mob', 'heavy', 'skirmisher', 'leader', 'artillery', 'legend']);
     expect(FOE_ROLES.find(({ id }) => id === 'legend')).toMatchObject({ hpPerPlayer: 50, minimumHp: 100, defense: 8 });
-    expect(FOE_PROFILES).toHaveLength(445);
+    expect(FOE_PROFILES).toHaveLength(449);
     expect(FOE_ABILITIES).toHaveLength(1365);
     expect(new Set(FOE_PROFILES.map(({ id }) => id)).size).toBe(FOE_PROFILES.length);
     expect(new Set(FOE_ABILITIES.map(({ id }) => id)).size).toBe(FOE_ABILITIES.length);
@@ -53,5 +58,34 @@ describe('ICON 1.5 content artifact', () => {
     const bouncer = FOE_PROFILES.find(({ id }) => id === 'scavenger:bouncer:367');
     expect(bouncer).toMatchObject({ kind: 'variant', parentId: 'scavenger:scrapper:367', abilities: [] });
     expect(FOE_PROFILES.find(({ name }) => name === 'I. RIDER OF THE PRIMAL STORM')).toMatchObject({ kind: 'legend', roleId: 'legend' });
+    expect(FOE_PROFILES.filter(({ id }) => [
+      'folk:chronicler:315',
+      'folk:churner:316',
+      'folk:yeokin:322',
+      'lowlander:special-mechanics-blightland-survivalists:428',
+    ].includes(id))).toHaveLength(4);
+  });
+
+  it('structures encounter rewards and audits every traceable mechanical source unit', () => {
+    expect(GENERAL_TROPHIES).toHaveLength(20);
+    expect(CAMP_FIXTURES).toHaveLength(16);
+    expect(CAMP_FIXTURES.flatMap(({ features }) => features)).toHaveLength(87);
+    expect(REWARD_RULES).toHaveLength(9);
+    expect(GENERAL_TROPHIES.every(({ rulesText, source }) => rulesText && source.page >= 99)).toBe(true);
+
+    const audit = auditRuleSourceUnits();
+    expect(audit.total).toBe(3261);
+    expect(audit.byKind).toMatchObject({
+      core: 56,
+      'job-ability': 144,
+      talent: 288,
+      mastery: 144,
+      'foe-ability': 1365,
+      trophy: 68,
+      'camp-fixture': 16,
+    });
+    expect(audit.duplicateIds).toEqual([]);
+    expect(audit.emptyRules).toEqual([]);
+    expect(audit.invalidSources).toEqual([]);
   });
 });

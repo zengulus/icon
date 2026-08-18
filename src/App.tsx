@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { CharacterProvider } from './context/CharacterContext.js';
 import { AppShell } from './components/AppShell.js';
 import { Dashboard } from './pages/Dashboard.js';
@@ -20,7 +20,8 @@ export function App() {
             <Route index element={<Dashboard />} />
             <Route path="characters/:id" element={<CharacterEditor />} />
             <Route path="compendium" element={<Suspense fallback={loading}><Compendium /></Suspense>} />
-            <Route path="sandbox" element={<Suspense fallback={loading}><Sandbox /></Suspense>} />
+            <Route path="lab" element={<Suspense fallback={loading}><Sandbox forceEnabled labMode /></Suspense>} />
+            <Route path="sandbox" element={<Navigate to="/lab" replace />} />
             <Route path="campaigns" element={<Suspense fallback={loading}><Campaigns /></Suspense>} />
           </Route>
         </Routes>

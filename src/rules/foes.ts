@@ -45,9 +45,32 @@ export const FOE_PROFILES: readonly FoeProfileDefinition[] = foes.profiles.map((
   roleId: profile.roleId as FoeRoleId,
   kind: profile.kind as FoeKind,
   source: { page: profile.source.page, sectionId: profile.source.sectionId },
+  minimumChapter: profile.minimumChapter as 1 | 2 | 3,
+  stats: { ...profile.stats, damageDie: profile.stats.damageDie as 6 | 8 | 10 | undefined },
+  traits: profile.traits.map((trait) => ({
+    ...trait,
+    source: { page: trait.source.page, sectionId: trait.source.sectionId },
+    automation: 'structured' as const,
+  })),
+  phases: profile.phases.map((phase) => ({
+    ...phase,
+    source: { page: phase.source.page, sectionId: phase.source.sectionId },
+  })),
+  chapterRules: profile.chapterRules.map((rule) => ({
+    ...rule,
+    chapter: rule.chapter as 1 | 2 | 3,
+    source: { page: rule.source.page, sectionId: rule.source.sectionId },
+  })),
+  trophies: profile.trophies.map((trophy) => ({
+    ...trophy,
+    uses: { ...trophy.uses, period: trophy.uses.period as 'use' | 'combat' | 'expedition' },
+    source: { page: trophy.source.page, sectionId: trophy.source.sectionId },
+    automation: 'structured' as const,
+  })),
   abilities: profile.abilities.map((ability) => ({
     ...ability,
     cost: { ...ability.cost, kind: ability.cost.kind as FoeProfileDefinition['abilities'][number]['cost']['kind'] },
+    source: { page: ability.source.page, sectionId: ability.source.sectionId },
   })),
   automation: 'structured',
 }));

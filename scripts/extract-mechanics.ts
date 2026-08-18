@@ -46,6 +46,23 @@ interface ParsedRelic {
   aspectQuest: string;
 }
 
+interface ParsedLimitBreak {
+  id: string;
+  name: string;
+  resolveCost: number;
+  cost: { kind: 'action' | 'free'; value: number };
+  range: number | null;
+  tags: string[];
+  rulesText: string;
+}
+
+interface ParsedTrait {
+  id: string;
+  name: string;
+  sourcePage: number;
+  rulesText: string;
+}
+
 interface ParsedBond {
   id: string;
   name: string;
@@ -85,11 +102,30 @@ const jobSeeds = [
   ['stormbender', 'Stormbender', 'wright', 230, 236],
 ] as const;
 
+const jobTraitNames: Record<string, readonly string[]> = {
+  bastion: ['Strive', 'Press the Advantage', 'Bull’s Strength', 'Shieldmaster'],
+  'demon-slayer': ['Demon Edge', 'Demon Strength', 'Hissatsu', 'True Horn'],
+  colossus: ['Furious Berserk', 'Wolfheart', 'Pulverize', 'Great Leap'],
+  knave: ['Martial Master', 'Blackheart', 'Taunt', 'Spite'],
+  fool: ['Tumbling', 'Curse of Chaos', 'Cheap Trick', 'Stack Dice'],
+  freelancer: ['Bound Spirit', 'Aether Shot', 'Trigrammaton', 'Astral Binding'],
+  shade: ['Shadow Arts', 'Underworld', 'Darkside', 'Meld'],
+  warden: ['Beast Master', 'Path of the Aesi', 'Ambush master', 'Green Kenning'],
+  chanter: ['Blessing of Faith', 'Songweave', 'Divine Grace', 'Uplift'],
+  harvester: ['Blessing of Rebirth', 'Mark of Tsumi', 'Gardener of Kin', 'Balance'],
+  sealer: ['Blessing of War', 'Mantra of Sealing', 'Godly Smite', 'Martial Arts'],
+  seer: ['The Wheel of Fate', 'Skein', 'Foretell', 'Bend Fate', 'Karma'],
+  enochian: ['Inner Furnace', 'Embersoul', 'Phoenix Rage', 'Soulfire'],
+  geomancer: ['Aftershock', 'Resonance', 'Orogenic Rage', 'Stone Double'],
+  spellblade: ['Aether Deflection', 'Conqueror’s Edge', 'Storm Hilt Rage', 'Klingenkunst'],
+  stormbender: ['Selkie', 'Dash on the Rocks', 'Sea Legs', 'Pelagic Rage'],
+};
+
 const knownTags = [
-  'attack', 'true strike', 'pierce', 'unerring', 'combo', 'stance', 'aura', 'mark', 'multimark', 'summon',
+  'attack', 'auto hit', 'true strike', 'pierce', 'divine', 'unerring', 'combo', 'stance', 'aura', 'mark', 'multimark', 'summon',
   'terrain effect', 'end turn', 'delay', 'rebound', 'line', 'arc', 'burst', 'small blast', 'medium blast',
-  'large blast', 'self', 'ally', 'foe', 'character', 'object', 'space', 'range', 'heroic', 'charge', 'exceed',
-  'collide', 'comeback', 'finishing blow', 'slay', 'chain reaction', 'infuse', 'gamble',
+  'large blast', 'self', 'ally', 'foe', 'character', 'object', 'space', 'range', 'sacrifice', 'power die',
+  'heroic', 'charge', 'exceed', 'collide', 'comeback', 'finishing blow', 'slay', 'chain reaction', 'infuse', 'gamble',
 ];
 
 const slug = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -228,14 +264,52 @@ function parseJob(lines: LayoutLine[], seed: typeof jobSeeds[number]) {
   }
   flush();
 
-  const prelude = relevant.slice(0, abilityStart >= 0 ? abilityStart : relevant.length).map((line) => line.text).join(' ').replace(/\s+/g, ' ').trim();
-  const traitsIndex = prelude.search(/\bTraits?:/i);
-  const limitIndex = prelude.search(/\bLIMIT BREAK:/i);
-  const traitsText = traitsIndex >= 0 ? prelude.slice(traitsIndex, limitIndex > traitsIndex ? limitIndex : undefined).trim() : '';
-  const limitText = limitIndex >= 0 ? prelude.slice(limitIndex).trim() : '';
+  const preludeLines = relevant.slice(0, abilityStart >= 0 ? abilityStart : relevant.length);
+  const traitsLineIndex = preludeLines.findIndex((line) => /^traits?:?(?:\s|$)/i.test(line.text));
+  const limitLineIndex = preludeLines.findIndex((line) => /^limit break:/i.test(line.text));
+  const summonLineIndex = preludeLines.findIndex((line, index) => index > limitLineIndex && /^summons\b/i.test(line.text));
+  const joinLines = (values: LayoutLine[]) => values.map((line) => line.text).join(' ').replace(/\s+/g, ' ').trim();
+  const traitsText = traitsLineIndex >= 0
+    ? joinLines(preludeLines.slice(traitsLineIndex, limitLineIndex > traitsLineIndex ? limitLineIndex : undefined))
+    : '';
+  const traitNames = jobTraitNames[id] ?? [];
+  const traitMatches = traitNames.map((traitName) => {
+    const expression = new RegExp(`${traitName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(?:\\([^)]*\\))?\\s*:`, 'i');
+    const match = expression.exec(traitsText);
+    return match ? { name: traitName, index: match.index, bodyStart: match.index + match[0].length } : null;
+  }).filter((value): value is NonNullable<typeof value> => value !== null).sort((left, right) => left.index - right.index);
+  const traits: ParsedTrait[] = traitMatches.map((match, index) => {
+    const sourceLine = preludeLines.find((line) => new RegExp(`^${match.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(line.text));
+    return {
+      id: `${id}:trait:${slug(match.name)}`,
+      name: match.name,
+      sourcePage: sourceLine?.page ?? startPage,
+      rulesText: traitsText.slice(match.bodyStart, traitMatches[index + 1]?.index ?? traitsText.length).trim(),
+    };
+  });
+  const limitText = limitLineIndex >= 0
+    ? joinLines(preludeLines.slice(limitLineIndex, summonLineIndex > limitLineIndex ? summonLineIndex : undefined))
+    : '';
+  const summonRulesText = summonLineIndex >= 0 ? joinLines(preludeLines.slice(summonLineIndex)) : '';
   const limitName = limitText.match(
     /^LIMIT BREAK:\s*(.*?)(?=\s+(?:(?:\d+\s+resolve)|(?:\d+\s+actions?)|(?:free\s+action)|(?:interrupt\s+\d+)))/i,
   )?.[1].trim() ?? '';
+  let limitBreak: ParsedLimitBreak | null = null;
+  if (limitText) {
+    const action = limitText.match(/\b(\d+)\s+actions?\b/i);
+    const tagWindow = limitText.slice(0, 220).toLocaleLowerCase();
+    limitBreak = {
+      id: `${id}:limit-break`,
+      name: limitName,
+      resolveCost: Number(limitText.match(/\b(\d+)\s+resolve\b/i)?.[1] ?? 0),
+      cost: /\bfree\s+action\b/i.test(tagWindow)
+        ? { kind: 'free', value: 0 }
+        : { kind: 'action', value: Number(action?.[1] ?? 0) },
+      range: Number(limitText.match(/\brange\s+(\d+)\b/i)?.[1]) || null,
+      tags: knownTags.filter((tag) => new RegExp(`\\b${tag.replace(' ', '\\s+')}\\b`, 'i').test(tagWindow)),
+      rulesText: limitText,
+    };
+  }
   return {
     id,
     name,
@@ -243,7 +317,9 @@ function parseJob(lines: LayoutLine[], seed: typeof jobSeeds[number]) {
     sourcePage: startPage,
     endPage,
     traitsText,
-    limitBreak: limitText ? { name: limitName, rulesText: limitText } : null,
+    traits,
+    summonRulesText,
+    limitBreak,
     abilities,
   };
 }
@@ -375,7 +451,7 @@ const jobs = jobSeeds.map((seed) => parseJob(lines, seed));
 const relics = parseRelics(lines);
 const bonds = parseBonds(lines);
 const artifact = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   rulesVersion: '1.5',
   jobs,
   relics,

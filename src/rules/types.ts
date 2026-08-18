@@ -1,6 +1,8 @@
+import type { RuleDuration, RuleExecutionInput, RuleModifier, RuleMutation, RuleTiming } from './automation/types.js';
+
 export const RULES_VERSION = '1.5' as const;
 export const CHARACTER_SCHEMA_VERSION = 2 as const;
-export const ENCOUNTER_SCHEMA_VERSION = 2 as const;
+export const ENCOUNTER_SCHEMA_VERSION = 3 as const;
 
 export const ACTION_IDS = [
   'sneak',
@@ -68,7 +70,17 @@ export interface JobClassDefinition {
   color: string;
   summary: string;
   stats: ClassStats;
+  traits: readonly TraitDefinition[];
+  gambit: string;
   source: SourceReference;
+}
+
+export interface TraitDefinition {
+  id: string;
+  name: string;
+  rulesText: string;
+  source: SourceReference;
+  automation: 'structured' | 'executable';
 }
 
 export interface AbilityDefinition {
@@ -97,7 +109,17 @@ export interface JobDefinition {
   source: SourceReference;
   endPage: number;
   traitsText: string;
-  limitBreak: { name: string; rulesText: string } | null;
+  traits: readonly TraitDefinition[];
+  summonRulesText: string;
+  limitBreak: {
+    id: string;
+    name: string;
+    resolveCost: number;
+    cost: { kind: 'action' | 'free'; value: number };
+    range: number | null;
+    tags: readonly string[];
+    rulesText: string;
+  } | null;
   abilities: readonly AbilityDefinition[];
 }
 
@@ -138,6 +160,66 @@ export interface FoeAbilityDefinition {
   range: number | null;
   tags: readonly string[];
   rulesText: string;
+  phaseId: string | null;
+  source: SourceReference;
+}
+
+export interface FoeTraitDefinition {
+  id: string;
+  name: string;
+  rulesText: string;
+  phaseId: string | null;
+  source: SourceReference;
+  automation: 'structured' | 'executable';
+}
+
+export interface FoePhaseDefinition {
+  id: string;
+  name: string;
+  rulesText: string;
+  source: SourceReference;
+}
+
+export interface FoeChapterRule {
+  chapter: 1 | 2 | 3;
+  rulesText: string;
+  source: SourceReference;
+}
+
+export interface TrophyDefinition {
+  id: string;
+  name: string;
+  uses: { count: number; period: 'use' | 'combat' | 'expedition' };
+  rulesText: string;
+  source: SourceReference;
+  automation: 'structured' | 'executable';
+}
+
+export interface CampFixtureFeatureDefinition {
+  id: string;
+  name: string;
+  rulesText: string;
+  source: SourceReference;
+  automation: 'structured' | 'executable';
+}
+
+export interface CampFixtureDefinition {
+  id: string;
+  name: string;
+  purchaseCost: number;
+  upgradeCost: number;
+  rulesText: string;
+  features: readonly CampFixtureFeatureDefinition[];
+  source: SourceReference;
+  automation: 'structured' | 'executable';
+}
+
+export interface RewardRuleDefinition {
+  id: string;
+  name: string;
+  rulesText: string;
+  source: SourceReference;
+  automation: 'structured' | 'executable';
 }
 
 export interface FoeProfileDefinition {
@@ -149,6 +231,22 @@ export interface FoeProfileDefinition {
   parentId: string | null;
   description: string;
   traitsText: string;
+  traits: readonly FoeTraitDefinition[];
+  phases: readonly FoePhaseDefinition[];
+  chapterRules: readonly FoeChapterRule[];
+  minimumChapter: 1 | 2 | 3;
+  stats: {
+    vitality?: number;
+    hp?: number;
+    speed?: number;
+    dash?: number;
+    defense?: number;
+    armor?: number;
+    fray?: number;
+    damageDie?: DamageDie;
+    size?: number;
+  };
+  trophies: readonly TrophyDefinition[];
   abilities: readonly FoeAbilityDefinition[];
   source: SourceReference;
   automation: 'structured' | 'executable';
@@ -236,6 +334,40 @@ export interface Position {
   y: number;
 }
 
+export interface EncounterCondition {
+  id: string;
+  sourceId: string;
+  potency: 'normal' | 'plus';
+  duration: RuleDuration | null;
+}
+
+export interface EncounterActiveEffect {
+  id: string;
+  sourceId: string;
+  effectId: string;
+  ownerId: string;
+  duration: RuleDuration;
+  modifiers: RuleModifier[];
+  triggers: string[];
+  state: Record<string, string | number | boolean | null>;
+}
+
+export interface EncounterMark {
+  id: string;
+  sourceId: string;
+  ownerId: string;
+  markId: string;
+  duration: RuleDuration | null;
+  state: Record<string, string | number | boolean | null>;
+}
+
+export interface EncounterStance {
+  id: string;
+  sourceId: string;
+  stanceId: string;
+  state: Record<string, string | number | boolean | null>;
+}
+
 export interface EncounterActor {
   id: string;
   name: string;
@@ -243,6 +375,9 @@ export interface EncounterActor {
   controllerId: string | null;
   characterId: string | null;
   foeProfileId?: string | null;
+  roleId: FoeRoleId | null;
+  actorKind: 'hero' | 'foe' | 'summon';
+  size: number;
   tokenUrl: string;
   classId: JobClassId | 'foe';
   chapter: 1 | 2 | 3;
@@ -261,6 +396,14 @@ export interface EncounterActor {
   damageDie: DamageDie;
   basicAttackRange: number;
   statuses: StatusId[];
+  conditions: EncounterCondition[];
+  resources: Record<string, number>;
+  ruleState: Record<string, string | number | boolean | null>;
+  activeEffects: EncounterActiveEffect[];
+  marks: EncounterMark[];
+  stance: EncounterStance | null;
+  traitIds: string[];
+  onBattlefield: boolean;
   defeated: boolean;
   actionsRemaining: number;
   standardMoveUsed: boolean;
@@ -297,8 +440,29 @@ export interface EncounterState {
   activeActorId: string | null;
   lastSide: EncounterActor['side'] | null;
   partyResolve: number;
+  entities: Record<string, EncounterEntity>;
+  terrainEffects: EncounterTerrainEffect[];
   revision: number;
   eventLog: EncounterEvent[];
+}
+
+export interface EncounterEntity {
+  id: string;
+  type: string;
+  ownerId: string | null;
+  positions: Position[];
+  state: Record<string, string | number | boolean | null>;
+  duration: RuleDuration | null;
+}
+
+export interface EncounterTerrainEffect {
+  id: string;
+  sourceId: string;
+  ownerId: string | null;
+  terrain: string;
+  positions: Position[];
+  height: number | null;
+  duration: RuleDuration | null;
 }
 
 export type EncounterCommand =
@@ -309,6 +473,7 @@ export type EncounterCommand =
   | { type: 'MOVE'; actorId: string; path: Position[]; mode: 'standard' | 'dash' }
   | { type: 'BASIC_ATTACK'; actorId: string; targetId: string; weight: 'light' | 'heavy'; boons?: number; cover?: boolean }
   | { type: 'USE_ABILITY'; actorId: string; abilityId: string; targetIds: string[]; boons?: number; cover?: boolean }
+  | { type: 'EXECUTE_RULE'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; input: RuleExecutionInput; attackTargetId?: string; triggerSourceId?: string; triggerTargetIds?: string[]; triggers?: string[] }
   | { type: 'INTERACT'; actorId: string; position: Position; description: string }
   | { type: 'RESCUE'; actorId: string; targetId: string }
   | { type: 'RECOVER'; actorId: string }
@@ -353,7 +518,8 @@ export type EncounterEvent =
   | { type: 'STATUS_APPLIED'; actorId: string; targetId: string; status: StatusId }
   | { type: 'TURN_ENDED'; actorId: string; nextActorId: string; round: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }> }
   | { type: 'ACTOR_DEFEATED'; actorId: string; woundGained: boolean }
-  | { type: 'ENCOUNTER_ENDED' };
+  | { type: 'ENCOUNTER_ENDED' }
+  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[] };
 
 export interface CommandResult {
   state: EncounterState;

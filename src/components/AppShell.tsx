@@ -5,7 +5,7 @@ import { useCharacters } from '../context/CharacterContext.js';
 const links = [
   ['/', 'Roster', '◈'],
   ['/compendium', 'Rules', '⌁'],
-  ['/sandbox', 'Sandbox', '◇'],
+  ['/lab', 'Rules Lab', '⌬'],
   ['/campaigns', 'Campaigns', '◉'],
 ] as const;
 
@@ -22,7 +22,7 @@ export function AppShell() {
           {links.map(([to, label, icon]) => (
             <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => isActive ? 'active' : ''}>
               <span>{icon}</span>{label}
-              {(to === '/sandbox' || to === '/campaigns') && !PHASE_TWO_READY && <i title="Rules gate active">GATED</i>}
+              {to === '/campaigns' && !PHASE_TWO_READY && <i title="Rules gate active">GATED</i>}
             </NavLink>
           ))}
         </nav>

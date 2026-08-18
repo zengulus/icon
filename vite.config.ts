@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => ({
           if (id.includes('icon-1.5.json')) return 'icon-compendium';
           if (id.includes('foes-1.5.json')) return 'icon-foes';
           if (id.includes('mechanics-1.5.json')) return 'icon-mechanics';
+          if (id.includes('rewards-1.5.json')) return 'icon-rewards';
           if (id.includes('@supabase')) return 'supabase';
           if (id.includes('node_modules/react')) return 'react';
         },

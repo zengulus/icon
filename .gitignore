@@ -7,3 +7,4 @@ dist-server/
 coverage/
 *.log
 .DS_Store
+vtt-extract/

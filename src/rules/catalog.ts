@@ -7,6 +7,7 @@ import type {
   JobClassId,
   JobDefinition,
   RelicDefinition,
+  TraitDefinition,
 } from './types.js';
 
 export const ACTIONS: readonly ActionDefinition[] = [
@@ -24,6 +25,14 @@ export const ACTIONS: readonly ActionDefinition[] = [
 
 export const KIN = ['Thrynn', 'Trogg', 'Beastfolk', 'Xixo'] as const;
 export const CULTURES = ['Yeokin', 'Islander', 'Leggio', 'Churner', 'Chronicler', 'Guilder'] as const;
+
+const classTrait = (classId: JobClassId, page: number, name: string, rulesText: string): TraitDefinition => ({
+  id: `${classId}:trait:${name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`,
+  name,
+  rulesText,
+  source: { page, sectionId: classId },
+  automation: 'structured',
+});
 
 const bondPowers: Record<string, readonly string[]> = {
   pathfinder: ['Saddleborn', 'Windrider', 'Dabbler', 'Freesoul', 'Lay Burdens', 'Airfeel', 'Colortongue', 'Horizon Sweeper', 'Memory of the Sole', 'Lightspeed'],
@@ -85,6 +94,11 @@ export const JOB_CLASSES: readonly JobClassDefinition[] = [
     color: '#d4513c',
     summary: 'Tough weapon masters who punish foes and control the battlefield.',
     stats: { vitality: 10, hp: 40, defense: 6, armor: 2, speed: 4, dash: 2, fray: 4, damageDie: 6, basicAttackRange: 3 },
+    traits: [
+      classTrait('stalwart', 116, 'Armor 2', 'Reduce all damage taken by 2.'),
+      classTrait('stalwart', 116, 'Fortify', 'Spaces adjacent to you have Rampart. Gain Vigilance +1 at the end of your turn.'),
+    ],
+    gambit: 'If you take a Stalwart ability while your primary Job is not Stalwart, you gain Heroics and may trigger one Heroic effect for free once per combat.',
     source: { page: 116, sectionId: 'stalwart' },
   },
   {
@@ -93,6 +107,13 @@ export const JOB_CLASSES: readonly JobClassDefinition[] = [
     color: '#e9b949',
     summary: 'Mobile blades for hire who exploit bloodied and isolated foes.',
     stats: { vitality: 7, hp: 28, defense: 10, armor: 0, speed: 4, dash: 4, fray: 2, damageDie: 10, basicAttackRange: 4 },
+    traits: [
+      classTrait('vagabond', 145, 'Skirmisher', 'May move diagonally and Dash at full Speed.'),
+      classTrait('vagabond', 145, 'Dodge', 'Immune to damage from missed attacks, successful saves, and area effects.'),
+      classTrait('vagabond', 145, 'Prowl', '1 action: Gain Stealth. This is a free action if no foes are in range 2.'),
+      classTrait('vagabond', 145, 'Finesse', 'Deal bonus damage to bloodied foes.'),
+    ],
+    gambit: 'If you take a Vagabond ability while your primary Job is not Vagabond, those Vagabond abilities benefit from Finesse.',
     source: { page: 145, sectionId: 'vagabond' },
   },
   {
@@ -101,6 +122,12 @@ export const JOB_CLASSES: readonly JobClassDefinition[] = [
     color: '#46a36f',
     summary: 'Healers and storytellers who cure, bless, and support their allies.',
     stats: { vitality: 10, hp: 40, defense: 8, armor: 0, speed: 4, dash: 2, fray: 3, damageDie: 6, basicAttackRange: 5 },
+    traits: [
+      classTrait('mendicant', 172, 'Diaga', '1 action: Cure a character in range 4.'),
+      classTrait('mendicant', 172, 'Bless', '1 action: Grant a Blessing token to a character in range 4.'),
+      classTrait('mendicant', 172, 'Succor', 'Rescue may target a defeated ally in range 4 instead of only an adjacent ally.'),
+    ],
+    gambit: 'If you take a Mendicant ability while your primary Job is not Mendicant, you gain the Bless action.',
     source: { page: 172, sectionId: 'mendicant' },
   },
   {
@@ -109,6 +136,13 @@ export const JOB_CLASSES: readonly JobClassDefinition[] = [
     color: '#4f7ecb',
     summary: 'Aetheric mages with long range and powerful area effects.',
     stats: { vitality: 8, hp: 32, defense: 7, armor: 0, speed: 4, dash: 2, fray: 3, damageDie: 8, basicAttackRange: 6 },
+    traits: [
+      classTrait('wright', 204, 'Slip', 'Movement ignores and does not trigger interrupts, Vigilance, or Rampart.'),
+      classTrait('wright', 204, 'Aetherwall', 'Gain resistance against abilities used by characters outside range 2.'),
+      classTrait('wright', 204, 'Chain Reaction', 'Once per round after damaging two or more foes with one ability, gain 1 Aether.'),
+      classTrait('wright', 204, 'Aether', 'Start combat at 0 Aether, gain 1 at the start of each turn, spend it on one Infuse effect per ability, and lose it after combat.'),
+    ],
+    gambit: 'If you take a Wright ability while your primary Job is not Wright, you gain Aether and Chain Reaction.',
     source: { page: 204, sectionId: 'wright' },
   },
 ];
@@ -140,7 +174,18 @@ export const JOBS: readonly JobDefinition[] = mechanics.jobs.map((job) => ({
   source: { page: job.sourcePage, sectionId: job.id },
   endPage: job.endPage,
   traitsText: job.traitsText,
-  limitBreak: job.limitBreak,
+  traits: job.traits.map((trait) => ({
+    id: trait.id,
+    name: trait.name,
+    rulesText: trait.rulesText,
+    source: { page: trait.sourcePage, sectionId: job.id },
+    automation: 'structured' as const,
+  })),
+  summonRulesText: job.summonRulesText,
+  limitBreak: job.limitBreak ? {
+    ...job.limitBreak,
+    cost: { ...job.limitBreak.cost, kind: job.limitBreak.cost.kind as 'action' | 'free' },
+  } : null,
   abilities: job.abilities.map((ability) => ({
     ...ability,
     classId: ability.classId as JobClassId,
