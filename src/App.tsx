@@ -8,6 +8,7 @@ import { CharacterEditor } from './pages/CharacterEditor.js';
 const Compendium = lazy(() => import('./pages/Compendium.js').then((module) => ({ default: module.Compendium })));
 const Sandbox = lazy(() => import('./pages/Sandbox.js').then((module) => ({ default: module.Sandbox })));
 const Campaigns = lazy(() => import('./pages/Campaigns.js').then((module) => ({ default: module.Campaigns })));
+const EncounterRoom = lazy(() => import('./pages/EncounterRoom.js').then((module) => ({ default: module.EncounterRoom })));
 
 const loading = <div className="page"><div className="empty-state">Opening module…</div></div>;
 
@@ -20,9 +21,10 @@ export function App() {
             <Route index element={<Dashboard />} />
             <Route path="characters/:id" element={<CharacterEditor />} />
             <Route path="compendium" element={<Suspense fallback={loading}><Compendium /></Suspense>} />
-            <Route path="lab" element={<Suspense fallback={loading}><Sandbox forceEnabled labMode /></Suspense>} />
+            <Route path="lab" element={<Suspense fallback={loading}><Sandbox labMode /></Suspense>} />
             <Route path="sandbox" element={<Navigate to="/lab" replace />} />
             <Route path="campaigns" element={<Suspense fallback={loading}><Campaigns /></Suspense>} />
+            <Route path="encounters/:encounterId" element={<Suspense fallback={loading}><EncounterRoom /></Suspense>} />
           </Route>
         </Routes>
       </HashRouter>

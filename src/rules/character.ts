@@ -1,5 +1,5 @@
 import { ACTION_IDS, CHARACTER_SCHEMA_VERSION, RULES_VERSION, type ActionRatings, type IconCharacter, type ValidationIssue } from './types.js';
-import { BONDS, findAbility, findBond, findClass, findJob, findRelic } from './catalog.js';
+import { BONDS, CULTURES, KIN, findAbility, findBond, findClass, findJob, findRelic } from './catalog.js';
 
 const emptyActions = (): ActionRatings => Object.fromEntries(ACTION_IDS.map((id) => [id, 0])) as ActionRatings;
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? `icon-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -73,6 +73,17 @@ export function relicSlotsForLevel(level: number) {
   return [2, 6, 9].filter((requiredLevel) => level >= requiredLevel).length;
 }
 
+/** Sourcebook p.242–245: levels II and III each need six dust; an Aspect
+ * needs a level III relic plus 12 dust, or a documented quest alternative. */
+export function relicMinimumInfusedDust(rank: 1 | 2 | 3 | 4, aspectState: IconCharacter['relics'][number]['aspectState'] = 'none') {
+  if (rank === 1) return 0;
+  if (rank === 2) return 6;
+  if (rank === 3) return 12;
+  if (aspectState === 'dust') return 24;
+  if (aspectState === 'shared-quest') return 16;
+  return 12;
+}
+
 export function narrativeBudgets(level: number) {
   const fixedPowers = 1 + [1, 2, 3, 6, 9, 12].filter((requiredLevel) => level >= requiredLevel).length;
   const fixedActionDots = 6 + [1, 2, 5, 7, 10, 11].filter((requiredLevel) => level >= requiredLevel).length;
@@ -96,7 +107,9 @@ export function validateCharacter(character: IconCharacter, complete = true): Va
   if (character.rulesVersion !== RULES_VERSION) error('rulesVersion', 'rules.unsupported', `Expected ICON rules ${RULES_VERSION}.`);
   if (complete && !character.name.trim()) error('name', 'required', 'Give the character a name.');
   if (complete && !character.kin) error('kin', 'required', 'Choose a Kin.');
+  else if (character.kin && !KIN.includes(character.kin as typeof KIN[number])) error('kin', 'kin.unknown', 'Choose a Kin from the ICON 1.5 source catalog.');
   if (complete && !character.culture) error('culture', 'required', 'Choose a Culture.');
+  else if (character.culture && !CULTURES.includes(character.culture as typeof CULTURES[number])) error('culture', 'culture.unknown', 'Choose a Culture from the ICON 1.5 source catalog.');
 
   const bond = findBond(character.bondId);
   if (complete && !bond) error('bondId', 'required', 'Choose a Bond.');
@@ -174,7 +187,14 @@ export function validateCharacter(character: IconCharacter, complete = true): Va
   for (const [index, relic] of character.relics.entries()) {
     if (!findRelic(relic.relicId)) error(`relics.${index}.relicId`, 'relic.unknown', 'That relic does not exist in ICON 1.5.');
     if (![1, 2, 3, 4].includes(relic.rank)) error(`relics.${index}.rank`, 'relic.rank', 'Relic rank must be I, II, III, or Aspected.');
+    if (!['none', 'dust', 'quest', 'shared-quest', 'unresolved'].includes(relic.aspectState)) error(`relics.${index}.aspectState`, 'relic.aspect-state', 'Relic aspect state is invalid.');
+    if (relic.rank < 4 && relic.aspectState !== 'none') error(`relics.${index}.aspectState`, 'relic.aspect-state', 'Only an Aspected relic can have an aspect state.');
+    if (relic.rank === 4 && relic.aspectState === 'none') error(`relics.${index}.aspectState`, 'relic.aspect-required', 'An Aspected relic requires recorded dust or quest advancement.');
+    if (relic.rank === 4 && relic.aspectState === 'unresolved') error(`relics.${index}.aspectState`, 'relic.aspect-unresolved', 'Confirm how this historical Aspected relic was earned before it can enter an encounter.');
     if (!Number.isInteger(relic.dustInfused) || relic.dustInfused < 0) error(`relics.${index}.dustInfused`, 'relic.dust', 'Relic infusion must be a non-negative whole number.');
+    else if ([1, 2, 3, 4].includes(relic.rank) && relic.dustInfused < relicMinimumInfusedDust(relic.rank, relic.aspectState)) {
+      error(`relics.${index}.dustInfused`, 'relic.infusion-required', `Relic rank ${relic.rank === 4 ? 'Aspect' : relic.rank} requires at least ${relicMinimumInfusedDust(relic.rank, relic.aspectState)} infused dust for its recorded advancement.`);
+    }
   }
   if (character.equippedLooseGear.some((item) => !character.looseGear.includes(item))) error('equippedLooseGear', 'gear.not-owned', 'Only recorded loose gear can be taken on an expedition.');
   if (character.equippedLooseGear.length > 2) error('equippedLooseGear', 'gear.limit', 'An expedition can include at most two pieces of loose gear.');
@@ -210,25 +230,184 @@ export function spendLevelUp(character: IconCharacter, chapterCap: number): Icon
   return { ...character, level: nextLevel, pendingLevelUps: character.pendingLevelUps - 1, xpAbilityPointClaimed: false, updatedAt: new Date().toISOString() };
 }
 
+const CHARACTER_FIELDS = [
+  'schemaVersion', 'rulesVersion', 'id', 'ownerId', 'name', 'pronouns',
+  'kin', 'culture', 'bondId', 'bondAction', 'bondPowers', 'actions',
+  'level', 'xp', 'pendingLevelUps', 'xpAbilityPointClaimed', 'jobs',
+  'primaryJobId', 'abilities', 'equippedAbilityIds', 'relics', 'dust',
+  'activeKit', 'customKitItems', 'looseGear', 'equippedLooseGear',
+  'burdens', 'ambitions', 'effort', 'strain', 'wounds', 'personalResolve',
+  'notes', 'portraitUrl', 'createdAt', 'updatedAt',
+] as const;
+
+const CURRENT_CHARACTER_FIELDS = new Set<string>(CHARACTER_FIELDS);
+const HISTORICAL_CHARACTER_FIELDS = new Set<string>([...CHARACTER_FIELDS, 'relicIds']);
+
+function characterRecord(input: unknown, path: string): Record<string, unknown> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error(`${path} must be an object.`);
+  return input as Record<string, unknown>;
+}
+
+function exactCharacterKeys(record: Record<string, unknown>, path: string, keys: readonly string[]) {
+  const expected = new Set(keys);
+  const actual = Object.keys(record);
+  const unexpected = actual.find((key) => !expected.has(key));
+  const missing = keys.find((key) => !(key in record));
+  if (unexpected) throw new Error(`${path}.${unexpected} is not part of the current character schema.`);
+  if (missing) throw new Error(`${path}.${missing} is required by the current character schema.`);
+}
+
+function allowedHistoricalCharacterKeys(record: Record<string, unknown>) {
+  const unexpected = Object.keys(record).find((key) => !HISTORICAL_CHARACTER_FIELDS.has(key));
+  if (unexpected) throw new Error(`Character.${unexpected} has no supported historical migration.`);
+}
+
+function characterString(value: unknown, path: string, nonEmpty = false): string {
+  if (typeof value !== 'string' || (nonEmpty && !value)) throw new Error(`${path} must be ${nonEmpty ? 'a non-empty ' : 'a '}string.`);
+  return value;
+}
+
+function characterNullableString(value: unknown, path: string): string | null {
+  return value === null ? null : characterString(value, path);
+}
+
+function characterInteger(value: unknown, path: string): number {
+  if (!Number.isSafeInteger(value)) throw new Error(`${path} must be a safe integer.`);
+  return value;
+}
+
+function characterBoolean(value: unknown, path: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`${path} must be a boolean.`);
+  return value;
+}
+
+function characterStringArray(value: unknown, path: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
+  value.forEach((item, index) => characterString(item, `${path}[${index}]`));
+  return value as string[];
+}
+
+function characterArray(value: unknown, path: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
+  return value;
+}
+
+function assertCurrentCharacterStructure(input: unknown): IconCharacter {
+  const character = characterRecord(input, 'Character');
+  exactCharacterKeys(character, 'Character', CHARACTER_FIELDS);
+  if (character.schemaVersion !== CHARACTER_SCHEMA_VERSION) throw new Error(`Character.schemaVersion must be ${CHARACTER_SCHEMA_VERSION}.`);
+  if (character.rulesVersion !== RULES_VERSION) throw new Error(`Character.rulesVersion must be ICON ${RULES_VERSION}.`);
+  characterString(character.id, 'Character.id', true);
+  characterNullableString(character.ownerId, 'Character.ownerId');
+  for (const field of ['name', 'pronouns', 'kin', 'culture', 'bondId', 'activeKit', 'notes', 'portraitUrl', 'createdAt', 'updatedAt'] as const) {
+    characterString(character[field], `Character.${field}`);
+  }
+  if (character.bondAction !== null && (!ACTION_IDS.includes(character.bondAction as typeof ACTION_IDS[number]))) {
+    throw new Error('Character.bondAction must be a known action or null.');
+  }
+  characterStringArray(character.bondPowers, 'Character.bondPowers');
+  const actions = characterRecord(character.actions, 'Character.actions');
+  exactCharacterKeys(actions, 'Character.actions', ACTION_IDS);
+  ACTION_IDS.forEach((action) => characterInteger(actions[action], `Character.actions.${action}`));
+  for (const field of ['level', 'xp', 'pendingLevelUps', 'dust', 'effort', 'strain', 'wounds', 'personalResolve'] as const) {
+    characterInteger(character[field], `Character.${field}`);
+  }
+  characterBoolean(character.xpAbilityPointClaimed, 'Character.xpAbilityPointClaimed');
+  characterStringArray(character.jobs, 'Character.jobs');
+  characterNullableString(character.primaryJobId, 'Character.primaryJobId');
+  characterStringArray(character.equippedAbilityIds, 'Character.equippedAbilityIds');
+  for (const field of ['customKitItems', 'looseGear', 'equippedLooseGear'] as const) {
+    characterStringArray(character[field], `Character.${field}`);
+  }
+  characterArray(character.abilities, 'Character.abilities').forEach((value, index) => {
+    const ability = characterRecord(value, `Character.abilities[${index}]`);
+    exactCharacterKeys(ability, `Character.abilities[${index}]`, ['abilityId', 'talent', 'mastered']);
+    characterString(ability.abilityId, `Character.abilities[${index}].abilityId`, true);
+    if (ability.talent !== null && ability.talent !== 1 && ability.talent !== 2) throw new Error(`Character.abilities[${index}].talent must be 1, 2, or null.`);
+    characterBoolean(ability.mastered, `Character.abilities[${index}].mastered`);
+  });
+  characterArray(character.relics, 'Character.relics').forEach((value, index) => {
+    const relic = characterRecord(value, `Character.relics[${index}]`);
+    exactCharacterKeys(relic, `Character.relics[${index}]`, ['relicId', 'rank', 'aspectState', 'dustInfused']);
+    characterString(relic.relicId, `Character.relics[${index}].relicId`, true);
+    if (relic.rank !== 1 && relic.rank !== 2 && relic.rank !== 3 && relic.rank !== 4) throw new Error(`Character.relics[${index}].rank must be 1, 2, 3, or 4.`);
+    if (!['none', 'dust', 'quest', 'shared-quest', 'unresolved'].includes(String(relic.aspectState))) throw new Error(`Character.relics[${index}].aspectState is invalid.`);
+    characterInteger(relic.dustInfused, `Character.relics[${index}].dustInfused`);
+  });
+  for (const field of ['burdens', 'ambitions'] as const) {
+    characterArray(character[field], `Character.${field}`).forEach((value, index) => {
+      const clock = characterRecord(value, `Character.${field}[${index}]`);
+      exactCharacterKeys(clock, `Character.${field}[${index}]`, ['id', 'name', 'size', 'progress']);
+      characterString(clock.id, `Character.${field}[${index}].id`, true);
+      characterString(clock.name, `Character.${field}[${index}].name`);
+      if (clock.size !== 4 && clock.size !== 6 && clock.size !== 10) throw new Error(`Character.${field}[${index}].size must be 4, 6, or 10.`);
+      characterInteger(clock.progress, `Character.${field}[${index}].progress`);
+    });
+  }
+  return character as IconCharacter;
+}
+
+function blockingCharacterIssues(character: IconCharacter): ValidationIssue[] {
+  return validateCharacter(character, false).filter((issue) => issue.severity === 'error'
+    && !issue.code.endsWith('total')
+    && !issue.code.endsWith('starting-count')
+    && issue.code !== 'relic.aspect-unresolved');
+}
+
+/** Reject malformed current records before any historical defaults are applied. */
+export function assertValidCharacterState(input: unknown): asserts input is IconCharacter {
+  const character = assertCurrentCharacterStructure(input);
+  const issues = blockingCharacterIssues(character);
+  if (issues.length) throw new Error(issues.map((issue) => issue.message).join(' '));
+}
+
+function historicalArray(value: unknown, path: string): unknown[] {
+  if (value === undefined) return [];
+  return characterArray(value, path);
+}
+
 export function migrateCharacter(input: unknown): IconCharacter {
-  if (!input || typeof input !== 'object') throw new Error('Character import must be a JSON object.');
-  const candidate = input as Omit<Partial<IconCharacter>, 'schemaVersion'> & { schemaVersion?: number; relicIds?: string[] };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== CHARACTER_SCHEMA_VERSION) throw new Error(`Unsupported character schema version: ${String(candidate.schemaVersion)}`);
+  const raw = characterRecord(input, 'Character import');
+  const candidate = raw as Omit<Partial<IconCharacter>, 'schemaVersion'> & { schemaVersion?: number; relicIds?: string[] };
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== CHARACTER_SCHEMA_VERSION) throw new Error(`Unsupported character schema version: ${String(candidate.schemaVersion)}`);
+  if (candidate.rulesVersion !== undefined && candidate.rulesVersion !== RULES_VERSION) {
+    throw new Error(`Unsupported ICON rules version: ${String(candidate.rulesVersion)}.`);
+  }
+  if (candidate.schemaVersion === CHARACTER_SCHEMA_VERSION) {
+    assertValidCharacterState(input);
+    return structuredClone(input) as IconCharacter;
+  }
+  allowedHistoricalCharacterKeys(raw);
   const defaults = createCharacter();
+  // Schema v1/v2 relic records predate aspectState. Keep the deliberately
+  // narrower migration shape here so TypeScript does not accidentally treat a
+  // legacy rank-one fallback as a fully current CharacterRelic.
+  type MigratingRelic = Omit<IconCharacter['relics'][number], 'aspectState'>
+    & Partial<Pick<IconCharacter['relics'][number], 'aspectState'>>;
+  const relics = (candidate.relics !== undefined
+    ? historicalArray(candidate.relics, 'Character.relics')
+    : historicalArray(candidate.relicIds, 'Character.relicIds').map((relicId) => ({ relicId, rank: 1 as const, dustInfused: 0 }))) as MigratingRelic[];
+  const { relicIds: _relicIds, ...migratingFields } = candidate;
   const migrated = {
     ...defaults,
-    ...candidate,
+    ...migratingFields,
     rulesVersion: RULES_VERSION,
     schemaVersion: CHARACTER_SCHEMA_VERSION,
     xpAbilityPointClaimed: candidate.xpAbilityPointClaimed ?? ((candidate.xp ?? 0) >= 7),
-    relics: candidate.relics ?? (candidate.relicIds ?? []).map((relicId) => ({ relicId, rank: 1 as const, dustInfused: 0 })),
-    customKitItems: [...(candidate.customKitItems ?? [])],
-    looseGear: [...(candidate.looseGear ?? [])],
-    equippedLooseGear: [...(candidate.equippedLooseGear ?? [])],
-    burdens: [...(candidate.burdens ?? [])],
-    ambitions: [...(candidate.ambitions ?? [])],
+    relics: relics.map((relic) => ({
+      ...relic,
+      aspectState: relic.aspectState ?? (relic.rank === 4 ? 'unresolved' : 'none'),
+    })),
+    customKitItems: [...historicalArray(candidate.customKitItems, 'Character.customKitItems')] as string[],
+    looseGear: [...historicalArray(candidate.looseGear, 'Character.looseGear')] as string[],
+    equippedLooseGear: [...historicalArray(candidate.equippedLooseGear, 'Character.equippedLooseGear')] as string[],
+    burdens: [...historicalArray(candidate.burdens, 'Character.burdens')] as IconCharacter['burdens'],
+    ambitions: [...historicalArray(candidate.ambitions, 'Character.ambitions')] as IconCharacter['ambitions'],
   } as IconCharacter;
-  const issues = validateCharacter(migrated, false).filter((issue) => issue.severity === 'error' && !issue.code.endsWith('total') && !issue.code.endsWith('starting-count'));
+  // A v2 Aspected relic had no provenance field. Preserve it as explicitly
+  // unresolved so the editor can repair it; do not silently coerce it into a
+  // legal dust or quest path, and do not discard the character on load.
+  const issues = blockingCharacterIssues(migrated);
   if (issues.length) throw new Error(issues.map((issue) => issue.message).join(' '));
   return migrated;
 }

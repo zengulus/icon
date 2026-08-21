@@ -25,7 +25,16 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # The supplied PDF is deliberately not committed; artifact cardinality
+      # and source-unit provenance are tested from the checked-in extraction.
+      - run: npm run audit:automation
       - run: npm test
+      - run: npm run typecheck
+      # This launches the compiled realtime service with an isolated in-memory
+      # store and verifies the actual HTTP/WebSocket protocol. External
+      # Supabase/Render deployment smoke tests need configured credentials.
+      - run: npm run test:e2e
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}

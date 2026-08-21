@@ -162,6 +162,10 @@ const artifact = {
   },
 };
 
+if (artifact.counts.generalTrophies !== 20 || artifact.counts.fixtures !== 16 || artifact.counts.fixtureFeatures !== 87) {
+  throw new Error(`ICON 1.5 rewards extraction expected 20 trophies, 16 camp fixtures, and 87 features; received ${artifact.counts.generalTrophies}, ${artifact.counts.fixtures}, and ${artifact.counts.fixtureFeatures}. Review the source artifact or parser before publishing generated data.`);
+}
+
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(artifact)}\n`, 'utf8');
 console.log(`Extracted ${artifact.counts.generalTrophies} general trophies and ${artifact.counts.fixtures} camp fixtures to ${outputPath}`);

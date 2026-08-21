@@ -1,0 +1,223 @@
+import { describe, expect, it } from 'vitest';
+import { actorFromCharacter, createEncounter, createFoe, executeCommand, RuleViolation } from '../encounter.js';
+import { planMovement, planMovementPath } from '../movement.js';
+import type { EncounterState, Position, TerrainCell } from '../types.js';
+import { validCharacter } from './fixtures.js';
+
+function activeEncounter(options: {
+  heroPosition?: Position;
+  foePosition?: Position;
+  allyPosition?: Position;
+  terrain?: TerrainCell[];
+  gridSize?: number;
+} = {}) {
+  const hero = actorFromCharacter(validCharacter('Aster'), options.heroPosition ?? { x: 1, y: 1 });
+  const foe = createFoe('Relict', options.foePosition ?? { x: 4, y: 4 });
+  const ally = options.allyPosition ? actorFromCharacter(validCharacter('Bryn'), options.allyPosition) : null;
+  let state = createEncounter('Movement plan fixture');
+  const gridSize = options.gridSize ?? 6;
+  state = { ...state, grid: { ...state.grid, width: gridSize, height: gridSize, terrain: options.terrain ?? [] } };
+  state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+  if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
+  state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  return { state, hero, foe, ally };
+}
+
+function moveAccepted(state: EncounterState, actorId: string, path: Position[], mode: 'standard' | 'dash') {
+  try {
+    return { accepted: true as const, result: executeCommand(state, { type: 'MOVE', actorId, path, mode }) };
+  } catch (error) {
+    expect(error).toBeInstanceOf(RuleViolation);
+    return { accepted: false as const, result: null };
+  }
+}
+
+describe('shared movement planner', () => {
+  it('predicts reducer acceptance, route, cost, and consequences over many destinations', () => {
+    const { state, hero } = activeEncounter({
+      allyPosition: { x: 2, y: 3 },
+      terrain: [
+        { position: { x: 1, y: 2 }, type: 'difficult', elevation: 0 },
+        { position: { x: 2, y: 2 }, type: 'dangerous', elevation: 0 },
+        { position: { x: 3, y: 3 }, type: 'impassable', elevation: 0 },
+        { position: { x: 4, y: 2 }, type: 'basic', elevation: 2 },
+      ],
+    });
+
+    for (const mode of ['standard', 'dash'] as const) {
+      for (let y = 0; y < state.grid.height; y += 1) {
+        for (let x = 0; x < state.grid.width; x += 1) {
+          const plan = planMovement(state, hero.id, { x, y }, mode);
+          const execution = moveAccepted(state, hero.id, plan.path, mode);
+          expect(execution.accepted, `${mode} (${x}, ${y})`).toBe(plan.legal);
+          if (execution.accepted) {
+            expect(execution.result.events[0]).toMatchObject({
+              type: 'ACTOR_MOVED',
+              actorId: hero.id,
+              path: plan.path,
+              mode,
+              dangerousDamage: plan.dangerousDamage,
+              slashedDamage: plan.slashedDamage,
+            });
+            expect(execution.result.state.actors[hero.id].position).toEqual(plan.destination);
+          }
+        }
+      }
+    }
+  });
+
+  it('allows an ally waypoint while rejecting occupied final spaces', () => {
+    const { state, hero, foe, ally } = activeEncounter({ allyPosition: { x: 2, y: 1 } });
+    const throughAlly = planMovement(state, hero.id, { x: 3, y: 1 }, 'standard');
+    expect(throughAlly).toMatchObject({ legal: true, path: [{ x: 2, y: 1 }, { x: 3, y: 1 }], cost: 2 });
+    expect(moveAccepted(state, hero.id, throughAlly.path, 'standard').accepted).toBe(true);
+
+    const allyDestination = planMovement(state, hero.id, ally!.position, 'standard');
+    expect(allyDestination).toMatchObject({ legal: false, issue: { code: 'move.obstructed' } });
+    expect(moveAccepted(state, hero.id, [ally!.position], 'standard').accepted).toBe(false);
+
+    const foeDestination = planMovement(state, hero.id, foe.position, 'standard');
+    expect(foeDestination).toMatchObject({ legal: false, issue: { code: 'move.obstructed' } });
+  });
+
+  it('uses the highest terrain, elevation, and engagement penalty and lets Dash ignore engagement', () => {
+    const terrain: TerrainCell[] = [
+      { position: { x: 1, y: 1 }, type: 'difficult', elevation: 0 },
+      { position: { x: 2, y: 1 }, type: 'basic', elevation: 2 },
+    ];
+    const elevation = activeEncounter({ terrain });
+    const elevated = planMovement(elevation.state, elevation.hero.id, { x: 2, y: 1 }, 'standard');
+    expect(elevated).toMatchObject({ legal: true, cost: 3, steps: [{ difficultTerrainPenalty: 1, elevationPenalty: 2, engagementPenalty: 0, cost: 3 }] });
+    expect(moveAccepted(elevation.state, elevation.hero.id, elevated.path, 'standard').accepted).toBe(true);
+
+    const sloped = activeEncounter({ terrain: [
+      { position: { x: 1, y: 1 }, type: 'slope', elevation: 0 },
+      { position: { x: 2, y: 1 }, type: 'basic', elevation: 2 },
+    ] });
+    expect(planMovement(sloped.state, sloped.hero.id, { x: 2, y: 1 }, 'standard')).toMatchObject({ legal: true, cost: 2, steps: [{ elevationPenalty: 1, cost: 2 }] });
+
+    const engaged = activeEncounter({ foePosition: { x: 1, y: 2 } });
+    expect(planMovement(engaged.state, engaged.hero.id, { x: 2, y: 1 }, 'standard')).toMatchObject({ legal: true, cost: 2, steps: [{ engagementPenalty: 1, cost: 2 }] });
+    const dash = planMovement(engaged.state, engaged.hero.id, { x: 2, y: 1 }, 'dash');
+    expect(dash).toMatchObject({ legal: true, cost: 1, actionCost: 1, steps: [{ engagementPenalty: 0, cost: 1 }] });
+    const executedDash = moveAccepted(engaged.state, engaged.hero.id, dash.path, 'dash');
+    expect(executedDash.accepted).toBe(true);
+    if (executedDash.accepted) {
+      expect(executedDash.result.state.actors[engaged.hero.id]).toMatchObject({ actionsRemaining: 1, usedAbilityIds: ['basic:dash'] });
+    }
+  });
+
+  it('reports an impossible elevation leg with the same rejection as the reducer', () => {
+    const { state, hero } = activeEncounter({ terrain: [{ position: { x: 2, y: 1 }, type: 'basic', elevation: 4 }] });
+    const path = [{ x: 2, y: 1 }];
+    expect(planMovement(state, hero.id, path[0]!, 'standard')).toMatchObject({ legal: false, issue: { code: 'move.elevation' } });
+    const plan = planMovementPath(state, hero.id, path, 'standard');
+    expect(plan).toMatchObject({ legal: false, issue: { code: 'move.elevation' } });
+    expect(moveAccepted(state, hero.id, path, 'standard').accepted).toBe(false);
+  });
+
+  it('retains reducer validation order for an empty MOVE path', () => {
+    const { state, hero } = activeEncounter();
+    state.actors[hero.id].standardMoveUsed = true;
+    expect(planMovementPath(state, hero.id, [], 'standard')).toMatchObject({ legal: false, issue: { code: 'move.empty' } });
+    try {
+      executeCommand(state, { type: 'MOVE', actorId: hero.id, path: [], mode: 'standard' });
+      throw new Error('Expected MOVE to be rejected.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'move.empty' });
+    }
+  });
+
+  it('applies dangerous terrain once in a turn, then resets it for the actor’s next turn', () => {
+    const { state, hero, foe } = activeEncounter({ terrain: [{ position: { x: 2, y: 1 }, type: 'dangerous', elevation: 0 }] });
+    const firstPlan = planMovement(state, hero.id, { x: 2, y: 1 }, 'standard');
+    expect(firstPlan).toMatchObject({ legal: true, dangerousDamage: 2 });
+    const afterStandard = executeCommand(state, { type: 'MOVE', actorId: hero.id, path: firstPlan.path, mode: 'standard' }).state;
+    expect(afterStandard.actors[hero.id]).toMatchObject({ hp: 38, dangerousTerrainTriggeredThisTurn: true });
+
+    const dashPlan = planMovement(afterStandard, hero.id, { x: 1, y: 1 }, 'dash');
+    expect(dashPlan).toMatchObject({ legal: true, dangerousDamage: 0 });
+    const afterDash = executeCommand(afterStandard, { type: 'MOVE', actorId: hero.id, path: dashPlan.path, mode: 'dash' }).state;
+    expect(afterDash.actors[hero.id]).toMatchObject({ hp: 38, dangerousTerrainTriggeredThisTurn: true });
+
+    const foeTurn = executeCommand(afterDash, { type: 'END_TURN', actorId: hero.id }).state;
+    const nextHeroTurn = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }).state;
+    expect(nextHeroTurn.actors[hero.id].dangerousTerrainTriggeredThisTurn).toBe(false);
+    const nextPlan = planMovement(nextHeroTurn, hero.id, { x: 2, y: 1 }, 'standard');
+    expect(nextPlan).toMatchObject({ legal: true, dangerousDamage: 2 });
+  });
+
+  it('applies overlapping terrain, pit elevation, and object obstruction from the source map state', () => {
+    const { state, hero } = activeEncounter({ terrain: [{ position: { x: 2, y: 1 }, type: 'pit', elevation: 3 }] });
+    state.terrainEffects.push({
+      id: 'fixture:acid-pit',
+      sourceId: 'fixture',
+      ownerId: null,
+      terrain: 'dangerous',
+      positions: [{ x: 2, y: 1 }],
+      height: null,
+      duration: null,
+    });
+    state.entities['fixture:barrel'] = {
+      id: 'fixture:barrel',
+      type: 'object',
+      ownerId: null,
+      positions: [{ x: 3, y: 1 }],
+      state: {},
+      duration: null,
+    };
+
+    // ICON p. 89: a pit is one elevation lower than its base space; dangerous
+    // terrain can overlap it and still deals its once-per-turn piercing damage.
+    expect(planMovement(state, hero.id, { x: 2, y: 1 }, 'standard')).toMatchObject({
+      legal: true,
+      cost: 3,
+      dangerousDamage: 2,
+      steps: [{ elevationPenalty: 2 }],
+    });
+    expect(planMovement(state, hero.id, { x: 3, y: 1 }, 'standard')).toMatchObject({
+      legal: false,
+      issue: { code: 'move.obstructed' },
+    });
+  });
+
+  it('executes Skirmisher, Flying, Phasing, and Immobile movement rules', () => {
+    const skirmisher = activeEncounter({ foePosition: { x: 5, y: 5 } });
+    skirmisher.state.actors[skirmisher.hero.id].traitIds.push('vagabond:trait:skirmisher');
+    skirmisher.state.actors[skirmisher.hero.id].dash = 2;
+    const diagonal = planMovement(skirmisher.state, skirmisher.hero.id, { x: 2, y: 2 }, 'standard');
+    expect(diagonal).toMatchObject({ legal: true, path: [{ x: 2, y: 2 }], cost: 1 });
+    expect(moveAccepted(skirmisher.state, skirmisher.hero.id, diagonal.path, 'standard').accepted).toBe(true);
+
+    const freshSkirmisher = activeEncounter({ foePosition: { x: 5, y: 5 } });
+    freshSkirmisher.state.actors[freshSkirmisher.hero.id].traitIds.push('vagabond:trait:skirmisher');
+    freshSkirmisher.state.actors[freshSkirmisher.hero.id].dash = 2;
+    // ICON p. 105: Skirmisher makes Dash a full-Speed move rather than Dash.
+    expect(planMovement(freshSkirmisher.state, freshSkirmisher.hero.id, { x: 5, y: 1 }, 'dash')).toMatchObject({ legal: true, allowance: 4, cost: 4 });
+
+    const flight = activeEncounter({
+      foePosition: { x: 5, y: 5 },
+      terrain: [
+        { position: { x: 2, y: 1 }, type: 'impassable', elevation: 3 },
+        { position: { x: 3, y: 1 }, type: 'dangerous', elevation: 0 },
+      ],
+    });
+    flight.state.actors[flight.hero.id].conditions.push({ id: 'flying', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    const flyingRoute = planMovementPath(flight.state, flight.hero.id, [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }], 'standard');
+    expect(flyingRoute).toMatchObject({ legal: true, cost: 3, dangerousDamage: 0 });
+    expect(flyingRoute.steps).toEqual(expect.arrayContaining([expect.objectContaining({ elevationPenalty: 0, difficultTerrainPenalty: 0, engagementPenalty: 0 })]));
+    // Flight crosses obstructions, but characters still cannot end in one.
+    expect(planMovement(flight.state, flight.hero.id, { x: 2, y: 1 }, 'standard')).toMatchObject({ legal: false, issue: { code: 'move.impassable' } });
+
+    const phasing = activeEncounter({ foePosition: { x: 5, y: 5 }, terrain: [{ position: { x: 2, y: 1 }, type: 'impassable', elevation: 0 }] });
+    phasing.state.actors[phasing.hero.id].conditions.push({ id: 'phasing', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    expect(planMovementPath(phasing.state, phasing.hero.id, [{ x: 2, y: 1 }, { x: 3, y: 1 }], 'standard')).toMatchObject({ legal: true, path: [{ x: 2, y: 1 }, { x: 3, y: 1 }] });
+    expect(planMovement(phasing.state, phasing.hero.id, { x: 2, y: 1 }, 'standard')).toMatchObject({ legal: false, issue: { code: 'move.impassable' } });
+
+    const immobile = activeEncounter();
+    immobile.state.actors[immobile.hero.id].conditions.push({ id: 'immobile', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    expect(planMovement(immobile.state, immobile.hero.id, { x: 2, y: 1 }, 'standard')).toMatchObject({ legal: false, issue: { code: 'move.immobile' } });
+    expect(moveAccepted(immobile.state, immobile.hero.id, [{ x: 2, y: 1 }], 'standard').accepted).toBe(false);
+  });
+});

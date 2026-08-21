@@ -251,17 +251,17 @@ export type RuleMutation =
   | { kind: 'move'; sourceId: string; sourceActorId: string; actorId: string; movement: 'rush' | 'shove' | 'fly' | 'teleport' | 'place' | 'remove' | 'swap'; distance: number | null; positions: Position[]; direction: Position | null; phasing: boolean }
   | { kind: 'resource'; sourceId: string; actorId: string; resourceId: string; operation: 'gain' | 'spend' | 'set' | 'tick-up' | 'tick-down'; amount: number; minimum: number | null; maximum: number | null }
   | { kind: 'actions'; sourceId: string; actorId: string; operation: 'gain' | 'spend' | 'set' | 'refund'; amount: number }
-  | { kind: 'terrain'; sourceId: string; operation: 'create' | 'remove' | 'raise' | 'lower'; terrain: string; positions: Position[]; height: number | null; duration?: RuleDuration }
+  | { kind: 'terrain'; sourceId: string; sourceActorId: string; operation: 'create' | 'remove' | 'raise' | 'lower'; terrain: string; positions: Position[]; height: number | null; duration?: RuleDuration }
   | { kind: 'entity'; sourceId: string; operation: 'summon' | 'create' | 'remove'; entityType: string; ownerId: string; positions: Position[]; count: number; state: Readonly<Record<string, string | number | boolean | null>>; duration?: RuleDuration }
   | { kind: 'mark'; sourceId: string; ownerId: string; operation: 'apply' | 'remove'; actorId: string; markId: string; duration?: RuleDuration; state: Readonly<Record<string, string | number | boolean | null>> }
-  | { kind: 'stance'; sourceId: string; operation: 'enter' | 'refresh' | 'exit'; actorId: string; stanceId: string; state: Readonly<Record<string, string | number | boolean | null>> }
+  | { kind: 'stance'; sourceId: string; sourceActorId: string; operation: 'enter' | 'refresh' | 'exit'; actorId: string; stanceId: string; state: Readonly<Record<string, string | number | boolean | null>> }
   | { kind: 'persistent'; sourceId: string; ownerId: string; operation: 'add' | 'remove'; actorId: string; effectId: string; duration: RuleDuration; modifiers: RuleModifier[]; triggers: string[]; state: Readonly<Record<string, string | number | boolean | null>> }
   | { kind: 'modifier'; sourceId: string; ownerId: string; actorId: string; modifier: RuleModifier; duration: RuleDuration }
   | { kind: 'save'; sourceId: string; actorId: string; roll: number; boon: number; total: number; success: boolean }
   | { kind: 'defeat'; sourceId: string; actorId: string }
-  | { kind: 'phase'; sourceId: string; actorId: string; phaseId: string }
-  | { kind: 'end-turn'; sourceId: string; actorId: string }
-  | { kind: 'state'; sourceId: string; actorId: string; key: string; operation: 'set' | 'clear' | 'increment'; value?: string | number | boolean | null };
+  | { kind: 'phase'; sourceId: string; sourceActorId: string; actorId: string; phaseId: string }
+  | { kind: 'end-turn'; sourceId: string; sourceActorId: string; actorId: string }
+  | { kind: 'state'; sourceId: string; sourceActorId: string; actorId: string; key: string; operation: 'set' | 'clear' | 'increment'; value?: string | number | boolean | null };
 
 export interface RuleExecutionResult {
   mutations: RuleMutation[];

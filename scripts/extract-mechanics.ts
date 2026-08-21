@@ -102,6 +102,8 @@ const jobSeeds = [
   ['stormbender', 'Stormbender', 'wright', 230, 236],
 ] as const;
 
+const EXPECTED_COUNTS = { jobs: 16, abilities: 144, relics: 40, bonds: 12 } as const;
+
 const jobTraitNames: Record<string, readonly string[]> = {
   bastion: ['Strive', 'Press the Advantage', 'Bull’s Strength', 'Shieldmaster'],
   'demon-slayer': ['Demon Edge', 'Demon Strength', 'Hissatsu', 'True Horn'],
@@ -463,6 +465,12 @@ const artifact = {
     bonds: bonds.length,
   },
 };
+
+for (const [key, expected] of Object.entries(EXPECTED_COUNTS) as Array<[keyof typeof EXPECTED_COUNTS, number]>) {
+  if (artifact.counts[key] !== expected) {
+    throw new Error(`ICON 1.5 mechanics extraction expected ${expected} ${key}, received ${artifact.counts[key]}. Review the source artifact or parser before publishing generated data.`);
+  }
+}
 
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(artifact)}\n`, 'utf8');

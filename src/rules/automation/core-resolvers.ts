@@ -40,11 +40,11 @@ const basicAttack = (weight: 'light' | 'heavy'): RuleResolver => (context) => {
 const coreResolvers: Record<string, RuleResolver> = {
   'core:standard-move': movementResolver('rush', (context) => context.state.actors[context.actorId]?.speed ?? 0, 'path'),
   'core:dash': movementResolver('rush', (context) => Math.ceil((context.state.actors[context.actorId]?.speed ?? 0) / 2), 'path'),
-  'core:interact': (context) => [{ kind: 'state', sourceId: context.sourceId, actorId: context.actorId, key: 'last-interaction', operation: 'set', value: context.input.options?.description ?? 'Interact' }],
+  'core:interact': (context) => [{ kind: 'state', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: context.actorId, key: 'last-interaction', operation: 'set', value: context.input.options?.description ?? 'Interact' }],
   'core:rescue': (context) => {
     const target = actorInput(context, 'target');
     if (!target) return [];
-    return [{ kind: 'state', sourceId: context.sourceId, actorId: target.id, key: 'rescue-requested', operation: 'set', value: true }, { kind: 'heal', sourceId: context.sourceId, actorId: target.id, amount: target.maxHp, maximum: target.maxHp }];
+    return [{ kind: 'state', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id, key: 'rescue-requested', operation: 'set', value: true }, { kind: 'heal', sourceId: context.sourceId, actorId: target.id, amount: target.maxHp, maximum: target.maxHp }];
   },
   'core:light-attack': basicAttack('light'),
   'core:heavy-attack': basicAttack('heavy'),
@@ -63,7 +63,7 @@ const coreResolvers: Record<string, RuleResolver> = {
   },
 };
 
-const passiveResolver: RuleResolver = (context) => [{ kind: 'state', sourceId: context.sourceId, actorId: context.actorId, key: `core-rule:${context.sourceId}`, operation: 'set', value: true }];
+const passiveResolver: RuleResolver = (context) => [{ kind: 'state', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: context.actorId, key: `core-rule:${context.sourceId}`, operation: 'set', value: true }];
 for (const rule of CORE_RULES) coreResolvers[`core:${rule.id}`] ??= passiveResolver;
 
 export const CORE_RULE_RESOLVERS: RuleResolverRegistry = coreResolvers;

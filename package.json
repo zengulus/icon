@@ -13,6 +13,9 @@
     "start:server": "node dist-server/server/index.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
+    "test:e2e": "npm run test:e2e:transport && npm run test:e2e:browser",
+    "test:e2e:transport": "npm run build:server && node scripts/e2e-realtime.mjs",
+    "test:e2e:browser": "npm run build:server && playwright test",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage"
   },
@@ -27,6 +30,7 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",

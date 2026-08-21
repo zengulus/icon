@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand, migrateEncounter, replayEncounter, RuleViolation } from '../encounter.js';
+import { ENCOUNTER_SCHEMA_VERSION } from '../types.js';
+import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand, hasCoverFrom, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter, replayEncounter, RuleViolation } from '../encounter.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
 
 function activeEncounter() {
@@ -24,6 +25,56 @@ describe('ICON encounter reducer', () => {
   it('rejects diagonal paths and occupied destinations', () => {
     const { state, hero } = activeEncounter();
     expect(() => executeCommand(state, { type: 'MOVE', actorId: hero.id, path: [{ x: 2, y: 2 }], mode: 'standard' })).toThrow(RuleViolation);
+  });
+
+  it('rejects browser-only actor token URLs even when a caller bypasses the websocket parser', () => {
+    const state = createEncounter('Durable token boundary');
+    const actor = createFoe('Temporary token', { x: 1, y: 1 });
+    actor.tokenUrl = 'blob:https://app.example/temporary-token';
+    expect(() => executeCommand(state, { type: 'ADD_ACTOR', actor })).toThrow(/browser-only blob URL/i);
+  });
+
+  it('keeps setup actors and terrain inside the authoritative grid', () => {
+    const state = createEncounter('Grid boundary');
+    const offBoardActor = createFoe('Off board', { x: state.grid.width, y: 0 });
+    try {
+      executeCommand(state, { type: 'ADD_ACTOR', actor: offBoardActor });
+      throw new Error('Expected off-grid actor to be rejected.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'actor.position' });
+    }
+    try {
+      executeCommand(state, {
+        type: 'SET_TERRAIN',
+        cell: { position: { x: -1, y: 0 }, type: 'basic', elevation: 0 },
+      });
+      throw new Error('Expected off-grid terrain to be rejected.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'terrain.position' });
+    }
+  });
+
+  it('canonicalizes legacy actor ownership fields at the reducer boundary', () => {
+    const state = createEncounter('Legacy actor command');
+    const actor = createFoe('Legacy actor', { x: 1, y: 1 }) as unknown as Record<string, unknown>;
+    delete actor.foeProfileId;
+    actor.conditions = [{ id: 'stealth', sourceId: 'legacy-source', potency: 'normal', duration: null }];
+    const result = executeCommand(state, { type: 'ADD_ACTOR', actor: actor as never });
+    const added = result.state.actors[(actor.id as string)];
+    expect(added).toMatchObject({ foeProfileId: null, conditions: [{ ownerId: null }] });
+  });
+
+  it('keeps a bounded recent event history without changing applied mechanics', () => {
+    const events = Array.from({ length: MAX_ENCOUNTER_EVENT_LOG + 5 }, (_, index) => ({
+      type: 'TERRAIN_SET' as const,
+      cell: { position: { x: index, y: 0 }, type: 'basic' as const, elevation: 0 },
+    }));
+    const state = applyEvents(createEncounter('Bounded history'), events);
+
+    expect(state.revision).toBe(events.length);
+    expect(state.eventLog).toHaveLength(MAX_ENCOUNTER_EVENT_LOG);
+    expect(state.eventLog[0]).toEqual(events[5]);
+    expect(state.eventLog.at(-1)).toEqual(events.at(-1));
   });
 
   it('applies Slashed once when an ability moves its target', () => {
@@ -52,42 +103,85 @@ describe('ICON encounter reducer', () => {
     expect(result.events.find((event) => event.type === 'ATTACK_RESOLVED')).toMatchObject({ rawDamage: 5, appliedDamage: 4 });
   });
 
+  it('derives cover and line of sight from terrain instead of trusting a client attack flag', () => {
+    const { state, hero, foe } = activeEncounter();
+    state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'basic', elevation: 1 });
+    expect(hasCoverFrom(state, state.actors[foe.id], state.actors[hero.id])).toBe(true);
+    const covered = executeCommand(state, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(12, 5));
+    expect(covered.events.find((event) => event.type === 'ATTACK_RESOLVED')).toMatchObject({ rawDamage: 9, appliedDamage: 5 });
+
+    const blocked = activeEncounter();
+    blocked.state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 1 });
+    expect(() => executeCommand(blocked.state, { type: 'BASIC_ATTACK', actorId: blocked.hero.id, targetId: blocked.foe.id, weight: 'light' })).toThrow(/line of sight/);
+  });
+
   it('enforces one attack ability per turn', () => {
     const { state, hero, foe } = activeEncounter();
     const first = executeCommand(state, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(12, 5)).state;
     expect(() => executeCommand(first, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(12, 5))).toThrow(/one attack/);
   });
 
-  it('resolves an equipped job attack from structured source mechanics', () => {
+  it('enforces Unstoppable immunity when a normal status is applied', () => {
     const { state, hero, foe } = activeEncounter();
-    const abilityId = hero.abilityIds[0];
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId, targetIds: [foe.id] }, scriptedDice(12, 5));
-    const event = result.events.find((candidate) => candidate.type === 'ABILITY_RESOLVED');
-    expect(event).toMatchObject({
-      abilityId: 'bastion:heracule',
-      actionCost: 1,
-      attack: { hit: true, rawDamage: 9, appliedDamage: 9 },
-    });
-    expect(result.state.actors[foe.id].hp).toBe(23);
-    expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
-    expect(result.state.actors[hero.id].attackedThisTurn).toBe(true);
+    state.actors[foe.id].conditions.push({ id: 'unstoppable', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    try {
+      executeCommand(state, { type: 'APPLY_STATUS', actorId: hero.id, targetId: foe.id, status: 'stunned' });
+      throw new Error('Expected Unstoppable to reject a status.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'status.immune' });
+    }
+    expect(state.actors[foe.id].statuses).not.toContain('stunned');
   });
 
-  it('rejects unequipped abilities and repeated paid abilities', () => {
+  it('refuses a structured job ability instead of applying a generic approximation', () => {
+    const { state, hero, foe } = activeEncounter();
+    const abilityId = hero.abilityIds[0];
+    try {
+      executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId, targetIds: [foe.id] }, scriptedDice(12, 5));
+      throw new Error('Expected a structured ability to remain unresolved.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'ability.unresolved' });
+      expect(error).toHaveProperty('message', expect.stringContaining('p.'));
+    }
+    expect(state.actors[foe.id].hp).toBe(32);
+    expect(state.actors[hero.id].actionsRemaining).toBe(2);
+    expect(state.actors[hero.id].attackedThisTurn).toBe(false);
+  });
+
+  it('rejects unequipped abilities before reporting unresolved catalogued rules', () => {
     const { state, hero, foe } = activeEncounter();
     expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:rook', targetIds: [foe.id] })).toThrow(/not in this actor/);
-    const first = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: hero.abilityIds[0], targetIds: [foe.id] }, scriptedDice(12, 5)).state;
-    expect(() => executeCommand(first, { type: 'USE_ABILITY', actorId: hero.id, abilityId: hero.abilityIds[0], targetIds: [foe.id] })).toThrow(/cannot be repeated/);
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: hero.abilityIds[0], targetIds: [foe.id] })).toThrow(/not an independently executable ICON rule/i);
   });
 
   it('migrates v1 actors into the versioned ability state model', () => {
     const original = createEncounter('Old save');
     const hero = actorFromCharacter(validCharacter(), { x: 1, y: 1 });
     const legacyActor = { ...hero } as Record<string, unknown>;
-    for (const key of ['chapter', 'abilityIds', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn']) delete legacyActor[key];
+    for (const key of ['chapter', 'abilityIds', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn', 'dangerousTerrainTriggeredThisTurn']) delete legacyActor[key];
     const migrated = migrateEncounter({ ...original, schemaVersion: 1, actors: { [hero.id]: legacyActor } });
-    expect(migrated.schemaVersion).toBe(3);
-    expect(migrated.actors[hero.id]).toMatchObject({ chapter: 1, abilityIds: [], usedAbilityIds: [], interruptUses: {}, interruptUsedThisTurn: false, slashedTriggeredThisTurn: false, conditions: [], resources: {}, activeEffects: [], marks: [], stance: null, onBattlefield: true });
+    expect(migrated.schemaVersion).toBe(ENCOUNTER_SCHEMA_VERSION);
+    expect(migrated.actors[hero.id]).toMatchObject({ chapter: 1, abilityIds: [], usedAbilityIds: [], interruptUses: {}, interruptUsedThisTurn: false, slashedTriggeredThisTurn: false, dangerousTerrainTriggeredThisTurn: false, conditions: [], resources: {}, activeEffects: [], marks: [], stance: null, onBattlefield: true });
+
+    const v3Migrated = migrateEncounter({ ...original, schemaVersion: 3, actors: { [hero.id]: legacyActor } });
+    expect(v3Migrated).toMatchObject({ schemaVersion: ENCOUNTER_SCHEMA_VERSION, actors: { [hero.id]: { dangerousTerrainTriggeredThisTurn: false } } });
+  });
+
+  it('rejects oversized historical event history rather than silently truncating it', () => {
+    const legacy = createEncounter('Historical audit trail');
+    legacy.schemaVersion = 1 as never;
+    legacy.eventLog = Array.from({ length: MAX_ENCOUNTER_EVENT_LOG + 1 }, (_, index) => ({
+      type: 'ACTOR_REMOVED' as const,
+      actorId: `historical-${index}`,
+    }));
+
+    expect(() => migrateEncounter(legacy)).toThrow(/event history exceeds/i);
+  });
+
+  it('rejects an encounter from an unmapped ICON rules version rather than relabelling it', () => {
+    const futureRules = createEncounter('Future rules');
+    futureRules.rulesVersion = '2.0' as never;
+    expect(() => migrateEncounter(futureRules)).toThrow(/Unsupported ICON rules version/i);
   });
 
   it('creates typed foes from source profiles and inherits variant abilities', () => {
@@ -101,7 +195,7 @@ describe('ICON encounter reducer', () => {
     expect(() => createFoeFromProfile('basic:basic-mob:300', { x: 0, y: 0 })).toThrow(/member-level state/);
   });
 
-  it('executes a fully compiled foe source program as replayable atomic mutations', () => {
+  it('does not execute a heuristic foe compilation through authoritative rule commands', () => {
     let state = createEncounter('Compiled foe ability');
     const hero = actorFromCharacter(validCharacter(), { x: 1, y: 1 });
     const soldier = createFoeFromProfile('basic:soldier:300', { x: 2, y: 1 });
@@ -109,19 +203,36 @@ describe('ICON encounter reducer', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: soldier }).state;
     state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
     state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    try {
+      executeCommand(state, {
+        type: 'EXECUTE_RULE',
+        actorId: soldier.id,
+        sourceId: 'basic:soldier:300:slash',
+        actionId: 'default',
+        timing: 'use',
+        input: {},
+        attackTargetId: hero.id,
+      }, scriptedDice(12, 5));
+      throw new Error('Expected heuristic foe program to be rejected.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'rule.not-executable' });
+    }
+  });
+
+  it('executes the explicitly reviewed Skirmisher program with source ownership', () => {
+    const { state, hero } = activeEncounter();
+    state.actors[hero.id].traitIds.push('vagabond:trait:skirmisher');
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
-      actorId: soldier.id,
-      sourceId: 'basic:soldier:300:slash',
+      actorId: hero.id,
+      sourceId: 'vagabond:trait:skirmisher',
       actionId: 'default',
-      timing: 'use',
+      timing: 'passive',
       input: {},
-      attackTargetId: hero.id,
-    }, scriptedDice(12, 5));
-    expect(result.events).toHaveLength(1);
-    expect(result.events[0]).toMatchObject({ type: 'RULE_MUTATIONS_APPLIED', sourceId: 'basic:soldier:300:slash', tags: expect.arrayContaining(['attack']) });
-    expect(result.state.actors[hero.id]).toMatchObject({ hp: 33, statuses: ['slashed'] });
-    expect(result.state.actors[soldier.id]).toMatchObject({ actionsRemaining: 1, attackedThisTurn: true });
+    });
+    expect(result.state.actors[hero.id]?.conditions).toMatchObject([
+      { id: 'skirmisher', sourceId: 'vagabond:trait:skirmisher', ownerId: hero.id },
+    ]);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

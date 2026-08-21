@@ -123,6 +123,7 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
     target.hp = 1;
     target.conditions = target.conditions.filter(({ id }) => id !== 'defiance');
     target.ruleState['damage-immune'] = true;
+    target.ruleStateOwners['damage-immune'] = mutation.sourceActorId;
   } else if (target.hp <= 0) defeatActor(state, target);
 }
 
@@ -185,9 +186,9 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
         actor.conditions = actor.conditions.filter(({ id }) => id !== mutation.conditionId);
       } else if (statusIds.has(mutation.conditionId as StatusId)) {
         if (!actor.statuses.includes(mutation.conditionId as StatusId)) actor.statuses.push(mutation.conditionId as StatusId);
-        if (mutation.potency === 'plus') actor.conditions.push({ id: mutation.conditionId, sourceId: mutation.sourceId, potency: 'plus', duration: mutation.duration ?? null });
+        if (mutation.potency === 'plus') actor.conditions.push({ id: mutation.conditionId, sourceId: mutation.sourceId, ownerId: mutation.sourceActorId, potency: 'plus', duration: mutation.duration ?? null });
       } else if (!actor.conditions.some(({ id, sourceId }) => id === mutation.conditionId && sourceId === mutation.sourceId)) {
-        actor.conditions.push({ id: mutation.conditionId, sourceId: mutation.sourceId, potency: mutation.potency, duration: mutation.duration ?? null });
+        actor.conditions.push({ id: mutation.conditionId, sourceId: mutation.sourceId, ownerId: mutation.sourceActorId, potency: mutation.potency, duration: mutation.duration ?? null });
       }
       break;
     }
@@ -214,7 +215,7 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
     case 'terrain': {
       if (mutation.operation === 'remove') state.terrainEffects = state.terrainEffects.filter((effect) => effect.terrain !== mutation.terrain || !effect.positions.some((position) => mutation.positions.some((candidate) => samePosition(position, candidate))));
       else {
-        const effect: EncounterTerrainEffect = { id: generatedId(state, mutation.sourceId, mutationIndex, 'terrain'), sourceId: mutation.sourceId, ownerId: null, terrain: mutation.terrain, positions: clone(mutation.positions), height: mutation.height, duration: mutation.duration ?? null };
+        const effect: EncounterTerrainEffect = { id: generatedId(state, mutation.sourceId, mutationIndex, 'terrain'), sourceId: mutation.sourceId, ownerId: mutation.sourceActorId, terrain: mutation.terrain, positions: clone(mutation.positions), height: mutation.height, duration: mutation.duration ?? null };
         state.terrainEffects.push(effect);
       }
       break;
@@ -242,7 +243,7 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
       const actor = state.actors[mutation.actorId];
       if (!actor) break;
       if (mutation.operation === 'exit') actor.stance = null;
-      else actor.stance = { id: generatedId(state, mutation.sourceId, mutationIndex, 'stance'), sourceId: mutation.sourceId, stanceId: mutation.stanceId, state: { ...mutation.state } };
+      else actor.stance = { id: generatedId(state, mutation.sourceId, mutationIndex, 'stance'), sourceId: mutation.sourceId, ownerId: mutation.sourceActorId, stanceId: mutation.stanceId, state: { ...mutation.state } };
       break;
     }
     case 'persistent': {
@@ -265,20 +266,33 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
     }
     case 'phase': {
       const actor = state.actors[mutation.actorId];
-      if (actor) actor.ruleState.phaseId = mutation.phaseId;
+      if (actor) {
+        actor.ruleState.phaseId = mutation.phaseId;
+        actor.ruleStateOwners.phaseId = mutation.sourceActorId;
+      }
       break;
     }
     case 'end-turn': {
       const actor = state.actors[mutation.actorId];
-      if (actor) actor.ruleState['end-turn-requested'] = true;
+      if (actor) {
+        actor.ruleState['end-turn-requested'] = true;
+        actor.ruleStateOwners['end-turn-requested'] = mutation.sourceActorId;
+      }
       break;
     }
     case 'state': {
       const actor = state.actors[mutation.actorId];
       if (!actor) break;
-      if (mutation.operation === 'clear') delete actor.ruleState[mutation.key];
-      else if (mutation.operation === 'increment') actor.ruleState[mutation.key] = Number(actor.ruleState[mutation.key] ?? 0) + Number(mutation.value ?? 1);
-      else actor.ruleState[mutation.key] = mutation.value ?? null;
+      if (mutation.operation === 'clear') {
+        delete actor.ruleState[mutation.key];
+        delete actor.ruleStateOwners[mutation.key];
+      } else if (mutation.operation === 'increment') {
+        actor.ruleState[mutation.key] = Number(actor.ruleState[mutation.key] ?? 0) + Number(mutation.value ?? 1);
+        actor.ruleStateOwners[mutation.key] = mutation.sourceActorId;
+      } else {
+        actor.ruleState[mutation.key] = mutation.value ?? null;
+        actor.ruleStateOwners[mutation.key] = mutation.sourceActorId;
+      }
       break;
     }
   }

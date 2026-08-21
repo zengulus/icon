@@ -106,7 +106,7 @@ export function Compendium() {
             <footer>{compendium.metadata.attribution}</footer>
           </article>
         ) : (
-          <div className="rules-welcome"><p className="eyebrow">Rules library</p><h1>Every page. One index.</h1><p>The complete ICON 1.5 sourcebook is extracted into searchable, versioned content. Choose a section or search for a rule.</p><div className="welcome-stats"><span><b>501</b> pages</span><span><b>74</b> indexed sections</span><span><b>144</b> Job abilities</span><span><b>120</b> Bond powers</span><span><b>40</b> relics</span><span><b>445</b> foe entries</span><span><b>1.5</b> rules version</span></div></div>
+          <div className="rules-welcome"><p className="eyebrow">Rules library</p><h1>Every page. One index.</h1><p>The complete ICON 1.5 sourcebook is extracted into searchable, versioned content. Choose a section or search for a rule.</p><div className="welcome-stats"><span><b>501</b> pages</span><span><b>75</b> indexed sections</span><span><b>144</b> Job abilities</span><span><b>120</b> Bond powers</span><span><b>40</b> relics</span><span><b>449</b> foe entries</span><span><b>1.5</b> rules version</span></div></div>
         )}
       </div>
     </div>

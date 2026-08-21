@@ -16,7 +16,7 @@ const applyCondition = (conditionId: string): RuleResolver => (context) => [{
   duration: { kind: 'combat' },
 }];
 
-const passiveState: RuleResolver = (context) => [{ kind: 'state', sourceId: context.sourceId, actorId: context.actorId, key: `trait:${context.sourceId}`, operation: 'set', value: true }];
+const passiveState: RuleResolver = (context) => [{ kind: 'state', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: context.actorId, key: `trait:${context.sourceId}`, operation: 'set', value: true }];
 
 export const CLASS_RULE_RESOLVERS: RuleResolverRegistry = {
   'stalwart:trait:armor-2': passiveState,

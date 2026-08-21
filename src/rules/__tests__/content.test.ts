@@ -9,6 +9,8 @@ describe('ICON 1.5 content artifact', () => {
   it('contains the complete extracted source and required credit', () => {
     expect(sourcebook.metadata.pageCount).toBe(501);
     expect(sourcebook.pages).toHaveLength(501);
+    expect(sourcebook.sections).toHaveLength(75);
+    expect(sourcebook.sections.find(({ id }) => id === 'relics')).toMatchObject({ startPage: 245, endPage: 252 });
     expect(sourcebook.pages[1].text).toContain('Tom Bloom');
     expect(sourcebook.pages.filter(({ text }) => text.length > 0).length).toBeGreaterThan(490);
   });

@@ -4,10 +4,13 @@ import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
 import { randomDice, rollBoonOrCurse, rollDamage, type DiceSource } from './dice.js';
 import { compileRuleSourceUnit } from './automation/compiler.js';
-import { applyRuleMutations, encounterRuleState } from './automation/encounter-adapter.js';
+import { isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/manual-programs.js';
+import { applyRuleMutations, encounterConditionSet, encounterRuleState } from './automation/encounter-adapter.js';
 import { executeRuleProgram } from './automation/runtime.js';
 import { RULE_RESOLVERS } from './automation/resolvers.js';
 import { findRuleSourceUnit } from './source-units.js';
+import { planMovementPath } from './movement.js';
+import { durableAssetUrlProblem } from './durable-assets.js';
 
 export class RuleViolation extends Error {
   constructor(public readonly code: string, message: string) {
@@ -16,10 +19,41 @@ export class RuleViolation extends Error {
   }
 }
 
+/**
+ * Durable room snapshots carry a recent combat history for the VTT event
+ * panel. It is not the source of truth for mechanical state, so keeping it
+ * bounded prevents every later checkpoint and player projection from growing
+ * forever during a long-running encounter.
+ */
+export const MAX_ENCOUNTER_EVENT_LOG = 500;
+
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? `encounter-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const clone = <T>(value: T): T => structuredClone(value);
 const samePosition = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 const distance = (a: Position, b: Position) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+const positionWithinGrid = (position: Position, state: Pick<EncounterState, 'grid'>) =>
+  position.x >= 0 && position.y >= 0 && position.x < state.grid.width && position.y < state.grid.height;
+
+/**
+ * The websocket schema already requires these fields, but local/imported
+ * callers can invoke the reducer directly. Canonicalize optional historical
+ * provenance at the reducer boundary so an accepted ADD_ACTOR event can
+ * never create a checkpoint that the strict room validator rejects later.
+ */
+function canonicalActorForAdd(actor: EncounterActor): EncounterActor {
+  const ruleState = { ...(actor.ruleState ?? {}) };
+  const ruleStateOwners = { ...(actor.ruleStateOwners ?? {}) };
+  for (const key of Object.keys(ruleState)) ruleStateOwners[key] ??= null;
+  for (const key of Object.keys(ruleStateOwners)) if (!(key in ruleState)) delete ruleStateOwners[key];
+  return {
+    ...actor,
+    foeProfileId: actor.foeProfileId ?? null,
+    conditions: (actor.conditions ?? []).map((condition) => ({ ...condition, ownerId: condition.ownerId ?? null })),
+    ruleState,
+    ruleStateOwners,
+    stance: actor.stance ? { ...actor.stance, ownerId: actor.stance.ownerId ?? null } : null,
+  };
+}
 
 export function createEncounter(name = 'Untitled encounter'): EncounterState {
   return {
@@ -44,8 +78,14 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
 export function migrateEncounter(input: unknown): EncounterState {
   if (!input || typeof input !== 'object') throw new RuleViolation('encounter.invalid', 'Encounter data must be an object.');
   const candidate = input as Omit<Partial<EncounterState>, 'schemaVersion'> & { schemaVersion?: number };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
     throw new RuleViolation('encounter.schema', `Unsupported encounter schema version: ${String(candidate.schemaVersion)}`);
+  }
+  // There is no cross-rules-version converter in this release. Treat a
+  // declared non-1.5 ruleset as an incompatible import instead of silently
+  // relabelling its mechanics as ICON 1.5 during schema migration.
+  if (candidate.rulesVersion !== undefined && candidate.rulesVersion !== RULES_VERSION) {
+    throw new RuleViolation('encounter.rules-version', `Unsupported ICON rules version: ${String(candidate.rulesVersion)}`);
   }
   const base = createEncounter(typeof candidate.name === 'string' ? candidate.name : 'Migrated encounter');
   const actors = Object.fromEntries(Object.entries(candidate.actors ?? {}).map(([id, value]) => {
@@ -59,20 +99,56 @@ export function migrateEncounter(input: unknown): EncounterState {
       size: actor.size ?? 1,
       chapter: actor.chapter ?? 1,
       abilityIds: [...(actor.abilityIds ?? [])],
-      conditions: [...(actor.conditions ?? [])],
+      conditions: (actor.conditions ?? []).map((condition) => ({ ...condition, ownerId: condition.ownerId ?? null })),
       resources: { ...(actor.resources ?? {}) },
       ruleState: { ...(actor.ruleState ?? {}) },
+      ruleStateOwners: { ...(actor.ruleStateOwners ?? {}) },
       activeEffects: [...(actor.activeEffects ?? [])],
       marks: [...(actor.marks ?? [])],
-      stance: actor.stance ? { ...actor.stance } : null,
+      stance: actor.stance ? { ...actor.stance, ownerId: actor.stance.ownerId ?? null } : null,
       traitIds: [...(actor.traitIds ?? [])],
       onBattlefield: actor.onBattlefield ?? true,
       usedAbilityIds: [...(actor.usedAbilityIds ?? [])],
       interruptUses: { ...(actor.interruptUses ?? {}) },
       interruptUsedThisTurn: actor.interruptUsedThisTurn ?? false,
       slashedTriggeredThisTurn: actor.slashedTriggeredThisTurn ?? false,
+      dangerousTerrainTriggeredThisTurn: actor.dangerousTerrainTriggeredThisTurn ?? false,
     } as EncounterActor];
   }));
+  // Pre-provenance checkpoint schemas did not record which actor created a
+  // condition. Recover the unambiguous common case from the source unit held
+  // by an actor, while leaving genuinely unknown legacy ownership as null.
+  // New resolver mutations always write ownerId explicitly.
+  const inferOwnerId = (sourceId: string): string | null => {
+    const owners = Object.values(actors).filter((candidate) => candidate.abilityIds.includes(sourceId)
+      || candidate.traitIds.includes(sourceId));
+    return owners.length === 1 ? owners[0]!.id : null;
+  };
+  for (const target of Object.values(actors)) {
+    for (const condition of target.conditions) {
+      if (condition.ownerId !== null) continue;
+      condition.ownerId = inferOwnerId(condition.sourceId);
+    }
+    if (target.stance?.ownerId === null) target.stance.ownerId = inferOwnerId(target.stance.sourceId);
+    for (const key of Object.keys(target.ruleState)) {
+      if (key in target.ruleStateOwners) continue;
+      const sourceId = key.startsWith('trait:')
+        ? key.slice('trait:'.length)
+        : key.startsWith('core-rule:')
+          ? key.slice('core-rule:'.length)
+          : null;
+      target.ruleStateOwners[key] = sourceId ? inferOwnerId(sourceId) : null;
+    }
+    for (const key of Object.keys(target.ruleStateOwners)) {
+      if (!(key in target.ruleState)) delete target.ruleStateOwners[key];
+    }
+  }
+  if (candidate.eventLog !== undefined && !Array.isArray(candidate.eventLog)) {
+    throw new RuleViolation('encounter.event-log', 'Encounter event history must be an array when present.');
+  }
+  if (candidate.eventLog && candidate.eventLog.length > MAX_ENCOUNTER_EVENT_LOG) {
+    throw new RuleViolation('encounter.event-log', `Encounter event history exceeds the ${MAX_ENCOUNTER_EVENT_LOG}-event durable limit.`);
+  }
   return {
     ...base,
     ...candidate,
@@ -82,7 +158,10 @@ export function migrateEncounter(input: unknown): EncounterState {
     actors,
     entities: clone(candidate.entities ?? {}),
     terrainEffects: clone(candidate.terrainEffects ?? []),
-    eventLog: [...(candidate.eventLog ?? [])],
+    // A migration may add canonical fields, but it must never erase an older
+    // event simply to fit the current bounded-history policy. Reject and ask
+    // for an explicit archive/compaction decision instead.
+    eventLog: candidate.eventLog ? clone(candidate.eventLog) : [],
   };
 }
 
@@ -122,6 +201,7 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     conditions: [],
     resources: { aether: 0, vigilance: 0, blessing: 0, combo: 0, 'personal-resolve': character.personalResolve },
     ruleState: {},
+    ruleStateOwners: {},
     activeEffects: [],
     marks: [],
     stance: null,
@@ -135,6 +215,7 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     interruptUses: {},
     interruptUsedThisTurn: false,
     slashedTriggeredThisTurn: false,
+    dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
   };
 }
@@ -171,6 +252,7 @@ export function createFoe(name: string, position: Position): EncounterActor {
     conditions: [],
     resources: {},
     ruleState: {},
+    ruleStateOwners: {},
     activeEffects: [],
     marks: [],
     stance: null,
@@ -184,6 +266,7 @@ export function createFoe(name: string, position: Position): EncounterActor {
     interruptUses: {},
     interruptUsedThisTurn: false,
     slashedTriggeredThisTurn: false,
+    dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
   };
 }
@@ -250,6 +333,7 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     conditions: [],
     resources: {},
     ruleState: { phaseId: profile.phases[0]?.id ?? null },
+    ruleStateOwners: { phaseId: null },
     activeEffects: [],
     marks: [],
     stance: null,
@@ -263,6 +347,7 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     interruptUses: {},
     interruptUsedThisTurn: false,
     slashedTriggeredThisTurn: false,
+    dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
   };
 }
@@ -271,20 +356,26 @@ function terrainAt(state: EncounterState, position: Position) {
   return state.grid.terrain.find((cell) => samePosition(cell.position, position));
 }
 
+/** ICON p.89: a pit counts as one elevation lower than its base space. */
+function elevationAt(state: EncounterState, position: Position) {
+  const terrain = terrainAt(state, position);
+  return (terrain?.elevation ?? 0) - (terrain?.type === 'pit' ? 1 : 0);
+}
+
 function assertActive(state: EncounterState, actorId: string) {
   if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
   if (state.activeActorId !== actorId) throw new RuleViolation('turn.not-active-actor', 'Only the active actor can take that action.');
   const actor = state.actors[actorId];
-  if (!actor || actor.defeated) throw new RuleViolation('actor.unavailable', 'That actor cannot act.');
+  if (!actor || actor.defeated || !actor.onBattlefield) throw new RuleViolation('actor.unavailable', 'That actor cannot act.');
   return actor;
 }
 
 function nextActor(state: EncounterState, current: EncounterActor) {
-  const living = Object.values(state.actors).filter((actor) => !actor.defeated && !actor.turnTaken && actor.id !== current.id);
+  const living = Object.values(state.actors).filter((actor) => !actor.defeated && actor.onBattlefield && !actor.turnTaken && actor.id !== current.id);
   const alternate = living.find((actor) => actor.side !== current.side);
   const same = living.find((actor) => actor.side === current.side);
   if (alternate || same) return { actor: alternate ?? same!, round: state.round };
-  const nextRoundActors = Object.values(state.actors).filter((actor) => !actor.defeated && actor.id !== current.id);
+  const nextRoundActors = Object.values(state.actors).filter((actor) => !actor.defeated && actor.onBattlefield && actor.id !== current.id);
   const preferred = nextRoundActors.find((actor) => actor.side !== current.side) ?? nextRoundActors[0] ?? current;
   return { actor: preferred, round: state.round + 1 };
 }
@@ -298,39 +389,15 @@ function saveStatuses(actor: EncounterActor, dice: DiceSource, excluded: StatusI
 }
 
 function movementEvents(state: EncounterState, command: Extract<EncounterCommand, { type: 'MOVE' }>): EncounterEvent[] {
-  const actor = assertActive(state, command.actorId);
-  if (command.path.length === 0) throw new RuleViolation('move.empty', 'Choose at least one destination space.');
-  if (command.mode === 'standard' && actor.standardMoveUsed) throw new RuleViolation('move.standard-used', 'The standard move has already been used this turn.');
-  if (command.mode === 'dash' && actor.actionsRemaining < 1) throw new RuleViolation('action.insufficient', 'Dashing costs one action.');
-  if (command.mode === 'dash' && actor.usedAbilityIds.includes('basic:dash')) throw new RuleViolation('ability.repeat', 'Dash cannot be repeated during the same turn.');
-  const allowance = command.mode === 'standard' ? actor.speed : actor.dash;
-  let previous = actor.position;
-  let cost = 0;
-  let dangerousDamage = 0;
-  for (const point of command.path) {
-    if (point.x < 0 || point.y < 0 || point.x >= state.grid.width || point.y >= state.grid.height) throw new RuleViolation('move.out-of-bounds', 'Movement cannot leave the battlefield.');
-    if (Math.abs(point.x - previous.x) + Math.abs(point.y - previous.y) !== 1) throw new RuleViolation('move.orthogonal', 'Movement must follow an orthogonal, contiguous path.');
-    const occupant = Object.values(state.actors).find((other) => !other.defeated && other.id !== actor.id && samePosition(other.position, point));
-    if (occupant && (occupant.side !== actor.side || samePosition(point, command.path.at(-1)!))) {
-      throw new RuleViolation('move.obstructed', occupant.side === actor.side ? 'Movement can pass through an ally but cannot end in their space.' : 'A foe obstructs that space.');
-    }
-    const terrain = terrainAt(state, point);
-    if (terrain?.type === 'impassable') throw new RuleViolation('move.impassable', 'Impassable terrain obstructs movement.');
-    const previousTerrain = terrainAt(state, previous);
-    const terrainPenalty = previousTerrain?.type === 'difficult' ? 1 : 0;
-    const rawElevationPenalty = Math.max(0, (terrain?.elevation ?? 0) - (previousTerrain?.elevation ?? 0));
-    const elevationPenalty = Math.max(0, rawElevationPenalty - (previousTerrain?.type === 'slope' ? 1 : 0));
-    if (elevationPenalty >= 4) throw new RuleViolation('move.elevation', 'Normal movement cannot climb four or more elevation levels at once.');
-    const engagementPenalty = command.mode === 'dash' ? 0 : Object.values(state.actors).some((other) => other.side !== actor.side && !other.defeated && distance(other.position, previous) <= 1) ? 1 : 0;
-    cost += 1 + Math.max(terrainPenalty, elevationPenalty, engagementPenalty);
-    if ((terrain?.type === 'dangerous' || previousTerrain?.type === 'dangerous') && dangerousDamage === 0) dangerousDamage = 2;
-    previous = point;
+  const plan = planMovementPath(state, command.actorId, command.path, command.mode);
+  if (!plan.legal) {
+    const failure = plan.issue ?? { code: 'move.invalid', message: 'That movement cannot be taken.' };
+    throw new RuleViolation(failure.code, failure.message);
   }
-  if (cost > allowance) throw new RuleViolation('move.too-far', `That path costs ${cost} movement; only ${allowance} is available.`);
-  const slashedDamage = actor.statuses.includes('slashed') && !actor.slashedTriggeredThisTurn ? Math.max(0, 4 - actor.armor) : 0;
-  const hpAfterDanger = Math.max(0, actor.hp - dangerousDamage);
-  const hpAfterSlashed = Math.max(0, hpAfterDanger - Math.max(0, slashedDamage - actor.vigor));
-  const events: EncounterEvent[] = [{ type: 'ACTOR_MOVED', actorId: actor.id, path: command.path, mode: command.mode, dangerousDamage, slashedDamage }];
+  const actor = state.actors[command.actorId]!;
+  const hpAfterDanger = Math.max(0, actor.hp - plan.dangerousDamage);
+  const hpAfterSlashed = Math.max(0, hpAfterDanger - Math.max(0, plan.slashedDamage - actor.vigor));
+  const events: EncounterEvent[] = [{ type: 'ACTOR_MOVED', actorId: actor.id, path: plan.path, mode: plan.mode, dangerousDamage: plan.dangerousDamage, slashedDamage: plan.slashedDamage }];
   if (hpAfterSlashed === 0) events.push({ type: 'ACTOR_DEFEATED', actorId: actor.id, woundGained: actor.side === 'heroes' });
   return events;
 }
@@ -344,9 +411,10 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   if (actor.actionsRemaining < cost) throw new RuleViolation('action.insufficient', `A ${command.weight} attack costs ${cost} action${cost === 1 ? '' : 's'}.`);
   const attackRange = actor.statuses.includes('blind') ? Math.min(2, actor.basicAttackRange) : actor.basicAttackRange;
   if (distance(actor.position, target.position) > attackRange) throw new RuleViolation('attack.range', 'The target is outside basic attack range.');
-  let netBoon = command.boons ?? 0;
-  const actorElevation = terrainAt(state, actor.position)?.elevation ?? 0;
-  const targetElevation = terrainAt(state, target.position)?.elevation ?? 0;
+  if (!hasLineOfSight(state, actor.position, target.position)) throw new RuleViolation('attack.line-of-sight', `${target.name} is outside line of sight.`);
+  let netBoon = 0;
+  const actorElevation = elevationAt(state, actor.position);
+  const targetElevation = elevationAt(state, target.position);
   netBoon += actorElevation - targetElevation;
   if (actor.statuses.includes('dazed')) netBoon -= 1;
   const d20 = dice.die(20);
@@ -360,7 +428,7 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   if (actor.statuses.includes('pacified')) rawDamage = Math.ceil(rawDamage / 2);
   const vulnerableDamage = rawDamage > 0 && target.statuses.includes('vulnerable') ? rawDamage + 1 : rawDamage;
   let reduced = Math.max(0, vulnerableDamage - target.armor);
-  if (command.cover && distance(actor.position, target.position) > 1) reduced = Math.ceil(reduced / 2);
+  if (hasCoverFrom(state, target, actor) && actorElevation <= targetElevation) reduced = Math.ceil(reduced / 2);
   const appliedDamage = Math.min(reduced, target.vigor + target.hp);
   const willDefeat = appliedDamage >= target.vigor + target.hp;
   const events: EncounterEvent[] = [{ type: 'ATTACK_RESOLVED', actorId: actor.id, targetId: target.id, weight: command.weight, d20, boonDie: boon.modifier, total, hit, critical, rawDamage, appliedDamage }];
@@ -401,7 +469,7 @@ function abilityRange(header: string, listedRange: number | null) {
   return area ? Number(area[1]) : 1;
 }
 
-function hasLineOfSight(state: EncounterState, from: Position, to: Position) {
+export function hasLineOfSight(state: EncounterState, from: Position, to: Position) {
   const steps = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y)) * 4;
   if (steps <= 1) return true;
   for (let step = 1; step < steps; step += 1) {
@@ -415,6 +483,41 @@ function hasLineOfSight(state: EncounterState, from: Position, to: Position) {
   return true;
 }
 
+function lineIntersectsCellInterior(from: Position, to: Position, cell: Position) {
+  const epsilon = 1e-9;
+  const startX = from.x + 0.5;
+  const startY = from.y + 0.5;
+  const deltaX = to.x - from.x;
+  const deltaY = to.y - from.y;
+  const intervalForAxis = (start: number, delta: number, lower: number, upper: number): [number, number] | null => {
+    if (Math.abs(delta) <= epsilon) return start > lower && start < upper ? [-Infinity, Infinity] : null;
+    const first = (lower - start) / delta;
+    const second = (upper - start) / delta;
+    return [Math.min(first, second), Math.max(first, second)];
+  };
+  const x = intervalForAxis(startX, deltaX, cell.x + epsilon, cell.x + 1 - epsilon);
+  const y = intervalForAxis(startY, deltaY, cell.y + epsilon, cell.y + 1 - epsilon);
+  if (!x || !y) return false;
+  return Math.max(0, x[0], y[0]) < Math.min(1, x[1], y[1]) - epsilon;
+}
+
+/**
+ * Source p.92: cover is a target-side state determined from adjacent higher
+ * terrain between the two characters. It is never accepted as a client attack
+ * flag. Exact edge-touch ambiguity remains a GM ruling, so this only grants
+ * cover for an unambiguous line through the terrain cell.
+ */
+export function hasCoverFrom(state: EncounterState, target: EncounterActor, attacker: EncounterActor) {
+  if (distance(attacker.position, target.position) <= 1) return false;
+  const targetElevation = elevationAt(state, target.position);
+  return state.grid.terrain.some((terrain) => {
+    if (distance(terrain.position, target.position) !== 1) return false;
+    const terrainElevation = terrain.elevation - (terrain.type === 'pit' ? 1 : 0);
+    if (terrain.type !== 'impassable' && terrainElevation < targetElevation + 1) return false;
+    return lineIntersectsCellInterior(attacker.position, target.position, terrain.position);
+  });
+}
+
 function abilityAttack(
   state: EncounterState,
   actor: EncounterActor,
@@ -424,10 +527,10 @@ function abilityAttack(
   dice: DiceSource,
 ): NonNullable<Extract<EncounterEvent, { type: 'ABILITY_RESOLVED' }>['attack']> {
   const automatic = /\bAttack:\s*Auto hit:/i.test(ability.rulesText);
-  let netBoon = command.boons ?? 0;
+  let netBoon = 0;
   netBoon += Number(ability.header.match(/\+(\d+)\s+boon/i)?.[1] ?? 0);
-  const actorElevation = terrainAt(state, actor.position)?.elevation ?? 0;
-  const targetElevation = terrainAt(state, target.position)?.elevation ?? 0;
+  const actorElevation = elevationAt(state, actor.position);
+  const targetElevation = elevationAt(state, target.position);
   netBoon += actorElevation - targetElevation;
   if (actor.statuses.includes('dazed') && !ability.tags.includes('true strike')) netBoon -= 1;
   const d20 = automatic ? null : dice.die(20);
@@ -453,7 +556,7 @@ function abilityAttack(
       rawDamage += outgoing;
       if (outgoing > 0 && target.statuses.includes('vulnerable')) outgoing += 1;
       if (!divine && !pierce) outgoing = Math.max(0, outgoing - target.armor);
-      const coverApplies = command.cover && distance(actor.position, target.position) > 1 && actorElevation <= targetElevation && !ability.tags.includes('unerring') && !divine;
+      const coverApplies = hasCoverFrom(state, target, actor) && actorElevation <= targetElevation && !ability.tags.includes('unerring') && !divine;
       if (coverApplies) outgoing = Math.ceil(outgoing / 2);
       reduced += outgoing;
     }
@@ -476,11 +579,21 @@ function abilityAttack(
 function abilityEvents(state: EncounterState, command: Extract<EncounterCommand, { type: 'USE_ABILITY' }>, dice: DiceSource): EncounterEvent[] {
   if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
   const actor = state.actors[command.actorId];
-  if (!actor || actor.defeated) throw new RuleViolation('actor.unavailable', 'That actor cannot use an ability.');
+  if (!actor || actor.defeated || !actor.onBattlefield) throw new RuleViolation('actor.unavailable', 'That actor cannot use an ability.');
   const ability = findAbility(command.abilityId);
   if (!ability) throw new RuleViolation('ability.unknown', 'That ability does not exist in ICON 1.5.');
   if (!actor.abilityIds.includes(ability.id)) throw new RuleViolation('ability.not-equipped', 'That ability is not in this actor’s expedition loadout.');
   if (ability.chapter > actor.chapter) throw new RuleViolation('ability.chapter', `Chapter ${ability.chapter} abilities are not available to this actor.`);
+  // Indexing a job ability gives the UI useful source text, not permission to
+  // apply a guessed generic attack/cost routine. An ability needs an explicit
+  // independently reviewed resolver entry and source-derived replay fixtures
+  // before it can alter encounter state.
+  if (ability.automation !== 'executable' || !isIndependentlyExecutableAbility(ability.id)) {
+    throw new RuleViolation(
+      'ability.unresolved',
+      `${ability.name} is not an independently executable ICON rule yet. Review p.${ability.source.page}: ${ability.rulesText}`,
+    );
+  }
   if (actor.usedAbilityIds.includes(ability.id)) throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
   if (ability.cost.kind === 'passive') throw new RuleViolation('ability.passive', 'Passive abilities are always active and cannot be used as commands.');
 
@@ -549,9 +662,15 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
   switch (command.type) {
     case 'ADD_ACTOR':
       if (state.phase !== 'setup') throw new RuleViolation('setup.closed', 'Actors can only be added during setup.');
-      if (state.actors[command.actor.id]) throw new RuleViolation('actor.duplicate', 'That actor is already on the battlefield.');
-      if (Object.values(state.actors).some((actor) => samePosition(actor.position, command.actor.position))) throw new RuleViolation('actor.position', 'That space is occupied.');
-      events = [{ type: 'ACTOR_ADDED', actor: command.actor }];
+      {
+        const actor = canonicalActorForAdd(command.actor);
+        const tokenUrlProblem = durableAssetUrlProblem(actor.tokenUrl);
+        if (tokenUrlProblem) throw new RuleViolation('actor.token-url', `Actor token URL ${tokenUrlProblem}`);
+        if (!positionWithinGrid(actor.position, state)) throw new RuleViolation('actor.position', 'Actor position must be inside the battlefield grid.');
+        if (state.actors[actor.id]) throw new RuleViolation('actor.duplicate', 'That actor is already on the battlefield.');
+        if (Object.values(state.actors).some((existing) => samePosition(existing.position, actor.position))) throw new RuleViolation('actor.position', 'That space is occupied.');
+        events = [{ type: 'ACTOR_ADDED', actor }];
+      }
       break;
     case 'REMOVE_ACTOR':
       if (state.phase !== 'setup') throw new RuleViolation('setup.closed', 'Actors can only be removed during setup.');
@@ -559,6 +678,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       break;
     case 'SET_TERRAIN':
       if (state.phase !== 'setup') throw new RuleViolation('setup.closed', 'Terrain can only be changed during setup.');
+      if (!positionWithinGrid(command.cell.position, state)) throw new RuleViolation('terrain.position', 'Terrain position must be inside the battlefield grid.');
       events = [{ type: 'TERRAIN_SET', cell: command.cell }];
       break;
     case 'START_ENCOUNTER': {
@@ -580,11 +700,18 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
     case 'EXECUTE_RULE': {
       if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
       const actor = state.actors[command.actorId];
-      if (!actor || actor.defeated) throw new RuleViolation('actor.unavailable', 'That actor cannot execute a rule program.');
+      if (!actor || actor.defeated || !actor.onBattlefield) throw new RuleViolation('actor.unavailable', 'That actor cannot execute a rule program.');
       if (command.timing === 'use' && state.activeActorId !== actor.id) throw new RuleViolation('turn.not-active-actor', 'Only the active actor can use this rule action.');
       if (actor.usedAbilityIds.includes(command.sourceId) && command.timing === 'use') throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
       const unit = findRuleSourceUnit(command.sourceId);
       if (!unit) throw new RuleViolation('rule.source-unknown', 'That ICON source rule does not exist.');
+      // Compilation coverage is an audit signal, not permission to execute a
+      // heuristic parse against live authority. Only explicitly reviewed
+      // manual VM programs may take this generic path; all other mechanics
+      // stay on their dedicated reducer command or table-facing rules path.
+      if (!isIndependentlyExecutableManualProgram(unit.id)) {
+        throw new RuleViolation('rule.not-executable', `${unit.name} does not have an independently verified RuleProgram implementation.`);
+      }
       if ((unit.kind === 'job-ability' || unit.kind === 'foe-ability') && !actor.abilityIds.includes(unit.id)) throw new RuleViolation('rule.not-owned', `${unit.name} is not available to this actor.`);
       if ((unit.kind === 'class-trait' || unit.kind === 'job-trait' || unit.kind === 'foe-trait') && !actor.traitIds.includes(unit.id)) throw new RuleViolation('rule.not-owned', `${unit.name} is not active on this actor.`);
       const compilation = compileRuleSourceUnit(unit);
@@ -652,11 +779,15 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       events = [{ type: 'ACTOR_RECOVERED', actorId: actor.id, vigorGained, saves }];
       break;
     }
+    // Status application in production comes from a resolved source program.
+    // This narrow command remains available to deterministic fixtures and GM
+    // migration tools, but is deliberately excluded from the websocket schema.
     case 'APPLY_STATUS': {
       const actor = assertActive(state, command.actorId);
       if (actor.statuses.includes('sealed')) throw new RuleViolation('status.sealed', 'Sealed characters cannot inflict statuses.');
       const target = state.actors[command.targetId];
       if (!target || target.defeated) throw new RuleViolation('status.target', 'That status target is unavailable.');
+      if (encounterConditionSet(target).has('unstoppable')) throw new RuleViolation('status.immune', `${target.name} is immune to statuses while Unstoppable.`);
       events = [{ type: 'STATUS_APPLIED', actorId: command.actorId, targetId: target.id, status: command.status }];
       break;
     }
@@ -697,7 +828,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
   for (const event of events) {
     switch (event.type) {
       case 'ACTOR_ADDED':
-        state.actors[event.actor.id] = clone(event.actor);
+        state.actors[event.actor.id] = canonicalActorForAdd(clone(event.actor));
         break;
       case 'ACTOR_REMOVED':
         delete state.actors[event.actorId];
@@ -716,6 +847,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           actor.resources.combo = 0;
           actor.resources.blessing = 0;
           actor.ruleState['damage-immune'] = false;
+          actor.ruleStateOwners['damage-immune'] ??= null;
           if (actor.traitIds.includes('stalwart:trait:armor-2')) actor.armor = Math.max(2, actor.armor);
         }
         break;
@@ -727,7 +859,10 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           actor.actionsRemaining -= 1;
           actor.usedAbilityIds.push('basic:dash');
         }
-        if (event.dangerousDamage) actor.hp = Math.max(0, actor.hp - event.dangerousDamage);
+        if (event.dangerousDamage) {
+          actor.hp = Math.max(0, actor.hp - event.dangerousDamage);
+          actor.dangerousTerrainTriggeredThisTurn = true;
+        }
         if (actor.statuses.includes('slashed') && !actor.slashedTriggeredThisTurn) {
           const slashedDamage = event.slashedDamage ?? 0;
           const vigorDamage = Math.min(actor.vigor, slashedDamage);
@@ -830,6 +965,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         actor.statuses = actor.statuses.filter((status) => status !== 'hatred');
         actor.conditions = actor.conditions.filter(({ id }) => id !== 'hatred');
         actor.ruleState['end-turn-requested'] = false;
+        actor.ruleStateOwners['end-turn-requested'] ??= null;
         if (actor.traitIds.includes('stalwart:trait:fortify')) actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
         if (actor.conditions.some(({ id }) => id === 'regeneration') && actor.hp <= actor.baseMaxHp / 2 && !actor.statuses.includes('shattered')) actor.vigor = Math.min(actor.vitality, actor.vigor + 4);
         actor.turnTaken = true;
@@ -847,7 +983,9 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           candidate.usedAbilityIds = [];
           candidate.interruptUsedThisTurn = false;
           candidate.slashedTriggeredThisTurn = false;
+          candidate.dangerousTerrainTriggeredThisTurn = false;
           candidate.ruleState['damage-immune'] = false;
+          candidate.ruleStateOwners['damage-immune'] ??= null;
         }
         state.round = event.round;
         state.activeActorId = event.nextActorId;
@@ -874,6 +1012,9 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
     }
     state.revision += 1;
     state.eventLog.push(clone(event));
+  }
+  if (state.eventLog.length > MAX_ENCOUNTER_EVENT_LOG) {
+    state.eventLog = state.eventLog.slice(-MAX_ENCOUNTER_EVENT_LOG);
   }
   return state;
 }

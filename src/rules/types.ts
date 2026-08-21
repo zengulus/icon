@@ -1,8 +1,11 @@
 import type { RuleDuration, RuleExecutionInput, RuleModifier, RuleMutation, RuleTiming } from './automation/types.js';
 
 export const RULES_VERSION = '1.5' as const;
-export const CHARACTER_SCHEMA_VERSION = 2 as const;
-export const ENCOUNTER_SCHEMA_VERSION = 3 as const;
+export const CHARACTER_SCHEMA_VERSION = 3 as const;
+// Schema 6 records ownership for every persisted mechanic produced by
+// automation. Player projections use that provenance to withhold mechanics
+// created by a GM-hidden actor without leaking the source id.
+export const ENCOUNTER_SCHEMA_VERSION = 6 as const;
 
 export const ACTION_IDS = [
   'sneak',
@@ -261,6 +264,9 @@ export interface CharacterAbility {
 export interface CharacterRelic {
   relicId: string;
   rank: 1 | 2 | 3 | 4;
+  /** How an Aspected relic was legitimately advanced. */
+  aspectState: 'none' | 'dust' | 'quest' | 'shared-quest' | 'unresolved';
+  /** Total dust permanently infused into this relic, not dust currently carried. */
   dustInfused: number;
 }
 
@@ -337,6 +343,8 @@ export interface Position {
 export interface EncounterCondition {
   id: string;
   sourceId: string;
+  /** Actor that created the condition, when it came from encounter authority. */
+  ownerId: string | null;
   potency: 'normal' | 'plus';
   duration: RuleDuration | null;
 }
@@ -364,6 +372,8 @@ export interface EncounterMark {
 export interface EncounterStance {
   id: string;
   sourceId: string;
+  /** Actor that created the stance; null only for legacy/imported state. */
+  ownerId: string | null;
   stanceId: string;
   state: Record<string, string | number | boolean | null>;
 }
@@ -399,6 +409,8 @@ export interface EncounterActor {
   conditions: EncounterCondition[];
   resources: Record<string, number>;
   ruleState: Record<string, string | number | boolean | null>;
+  /** Provenance for ruleState entries; no mechanic may rely on this map. */
+  ruleStateOwners: Record<string, string | null>;
   activeEffects: EncounterActiveEffect[];
   marks: EncounterMark[];
   stance: EncounterStance | null;
@@ -412,6 +424,7 @@ export interface EncounterActor {
   interruptUses: Record<string, number>;
   interruptUsedThisTurn: boolean;
   slashedTriggeredThisTurn: boolean;
+  dangerousTerrainTriggeredThisTurn: boolean;
   turnTaken: boolean;
 }
 
@@ -471,13 +484,14 @@ export type EncounterCommand =
   | { type: 'SET_TERRAIN'; cell: TerrainCell }
   | { type: 'START_ENCOUNTER' }
   | { type: 'MOVE'; actorId: string; path: Position[]; mode: 'standard' | 'dash' }
-  | { type: 'BASIC_ATTACK'; actorId: string; targetId: string; weight: 'light' | 'heavy'; boons?: number; cover?: boolean }
-  | { type: 'USE_ABILITY'; actorId: string; abilityId: string; targetIds: string[]; boons?: number; cover?: boolean }
+  | { type: 'BASIC_ATTACK'; actorId: string; targetId: string; weight: 'light' | 'heavy' }
+  | { type: 'USE_ABILITY'; actorId: string; abilityId: string; targetIds: string[] }
   | { type: 'EXECUTE_RULE'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; input: RuleExecutionInput; attackTargetId?: string; triggerSourceId?: string; triggerTargetIds?: string[]; triggers?: string[] }
   | { type: 'INTERACT'; actorId: string; position: Position; description: string }
   | { type: 'RESCUE'; actorId: string; targetId: string }
   | { type: 'RECOVER'; actorId: string }
   | { type: 'END_TURN'; actorId: string }
+  /** Internal deterministic fixture/admin command; never accepted by the websocket schema. */
   | { type: 'APPLY_STATUS'; actorId: string; targetId: string; status: StatusId }
   | { type: 'END_ENCOUNTER' };
 

@@ -3,7 +3,20 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(({ mode }) => ({
   base: mode === 'production' ? '/icon/' : '/',
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      // The browser acceptance server uses a loopback IP rather than
+      // `localhost` so it is isolated from a developer's normal service.
+      // Keep that CSP relaxation out of every normal/dev and production page.
+      name: 'e2e-loopback-websocket-csp',
+      transformIndexHtml(html) {
+        return mode === 'e2e'
+          ? html.replace('ws://localhost:*;', 'ws://localhost:* ws://127.0.0.1:*;')
+          : html;
+      },
+    },
+  ],
   build: {
     sourcemap: true,
     target: 'es2022',
@@ -23,7 +36,9 @@ export default defineConfig(({ mode }) => ({
   },
   test: {
     environment: 'node',
-    exclude: ['node_modules/**', 'dist/**', 'dist-server/**'],
+    // Browser acceptance is owned by Playwright (`npm run test:e2e:browser`),
+    // not Vitest's node runner.
+    exclude: ['node_modules/**', 'dist/**', 'dist-server/**', 'e2e/**'],
     coverage: {
       reporter: ['text', 'html'],
       include: ['src/rules/**/*.ts'],

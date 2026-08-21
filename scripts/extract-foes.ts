@@ -467,6 +467,10 @@ const artifact = {
   },
 };
 
+if (artifact.counts.profiles !== 449 || artifact.counts.abilities !== 1365) {
+  throw new Error(`ICON 1.5 foe extraction expected 449 profiles and 1365 abilities, received ${artifact.counts.profiles} profiles and ${artifact.counts.abilities} abilities. Review the source artifact or parser before publishing generated data.`);
+}
+
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(artifact)}\n`, 'utf8');
 console.log(`Extracted ${artifact.counts.profiles} foe profiles and ${artifact.counts.abilities} foe abilities to ${outputPath}`);

@@ -17,6 +17,35 @@ const activeClassTraits: Record<string, { cost: number; range: number | null }> 
   'mendicant:trait:bless': { cost: 1, range: 4 },
 };
 
+/**
+ * These are the only hand-authored programs that are independently safe to
+ * execute through the generic RuleProgram VM.  Other core rules are enforced
+ * by dedicated encounter commands or reducer lifecycle code, while the
+ * remaining class traits still need a complete typed resolver.  Keeping that
+ * distinction here prevents a passive placeholder from being reported as a
+ * fully executable source rule.
+ */
+const independentlyExecutableManualPrograms = new Set([
+  'vagabond:trait:skirmisher',
+]);
+
+/**
+ * Catalogued job abilities remain source-visible but none has yet passed the
+ * source-specific resolver + replay-fixture bar. Keep this explicit empty
+ * allowlist separate from the generic RuleProgram list so a future
+ * `automation: "executable"` metadata edit cannot accidentally unlock the
+ * old generic cost/attack approximation.
+ */
+const independentlyExecutableAbilityIds = new Set<string>();
+
+export function isIndependentlyExecutableManualProgram(sourceId: string) {
+  return independentlyExecutableManualPrograms.has(sourceId);
+}
+
+export function isIndependentlyExecutableAbility(abilityId: string) {
+  return independentlyExecutableAbilityIds.has(abilityId);
+}
+
 export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompilation | null {
   if (unit.kind !== 'core' && unit.kind !== 'class-trait') return null;
   const classActivation = activeClassTraits[unit.id];
@@ -39,8 +68,12 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
     label: timing,
     text: unit.rulesText,
     effects: [],
-    complete: true,
-    unsupportedText: '',
+    complete: isIndependentlyExecutableManualProgram(unit.id),
+    unsupportedText: isIndependentlyExecutableManualProgram(unit.id)
+      ? ''
+      : unit.kind === 'core'
+        ? 'Implemented by a dedicated encounter reducer path; it has no complete generic RuleProgram resolver yet.'
+        : 'Class trait requires a complete typed resolver before it can execute through the generic RuleProgram VM.',
   };
   return {
     program: {
@@ -55,6 +88,6 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
       classification: 'encounter',
     },
     clauses: [clause],
-    unsupportedClauses: [],
+    unsupportedClauses: clause.complete ? [] : [clause],
   };
 }

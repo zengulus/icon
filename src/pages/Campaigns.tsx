@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PHASE_THREE_READY } from '../rules/index.js';
 import { useCharacters } from '../context/CharacterContext.js';
 import { createCampaign, createEncounterRecord, listCampaigns, listEncounters, type Campaign, type EncounterRecord } from '../services/campaigns.js';
 
-const testingEnabled = PHASE_THREE_READY || import.meta.env.DEV || import.meta.env.VITE_ENABLE_INCOMPLETE_VTT === 'true';
+const testingEnabled = PHASE_THREE_READY || import.meta.env.DEV;
 
 export function Campaigns() {
   const { user, cloudEnabled } = useCharacters();
@@ -45,5 +46,5 @@ export function Campaigns() {
 
   if (!cloudEnabled || !user) return <div className="page"><header className="page-header"><div><p className="eyebrow">Campaign archive</p><h1>Sign in to collaborate</h1><p>Campaign membership and multiplayer encounters require Supabase authentication. Configure Supabase and sign in from the roster.</p></div></header></div>;
 
-  return <div className="page"><header className="page-header"><div><p className="eyebrow">Engineering preview // multiplayer</p><h1>Campaigns</h1><p>Durable campaign and encounter records for the Render activity service.</p></div><div className="header-actions"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Campaign name" /><button className="button primary" onClick={addCampaign}>Create campaign</button></div></header>{message && <div className="notice">{message}</div>}<div className="campaign-layout"><section className="campaign-list"><h2>Campaign archive</h2>{campaigns.map((campaign) => <button className={selected?.id === campaign.id ? 'selected' : ''} key={campaign.id} onClick={() => void selectCampaign(campaign)}><strong>{campaign.name}</strong><small>{campaign.role} · {new Date(campaign.updatedAt).toLocaleDateString()}</small></button>)}</section><section className="encounter-list"><div><h2>{selected?.name ?? 'Choose a campaign'}</h2>{selected?.role === 'gm' && <button className="button compact" onClick={addEncounter}>New encounter</button>}</div>{encounters.map((encounter) => <article key={encounter.id}><div><strong>{encounter.name}</strong><small>{encounter.state.phase} · round {encounter.state.round} · rev {encounter.revision}</small></div><code>{encounter.id}</code></article>)}</section></div></div>;
+  return <div className="page"><header className="page-header"><div><p className="eyebrow">Engineering preview // multiplayer</p><h1>Campaigns</h1><p>Durable campaign metadata and Render-authoritative encounters.</p></div><div className="header-actions"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Campaign name" /><button className="button primary" onClick={addCampaign}>Create campaign</button></div></header>{message && <div className="notice">{message}</div>}<div className="campaign-layout"><section className="campaign-list"><h2>Campaign archive</h2>{campaigns.map((campaign) => <button className={selected?.id === campaign.id ? 'selected' : ''} key={campaign.id} onClick={() => void selectCampaign(campaign)}><strong>{campaign.name}</strong><small>{campaign.role} · {new Date(campaign.updatedAt).toLocaleDateString()}</small></button>)}</section><section className="encounter-list"><div><h2>{selected?.name ?? 'Choose a campaign'}</h2>{selected?.role === 'gm' && <button className="button compact" onClick={addEncounter}>New encounter</button>}</div>{encounters.map((encounter) => <article key={encounter.id}><div><strong>{encounter.name}</strong><small>latest durable revision {encounter.revision}</small></div><Link className="button compact" to={`/encounters/${encounter.id}`}>Open VTT</Link></article>)}</section></div></div>;
 }

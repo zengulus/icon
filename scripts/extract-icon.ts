@@ -4,6 +4,11 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 type SectionSeed = readonly [id: string, title: string, startPage: number, category: string];
 
+// Golden source identity. A changed source artifact must stop extraction for
+// review instead of silently regenerating a superficially plausible catalog.
+const EXPECTED_PAGE_COUNT = 501;
+const EXPECTED_SECTION_COUNT = 75;
+
 const sections: SectionSeed[] = [
   ['introduction', 'ICON: Legacy of the Arkenlords', 9, 'Introduction'],
   ['playing', 'Playing the Game', 11, 'Introduction'],
@@ -109,6 +114,12 @@ const sourcePath = resolve(process.argv[2] ?? 'ICON 1.5.pdf');
 const outputPath = resolve(process.argv[3] ?? 'src/content/generated/icon-1.5.json');
 const data = new Uint8Array(await readFile(sourcePath));
 const document = await pdfjs.getDocument({ data }).promise;
+if (document.numPages !== EXPECTED_PAGE_COUNT) {
+  throw new Error(`ICON 1.5 extraction expected ${EXPECTED_PAGE_COUNT} pages, received ${document.numPages}. Review the source artifact before updating generated catalogs.`);
+}
+if (sections.length !== EXPECTED_SECTION_COUNT) {
+  throw new Error(`ICON 1.5 extraction expected ${EXPECTED_SECTION_COUNT} indexed sections, received ${sections.length}. Review section indexing before continuing.`);
+}
 const pages = [];
 
 for (let number = 1; number <= document.numPages; number += 1) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { abilityPointAllowance, awardXp, chapterForLevel, createCharacter, jobSlotsForLevel, masteryPointAllowance, migrateCharacter, narrativeBudgets, relicSlotsForLevel, spendLevelUp, validateCharacter } from '../character.js';
-import { JOBS } from '../catalog.js';
+import { abilityPointAllowance, awardXp, chapterForLevel, createCharacter, jobSlotsForLevel, masteryPointAllowance, migrateCharacter, narrativeBudgets, relicMinimumInfusedDust, relicSlotsForLevel, spendLevelUp, validateCharacter } from '../character.js';
+import { JOBS, RELICS } from '../catalog.js';
 import { validCharacter } from './fixtures.js';
 
 describe('ICON character creation', () => {
@@ -53,6 +53,38 @@ describe('ICON character creation', () => {
 
   it('rejects unknown import schema versions', () => {
     expect(() => migrateCharacter({ schemaVersion: 99 })).toThrow(/Unsupported character schema/);
+  });
+
+  it('rejects identity values outside the source-derived Kin and Culture catalogs', () => {
+    const character = validCharacter();
+    character.kin = 'NOT-A-KIN';
+    character.culture = 'NOT-A-CULTURE';
+    expect(validateCharacter(character).map(({ code }) => code)).toEqual(expect.arrayContaining(['kin.unknown', 'culture.unknown']));
+  });
+
+  it('tracks the source-required relic advancement path rather than accepting a free Aspect', () => {
+    const character = validCharacter();
+    character.level = 12;
+    character.relics = [{ relicId: RELICS[0].id, rank: 4, aspectState: 'none', dustInfused: 0 }];
+    expect(validateCharacter(character).map(({ code }) => code)).toEqual(expect.arrayContaining(['relic.aspect-required', 'relic.infusion-required']));
+
+    character.relics = [{ relicId: RELICS[0].id, rank: 4, aspectState: 'dust', dustInfused: relicMinimumInfusedDust(4, 'dust') }];
+    expect(validateCharacter(character).map(({ code }) => code)).not.toContain('relic.infusion-required');
+    expect(relicMinimumInfusedDust(2)).toBe(6);
+    expect(relicMinimumInfusedDust(3)).toBe(12);
+    expect(relicMinimumInfusedDust(4, 'shared-quest')).toBe(16);
+  });
+
+  it('migrates historical Aspected relics without silently inventing their advancement path', () => {
+    const legacy = validCharacter() as unknown as Record<string, unknown>;
+    legacy.schemaVersion = 2;
+    legacy.level = 12;
+    legacy.relics = [{ relicId: RELICS[0].id, rank: 4, dustInfused: 12 }];
+
+    const migrated = migrateCharacter(legacy);
+    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.relics).toEqual([{ relicId: RELICS[0].id, rank: 4, dustInfused: 12, aspectState: 'unresolved' }]);
+    expect(validateCharacter(migrated).map(({ code }) => code)).toContain('relic.aspect-unresolved');
   });
 
   it('rejects abilities above the character chapter and unlearned loadout entries', () => {

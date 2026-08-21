@@ -2,11 +2,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { User } from '@supabase/supabase-js';
 import type { IconCharacter } from '../rules/index.js';
 import { deleteCharacter, listCharacters, saveCharacter } from '../services/characters.js';
+import { currentE2EIdentity, e2eAuthEnabled } from '../services/e2e-auth.js';
 import { supabase, supabaseConfigured } from '../services/supabase.js';
+
+/** The UI only needs an id and display email from a Supabase user. */
+type AppUser = Pick<User, 'id' | 'email'>;
 
 interface CharacterContextValue {
   characters: IconCharacter[];
-  user: User | null;
+  user: AppUser | null;
   loading: boolean;
   cloudEnabled: boolean;
   error: string;
@@ -21,7 +25,7 @@ const CharacterContext = createContext<CharacterContextValue | null>(null);
 
 export function CharacterProvider({ children }: { children: ReactNode }) {
   const [characters, setCharacters] = useState<IconCharacter[]>([]);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -39,6 +43,11 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    if (e2eAuthEnabled) {
+      setUser(currentE2EIdentity());
+      setLoading(false);
+      return () => { active = false; };
+    }
     if (!supabase) {
       setLoading(false);
       setCharacters([]);
@@ -59,7 +68,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     characters,
     user,
     loading,
-    cloudEnabled: supabaseConfigured,
+    cloudEnabled: supabaseConfigured || e2eAuthEnabled,
     error,
     refresh,
     async save(character) {
@@ -72,12 +81,17 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       setCharacters((current) => current.filter((character) => character.id !== id));
     },
     async signIn(email) {
+      if (e2eAuthEnabled) throw new Error('Browser acceptance identities are provisioned by the E2E route, not email login.');
       if (!supabase) throw new Error('Supabase is not configured for this deployment.');
       const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
       const { error: signInError } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
       if (signInError) throw signInError;
     },
     async signOut() {
+      if (e2eAuthEnabled) {
+        setUser(null);
+        return;
+      }
       if (supabase) await supabase.auth.signOut();
     },
   }), [characters, error, loading, refresh, user]);

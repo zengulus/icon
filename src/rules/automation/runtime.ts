@@ -234,7 +234,7 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
         const positions = [...(context.input.positions?.[effect.positionInput] ?? [])];
         const count = effect.count ? integer(effect.count, context) : positions.length;
         if (positions.length < count) throw new RuleProgramViolation('choice.position-count', `${effect.positionInput} requires ${count} positions.`);
-        output.push({ kind: 'terrain', sourceId: context.sourceId, operation: effect.operation, terrain: effect.terrain, positions: positions.slice(0, count), height: effect.height ? integer(effect.height, context) : null, ...(effect.duration ? { duration: effect.duration } : {}) });
+        output.push({ kind: 'terrain', sourceId: context.sourceId, sourceActorId: context.actorId, operation: effect.operation, terrain: effect.terrain, positions: positions.slice(0, count), height: effect.height ? integer(effect.height, context) : null, ...(effect.duration ? { duration: effect.duration } : {}) });
         break;
       }
       case 'entity': {
@@ -245,7 +245,7 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
         break;
       }
       case 'mark': for (const target of targets) output.push({ kind: 'mark', sourceId: context.sourceId, ownerId: context.actorId, operation: effect.operation, actorId: target.id, markId: effect.markId, ...(effect.duration ? { duration: effect.duration } : {}), state: effect.state ?? {} }); break;
-      case 'stance': for (const target of targets) output.push({ kind: 'stance', sourceId: context.sourceId, operation: effect.operation, actorId: target.id, stanceId: effect.stanceId, state: effect.state ?? {} }); break;
+      case 'stance': for (const target of targets) output.push({ kind: 'stance', sourceId: context.sourceId, sourceActorId: context.actorId, operation: effect.operation, actorId: target.id, stanceId: effect.stanceId, state: effect.state ?? {} }); break;
       case 'persistent': for (const target of targets) output.push({ kind: 'persistent', sourceId: context.sourceId, ownerId: context.actorId, operation: effect.operation, actorId: target.id, effectId: effect.effectId, duration: effect.duration, modifiers: effect.modifiers ?? [], triggers: effect.triggers ?? [], state: effect.state ?? {} }); break;
       case 'modifier': for (const target of targets) output.push({ kind: 'modifier', sourceId: context.sourceId, ownerId: context.actorId, actorId: target.id, modifier: effect.modifier, duration: effect.duration }); break;
       case 'save': {
@@ -262,9 +262,9 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
       case 'if': effectsToMutations(evaluatePredicate(effect.predicate, context) ? effect.then : effect.otherwise ?? [], context, output); break;
       case 'repeat': for (let iteration = 0; iteration < integer(effect.times, context); iteration += 1) effectsToMutations(effect.effects, context, output); break;
       case 'defeat': for (const target of targets) output.push({ kind: 'defeat', sourceId: context.sourceId, actorId: target.id }); break;
-      case 'phase': for (const target of targets) output.push({ kind: 'phase', sourceId: context.sourceId, actorId: target.id, phaseId: effect.phaseId }); break;
-      case 'end-turn': for (const target of targets) output.push({ kind: 'end-turn', sourceId: context.sourceId, actorId: target.id }); break;
-      case 'state': for (const target of targets) output.push({ kind: 'state', sourceId: context.sourceId, actorId: target.id, key: effect.key, operation: effect.operation, ...(effect.value !== undefined ? { value: effect.value } : {}) }); break;
+      case 'phase': for (const target of targets) output.push({ kind: 'phase', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id, phaseId: effect.phaseId }); break;
+      case 'end-turn': for (const target of targets) output.push({ kind: 'end-turn', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id }); break;
+      case 'state': for (const target of targets) output.push({ kind: 'state', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id, key: effect.key, operation: effect.operation, ...(effect.value !== undefined ? { value: effect.value } : {}) }); break;
     }
   }
 }
