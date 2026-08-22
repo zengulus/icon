@@ -8,7 +8,6 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
-  type WheelEvent,
 } from 'react';
 import { JOBS, PHASE_TWO_READY, RULES_COVERAGE, findAbility, findJob } from '../rules/catalog.js';
 import { createCharacter, validateCharacter } from '../rules/character.js';
@@ -319,7 +318,7 @@ export interface TacticalViewportProps {
   onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onWheel: (event: WheelEvent<HTMLDivElement>) => void;
+  onWheel: (event: WheelEvent) => void;
 }
 
 export function TacticalViewport({
@@ -343,6 +342,18 @@ export function TacticalViewport({
   const mapOrigin = mapToScreen({ x: 0, y: 0 }, geometry);
   const terrainByCell = useMemo(() => new Map(encounter.grid.terrain.map((cell) => [`${cell.position.x},${cell.position.y}`, cell])), [encounter.grid.terrain]);
   const foggedCells = useMemo(() => new Set(room.table.fog.flatMap((region) => region.cells.map((cell) => `${cell.x},${cell.y}`))), [room.table.fog]);
+  // React registers `wheel` as a passive listener at the root, which silently
+  // drops preventDefault(); attach our own non-passive listener so map zoom
+  // can actually suppress page scrolling.
+  const latestWheelHandler = useRef(onWheel);
+  latestWheelHandler.current = onWheel;
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onNativeWheel = (event: WheelEvent) => latestWheelHandler.current(event);
+    el.addEventListener('wheel', onNativeWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onNativeWheel);
+  }, [viewportRef]);
   return (
     <div
       ref={viewportRef}
@@ -351,7 +362,6 @@ export function TacticalViewport({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      onWheel={onWheel}
     >
       <div className="vtt-map-image" style={{ left: mapOrigin.x, top: mapOrigin.y, width: encounter.grid.width * room.table.map.cellSize * room.table.map.scale * geometry.camera.zoom, height: encounter.grid.height * room.table.map.cellSize * room.table.map.scale * geometry.camera.zoom, ...assetBackground(room.table.map.backgroundUrl) }} />
       <div className="vtt-grid-boundary" style={{ left: gridOrigin.x, top: gridOrigin.y, width: encounter.grid.width * screenCellSize, height: encounter.grid.height * screenCellSize }} />
@@ -499,7 +509,7 @@ export function VttRoomBoard({ room, role, onEncounter, onTable, onPing }: VttRo
     }
   }
 
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+  function handleWheel(event: WheelEvent) {
     const target = viewportRef.current;
     if (!target) return;
     event.preventDefault();
@@ -520,7 +530,7 @@ export function VttRoomBoard({ room, role, onEncounter, onTable, onPing }: VttRo
       <button className={tableTool === 'select' && mode === 'heavy' ? 'active' : ''} onClick={() => { setTableTool('select'); setMode('heavy'); }}>Heavy</button>
       <span className="vtt-tool-hint">{notice || (draftAnnotationStart ? 'Choose the second point' : 'Click a grid cell')}</span>
     </div>
-    <TacticalViewport room={room} geometry={geometry} tableTool={tableTool} selectedCell={selectedCell} selectedActorId={selectedActorId} draftAnnotationStart={draftAnnotationStart} viewportRef={viewportRef} onCell={clickCell} onTokenSelect={(actor) => { setSelectedActorId(actor.id); setSelectedCell(actor.position); onPing?.(actor.position); }} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
+    <TacticalViewport room={room} geometry={geometry} tableTool={tableTool} selectedCell={selectedCell} selectedActorId={selectedActorId} draftAnnotationStart={draftAnnotationStart} viewportRef={viewportRef} onCell={clickCell} onTokenSelect={(actor) => { setSelectedActorId(actor.id); setSelectedCell(actor.position); clickCell(actor.position); }} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
     <div className="vtt-camera-bar"><button onClick={fitCamera}>Fit map</button><button onClick={() => setCamera((current) => ({ ...current, zoom: clamp(current.zoom / 1.15, .2, 4) }))}>−</button><output>{Math.round(camera.zoom * 100)}%</output><button onClick={() => setCamera((current) => ({ ...current, zoom: clamp(current.zoom * 1.15, .2, 4) }))}>+</button><span>Camera is ephemeral; room commands remain authoritative.</span></div>
   </section>;
 }
@@ -832,7 +842,7 @@ export function Sandbox({ forceEnabled = false, labMode = false }: SandboxProps)
     }
   }
 
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+  function handleWheel(event: WheelEvent) {
     const target = viewportRef.current;
     if (!target) return;
     event.preventDefault();
@@ -886,7 +896,7 @@ export function Sandbox({ forceEnabled = false, labMode = false }: SandboxProps)
             ] as Array<[TableTool, string]>).map(([tool, label]) => <button key={tool} className={tableTool === tool ? 'active' : ''} onClick={() => activateTableTool(tool)}>{label}</button>)}
             <span className="vtt-tool-hint">{draftAnnotationStart ? 'Choose the second point' : tableTool === 'pan' ? 'Drag or use middle mouse' : 'Click a grid cell'}</span>
           </div>
-          <TacticalViewport room={room} geometry={geometry} tableTool={tableTool} selectedCell={selectedCell} selectedActorId={selectedActorId} draftAnnotationStart={draftAnnotationStart} viewportRef={viewportRef} onCell={clickCell} onTokenSelect={(actor) => { setSelectedActorId(actor.id); setSelectedCell(actor.position); }} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
+          <TacticalViewport room={room} geometry={geometry} tableTool={tableTool} selectedCell={selectedCell} selectedActorId={selectedActorId} draftAnnotationStart={draftAnnotationStart} viewportRef={viewportRef} onCell={clickCell} onTokenSelect={(actor) => { setSelectedActorId(actor.id); setSelectedCell(actor.position); clickCell(actor.position); }} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
           <div className="vtt-camera-bar"><button onClick={fitCamera}>Fit map</button><button onClick={() => setCamera((current) => ({ ...current, zoom: clamp(current.zoom / 1.15, .2, 4) }))}>−</button><output>{Math.round(camera.zoom * 100)}%</output><button onClick={() => setCamera((current) => ({ ...current, zoom: clamp(current.zoom * 1.15, .2, 4) }))}>+</button><span>Wheel to zoom at pointer · Pan never alters a mechanical space</span></div>
         </section>
 

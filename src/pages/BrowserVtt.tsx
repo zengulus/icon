@@ -6,7 +6,6 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
-  type WheelEvent,
 } from 'react';
 import { JOBS, findAbility, findJob } from '../rules/catalog.js';
 import { createCharacter } from '../rules/character.js';
@@ -377,7 +376,7 @@ export function BrowserVtt() {
     }
   }
 
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+  function handleWheel(event: WheelEvent) {
     const target = viewportRef.current;
     if (!target) return;
     event.preventDefault();
@@ -426,7 +425,7 @@ export function BrowserVtt() {
             {tools.map(([tool, label]) => <button key={tool} className={tableTool === tool ? 'active' : ''} onClick={() => activateTableTool(tool)}>{label}</button>)}
             <span className="vtt-tool-hint">{tableTool === 'pan' ? 'Drag or use middle mouse' : 'Click a grid cell'}</span>
           </div>
-          <TacticalViewport room={room} geometry={geometry} tableTool={tableTool} selectedCell={selectedCell} selectedActorId={selectedActorId} draftAnnotationStart={null} viewportRef={viewportRef} onCell={clickCell} onTokenSelect={(actor) => { setSelectedActorId(actor.id); setSelectedCell(actor.position); }} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
+          <TacticalViewport room={room} geometry={geometry} tableTool={tableTool} selectedCell={selectedCell} selectedActorId={selectedActorId} draftAnnotationStart={null} viewportRef={viewportRef} onCell={clickCell} onTokenSelect={(actor) => { setSelectedActorId(actor.id); setSelectedCell(actor.position); clickCell(actor.position); }} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onWheel={handleWheel} />
           <div className="vtt-camera-bar"><button onClick={fitCamera}>Fit map</button><button onClick={() => setCamera((current) => ({ ...current, zoom: clamp(current.zoom / 1.15, .2, 4) }))}>−</button><output>{Math.round(camera.zoom * 100)}%</output><button onClick={() => setCamera((current) => ({ ...current, zoom: clamp(current.zoom * 1.15, .2, 4) }))}>+</button><span>Wheel to zoom at pointer · Pan never alters a mechanical space</span></div>
         </section>
 
