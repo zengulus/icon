@@ -16,6 +16,7 @@ import { ENOCHIAN_RULE_RESOLVERS } from './enochian-programs.js';
 import { GEOMANCER_RULE_RESOLVERS } from './geomancer-programs.js';
 import { SPELLBLADE_RULE_RESOLVERS } from './spellblade-programs.js';
 import { STORMBENDER_RULE_RESOLVERS } from './stormbender-programs.js';
+import { FOE_RULE_RESOLVERS } from './foe-recipes.js';
 import type { RuleResolverRegistry } from './types.js';
 
 export const RULE_RESOLVERS: RuleResolverRegistry = {
@@ -37,6 +38,7 @@ export const RULE_RESOLVERS: RuleResolverRegistry = {
   ...GEOMANCER_RULE_RESOLVERS,
   ...SPELLBLADE_RULE_RESOLVERS,
   ...STORMBENDER_RULE_RESOLVERS,
+  ...FOE_RULE_RESOLVERS,
 };
 
 export function hasRuleResolver(id: string) {

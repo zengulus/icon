@@ -16,6 +16,7 @@ import { ENOCHIAN_ABILITY_PROGRAMS } from './enochian-programs.js';
 import { GEOMANCER_ABILITY_PROGRAMS } from './geomancer-programs.js';
 import { SPELLBLADE_ABILITY_PROGRAMS } from './spellblade-programs.js';
 import { STORMBENDER_ABILITY_PROGRAMS } from './stormbender-programs.js';
+import { FOE_ABILITY_RECIPES, compileFoeAbilityRecipe } from './foe-recipes.js';
 
 const coreUseCosts: Record<string, number> = {
   'core:dash': 1,
@@ -283,10 +284,19 @@ export const EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
   'stormbender:eye-of-the-storm',
 ]);
 
+/** The reviewed foe-ability slices have passed the same source-specific
+ * resolver + replay-fixture bar as the job sets. Each entry is one
+ * declarative FoeRecipe in foe-recipes.ts (Crusher p.301, Warrior p.300,
+ * Soldier p.300, Brute p.300, Pepperbox p.302, Hunter p.302); the generic
+ * factories compile the recipe into a typed RuleProgram and its named
+ * deterministic resolver — no per-ability resolver code. */
+export const EXECUTABLE_FOE_ABILITY_IDS: ReadonlySet<string> = new Set(Object.keys(FOE_ABILITY_RECIPES));
+
 /** Every independently executable ability is also independently executable
  * through the generic RuleProgram VM (EXECUTE_RULE), which is how triggered
  * steps such as Collide/Heroic and stance refresh are activated. */
 for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) independentlyExecutableManualPrograms.add(abilityId);
+for (const foeld of EXECUTABLE_FOE_ABILITY_IDS) independentlyExecutableManualPrograms.add(foeld);
 
 const independentlyExecutableAbilityIds = new Set<string>(EXECUTABLE_JOB_ABILITY_IDS);
 
@@ -332,6 +342,10 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
     if (spellblade) return spellblade(unit);
     const stormbender = STORMBENDER_ABILITY_PROGRAMS[unit.id];
     return stormbender ? stormbender(unit) : null;
+  }
+  if (unit.kind === 'foe-ability') {
+    const recipe = FOE_ABILITY_RECIPES[unit.id];
+    return recipe ? compileFoeAbilityRecipe(unit, recipe) : null;
   }
   if (unit.kind !== 'core' && unit.kind !== 'class-trait') return null;
   const classActivation = activeClassTraits[unit.id];

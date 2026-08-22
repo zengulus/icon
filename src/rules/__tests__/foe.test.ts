@@ -1,0 +1,391 @@
+import { describe, expect, it } from 'vitest';
+import { EXECUTABLE_FOE_ABILITY_IDS } from '../automation/manual-programs.js';
+import { FOE_ABILITY_RECIPES } from '../automation/foe-recipes.js';
+import { compileRuleSourceUnit } from '../automation/compiler.js';
+import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
+import { findRuleSourceUnit } from '../source-units.js';
+import type { EncounterActor, EncounterState, Position } from '../types.js';
+import { scriptedDice, validCharacter } from './fixtures.js';
+
+/**
+ * Source-derived golden fixtures for the recipe-driven foe ability slices
+ * (ICON p.300–302: Crusher, Warrior, Soldier, Brute, Pepperbox, Hunter).
+ * Every ability below is one declarative FoeRecipe in
+ * `automation/foe-recipes.ts` — the generic factories resolve it — and each
+ * scenario resolves through the shared encounter reducer and must replay to
+ * the identical state through `applyEvents`.
+ *
+ * Foe abilities execute through EXECUTE_RULE (the same generic VM the job
+ * sub-actions use), so each fixture hands the turn to the foe with END_TURN
+ * and strips the hero's when-damaged/defeated interrupts so the foe blow
+ * applies instead of being held by the p.107 interrupt protocol.
+ */
+
+interface FoeLayout {
+  foe: Position;
+  hero: Position;
+  /** Extra actors added after the main foe so it receives the turn. */
+  extras?: Array<{ kind: 'hero' | 'foe'; at: Position }>;
+}
+
+interface FoeFixture {
+  state: EncounterState;
+  hero: EncounterActor;
+  foe: EncounterActor;
+  extras: EncounterActor[];
+}
+
+function foeFixture(profileId: string, layout: FoeLayout): FoeFixture {
+  let state = createEncounter('Foe fixture');
+  const hero = actorFromCharacter(validCharacter('Aster'), layout.hero);
+  // Foe damage must apply in fixtures: strip the when-damaged (p.128) and
+  // defeated (p.138) interrupts that would otherwise hold every foe blow.
+  hero.abilityIds = hero.abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain' && id !== 'colossus:boiling-blood');
+  const foe = createFoeFromProfile(profileId, layout.foe);
+  state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+  state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+  const extras: EncounterActor[] = [];
+  for (const item of layout.extras ?? []) {
+    const extra = item.kind === 'hero'
+      ? actorFromCharacter(validCharacter(`Ally ${extras.length + 1}`), item.at)
+      : createFoeFromProfile(profileId, item.at);
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: extra }).state;
+    extras.push(extra);
+  }
+  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  // The hero starts; END_TURN hands the turn to the first foe.
+  state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+  return { state, hero, foe, extras };
+}
+
+const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], sourceId: string) => {
+  const event = events.find((candidate) => candidate.type === 'RULE_MUTATIONS_APPLIED' && candidate.sourceId === sourceId);
+  return event && event.type === 'RULE_MUTATIONS_APPLIED' ? event.mutations : [];
+};
+
+/** EXECUTE_RULE through the same command surface the VTT/transport use. */
+function foeAbility(state: EncounterState, fixture: FoeFixture, abilityId: string, options: { targetId?: string; dice?: number[] } = {}) {
+  return executeCommand(state, {
+    type: 'EXECUTE_RULE',
+    actorId: fixture.foe.id,
+    sourceId: abilityId,
+    actionId: 'default',
+    timing: 'use',
+    input: options.targetId ? { actorIds: { target: [options.targetId] } } : {},
+    ...(options.targetId && abilityIsAttack(abilityId) ? { attackTargetId: options.targetId } : {}),
+  }, scriptedDice(...(options.dice ?? [])));
+}
+
+function abilityIsAttack(abilityId: string) {
+  return findRuleSourceUnit(abilityId)?.metadata.tags?.toString().includes('attack') ?? false;
+}
+
+describe('foe ability automation (p.300–302 recipes)', () => {
+  it('marks every reviewed foe ability executable in the catalog and audit', () => {
+    expect(Object.keys(FOE_ABILITY_RECIPES)).toHaveLength(20);
+    for (const abilityId of EXECUTABLE_FOE_ABILITY_IDS) {
+      const unit = findRuleSourceUnit(abilityId)!;
+      expect(unit.kind).toBe('foe-ability');
+      expect(FOE_ABILITY_RECIPES[abilityId]).toBeDefined();
+      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
+    }
+  });
+
+  it('Crusher Headbutt: true-strike attack, weakened on hit, [D]+fray', () => {
+    const fixture = foeFixture('basic:crusher:301', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:crusher:301:headbutt', { targetId: fixture.hero.id, dice: [12, 3] });
+    expect(mutationsOf(result.events, 'basic:crusher:301:headbutt')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'attack', d20: 12, total: 12, hit: true, trueStrike: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 7, delivery: 'hit' },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'weakened' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(35); // 40 - (3 + fray 4 - armor 2)
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('weakened');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Crusher Headbutt: bonus damage die (keep highest) against weakened foes (p.102)', () => {
+    const fixture = foeFixture('basic:crusher:301', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    fixture.state.actors[fixture.hero.id].statuses.push('weakened');
+    const result = foeAbility(fixture.state, fixture, 'basic:crusher:301:headbutt', { targetId: fixture.hero.id, dice: [12, 3, 2, 5] });
+    expect(mutationsOf(result.events, 'basic:crusher:301:headbutt')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'attack', d20: 12, hit: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 12 }, // die 3 + fray 4 + max(2,5)
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'weakened' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(30); // 40 - (12 - armor 2)
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Crusher Mighty Blow: 2 damage and a shove 1', () => {
+    const fixture = foeFixture('basic:crusher:301', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:crusher:301:mighty-blow', { targetId: fixture.hero.id });
+    expect(mutationsOf(result.events, 'basic:crusher:301:mighty-blow')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 2, delivery: 'effect' },
+      { kind: 'move', actorId: fixture.hero.id, movement: 'shove', distance: 1, direction: { x: 1, y: 0 } },
+    ]);
+    expect(result.state.actors[fixture.hero.id].position).toEqual({ x: 3, y: 1 }); // armor 2 absorbs the damage
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Crusher Grapple: marks an adjacent foe', () => {
+    const fixture = foeFixture('basic:crusher:301', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:crusher:301:grapple', { targetId: fixture.hero.id });
+    expect(mutationsOf(result.events, 'basic:crusher:301:grapple')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'mark', actorId: fixture.hero.id, markId: 'crusher:grapple', ownerId: fixture.foe.id },
+    ]);
+    expect(result.state.actors[fixture.hero.id].marks.some(({ markId, ownerId }) => markId === 'crusher:grapple' && ownerId === fixture.foe.id)).toBe(true);
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Warrior Redondo (free action): swaps places with an adjacent ally', () => {
+    const fixture = foeFixture('basic:warrior:300', {
+      foe: { x: 1, y: 1 }, hero: { x: 5, y: 5 },
+      extras: [{ kind: 'foe', at: { x: 2, y: 1 } }],
+    });
+    const result = foeAbility(fixture.state, fixture, 'basic:warrior:300:redondo', { targetId: fixture.extras[0].id });
+    expect(mutationsOf(result.events, 'basic:warrior:300:redondo')).toMatchObject([
+      { kind: 'move', actorId: fixture.foe.id, movement: 'place' },
+      { kind: 'move', actorId: fixture.extras[0].id, movement: 'place' },
+    ]);
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 2, y: 1 });
+    expect(result.state.actors[fixture.extras[0].id].position).toEqual({ x: 1, y: 1 });
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Warrior Cleave: 2[D]+fray attack and fray splash to adjacent foes', () => {
+    const fixture = foeFixture('basic:warrior:300', {
+      foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 },
+      extras: [{ kind: 'hero', at: { x: 3, y: 1 } }],
+    });
+    const result = foeAbility(fixture.state, fixture, 'basic:warrior:300:cleave', { targetId: fixture.hero.id, dice: [12, 3, 4] });
+    expect(mutationsOf(result.events, 'basic:warrior:300:cleave')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'attack', hit: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 11, delivery: 'hit' },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 4, delivery: 'area' },
+      { kind: 'damage', actorId: fixture.extras[0].id, amount: 4, delivery: 'area' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(29); // 40 - (11-2) - (4-2)
+    expect(result.state.actors[fixture.extras[0].id].hp).toBe(38); // 40 - (4-2)
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Warrior Bull rush: rushes 1 and weakens the adjacent character it reaches', () => {
+    const fixture = foeFixture('basic:warrior:300', { foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:warrior:300:bull-rush');
+    expect(mutationsOf(result.events, 'basic:warrior:300:bull-rush')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'move', actorId: fixture.foe.id, movement: 'rush' },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'weakened' },
+    ]);
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 2, y: 1 });
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('weakened');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Soldier Slash: true-strike attack that slashes, and a critical adds a die', () => {
+    const fixture = foeFixture('basic:soldier:300', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:soldier:300:slash', { targetId: fixture.hero.id, dice: [20, 3, 4] });
+    expect(mutationsOf(result.events, 'basic:soldier:300:slash')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'attack', d20: 20, hit: true, critical: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 7, delivery: 'hit' },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 4, delivery: 'hit' },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'slashed' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(33); // 40 - (7-2) - (4-2)
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('slashed');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Soldier Bash: shoves an adjacent foe 2', () => {
+    const fixture = foeFixture('basic:soldier:300', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:soldier:300:bash', { targetId: fixture.hero.id });
+    expect(result.state.actors[fixture.hero.id].position).toEqual({ x: 4, y: 1 });
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Soldier Valiant: rushes up to 4 toward the nearest foe', () => {
+    const fixture = foeFixture('basic:soldier:300', { foe: { x: 1, y: 1 }, hero: { x: 6, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:soldier:300:valiant');
+    expect(mutationsOf(result.events, 'basic:soldier:300:valiant')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'move', actorId: fixture.foe.id, movement: 'rush' },
+    ]);
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 5, y: 1 }); // blocked by the hero at 6
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Brute Backhand: true-strike [D]+fray attack', () => {
+    const fixture = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:brute:300:backhand', { targetId: fixture.hero.id, dice: [12, 3] });
+    expect(result.state.actors[fixture.hero.id].hp).toBe(35); // 40 - (3 + fray 4 - armor 2)
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Brute Backbreaker: rushes 2 before the 2[D]+fray attack and stuns', () => {
+    const fixture = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:brute:300:backbreaker', { targetId: fixture.hero.id, dice: [12, 3, 4] });
+    expect(mutationsOf(result.events, 'basic:brute:300:backbreaker')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'move', actorId: fixture.foe.id, movement: 'rush' },
+      { kind: 'attack', hit: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 11, delivery: 'hit' },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'stunned' },
+    ]);
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 2, y: 1 });
+    expect(result.state.actors[fixture.hero.id].hp).toBe(31); // 40 - (11 - armor 2)
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('stunned');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Brute Bulk up: gains 4 vigor, or 6 when bloodied', () => {
+    const fixture = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 5, y: 5 } });
+    const buffed = foeAbility(fixture.state, fixture, 'basic:brute:300:bulk-up');
+    expect(buffed.state.actors[fixture.foe.id].vigor).toBe(4);
+
+    fixture.state.actors[fixture.foe.id].hp = 10; // bloodied (40/2)
+    fixture.state.actors[fixture.foe.id].vigor = 0;
+    const bloodied = foeAbility(fixture.state, fixture, 'basic:brute:300:bulk-up');
+    expect(bloodied.state.actors[fixture.foe.id].vigor).toBe(6);
+    expect(applyEvents(fixture.state, bloodied.events)).toEqual(bloodied.state);
+  });
+
+  it('Brute Hurl: shoves 2, and a Collide weakens the shoved character', () => {
+    const clear = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    const shoved = foeAbility(clear.state, clear, 'basic:brute:300:hurl', { targetId: clear.hero.id });
+    expect(shoved.state.actors[clear.hero.id].position).toEqual({ x: 4, y: 1 });
+    expect(shoved.state.actors[clear.hero.id].statuses).not.toContain('weakened');
+
+    const colliding = foeFixture('basic:brute:300', {
+      foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 },
+      extras: [{ kind: 'hero', at: { x: 4, y: 1 } }],
+    });
+    const result = foeAbility(colliding.state, colliding, 'basic:brute:300:hurl', { targetId: colliding.hero.id });
+    expect(result.state.actors[colliding.hero.id].position).toEqual({ x: 3, y: 1 }); // stopped by the ally at 4
+    expect(result.state.actors[colliding.hero.id].statuses).toContain('weakened');
+    expect(applyEvents(colliding.state, result.events)).toEqual(result.state);
+  });
+
+  it('Pepperbox Riddle: 3 damage three times, dazed and unerring at exactly range 3', () => {
+    const fixture = foeFixture('basic:pepperbox:302', { foe: { x: 1, y: 1 }, hero: { x: 4, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:pepperbox:302:riddle', { targetId: fixture.hero.id, dice: [12, 4] });
+    expect(mutationsOf(result.events, 'basic:pepperbox:302:riddle')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'attack', d20: 12, boon: 4, total: 16, hit: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 3, instance: 1, ignoreCover: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 3, instance: 2, ignoreCover: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 3, instance: 3, ignoreCover: true },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'dazed' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(37); // 3 × (3 - armor 2)
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('dazed');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Pepperbox Riddle: a miss deals 3 damage', () => {
+    const fixture = foeFixture('basic:pepperbox:302', { foe: { x: 1, y: 1 }, hero: { x: 4, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:pepperbox:302:riddle', { targetId: fixture.hero.id, dice: [1, 4] });
+    // The Effect clause is unconditional: at exactly range 3 the target is
+    // dazed whether the attack hits or misses.
+    expect(mutationsOf(result.events, 'basic:pepperbox:302:riddle')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'attack', d20: 1, total: 5, hit: false },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 3, delivery: 'miss' },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'dazed' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(39); // 40 - (3 - armor 2)
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('dazed');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Pepperbox Strafe: dashes 2 then deals 2 damage to a foe in range 3', () => {
+    const fixture = foeFixture('basic:pepperbox:302', { foe: { x: 1, y: 1 }, hero: { x: 4, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:pepperbox:302:strafe');
+    expect(mutationsOf(result.events, 'basic:pepperbox:302:strafe')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'move', actorId: fixture.foe.id, movement: 'rush' },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 2, delivery: 'effect' },
+    ]);
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 3, y: 1 });
+    expect(result.state.actors[fixture.hero.id].hp).toBe(40); // armor 2 absorbs the 2 damage
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Pepperbox Flash Bomb: small blast deals 3 damage twice, blinds foes, and grants allies stealth', () => {
+    const fixture = foeFixture('basic:pepperbox:302', {
+      foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 },
+      extras: [
+        { kind: 'hero', at: { x: 4, y: 1 } },
+        { kind: 'foe', at: { x: 2, y: 1 } },
+      ],
+    });
+    const result = foeAbility(fixture.state, fixture, 'basic:pepperbox:302:flash-bomb', { targetId: fixture.hero.id });
+    const mutations = mutationsOf(result.events, 'basic:pepperbox:302:flash-bomb');
+    expect(mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === fixture.hero.id)).toHaveLength(2);
+    expect(mutations.filter((mutation) => mutation.kind === 'condition' && mutation.conditionId === 'blind')).toHaveLength(2);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(38); // 2 × (3 - armor 2)
+    expect(result.state.actors[fixture.extras[0].id].hp).toBe(38);
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('blind');
+    // The allied foe in the area gains stealth instead of damage.
+    expect(result.state.actors[fixture.extras[1].id].conditions.some(({ id }) => id === 'stealth')).toBe(true);
+    expect(result.state.actors[fixture.extras[1].id].hp).toBe(28); // skirmisher, untouched by the blast
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Hunter shot: +1 boon ranged attack, shoving and dazing bloodied targets', () => {
+    const fixture = foeFixture('basic:hunter:302', { foe: { x: 1, y: 1 }, hero: { x: 4, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:hunter-shot', { targetId: fixture.hero.id, dice: [12, 4, 3] });
+    expect(result.state.actors[fixture.hero.id].hp).toBe(37); // 40 - (3 + fray 2 - armor 2)
+    expect(result.state.actors[fixture.hero.id].statuses).not.toContain('dazed'); // not bloodied
+
+    fixture.state.actors[fixture.hero.id].hp = 10;
+    const bloodied = foeAbility(fixture.state, fixture, 'basic:hunter:302:hunter-shot', { targetId: fixture.hero.id, dice: [12, 4, 3] });
+    expect(bloodied.state.actors[fixture.hero.id].position).toEqual({ x: 5, y: 1 }); // shoved 1
+    expect(bloodied.state.actors[fixture.hero.id].statuses).toContain('dazed');
+    expect(bloodied.state.actors[fixture.hero.id].hp).toBe(7); // 10 - (3 + fray 2 - armor 2)
+    expect(applyEvents(fixture.state, bloodied.events)).toEqual(bloodied.state);
+  });
+
+  it('Hunter Set Trap: creates a dangerous terrain space in free space in range 2', () => {
+    const fixture = foeFixture('basic:hunter:302', { foe: { x: 1, y: 1 }, hero: { x: 5, y: 5 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:set-trap');
+    const traps = result.state.terrainEffects.filter((effect) => effect.terrain === 'dangerous');
+    expect(traps).toHaveLength(1);
+    expect(traps[0].ownerId).toBe(fixture.foe.id);
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Hunter Prowl: dashes 1, gains stealth, and records the end-turn request', () => {
+    const fixture = foeFixture('basic:hunter:302', { foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:prowl');
+    expect(mutationsOf(result.events, 'basic:hunter:302:prowl')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'move', actorId: fixture.foe.id, movement: 'rush' },
+      { kind: 'condition', actorId: fixture.foe.id, conditionId: 'stealth' },
+      { kind: 'end-turn', actorId: fixture.foe.id },
+    ]);
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 2, y: 1 });
+    expect(result.state.actors[fixture.foe.id].conditions.some(({ id }) => id === 'stealth')).toBe(true);
+    // The end-turn mutation is what EXECUTE_RULE honors to auto-end the turn.
+    expect(result.events.some((event) => event.type === 'TURN_ENDED' && event.actorId === fixture.foe.id)).toBe(true);
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Hunter Hunt: marks a character in range, then Hunter shot deals bonus damage and unerring to it', () => {
+    const fixture = foeFixture('basic:hunter:302', { foe: { x: 1, y: 1 }, hero: { x: 4, y: 1 } });
+    const marked = foeAbility(fixture.state, fixture, 'basic:hunter:302:hunt', { targetId: fixture.hero.id });
+    expect(marked.state.actors[fixture.hero.id].marks.some(({ markId, ownerId }) => markId === 'hunter:hunt' && ownerId === fixture.foe.id)).toBe(true);
+
+    const shot = foeAbility(marked.state, fixture, 'basic:hunter:302:hunter-shot', { targetId: fixture.hero.id, dice: [12, 4, 3, 5, 1] });
+    const hitDamage = mutationsOf(shot.events, 'basic:hunter:302:hunter-shot').find((mutation) => mutation.kind === 'damage' && mutation.delivery === 'hit');
+    expect(hitDamage).toMatchObject({ amount: 10, ignoreCover: true }); // die 3 + fray 2 + max(5,1) bonus die
+    expect(shot.state.actors[fixture.hero.id].hp).toBe(32); // 40 - (10 - armor 2)
+    expect(applyEvents(marked.state, shot.events)).toEqual(shot.state);
+  });
+});

@@ -10,7 +10,7 @@ The ICON 1.5 source artifact is content-complete: all 501 PDF pages are stored, 
 | Jobs | Yes | Partial | 16 Jobs and 144 abilities with chapter, cost, range, tags, rules text, talents, masteries, traits, and Limit Breaks; the nine Bastion abilities (p.122–124), the nine Demon Slayer abilities (p.128–130), the nine Colossus abilities (p.133–138), the nine Knave abilities (p.139–144), the nine Fool abilities (p.150–152), the nine Freelancer abilities (p.153–158), the nine Shade abilities (p.159–164), the nine Warden abilities (p.165–171), and the nine Chanter abilities (p.174–181) are independently executable with typed programs, resolvers, and golden fixtures, and every other Job ability remains source-visible and reducer-blocked until it has an independently reviewed resolver and replay fixture |
 | Relics | Yes | No | 40 Relics with ranks I–III, aspects, and quests; invokes and persistent effects are not automated |
 | Core combat | Yes | Partial | Movement, overlapping terrain, pits, objects, Skirmisher/Flying/Phasing/Immobile movement, Rampart (dash/fly/teleport blocking with Slip/Unstoppable ignoring it), Counter retaliation, Hatred-of-X half damage with defeat clearing, Stealth adjacency targeting and break-on-use, Vigilance guard/punish spends, state-derived Charge/Comeback/Finishing Blow/Exceed/Collide/Slay triggers, cross-character effect ordering (non-turn before turn, hostile before beneficial), Chain Reaction aether, Bloodied/Regeneration, line of sight, basic attacks, damage order, saves, core statuses, wounds, rescue, recovery, turns, events, migration, and replay; areas, summons, marks, stances, and full traits remain incomplete |
-| Foes | Yes | Partial | Six source roles and 449 jobs, variants, uniques, elites, legends, components, and special entries with 1,365 abilities; standard profile construction works, but mobs and foe abilities are not executable |
+| Foes | Yes | Partial | Six source roles and 449 jobs, variants, uniques, elites, legends, components, and special entries with 1,365 abilities; standard profile construction works, and 20 foe abilities across the Crusher (p.301), Warrior, Soldier, Brute (p.300), Pepperbox, and Hunter (p.302) profiles are independently executable as declarative recipes (see the Foe ability recipes section); mobs and the remaining 1,345 foe abilities are not executable |
 | Trophies and camp fixtures | Yes | No | 20 general trophies, 16 fixtures, and 87 fixture features are typed and source-linked; their effects are not automated |
 | Multiplayer transport | Yes | Engineering preview | Validated commands, authentication, permissions, revisions, persistence, reconnect, and Discord activity exist, but remain behind the rules gates |
 
@@ -25,12 +25,12 @@ For the checked-in ICON 1.5 artifact, the report is deliberately conservative:
 | Measure | Count |
 | --- | ---: |
 | Traceable source programs | 3,275 |
-| Traceable source clauses | 4,866 |
-| Generic RulePrograms with no unresolved clause | 185 |
-| Generic RuleProgram clauses with no unresolved text | 1,242 |
-| Explicitly unresolved clauses | 3,624 |
+| Traceable source clauses | 4,793 |
+| Generic RulePrograms with no unresolved clause | 263 |
+| Generic RuleProgram clauses with no unresolved text | 1,403 |
+| Explicitly unresolved clauses | 3,390 |
 
-Reducer-backed core mechanics are tested separately, but are not counted as generic VM coverage until their full typed `RuleProgram` semantics exist; any core rule without a documented reducer path remains explicitly unresolved. A compiler result with no unresolved clause is also **not** an authority permit: live `EXECUTE_RULE` accepts only the explicit independently reviewed allowlist in `automation/manual-programs.ts` (currently Skirmisher plus the nine Bastion, nine Demon Slayer, nine Colossus, nine Knave, nine Fool, nine Freelancer, nine Shade, nine Warden, and nine Chanter ability programs). This prevents a heuristic parser result from silently becoming a GM-executable foe or ability rule. `npm run audit:automation -- --strict` intentionally fails while any unresolved clause remains; it is a release-completeness gate, not a passing CI threshold for this incomplete rules engine.
+Reducer-backed core mechanics are tested separately, but are not counted as generic VM coverage until their full typed `RuleProgram` semantics exist; any core rule without a documented reducer path remains explicitly unresolved. A compiler result with no unresolved clause is also **not** an authority permit: live `EXECUTE_RULE` accepts only the explicit independently reviewed allowlist in `automation/manual-programs.ts` (currently Skirmisher plus the nine Bastion, nine Demon Slayer, nine Colossus, nine Knave, nine Fool, nine Freelancer, nine Shade, nine Warden, and nine Chanter ability programs, plus the twenty reviewed foe ability recipes in `automation/foe-recipes.ts`). This prevents a heuristic parser result from silently becoming a GM-executable foe or ability rule. `npm run audit:automation -- --strict` intentionally fails while any unresolved clause remains; it is a release-completeness gate, not a passing CI threshold for this incomplete rules engine.
 
 An ability becomes executable only when it has:
 
@@ -187,6 +187,21 @@ All nine Chanter abilities (the first Mendicant job, p.174–181) are independen
 - **Chastise combo (CHARISM)** (p.179): marks a foe; at the end of its next turn allies in a small blast centered on it are cured or blessed (default cure), and a pit opens under it if two or more allies were in the area.
 
 Fidelity notes are preserved on the program: Pandaemonium's rearrangement is a deterministic rotation; the mote creation consumes up to four blessings deterministically; Monogatari's extra d6 gamble takes the higher of two Charge rolls; and Symphony's movement-entry detonation resolves on movement-end and turn-start (the single-pass VM has no movement-entry interrupt).
+
+## Foe ability recipes (ICON p.300–302)
+
+The first foe-ability slices are independently executable as **declarative recipes** — the genericised answer to the 1,365 source `foe-ability` units. Each ability is one entry in `FOE_ABILITY_RECIPES` (`automation/foe-recipes.ts`) naming a primitive (attack, shove, rush, vigor, mark, swap, dash-strike, blast, terrain, end-turn-stealth) plus its parameterized options; the generic resolver factories compile the recipe into a typed `RuleProgram` and its named deterministic resolver, so **no per-ability resolver code exists**. The full source text is preserved on every event through the clause labels. Adding a new slice is a data change plus a replay fixture — see `docs/foe-template.md`.
+
+The Crusher pilot (p.301) validated the recipe machinery end-to-end; the basic faction slice (Warrior, Soldier, Brute p.300; Pepperbox, Hunter p.302) exercises every recipe kind:
+
+- **Crusher** (p.301): Headbutt (true-strike attack, weakened on hit, bonus damage die vs weakened foes), Mighty Blow (2 damage + shove 1; the pit branch is the documented GM choice), Grapple (adjacency mark; the reactive save-on-break-adjacency window is table-facing).
+- **Warrior** (p.300): Redondo (free-action swap with an adjacent ally), Cleave (2[D]+fray true-strike attack with fray splash to every foe adjacent to the warrior or its target), Bull rush (rush 1, weakening the adjacent character reached; the shove branch is the documented choice).
+- **Soldier** (p.300): Slash (true-strike attack, slashed), Bash (shove 2), Valiant (rush up to 4 toward the nearest foe; the free Bash after the rush is a documented caller choice).
+- **Brute** (p.300): Backhand (true-strike attack), Backbreaker (2[D]+fray attack that rushes 2 first and stuns), Bulk up (4 vigor, 6 when bloodied), Hurl (shove 2 with a Collide weakened).
+- **Pepperbox** (p.302): Riddle (range-4 +1-boon attack, 3 damage three times, dazed + unerring at exactly range 3 — the Effect clause applies on a miss too), Strafe (dash 2 then 2 damage to the nearest foe in range 3), Flash Bomb (small blast: foes take 3 damage twice and are blinded; allies and the Pepperbox in the area gain stealth).
+- **Hunter** (p.302): Hunter shot (range-4 +1-boon attack; bloodied targets are shoved 1 and dazed), Set Trap (dangerous terrain in the nearest free cell in range 2), Prowl (dash 1, stealth, and the end-turn request EXECUTE_RULE honors), Hunt (range-4 mark whose benefit — a bonus damage die and unerring against the hunted character — is wired into Hunter shot).
+
+Fidelity notes are preserved on the recipes themselves: deterministic defaults take the first-listed branch of "either/or" and "may" choices (the alternative is table-facing), critical hits add one extra [D], bonus damage (p.102) rolls an extra die and keeps the higher result, collide detection mirrors the reducer's `shoveResolution`, and the `end-turn` mutation is what auto-ends the foe's turn through EXECUTE_RULE. Replay fixtures in `__tests__/foe.test.ts` pin the golden mutation sequences and verify `applyEvents` replays to the identical state. The five reviewed profiles also carry `foe-trait` units (e.g. Crusher's Sturdy, Hunter's Wayfinding) that remain table-facing — a trait recipe layer is the documented next step.
 
 ## Shared resource registry (ICON p.99–105, p.204)
 

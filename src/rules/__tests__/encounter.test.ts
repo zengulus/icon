@@ -210,18 +210,21 @@ describe('ICON encounter reducer', () => {
   });
 
   it('does not execute a heuristic foe compilation through authoritative rule commands', () => {
+    // Impaler Spike is source-indexed but has no reviewed FoeRecipe yet, so it
+    // stays a heuristic compilation — never an authority permit (contrast the
+    // reviewed Soldier Slash recipe, which now executes).
     let state = createEncounter('Compiled foe ability');
     const hero = actorFromCharacter(validCharacter(), { x: 1, y: 1 });
-    const soldier = createFoeFromProfile('basic:soldier:300', { x: 2, y: 1 });
+    const impaler = createFoeFromProfile('basic:impaler:300', { x: 2, y: 1 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
-    state = executeCommand(state, { type: 'ADD_ACTOR', actor: soldier }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: impaler }).state;
     state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
     state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
     try {
       executeCommand(state, {
         type: 'EXECUTE_RULE',
-        actorId: soldier.id,
-        sourceId: 'basic:soldier:300:slash',
+        actorId: impaler.id,
+        sourceId: 'basic:impaler:300:spike',
         actionId: 'default',
         timing: 'use',
         input: {},

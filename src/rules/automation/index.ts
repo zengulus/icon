@@ -21,4 +21,6 @@ export * from './enochian-programs.js';
 export * from './geomancer-programs.js';
 export * from './spellblade-programs.js';
 export * from './stormbender-programs.js';
+export * from './foe-kit.js';
+export * from './foe-recipes.js';
 export * from './resolvers.js';
