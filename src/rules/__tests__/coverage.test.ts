@@ -47,13 +47,17 @@ describe('rules automation coverage gate', () => {
   it('reports every source unit and leaves unresolved mechanics visible', () => {
     const { audit } = auditRuleCompilations(collectRuleSourceUnits());
     expect(audit).toMatchObject({
-      totalPrograms: 3261,
-      totalClauses: 4884,
-      completePrograms: 104,
-      unsupportedPrograms: 3157,
-      completeClauses: 1014,
-      unsupportedClauses: 3870,
-      unsupportedByKind: { core: 56, 'class-trait': 12, 'foe-ability': 1262 },
+      totalPrograms: 3275,
+      totalClauses: 4785,
+      completePrograms: 248,
+      unsupportedPrograms: 3027,
+      completeClauses: 1380,
+      unsupportedClauses: 3405,
+      unsupportedByKind: {
+        core: 70, 'class-trait': 12, 'job-trait': 65, 'limit-break': 16, 'talent': 288, 'mastery': 144,
+        'job-summon-rule': 6, 'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1262, 'foe-trait': 691,
+        'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
+      },
     });
     expect(audit.completePrograms + audit.unsupportedPrograms).toBe(audit.totalPrograms);
     expect(audit.completeClauses + audit.unsupportedClauses).toBe(audit.totalClauses);

@@ -51,8 +51,35 @@ function eventSummary(event: EncounterEvent, encounter: EncounterState): { title
       return { title: `${actorName(event.actorId)} cleared ${event.status}`, detail: '' };
     case 'ACTOR_INTERACTED':
       return { title: `${actorName(event.actorId)} interacted`, detail: event.description || `(${event.position.x}, ${event.position.y})` };
-    case 'RULE_MUTATIONS_APPLIED':
-      return { title: `${actorName(event.actorId)} resolved ${event.actionId}`, detail: `${event.mutations.length} rule mutation${event.mutations.length === 1 ? '' : 's'}` };
+    case 'RULE_MUTATIONS_APPLIED': {
+      const ability = findAbility(event.sourceId);
+      const name = ability?.name ?? event.sourceId;
+      const parts: string[] = [];
+      const attack = event.mutations.find((mutation) => mutation.kind === 'attack');
+      if (attack) parts.push(`attack ${attack.hit ? (attack.critical ? 'crit hit' : 'hit') : 'miss'}${attack.d20 !== null ? ` (d${attack.d20})` : ''}`);
+      for (const mutation of event.mutations) {
+        switch (mutation.kind) {
+          case 'damage': parts.push(`${mutation.amount} damage to ${actorName(mutation.actorId)}${mutation.delivery && mutation.delivery !== 'hit' ? ` (${mutation.delivery})` : ''}`); break;
+          case 'actions': parts.push(mutation.operation === 'spend' ? `${mutation.amount} action${mutation.amount === 1 ? '' : 's'} cost` : mutation.operation === 'refund' ? `${mutation.amount} action${mutation.amount === 1 ? '' : 's'} refunded` : `${mutation.operation} ${mutation.amount} actions`); break;
+          case 'condition': parts.push(mutation.operation === 'apply' ? `${actorName(mutation.actorId)} ${mutation.conditionId}` : `cleared ${mutation.conditionId} from ${actorName(mutation.actorId)}`); break;
+          case 'move': parts.push(mutation.movement === 'shove' ? `shoved ${actorName(mutation.actorId)}${mutation.distance ? ` ${mutation.distance}` : ''}` : mutation.movement === 'rush' ? `${actorName(mutation.actorId)} rushed` : mutation.movement === 'remove' ? `${actorName(mutation.actorId)} left the battlefield` : `${actorName(mutation.actorId)} ${mutation.movement}`); break;
+          case 'stance': parts.push(mutation.operation === 'exit' ? 'stance ended' : `entered ${mutation.stanceId.replace(/-/g, ' ')}`); break;
+          case 'mark': parts.push(mutation.operation === 'apply' ? `marked ${actorName(mutation.actorId)}` : `cleared mark on ${actorName(mutation.actorId)}`); break;
+          case 'persistent': parts.push(mutation.operation === 'add' ? `${actorName(mutation.actorId)} gained ${mutation.effectId}` : `lost ${mutation.effectId}`); break;
+          case 'vigor': parts.push(`${mutation.amount} vigor to ${actorName(mutation.actorId)}`); break;
+          case 'heal': parts.push(`healed ${mutation.amount} on ${actorName(mutation.actorId)}`); break;
+          case 'save': parts.push(`${actorName(mutation.actorId)} save ${mutation.success ? 'passed' : 'failed'}`); break;
+          case 'resource': parts.push(`${mutation.amount} ${mutation.resourceId} ${mutation.operation === 'spend' ? 'spent' : mutation.operation}`); break;
+          case 'defeat': parts.push(`${actorName(mutation.actorId)} defeated`); break;
+          default: break;
+        }
+      }
+      const summary = parts.slice(0, 6).join(' · ');
+      const detail = parts.length > 6 ? `${summary} · +${parts.length - 6} more` : summary;
+      return { title: `${actorName(event.actorId)} · ${name}`, detail };
+    }
+    case 'VIGILANCE_SPENT':
+      return { title: `${actorName(event.actorId)} spent vigilance (${event.use})`, detail: `${event.roll} rolled · ${event.appliedDamage} to ${actorName(event.targetId)}` };
     case 'ACTOR_ADDED':
       return { title: `${event.actor.name} joined`, detail: event.actor.side };
     case 'ACTOR_REMOVED':

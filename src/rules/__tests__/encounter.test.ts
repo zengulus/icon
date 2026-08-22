@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENCOUNTER_SCHEMA_VERSION } from '../types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand, hasCoverFrom, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter, replayEncounter, RuleViolation } from '../encounter.js';
+import { ABILITIES, JOBS } from '../catalog.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
 
 function activeEncounter() {
@@ -133,15 +134,26 @@ describe('ICON encounter reducer', () => {
     expect(state.actors[foe.id].statuses).not.toContain('stunned');
   });
 
-  it('refuses a structured job ability instead of applying a generic approximation', () => {
+  it('executes every job ability through a reviewed resolver, never a generic approximation', () => {
+    // The job-ability sweep is complete: every catalogued job ability is
+    // independently executable through a hand-authored typed program.
+    expect(ABILITIES.every((ability) => ability.automation === 'executable')).toBe(true);
+    // Structured source units outside the executable set are still refused by
+    // the generic VM rather than heuristically applied.
     const { state, hero, foe } = activeEncounter();
-    const abilityId = hero.abilityIds[0];
     try {
-      executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId, targetIds: [foe.id] }, scriptedDice(12, 5));
-      throw new Error('Expected a structured ability to remain unresolved.');
+      executeCommand(state, {
+        type: 'EXECUTE_RULE',
+        actorId: hero.id,
+        sourceId: 'mendicant:trait:diaga',
+        actionId: 'default',
+        timing: 'use',
+        input: {},
+        attackTargetId: foe.id,
+      });
+      throw new Error('Expected a structured rule to remain unresolved.');
     } catch (error) {
-      expect(error).toMatchObject({ code: 'ability.unresolved' });
-      expect(error).toHaveProperty('message', expect.stringContaining('p.'));
+      expect(error).toMatchObject({ code: 'rule.not-executable' });
     }
     expect(state.actors[foe.id].hp).toBe(32);
     expect(state.actors[hero.id].actionsRemaining).toBe(2);
@@ -151,7 +163,9 @@ describe('ICON encounter reducer', () => {
   it('rejects unequipped abilities before reporting unresolved catalogued rules', () => {
     const { state, hero, foe } = activeEncounter();
     expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:rook', targetIds: [foe.id] })).toThrow(/not in this actor/);
-    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: hero.abilityIds[0], targetIds: [foe.id] })).toThrow(/not an independently executable ICON rule/i);
+    // An ability from the (now fully executable) catalog that the actor does
+    // not own is refused the same way, before any resolution attempt.
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:sow', targetIds: [foe.id] })).toThrow(/not in this actor/);
   });
 
   it('migrates v1 actors into the versioned ability state model', () => {

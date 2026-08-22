@@ -18,16 +18,19 @@ const actor = (id: string, side: RuleActorView['side'], x: number, overrides: Pa
   fray: 3,
   damageDie: 8,
   actions: 2,
+  attacked: false,
   size: 1,
   defeated: false,
   conditions: new Set(),
   resources: {},
   state: {},
+  marks: [],
   ...overrides,
 });
 
 const state: RuleRuntimeState = {
   round: 3,
+  grid: { width: 10, height: 10 },
   actors: {
     hero: actor('hero', 'heroes', 0, { resources: { aether: 4 } }),
     ally: actor('ally', 'heroes', 1),
@@ -35,6 +38,7 @@ const state: RuleRuntimeState = {
     far: actor('far', 'foes', 8),
   },
   entities: {},
+  terrainEffects: [],
   terrainAt: () => new Set(),
 };
 

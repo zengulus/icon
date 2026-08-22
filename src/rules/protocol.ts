@@ -126,6 +126,7 @@ const encounterCommand = z.discriminatedUnion('type', [
   z.object({ type: z.literal('INTERACT'), actorId: identifier, position, description: z.string().max(500) }).strict(),
   z.object({ type: z.literal('RESCUE'), actorId: identifier, targetId: identifier }).strict(),
   z.object({ type: z.literal('RECOVER'), actorId: identifier }).strict(),
+  z.object({ type: z.literal('SPEND_VIGILANCE'), actorId: identifier, targetId: identifier, use: z.enum(['guard', 'punish']), damage: z.number().finite().optional() }).strict(),
   z.object({ type: z.literal('END_TURN'), actorId: identifier }).strict(),
   z.object({ type: z.literal('END_ENCOUNTER') }).strict(),
 ]);

@@ -359,7 +359,7 @@ const eventTypes = new Set([
   'ACTOR_ADDED', 'ACTOR_REMOVED', 'TERRAIN_SET', 'ENCOUNTER_STARTED',
   'ACTOR_MOVED', 'ATTACK_RESOLVED', 'ABILITY_RESOLVED', 'ACTOR_INTERACTED',
   'ACTOR_RESCUED', 'STATUS_REMOVED', 'ACTOR_RECOVERED', 'STATUS_APPLIED',
-  'TURN_ENDED', 'ACTOR_DEFEATED', 'ENCOUNTER_ENDED', 'RULE_MUTATIONS_APPLIED',
+  'TURN_ENDED', 'ACTOR_DEFEATED', 'VIGILANCE_SPENT', 'ENCOUNTER_ENDED', 'RULE_MUTATIONS_APPLIED',
 ]);
 
 function invalidSnapshot(path: string, message: string): never {
@@ -664,7 +664,7 @@ function strictEncounter(value: unknown): EncounterState {
   assertExactKeys(encounter, 'room.encounter', [
     'schemaVersion', 'rulesVersion', 'id', 'name', 'phase', 'grid', 'actors',
     'round', 'activeActorId', 'lastSide', 'partyResolve', 'entities',
-    'terrainEffects', 'revision', 'eventLog',
+    'terrainEffects', 'pendingInterrupts', 'revision', 'eventLog',
   ]);
   if (encounter.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) invalidSnapshot('room.encounter.schemaVersion', `must be ${ENCOUNTER_SCHEMA_VERSION}.`);
   if (encounter.rulesVersion !== RULES_VERSION) invalidSnapshot('room.encounter.rulesVersion', `must be ${RULES_VERSION}.`);
@@ -727,6 +727,61 @@ function strictEncounter(value: unknown): EncounterState {
       .forEach((position, positionIndex) => strictGridPosition(position, `${effectPath}.positions[${positionIndex}]`, gridWidth, gridHeight));
     if (item.height !== null) strictInteger(item.height, `${effectPath}.height`, -100, 100);
     strictDuration(item.duration, `${effectPath}.duration`, true);
+  });
+  if (!Array.isArray(encounter.pendingInterrupts) || encounter.pendingInterrupts.length > 10_000) invalidSnapshot('room.encounter.pendingInterrupts', 'contains too many interrupt windows.');
+  encounter.pendingInterrupts.forEach((window, index) => {
+    const windowPath = `room.encounter.pendingInterrupts[${index}]`;
+    const item = strictRecord(window, windowPath);
+    assertExactKeys(item, windowPath, ['id', 'actorId', 'trigger', 'triggeredAt', 'order', 'heldDamage', 'heldEffects', 'retarget', 'heldSave']);
+    strictIdentifier(item.id, `${windowPath}.id`);
+    const windowActorId = strictIdentifier(item.actorId, `${windowPath}.actorId`);
+    if (!actors[windowActorId]) invalidSnapshot(`${windowPath}.actorId`, 'must identify a current actor.');
+    strictString(item.trigger, `${windowPath}.trigger`, 200);
+    strictInteger(item.triggeredAt, `${windowPath}.triggeredAt`, 0);
+    strictInteger(item.order, `${windowPath}.order`, 0);
+    if (item.heldDamage !== undefined) {
+      const heldPath = `${windowPath}.heldDamage`;
+      const held = strictRecord(item.heldDamage, heldPath);
+      assertExactKeys(held, heldPath, ['amount', 'damageType', 'sourceActorId', 'sourceId', 'instance', 'delivery', 'ignoreCover']);
+      strictFinite(held.amount, `${heldPath}.amount`, 0, 1_000_000);
+      strictEnum(held.damageType, `${heldPath}.damageType`, new Set(['normal', 'piercing', 'divine', 'sacrifice']));
+      strictIdentifier(held.sourceActorId, `${heldPath}.sourceActorId`);
+      strictIdentifier(held.sourceId, `${heldPath}.sourceId`);
+      strictInteger(held.instance, `${heldPath}.instance`, 0);
+      strictEnum(held.delivery, `${heldPath}.delivery`, new Set(['hit', 'miss', 'area', 'effect', 'save-success', 'terrain']));
+      strictBoolean(held.ignoreCover, `${heldPath}.ignoreCover`);
+    }
+    if (item.heldEffects !== undefined) {
+      // The held effects are the triggering ability's already-generated
+      // mutation list, bounded like the event history they came from: they are
+      // replayed by Render, not by the checkpoint hydrator, so bounded JSON
+      // is the correct validation surface.
+      const heldEffectsPath = `${windowPath}.heldEffects`;
+      if (!Array.isArray(item.heldEffects) || item.heldEffects.length > 1_000) invalidSnapshot(heldEffectsPath, 'contains too many held effect mutations.');
+      item.heldEffects.forEach((effect, effectIndex) => strictJson(effect, `${heldEffectsPath}[${effectIndex}]`));
+    }
+    if (item.retarget !== undefined) {
+      const retargetPath = `${windowPath}.retarget`;
+      const retarget = strictRecord(item.retarget, retargetPath);
+      assertExactKeys(retarget, retargetPath, ['fromActorId', 'toActorId']);
+      strictIdentifier(retarget.fromActorId, `${retargetPath}.fromActorId`);
+      strictIdentifier(retarget.toActorId, `${retargetPath}.toActorId`);
+    }
+    if (item.heldSave !== undefined) {
+      // The held save carries the save effect's branch AST (bounded JSON, like
+      // the held effects it came from) plus identifiers.
+      const heldSavePath = `${windowPath}.heldSave`;
+      const heldSave = strictRecord(item.heldSave, heldSavePath);
+      assertExactKeys(heldSave, heldSavePath, ['targetId', 'boon', 'sourceId', 'sourceActorId', 'onSuccess', 'onFailure']);
+      strictIdentifier(heldSave.targetId, `${heldSavePath}.targetId`);
+      strictFinite(heldSave.boon, `${heldSavePath}.boon`, -100, 100);
+      strictIdentifier(heldSave.sourceId, `${heldSavePath}.sourceId`);
+      strictIdentifier(heldSave.sourceActorId, `${heldSavePath}.sourceActorId`);
+      for (const branch of ['onSuccess', 'onFailure'] as const) {
+        if (!Array.isArray(heldSave[branch]) || heldSave[branch]!.length > 1_000) invalidSnapshot(`${heldSavePath}.${branch}`, 'contains too many save effects.');
+        heldSave[branch]!.forEach((effect, effectIndex) => strictJson(effect, `${heldSavePath}.${branch}[${effectIndex}]`));
+      }
+    }
   });
   const encounterRevision = strictInteger(encounter.revision, 'room.encounter.revision', 0);
   if (!Array.isArray(encounter.eventLog) || encounter.eventLog.length > MAX_ENCOUNTER_EVENT_LOG) invalidSnapshot('room.encounter.eventLog', `contains more than ${MAX_ENCOUNTER_EVENT_LOG} recent events.`);
@@ -1036,6 +1091,20 @@ export function roomVisibleToRole(room: VttRoomState, role: 'gm' | 'player'): Vt
     .filter(([, entity]) => entity.ownerId !== null && !hiddenActorIds.has(entity.ownerId)));
   encounter.terrainEffects = encounter.terrainEffects
     .filter((effect) => !isHiddenMechanic(effect.ownerId, effect.sourceId));
+  // A hidden actor's interrupt windows are as sensitive as the actor record.
+  encounter.pendingInterrupts = encounter.pendingInterrupts
+    .filter((window) => !hiddenActorIds.has(window.actorId))
+    // Deferred-trigger windows hold the triggering ability's mutations, which
+    // name the source; a Masquerade redirect names the swap partner. Render
+    // stays authoritative; the player projection withholds any reference to a
+    // hidden actor rather than leak its id.
+    .map((window) => ({
+      ...window,
+      heldEffects: window.heldEffects?.filter((effect) => !hiddenActorIds.has((effect as { sourceActorId?: string }).sourceActorId ?? '')
+        && !hiddenSourceIds.has((effect as { sourceId?: string }).sourceId ?? '')) || undefined,
+      retarget: window.retarget && !hiddenActorIds.has(window.retarget.fromActorId) && !hiddenActorIds.has(window.retarget.toActorId) ? window.retarget : undefined,
+      heldSave: window.heldSave && !hiddenActorIds.has(window.heldSave.targetId) && !hiddenActorIds.has(window.heldSave.sourceActorId) ? window.heldSave : undefined,
+    }));
   // A visible actor can carry mechanics created by another actor. Keep no
   // owner reference for a GM-hidden source in the player projection: those
   // IDs are as sensitive as the hidden actor record itself. Filtering is
