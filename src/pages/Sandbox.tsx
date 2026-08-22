@@ -60,7 +60,7 @@ const LAB_PREFERENCES_KEY = 'icon.rules-lab.preferences.v1';
 // server; production remains governed by the source coverage gate.
 const testingEnabled = PHASE_TWO_READY || import.meta.env.DEV;
 
-type InteractionMode = 'standard' | 'dash' | 'light' | 'heavy' | 'interact' | 'rescue' | 'ability';
+export type InteractionMode = 'standard' | 'dash' | 'light' | 'heavy' | 'interact' | 'rescue' | 'ability';
 export type TableTool = 'select' | 'pan' | 'fog' | 'marker' | 'line' | 'arrow' | 'template' | 'terrain';
 
 const labFoes = FOE_PROFILES.filter(({ roleId }) => roleId !== 'mob' && roleId !== 'special');

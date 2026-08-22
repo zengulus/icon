@@ -230,6 +230,133 @@ export function spendLevelUp(character: IconCharacter, chapterCap: number): Icon
   return { ...character, level: nextLevel, pendingLevelUps: character.pendingLevelUps - 1, xpAbilityPointClaimed: false, updatedAt: new Date().toISOString() };
 }
 
+/** ICON p.113: Refocus refunds every ability, talent, and mastery, drops all
+ * Jobs, and re-picks the same number of Jobs during an interlude. */
+export const REFOCUS_DUST_COST = 8;
+/** ICON p.113: Refocusing without changing any Job costs half the dust. */
+export const REFOCUS_KEEP_JOBS_DUST_COST = 4;
+
+export interface RefocusPlan {
+  jobs: string[];
+  primaryJobId: string | null;
+  abilities: IconCharacter['abilities'];
+  equippedAbilityIds: string[];
+}
+
+/** The sourcebook charges 8 dust to change Jobs and 4 dust to keep them. */
+export function refocusDustCost(character: IconCharacter, nextJobs: string[]) {
+  const changed = nextJobs.length !== character.jobs.length
+    || nextJobs.some((jobId) => !character.jobs.includes(jobId))
+    || character.jobs.some((jobId) => !nextJobs.includes(jobId));
+  return changed ? REFOCUS_DUST_COST : REFOCUS_KEEP_JOBS_DUST_COST;
+}
+
+/**
+ * Respecialize during an interlude (ICON p.113). Refunds every ability point,
+ * talent, and mastery, drops all Jobs, then re-picks the same number of Jobs
+ * and re-spends AP on the provided abilities. Narrative state (Bond, action
+ * ratings, powers, relics, gear) is untouched. The re-pick is validated with
+ * the same blocking rules as character creation, so a Refocus can never
+ * silently legalize an illegal build.
+ */
+export function refocusCharacter(character: IconCharacter, plan: RefocusPlan): IconCharacter {
+  if (character.level < 1) throw new Error('Refocus requires a level 1 or higher character during an interlude.');
+  if (plan.jobs.length !== character.jobs.length) {
+    throw new Error('Refocus re-picks the same number of Jobs the character already had.');
+  }
+  const cost = refocusDustCost(character, plan.jobs);
+  if (character.dust < cost) throw new Error(`Refocus costs ${cost} dust; the character carries ${character.dust}.`);
+  const next: IconCharacter = {
+    ...character,
+    dust: character.dust - cost,
+    jobs: [...plan.jobs],
+    primaryJobId: plan.primaryJobId,
+    abilities: plan.abilities.map((ability) => ({ ...ability })),
+    equippedAbilityIds: [...plan.equippedAbilityIds],
+    updatedAt: new Date().toISOString(),
+  };
+  const blocking = blockingCharacterIssues(next);
+  if (blocking.length) throw new Error(blocking.map((issue) => issue.message).join(' '));
+  return next;
+}
+
+/** ICON p.245: Relics start at level I and need 6 dust for levels II and III. */
+export function relicRankForDust(dustInfused: number): 1 | 2 | 3 {
+  if (dustInfused >= 12) return 3;
+  if (dustInfused >= 6) return 2;
+  return 1;
+}
+
+function findRelicSlot(character: IconCharacter, relicId: string) {
+  const index = character.relics.findIndex((relic) => relic.relicId === relicId);
+  if (index === -1) throw new Error('That relic is not recorded on this character.');
+  return index;
+}
+
+/**
+ * Permanently infuse carried dust into a relic (ICON p.245: “Infuse 1 dust
+ * into a relic of your choice when you complete a tactical combat”). Rank
+ * advances deterministically at 6, 12, and 24 infused dust; crossing 24 on a
+ * level III relic is the 12-dust Aspect path.
+ */
+export function infuseRelicDust(character: IconCharacter, relicId: string, amount = 1): IconCharacter {
+  const index = findRelicSlot(character, relicId);
+  const relic = character.relics[index];
+  if (!Number.isSafeInteger(amount) || amount < 1) throw new Error('Relic infusion must spend at least one dust.');
+  if (relic.rank === 4) throw new Error(`${relic.relicId} is already Aspected and cannot take more dust.`);
+  if (character.dust < amount) throw new Error(`Infusing ${amount} dust requires ${amount} carried dust; the character carries ${character.dust}.`);
+  const dustInfused = relic.dustInfused + amount;
+  const next: IconCharacter['relics'][number] = { ...relic, dustInfused, rank: relicRankForDust(dustInfused) };
+  if (next.rank === 3 && dustInfused >= 24 && relic.aspectState === 'none') {
+    next.rank = 4;
+    next.aspectState = 'dust';
+  }
+  const relics = character.relics.map((candidate, candidateIndex) => candidateIndex === index ? next : candidate);
+  return { ...character, dust: character.dust - amount, relics, updatedAt: new Date().toISOString() };
+}
+
+/** ICON p.245: a level III relic becomes Aspected by completing a legendary task. */
+export function completeRelicAspectQuest(character: IconCharacter, relicId: string): IconCharacter {
+  const index = findRelicSlot(character, relicId);
+  const relic = character.relics[index];
+  if (relic.rank !== 3 || relic.aspectState !== 'none') throw new Error('Only a level III relic without an aspect can complete an aspect quest.');
+  if (relic.dustInfused < relicMinimumInfusedDust(3)) throw new Error('A relic must reach level III (12 infused dust) before it can be Aspected.');
+  const relics = character.relics.map((candidate, candidateIndex) => candidateIndex === index
+    ? { ...candidate, rank: 4 as const, aspectState: 'quest' as const }
+    : candidate);
+  return { ...character, relics, updatedAt: new Date().toISOString() };
+}
+
+/** ICON p.245: once any character completed the quest, others Aspect for 4 dust. */
+export function aspectRelicFromSharedQuest(character: IconCharacter, relicId: string): IconCharacter {
+  const index = findRelicSlot(character, relicId);
+  const relic = character.relics[index];
+  if (relic.rank !== 3 || relic.aspectState !== 'none') throw new Error('Only a level III relic without an aspect can share a completed aspect quest.');
+  if (relic.dustInfused < relicMinimumInfusedDust(3)) throw new Error('A relic must reach level III (12 infused dust) before it can be Aspected.');
+  if (character.dust < 4) throw new Error('Sharing a completed aspect quest costs 4 dust.');
+  const dustInfused = relic.dustInfused + 4;
+  const relics = character.relics.map((candidate, candidateIndex) => candidateIndex === index
+    ? { ...candidate, rank: 4 as const, aspectState: 'shared-quest' as const, dustInfused }
+    : candidate);
+  return { ...character, dust: character.dust - 4, relics, updatedAt: new Date().toISOString() };
+}
+
+/**
+ * Repair a migrated Aspected relic whose provenance was unknown. The chosen
+ * path must satisfy its own minimum infusion, and dustInfused is raised to
+ * that minimum rather than inventing or discarding recorded dust.
+ */
+export function resolveRelicAspect(character: IconCharacter, relicId: string, path: 'dust' | 'quest' | 'shared-quest'): IconCharacter {
+  const index = findRelicSlot(character, relicId);
+  const relic = character.relics[index];
+  if (relic.rank !== 4 || relic.aspectState !== 'unresolved') throw new Error('Only an Aspected relic with unresolved provenance can be resolved.');
+  const minimum = relicMinimumInfusedDust(4, path);
+  const relics = character.relics.map((candidate, candidateIndex) => candidateIndex === index
+    ? { ...candidate, aspectState: path, dustInfused: Math.max(candidate.dustInfused, minimum) }
+    : candidate);
+  return { ...character, relics, updatedAt: new Date().toISOString() };
+}
+
 const CHARACTER_FIELDS = [
   'schemaVersion', 'rulesVersion', 'id', 'ownerId', 'name', 'pronouns',
   'kin', 'culture', 'bondId', 'bondAction', 'bondPowers', 'actions',
@@ -272,7 +399,7 @@ function characterNullableString(value: unknown, path: string): string | null {
 }
 
 function characterInteger(value: unknown, path: string): number {
-  if (!Number.isSafeInteger(value)) throw new Error(`${path} must be a safe integer.`);
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error(`${path} must be a safe integer.`);
   return value;
 }
 
@@ -344,7 +471,7 @@ function assertCurrentCharacterStructure(input: unknown): IconCharacter {
       characterInteger(clock.progress, `Character.${field}[${index}].progress`);
     });
   }
-  return character as IconCharacter;
+  return character as unknown as IconCharacter;
 }
 
 function blockingCharacterIssues(character: IconCharacter): ValidationIssue[] {

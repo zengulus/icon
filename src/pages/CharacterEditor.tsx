@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ACTIONS, ACTION_IDS, BONDS, CULTURES, JOBS, KIN, RELICS, abilityPointAllowance, abilityPointsSpent, awardXp, chapterForLevel, characterStats, findBond, findClass, findJob, jobSlotsForLevel, masteryPointAllowance, narrativeBudgets, relicSlotsForLevel, spendLevelUp, validateCharacter, type ActionId, type CharacterClock, type IconCharacter } from '../rules/index.js';
+import { ACTIONS, ACTION_IDS, BONDS, CULTURES, JOBS, KIN, RELICS, abilityPointAllowance, abilityPointsSpent, aspectRelicFromSharedQuest, awardXp, chapterForLevel, characterStats, completeRelicAspectQuest, findBond, findClass, findJob, infuseRelicDust, jobSlotsForLevel, masteryPointAllowance, narrativeBudgets, refocusCharacter, refocusDustCost, relicMinimumInfusedDust, relicRankForDust, relicSlotsForLevel, resolveRelicAspect, spendLevelUp, validateCharacter, type ActionId, type CharacterClock, type IconCharacter } from '../rules/index.js';
 import { downloadCharacter } from '../services/characters.js';
 import { useCharacters } from '../context/CharacterContext.js';
 import { assetBackground, uploadImage } from '../services/assets.js';
@@ -12,6 +12,8 @@ export function CharacterEditor() {
   const [draft, setDraft] = useState<IconCharacter | null>(null);
   const [saved, setSaved] = useState(true);
   const [message, setMessage] = useState('');
+  const [refocusOpen, setRefocusOpen] = useState(false);
+  const [refocusJobs, setRefocusJobs] = useState<string[]>([]);
 
   useEffect(() => {
     const character = characters.find((item) => item.id === id);
@@ -131,6 +133,34 @@ export function CharacterEditor() {
     update({ relics: [...draft.relics, { relicId, rank: 1, aspectState: 'none', dustInfused: 0 }] });
   }
 
+  function relicAction(action: () => IconCharacter) {
+    try {
+      setDraft(action());
+      setSaved(false);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : 'Relic advancement failed.');
+    }
+  }
+
+  function beginRefocus() {
+    if (!draft) return;
+    setRefocusJobs([...draft.jobs]);
+    setRefocusOpen(true);
+  }
+
+  function confirmRefocus() {
+    if (!draft || !refocusOpen) return;
+    try {
+      const refocused = refocusCharacter(draft, { jobs: refocusJobs, primaryJobId: refocusJobs[0] ?? null, abilities: [], equippedAbilityIds: [] });
+      setDraft(refocused);
+      setSaved(false);
+      setRefocusOpen(false);
+      setMessage('Refocus complete — re-pick abilities and masteries with the refunded AP.');
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : 'Refocus failed.');
+    }
+  }
+
   function toggleEquipped(abilityId: string) {
     if (!draft) return;
     const equippedAbilityIds = draft.equippedAbilityIds.includes(abilityId)
@@ -223,7 +253,9 @@ export function CharacterEditor() {
             <div className="section-heading"><span>05</span><div><h2>Advancement and loadout</h2><p>AP buys abilities or one of their mutually exclusive talents. Mastery uses its own points.</p></div><div className="dot-budget">{apSpent}<small>/ {apAllowance} AP</small></div></div>
             <div className="advancement-summary"><span><b>{draft.equippedAbilityIds.length}</b>/6 equipped</span><span><b>{draft.abilities.filter(({ mastered }) => mastered).length}</b>/{masteryAllowance} masteries</span><span><b>{draft.relics.length}</b>/{relicSlotsForLevel(draft.level)} relics</span></div>
             <div className="learned-abilities">{draft.abilities.map((learned) => { const definition = JOBS.flatMap((item) => item.abilities).find((ability) => ability.id === learned.abilityId); if (!definition) return null; return <article key={learned.abilityId}><div><strong>{definition.name}</strong><small>{definition.header} · {findJob(definition.jobId)?.name}</small></div><label className="inline-check"><input type="checkbox" checked={draft.equippedAbilityIds.includes(learned.abilityId)} onChange={() => toggleEquipped(learned.abilityId)} /> Equipped</label><label>Talent<select value={learned.talent ?? ''} onChange={(event) => setTalent(learned.abilityId, event.target.value ? Number(event.target.value) as 1 | 2 : null)}><option value="">None</option><option value="1">I · {definition.talents[0]}</option><option value="2">II · {definition.talents[1]}</option></select></label><button className={`mastery-toggle ${learned.mastered ? 'selected' : ''}`} onClick={() => toggleMastery(learned.abilityId)}>{learned.mastered ? 'Mastered' : `Mastery · ${definition.mastery?.name ?? ''}`}</button></article>; })}</div>
-            <div className="relic-manager"><div className="subheading"><div><h3>Relics</h3><p>Relic slots unlock at levels 2, 6, and 9.</p></div><select value="" onChange={(event) => addRelic(event.target.value)}><option value="">Add relic…</option>{RELICS.filter((relic) => !draft.relics.some((selected) => selected.relicId === relic.id)).map((relic) => <option value={relic.id} key={relic.id}>{relic.name}</option>)}</select></div>{draft.relics.map((selected) => { const relic = RELICS.find((item) => item.id === selected.relicId)!; return <article key={selected.relicId}><div><strong>{relic.name}</strong><small>{relic.description}</small></div><label>Rank<select value={selected.rank} onChange={(event) => update({ relics: draft.relics.map((item) => item.relicId === selected.relicId ? { ...item, rank: Number(event.target.value) as 1 | 2 | 3 | 4, aspectState: Number(event.target.value) === 4 ? item.aspectState === 'none' ? 'unresolved' : item.aspectState : 'none' } : item) })}><option value="1">I</option><option value="2">II</option><option value="3">III</option><option value="4">Aspected</option></select></label>{selected.rank === 4 && <label>Aspect earned by<select value={selected.aspectState} onChange={(event) => update({ relics: draft.relics.map((item) => item.relicId === selected.relicId ? { ...item, aspectState: event.target.value as typeof item.aspectState } : item) })}><option value="unresolved">Confirm source</option><option value="dust">12-dust aspect (24 total)</option><option value="quest">Aspect quest</option><option value="shared-quest">Shared aspect quest</option></select></label>}<label>Infused dust<input type="number" min="0" value={selected.dustInfused} onChange={(event) => update({ relics: draft.relics.map((item) => item.relicId === selected.relicId ? { ...item, dustInfused: Number(event.target.value) } : item) })} /></label><button className="text-button danger" onClick={() => update({ relics: draft.relics.filter((item) => item.relicId !== selected.relicId) })}>Remove</button></article>; })}</div>
+            <div className="relic-manager"><div className="subheading"><div><h3>Relics</h3><p>Relic slots unlock at levels 2, 6, and 9.</p></div><select value="" onChange={(event) => addRelic(event.target.value)}><option value="">Add relic…</option>{RELICS.filter((relic) => !draft.relics.some((selected) => selected.relicId === relic.id)).map((relic) => <option value={relic.id} key={relic.id}>{relic.name}</option>)}</select></div>{draft.relics.map((selected) => { const relic = RELICS.find((item) => item.id === selected.relicId)!; const rank = selected.rank === 4 ? 4 : relicRankForDust(selected.dustInfused); const canInfuse = rank < 4 && draft.dust > 0; const canAspect = rank === 3 && selected.aspectState === 'none' && selected.dustInfused >= relicMinimumInfusedDust(3); return <article key={selected.relicId}><div><strong>{relic.name}</strong><small>{relic.description}</small></div><div className="relic-advancement"><span><b>Rank {['I', 'II', 'III', 'Aspected'][rank - 1]}</b><small>{selected.dustInfused} dust infused · {selected.aspectState === 'unresolved' ? 'provenance unconfirmed' : selected.aspectState === 'none' ? '' : selected.aspectState.replace('-', ' ')}</small></span>{canInfuse && <button className="button compact" onClick={() => relicAction(() => infuseRelicDust(draft, selected.relicId, 1))}>Infuse 1 dust ({draft.dust} carried)</button>}</div>{canAspect && <div className="relic-aspect-actions"><button className="button compact" title="Complete a legendary task for this relic" onClick={() => relicAction(() => completeRelicAspectQuest(draft, selected.relicId))}>Aspect: legendary task</button><button className="button compact" title="Another character completed this relic's quest, so Aspect costs 4 dust" disabled={draft.dust < 4} onClick={() => relicAction(() => aspectRelicFromSharedQuest(draft, selected.relicId))}>Aspect: shared quest (4 dust)</button></div>}{selected.aspectState === 'unresolved' && <div className="relic-aspect-actions"><label>Resolve aspect<select value="" onChange={(event) => { if (event.target.value) relicAction(() => resolveRelicAspect(draft, selected.relicId, event.target.value as 'dust' | 'quest' | 'shared-quest')); }}><option value="">Confirm how it was earned…</option><option value="dust">12-dust aspect (24 total)</option><option value="quest">Aspect quest</option><option value="shared-quest">Shared aspect quest</option></select></label></div>}<button className="text-button danger" onClick={() => update({ relics: draft.relics.filter((item) => item.relicId !== selected.relicId) })}>Remove</button></article>; })}</div>
+            <div className="refocus-controls"><div><h3>Refocus</h3><p>During an interlude, refund every ability, talent, and mastery, drop and re-pick Jobs ({refocusDustCost(draft, draft.jobs)} dust to keep Jobs, 8 to change them).</p></div><button className="button compact" disabled={draft.level < 1 || draft.dust < refocusDustCost(draft, draft.jobs)} onClick={beginRefocus}>Refocus…</button></div>
+            {refocusOpen && <div className="refocus-panel"><label className="eyebrow">Refocus re-picks the same number of Jobs ({draft.jobs.length}); abilities and masteries are refunded.</label><div className="form-grid">{draft.jobs.map((_, index) => <label key={index}>Job {index + 1}<select value={refocusJobs[index] ?? ''} onChange={(event) => setRefocusJobs((current) => current.map((jobId, jobIndex) => jobIndex === index ? event.target.value : jobId))}>{JOBS.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}</select></label>)}</div><small className="refocus-cost">Cost: {refocusDustCost(draft, refocusJobs)} dust · carried {draft.dust}</small><div className="refocus-actions"><button className="button primary compact" onClick={confirmRefocus}>Confirm refocus</button><button className="button ghost compact" onClick={() => setRefocusOpen(false)}>Cancel</button></div></div>}
           </section>
 
           <section className="sheet-section">

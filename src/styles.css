@@ -187,6 +187,22 @@ label input, label select, label textarea { color: var(--ink); font: 12px 'Manro
 .subheading p { margin: 2px 0 0; color: var(--muted); font-size: 8px; }
 .subheading select { max-width: 240px; }
 .relic-manager { margin-top: 24px; }
+.relic-manager article { display: grid; grid-template-columns: minmax(150px, 1fr) auto; align-items: end; gap: 10px; padding: 11px; background: #eeeadf; border: 1px solid #ddd7ca; border-radius: 5px; }
+.relic-advancement { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.relic-advancement span { display: grid; gap: 1px; }
+.relic-advancement b { font-size: 10px; }
+.relic-advancement small { color: var(--muted); font-size: 7px; text-transform: capitalize; }
+.relic-aspect-actions { display: flex; align-items: center; gap: 6px; grid-column: 1 / -1; }
+.relic-aspect-actions label { display: flex; align-items: center; gap: 6px; }
+.relic-aspect-actions select { max-width: 230px; }
+.refocus-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 22px; padding: 13px 15px; background: #e5e0d3; border-radius: 5px; }
+.refocus-controls h3 { margin: 0; font: 650 19px 'Newsreader', serif; }
+.refocus-controls p { margin: 2px 0 0; color: var(--muted); font-size: 8px; }
+.refocus-panel { display: grid; gap: 10px; margin-top: 10px; padding: 14px; background: #eeeadf; border: 1px solid #ddd7ca; border-radius: 5px; }
+.refocus-panel .eyebrow { margin: 0; }
+.refocus-panel .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.refocus-cost { color: var(--muted); font: 8px 'DM Mono', monospace; }
+.refocus-actions { display: flex; gap: 7px; }
 .relic-manager article { display: grid; grid-template-columns: minmax(180px, 1fr) 90px 105px auto; align-items: end; gap: 10px; padding: 11px; background: #eeeadf; border-radius: 5px; }
 .gear-picker { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 15px 0; padding: 12px; background: #eeeadf; border-radius: 5px; }
 .gear-picker > strong { width: 100%; font-size: 9px; }

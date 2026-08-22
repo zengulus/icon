@@ -6,6 +6,7 @@ const links = [
   ['/', 'Roster', '◈'],
   ['/compendium', 'Rules', '⌁'],
   ['/lab', 'Rules Lab', '⌬'],
+  ['/vtt', 'Browser VTT', '▦'],
   ['/campaigns', 'Campaigns', '◉'],
 ] as const;
 

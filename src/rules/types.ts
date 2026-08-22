@@ -1,4 +1,4 @@
-import type { RuleDuration, RuleExecutionInput, RuleModifier, RuleMutation, RuleTiming } from './automation/types.js';
+import type { RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleTiming } from './automation/types.js';
 
 export const RULES_VERSION = '1.5' as const;
 export const CHARACTER_SCHEMA_VERSION = 3 as const;
@@ -436,6 +436,66 @@ export interface TerrainCell {
   elevation: number;
 }
 
+/** ICON p.107 — damage that was determined but held unapplied while a
+ * `when-damaged` interrupt window is open. The held damage is the final
+ * mitigated amount (armor, resistance, and other reductions already applied).
+ * It applies after the window's interrupt resolves — or at the end of the turn
+ * if no interrupt answers the window — unless the interrupt's own mutations
+ * re-dealt damage to the held target (e.g. Righteous Disdain, p.128, splits
+ * the held damage between two characters). */
+export interface EncounterHeldDamage {
+  amount: number;
+  damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice';
+  sourceActorId: string;
+  sourceId: string;
+  instance: number;
+  delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain';
+  ignoreCover: boolean;
+}
+
+/** ICON p.107 — an interrupt window opened by an effect. `triggeredAt` is the
+ * encounter revision when the window opened, so windows opened later (nested
+ * interrupts) resolve first; windows opened by the same effect share the
+ * revision and resolve in turn order (see `orderInterrupts`). A `when-damaged`
+ * window may hold the damage that opened it (see `EncounterHeldDamage`); a
+ * `uses-ability` window may hold the triggering ability's effect mutations
+ * (costs already paid) until the interrupt resolves. */
+export interface EncounterPendingInterrupt {
+  id: string;
+  /** The character whose interrupt the window belongs to. */
+  actorId: string;
+  /** The trigger that opened the window (e.g. `when-damaged`, `uses-ability`). */
+  trigger: string;
+  /** Encounter revision when the window opened; higher resolves first (LIFO). */
+  triggeredAt: number;
+  /** Registration order within the same trigger event (deterministic tiebreak). */
+  order: number;
+  /** Present when the window opened on damage that has not been applied yet. */
+  heldDamage?: EncounterHeldDamage;
+  /** Present when the window opened on an ability that has not resolved yet
+   * (a foe targeted the interrupt user's ally; the ability's effects resolve
+   * after the interrupt, or at the end of the turn if none answers). */
+  heldEffects?: RuleMutation[];
+  /** Present when the interrupt redirects the held ability (Masquerade, p.151:
+   * the ability targeted `fromActorId` and targets `toActorId` instead after
+   * the swap). Applied when the held effects resolve. */
+  retarget?: { fromActorId: string; toActorId: string };
+  /** Present when the window opened on a rolled save (Sucker Punch, p.143: an
+   * enemy adjacent to the interrupt user rolled a save). `heldEffects` carries
+   * the save's original branch; the interrupt re-rolls it, keeping the second
+   * result, and the regenerated branch replaces it (see the event `reroll`). */
+  heldSave?: {
+    targetId: string;
+    /** Evaluated save modifier (boon/curse) applied to both rolls. */
+    boon: number;
+    /** Provenance of the triggering ability, reused for the regenerated branch. */
+    sourceId: string;
+    sourceActorId: string;
+    onSuccess: RuleEffect[];
+    onFailure: RuleEffect[];
+  };
+}
+
 export interface EncounterState {
   schemaVersion: typeof ENCOUNTER_SCHEMA_VERSION;
   rulesVersion: typeof RULES_VERSION;
@@ -455,6 +515,9 @@ export interface EncounterState {
   partyResolve: number;
   entities: Record<string, EncounterEntity>;
   terrainEffects: EncounterTerrainEffect[];
+  /** ICON p.107: interrupt windows opened by effects (e.g. damage dealt). They
+   * resolve most-recently-triggered first (LIFO) and close at turn end. */
+  pendingInterrupts: EncounterPendingInterrupt[];
   revision: number;
   eventLog: EncounterEvent[];
 }
@@ -490,6 +553,7 @@ export type EncounterCommand =
   | { type: 'INTERACT'; actorId: string; position: Position; description: string }
   | { type: 'RESCUE'; actorId: string; targetId: string }
   | { type: 'RECOVER'; actorId: string }
+  | { type: 'SPEND_VIGILANCE'; actorId: string; targetId: string; use: 'guard' | 'punish'; damage?: number }
   | { type: 'END_TURN'; actorId: string }
   /** Internal deterministic fixture/admin command; never accepted by the websocket schema. */
   | { type: 'APPLY_STATUS'; actorId: string; targetId: string; status: StatusId }
@@ -530,10 +594,11 @@ export type EncounterEvent =
   | { type: 'STATUS_REMOVED'; actorId: string; status: StatusId }
   | { type: 'ACTOR_RECOVERED'; actorId: string; vigorGained: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }> }
   | { type: 'STATUS_APPLIED'; actorId: string; targetId: string; status: StatusId }
-  | { type: 'TURN_ENDED'; actorId: string; nextActorId: string; round: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }> }
+  | { type: 'TURN_ENDED'; actorId: string; nextActorId: string; round: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; carnevaleGamble?: number; monogatariGamble?: number }
   | { type: 'ACTOR_DEFEATED'; actorId: string; woundGained: boolean }
+  | { type: 'VIGILANCE_SPENT'; actorId: string; targetId: string; use: 'guard' | 'punish'; roll: number; appliedDamage: number }
   | { type: 'ENCOUNTER_ENDED' }
-  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[] };
+  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[]; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] } };
 
 export interface CommandResult {
   state: EncounterState;

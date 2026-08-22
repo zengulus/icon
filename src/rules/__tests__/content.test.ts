@@ -76,9 +76,9 @@ describe('ICON 1.5 content artifact', () => {
     expect(GENERAL_TROPHIES.every(({ rulesText, source }) => rulesText && source.page >= 99)).toBe(true);
 
     const audit = auditRuleSourceUnits();
-    expect(audit.total).toBe(3261);
+    expect(audit.total).toBe(3275);
     expect(audit.byKind).toMatchObject({
-      core: 56,
+      core: 70,
       'job-ability': 144,
       talent: 288,
       mastery: 144,

@@ -1,4 +1,5 @@
 import mechanics from '../content/generated/mechanics-1.5.json' with { type: 'json' };
+import { EXECUTABLE_JOB_ABILITY_IDS } from './automation/manual-programs.js';
 import type {
   AbilityDefinition,
   ActionDefinition,
@@ -193,7 +194,7 @@ export const JOBS: readonly JobDefinition[] = mechanics.jobs.map((job) => ({
     cost: { ...ability.cost, kind: ability.cost.kind as AbilityDefinition['cost']['kind'] },
     talents: ability.talents as [] | [string, string],
     source: { page: ability.sourcePage, sectionId: job.id },
-    automation: 'structured' as const,
+    automation: EXECUTABLE_JOB_ABILITY_IDS.has(ability.id) ? 'executable' as const : 'structured' as const,
   })),
 }));
 

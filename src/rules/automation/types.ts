@@ -31,7 +31,7 @@ export type RuleTiming =
   | 'combat-start'
   | 'combat-end';
 
-export type RuleCostKind = 'action' | 'free' | 'interrupt' | 'round' | 'resolve' | 'aether' | 'sacrifice' | 'use' | 'passive';
+export type RuleCostKind = 'action' | 'free' | 'interrupt' | 'round' | 'resolve' | 'aether' | 'sacrifice' | 'use' | 'passive' | 'combo';
 
 export interface RuleCost {
   kind: RuleCostKind;
@@ -194,11 +194,15 @@ export interface RuleActorView {
   fray: number;
   damageDie: number;
   actions: number;
+  /** Whether this actor has already made an attack this turn (p.129 Special). */
+  attacked: boolean;
   size: number;
   defeated: boolean;
   conditions: ReadonlySet<string>;
   resources: Readonly<Record<string, number>>;
   state: Readonly<Record<string, string | number | boolean | null>>;
+  /** Marks on this actor (resolvers key on markId/ownerId, e.g. Incubus). */
+  marks: ReadonlyArray<{ markId: string; ownerId: string }>;
 }
 
 export interface RuleEntityView {
@@ -211,9 +215,13 @@ export interface RuleEntityView {
 
 export interface RuleRuntimeState {
   round: number;
+  /** Battlefield bounds so resolvers can compute legal positions. */
+  grid: { width: number; height: number };
   actors: Readonly<Record<string, RuleActorView>>;
   entities: Readonly<Record<string, RuleEntityView>>;
   terrainAt(position: Position): ReadonlySet<string>;
+  /** Durable terrain effects (delays, objects, rampart) for resolver lifecycle. */
+  terrainEffects: ReadonlyArray<{ id: string; terrain: string; ownerId: string | null; positions: readonly Position[]; height: number | null }>;
 }
 
 export interface RuleExecutionInput {
@@ -257,7 +265,7 @@ export type RuleMutation =
   | { kind: 'stance'; sourceId: string; sourceActorId: string; operation: 'enter' | 'refresh' | 'exit'; actorId: string; stanceId: string; state: Readonly<Record<string, string | number | boolean | null>> }
   | { kind: 'persistent'; sourceId: string; ownerId: string; operation: 'add' | 'remove'; actorId: string; effectId: string; duration: RuleDuration; modifiers: RuleModifier[]; triggers: string[]; state: Readonly<Record<string, string | number | boolean | null>> }
   | { kind: 'modifier'; sourceId: string; ownerId: string; actorId: string; modifier: RuleModifier; duration: RuleDuration }
-  | { kind: 'save'; sourceId: string; actorId: string; roll: number; boon: number; total: number; success: boolean }
+  | { kind: 'save'; sourceId: string; actorId: string; roll: number; boon: number; total: number; success: boolean; reroll?: { boon: number; onSuccess: RuleEffect[]; onFailure: RuleEffect[] } }
   | { kind: 'defeat'; sourceId: string; actorId: string }
   | { kind: 'phase'; sourceId: string; sourceActorId: string; actorId: string; phaseId: string }
   | { kind: 'end-turn'; sourceId: string; sourceActorId: string; actorId: string }

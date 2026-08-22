@@ -1,5 +1,5 @@
 import type { EncounterActor, EncounterState, Position, TerrainCell } from './types.js';
-import { encounterConditionSet } from './automation/encounter-adapter.js';
+import { encounterConditionSet, rampartObstructs } from './automation/encounter-adapter.js';
 
 /** The two built-in movement abilities available to an actor. */
 export type MovementMode = 'standard' | 'dash';
@@ -261,6 +261,13 @@ function resolveStep(
     return { step: null, issue: issue('move.impassable', 'Impassable terrain obstructs movement.') };
   }
   const flying = ignoresTerrainCosts(actor);
+  // Rampart (p.104): foes cannot enter or exit affected spaces by dashing or
+  // flying. Standard movement is unaffected; Slip and Unstoppable ignore it.
+  if (mode === 'dash' || flying) {
+    if (rampartObstructs(state, actor, from) !== rampartObstructs(state, actor, to)) {
+      return { step: null, issue: issue('move.rampart', 'Rampart obstructs dashing and flying movement.') };
+    }
+  }
   const currentTerrain = terrainTypesAt(state, from);
   const destinationTerrain = terrainTypesAt(state, to);
   const difficultTerrainPenalty = !flying && currentTerrain.has('difficult') ? 1 : 0;

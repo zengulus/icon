@@ -1,5 +1,6 @@
 import { rollBoonOrCurse } from '../dice.js';
 import type {
+  RuleAction,
   RuleActorView,
   RuleEffect,
   RuleExecutionContext,
@@ -10,6 +11,7 @@ import type {
   RuleProgram,
   RuleResolverRegistry,
   RuleSelector,
+  RuleStep,
 } from './types.js';
 
 export class RuleProgramViolation extends Error {
@@ -254,7 +256,9 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
           const boon = effect.boon ? rollBoonOrCurse(Math.trunc(evaluateNumber(effect.boon, context)), context.dice).modifier : 0;
           const total = roll + boon;
           const success = total >= 10;
-          output.push({ kind: 'save', sourceId: context.sourceId, actorId: target.id, roll, boon, total, success });
+          // The save effect's branches ride the mutation so a save-reroll
+          // interrupt (Sucker Punch, p.143) can regenerate either outcome.
+          output.push({ kind: 'save', sourceId: context.sourceId, actorId: target.id, roll, boon, total, success, reroll: { boon, onSuccess: effect.onSuccess, onFailure: effect.onFailure } });
           effectsToMutations(success ? effect.onSuccess : effect.onFailure, { ...context, triggerTargetIds: [target.id], delivery: success ? 'save-success' : 'effect' }, output);
         }
         break;
@@ -269,21 +273,71 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
   }
 }
 
-export function executeRuleProgram(program: RuleProgram, context: RuleExecutionContext, resolvers: RuleResolverRegistry = {}): RuleExecutionResult {
+/**
+ * ICON p.85 ("Effects resolve in the order they are listed") and p.107 §4
+ * ("The effects of abilities resolve in the order they are listed") define
+ * the deterministic order of an ability's trigger steps: there is no global
+ * trigger priority — simultaneously-derived triggers share the ability's
+ * source-listing order. This returns the selected steps in that canonical
+ * order so execution never depends on Set iteration or author discipline.
+ */
+export function orderedSelectedSteps(action: RuleAction, selectedSteps: RuleStep[]): RuleStep[] {
+  const sourceOrder = new Map(action.steps.map((step, index) => [step.id, index]));
+  return [...selectedSteps].sort((first, second) => (sourceOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) - (sourceOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER));
+}
+
+/** ICON p.143 — regenerate a save and its outcome branch for a re-roll
+ * (Sucker Punch: "the enemy must re-roll the save, keeping the second
+ * result"). The roll is supplied by the caller (the command layer, which owns
+ * the dice); the branch for the new result is generated from the save effect's
+ * AST with the triggering ability's provenance, so the regenerated mutations
+ * are replay-exact and carry the same source attribution. */
+export function rerollSaveMutations(
+  save: { targetId: string; boon: number; sourceId: string; sourceActorId: string; onSuccess: RuleEffect[]; onFailure: RuleEffect[] },
+  context: RuleExecutionContext,
+  roll: number,
+  boon: number,
+): RuleMutation[] {
+  const total = roll + boon;
+  const success = total >= 10;
+  const output: RuleMutation[] = [{ kind: 'save', sourceId: save.sourceId, actorId: save.targetId, roll, boon, total, success }];
+  effectsToMutations(success ? save.onSuccess : save.onFailure, {
+    ...context,
+    actorId: save.sourceActorId,
+    sourceId: save.sourceId,
+    input: {},
+    triggerTargetIds: [save.targetId],
+    delivery: success ? 'save-success' : 'effect',
+  }, output);
+  return output;
+}
+
+export function executeRuleProgram(
+  program: RuleProgram,
+  context: RuleExecutionContext,
+  resolvers: RuleResolverRegistry = {},
+  options: { onlyTriggers?: ReadonlySet<string> } = {},
+): RuleExecutionResult {
   if (program.sourceId !== context.sourceId) throw new RuleProgramViolation('program.source', 'The execution context does not match this source program.');
   const action = program.actions.find(({ id, timing }) => id === context.actionId && timing === context.timing);
   if (!action) throw new RuleProgramViolation('program.action', `${context.actionId} is not available at ${context.timing}.`);
-  const selectedSteps = action.steps.filter(({ timing, trigger, condition }) => timing === context.timing && (!trigger || context.triggers?.has(trigger)) && (!condition || evaluatePredicate(condition, context)));
+  const appendOnly = options.onlyTriggers !== undefined;
+  const selectedSteps = orderedSelectedSteps(action, action.steps.filter(({ timing, trigger, condition }) => timing === context.timing
+    && (!trigger || context.triggers?.has(trigger))
+    && (!appendOnly || (trigger !== undefined && options.onlyTriggers!.has(trigger)))
+    && (!condition || evaluatePredicate(condition, context))));
   const mutations: RuleMutation[] = [];
-  if (context.timing === 'use' || context.timing === 'interrupt') {
+  // Costs and the named resolver are paid once, on the primary execution pass;
+  // an append-only pass re-resolves only the newly-qualifying trigger steps.
+  if (!appendOnly && (context.timing === 'use' || context.timing === 'interrupt')) {
     for (const cost of action.costs) {
       const amount = integer(cost.amount, context);
       if (cost.kind === 'action') mutations.push({ kind: 'actions', sourceId: context.sourceId, actorId: context.actorId, operation: 'spend', amount });
-      else if (cost.kind === 'aether' || cost.kind === 'resolve' || cost.kind === 'use') mutations.push({ kind: 'resource', sourceId: context.sourceId, actorId: context.actorId, resourceId: cost.resourceId ?? cost.kind, operation: 'spend', amount, minimum: 0, maximum: null });
+      else if (cost.kind === 'aether' || cost.kind === 'resolve' || cost.kind === 'use' || cost.kind === 'combo') mutations.push({ kind: 'resource', sourceId: context.sourceId, actorId: context.actorId, resourceId: cost.resourceId ?? cost.kind, operation: 'spend', amount, minimum: 0, maximum: null });
       else if (cost.kind === 'sacrifice') mutations.push({ kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: context.actorId, amount, damageType: 'sacrifice', instance: 1, delivery: 'effect', ignoreCover: true });
     }
   }
-  if (action.resolverId) {
+  if (!appendOnly && action.resolverId) {
     const resolver = resolvers[action.resolverId];
     if (!resolver) throw new RuleProgramViolation('program.resolver', `Named resolver ${action.resolverId} is not registered.`);
     mutations.push(...resolver(context, action));
