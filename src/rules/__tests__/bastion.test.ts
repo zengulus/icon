@@ -376,6 +376,33 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(ended.actors[foe.id].hp).toBe(28);
   });
 
+  it('Great Giorgios determines its delayed raw damage through the shared damage kernel', () => {
+    const { state, hero, foe } = bastionEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null });
+    state.actors[foe.id].armor = 2;
+    const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
+    const ended = executeCommand(used.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+
+    // The rush travels two spaces, so the source damage is 4. Its delayed
+    // lifecycle hook no longer writes that raw value directly: armor reduces
+    // it through the common p.93 determination before application.
+    expect(ended.state.actors[foe.id].hp).toBe(30);
+    expect(applyEvents(used.state, ended.events)).toEqual(ended.state);
+  });
+
+  it('Great Giorgios routes its delayed self-rush through the Slashed ability-move gate', () => {
+    const { state, hero, foe } = bastionEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null });
+    state.actors[hero.id].statuses.push('slashed');
+
+    const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
+    const ended = executeCommand(used.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+
+    // Great Giorgios's delayed rush is still a self ability move. The single
+    // raw Slashed instance is determined by the shared kernel, so Armor 2
+    // turns its 4 normal damage into exactly 2 applied HP damage.
+    expect(ended.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+    expect(applyEvents(used.state, ended.events)).toEqual(ended.state);
+  });
+
   it('Great Giorgios: Collide adds hatred of the user', () => {
     const { state, hero, foe } = bastionEncounter({ foe: { x: 3, y: 1 }, ally: null });
     const result = executeCommand(state, {
@@ -402,7 +429,9 @@ describe('Bastion ability automation (p.122–124)', () => {
       executeCommand(state, {
         type: 'EXECUTE_RULE',
         actorId: hero.id,
-        sourceId: 'mendicant:trait:diaga',
+        // Diaga is independently executable now; Fortify remains a
+        // reducer-consumed passive and must not take the generic VM path.
+        sourceId: 'stalwart:trait:fortify',
         actionId: 'default',
         timing: 'use',
         input: {},

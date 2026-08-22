@@ -8,8 +8,16 @@ describe('rules automation coverage gate', () => {
   it('does not count reducer-only or placeholder manual rules as generic VM programs', () => {
     const standardMove = findRuleSourceUnit('core:standard-move');
     const skirmisher = findRuleSourceUnit('vagabond:trait:skirmisher');
+    const prowl = findRuleSourceUnit('vagabond:trait:prowl');
+    const diaga = findRuleSourceUnit('mendicant:trait:diaga');
+    const bless = findRuleSourceUnit('mendicant:trait:bless');
+    const succor = findRuleSourceUnit('mendicant:trait:succor');
     expect(standardMove).toBeDefined();
     expect(skirmisher).toBeDefined();
+    expect(prowl).toBeDefined();
+    expect(diaga).toBeDefined();
+    expect(bless).toBeDefined();
+    expect(succor).toBeDefined();
 
     const standardMoveCompilation = compileRuleSourceUnit(standardMove!);
     expect(standardMoveCompilation.unsupportedClauses).toHaveLength(1);
@@ -18,6 +26,19 @@ describe('rules automation coverage gate', () => {
     // Skirmisher is a deliberately small, independently executable passive:
     // it creates the condition consumed by the shared movement planner.
     expect(compileRuleSourceUnit(skirmisher!).unsupportedClauses).toEqual([]);
+
+    // Prowl is source-specific rather than a generic "gain Stealth" parse:
+    // its resolver charges an action only when a living foe is in range 2.
+    expect(compileRuleSourceUnit(prowl!).unsupportedClauses).toEqual([]);
+
+    // Diaga uses the shared command-time Cure/status-save resolver: p.94
+    // ongoing statuses are excluded and p.102 Blessing choices are explicit.
+    expect(compileRuleSourceUnit(diaga!).unsupportedClauses).toEqual([]);
+
+    // ICON p.172: Bless has a one-character, range-4 resolver, while Succor
+    // is a source-ID-gated passive consumed by the Rescue reducer.
+    expect(compileRuleSourceUnit(bless!).unsupportedClauses).toEqual([]);
+    expect(compileRuleSourceUnit(succor!).unsupportedClauses).toEqual([]);
   });
 
   it('does not allow a reducer-only core rule to silently take the generic VM path', () => {
@@ -49,13 +70,13 @@ describe('rules automation coverage gate', () => {
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4793,
-      completePrograms: 263,
-      unsupportedPrograms: 3012,
-      completeClauses: 1403,
-      unsupportedClauses: 3390,
+      completePrograms: 303,
+      unsupportedPrograms: 2972,
+      completeClauses: 1443,
+      unsupportedClauses: 3350,
       unsupportedByKind: {
-        core: 70, 'class-trait': 12, 'job-trait': 65, 'limit-break': 16, 'talent': 288, 'mastery': 144,
-        'job-summon-rule': 6, 'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 691,
+        core: 70, 'class-trait': 8, 'job-trait': 65, 'limit-break': 16, 'talent': 288, 'mastery': 144,
+        'job-summon-rule': 6, 'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 655,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
     });

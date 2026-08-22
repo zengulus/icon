@@ -5,7 +5,7 @@ import {
   axisDirection, lineCells, sameCell, squareArea, withinGrid, occupied,
   constant, untilNextTurnEnd,
   distance, sourceActor, walk, freeCellsInRange, resolveAttack, rushTowardFoes,
-  damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutation,
+  damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   flyMutation, removeMutation, placeMutation, terrainMutation,
   action, compilation,
@@ -68,7 +68,7 @@ const holyEffects: RuleResolver = (context) => {
     const cureTarget = Object.values(context.state.actors)
       .filter((character) => character.side === source.side && character.position && distance(character.position, targetPosition) <= 2)
       .sort((a, b) => distance(a.position!, targetPosition) - distance(b.position!, targetPosition) || a.id.localeCompare(b.id))[0];
-    if (cureTarget) mutations.push(cureMutation(context, cureTarget.id));
+    if (cureTarget) mutations.push(...cureMutations(context, cureTarget.id));
   }
   if (context.triggers?.has('charge')) {
     const targetPosition = target.position;

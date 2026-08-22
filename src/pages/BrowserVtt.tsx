@@ -24,7 +24,7 @@ import {
   type VttRoomState,
 } from '../rules/vtt-room.js';
 import type { EncounterCommand, EncounterEvent, EncounterState, Position, TerrainType } from '../rules/types.js';
-import { assetBackground } from '../services/assets.js';
+import { assetBackground } from '../vtt/presentation.js';
 import {
   fitWorldBounds,
   gridBoundsToWorld,
@@ -35,10 +35,10 @@ import {
   type ViewportRect,
 } from '../vtt/geometry.js';
 import { restorePersistedVttRoom } from '../vtt/persistence.js';
-import { TacticalViewport, type InteractionMode, type TableTool } from './Sandbox.js';
+import { TacticalViewport, type InteractionMode, type TableTool } from '../vtt/tactical-viewport.js';
 
 /**
- * Serverless / browser-only VTT test route (`#/vtt`).
+ * Browser-local Lab (`#/lab`).
  *
  * This page is deliberately independent of both the Supabase data layer and
  * the Render realtime server: it boots a preset local authoritative room from
@@ -47,8 +47,9 @@ import { TacticalViewport, type InteractionMode, type TableTool } from './Sandbo
  * on its own route OUTSIDE the `CharacterProvider`, so mounting it never calls
  * `supabase.auth.getUser` or any cloud/realtime service.
  *
- * It is an engineering test harness, not a multiplayer authority: there is no
- * clock, account, or checkpoint — every command is a local replay.
+ * It is a human-testing service, not a multiplayer authority: there is no
+ * account, network connection, or shared checkpoint — every command is a
+ * local replay. It deliberately remains available at every release phase.
  */
 const STORAGE_KEY = 'icon.browser-vtt.room.v1';
 const PREFERENCES_KEY = 'icon.browser-vtt.preferences.v1';
@@ -94,7 +95,7 @@ function samePosition(first: Position, second: Position): boolean {
   return first.x === second.x && first.y === second.y;
 }
 
-function createBrowserFixture(preferences: Preferences): VttRoomState {
+function createLabFixture(preferences: Preferences): VttRoomState {
   const job = findJob(preferences.jobId) ?? JOBS[0]!;
   const character = createCharacter('2026-08-19T00:00:00.000Z');
   character.id = 'browser-vtt-hero';
@@ -108,7 +109,7 @@ function createBrowserFixture(preferences: Preferences): VttRoomState {
   const foe = createFoeFromProfile(preferences.foeProfileId, { x: 6, y: 4 }, 4, 3);
   hero.id = 'actor:browser-vtt-hero';
   foe.id = 'foe:browser-vtt-foe';
-  const encounter = { ...createEncounter('Browser-only VTT test'), id: 'browser-vtt-encounter' };
+  const encounter = { ...createEncounter('Lab fixture'), id: 'browser-vtt-encounter' };
   let room = createVttRoom(encounter);
   room = executeRoomCommand(room, { domain: 'encounter', command: { type: 'ADD_ACTOR', actor: hero } }, seededDice(preferences.seed)).state;
   room = executeRoomCommand(room, { domain: 'encounter', command: { type: 'ADD_ACTOR', actor: foe } }, seededDice(preferences.seed + 1)).state;
@@ -120,19 +121,43 @@ interface Load {
   recoveryMessage: string;
 }
 
+function preserveCorruptRoom(raw: string): boolean {
+  try {
+    const baseKey = `${STORAGE_KEY}.corrupt`;
+    const existing = localStorage.getItem(baseKey);
+    // The common case is a reload before the user has chosen an action: one
+    // forensic copy is enough and avoids adding a new record on each mount.
+    if (existing === raw) return true;
+    const key = existing === null
+      ? baseKey
+      : `${baseKey}.${Date.now()}-${globalThis.crypto?.randomUUID?.() ?? 'recovery'}`;
+    localStorage.setItem(key, raw);
+    return true;
+  } catch {
+    // Keep the active record untouched when browser storage is unavailable;
+    // a later command will still surface its save failure rather than quietly
+    // replacing the malformed payload.
+    return false;
+  }
+}
+
 function loadRoom(preferences: Preferences): Load {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === null) return { room: createBrowserFixture(preferences), recoveryMessage: '' };
+    if (stored === null) return { room: createLabFixture(preferences), recoveryMessage: '' };
     try {
       return { room: restorePersistedVttRoom(JSON.parse(stored)), recoveryMessage: '' };
     } catch (reason) {
       const detail = reason instanceof Error ? reason.message : 'The saved room is malformed.';
-      return { room: createBrowserFixture(preferences), recoveryMessage: `The previous local room was not loaded: ${detail}` };
+      const preserved = preserveCorruptRoom(stored);
+      return {
+        room: createLabFixture(preferences),
+        recoveryMessage: `The previous local room was not loaded: ${detail}${preserved ? ' A recovery copy was kept in local storage.' : ''}`,
+      };
     }
   } catch (reason) {
     const detail = reason instanceof Error ? reason.message : 'Browser storage is unavailable.';
-    return { room: createBrowserFixture(preferences), recoveryMessage: `The previous local room could not be read: ${detail}` };
+    return { room: createLabFixture(preferences), recoveryMessage: `The previous local room could not be read: ${detail}` };
   }
 }
 
@@ -177,7 +202,7 @@ function useViewportSize(ref: React.RefObject<HTMLElement | null>) {
   return size;
 }
 
-export function BrowserVtt() {
+export function Lab() {
   const [preferences, setPreferences] = useState(loadPreferences);
   const initialLoad = useRef<Load | null>(null);
   if (initialLoad.current === null) {
@@ -256,7 +281,7 @@ export function BrowserVtt() {
   }
 
   function reset() {
-    const fresh = createBrowserFixture(preferences);
+    const fresh = createLabFixture(preferences);
     setRoom(fresh);
     setSelectedAbilityId('');
     setSelectedActorId(null);
@@ -393,9 +418,9 @@ export function BrowserVtt() {
     <div className="sandbox-page vtt-page">
       <header className="sandbox-header vtt-header">
         <div>
-          <p className="eyebrow">Serverless // browser-only VTT test</p>
+          <p className="eyebrow">Lab // browser-local human testing</p>
           <h1>{encounter.name}</h1>
-          <p>Runs entirely in this browser against the local authoritative room reducer. No Supabase, no Render server — commands are replayed locally and persisted to browser storage only.</p>
+          <p>Runs entirely in this browser against the local authoritative room reducer. No Supabase, no Render server, and no shared room — commands replay locally and persist only to this browser.</p>
         </div>
         <div className="battle-status"><span>ROUND <b>{encounter.round || '—'}</b></span><span>RESOLVE <b>{encounter.partyResolve}</b></span><span>ROOM REV <b>{room.revision}</b></span><a href="#/"><span>← Back to app</span></a></div>
       </header>

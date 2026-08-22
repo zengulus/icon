@@ -1,4 +1,7 @@
-import { rollBoonOrCurse } from '../dice.js';
+import { resolveAttackRoll } from './attack-resolution.js';
+import { resolveCureMutations } from './status-saves.js';
+import { resolveSaveWindow } from './save-window.js';
+import { eligibleTargets, isEligibleTarget } from './targeting.js';
 import type {
   RuleAction,
   RuleActorView,
@@ -32,24 +35,23 @@ function actor(context: RuleExecutionContext, id: string) {
   return value;
 }
 
-function relationMatches(source: RuleActorView, target: RuleActorView, relation: 'self' | 'ally' | 'foe' | 'any') {
-  if (relation === 'self') return source.id === target.id;
-  if (relation === 'ally') return source.side === target.side;
-  if (relation === 'foe') return source.side !== target.side;
-  return true;
-}
-
 export function selectActors(selector: RuleSelector, context: RuleExecutionContext): RuleActorView[] {
   const source = actor(context, context.actorId);
   let selected: RuleActorView[];
   switch (selector.kind) {
     case 'self': selected = [source]; break;
-    case 'attack-target': selected = context.attackTargetId ? [actor(context, context.attackTargetId)] : []; break;
+    case 'attack-target': {
+      const target = context.attackTargetId ? actor(context, context.attackTargetId) : undefined;
+      selected = target && isEligibleTarget(source, target, { relation: 'any' }) ? [target] : [];
+      break;
+    }
     case 'trigger-source': selected = context.triggerSourceId ? [actor(context, context.triggerSourceId)] : []; break;
     case 'trigger-targets': selected = (context.triggerTargetIds ?? []).map((id) => actor(context, id)); break;
     case 'input': {
       selected = (context.input.actorIds?.[selector.key] ?? []).map((id) => actor(context, id));
-      selected = selected.filter((target) => relationMatches(source, target, selector.relation ?? 'any'));
+      // p.92: `ally` means another ally; generic input selectors also reject
+      // defeated/off-board actors before a resolver can mutate them.
+      selected = eligibleTargets(source, selected, { relation: selector.relation ?? 'any' });
       const minimum = selector.minimum ?? 0;
       const maximum = selector.maximum ?? Number.POSITIVE_INFINITY;
       if (selected.length < minimum || selected.length > maximum) throw new RuleProgramViolation('choice.actor-count', `${selector.key} requires ${minimum}–${maximum} actor targets.`);
@@ -59,30 +61,37 @@ export function selectActors(selector: RuleSelector, context: RuleExecutionConte
       }
       break;
     }
-    case 'all': selected = Object.values(context.state.actors).filter((target) => relationMatches(source, target, selector.relation)); break;
+    case 'all': selected = eligibleTargets(source, Object.values(context.state.actors), { relation: selector.relation }); break;
     case 'adjacent': {
       const origins = selectActors(selector.origin, context);
-      selected = Object.values(context.state.actors).filter((target) => relationMatches(source, target, selector.relation) && origins.some((origin) => distance(origin, target) <= 1));
+      selected = eligibleTargets(source, Object.values(context.state.actors), { relation: selector.relation })
+        .filter((target) => origins.some((origin) => distance(origin, target) <= 1));
       break;
     }
     case 'within': {
       const origins = selectActors(selector.origin, context);
       const maximumRange = evaluateNumber(selector.range, context);
-      selected = Object.values(context.state.actors).filter((target) => relationMatches(source, target, selector.relation) && origins.some((origin) => distance(origin, target) <= maximumRange));
+      selected = eligibleTargets(source, Object.values(context.state.actors), { relation: selector.relation })
+        .filter((target) => origins.some((origin) => distance(origin, target) <= maximumRange));
       break;
     }
-    case 'condition': selected = Object.values(context.state.actors).filter((target) => relationMatches(source, target, selector.relation) && target.conditions.has(selector.conditionId)); break;
-    case 'marked': selected = Object.values(context.state.actors).filter((target) => Boolean(target.state[`mark:${selector.markId ?? context.sourceId}`])); break;
+    case 'condition': selected = eligibleTargets(source, Object.values(context.state.actors), { relation: selector.relation })
+      .filter((target) => target.conditions.has(selector.conditionId)); break;
+    case 'marked': selected = eligibleTargets(source, Object.values(context.state.actors), { relation: 'any' })
+      .filter((target) => Boolean(target.state[`mark:${selector.markId ?? context.sourceId}`])); break;
     case 'summons': {
       const ownerId = selector.owner === 'self' ? source.id : null;
       const ids = Object.values(context.state.entities)
         .filter((entity) => entity.ownerId && (!ownerId || entity.ownerId === ownerId) && (!selector.summonType || entity.type === selector.summonType))
         .map(({ state }) => typeof state.actorId === 'string' ? state.actorId : '')
         .filter(Boolean);
-      selected = ids.map((id) => actor(context, id));
+      selected = eligibleTargets(source, ids.map((id) => actor(context, id)), { relation: 'any' });
       break;
     }
   }
+  // TODO(ICON-rules, pp.87–92, 94, 107): selection eligibility is shared
+  // here, but line of sight/effect, Blind, Stealth, areas, footprint distance,
+  // and movement destinations must move into the planned TargetQuery gateway.
   return [...new Map(selected.map((target) => [target.id, target])).values()];
 }
 
@@ -194,22 +203,31 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
       case 'attack': {
         const source = actor(context, context.actorId);
         for (const target of targets) {
-          const trueStrike = effect.trueStrike ?? false;
-          const autoHit = effect.autoHit ?? false;
-          const evasionRoll = !autoHit && !trueStrike && target.conditions.has('evasion') ? context.dice.die(6) : null;
-          const evaded = evasionRoll !== null && evasionRoll >= 4;
-          const netBoon = Math.trunc(effect.boons ? evaluateNumber(effect.boons, context) : 0) - (!trueStrike && source.conditions.has('dazed') ? 1 : 0);
-          const d20 = autoHit || evaded ? null : context.dice.die(20);
-          const boon = autoHit || evaded ? 0 : rollBoonOrCurse(netBoon, context.dice).modifier;
-          const total = d20 === null ? null : d20 + boon;
-          const hit = autoHit || (!evaded && (total ?? 0) >= target.defense);
-          const critical = !autoHit && hit && (total ?? 0) >= 20;
+          const attack = resolveAttackRoll({
+            defense: target.defense,
+            sourceBoon: effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0,
+            elevationModifier: source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0,
+            sourceDazed: source.conditions.has('dazed'),
+            targetEvasion: target.conditions.has('evasion'),
+            trueStrike: effect.trueStrike ?? false,
+            autoHit: effect.autoHit ?? false,
+          }, context.dice);
+          const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover } = attack;
           output.push({ kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit });
           const triggers = new Set(context.triggers);
           triggers.add(hit ? 'hit' : 'miss');
           if (critical) triggers.add('critical-hit');
           if ((total ?? 0) >= 15) triggers.add('exceed');
-          const branchContext = { ...context, attackTargetId: target.id, triggerTargetIds: [target.id], triggers, delivery: hit ? 'hit' as const : 'miss' as const };
+          const branchContext = {
+            ...context,
+            attackTargetId: target.id,
+            triggerTargetIds: [target.id],
+            triggers,
+            delivery: hit ? 'hit' as const : 'miss' as const,
+            // p.89/p.104 exceptions belong only to this resolved attack's
+            // direct target, not collateral area or later effect damage.
+            attackDamageProvenance: { targetId: target.id, ignoreDodge, ignoreCover },
+          };
           effectsToMutations(hit ? effect.onHit : effect.onMiss, branchContext, output);
           if (critical) effectsToMutations(effect.onCritical ?? [], branchContext, output);
         }
@@ -217,13 +235,22 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
       }
       case 'damage': {
         const instances = effect.instances ? integer(effect.instances, context) : 1;
-        for (const target of targets) for (let instance = 1; instance <= instances; instance += 1) output.push({ kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id, amount: integer(effect.amount, context), damageType: effect.damageType, instance, delivery: effect.delivery ?? context.delivery ?? 'effect', ignoreCover: effect.ignoreCover ?? context.actionTags?.has('unerring') ?? false });
+        for (const target of targets) for (let instance = 1; instance <= instances; instance += 1) {
+          const attackDamage = context.attackDamageProvenance?.targetId === target.id ? context.attackDamageProvenance : undefined;
+          const ignoreCover = Boolean(effect.ignoreCover || context.actionTags?.has('unerring') || attackDamage?.ignoreCover);
+          output.push({
+            kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id,
+            amount: integer(effect.amount, context), damageType: effect.damageType, instance,
+            delivery: effect.delivery ?? context.delivery ?? 'effect', ignoreCover,
+            ...(attackDamage?.ignoreDodge ? { ignoreDodge: true } : {}),
+          });
+        }
         break;
       }
       case 'heal': for (const target of targets) output.push({ kind: 'heal', sourceId: context.sourceId, actorId: target.id, amount: integer(effect.amount, context), maximum: effect.maximum ? integer(effect.maximum, context) : null }); break;
       case 'vigor': for (const target of targets) output.push({ kind: 'vigor', sourceId: context.sourceId, actorId: target.id, amount: integer(effect.amount, context), uncapped: effect.uncapped ?? false }); break;
       case 'condition': for (const target of targets) output.push({ kind: 'condition', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id, conditionId: effect.conditionId, operation: effect.operation, potency: effect.potency ?? 'normal', ...(effect.duration ? { duration: effect.duration } : {}) }); break;
-      case 'cure': for (const target of targets) output.push({ kind: 'cure', sourceId: context.sourceId, actorId: target.id, all: effect.all ?? false }); break;
+      case 'cure': for (const target of targets) output.push(...resolveCureMutations(context, target, effect.all ?? false)); break;
       case 'move': {
         const positions = effect.positionInput ? [...(context.input.positions?.[effect.positionInput] ?? [])] : [];
         const direction = effect.directionInput ? context.input.directions?.[effect.directionInput] ?? null : null;
@@ -252,14 +279,19 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
       case 'modifier': for (const target of targets) output.push({ kind: 'modifier', sourceId: context.sourceId, ownerId: context.actorId, actorId: target.id, modifier: effect.modifier, duration: effect.duration }); break;
       case 'save': {
         for (const target of targets) {
-          const roll = context.dice.die(20);
-          const boon = effect.boon ? rollBoonOrCurse(Math.trunc(evaluateNumber(effect.boon, context)), context.dice).modifier : 0;
-          const total = roll + boon;
-          const success = total >= 10;
+          const sourceModifier = effect.boon ? Math.trunc(evaluateNumber(effect.boon, context)) : 0;
+          const ordinal = output.filter((mutation) => mutation.kind === 'save').length + 1;
+          const save = resolveSaveWindow(context, target, {
+            id: `${context.sourceId}:${context.actionId}:effect-save:${ordinal}:${target.id}`,
+            kind: 'effect',
+            sourceId: context.sourceId,
+            actorId: context.actorId,
+            sourceModifier,
+          }).mutation;
           // The save effect's branches ride the mutation so a save-reroll
           // interrupt (Sucker Punch, p.143) can regenerate either outcome.
-          output.push({ kind: 'save', sourceId: context.sourceId, actorId: target.id, roll, boon, total, success, reroll: { boon, onSuccess: effect.onSuccess, onFailure: effect.onFailure } });
-          effectsToMutations(success ? effect.onSuccess : effect.onFailure, { ...context, triggerTargetIds: [target.id], delivery: success ? 'save-success' : 'effect' }, output);
+          output.push({ ...save, reroll: { boon: save.boon, onSuccess: effect.onSuccess, onFailure: effect.onFailure } });
+          effectsToMutations(save.success ? effect.onSuccess : effect.onFailure, { ...context, triggerTargetIds: [target.id], delivery: save.success ? 'save-success' : 'effect' }, output);
         }
         break;
       }

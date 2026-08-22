@@ -3,9 +3,9 @@
 A job becomes "independently executable" when every one of its nine abilities
 has a hand-authored typed `RuleProgram`, named deterministic resolvers, and a
 source-page replay fixture — and the coverage audit stops counting it as an
-unresolved `job-ability`. This page is the recipe the first five job slices
-(Bastion, Demon Slayer, Colossus, Knave, Fool) established; follow it for each
-new job so future slices take hours, not days.
+unresolved `job-ability`. All sixteen current Job slices now use this recipe;
+follow it when adding a future sourcebook Job so the coverage invariant stays
+honest.
 
 The shared building blocks live in `src/rules/automation/job-kit.ts`. It
 consolidates the selectors, number/effect builders, mutation builders,
@@ -107,8 +107,10 @@ Rules of thumb baked into the kit and the existing slices:
 3. **`src/rules/automation/index.ts`**
    - `export * from './<job>-programs.js';`
 4. **Coverage gate tests**
-   - `bastion.test.ts` and `demon-slayer.test.ts` assert the global
-     `EXECUTABLE_JOB_ABILITY_IDS.size` (currently `45`); bump it by `9`.
+   - The Job-suite tests and the catalog test assert the global
+     `EXECUTABLE_JOB_ABILITY_IDS` set exactly equals the source catalog
+     (currently `144`); when a future sourcebook adds a Job, add all nine IDs
+     and update the source-cardinality fixture deliberately.
    - `coverage.test.ts` asserts the audit totals. Bump `completePrograms`
      (+9), drop `unsupportedPrograms` (−9) and `unsupportedByKind['job-ability']`
      (−9), and adjust `completeClauses` / `unsupportedClauses` by however many

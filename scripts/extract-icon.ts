@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { assertKnownIconSource, resolveIconSourcePath } from './source-artifact.js';
 
 type SectionSeed = readonly [id: string, title: string, startPage: number, category: string];
 
@@ -110,9 +111,10 @@ function sectionForPage(page: number) {
   return current;
 }
 
-const sourcePath = resolve(process.argv[2] ?? 'ICON 1.5.pdf');
+const sourcePath = resolveIconSourcePath(process.argv[2]);
 const outputPath = resolve(process.argv[3] ?? 'src/content/generated/icon-1.5.json');
 const data = new Uint8Array(await readFile(sourcePath));
+assertKnownIconSource(data, sourcePath);
 const document = await pdfjs.getDocument({ data }).promise;
 if (document.numPages !== EXPECTED_PAGE_COUNT) {
   throw new Error(`ICON 1.5 extraction expected ${EXPECTED_PAGE_COUNT} pages, received ${document.numPages}. Review the source artifact before updating generated catalogs.`);

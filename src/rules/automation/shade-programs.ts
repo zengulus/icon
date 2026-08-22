@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from './runtime.js';
+import { resolveSaveWindow } from './save-window.js';
 import type { RuleSourceUnit } from '../source-units.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from './types.js';
 import {
@@ -79,10 +80,15 @@ const umbraComboEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   if (!sourcePosition || !target || !targetPosition) return mutations;
   const blinded = target.conditions.has('blind');
-  const roll = blinded ? null : context.dice.die(20);
-  const success = blinded ? false : (roll ?? 0) >= 10;
-  mutations.push({ kind: 'save', sourceId: context.sourceId, actorId: target.id, roll: roll ?? 0, boon: 0, total: roll ?? 0, success });
-  if (!success) {
+  const save = resolveSaveWindow(context, target, {
+    id: `${context.sourceId}:${context.actionId}:penumbra:${target.id}`,
+    kind: 'effect',
+    sourceId: context.sourceId,
+    actorId: context.actorId,
+    forceFailure: blinded,
+  }).mutation;
+  mutations.push(save);
+  if (!save.success) {
     const destination = walk(context, targetPosition, axisDirection(targetPosition, sourcePosition), 3, false, target.id);
     if (!sameCell(destination, targetPosition)) mutations.push(teleportMutation(context, target.id, destination));
   }

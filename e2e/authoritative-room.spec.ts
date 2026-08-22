@@ -5,7 +5,7 @@ const realtimePort = Number(process.env.E2E_REALTIME_PORT ?? 48781);
 const realtimeUrl = `ws://127.0.0.1:${realtimePort}/realtime`;
 
 function roomPath(userId: string, role: 'gm' | 'player') {
-  return `/#/encounters/${roomId}?e2eUser=${encodeURIComponent(userId)}&e2eRole=${role}`;
+  return `/#/vtt/${roomId}?e2eUser=${encodeURIComponent(userId)}&e2eRole=${role}`;
 }
 
 async function joinRoom(page: Page, userId: string, role: 'gm' | 'player') {

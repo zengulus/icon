@@ -5,7 +5,7 @@ import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
   distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe,
-  damageMutation, conditionMutation, stateMutation, vigorMutation,
+  damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation,
   action, compilation,
@@ -277,7 +277,7 @@ const wishEffects: RuleResolver = (context) => {
   if (!ally) throw new RuleProgramViolation('choice.actor-count', 'Wish requires an ally on the battlefield.');
   const mutations: RuleMutation[] = [
     damageMutation(context, source.id, Math.ceil(source.maxHp / 4), 'effect', 'sacrifice'),
-    { kind: 'cure', sourceId: context.sourceId, actorId: ally.id, all: false },
+    ...cureMutations(context, ally.id),
     stateMutation(context, ally.id, 'wish:shield', true),
   ];
   return mutations;

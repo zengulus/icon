@@ -297,7 +297,11 @@ function resolveStep(
 function consequences(actor: EncounterActor, steps: readonly MovementStep[]): Pick<MovementPlan, 'dangerousDamage' | 'slashedDamage'> {
   return {
     dangerousDamage: !movementConditions(actor).has('flying') && !actor.dangerousTerrainTriggeredThisTurn && steps.some((step) => step.entersOrExitsDangerousTerrain) ? 2 : 0,
-    slashedDamage: actor.statuses.includes('slashed') && !actor.slashedTriggeredThisTurn ? Math.max(0, 4 - actor.armor) : 0,
+    // ICON p.104 Slashed is not a normal-movement consequence. It follows an
+    // ability mutation from the character or an ally, so the authoritative
+    // trigger lives beside RuleMutation application rather than this planner.
+    // Keep the legacy event field at zero until MoveIntent supersedes it.
+    slashedDamage: 0,
   };
 }
 

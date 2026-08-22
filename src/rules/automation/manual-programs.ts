@@ -17,6 +17,7 @@ import { GEOMANCER_ABILITY_PROGRAMS } from './geomancer-programs.js';
 import { SPELLBLADE_ABILITY_PROGRAMS } from './spellblade-programs.js';
 import { STORMBENDER_ABILITY_PROGRAMS } from './stormbender-programs.js';
 import { FOE_ABILITY_RECIPES, compileFoeAbilityRecipe } from './foe-recipes.js';
+import { compileFoeTraitMovementRecipe } from './foe-trait-recipes.js';
 
 const coreUseCosts: Record<string, number> = {
   'core:dash': 1,
@@ -29,7 +30,10 @@ const coreUseCosts: Record<string, number> = {
 
 const coreUseRules = new Set(['core:standard-move', ...Object.keys(coreUseCosts)]);
 const activeClassTraits: Record<string, { cost: number; range: number | null }> = {
-  'vagabond:trait:prowl': { cost: 1, range: null },
+  // Prowl's source cost is conditional: the typed resolver emits its one
+  // action spend only while a living foe is in range 2. Keeping the compiled
+  // action cost empty preserves its explicitly free-action branch.
+  'vagabond:trait:prowl': { cost: 0, range: null },
   'mendicant:trait:diaga': { cost: 1, range: 4 },
   'mendicant:trait:bless': { cost: 1, range: 4 },
 };
@@ -44,6 +48,13 @@ const activeClassTraits: Record<string, { cost: number; range: number | null }> 
  */
 const independentlyExecutableManualPrograms = new Set([
   'vagabond:trait:skirmisher',
+  'vagabond:trait:prowl',
+  'mendicant:trait:diaga',
+  'mendicant:trait:bless',
+  // ICON p.172 Succor is a passive. Its source-ID-gated effect is consumed
+  // by the Rescue reducer, so it is audited as a reviewed passive rather
+  // than becoming a guessed active action.
+  'mendicant:trait:succor',
 ]);
 
 /**
@@ -347,6 +358,7 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
     const recipe = FOE_ABILITY_RECIPES[unit.id];
     return recipe ? compileFoeAbilityRecipe(unit, recipe) : null;
   }
+  if (unit.kind === 'foe-trait') return compileFoeTraitMovementRecipe(unit);
   if (unit.kind !== 'core' && unit.kind !== 'class-trait') return null;
   const classActivation = activeClassTraits[unit.id];
   const timing: RuleTiming = unit.kind === 'core' ? coreUseRules.has(unit.id) ? 'use' : 'passive' : classActivation ? 'use' : 'passive';

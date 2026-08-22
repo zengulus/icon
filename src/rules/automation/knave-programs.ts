@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from './runtime.js';
+import { resolveAttackRoll } from './attack-resolution.js';
 import type { RuleSourceUnit } from '../source-units.js';
 import type { Position } from '../types.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from './types.js';
@@ -6,7 +7,7 @@ import {
   axisDirection, sameCell,
   constant, attackStep, comboCost,
   distance, sourceActor, impassable, walk, nearestFoe, ringAround,
-  damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutation,
+  damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   shoveMutation, rushMutation, placeMutation,
   untilNextTurnEnd, action, compilation,
@@ -64,7 +65,7 @@ const lowBlowEffects: RuleResolver = (context) => {
     if (alreadySlashed) mutations.push(conditionMutation(context, target.id, 'hatred'));
   }
   if (context.triggers?.has('slay') || context.triggers?.has('heroic')) {
-    mutations.push(cureMutation(context, source.id));
+    mutations.push(...cureMutations(context, source.id));
   }
   return mutations;
 };
@@ -288,27 +289,34 @@ const bleakMercyEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source || !target || !target.position) return [];
   const empowered = target.conditions.size >= 3;
-  const trueStrike = empowered;
-  const evasionRoll = !trueStrike && target.conditions.has('evasion') ? context.dice.die(6) : null;
-  const evaded = evasionRoll !== null && evasionRoll >= 4;
-  const netBoon = trueStrike ? 0 : (source.conditions.has('dazed') ? -1 : 0);
-  const d20 = evaded ? null : context.dice.die(20);
-  const boon = evaded ? 0 : Math.max(-2, Math.min(2, netBoon)) === 0 ? 0 : (netBoon > 0 ? context.dice.die(6) : -context.dice.die(6));
-  const total = d20 === null ? null : d20 + boon;
-  const hit = !evaded && (total ?? 0) >= target.defense;
-  const critical = !evaded && hit && (total ?? 0) >= 20;
+  const attack = resolveAttackRoll({
+    defense: target.defense,
+    elevationModifier: source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0,
+    sourceDazed: source.conditions.has('dazed'),
+    targetEvasion: target.conditions.has('evasion'),
+    trueStrike: empowered,
+  }, context.dice);
+  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover } = attack;
+  const damageProvenance = {
+    ignoreDodge,
+    ignoreCover,
+    // p.144 names only these three exceptions. In particular this must not
+    // use Divine as a shortcut: Divine also ignores Resistance, Cover,
+    // Aetherwall, Pacified, and Hatred, none of which Bleak Mercy names.
+    ...(empowered ? { bypassVigor: true, ignoreArmor: true, ignoreDefiance: true } : {}),
+  };
   const mutations: RuleMutation[] = [{
-    kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit: false,
+    kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
   }];
   if (hit) {
     const dice = context.dice.die(source.damageDie) + context.dice.die(source.damageDie);
-    mutations.push(damageMutation(context, target.id, dice + source.fray, 'hit', empowered ? 'divine' : 'normal'));
+    mutations.push(damageMutation(context, target.id, dice + source.fray, 'hit', 'normal', damageProvenance));
   } else {
-    mutations.push(damageMutation(context, target.id, source.fray, 'miss'));
+    mutations.push(damageMutation(context, target.id, source.fray, 'miss', 'normal', damageProvenance));
   }
-  if (critical) mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'hit'));
+  if (critical) mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'hit', 'normal', damageProvenance));
   if (context.triggers?.has('slay') || context.triggers?.has('heroic')) {
-    mutations.push(cureMutation(context, source.id));
+    mutations.push(...cureMutations(context, source.id));
     if (source.position) {
       for (const foe of Object.values(context.state.actors)) {
         if (foe.side === source.side || !foe.position || distance(foe.position, source.position) > 2) continue;

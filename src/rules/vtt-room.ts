@@ -742,9 +742,12 @@ function strictEncounter(value: unknown): EncounterState {
     if (item.heldDamage !== undefined) {
       const heldPath = `${windowPath}.heldDamage`;
       const held = strictRecord(item.heldDamage, heldPath);
-      assertExactKeys(held, heldPath, ['amount', 'damageType', 'sourceActorId', 'sourceId', 'instance', 'delivery', 'ignoreCover']);
+      assertExactKeys(held, heldPath, ['amount', 'damageType', 'sourceActorId', 'sourceId', 'instance', 'delivery', 'ignoreCover'], ['bypassVigor', 'ignoreDodge', 'ignoreDefiance']);
       strictFinite(held.amount, `${heldPath}.amount`, 0, 1_000_000);
       strictEnum(held.damageType, `${heldPath}.damageType`, new Set(['normal', 'piercing', 'divine', 'sacrifice']));
+      if (held.bypassVigor !== undefined) strictBoolean(held.bypassVigor, `${heldPath}.bypassVigor`);
+      if (held.ignoreDodge !== undefined) strictBoolean(held.ignoreDodge, `${heldPath}.ignoreDodge`);
+      if (held.ignoreDefiance !== undefined) strictBoolean(held.ignoreDefiance, `${heldPath}.ignoreDefiance`);
       strictIdentifier(held.sourceActorId, `${heldPath}.sourceActorId`);
       strictIdentifier(held.sourceId, `${heldPath}.sourceId`);
       strictInteger(held.instance, `${heldPath}.instance`, 0);

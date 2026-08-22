@@ -1,4 +1,5 @@
 import type { DiceSource } from '../dice.js';
+import type { AttackDamageProvenance } from './attack-resolution.js';
 import type { Position, SourceReference } from '../types.js';
 
 export const RULE_PROGRAM_SCHEMA_VERSION = 1 as const;
@@ -199,6 +200,23 @@ export interface RuleActorView {
   size: number;
   defeated: boolean;
   conditions: ReadonlySet<string>;
+  /**
+   * Statuses with their source potency.  `conditions` remains the broad
+   * lookup surface for existing resolvers; this projection preserves the
+   * p.94 distinction between ordinary statuses and ongoing (+) statuses.
+   */
+  statuses: ReadonlyArray<{ id: string; potency: 'normal' | 'plus' }>;
+  /**
+   * Encounter-authoritative modifiers that apply when this character is
+   * cured or saves to clear a status.  These fields are transient projection
+   * data, never persisted in encounter snapshots.
+   */
+  statusSavePolicy: {
+    cureDenied: boolean;
+    statusSaveDenied: boolean;
+    saveBoon: number;
+    saveCurse: number;
+  };
   resources: Readonly<Record<string, number>>;
   state: Readonly<Record<string, string | number | boolean | null>>;
   /** Marks on this actor (resolvers key on markId/ownerId, e.g. Incubus). */
@@ -220,6 +238,9 @@ export interface RuleRuntimeState {
   actors: Readonly<Record<string, RuleActorView>>;
   entities: Readonly<Record<string, RuleEntityView>>;
   terrainAt(position: Position): ReadonlySet<string>;
+  /** ICON p.89: terrain elevation (including pit adjustment) for the shared
+   * attack-resolution kernel. */
+  elevationAt(position: Position): number;
   /** Durable terrain effects (delays, objects, rampart) for resolver lifecycle. */
   terrainEffects: ReadonlyArray<{ id: string; terrain: string; ownerId: string | null; positions: readonly Position[]; height: number | null }>;
 }
@@ -231,6 +252,11 @@ export interface RuleExecutionInput {
   options?: Readonly<Record<string, string>>;
   numbers?: Readonly<Record<string, number>>;
   booleans?: Readonly<Record<string, boolean>>;
+  /**
+   * Optional, per-status Blessing choices for a command-time status save.
+   * The actor being saved owns and spends the token (ICON p.102/p.172).
+   */
+  statusSaveChoices?: Readonly<Record<string, Readonly<Record<string, { spendBlessing?: boolean }>>>>;
 }
 
 export interface RuleExecutionContext {
@@ -247,11 +273,23 @@ export interface RuleExecutionContext {
   triggers?: ReadonlySet<string>;
   actionTags?: ReadonlySet<string>;
   delivery?: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain';
+  /** Internal VM branch state. It is derived from a just-resolved attack,
+   * never supplied by a command, and applies only to that attack target. */
+  attackDamageProvenance?: Readonly<AttackDamageProvenance & { targetId: string }>;
 }
 
 export type RuleMutation =
   | { kind: 'attack'; sourceId: string; actorId: string; targetId: string; d20: number | null; boon: number; total: number | null; hit: boolean; critical: boolean; evasionRoll: number | null; trueStrike: boolean; autoHit: boolean }
-  | { kind: 'damage'; sourceId: string; sourceActorId: string; actorId: string; amount: number; damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice'; instance: number; delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain'; ignoreCover: boolean }
+  | {
+      kind: 'damage'; sourceId: string; sourceActorId: string; actorId: string; amount: number;
+      damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice'; instance: number;
+      delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain'; ignoreCover: boolean;
+      /** Present only when an attack's True Strike provenance applies. */ ignoreDodge?: boolean;
+      /** Explicit source exceptions. They are not aliases for Divine. */
+      bypassVigor?: boolean;
+      ignoreArmor?: boolean;
+      ignoreDefiance?: boolean;
+    }
   | { kind: 'heal'; sourceId: string; actorId: string; amount: number; maximum: number | null }
   | { kind: 'vigor'; sourceId: string; actorId: string; amount: number; uncapped: boolean }
   | { kind: 'condition'; sourceId: string; sourceActorId: string; actorId: string; conditionId: string; operation: 'apply' | 'remove'; potency: 'normal' | 'plus'; duration?: RuleDuration }
@@ -265,7 +303,10 @@ export type RuleMutation =
   | { kind: 'stance'; sourceId: string; sourceActorId: string; operation: 'enter' | 'refresh' | 'exit'; actorId: string; stanceId: string; state: Readonly<Record<string, string | number | boolean | null>> }
   | { kind: 'persistent'; sourceId: string; ownerId: string; operation: 'add' | 'remove'; actorId: string; effectId: string; duration: RuleDuration; modifiers: RuleModifier[]; triggers: string[]; state: Readonly<Record<string, string | number | boolean | null>> }
   | { kind: 'modifier'; sourceId: string; ownerId: string; actorId: string; modifier: RuleModifier; duration: RuleDuration }
-  | { kind: 'save'; sourceId: string; actorId: string; roll: number; boon: number; total: number; success: boolean; reroll?: { boon: number; onSuccess: RuleEffect[]; onFailure: RuleEffect[] } }
+  /** `statusId` is present for an ordinary status-clearing save window.
+   * `windowId` is stable command provenance for the pending generalized
+   * SaveWindow choice/interrupt migration. */
+  | { kind: 'save'; sourceId: string; actorId: string; statusId?: string; windowId?: string; roll: number; boon: number; total: number; success: boolean; reroll?: { boon: number; onSuccess: RuleEffect[]; onFailure: RuleEffect[] } }
   | { kind: 'defeat'; sourceId: string; actorId: string }
   | { kind: 'phase'; sourceId: string; sourceActorId: string; actorId: string; phaseId: string }
   | { kind: 'end-turn'; sourceId: string; sourceActorId: string; actorId: string }

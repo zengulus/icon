@@ -7,18 +7,18 @@ The ICON 1.5 source artifact is content-complete: all 501 PDF pages are stored, 
 | Character creation | Yes | Yes | Kin, Culture, Bond, action dots, Job, starting powers, and abilities |
 | Advancement | Yes | Partial | Levels, chapter boundaries, XP/AP, Job slots, talents, masteries, narrative choices, and Relic slots validate; Refocus (p.113) and Relic infusion/aspect transitions (p.245) now run as dedicated validated engine functions with tests |
 | Bonds | Yes | Partial | 12 Bonds, 36 ideals, 120 powers, Effort/Strain, Second Wind, special features, and kits; free-form narrative power outcomes remain table-facing |
-| Jobs | Yes | Partial | 16 Jobs and 144 abilities with chapter, cost, range, tags, rules text, talents, masteries, traits, and Limit Breaks; the nine Bastion abilities (p.122–124), the nine Demon Slayer abilities (p.128–130), the nine Colossus abilities (p.133–138), the nine Knave abilities (p.139–144), the nine Fool abilities (p.150–152), the nine Freelancer abilities (p.153–158), the nine Shade abilities (p.159–164), the nine Warden abilities (p.165–171), and the nine Chanter abilities (p.174–181) are independently executable with typed programs, resolvers, and golden fixtures, and every other Job ability remains source-visible and reducer-blocked until it has an independently reviewed resolver and replay fixture |
+| Jobs | Yes | Partial | All 16 Jobs and all 144 abilities have independently reviewed typed programs, resolvers, and source-page replay fixtures. Diaga, Bless, and Succor (Mendicant p.172) are also reviewed; the unfinished Job scope is the remaining traits, talents, masteries, Limit Breaks, summon rules, and documented table-facing choices—not a source-only set of Job abilities. |
 | Relics | Yes | No | 40 Relics with ranks I–III, aspects, and quests; invokes and persistent effects are not automated |
-| Core combat | Yes | Partial | Movement, overlapping terrain, pits, objects, Skirmisher/Flying/Phasing/Immobile movement, Rampart (dash/fly/teleport blocking with Slip/Unstoppable ignoring it), Counter retaliation, Hatred-of-X half damage with defeat clearing, Stealth adjacency targeting and break-on-use, Vigilance guard/punish spends, state-derived Charge/Comeback/Finishing Blow/Exceed/Collide/Slay triggers, cross-character effect ordering (non-turn before turn, hostile before beneficial), Chain Reaction aether, Bloodied/Regeneration, line of sight, basic attacks, damage order, saves, core statuses, wounds, rescue, recovery, turns, events, migration, and replay; areas, summons, marks, stances, and full traits remain incomplete |
-| Foes | Yes | Partial | Six source roles and 449 jobs, variants, uniques, elites, legends, components, and special entries with 1,365 abilities; standard profile construction works, and 20 foe abilities across the Crusher (p.301), Warrior, Soldier, Brute (p.300), Pepperbox, and Hunter (p.302) profiles are independently executable as declarative recipes (see the Foe ability recipes section); mobs and the remaining 1,345 foe abilities are not executable |
+| Core combat | Yes | Partial | Shared damage, save, target-eligibility, defeat, vigor, movement, and replay foundations exist, but the comprehensive Damage/Attack/Target/Save/Turn-window contracts are still in progress. See [rules foundations](rules-foundations.md); areas, summons, marks, stances, Vigilance triggers, foe role baselines, and full traits remain incomplete. |
+| Foes | Yes | Partial | Six source roles and 449 jobs, variants, uniques, elites, legends, components, and special entries with 1,365 abilities; standard profile construction works. Twenty foe abilities across the Crusher (p.301), Warrior, Soldier, Brute (p.300), Pepperbox, and Hunter (p.302) profiles are independently executable as declarative recipes, and 36 explicitly audited foe-trait IDs project Flying and/or Phasing into movement (see the foe recipe sections). Mobs, the remaining 1,345 foe abilities, and the remaining 655 traceable foe traits are not executable. |
 | Trophies and camp fixtures | Yes | No | 20 general trophies, 16 fixtures, and 87 fixture features are typed and source-linked; their effects are not automated |
 | Multiplayer transport | Yes | Engineering preview | Validated commands, authentication, permissions, revisions, persistence, reconnect, and Discord activity exist, but remain behind the rules gates |
 
-`PHASE_TWO_READY` remains false while any gameplay-required row is partial or reference-only. Production builds therefore show the gate instead of the sandbox. The engineering sandbox is available only from a local Vite development/test server.
+`PHASE_TWO_READY` remains false while any gameplay-required row is partial or reference-only. `#/lab` is deliberately exempt: it is a public browser-local human-testing service with no Supabase, Render, authentication, or shared checkpoint path, and can be deployed on GitHub Pages at every phase. The real shared VTT (`#/vtt/:encounterId`) and the production realtime service remain gated until readiness is earned. Cross-cutting refactor obligations are tracked in the [rules-foundations ledger](rules-foundations.md), not hidden behind individual ability claims.
 
 ## Measured source-to-program coverage
 
-`npm run audit:automation` is the machine-readable coverage report. It does not treat structured catalogs, a generic passive resolver, or reducer-only behavior as an independently executable `RuleProgram`.
+`npm run audit:automation` is the machine-readable coverage report. It does not treat structured catalogs, a generic passive parser, or reducer-only behavior as an independently executable `RuleProgram`.
 
 For the checked-in ICON 1.5 artifact, the report is deliberately conservative:
 
@@ -26,11 +26,15 @@ For the checked-in ICON 1.5 artifact, the report is deliberately conservative:
 | --- | ---: |
 | Traceable source programs | 3,275 |
 | Traceable source clauses | 4,793 |
-| Generic RulePrograms with no unresolved clause | 263 |
-| Generic RuleProgram clauses with no unresolved text | 1,403 |
-| Explicitly unresolved clauses | 3,390 |
+| Generic RulePrograms with no unresolved clause | 303 |
+| Generic RuleProgram clauses with no unresolved text | 1,443 |
+| Explicitly unresolved clauses | 3,350 |
 
-Reducer-backed core mechanics are tested separately, but are not counted as generic VM coverage until their full typed `RuleProgram` semantics exist; any core rule without a documented reducer path remains explicitly unresolved. A compiler result with no unresolved clause is also **not** an authority permit: live `EXECUTE_RULE` accepts only the explicit independently reviewed allowlist in `automation/manual-programs.ts` (currently Skirmisher plus the nine Bastion, nine Demon Slayer, nine Colossus, nine Knave, nine Fool, nine Freelancer, nine Shade, nine Warden, and nine Chanter ability programs, plus the twenty reviewed foe ability recipes in `automation/foe-recipes.ts`). This prevents a heuristic parser result from silently becoming a GM-executable foe or ability rule. `npm run audit:automation -- --strict` intentionally fails while any unresolved clause remains; it is a release-completeness gate, not a passing CI threshold for this incomplete rules engine.
+Reducer-backed core mechanics are tested separately, but are not counted as generic VM coverage until their full typed `RuleProgram` semantics exist; any core rule without a documented reducer path remains explicitly unresolved. A compiler result with no unresolved clause is also **not** an authority permit: live `EXECUTE_RULE` accepts only the explicit independently reviewed active allowlist in `automation/manual-programs.ts` (currently Skirmisher, Prowl, Diaga, Bless, all 144 Job ability programs across the 16 Jobs, and the twenty reviewed foe ability recipes in `automation/foe-recipes.ts`). Succor and the 36 source-ID foe-trait entries are typed passive projections from durable `traitIds`, not active command authority. This prevents a heuristic parser result from silently becoming a GM-executable foe or ability rule. The audit has no unresolved `job-ability` entries; its 3,350 unresolved clauses are supporting/core, foe, Relic, reward, and other source units. `npm run audit:automation -- --strict` intentionally fails while any unresolved clause remains; it is a release-completeness gate, not a passing CI threshold for this incomplete rules engine.
+
+## Mendicant class traits (ICON p.172)
+
+The reviewed Mendicant class-trait slice remains deliberately narrow. **Diaga** uses the shared Cure/status-save path; **Bless** is a one-action, range-4 direct rule that grants the selected character one `blessing` resource token; and passive **Succor** preserves every core Rescue rule except its source-ID-gated range extension from adjacent to 4. `__tests__/mendicant.test.ts` pins the p.172 source records, costs, range boundaries, and replayed events. Class traits outside this reviewed Mendicant slice stay explicitly unresolved.
 
 An ability becomes executable only when it has:
 
@@ -38,6 +42,22 @@ An ability becomes executable only when it has:
 2. Declarative effects or a named deterministic resolver.
 3. Explicit hit, miss, critical, save, trigger, talent, and mastery behavior where applicable.
 4. Source-page golden fixtures and event-replay tests.
+
+## Complete Job ability coverage
+
+All 16 nine-ability Job sets are independently executable. The first nine sets have the detailed notes below; the remaining seven use the same reviewed program/resolver/replay-fixture bar:
+
+| Job | Ability pages | Program module | Replay fixture |
+| --- | --- | --- | --- |
+| Harvester | p.185–187 | `automation/harvester-programs.ts` | `__tests__/harvester.test.ts` |
+| Sealer | p.192–194 | `automation/sealer-programs.ts` | `__tests__/sealer.test.ts` |
+| Seer | p.201–203 | `automation/seer-programs.ts` | `__tests__/seer.test.ts` |
+| Enochian | p.209–211 | `automation/enochian-programs.ts` | `__tests__/enochian.test.ts` |
+| Geomancer | p.218–221 | `automation/geomancer-programs.ts` | `__tests__/geomancer.test.ts` |
+| Spellblade | p.225–227 | `automation/spellblade-programs.ts` | `__tests__/spellblade.test.ts` |
+| Stormbender | p.233–236 | `automation/stormbender-programs.ts` | `__tests__/stormbender.test.ts` |
+
+The catalog test enforces exact equality between these reviewed IDs and all 144 source Job abilities. This confirms execution authority; it does not lift the Phase 2 gate while the surrounding source units remain incomplete.
 
 ## Demon Slayer ability set (ICON p.128–130)
 
@@ -53,7 +73,7 @@ All nine Demon Slayer abilities are independently executable end to end: typed c
 - **Six Hells Trigram** (p.129): burst-2 (self) terrain effect that ends the turn, activates at the start of the user's next turn to weaken all foes inside (Heroic adds rampart and fray), and forces exiting foes to pass a save.
 - **Wicked Sheath** (p.130): true-strike melee attack with fray damage and a shove on hit, a d4 power die that charges at each round start, +1 boon per tick, and die discard after any hit; Charge/Heroic rushes once per charge.
 
-Fidelity notes are preserved on the program itself: the second areas of Demon Cutter/Draken Cross use a deterministic non-overlapping placement, and slow-turn restrictions from delay effects are recorded but not yet enforced by the reducer's action gates (the Charge trigger now fires on a slow turn, but the delayed turn itself still grants full actions). Vigilance charge spends are now fully wired (see the condition pipeline section).
+Fidelity notes are preserved on the program itself: the second areas of Demon Cutter/Draken Cross use a deterministic non-overlapping placement, and slow-turn restrictions from delay effects are recorded but not yet enforced by the reducer's action gates (the Charge trigger now fires on a slow turn, but the delayed turn itself still grants full actions). Vigilance's legacy spend surface is available for deterministic fixtures, but its trigger/range authority remains a [foundation TODO](rules-foundations.md#1-damage-and-defeat-kernel--started).
 
 ## Bastion ability set (ICON p.122–124)
 
@@ -69,7 +89,7 @@ All nine Bastion abilities are independently executable end to end: typed costs,
 - **Rook** (p.123): melee attack, shove 1, and aura 1 until the end of your next turn; Collide slashes.
 - **Great Giorgios** (p.124): marks a foe in range 3, ends the turn, and the reducer resolves the delayed rush/shave/damage when that foe's turn ends; Collide/Heroic adds hatred.
 
-Fidelity notes are preserved on the program itself: the VM resolves attack rolls and damage with the dedicated reducer's cover/elevation path, aura zones and delayed end-of-turn effects are stored as typed persistent effects and marks with explicit provenance, and Collide/Heroic triggers fire only when a caller asserts them through `EXECUTE_RULE`.
+Fidelity notes are preserved on the program itself: the shared attack/damage kernels resolve rolls, elevation, cover, and their direct-damage provenance; aura zones and delayed end-of-turn effects are stored as typed persistent effects and marks with explicit provenance; and Collide/Heroic triggers fire only when a caller asserts them through `EXECUTE_RULE`.
 
 ## Colossus ability set (ICON p.133–138)
 
@@ -99,7 +119,7 @@ All nine Knave abilities are independently executable end to end: typed costs, t
 - **Strongarm** (p.141): shoves an adjacent foe in a clockwise or counter-clockwise circle around the user, phasing through characters; each passed-through character takes 2 damage (max 3) and is shoved 1, then the foe is shoved 1. Collide weakens foes; Heroic shoves the foe extra.
 - **Intimidate** (p.142): marks a foe at or beyond range 4 (range 2 with Heroic) and ends the turn; starting the next turn adjacent to the marked foe deals fray, stuns, and ends the mark.
 - **Sucker Punch** (p.143): an adjacent-foe interrupt that tracks usage (once per round, once per turn). It answers a `save-rolled` window: when a foe's ability makes a save, the reducer holds the save record and its branch effects in the window (costs pay immediately), the interrupt re-rolls the save through the command layer, and the held branch is regenerated from the save effect's AST with the second result — the re-roll keeps the second result, whether it succeeds or fails. On Heroic the re-rolled save is made with +1 curse (recorded on the target and consumed by the re-roll). An unanswered window resolves the original save's branch at the turn boundary. Fixtures in `__tests__/knave.test.ts` (re-roll to failure, re-roll keeping success, Heroic curse, unanswered-window resolution).
-- **Bleak Mercy** (p.144): a two-action 2[D]+fray attack that gains true strike and becomes divine (ignoring defiance, armor, and vigor) when the target has three or more statuses; Slay/Heroic cures the user and shoves all foes in range 2. Combo (Sweet Torment) adds aura 1 that stops cures and save clearing until the end of the next turn.
+- **Bleak Mercy** (p.144): a two-action 2[D]+fray attack that gains True Strike and, at three or more statuses, explicitly ignores Defiance and Armor and bypasses Vigor. These are narrow damage-intent flags—not Divine—so the attack still respects every defense not named by the source. Slay/Heroic cures the user and shoves all foes in range 2. Combo (Sweet Torment) adds aura 1 that stops cures and save clearing until the end of the next turn.
 
 Fidelity notes are preserved on the program: Strongarm's circular traversal defaults to clockwise, and Riposte's "refresh when a foe damages you or an adjacent ally" and Revenge's "rush once per turn when damaged" reactive windows are reducer hooks keyed on damage events rather than explicit caller assertions.
 
@@ -201,7 +221,15 @@ The Crusher pilot (p.301) validated the recipe machinery end-to-end; the basic f
 - **Pepperbox** (p.302): Riddle (range-4 +1-boon attack, 3 damage three times, dazed + unerring at exactly range 3 — the Effect clause applies on a miss too), Strafe (dash 2 then 2 damage to the nearest foe in range 3), Flash Bomb (small blast: foes take 3 damage twice and are blinded; allies and the Pepperbox in the area gain stealth).
 - **Hunter** (p.302): Hunter shot (range-4 +1-boon attack; bloodied targets are shoved 1 and dazed), Set Trap (dangerous terrain in the nearest free cell in range 2), Prowl (dash 1, stealth, and the end-turn request EXECUTE_RULE honors), Hunt (range-4 mark whose benefit — a bonus damage die and unerring against the hunted character — is wired into Hunter shot).
 
-Fidelity notes are preserved on the recipes themselves: deterministic defaults take the first-listed branch of "either/or" and "may" choices (the alternative is table-facing), critical hits add one extra [D], bonus damage (p.102) rolls an extra die and keeps the higher result, collide detection mirrors the reducer's `shoveResolution`, and the `end-turn` mutation is what auto-ends the foe's turn through EXECUTE_RULE. Replay fixtures in `__tests__/foe.test.ts` pin the golden mutation sequences and verify `applyEvents` replays to the identical state. The five reviewed profiles also carry `foe-trait` units (e.g. Crusher's Sturdy, Hunter's Wayfinding) that remain table-facing — a trait recipe layer is the documented next step.
+Fidelity notes are preserved on the recipes themselves: deterministic defaults take the first-listed branch of "either/or" and "may" choices (the alternative is table-facing), critical hits add one extra [D], bonus damage (p.102) rolls an extra die and keeps the higher result, collide detection mirrors the reducer's `shoveResolution`, and the `end-turn` mutation is what auto-ends the foe's turn through EXECUTE_RULE. Replay fixtures in `__tests__/foe.test.ts` pin the golden mutation sequences and verify `applyEvents` replays to the identical state. The five reviewed profiles still carry table-facing `foe-trait` units (for example, Crusher's Sturdy and Hunter's Wayfinding); the narrowly reviewed movement projection is documented below.
+
+## Foe movement-trait projection (ICON p.104)
+
+`automation/foe-trait-recipes.ts` is a closed source-ID manifest, not a text parser. It maps 36 reviewed trait units whose entire extracted text is `Flying`, `Phasing`, or the two conditions together: 19 Flying-only, 14 Phasing-only, and three two-condition entries. The latter includes Smoke Demon at p.410 (`Phasing, Flying`), so source order does not erase either reviewed mechanic.
+
+While an actor owns one of those trait IDs, `encounterConditionSet` projects the typed `flying` and/or `phasing` conditions used by the shared movement planner. The catalog marks those trait entries executable as automatic passives, but they do not open an `EXECUTE_RULE` command: no condition is inferred from prose at runtime. Every Sturdy trait, conditional/mixed flight or phasing trait, and every other foe trait remains source-visible and unprojected until it has its own reviewed recipe.
+
+`__tests__/foe-traits.test.ts` table-audits the exact 36 IDs and source text, proves all other traceable foe traits stay unprojected, compiles the typed passive actions, and replays movement for real Hellion (Flying) and Shadow (Phasing) profiles through the authoritative reducer.
 
 ## Shared resource registry (ICON p.99–105, p.204)
 
@@ -220,13 +248,13 @@ The reducer enforces the registry: `ENCOUNTER_STARTED` and `ENCOUNTER_ENDED` cle
 
 ## Combat condition pipeline (ICON p.104–105)
 
-The condition vocabulary shared by abilities and traits is wired into the reducer's damage, movement, targeting, and trigger-derivation paths, with source-derived golden fixtures in `__tests__/conditions.test.ts`:
+The condition vocabulary below is partially wired into shared reducer paths, with source-derived golden fixtures in `__tests__/conditions.test.ts`. It is not a claim that every delivery, target, or trigger has complete authority; the remaining cross-cutting work is explicit in the [rules-foundations ledger](rules-foundations.md):
 
 - **Rampart** — foes cannot enter or exit affected spaces by dashing, flying, or teleporting; standard movement is unaffected. Rampart spaces come from rampart terrain effects and from adjacency to a character projecting rampart (the Fortify trait). **Slip** and **Unstoppable** ignore it.
-- **Counter** — when damaged by an ability, deal 2 damage back per applied damage instance. Wired in both the resolver VM path and the basic-attack path; retaliation does not recurse.
+- **Counter** — the shared application kernel can resolve its non-recursive retaliation on current VM/basic/direct paths. Its exact “damaged by an ability” trigger coverage remains incomplete until damage provenance is a durable trigger record.
 - **Hatred of X** — half damage to every foe other than X, full damage against X. The hated target is tracked as `ruleState['hatred-of']` when the status is applied, and hatred ends when X is defeated (or at turn end).
 - **Stealth** — cannot be directly targeted except from adjacency (True Strike ignores it), and using an attack ability breaks the user's own stealth.
-- **Vigilance** — `SPEND_VIGILANCE` spends a charge to roll d6 and either reduce determined damage to an ally (`guard`) or damage a foe (`punish`). Charges come from Gates of Hell and from Fortify at turn end; rejected spends do not consume.
+- **Vigilance** — a legacy `SPEND_VIGILANCE` fixture command spends a charge and replays its declared result. It is not production-complete: range 2, an eligible incoming-damage/adjacency-breaking trigger, and per-trigger use must move into `DamageWindow`/`TriggerWindow` authority.
 - **State-derived triggers** — the reducer infers `charge` (slow turn), `comeback` (user bloodied), `finishing-blow` (bloodied target), and `exceed` (attack total 15+) before a resolver runs, so those triggers no longer require the caller to assert them. Heroic and Infuse remain explicit caller choices because they gate a gambit or an aether spend.
 - **Reactive Collide/Slay** — `collide` (a shove stopped by an obstruction) and `slay` (a character reduced to 0 HP) are derived after the first mutation pass: `executeRuleProgramWithReactiveTriggers` dry-runs the base mutations on a state clone, then re-resolves only the newly-qualifying trigger steps in an append pass that pays no costs and re-runs no resolver.
 - **Trigger ordering** — ICON p.85 and p.107 §4 resolve an ability's effects in source-listing order, so there is no global trigger priority. `orderedSelectedSteps` enforces that simultaneously-derived triggers fire in their listed positions; reactive Collide/Slay activate after the base pass (their listed position, since a collide/slay clause follows the effect that reveals it), deterministically.
@@ -235,9 +263,9 @@ The condition vocabulary shared by abilities and traits is wired into the reduce
 - **Held-damage protocol** — ICON p.107: when damage from a foe has been determined but not applied and the target has an available `when-damaged` interrupt (Righteous Disdain, p.128), the reducer holds the final mitigated amount unapplied, opens the window carrying it as `heldDamage`, and resolves the interrupt before the damage applies. A **`defeated` window** extends this to lethal blows when the target has an available defeated interrupt (Boiling Blood, p.138): the blow is held, the interrupt arms defy-death, and the held blow lands clamped to 1 hp. After the interrupt's own mutations, the held damage applies — or at the end of the turn if no interrupt answers the window — unless the interrupt re-dealt damage to the held target (Righteous Disdain's split consumes it). Interrupts that grant immunity or defeat-prevention naturally prevent the re-application (`applyHeldDamage` re-runs the shared `applyDeterminedDamage` pipeline, so defeat, defiance, counter, and the Chastise/Gentleness/Aria hooks fire exactly as they would for an immediate blow).
 - **Deferred-effect windows** — ICON p.107: an ability that has not resolved yet is held (its costs pay immediately) and its effects apply after the interrupt — or at the end of the turn if none answers. Three triggers are wired: **`uses-ability`** (p.122 Heroic Intervention — a foe targets the armored ally), **`area-inclusion`** (p.123 Perseus — an allied area effect includes the user, whose immunity applies first), and **`targeted-by-ability`** (p.151 Masquerade — an ability targets the user; the swap redirects the held effects to the ally via the window's `retarget`). All windows close at the turn boundary, where `resolveHeldInterruptWindows` drains the queue (resolving effects can open new windows, e.g. a deferred blow that a `when-damaged` interrupt can still answer).
 - **Chain Reaction** — grants 1 Aether once per round when a Wright ability damages at least two foes, tracked per-round via `chain-reaction-used`.
-- **Bloodied / Regeneration** — `isBloodied` tracks the after-wounds 50% threshold used by triggers and Comeback; Regeneration restores 4 vigor at turn end while bloodied (not while shattered).
+- **Bloodied / Regeneration** — `isBloodied` tracks the after-wounds 50% threshold used by triggers and Comeback; a literal projected Regeneration condition restores 4 vigor through the shared vigor kernel while bloodied (not while Rot- or Shattered-denied). The Rot combo's source-ID projection is still pending.
 
-Statuses (Blind, Dazed, Pacified, Sealed, Shattered, Stunned, Weakened, Vulnerable), positive effects (Defiance, Divine, Dodge, Evasion, Flying, Intangible, Immobile, Rampart, Skirmisher, Stealth, Sturdy, True Strike, Unstoppable), and the Piercing/Divine damage types are enforced across the basic-attack path, the resolver VM, and the movement planner; Incapacitated is expressed by the existing `defeated`/rescue model.
+Statuses (Blind, Dazed, Pacified, Sealed, Shattered, Stunned, Weakened, Vulnerable), positive effects (Defiance, Divine, Dodge, Evasion, Flying, Intangible, Immobile, Rampart, Skirmisher, Stealth, Sturdy, True Strike, Unstoppable), and the Piercing/Divine damage types have **partial** implementation across the basic-attack path, resolver VM, and movement planner. Individual source mechanics remain unpromoted until their delivery/target/window matrix is verified; Incapacitated is expressed by the existing `defeated`/rescue model.
 
 Interrupt order (p.107) is formalized separately: interrupts resolve with the most recently triggered interrupt first (LIFO), and simultaneous same-trigger interrupts resolve in turn order; the reducer opens `when-damaged`/`defeated` windows when damage applies and `uses-ability`/`area-inclusion`/`targeted-by-ability` windows when an ability has not resolved yet, pops the most recent window when that character interrupts, and closes all windows at the end of the turn. When the target has an available `when-damaged` interrupt, the window holds the determined damage and the interrupt resolves before it applies — the damage applies after the interrupt (or at the turn boundary) unless the interrupt re-dealt it. The held-damage flow (including the Righteous Disdain split and Boiling Blood's held lethal blow) is pinned in `__tests__/interrupts.test.ts` and `__tests__/colossus.test.ts`; the deferred-effect flows (Heroic Intervention, Perseus, Masquerade) in `__tests__/bastion.test.ts` and `__tests__/fool.test.ts`.
 
@@ -269,4 +297,4 @@ Every mechanic in the executable set that still needs a human ruling (or a calle
 
 This sweep also closed four previously documented gaps by wiring them: **Sucker Punch Heroic's +1 curse** is consumed by the re-rolled save (p.144), **Penumbra's save-to-resist** is rolled with blinded foes failing automatically (p.162), **Chronotemper's Cheat Time** is gated on the mark that grants it (p.152), and **Trick Shot's +1 boon** is applied to the armed next attack (p.156).
 
-No VTT path may silently approximate unresolved rules. The generic VM admits only the independently reviewed allowlist, and `USE_ABILITY` refuses every source-only Job ability while exposing its complete source text and page reference to the engineering harness.
+No VTT path may silently approximate unresolved rules. The generic VM admits only the independently reviewed allowlist, and `USE_ABILITY` accepts the reviewed 144-ability Job catalog while refusing any unallowlisted source rule. Source text and page references remain available in the engineering harness for unresolved supporting mechanics.

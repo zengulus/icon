@@ -18,9 +18,22 @@ describe('ICON encounter reducer', () => {
   it('starts with a hero and alternates to a foe', () => {
     const { state, hero, foe } = activeEncounter();
     expect(state.activeActorId).toBe(hero.id);
-    const ended = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    expect(ended.activeActorId).toBe(foe.id);
-    expect(ended.round).toBe(1);
+    const result = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice());
+    expect(result.state.activeActorId).toBe(foe.id);
+    expect(result.state.round).toBe(1);
+    expect(result.events).toMatchObject([{ type: 'TURN_ENDED', cause: 'voluntary' }]);
+  });
+
+  it('retains a forced-status turn-boundary cause without changing replay order', () => {
+    const { state, hero, foe } = activeEncounter();
+    state.actors[hero.id].statuses.push('stunned');
+
+    const result = executeCommand(state, {
+      type: 'MOVE', actorId: hero.id, path: [{ x: 1, y: 2 }], mode: 'standard',
+    }, scriptedDice());
+
+    expect(result.events.at(-1)).toMatchObject({ type: 'TURN_ENDED', cause: 'forced-status', nextActorId: foe.id });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
   it('rejects diagonal paths and occupied destinations', () => {
@@ -78,12 +91,32 @@ describe('ICON encounter reducer', () => {
     expect(state.eventLog.at(-1)).toEqual(events.at(-1));
   });
 
-  it('applies Slashed once when an ability moves its target', () => {
+  it('does not trigger Slashed from a core Move or Dash command', () => {
     const { state, hero } = activeEncounter();
     state.actors[hero.id].statuses.push('slashed');
-    const moved = executeCommand(state, { type: 'MOVE', actorId: hero.id, path: [{ x: 1, y: 2 }], mode: 'standard' }).state;
-    expect(moved.actors[hero.id].hp).toBe(38);
-    expect(moved.actors[hero.id].slashedTriggeredThisTurn).toBe(true);
+    const moved = executeCommand(state, { type: 'MOVE', actorId: hero.id, path: [{ x: 1, y: 2 }], mode: 'standard' });
+    // p.104 says Slashed follows a self/ally *ability* that moves the
+    // character. Standard movement only records the retired compatibility
+    // field and must not consume the once-per-turn ability trigger.
+    expect(moved.events[0]).toMatchObject({ type: 'ACTOR_MOVED', slashedDamage: 0 });
+    expect(moved.state.actors[hero.id].hp).toBe(40);
+    expect(moved.state.actors[hero.id].slashedTriggeredThisTurn).toBe(false);
+    expect(applyEvents(state, moved.events)).toEqual(moved.state);
+  });
+
+  it('triggers Slashed once after a self ability actually moves the character', () => {
+    const { state, hero } = activeEncounter();
+    state.actors[hero.id].abilityIds = ['bastion:valiant'];
+    state.actors[hero.id].chapter = 3;
+    state.actors[hero.id].statuses.push('slashed');
+
+    const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:valiant', targetIds: [] });
+
+    // Valiant rushes twice, but p.104 caps Slashed at one source instance.
+    // The raw 4 normal damage is determined by the common kernel, so Aster's
+    // Armor 2 leaves exactly 2 applied HP damage.
+    expect(used.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+    expect(applyEvents(state, used.events)).toEqual(used.state);
   });
 
   it('resolves a light attack with armor and deterministic dice', () => {
@@ -94,6 +127,20 @@ describe('ICON encounter reducer', () => {
     expect(attack).toMatchObject({ hit: true, rawDamage: 9, appliedDamage: 7 });
     expect(result.state.actors[foe.id].hp).toBe(25);
     expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
+  });
+
+  it('records Evasion before a basic-attack roll and replays the evaded result', () => {
+    const { state, hero, foe } = activeEncounter();
+    state.actors[foe.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+
+    const result = executeCommand(state, {
+      type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light',
+    }, scriptedDice(4));
+    const attack = result.events.find((event) => event.type === 'ATTACK_RESOLVED');
+
+    expect(attack).toMatchObject({ d20: null, total: null, evasionRoll: 4, hit: false, critical: false });
+    expect(result.state.actors[foe.id].hp).toBe(28); // fray still applies on a miss
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
   it('applies Vulnerable before armor as part of defender-side damage order', () => {
@@ -145,7 +192,7 @@ describe('ICON encounter reducer', () => {
       executeCommand(state, {
         type: 'EXECUTE_RULE',
         actorId: hero.id,
-        sourceId: 'mendicant:trait:diaga',
+        sourceId: 'stalwart:trait:fortify',
         actionId: 'default',
         timing: 'use',
         input: {},
@@ -251,6 +298,44 @@ describe('ICON encounter reducer', () => {
       { id: 'skirmisher', sourceId: 'vagabond:trait:skirmisher', ownerId: hero.id },
     ]);
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('executes Prowl with its source-specific conditional action cost', () => {
+    const inRange = activeEncounter();
+    inRange.state.actors[inRange.hero.id].traitIds.push('vagabond:trait:prowl');
+    const paid = executeCommand(inRange.state, {
+      type: 'EXECUTE_RULE',
+      actorId: inRange.hero.id,
+      sourceId: 'vagabond:trait:prowl',
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+    });
+    expect(paid.state.actors[inRange.hero.id]).toMatchObject({
+      actionsRemaining: 1,
+      conditions: [{ id: 'stealth', sourceId: 'vagabond:trait:prowl', ownerId: inRange.hero.id }],
+    });
+    expect(applyEvents(inRange.state, paid.events)).toEqual(paid.state);
+
+    const noFoeInRange = activeEncounter();
+    noFoeInRange.state.actors[noFoeInRange.hero.id].traitIds.push('vagabond:trait:prowl');
+    // A defeated actor cannot make Prowl cost an action even if their last
+    // position remains in range 2.
+    noFoeInRange.state.actors[noFoeInRange.foe.id].defeated = true;
+    noFoeInRange.state.actors[noFoeInRange.hero.id].actionsRemaining = 0;
+    const free = executeCommand(noFoeInRange.state, {
+      type: 'EXECUTE_RULE',
+      actorId: noFoeInRange.hero.id,
+      sourceId: 'vagabond:trait:prowl',
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+    });
+    expect(free.state.actors[noFoeInRange.hero.id]).toMatchObject({
+      actionsRemaining: 0,
+      conditions: [{ id: 'stealth', sourceId: 'vagabond:trait:prowl', ownerId: noFoeInRange.hero.id }],
+    });
+    expect(applyEvents(noFoeInRange.state, free.events)).toEqual(free.state);
   });
 
   it('executes Interact and Rescue as costed basic abilities', () => {

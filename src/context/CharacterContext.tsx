@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { IconCharacter } from '../rules/index.js';
-import { deleteCharacter, listCharacters, saveCharacter } from '../services/characters.js';
+import { characterLoadNotice, deleteCharacter, listCharactersWithReport, saveCharacter } from '../services/characters.js';
 import { currentE2EIdentity, e2eAuthEnabled } from '../services/e2e-auth.js';
 import { supabase, supabaseConfigured } from '../services/supabase.js';
 
@@ -32,8 +32,9 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setCharacters(await listCharacters(user?.id ?? null));
-      setError('');
+      const result = await listCharactersWithReport(user?.id ?? null);
+      setCharacters(result.characters);
+      setError(characterLoadNotice(result.issues));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load characters.');
     } finally {
@@ -49,9 +50,6 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       return () => { active = false; };
     }
     if (!supabase) {
-      setLoading(false);
-      setCharacters([]);
-      void listCharacters(null).then((items) => active && setCharacters(items));
       return () => { active = false; };
     }
     void supabase.auth.getUser().then(({ data }) => active && setUser(data.user));

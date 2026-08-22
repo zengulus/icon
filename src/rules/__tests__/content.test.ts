@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import sourcebook from '../../content/generated/icon-1.5.json';
 import { ABILITIES, BONDS, JOBS, PHASE_TWO_READY, RELICS, RULES_COVERAGE } from '../catalog.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
 import { FOE_ABILITIES, FOE_PROFILES, FOE_ROLES } from '../foes.js';
 import { CAMP_FIXTURES, GENERAL_TROPHIES, REWARD_RULES } from '../rewards.js';
 import { auditRuleSourceUnits } from '../source-units.js';
@@ -41,7 +42,16 @@ describe('ICON 1.5 content artifact', () => {
 
   it('keeps Phase 2 closed while executable coverage is incomplete', () => {
     expect(RULES_COVERAGE.some(({ status }) => status !== 'complete')).toBe(true);
+    expect(RULES_COVERAGE.find(({ id }) => id === 'job-ability-automation')).toMatchObject({ status: 'complete' });
+    expect(RULES_COVERAGE.find(({ id }) => id === 'job-automation')).toMatchObject({ status: 'partial' });
     expect(PHASE_TWO_READY).toBe(false);
+  });
+
+  it('keeps the independently reviewed Job allowlist in lockstep with the source catalog', () => {
+    const catalogAbilityIds = new Set(ABILITIES.map(({ id }) => id));
+    expect(EXECUTABLE_JOB_ABILITY_IDS.size).toBe(ABILITIES.length);
+    expect([...EXECUTABLE_JOB_ABILITY_IDS].sort()).toEqual([...catalogAbilityIds].sort());
+    expect(ABILITIES.every(({ automation }) => automation === 'executable')).toBe(true);
   });
 
   it('structures every color-coded foe role, profile, variant, and legend component', () => {

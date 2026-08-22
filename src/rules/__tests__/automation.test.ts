@@ -26,6 +26,8 @@ const actor = (id: string, side: RuleActorView['side'], x: number, overrides: Pa
   state: {},
   marks: [],
   ...overrides,
+  statuses: overrides.statuses ?? [],
+  statusSavePolicy: overrides.statusSavePolicy ?? { cureDenied: false, statusSaveDenied: false, saveBoon: 0, saveCurse: 0 },
 });
 
 const state: RuleRuntimeState = {
@@ -40,6 +42,7 @@ const state: RuleRuntimeState = {
   entities: {},
   terrainEffects: [],
   terrainAt: () => new Set(),
+  elevationAt: () => 0,
 };
 
 const program: RuleProgram = {
@@ -128,6 +131,41 @@ describe('declarative ICON rule runtime', () => {
     expect(evaded.mutations).toMatchObject([{ kind: 'attack', d20: null, evasionRoll: 4, hit: false }, { kind: 'damage', amount: 3 }]);
   });
 
+  it('carries True Strike and high-ground provenance into its direct damage branch', () => {
+    const provenanceProgram: RuleProgram = {
+      ...program,
+      id: 'program:attack-provenance',
+      sourceId: 'attack-provenance',
+      actions: [{ ...program.actions[0], costs: [], steps: [{ id: 'attack', timing: 'use', effects: [{
+        kind: 'attack',
+        target: { kind: 'attack-target' },
+        trueStrike: true,
+        onHit: [],
+        onMiss: [{ kind: 'damage', target: { kind: 'attack-target' }, amount: { kind: 'constant', value: 3 }, damageType: 'normal' }],
+      }] }] }],
+    };
+    const highGroundState: RuleRuntimeState = {
+      ...state,
+      elevationAt: (position) => position.x === 0 ? 1 : 0,
+      actors: {
+        ...state.actors,
+        foe: actor('foe', 'foes', 2, { defense: 20, conditions: new Set(['dodge']) }),
+      },
+    };
+
+    // ICON pp.89/104: higher elevation ignores the lower target's cover and
+    // True Strike ignores Dodge even when the attack misses.
+    const result = executeRuleProgram(provenanceProgram, context({
+      sourceId: 'attack-provenance',
+      state: highGroundState,
+      dice: scriptedDice(1, 1),
+    }));
+    expect(result.mutations).toMatchObject([
+      { kind: 'attack', hit: false, trueStrike: true },
+      { kind: 'damage', actorId: 'foe', delivery: 'miss', ignoreDodge: true, ignoreCover: true },
+    ]);
+  });
+
   it('emits deterministic costs, expressions, damage, and conditional effects', () => {
     const result = executeRuleProgram(program, context());
     expect(result.mutations).toEqual([
@@ -160,5 +198,17 @@ describe('declarative ICON rule runtime', () => {
     expect(failed.mutations).toMatchObject([{ kind: 'save', roll: 9, success: false }, { kind: 'condition', actorId: 'foe', conditionId: 'stunned' }]);
     const passed = executeRuleProgram(saveProgram, context({ sourceId: 'save', dice: scriptedDice(10) }));
     expect(passed.mutations).toMatchObject([{ kind: 'save', roll: 10, success: true }, { kind: 'damage', actorId: 'foe', amount: 2 }]);
+
+    // Generic effect saves share the durable save policy: Rot's curse is not
+    // limited to Cure/end-turn status windows.
+    const cursedState: RuleRuntimeState = {
+      ...state,
+      actors: {
+        ...state.actors,
+        foe: actor('foe', 'foes', 2, { statusSavePolicy: { cureDenied: false, statusSaveDenied: false, saveBoon: 0, saveCurse: 1 } }),
+      },
+    };
+    const cursed = executeRuleProgram(saveProgram, context({ sourceId: 'save', state: cursedState, dice: scriptedDice(10, 1) }));
+    expect(cursed.mutations[0]).toMatchObject({ kind: 'save', windowId: 'save:use:effect-save:1:foe', roll: 10, boon: -1, total: 9, success: false });
   });
 });

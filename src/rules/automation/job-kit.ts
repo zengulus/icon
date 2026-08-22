@@ -1,4 +1,5 @@
-import { rollBoonOrCurse } from '../dice.js';
+import { resolveCureMutations } from './status-saves.js';
+import { attackDamageProvenance, resolveAttackRoll, type AttackDamageProvenance } from './attack-resolution.js';
 import { axisDirection, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../area-geometry.js';
 import type { Position } from '../types.js';
 import type { RuleSourceUnit } from '../source-units.js';
@@ -42,8 +43,8 @@ import type {
  *   movement helpers the earlier jobs inlined — the Knave variant ignored
  *   entities.)
  * - `resolveAttack` mirrors the generic VM's `attack` effect so resolver-driven
- *   attacks report the identical mutation shape and honor evasion, boons, and
- *   the Dazed curse.
+ *   attacks report the identical mutation shape and honor evasion, elevation,
+ *   boons, and the Dazed curse.
  */
 
 // Re-export area geometry so a job file has a single import point.
@@ -197,31 +198,65 @@ export interface AttackResolution {
   attackMutation: RuleMutation;
   hit: boolean;
   critical: boolean;
+  /** Explicit p.89/p.104 facts for direct hit/miss damage emitted after this
+   * resolver attack. */
+  damageProvenance: AttackDamageProvenance;
 }
 
-/** Deterministic attack roll mirroring the generic VM's `attack` effect, so
- * resolver-driven attacks report the same mutation shape (evasion, boons, and
- * the Dazed curse all honored). */
+/** Resolver functions emit mutations synchronously. This private weak map
+ * lets the common damage builder consume the immediately preceding attack's
+ * durable rules facts without mutating command input or leaking them into VM
+ * branches. It is restricted to the matching target and hit/miss delivery. */
+const resolvedAttackDamage = new WeakMap<RuleExecutionContext, Map<string, AttackDamageProvenance>>();
+
+function rememberAttackDamage(context: RuleExecutionContext, targetId: string, provenance: AttackDamageProvenance) {
+  const byTarget = resolvedAttackDamage.get(context) ?? new Map<string, AttackDamageProvenance>();
+  byTarget.set(targetId, provenance);
+  resolvedAttackDamage.set(context, byTarget);
+}
+
+function directAttackDamageProvenance(
+  context: RuleExecutionContext,
+  targetId: string,
+  delivery: DamageDelivery,
+): AttackDamageProvenance | undefined {
+  if (delivery !== 'hit' && delivery !== 'miss') return undefined;
+  const remembered = resolvedAttackDamage.get(context)?.get(targetId);
+  if (remembered) return remembered;
+  // Auto-hit named resolvers can intentionally emit a direct attack mutation
+  // without calling resolveAttack. They still receive the universal p.89
+  // high-ground cover exception; auto-hits never need a miss-Dodge exception.
+  const source = context.state.actors[context.actorId];
+  const target = context.state.actors[targetId];
+  if (!source?.position || !target?.position) return undefined;
+  return attackDamageProvenance({
+    elevationModifier: context.state.elevationAt(source.position) - context.state.elevationAt(target.position),
+  });
+}
+
+/** Deterministic attack roll shared with the generic VM and basic attack path. */
 export function resolveAttack(
   context: RuleExecutionContext,
   source: RuleActorView,
   target: RuleActorView,
   options: { boons?: number; trueStrike?: boolean; autoHit?: boolean } = {},
 ): AttackResolution {
-  const trueStrike = options.trueStrike ?? false;
-  const autoHit = options.autoHit ?? false;
-  const evasionRoll = !autoHit && !trueStrike && target.conditions.has('evasion') ? context.dice.die(6) : null;
-  const evaded = evasionRoll !== null && evasionRoll >= 4;
-  const netBoon = Math.trunc(options.boons ?? 0) - (!trueStrike && source.conditions.has('dazed') ? 1 : 0);
-  const d20 = autoHit || evaded ? null : context.dice.die(20);
-  const boon = autoHit || evaded ? 0 : rollBoonOrCurse(netBoon, context.dice).modifier;
-  const total = d20 === null ? null : d20 + boon;
-  const hit = autoHit || (!evaded && (total ?? 0) >= target.defense);
-  const critical = !autoHit && hit && (total ?? 0) >= 20;
+  const attack = resolveAttackRoll({
+    defense: target.defense,
+    sourceBoon: options.boons ?? 0,
+    elevationModifier: source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0,
+    sourceDazed: source.conditions.has('dazed'),
+    targetEvasion: target.conditions.has('evasion'),
+    trueStrike: options.trueStrike ?? false,
+    autoHit: options.autoHit ?? false,
+  }, context.dice);
+  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover } = attack;
+  const damageProvenance = { ignoreDodge, ignoreCover };
+  rememberAttackDamage(context, target.id, damageProvenance);
   const attackMutation: RuleMutation = {
     kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
   };
-  return { attackMutation, hit, critical };
+  return { attackMutation, hit, critical, damageProvenance };
 }
 
 // ── Durations ────────────────────────────────────────────────────────────────
@@ -229,15 +264,38 @@ export const untilNextTurnEnd: RuleDuration = { kind: 'turn-end', actor: self, t
 export const untilNextTurnStart: RuleDuration = { kind: 'turn-start', actor: self, turns: 1 };
 
 // ── Mutation builders ────────────────────────────────────────────────────────
+/**
+ * Exact source-specific damage exceptions. Do not substitute a broader damage
+ * type (especially Divine) for a partial exception: p.144 Bleak Mercy ignores
+ * Armor, Defiance, and Vigor but still permits Resistance, Cover, Aetherwall,
+ * Pacified, and Hatred mitigation. Add a field only with source text, event
+ * replay coverage, and held-damage persistence where it affects application.
+ */
+export interface DamageProvenance extends Partial<AttackDamageProvenance> {
+  bypassVigor?: boolean;
+  ignoreArmor?: boolean;
+  ignoreDefiance?: boolean;
+}
+
 export const damageMutation = (
   context: RuleExecutionContext,
   actorId: string,
   amount: number,
   delivery: DamageDelivery = 'effect',
   damageType: DamageType = 'normal',
-): RuleMutation => ({
-  kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId, amount, damageType, instance: 1, delivery, ignoreCover: false,
-});
+  provenance: DamageProvenance = {},
+): RuleMutation => {
+  const inherited = directAttackDamageProvenance(context, actorId, delivery);
+  const ignoreCover = Boolean(provenance.ignoreCover || inherited?.ignoreCover);
+  const ignoreDodge = Boolean(provenance.ignoreDodge || inherited?.ignoreDodge);
+  return {
+    kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId, amount, damageType, instance: 1, delivery, ignoreCover,
+    ...(ignoreDodge ? { ignoreDodge: true } : {}),
+    ...(provenance.bypassVigor ? { bypassVigor: true } : {}),
+    ...(provenance.ignoreArmor ? { ignoreArmor: true } : {}),
+    ...(provenance.ignoreDefiance ? { ignoreDefiance: true } : {}),
+  };
+};
 
 export const conditionMutation = (
   context: RuleExecutionContext,
@@ -257,9 +315,11 @@ export const vigorMutation = (context: RuleExecutionContext, actorId: string, am
   kind: 'vigor', sourceId: context.sourceId, actorId, amount, uncapped: false,
 });
 
-export const cureMutation = (context: RuleExecutionContext, actorId: string): RuleMutation => ({
-  kind: 'cure', sourceId: context.sourceId, actorId, all: false,
-});
+/** Command-time Cure, including p.94 status saves and explicit Blessings. */
+export const cureMutations = (context: RuleExecutionContext, actorId: string): RuleMutation[] => {
+  const target = sourceActor(context, actorId);
+  return target ? resolveCureMutations(context, target) : [];
+};
 
 export const resourceMutation = (
   context: RuleExecutionContext,

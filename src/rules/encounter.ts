@@ -1,14 +1,18 @@
-import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type EncounterActiveEffect, type EncounterActor, type EncounterCommand, type EncounterCondition, type EncounterEvent, type EncounterMark, type EncounterPendingInterrupt, type EncounterState, type IconCharacter, type Position, type StatusId } from './types.js';
+import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type EncounterActiveEffect, type EncounterActor, type EncounterCommand, type EncounterCondition, type EncounterEvent, type EncounterMark, type EncounterPendingInterrupt, type EncounterState, type IconCharacter, type Position, type StatusId, type StatusSaveCommandInput, type TurnEndCause } from './types.js';
 import { findAbility, findClass, findJob } from './catalog.js';
 import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
-import { randomDice, rollBoonOrCurse, rollDamage, type DiceSource } from './dice.js';
+import { randomDice, rollDamage, type DiceSource } from './dice.js';
 import { compileRuleSourceUnit } from './automation/compiler.js';
 import type { RuleExecutionContext, RuleExecutionResult, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/types.js';
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
-import { applyHeldDamage, applyRuleMutations, deferrableEffectWindow, defyDeathActive, encounterConditionSet, encounterRuleState, gentlenessReflection, hatredDivertsDamage, isBloodied, reactiveRuleTriggers, retaliate, saveRerollWindow } from './automation/encounter-adapter.js';
+import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, defeatActor, deferrableEffectWindow, defyDeathActive, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, saveRerollWindow } from './automation/encounter-adapter.js';
+import { applyDeterminedDamageToVitals } from './automation/damage-resolution.js';
+import { resolveAttackRoll } from './automation/attack-resolution.js';
+import { queryDirectTarget, type DirectTargetQuery } from './automation/targeting.js';
 import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/runtime.js';
+import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/status-saves.js';
 import { RULE_RESOLVERS } from './automation/resolvers.js';
 import { findRuleSourceUnit } from './source-units.js';
 import { planMovementPath } from './movement.js';
@@ -394,12 +398,160 @@ function nextActor(state: EncounterState, current: EncounterActor) {
   return { actor: preferred, round: state.round + 1 };
 }
 
-function saveStatuses(actor: EncounterActor, dice: DiceSource, excluded: StatusId[] = []) {
-  const ongoing = new Set(actor.conditions.filter(({ potency }) => potency === 'plus').map(({ id }) => id));
-  return actor.statuses.filter((status) => !excluded.includes(status) && !ongoing.has(status)).map((status) => {
-    const roll = dice.die(20);
-    return { status, roll, cleared: roll >= 10 };
+interface EncounterStatusSaveResolution {
+  mutations: RuleMutation[];
+  saves: Array<{ status: StatusId; roll: number; cleared: boolean }>;
+}
+
+function statusSaveResults(mutations: readonly RuleMutation[]): Array<{ status: StatusId; roll: number; cleared: boolean }> {
+  return mutations.flatMap((mutation) => mutation.kind === 'save' && mutation.statusId
+    ? [{ status: mutation.statusId as StatusId, roll: mutation.roll, cleared: mutation.success }]
+    : []);
+}
+
+/**
+ * Resolve a core command's ordinary status-save window through the same
+ * projected policy as command-time Cure.  This is intentionally not a
+ * generic replacement for program/movement saves: those have their own
+ * source-specific contexts and remain separately audited.
+ */
+function resolveEncounterStatusSaves(
+  state: EncounterState,
+  actor: EncounterActor,
+  dice: DiceSource,
+  input: StatusSaveCommandInput | RuleExecutionContext['input'] = {},
+  excluded: readonly StatusId[] = [],
+  sourceId = 'core:status-save',
+): EncounterStatusSaveResolution {
+  const projected = encounterRuleState(state);
+  const target = projected.actors[actor.id];
+  if (!target) return { mutations: [], saves: [] };
+  try {
+    const mutations = resolveStatusSaveMutations({
+      state: projected,
+      actorId: actor.id,
+      sourceId,
+      actionId: 'status-save',
+      timing: 'turn-end',
+      input,
+      dice,
+    }, target, { excludedStatusIds: new Set(excluded) });
+    return {
+      mutations,
+      saves: statusSaveResults(mutations),
+    };
+  } catch (error) {
+    if (error instanceof StatusSaveViolation) throw new RuleViolation(error.code, error.message);
+    throw error;
+  }
+}
+
+/** Resolve the p.91 Recover/Diaga Cure sequence, including Cure's own denial. */
+function resolveEncounterCure(
+  state: EncounterState,
+  actor: EncounterActor,
+  dice: DiceSource,
+  input: StatusSaveCommandInput | RuleExecutionContext['input'] = {},
+  sourceId = 'core:recover',
+): EncounterStatusSaveResolution {
+  const projected = encounterRuleState(state);
+  const target = projected.actors[actor.id];
+  if (!target) return { mutations: [], saves: [] };
+  try {
+    const mutations = resolveCureMutations({
+      state: projected,
+      actorId: actor.id,
+      sourceId,
+      actionId: 'default',
+      timing: 'use',
+      input,
+      dice,
+    }, target);
+    return { mutations, saves: statusSaveResults(mutations) };
+  } catch (error) {
+    if (error instanceof StatusSaveViolation) throw new RuleViolation(error.code, error.message);
+    throw error;
+  }
+}
+
+/**
+ * One command can resolve a status save and then force its own turn to end.
+ * A p.102 choice is for one save, not a reusable command-wide discount, so
+ * status-tagged save mutations consume the matching declared choice before a
+ * later forced end-turn window sees it.
+ */
+function remainingStatusSaveInput(input: RuleExecutionContext['input'], mutations: readonly RuleMutation[]): RuleExecutionContext['input'] {
+  const choices = input.statusSaveChoices;
+  if (!choices) return input;
+  const consumed = new Map<string, Set<string>>();
+  for (const mutation of mutations) {
+    if (mutation.kind !== 'save' || !mutation.statusId) continue;
+    const statuses = consumed.get(mutation.actorId) ?? new Set<string>();
+    statuses.add(mutation.statusId);
+    consumed.set(mutation.actorId, statuses);
+  }
+  if (consumed.size === 0) return input;
+  const remaining: Record<string, Record<string, { spendBlessing?: boolean }>> = {};
+  for (const [actorId, actorChoices] of Object.entries(choices)) {
+    const used = consumed.get(actorId);
+    const retained = Object.fromEntries(Object.entries(actorChoices).filter(([statusId]) => !used?.has(statusId)));
+    if (Object.keys(retained).length > 0) remaining[actorId] = retained;
+  }
+  return { ...input, statusSaveChoices: remaining };
+}
+
+function statusSaveMutationsFromEvents(events: readonly EncounterEvent[]): RuleMutation[] {
+  return events.flatMap((event) => {
+    if (event.type === 'RULE_MUTATIONS_APPLIED') return event.mutations;
+    if (event.type === 'ACTOR_RECOVERED' || event.type === 'TURN_ENDED') return event.statusSaveMutations ?? [];
+    return [];
   });
+}
+
+/**
+ * A client may only nominate a Blessing for a status save that this command
+ * actually produced.  This rejects cross-target and no-longer-available
+ * choices instead of silently accepting a misleading command payload.
+ */
+function assertStatusSaveChoicesConsumed(input: RuleExecutionContext['input'], mutations: readonly RuleMutation[]) {
+  const choices = input.statusSaveChoices;
+  if (!choices) return;
+  const resolved = new Set(mutations.flatMap((mutation) => mutation.kind === 'save' && mutation.statusId
+    ? [`${mutation.actorId}\u0000${mutation.statusId}`]
+    : []));
+  for (const [actorId, actorChoices] of Object.entries(choices)) {
+    for (const statusId of Object.keys(actorChoices)) {
+      if (!resolved.has(`${actorId}\u0000${statusId}`)) {
+        throw new RuleViolation('status-save.unused-choice', `${statusId} is not being saved against by this command.`);
+      }
+    }
+  }
+}
+
+function turnEndedEvent(
+  state: EncounterState,
+  actor: EncounterActor,
+  dice: DiceSource,
+  input: StatusSaveCommandInput | RuleExecutionContext['input'] = {},
+  excluded: readonly StatusId[] = [],
+  sourceId = 'core:end-turn',
+  cause: TurnEndCause = 'voluntary',
+): Extract<EncounterEvent, { type: 'TURN_ENDED' }> {
+  const next = nextActor(state, actor);
+  const carnevaleGamble = carnevaleGambleForTurnEnd(state, actor, dice);
+  const monogatariGamble = monogatariGambleForTurnEnd(state, actor, dice);
+  const statusSaves = resolveEncounterStatusSaves(state, actor, dice, input, excluded, sourceId);
+  return {
+    type: 'TURN_ENDED',
+    actorId: actor.id,
+    nextActorId: next.actor.id,
+    round: next.round,
+    saves: statusSaves.saves,
+    statusSaveMutations: statusSaves.mutations,
+    cause,
+    ...(carnevaleGamble !== undefined ? { carnevaleGamble } : {}),
+    ...(monogatariGamble !== undefined ? { monogatariGamble } : {}),
+  };
 }
 
 function movementEvents(state: EncounterState, command: Extract<EncounterCommand, { type: 'MOVE' }>, dice: DiceSource): EncounterEvent[] {
@@ -421,10 +573,27 @@ function movementEvents(state: EncounterState, command: Extract<EncounterCommand
       }
     }
   }
-  const hpAfterDanger = Math.max(0, actor.hp - plan.dangerousDamage);
-  const hpAfterSlashed = Math.max(0, hpAfterDanger - Math.max(0, plan.slashedDamage - actor.vigor));
+  const defiance = encounterConditionSet(actor).has('defiance');
+  // Movement records source damage, not a locally armor-reduced preview.
+  // Derive the same p.93 amount used by replay here only to decide whether an
+  // explicit legacy defeat event is needed after the move.
+  const dangerousDetermination = determineEncounterDamage(state, {
+    targetId: actor.id,
+    sourceRuleId: 'core:dangerous-terrain',
+    amount: plan.dangerousDamage,
+    damageType: 'piercing',
+    delivery: 'terrain',
+    instance: 1,
+    ignoreCover: true,
+  });
+  const dangerousUsesDefiance = defiance && dangerousDetermination.amount >= actor.hp;
+  const dangerous = applyDeterminedDamageToVitals(actor, {
+    amount: dangerousDetermination.amount,
+    bypassVigor: true,
+    minimumHp: defyDeathActive(actor) || dangerousUsesDefiance ? 1 : 0,
+  });
   const events: EncounterEvent[] = [{ type: 'ACTOR_MOVED', actorId: actor.id, path: plan.path, mode: plan.mode, dangerousDamage: plan.dangerousDamage, slashedDamage: plan.slashedDamage }];
-  if (hpAfterSlashed === 0 && !defyDeathActive(actor)) events.push({ type: 'ACTOR_DEFEATED', actorId: actor.id, woundGained: actor.side === 'heroes' });
+  if (dangerous.hp === 0 && !defyDeathActive(actor) && !dangerousUsesDefiance) events.push({ type: 'ACTOR_DEFEATED', actorId: actor.id, woundGained: actor.side === 'heroes' });
   return events;
 }
 
@@ -433,37 +602,47 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   const target = state.actors[command.targetId];
   const cost = command.weight === 'heavy' ? 2 : 1;
   if (!target || target.defeated || target.side === actor.side) throw new RuleViolation('attack.invalid-target', 'Basic attacks require a living foe.');
-  if (encounterConditionSet(target).has('stealth') && distance(actor.position, target.position) > 1) throw new RuleViolation('attack.stealth', 'A stealthy character can only be directly targeted from adjacency.');
   if (actor.attackedThisTurn) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
   if (actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
   if (actor.actionsRemaining < cost) throw new RuleViolation('action.insufficient', `A ${command.weight} attack costs ${cost} action${cost === 1 ? '' : 's'}.`);
-  const attackRange = actor.statuses.includes('blind') ? Math.min(2, actor.basicAttackRange) : actor.basicAttackRange;
-  if (distance(actor.position, target.position) > attackRange) throw new RuleViolation('attack.range', 'The target is outside basic attack range.');
-  if (!hasLineOfSight(state, actor.position, target.position)) throw new RuleViolation('attack.line-of-sight', `${target.name} is outside line of sight.`);
-  let netBoon = 0;
+  assertDirectTarget(state, actor, target, {
+    relation: 'foe',
+    maximumRange: actor.basicAttackRange,
+    requireLineOfSight: true,
+  }, 'attack');
   const actorElevation = elevationAt(state, actor.position);
   const targetElevation = elevationAt(state, target.position);
-  netBoon += actorElevation - targetElevation;
-  if (actor.statuses.includes('dazed')) netBoon -= 1;
-  const d20 = dice.die(20);
-  const boon = rollBoonOrCurse(netBoon, dice);
-  const total = d20 + boon.modifier;
-  const hit = total >= target.defense;
-  const critical = hit && total >= 20;
+  const { d20, boon, total, hit, critical, evasionRoll } = resolveAttackRoll({
+    defense: target.defense,
+    elevationModifier: actorElevation - targetElevation,
+    sourceDazed: actor.statuses.includes('dazed'),
+    targetEvasion: encounterConditionSet(target).has('evasion'),
+  }, dice);
   if (massiveOverheadArmed(actor)) actor.resources['bonus-damage'] = (actor.resources['bonus-damage'] ?? 0) + 1;
   const bonusDice = (critical ? 1 : 0) + Math.max(0, actor.resources['bonus-damage'] ?? 0);
   const damageRoll = rollDamage(actor.damageDie, hit ? (command.weight === 'heavy' ? 2 : 1) : 0, bonusDice, dice);
-  let rawDamage = (hit ? damageRoll.total : 0) + actor.fray;
-  if (actor.statuses.includes('weakened')) rawDamage = Math.max(0, rawDamage - 2);
-  if (actor.statuses.includes('pacified')) rawDamage = Math.ceil(rawDamage / 2);
-  if (hatredDivertsDamage(state, actor, target)) rawDamage = Math.ceil(rawDamage / 2);
-  const vulnerableDamage = rawDamage > 0 && target.statuses.includes('vulnerable') ? rawDamage + 1 : rawDamage;
-  let reduced = Math.max(0, vulnerableDamage - target.armor);
-  if (hasCoverFrom(state, target, actor) && actorElevation <= targetElevation) reduced = Math.ceil(reduced / 2);
-  const defeatCeiling = defyDeathActive(target) ? target.vigor + target.hp - 1 : target.vigor + target.hp;
-  const appliedDamage = Math.min(reduced, defeatCeiling);
-  const willDefeat = !defyDeathActive(target) && appliedDamage >= target.vigor + target.hp;
-  const events: EncounterEvent[] = [{ type: 'ATTACK_RESOLVED', actorId: actor.id, targetId: target.id, weight: command.weight, d20, boonDie: boon.modifier, total, hit, critical, rawDamage, appliedDamage }];
+  const rawDamage = (hit ? damageRoll.total : 0) + actor.fray;
+  const determination = determineEncounterDamage(state, {
+    targetId: target.id,
+    sourceActorId: actor.id,
+    sourceRuleId: command.weight === 'heavy' ? 'core:heavy-attack' : 'core:light-attack',
+    amount: rawDamage,
+    damageType: 'normal',
+    delivery: hit ? 'hit' : 'miss',
+    instance: 1,
+    ignoreCover: false,
+    covered: hasCoverFrom(state, target, actor) && actorElevation <= targetElevation,
+  });
+  const defiance = encounterConditionSet(target).has('defiance');
+  const wouldDefeat = determination.amount >= target.vigor + target.hp;
+  const preview = applyDeterminedDamageToVitals(target, {
+    amount: determination.amount,
+    bypassVigor: false,
+    minimumHp: defyDeathActive(target) || (defiance && wouldDefeat) ? 1 : 0,
+  });
+  const appliedDamage = preview.amountApplied;
+  const willDefeat = !defyDeathActive(target) && !(defiance && wouldDefeat) && preview.hp === 0;
+  const events: EncounterEvent[] = [{ type: 'ATTACK_RESOLVED', actorId: actor.id, targetId: target.id, weight: command.weight, d20, boonDie: boon, total, evasionRoll, hit, critical, rawDamage, appliedDamage }];
   if (willDefeat) events.push({ type: 'ACTOR_DEFEATED', actorId: target.id, woundGained: target.side === 'heroes' });
   return events;
 }
@@ -485,9 +664,23 @@ function vigilanceEvents(state: EncounterState, command: Extract<EncounterComman
   if (command.use === 'guard' && target.side !== actor.side) throw new RuleViolation('vigilance.ally', 'Guard can only protect an ally.');
   if (command.use === 'punish' && target.side === actor.side) throw new RuleViolation('vigilance.foe', 'Punish can only damage a foe.');
   const roll = dice.die(6);
+  // Guard receives a *previously determined* incoming damage amount; applying
+  // armor/halving again here would double-mitigate it. Punish is kept on this
+  // historical event shape until Vigilance is moved into DamageWindow/
+  // TriggerWindow authority (ICON p.105).
+  // TODO(ICON-rules): bind both uses to a real trigger record, enforce range
+  // 2/adjacency, and give Punish a full DamageIntent before promoting it.
   const appliedDamage = command.use === 'guard' ? Math.max(0, (command.damage ?? 0) - roll) : roll;
-  const events: EncounterEvent[] = [{ type: 'VIGILANCE_SPENT', actorId: actor.id, targetId: target.id, use: command.use, roll, appliedDamage }];
-  if (!defyDeathActive(target) && appliedDamage >= target.vigor + target.hp) events.push({ type: 'ACTOR_DEFEATED', actorId: target.id, woundGained: target.side === 'heroes' });
+  const defiance = encounterConditionSet(target).has('defiance');
+  const wouldDefeat = appliedDamage >= target.vigor + target.hp;
+  const preview = applyDeterminedDamageToVitals(target, {
+    amount: appliedDamage,
+    bypassVigor: false,
+    minimumHp: defyDeathActive(target) || (defiance && wouldDefeat) ? 1 : 0,
+  });
+  const appliedDamageAfterDefiance = preview.amountApplied;
+  const events: EncounterEvent[] = [{ type: 'VIGILANCE_SPENT', actorId: actor.id, targetId: target.id, use: command.use, roll, appliedDamage: appliedDamageAfterDefiance }];
+  if (!defyDeathActive(target) && !(defiance && wouldDefeat) && preview.hp === 0) events.push({ type: 'ACTOR_DEFEATED', actorId: target.id, woundGained: target.side === 'heroes' });
   return events;
 }
 
@@ -565,6 +758,42 @@ export function hasLineOfSight(state: EncounterState, from: Position, to: Positi
   return true;
 }
 
+/**
+ * Current one-target command gate shared by basic attacks, reviewed ability
+ * commands, and reviewed raw rule commands. It intentionally uses the
+ * point-cell range metric that the existing reducer used; p.92 footprint and
+ * p.107 line-of-effect belong to the next TargetQuery tranche.
+ */
+function assertDirectTarget(
+  state: EncounterState,
+  source: EncounterActor,
+  target: EncounterActor,
+  query: Omit<DirectTargetQuery, 'sourceBlind' | 'hasLineOfSight'>,
+  family: 'attack' | 'ability',
+) {
+  const result = queryDirectTarget(source, target, {
+    ...query,
+    sourceBlind: encounterConditionSet(source).has('blind'),
+    targetStealth: query.targetStealth ?? encounterConditionSet(target).has('stealth'),
+    hasLineOfSight: query.requireLineOfSight ? hasLineOfSight(state, source.position, target.position) : true,
+  });
+  if (result.legal) return;
+  switch (result.problem) {
+    case 'unavailable':
+      throw new RuleViolation(family === 'attack' ? 'attack.invalid-target' : 'ability.invalid-target', family === 'attack' ? 'Basic attacks require a living foe.' : 'That ability target is unavailable.');
+    case 'relation':
+      throw new RuleViolation('attack.invalid-target', 'Attacks can only target foes.');
+    case 'stealth':
+      throw new RuleViolation(family === 'attack' ? 'attack.stealth' : 'ability.stealth', 'A stealthy character can only be directly targeted from adjacency.');
+    case 'range':
+      throw new RuleViolation(family === 'attack' ? 'attack.range' : 'ability.range', family === 'attack' ? 'The target is outside basic attack range.' : `${target.name} is outside this ability’s range.`);
+    case 'line-of-sight':
+      throw new RuleViolation(family === 'attack' ? 'attack.line-of-sight' : 'ability.line-of-sight', `${target.name} is outside line of sight.`);
+    default:
+      throw new RuleViolation('ability.invalid-target', 'That ability target is unavailable.');
+  }
+}
+
 function lineIntersectsCellInterior(from: Position, to: Position, cell: Position) {
   const epsilon = 1e-9;
   const startX = from.x + 0.5;
@@ -639,10 +868,6 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   if (attackAbility && !noAttackSpace && targetIds.length !== 1) throw new RuleViolation('attack.target-count', 'Choose exactly one attack target.');
   const targets = targetIds.map((targetId) => state.actors[targetId]);
   if (targets.some((target) => !target || target.defeated)) throw new RuleViolation('ability.invalid-target', 'One or more ability targets are unavailable.');
-  if (attackAbility && !noAttackSpace && targets[0].side === actor.side) throw new RuleViolation('attack.invalid-target', 'Attacks can only target foes.');
-  if (attackAbility && !noAttackSpace && !ability.tags.includes('true strike') && encounterConditionSet(targets[0]).has('stealth') && distance(actor.position, targets[0].position) > 1) {
-    throw new RuleViolation('ability.stealth', 'A stealthy character can only be directly targeted from adjacency.');
-  }
 
   // Independently executable abilities resolve through their hand-authored
   // typed RuleProgram and named deterministic resolvers; the generic
@@ -650,10 +875,13 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // enforce their own target ranges, so the reducer only keeps the generic
   // attack-range and line-of-sight gate for the single attack target.
   if (attackAbility && !noAttackSpace) {
-    const attackTargetActor = targets[0];
-    const maximumRange = actor.statuses.includes('blind') && !ability.tags.includes('true strike') ? Math.min(2, abilityRange(ability.header, ability.range)) : abilityRange(ability.header, ability.range);
-    if (distance(actor.position, attackTargetActor.position) > maximumRange) throw new RuleViolation('ability.range', `${attackTargetActor.name} is outside this ability’s range.`);
-    if (!hasLineOfSight(state, actor.position, attackTargetActor.position)) throw new RuleViolation('ability.line-of-sight', `${attackTargetActor.name} is outside line of sight.`);
+    const attackTargetActor = targets[0]!;
+    assertDirectTarget(state, actor, attackTargetActor, {
+      relation: 'foe',
+      maximumRange: abilityRange(ability.header, ability.range),
+      trueStrike: ability.tags.includes('true strike'),
+      requireLineOfSight: true,
+    }, 'ability');
   }
   for (const target of targets) {
     if (target.id === actor.id && !ability.tags.includes('self')) throw new RuleViolation('ability.self-target', 'Abilities cannot target their user unless they specify Self.');
@@ -688,7 +916,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     sourceId: ability.id,
     actionId: programAction.id,
     timing,
-    input: { actorIds: { target: targetIds } },
+    input: { ...(command.input ?? {}), actorIds: { target: targetIds } },
     dice,
     ...(attackAbility && !noAttackSpace && targets[0] ? { attackTargetId: targets[0].id } : {}),
     triggers: abilityTriggers,
@@ -707,10 +935,15 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     const intermediate = applyEvents(state, events);
     const acting = intermediate.actors[actor.id];
     if (!acting.defeated) {
-      const next = nextActor(intermediate, acting);
-      const carnevaleGamble = carnevaleGambleForTurnEnd(intermediate, acting, dice);
-      const monogatariGamble = monogatariGambleForTurnEnd(intermediate, acting, dice);
-      events.push({ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(acting, dice, ['stunned']), ...(carnevaleGamble !== undefined ? { carnevaleGamble } : {}), ...(monogatariGamble !== undefined ? { monogatariGamble } : {}) });
+      events.push(turnEndedEvent(
+        intermediate,
+        acting,
+        dice,
+        remainingStatusSaveInput(command.input ?? {}, result.mutations),
+        ['stunned'],
+        'core:forced-end-turn',
+        actor.statuses.includes('stunned') ? 'forced-status' : 'ability-tag',
+      ));
     }
   }
   return events;
@@ -791,11 +1024,16 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       if (command.attackTargetId) {
         const target = state.actors[command.attackTargetId];
         if (!target || target.defeated || !target.onBattlefield) throw new RuleViolation('attack.invalid-target', 'That rule target is unavailable.');
-        if (action.tags.includes('attack') && target.side === actor.side) throw new RuleViolation('attack.invalid-target', 'Attacks can only target foes.');
-        if (action.tags.includes('attack') && !action.tags.includes('true strike') && encounterConditionSet(target).has('stealth') && distance(actor.position, target.position) > 1) throw new RuleViolation('ability.stealth', 'A stealthy character can only be directly targeted from adjacency.');
-        const maximumRange = action.range?.kind === 'constant' ? action.range.value : 1;
-        if (distance(actor.position, target.position) > maximumRange) throw new RuleViolation('ability.range', `${target.name} is outside this rule action’s range.`);
-        if (!hasLineOfSight(state, actor.position, target.position)) throw new RuleViolation('ability.line-of-sight', `${target.name} is outside line of sight.`);
+        assertDirectTarget(state, actor, target, {
+          relation: action.tags.includes('attack') ? 'foe' : 'any',
+          maximumRange: action.range?.kind === 'constant' ? action.range.value : 1,
+          trueStrike: action.tags.includes('true strike'),
+          // Preserve the current explicitly reviewed Stealth gate for attacks;
+          // non-attack direct-target semantics move with TargetQuery's broader
+          // source contract instead of being guessed here.
+          targetStealth: action.tags.includes('attack') ? undefined : false,
+          requireLineOfSight: true,
+        }, 'ability');
       }
       const triggers = deriveTriggers(state, actor, command.attackTargetId);
       for (const trigger of command.triggers ?? []) triggers.add(trigger);
@@ -823,12 +1061,24 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         ...(command.triggerTargetIds ? { triggerTargetIds: command.triggerTargetIds } : {}),
         triggers,
       };
-      const result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
+      let result: RuleExecutionResult;
+      try {
+        result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
+      } catch (error) {
+        if (error instanceof StatusSaveViolation) throw new RuleViolation(error.code, error.message);
+        throw error;
+      }
+      const spentResources = new Map<string, number>();
       for (const mutation of result.mutations) {
         if (mutation.kind === 'actions' && mutation.operation === 'spend' && mutation.amount > actor.actionsRemaining) throw new RuleViolation('action.insufficient', `${unit.name} costs more actions than are available.`);
         if (mutation.kind === 'resource' && mutation.operation === 'spend') {
-          const available = mutation.resourceId === 'resolve' ? state.partyResolve + (actor.resources['personal-resolve'] ?? 0) : actor.resources[mutation.resourceId] ?? 0;
-          if (mutation.amount > available) throw new RuleViolation('resource.insufficient', `${unit.name} requires ${mutation.amount} ${mutation.resourceId}.`);
+          const resourceActor = state.actors[mutation.actorId];
+          if (!resourceActor) throw new RuleViolation('resource.actor-missing', `${unit.name} attempted to spend a resource from an unavailable character.`);
+          const key = `${resourceActor.id}:${mutation.resourceId}`;
+          const spent = (spentResources.get(key) ?? 0) + mutation.amount;
+          spentResources.set(key, spent);
+          const available = mutation.resourceId === 'resolve' ? state.partyResolve + (resourceActor.resources['personal-resolve'] ?? 0) : resourceActor.resources[mutation.resourceId] ?? 0;
+          if (spent > available) throw new RuleViolation('resource.insufficient', `${unit.name} requires ${spent} ${mutation.resourceId}.`);
         }
       }
       events = [attachSaveReroll(state, actor.id, unit.id, ruleContext, dice, {
@@ -857,7 +1107,15 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       if (actor.actionsRemaining < 1) throw new RuleViolation('action.insufficient', 'Rescue costs one action.');
       if (actor.usedAbilityIds.includes('basic:rescue')) throw new RuleViolation('ability.repeat', 'Rescue cannot be repeated during the same turn.');
       if (!target || !target.defeated || target.side !== actor.side || target.id === actor.id) throw new RuleViolation('rescue.target', 'Rescue requires an adjacent defeated ally.');
-      if (distance(actor.position, target.position) > 1) throw new RuleViolation('rescue.range', 'The defeated ally must be adjacent.');
+      // ICON p.172 Succor changes only Rescue's target distance. Keep this a
+      // closed source-ID check: a trait name or arbitrary condition cannot
+      // accidentally widen the core Rescue action.
+      const rescueRange = actor.traitIds.includes('mendicant:trait:succor') ? 4 : 1;
+      if (distance(actor.position, target.position) > rescueRange) {
+        throw new RuleViolation('rescue.range', rescueRange === 4
+          ? 'Succor can only rescue a defeated ally in range 4.'
+          : 'The defeated ally must be adjacent.');
+      }
       events = [{ type: 'ACTOR_RESCUED', actorId: actor.id, targetId: target.id, restoredHp: Math.max(1, target.baseMaxHp - target.wounds * target.vitality) }];
       break;
     }
@@ -868,10 +1126,16 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const actor = assertActive(state, command.actorId);
       if (actor.actionsRemaining < 2) throw new RuleViolation('action.insufficient', 'Recover costs two actions.');
       if (actor.usedAbilityIds.includes('basic:recover')) throw new RuleViolation('ability.repeat', 'Recover cannot be repeated during the same turn.');
-      const saves = saveStatuses(actor, dice);
-      const cap = actor.vitality;
-      const vigorGained = actor.statuses.includes('shattered') ? 0 : Math.max(0, Math.min(cap, actor.vigor + (actor.hp <= actor.baseMaxHp / 2 ? cap : 4)) - actor.vigor);
-      events = [{ type: 'ACTOR_RECOVERED', actorId: actor.id, vigorGained, saves }];
+      // ICON p.91 Recover is Cure self, then save against every saveable
+      // status.  Match Diaga's Cure sequence exactly: a cure denial blocks
+      // that immediate sequence, while Rot's curse still applies to separate
+      // ordinary save windows such as an end turn (pp.144, 186).
+      const recovery = resolveEncounterCure(state, actor, dice, command.input ?? {}, 'core:recover');
+      const statusSaveMutations = recovery.mutations;
+      const preview = clone(state);
+      applyRuleMutations(preview, statusSaveMutations);
+      const vigorGained = Math.max(0, preview.actors[actor.id]!.vigor - actor.vigor);
+      events = [{ type: 'ACTOR_RECOVERED', actorId: actor.id, vigorGained, saves: recovery.saves, statusSaveMutations }];
       break;
     }
     // Status application in production comes from a resolved source program.
@@ -888,10 +1152,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
     }
     case 'END_TURN': {
       const actor = assertActive(state, command.actorId);
-      const next = nextActor(state, actor);
-      const carnevaleGamble = carnevaleGambleForTurnEnd(state, actor, dice);
-      const monogatariGamble = monogatariGambleForTurnEnd(state, actor, dice);
-      events = [{ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(actor, dice), ...(carnevaleGamble !== undefined ? { carnevaleGamble } : {}), ...(monogatariGamble !== undefined ? { monogatariGamble } : {}) }];
+      events = [turnEndedEvent(state, actor, dice, command.input ?? {})];
       break;
     }
     case 'END_ENCOUNTER':
@@ -903,25 +1164,70 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
     const intermediate = applyEvents(state, events);
     const actor = intermediate.actors[command.actorId];
     if (!actor.defeated) {
-      const next = nextActor(intermediate, actor);
-      const carnevaleGamble = carnevaleGambleForTurnEnd(intermediate, actor, dice);
-      const monogatariGamble = monogatariGambleForTurnEnd(intermediate, actor, dice);
+      const input = 'input' in command ? command.input ?? {} : {};
       events.push({ type: 'STATUS_REMOVED', actorId: actor.id, status: 'stunned' });
-      events.push({ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(actor, dice, ['stunned']), ...(carnevaleGamble !== undefined ? { carnevaleGamble } : {}), ...(monogatariGamble !== undefined ? { monogatariGamble } : {}) });
+      events.push(turnEndedEvent(
+        intermediate,
+        actor,
+        dice,
+        remainingStatusSaveInput(input, statusSaveMutationsFromEvents(events)),
+        ['stunned'],
+        'core:forced-end-turn',
+        'forced-status',
+      ));
     }
   }
   if (command.type === 'EXECUTE_RULE' && command.timing === 'use') {
     const intermediate = applyEvents(state, events);
     const actor = intermediate.actors[command.actorId];
     if (actor && !actor.defeated && (state.actors[command.actorId]?.statuses.includes('stunned') || actor.ruleState['end-turn-requested'] === true)) {
-      const next = nextActor(intermediate, actor);
-      const carnevaleGamble = carnevaleGambleForTurnEnd(intermediate, actor, dice);
-      const monogatariGamble = monogatariGambleForTurnEnd(intermediate, actor, dice);
       if (actor.statuses.includes('stunned')) events.push({ type: 'STATUS_REMOVED', actorId: actor.id, status: 'stunned' });
-      events.push({ type: 'TURN_ENDED', actorId: actor.id, nextActorId: next.actor.id, round: next.round, saves: saveStatuses(actor, dice, ['stunned']), ...(carnevaleGamble !== undefined ? { carnevaleGamble } : {}), ...(monogatariGamble !== undefined ? { monogatariGamble } : {}) });
+      events.push(turnEndedEvent(
+        intermediate,
+        actor,
+        dice,
+        remainingStatusSaveInput(command.input, statusSaveMutationsFromEvents(events)),
+        ['stunned'],
+        'core:forced-end-turn',
+        state.actors[command.actorId]?.statuses.includes('stunned') ? 'forced-status' : 'rule-requested',
+      ));
     }
   }
+  const statusSaveInput = 'input' in command ? command.input ?? {} : {};
+  assertStatusSaveChoicesConsumed(statusSaveInput, statusSaveMutationsFromEvents(events));
   return { state: applyEvents(state, events), events };
+}
+
+/**
+ * Apply a deterministic, lifecycle-owned ability move through the same
+ * mutation boundary as a command-time ability. This is what lets p.104
+ * Slashed observe delayed self/ally ability movement without reviving the
+ * incorrect standard-Move trigger.
+ *
+ * TODO(ICON-rules, pp.87–94, 104, 107): replace the precomputed destination
+ * with a durable SpatialIntent/MoveIntent that records legality, movement
+ * path, and trigger windows. Until then, every lifecycle ability that moves a
+ * source/self or an ally must call this helper rather than assign `.position`
+ * directly, and must provide an exact source ID plus a source/replay fixture.
+ */
+function applyLifecycleAbilityMove(
+  state: EncounterState,
+  actor: EncounterActor,
+  sourceId: string,
+  movement: Extract<RuleMutation, { kind: 'move' }>['movement'],
+  destination: Position,
+) {
+  applyRuleMutations(state, [{
+    kind: 'move',
+    sourceId,
+    sourceActorId: actor.id,
+    actorId: actor.id,
+    movement,
+    distance: null,
+    positions: [{ ...destination }],
+    direction: null,
+    phasing: false,
+  }]);
 }
 
 /**
@@ -944,6 +1250,7 @@ function resolveDelayedMarkEffects(state: EncounterState, actor: EncounterActor)
   for (const mark of pending) {
     const owner = mark.ownerId ? state.actors[mark.ownerId] : undefined;
     if (!owner || owner.defeated || !owner.onBattlefield) continue;
+    const startPosition = { ...owner.position };
     let position = { ...owner.position };
     let steps = 0;
     while (steps < 4) {
@@ -957,26 +1264,30 @@ function resolveDelayedMarkEffects(state: EncounterState, actor: EncounterActor)
       position = next;
       steps += 1;
     }
-    owner.position = position;
-    if (distanceTo(position) > 1 || actor.defeated) continue;
-    const dx = actor.position.x - position.x;
-    const dy = actor.position.y - position.y;
+    applyLifecycleAbilityMove(state, owner, 'stalwart:great-giorgios', 'rush', position);
+    const rushed = distance(startPosition, owner.position);
+    if (owner.defeated || distanceTo(owner.position) > 1 || actor.defeated) continue;
+    const dx = actor.position.x - owner.position.x;
+    const dy = actor.position.y - owner.position.y;
     const direction = Math.abs(dx) >= Math.abs(dy) ? { x: Math.sign(dx) || 0, y: 0 } : { x: 0, y: Math.sign(dy) || 0 };
     let shoved = 0;
-    while (shoved < steps) {
+    while (shoved < rushed) {
       const next = { x: actor.position.x + direction.x, y: actor.position.y + direction.y };
       if (blockedCell(next, actor.id)) break;
       actor.position = next;
       shoved += 1;
     }
-    const damage = steps + 2;
-    actor.hp = Math.max(defyDeathActive(actor) ? 1 : 0, actor.hp - damage);
-    if (actor.hp <= 0 && !defyDeathActive(actor)) {
-      actor.defeated = true;
-      actor.vigor = 0;
-      actor.statuses = [];
-      if (actor.side === 'heroes') actor.wounds = Math.min(4, actor.wounds + 1);
-    }
+    const damage = rushed + 2;
+    determineAndApplyEncounterDamage(state, {
+      targetId: actor.id,
+      sourceActorId: owner.id,
+      sourceRuleId: 'stalwart:great-giorgios',
+      amount: damage,
+      damageType: 'normal',
+      instance: 1,
+      delivery: 'effect',
+      ignoreCover: true,
+    });
   }
 }
 
@@ -1411,7 +1722,7 @@ function resolveShowdownTurnEnd(state: EncounterState, actor: EncounterActor) {
         if (samePosition(next, position) || blocked(next, owner.id)) break;
         position = next;
       }
-      owner.position = position;
+      applyLifecycleAbilityMove(state, owner, 'freelancer:showdown', 'rush', position);
     } else {
       applyRuleMutations(state, [{
         kind: 'damage', sourceId: 'freelancer:showdown', sourceActorId: owner.id, actorId: actor.id, amount: mark.state.finishing === true ? 8 : 4, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true,
@@ -1451,7 +1762,8 @@ function resolveAssassinateTurnEnd(state: EncounterState, actor: EncounterActor)
     if (!owner || owner.defeated || !owner.onBattlefield || !owner.position || !actor.position) continue;
     if (distance(owner.position, actor.position) > 3) continue;
     const adjacent = orthogonalNeighbors(actor.position).find((cell) => !blocked(cell, owner.id));
-    if (adjacent) owner.position = { ...adjacent };
+    if (adjacent) applyLifecycleAbilityMove(state, owner, 'shade:assassinate', 'teleport', adjacent);
+    if (owner.defeated) continue;
     const hasAdjacentAlly = Object.values(state.actors).some((candidate) => candidate.side === actor.side && candidate.id !== actor.id && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, actor.position) <= 1);
     applyRuleMutations(state, [
       { kind: 'damage', sourceId: 'shade:assassinate', sourceActorId: owner.id, actorId: actor.id, amount: hasAdjacentAlly ? 2 : 6, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true },
@@ -1464,7 +1776,7 @@ function resolveAssassinateTurnEnd(state: EncounterState, actor: EncounterActor)
       if (blocked(next, owner.id)) break;
       position = next;
     }
-    owner.position = position;
+    applyLifecycleAbilityMove(state, owner, 'shade:assassinate', 'fly', position);
   }
 }
 
@@ -1678,6 +1990,10 @@ function resolveAriaTurnStart(state: EncounterState, actor: EncounterActor) {
     if (character.defeated || !character.onBattlefield || !character.position) continue;
     if (!area.some((cell) => samePosition(cell, character.position))) continue;
     if (character.side === actor.side) {
+      // TODO(ICON-rules, pp.94/102): Aria's source "Cure" text needs a
+      // declared lifecycle SaveWindow policy before this turn-start hook can
+      // roll/save deterministically. Preserve the historical vigor-only path
+      // rather than inventing unrecorded dice.
       applyRuleMutations(state, [{ kind: 'cure', sourceId: 'chanter:aria', actorId: character.id, all: false }]);
     } else {
       applyRuleMutations(state, [
@@ -1731,7 +2047,7 @@ function detonateSymphonyMote(state: EncounterState, actor: EncounterActor) {
     const free = next.x >= 0 && next.y >= 0 && next.x < state.grid.width && next.y < state.grid.height
       && !Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position && samePosition(candidate.position, next))
       && !state.grid.terrain.some((cell) => samePosition(cell.position, next) && cell.type === 'impassable');
-    if (free) actor.position = next;
+    if (free) applyLifecycleAbilityMove(state, actor, 'chanter:symphony', 'fly', next);
   } else {
     state.terrainEffects.push({ id: `symphony-pit:${actor.id}:${state.revision}`, sourceId: 'chanter:symphony', ownerId: actor.id, terrain: 'pit', positions: [center], height: null, duration: null });
   }
@@ -1812,6 +2128,8 @@ function resolveChastiseTurnEnd(state: EncounterState, actor: EncounterActor) {
         }
       } else {
         for (const ally of allies) {
+          // TODO(ICON-rules, pp.94/102): see Aria above; Chastise's delayed
+          // Cure needs the same explicit lifecycle SaveWindow decision.
           applyRuleMutations(state, [{ kind: 'cure', sourceId: 'chanter:chastise', actorId: ally.id, all: false }]);
         }
       }
@@ -1913,6 +2231,80 @@ function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor
   return dice.die(6);
 }
 
+/**
+ * Apply one already-planned turn boundary.  Command paths may differ in why
+ * they end a turn, but every replayed boundary must use this one ordered
+ * lifecycle.  `event.cause` is durable provenance for the future
+ * TurnTransition participant registry; it deliberately does not change the
+ * established hook order yet.
+ *
+ * TODO(ICON-rules, pp.87, 91, 94, 103–104, 107): replace this imperative
+ * sequence with a replayable TurnTransitionIntent/participant plan before
+ * adding lifecycle rules. Do not reorder hooks piecemeal in resolvers.
+ */
+function applyTurnTransition(
+  state: EncounterState,
+  event: Extract<EncounterEvent, { type: 'TURN_ENDED' }>,
+) {
+  const actor = state.actors[event.actorId];
+  if (event.statusSaveMutations) {
+    // New events retain every result as mutations so replay does not need
+    // fresh dice or re-evaluate temporary status-save policy.
+    applyRuleMutations(state, event.statusSaveMutations);
+  } else {
+    // Historical event logs did not include the mutation ledger.
+    actor.statuses = actor.statuses.filter((status) => !event.saves.some((save) => save.status === status && save.cleared));
+    actor.conditions = actor.conditions.filter((condition) => !event.saves.some((save) => save.status === condition.id && save.cleared && condition.potency !== 'plus'));
+  }
+  actor.statuses = actor.statuses.filter((status) => status !== 'hatred');
+  actor.conditions = actor.conditions.filter(({ id }) => id !== 'hatred');
+  actor.ruleState['end-turn-requested'] = false;
+  actor.ruleStateOwners['end-turn-requested'] ??= null;
+  if (actor.traitIds.includes('stalwart:trait:fortify')) actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
+  if (actor.conditions.some(({ id }) => id === 'regeneration') && isBloodied(actor)) gainVigor(state, actor, 4);
+  actor.turnTaken = true;
+  resolveTurnEnd(state, actor, event.carnevaleGamble, event.monogatariGamble);
+  if (event.round > state.round) {
+    expireBoundaryEffects(state, actor.id, 'round-end');
+    for (const candidate of Object.values(state.actors)) {
+      candidate.turnTaken = false;
+      candidate.ruleState['chain-reaction-used'] = false;
+      candidate.ruleStateOwners['chain-reaction-used'] ??= null;
+      candidate.ruleState['incubus:triggered'] = false;
+      candidate.ruleStateOwners['incubus:triggered'] ??= null;
+      candidate.ruleState['stampede:triggered'] = false;
+      candidate.ruleStateOwners['stampede:triggered'] ??= null;
+    }
+    state.partyResolve += 1;
+    chargeWickedSheathDie(state);
+  }
+  const next = state.actors[event.nextActorId];
+  next.actionsRemaining = 2;
+  next.standardMoveUsed = false;
+  next.attackedThisTurn = false;
+  next.interruptUses = {};
+  if (next.traitIds.includes('wright:trait:aether')) next.resources.aether = (next.resources.aether ?? 0) + 1;
+  for (const candidate of Object.values(state.actors)) {
+    candidate.usedAbilityIds = [];
+    candidate.interruptUsedThisTurn = false;
+    candidate.slashedTriggeredThisTurn = false;
+    candidate.dangerousTerrainTriggeredThisTurn = false;
+    candidate.ruleState['damage-immune'] = false;
+    candidate.ruleStateOwners['damage-immune'] ??= null;
+    candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
+    candidate.ruleStateOwners['gates-of-hell:vigilance-rushed'] ??= null;
+  }
+  state.round = event.round;
+  state.activeActorId = event.nextActorId;
+  state.lastSide = actor.side;
+  resolveDelayedMarkEffects(state, actor);
+  // ICON p.107: interrupt windows close at the end of the turn; held damage
+  // and held ability effects resolve now (the window was the opportunity).
+  resolveHeldInterruptWindows(state);
+  expireBoundaryEffects(state, next.id, 'round-start');
+  resolveTurnStart(state, next);
+}
+
 export function applyEvents(input: EncounterState, events: EncounterEvent[]): EncounterState {
   const state = clone(input);
   for (const event of events) {
@@ -1951,17 +2343,28 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           actor.actionsRemaining -= 1;
           actor.usedAbilityIds.push('basic:dash');
         }
+        // Movement events intentionally retain source amounts.  Do not route
+        // them through applyDeterminedEncounterDamage: that API is only for
+        // a persisted post-mitigation amount and would bypass p.93 here.
+        // TODO(ICON-rules, pp.89, 93–107): replace these loose numeric fields
+        // with a durable DamageIntent ledger before adding new terrain damage.
         if (event.dangerousDamage) {
-          actor.hp = Math.max(defyDeathActive(actor) ? 1 : 0, actor.hp - event.dangerousDamage);
+          determineAndApplyEncounterDamage(state, {
+            targetId: actor.id,
+            sourceRuleId: 'core:dangerous-terrain',
+            amount: event.dangerousDamage,
+            damageType: 'piercing',
+            bypassVigor: true,
+            instance: 1,
+            delivery: 'terrain',
+            ignoreCover: true,
+          });
           actor.dangerousTerrainTriggeredThisTurn = true;
         }
-        if (actor.statuses.includes('slashed') && !actor.slashedTriggeredThisTurn) {
-          const slashedDamage = event.slashedDamage ?? 0;
-          const vigorDamage = Math.min(actor.vigor, slashedDamage);
-          actor.vigor -= vigorDamage;
-          actor.hp = Math.max(defyDeathActive(actor) ? 1 : 0, actor.hp - (slashedDamage - vigorDamage));
-          actor.slashedTriggeredThisTurn = true;
-        }
+        // `slashedDamage` is a retired compatibility field. p.104 Slashed
+        // belongs to the self/ally ability-mutation trigger in the encounter
+        // adapter, not to a standard MOVE/DASH event. Leave old snapshots
+        // readable without perpetuating their incorrect core-movement damage.
         // ICON p.178 Symphony: entering a mote space detonates it.
         detonateSymphonyMote(state, actor);
         break;
@@ -1973,12 +2376,15 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         actor.attackedThisTurn = true;
         if (event.hit) discardWickedSheathDie(actor);
         breakStealth(actor);
-        const vigorDamage = Math.min(target.vigor, event.appliedDamage);
-        target.vigor -= vigorDamage;
-        target.hp = Math.max(0, target.hp - (event.appliedDamage - vigorDamage));
-        if (event.appliedDamage > 0 && actor.side !== target.side) target.statuses = target.statuses.filter((status) => status !== 'pacified');
-        if (event.appliedDamage > 0 && actor.side !== target.side && encounterConditionSet(target).has('counter')) retaliate(state, actor);
-        if (event.appliedDamage > 0) gentlenessReflection(state, actor);
+        applyDeterminedEncounterDamage(state, target, actor, {
+          amount: event.appliedDamage,
+          damageType: 'normal',
+          sourceActorId: actor.id,
+          sourceId: event.weight === 'heavy' ? 'core:heavy-attack' : 'core:light-attack',
+          instance: 1,
+          delivery: event.hit ? 'hit' : 'miss',
+          ignoreCover: false,
+        });
         consumeMassiveOverhead(state, actor, target);
         if (!event.hit) tickGallowsHumorOnMiss(state);
         break;
@@ -1998,13 +2404,15 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         if (event.endsTurn) actor.statuses = actor.statuses.filter((status) => status !== 'stunned');
         if (event.attack) {
           const target = state.actors[event.attack.targetId];
-          if (event.attack.bypassVigor) target.hp = Math.max(0, target.hp - event.attack.appliedDamage);
-          else {
-            const vigorDamage = Math.min(target.vigor, event.attack.appliedDamage);
-            target.vigor -= vigorDamage;
-            target.hp = Math.max(0, target.hp - (event.attack.appliedDamage - vigorDamage));
-          }
-          if (event.attack.appliedDamage > 0 && actor.side !== target.side) target.statuses = target.statuses.filter((status) => status !== 'pacified');
+          applyDeterminedEncounterDamage(state, target, actor, {
+            amount: event.attack.appliedDamage,
+            damageType: event.attack.bypassVigor ? 'divine' : 'normal',
+            sourceActorId: actor.id,
+            sourceId: event.abilityId,
+            instance: 1,
+            delivery: event.attack.hit ? 'hit' : 'miss',
+            ignoreCover: false,
+          });
         }
         break;
       }
@@ -2141,32 +2549,37 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
       }
       case 'ACTOR_DEFEATED': {
         const actor = state.actors[event.actorId];
-        if (defyDeathActive(actor)) {
-          actor.hp = Math.max(1, actor.hp);
-          break;
-        }
-        actor.defeated = true;
-        actor.hp = 0;
-        actor.vigor = 0;
-        actor.statuses = [];
-        if (event.woundGained) actor.wounds = Math.min(4, actor.wounds + 1);
+        defeatActor(state, actor, { woundGained: event.woundGained });
         break;
       }
       case 'VIGILANCE_SPENT': {
         const actor = state.actors[event.actorId];
         const target = state.actors[event.targetId];
         actor.resources.vigilance = Math.max(0, (actor.resources.vigilance ?? 0) - 1);
-        const vigorDamage = Math.min(target.vigor, event.appliedDamage);
-        target.vigor -= vigorDamage;
-        target.hp = Math.max(defyDeathActive(target) ? 1 : 0, target.hp - (event.appliedDamage - vigorDamage));
+        applyDeterminedEncounterDamage(state, target, actor, {
+          amount: event.appliedDamage,
+          damageType: 'normal',
+          sourceActorId: actor.id,
+          sourceId: 'core:vigilance',
+          instance: 1,
+          delivery: 'effect',
+          ignoreCover: true,
+        });
         break;
       }
       case 'ACTOR_RECOVERED': {
         const actor = state.actors[event.actorId];
         actor.actionsRemaining -= 2;
         actor.usedAbilityIds.push('basic:recover');
-        actor.vigor = Math.min(actor.vitality, actor.vigor + event.vigorGained);
-        actor.statuses = actor.statuses.filter((status) => !event.saves.some((save) => save.status === status && save.cleared));
+        if (event.statusSaveMutations) {
+          // New events replay the full cure/save ledger, including policy
+          // denial, Rot's curse, and any explicit Blessing spend.
+          applyRuleMutations(state, event.statusSaveMutations);
+        } else {
+          // Historical event logs only recorded outcome booleans.
+          gainVigor(state, actor, event.vigorGained);
+          actor.statuses = actor.statuses.filter((status) => !event.saves.some((save) => save.status === status && save.cleared));
+        }
         break;
       }
       case 'STATUS_APPLIED': {
@@ -2180,57 +2593,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         break;
       }
       case 'TURN_ENDED': {
-        const actor = state.actors[event.actorId];
-        actor.statuses = actor.statuses.filter((status) => !event.saves.some((save) => save.status === status && save.cleared));
-        actor.conditions = actor.conditions.filter((condition) => !event.saves.some((save) => save.status === condition.id && save.cleared && condition.potency !== 'plus'));
-        actor.statuses = actor.statuses.filter((status) => status !== 'hatred');
-        actor.conditions = actor.conditions.filter(({ id }) => id !== 'hatred');
-        actor.ruleState['end-turn-requested'] = false;
-        actor.ruleStateOwners['end-turn-requested'] ??= null;
-        if (actor.traitIds.includes('stalwart:trait:fortify')) actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
-        if (actor.conditions.some(({ id }) => id === 'regeneration') && actor.hp <= actor.baseMaxHp / 2 && !actor.statuses.includes('shattered')) actor.vigor = Math.min(actor.vitality, actor.vigor + 4);
-        actor.turnTaken = true;
-        resolveTurnEnd(state, actor, event.carnevaleGamble, event.monogatariGamble);
-        if (event.round > state.round) {
-          expireBoundaryEffects(state, actor.id, 'round-end');
-          for (const candidate of Object.values(state.actors)) {
-            candidate.turnTaken = false;
-            candidate.ruleState['chain-reaction-used'] = false;
-            candidate.ruleStateOwners['chain-reaction-used'] ??= null;
-            candidate.ruleState['incubus:triggered'] = false;
-            candidate.ruleStateOwners['incubus:triggered'] ??= null;
-            candidate.ruleState['stampede:triggered'] = false;
-            candidate.ruleStateOwners['stampede:triggered'] ??= null;
-          }
-          state.partyResolve += 1;
-          chargeWickedSheathDie(state);
-        }
-        const next = state.actors[event.nextActorId];
-        next.actionsRemaining = 2;
-        next.standardMoveUsed = false;
-        next.attackedThisTurn = false;
-        next.interruptUses = {};
-        if (next.traitIds.includes('wright:trait:aether')) next.resources.aether = (next.resources.aether ?? 0) + 1;
-        for (const candidate of Object.values(state.actors)) {
-          candidate.usedAbilityIds = [];
-          candidate.interruptUsedThisTurn = false;
-          candidate.slashedTriggeredThisTurn = false;
-          candidate.dangerousTerrainTriggeredThisTurn = false;
-          candidate.ruleState['damage-immune'] = false;
-          candidate.ruleStateOwners['damage-immune'] ??= null;
-          candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
-          candidate.ruleStateOwners['gates-of-hell:vigilance-rushed'] ??= null;
-        }
-        state.round = event.round;
-        state.activeActorId = event.nextActorId;
-        state.lastSide = actor.side;
-        resolveDelayedMarkEffects(state, actor);
-        // ICON p.107: interrupt windows close at the end of the turn; held
-        // damage and held ability effects resolve now (the window was the
-        // interrupt opportunity).
-        resolveHeldInterruptWindows(state);
-        expireBoundaryEffects(state, next.id, 'round-start');
-        resolveTurnStart(state, next);
+        applyTurnTransition(state, event);
         break;
       }
       case 'ENCOUNTER_ENDED':

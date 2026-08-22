@@ -127,6 +127,25 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(applyEvents(blindedFixture.state, blinded.events)).toEqual(blinded.state);
   });
 
+  it('Umbra Combo (Penumbra): uses the shared Rot save curse', () => {
+    const { state, hero, foe } = shadeEncounter({ foe: { x: 4, y: 1 }, second: null });
+    state.actors[hero.id].resources.combo = 1;
+    state.actors[foe.id].marks.push({
+      id: 'fixture-rot', sourceId: 'harvester:rot', ownerId: hero.id,
+      markId: 'rot', duration: null, state: { kind: 'foe' },
+    });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'shade:umbra',
+      actionId: 'combo', timing: 'use', input: { actorIds: { target: [foe.id] } }, attackTargetId: foe.id,
+    }, scriptedDice(10, 1, 15, 4, 4));
+
+    expect(mutationsOf(result.events, 'shade:umbra').find((mutation) => mutation.kind === 'save')).toMatchObject({
+      windowId: `shade:umbra:combo:penumbra:${foe.id}`, roll: 10, boon: -1, total: 9, success: false,
+    });
+    expect(result.state.actors[foe.id].position).toEqual({ x: 2, y: 1 });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Harrow: marks a character, and a Finishing Blow teleports and damages them', () => {
     const { state, hero, foe } = shadeEncounter({ foe: { x: 4, y: 1 }, second: null });
     const marked = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:harrow', targetIds: [foe.id] }, scriptedDice()).state;

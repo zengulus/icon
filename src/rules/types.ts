@@ -446,11 +446,23 @@ export interface TerrainCell {
 export interface EncounterHeldDamage {
   amount: number;
   damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice';
+  /**
+   * Source-specific HP routing. Piercing does not itself imply this flag:
+   * dangerous terrain (p.89) is explicitly piercing *and* bypasses vigor.
+   * Absent on historical windows means the legacy divine-only behavior.
+   */
+  bypassVigor?: boolean;
+  /** Source-specific application exception (for example Bleak Mercy p.144).
+   * It does not imply generic damage immunity bypass. */
+  ignoreDefiance?: boolean;
   sourceActorId: string;
   sourceId: string;
   instance: number;
   delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain';
   ignoreCover: boolean;
+  /** Audit provenance for a determined True-Strike damage instance. The held
+   * amount is already final, so replay does not recalculate this exception. */
+  ignoreDodge?: boolean;
 }
 
 /** ICON p.107 — an interrupt window opened by an effect. `triggeredAt` is the
@@ -541,23 +553,37 @@ export interface EncounterTerrainEffect {
   duration: RuleDuration | null;
 }
 
+/**
+ * The only player-declared input accepted by the core command save windows.
+ * It keeps p.102 Blessing decisions explicit without exposing the generic
+ * RuleProgram input surface on ordinary encounter commands.
+ */
+export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices'>;
+
 export type EncounterCommand =
   | { type: 'ADD_ACTOR'; actor: EncounterActor }
   | { type: 'REMOVE_ACTOR'; actorId: string }
   | { type: 'SET_TERRAIN'; cell: TerrainCell }
   | { type: 'START_ENCOUNTER' }
-  | { type: 'MOVE'; actorId: string; path: Position[]; mode: 'standard' | 'dash' }
-  | { type: 'BASIC_ATTACK'; actorId: string; targetId: string; weight: 'light' | 'heavy' }
-  | { type: 'USE_ABILITY'; actorId: string; abilityId: string; targetIds: string[] }
+  | { type: 'MOVE'; actorId: string; path: Position[]; mode: 'standard' | 'dash'; input?: StatusSaveCommandInput }
+  | { type: 'BASIC_ATTACK'; actorId: string; targetId: string; weight: 'light' | 'heavy'; input?: StatusSaveCommandInput }
+  | { type: 'USE_ABILITY'; actorId: string; abilityId: string; targetIds: string[]; input?: StatusSaveCommandInput }
   | { type: 'EXECUTE_RULE'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; input: RuleExecutionInput; attackTargetId?: string; triggerSourceId?: string; triggerTargetIds?: string[]; triggers?: string[] }
-  | { type: 'INTERACT'; actorId: string; position: Position; description: string }
-  | { type: 'RESCUE'; actorId: string; targetId: string }
-  | { type: 'RECOVER'; actorId: string }
+  | { type: 'INTERACT'; actorId: string; position: Position; description: string; input?: StatusSaveCommandInput }
+  | { type: 'RESCUE'; actorId: string; targetId: string; input?: StatusSaveCommandInput }
+  | { type: 'RECOVER'; actorId: string; input?: StatusSaveCommandInput }
   | { type: 'SPEND_VIGILANCE'; actorId: string; targetId: string; use: 'guard' | 'punish'; damage?: number }
-  | { type: 'END_TURN'; actorId: string }
+  | { type: 'END_TURN'; actorId: string; input?: StatusSaveCommandInput }
   /** Internal deterministic fixture/admin command; never accepted by the websocket schema. */
   | { type: 'APPLY_STATUS'; actorId: string; targetId: string; status: StatusId }
   | { type: 'END_ENCOUNTER' };
+
+/**
+ * Why a turn boundary occurred. New events retain this provenance so later
+ * lifecycle/interrupt work can reason about a boundary without inferring it
+ * from mutable actor state. Historical event logs omit it.
+ */
+export type TurnEndCause = 'voluntary' | 'ability-tag' | 'forced-status' | 'rule-requested';
 
 export type EncounterEvent =
   | { type: 'ACTOR_ADDED'; actor: EncounterActor }
@@ -565,7 +591,12 @@ export type EncounterEvent =
   | { type: 'TERRAIN_SET'; cell: TerrainCell }
   | { type: 'ENCOUNTER_STARTED'; firstActorId: string }
   | { type: 'ACTOR_MOVED'; actorId: string; path: Position[]; mode: 'standard' | 'dash'; dangerousDamage: number; slashedDamage: number }
-  | { type: 'ATTACK_RESOLVED'; actorId: string; targetId: string; weight: 'light' | 'heavy'; d20: number; boonDie: number; total: number; hit: boolean; critical: boolean; rawDamage: number; appliedDamage: number }
+  /**
+   * The roll is recorded rather than recalculated during replay.  Evasion
+   * resolves before a d20 is rolled, so an evaded basic attack deliberately
+   * has null d20/total and its d6 result is retained for the event log.
+   */
+  | { type: 'ATTACK_RESOLVED'; actorId: string; targetId: string; weight: 'light' | 'heavy'; d20: number | null; boonDie: number; total: number | null; evasionRoll: number | null; hit: boolean; critical: boolean; rawDamage: number; appliedDamage: number }
   | {
       type: 'ABILITY_RESOLVED';
       actorId: string;
@@ -592,9 +623,14 @@ export type EncounterEvent =
   | { type: 'ACTOR_INTERACTED'; actorId: string; position: Position; description: string }
   | { type: 'ACTOR_RESCUED'; actorId: string; targetId: string; restoredHp: number }
   | { type: 'STATUS_REMOVED'; actorId: string; status: StatusId }
-  | { type: 'ACTOR_RECOVERED'; actorId: string; vigorGained: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }> }
+  /**
+   * `statusSaveMutations` is present on newly-created events.  It records
+   * every policy-aware roll, Blessing spend, and successful removal for
+   * deterministic replay; absent means a legacy event using `saves` alone.
+   */
+  | { type: 'ACTOR_RECOVERED'; actorId: string; vigorGained: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[] }
   | { type: 'STATUS_APPLIED'; actorId: string; targetId: string; status: StatusId }
-  | { type: 'TURN_ENDED'; actorId: string; nextActorId: string; round: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; carnevaleGamble?: number; monogatariGamble?: number }
+  | { type: 'TURN_ENDED'; actorId: string; nextActorId: string; round: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[]; carnevaleGamble?: number; monogatariGamble?: number; cause?: TurnEndCause }
   | { type: 'ACTOR_DEFEATED'; actorId: string; woundGained: boolean }
   | { type: 'VIGILANCE_SPENT'; actorId: string; targetId: string; use: 'guard' | 'punish'; roll: number; appliedDamage: number }
   | { type: 'ENCOUNTER_ENDED' }

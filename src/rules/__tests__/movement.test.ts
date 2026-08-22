@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actorFromCharacter, createEncounter, createFoe, executeCommand, RuleViolation } from '../encounter.js';
+import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, RuleViolation } from '../encounter.js';
 import { planMovement, planMovementPath } from '../movement.js';
 import type { EncounterState, Position, TerrainCell } from '../types.js';
 import { validCharacter } from './fixtures.js';
@@ -131,21 +131,38 @@ describe('shared movement planner', () => {
 
   it('applies dangerous terrain once in a turn, then resets it for the actor’s next turn', () => {
     const { state, hero, foe } = activeEncounter({ terrain: [{ position: { x: 2, y: 1 }, type: 'dangerous', elevation: 0 }] });
+    state.actors[hero.id].vigor = 5;
     const firstPlan = planMovement(state, hero.id, { x: 2, y: 1 }, 'standard');
     expect(firstPlan).toMatchObject({ legal: true, dangerousDamage: 2 });
-    const afterStandard = executeCommand(state, { type: 'MOVE', actorId: hero.id, path: firstPlan.path, mode: 'standard' }).state;
-    expect(afterStandard.actors[hero.id]).toMatchObject({ hp: 38, dangerousTerrainTriggeredThisTurn: true });
+    const standardResult = executeCommand(state, { type: 'MOVE', actorId: hero.id, path: firstPlan.path, mode: 'standard' });
+    const afterStandard = standardResult.state;
+    expect(afterStandard.actors[hero.id]).toMatchObject({ hp: 38, vigor: 5, dangerousTerrainTriggeredThisTurn: true });
+    expect(applyEvents(state, standardResult.events)).toEqual(afterStandard);
 
     const dashPlan = planMovement(afterStandard, hero.id, { x: 1, y: 1 }, 'dash');
     expect(dashPlan).toMatchObject({ legal: true, dangerousDamage: 0 });
     const afterDash = executeCommand(afterStandard, { type: 'MOVE', actorId: hero.id, path: dashPlan.path, mode: 'dash' }).state;
-    expect(afterDash.actors[hero.id]).toMatchObject({ hp: 38, dangerousTerrainTriggeredThisTurn: true });
+    expect(afterDash.actors[hero.id]).toMatchObject({ hp: 38, vigor: 5, dangerousTerrainTriggeredThisTurn: true });
 
     const foeTurn = executeCommand(afterDash, { type: 'END_TURN', actorId: hero.id }).state;
     const nextHeroTurn = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }).state;
     expect(nextHeroTurn.actors[hero.id].dangerousTerrainTriggeredThisTurn).toBe(false);
     const nextPlan = planMovement(nextHeroTurn, hero.id, { x: 2, y: 1 }, 'standard');
     expect(nextPlan).toMatchObject({ legal: true, dangerousDamage: 2 });
+  });
+
+  it('determines dangerous terrain through mitigation but retains its explicit vigor bypass', () => {
+    const { state, hero } = activeEncounter({ terrain: [{ position: { x: 2, y: 1 }, type: 'dangerous', elevation: 0 }] });
+    state.actors[hero.id].vigor = 5;
+    state.actors[hero.id].conditions.push({ id: 'resistance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+
+    const moved = executeCommand(state, { type: 'MOVE', actorId: hero.id, path: [{ x: 2, y: 1 }], mode: 'standard' });
+
+    // Dangerous terrain is a raw 2-piercing instance (p.89). Resistance
+    // halves it once; its independently stated bypass-vigor property remains.
+    expect(moved.events[0]).toMatchObject({ type: 'ACTOR_MOVED', dangerousDamage: 2 });
+    expect(moved.state.actors[hero.id]).toMatchObject({ hp: 39, vigor: 5 });
+    expect(applyEvents(state, moved.events)).toEqual(moved.state);
   });
 
   it('applies overlapping terrain, pit elevation, and object obstruction from the source map state', () => {

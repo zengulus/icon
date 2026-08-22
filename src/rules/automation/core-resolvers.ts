@@ -1,8 +1,7 @@
 import { CORE_RULES } from '../core.js';
-import { rollBoonOrCurse } from '../dice.js';
-import type { RuleMutation, RuleResolver, RuleResolverRegistry } from './types.js';
-
-const statusIds = new Set(['slashed', 'blind', 'dazed', 'hatred', 'pacified', 'sealed', 'shattered', 'stunned', 'weakened', 'vulnerable']);
+import { resolveAttackRoll } from './attack-resolution.js';
+import { resolveCureMutations } from './status-saves.js';
+import type { RuleResolver, RuleResolverRegistry } from './types.js';
 
 const actorInput = (context: Parameters<RuleResolver>[0], key: string) => {
   const id = context.input.actorIds?.[key]?.[0];
@@ -25,15 +24,19 @@ const basicAttack = (weight: 'light' | 'heavy'): RuleResolver => (context) => {
   const source = context.state.actors[context.actorId];
   const target = actorInput(context, 'target') ?? (context.attackTargetId ? context.state.actors[context.attackTargetId] : undefined);
   if (!source || !target) return [];
-  const d20 = context.dice.die(20);
-  const boon = rollBoonOrCurse(Math.trunc(context.input.numbers?.boons ?? 0) - (source.conditions.has('dazed') ? 1 : 0), context.dice).modifier;
-  const total = d20 + boon;
-  const hit = total >= target.defense;
-  const critical = hit && total >= 20;
+  const attack = resolveAttackRoll({
+    defense: target.defense,
+    sourceBoon: Math.trunc(context.input.numbers?.boons ?? 0),
+    elevationModifier: source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0,
+    sourceDazed: source.conditions.has('dazed'),
+    targetEvasion: target.conditions.has('evasion'),
+  }, context.dice);
+  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover } = attack;
   const diceCount = hit ? (weight === 'heavy' ? 2 : 1) + (critical ? 1 : 0) : 0;
   const damage = Array.from({ length: diceCount }, () => context.dice.die(source.damageDie)).reduce((sum, roll) => sum + roll, source.fray);
-  return [{ kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll: null, trueStrike: false, autoHit: false }, {
-    kind: 'damage', sourceId: context.sourceId, sourceActorId: source.id, actorId: target.id, amount: damage, damageType: 'normal', instance: 1, delivery: hit ? 'hit' : 'miss', ignoreCover: false,
+  return [{ kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit }, {
+    kind: 'damage', sourceId: context.sourceId, sourceActorId: source.id, actorId: target.id, amount: damage, damageType: 'normal', instance: 1, delivery: hit ? 'hit' : 'miss', ignoreCover,
+    ...(ignoreDodge ? { ignoreDodge: true } : {}),
   }];
 };
 
@@ -51,15 +54,7 @@ const coreResolvers: Record<string, RuleResolver> = {
   'core:recover': (context) => {
     const source = context.state.actors[context.actorId];
     if (!source) return [];
-    const mutations: RuleMutation[] = [{ kind: 'vigor', sourceId: context.sourceId, actorId: source.id, amount: source.hp <= source.maxHp / 2 ? source.vitality : 4, uncapped: false }];
-    for (const conditionId of source.conditions) {
-      if (!statusIds.has(conditionId)) continue;
-      const roll = context.dice.die(20);
-      const success = roll >= 10;
-      mutations.push({ kind: 'save', sourceId: context.sourceId, actorId: source.id, roll, boon: 0, total: roll, success });
-      if (success) mutations.push({ kind: 'condition', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: source.id, conditionId, operation: 'remove', potency: 'normal' });
-    }
-    return mutations;
+    return resolveCureMutations(context, source);
   },
 };
 

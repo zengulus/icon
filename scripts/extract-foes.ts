@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { assertKnownIconSource, resolveIconSourcePath } from './source-artifact.js';
 
 interface TextItem {
   str: string;
@@ -307,9 +308,10 @@ function parseTrophies(profileId: string, body: LayoutLine[]): FoeTrophy[] {
   });
 }
 
-const sourcePath = resolve(process.argv[2] ?? 'ICON 1.5.pdf');
+const sourcePath = resolveIconSourcePath(process.argv[2]);
 const outputPath = resolve(process.argv[3] ?? 'src/content/generated/foes-1.5.json');
 const data = new Uint8Array(await readFile(sourcePath));
+assertKnownIconSource(data, sourcePath);
 const document = await pdfjs.getDocument({ data }).promise;
 const lines: LayoutLine[] = [];
 for (let pageNumber = 300; pageNumber <= 490; pageNumber += 1) {

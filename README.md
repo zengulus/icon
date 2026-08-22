@@ -12,17 +12,17 @@ The project does not claim affiliation with Massif Press. ICON, its text, art, l
 - Characters save locally without configuration or sync through Supabase when configured.
 - Versioned JSON import/export and schema migration are built in.
 - Narrative rolls implement zero-rating rolls, boons/curses, and criticals.
-- The shared encounter reducer implements movement, core terrain, basic attacks, armor, cover, vigor, statuses, wounds, recovery, deterministic events, and replay. Source-only Job abilities are deliberately blocked from changing state until they receive source-specific deterministic resolvers and replay fixtures.
+- The shared encounter reducer implements movement, core terrain, basic attacks, armor, cover, vigor, statuses, wounds, recovery, deterministic events, and replay. All 144 Job abilities are on the independently reviewed execution allowlist with typed programs and replay fixtures; unresolved supporting rules remain explicitly gated or table-facing rather than silently approximated.
 - The Render service validates network commands, authenticates users, enforces campaign roles and actor ownership, checks optimistic revisions, redacts GM-hidden state for players, and persists append-only room checkpoints.
 - Discord webhook secrets remain server-side.
 
-Phase 2 is intentionally production-gated. Source and major mechanical catalogs are structured, but Job abilities, Relic invokes, mobs, summons, area placement, and foe/legend behavior are not all executable. See [rules coverage](docs/rules-coverage.md) and the [delivery roadmap](docs/roadmap.md).
+Phase 2 is intentionally production-gated. All Job abilities are executable, but core/supporting rules, Relic invokes, mobs, summons, full foe/legend behavior, and other encounter-required content are still incomplete. See [rules coverage](docs/rules-coverage.md), the cross-cutting [rules foundations](docs/rules-foundations.md), and the [delivery roadmap](docs/roadmap.md).
 
 ## Local development
 
 Requirements: Node.js 24. The checked-in generated content is enough to run,
 test, and build the application. The untracked `ICON 1.5.pdf` in the repository
-root is required only when regenerating source artifacts.
+root is required only for regeneration or full byte-for-byte extraction evidence.
 
 ```sh
 npm install
@@ -32,15 +32,18 @@ npm run test:e2e
 npm run dev
 ```
 
-To regenerate the checked-in content after changing extraction logic or working
-from a new supplied PDF:
+To regenerate the checked-in content after changing extraction logic, first
+verify the supplied PDF against the pinned source identity. The full verifier
+regenerates only into a temporary directory and compares those results with the
+checked-in artifacts:
 
 ```sh
+npm run verify:extraction
 npm run extract:rules
 npm test
 ```
 
-The app runs at `http://localhost:5173`. With no environment variables it uses browser storage and exposes the tactical engineering harness because Vite is in development mode.
+The app runs at `http://localhost:5173`. With no environment variables it uses browser storage; `#/lab` is always the browser-local human-testing service. Development builds also expose the separately gated engineering-preview routes.
 
 To run the realtime service locally:
 
@@ -51,7 +54,7 @@ npm run dev:server
 
 `dev:USER_ID:gm` and `dev:USER_ID:player` tokens are reserved for the automated acceptance harness. Render accepts them only when both `NODE_ENV=test` and `ALLOW_DEV_AUTH=true`; normal local development and every production deployment must authenticate through Supabase. The companion browser identity path is likewise limited to Vite's unbuilt `--mode e2e` development server with `VITE_E2E_AUTH=true`; it cannot activate in a production build.
 
-The multiplayer server enforces the same rules-coverage phase gate as the UI. While it is incomplete, only the explicit test harness or a local `NODE_ENV=development` process with `ALLOW_INCOMPLETE_VTT=true` can open engineering-preview rooms; a production Render deployment cannot override the gate.
+`#/lab` is a public, browser-local human-testing service: it deliberately runs without Supabase, Render, authentication, or shared checkpoints, and is available at every release phase (including a GitHub Pages deployment). It persists only in that browser. The real shared VTT is `#/vtt/:encounterId`; it and the multiplayer server enforce the rules-coverage phase gate. While the gate is incomplete, a production build or Render deployment cannot open an authoritative room.
 
 ## Supabase
 
@@ -64,7 +67,7 @@ The migrations create RLS-protected characters, campaigns, memberships, encounte
 
 ## GitHub Pages
 
-The workflow in `.github/workflows/ci.yml` audits rules automation, runs unit/integration tests, launches the compiled realtime service for transport acceptance, runs a Chromium browser acceptance flow against GM/player routes, and builds every push. On `main`, it publishes `dist/` through GitHub Pages. Configure these repository variables:
+The workflow in `.github/workflows/ci.yml` audits rules automation, runs unit/integration tests, launches the compiled realtime service for transport acceptance, runs a Chromium browser acceptance flow against GM/player routes, and builds every push. On `main`, it publishes `dist/` through GitHub Pages. `#/lab` works there with no environment variables or backend: it is deliberately browser-local. Configure these repository variables only when the authenticated companion UI should also connect to Supabase and Render:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
@@ -87,13 +90,17 @@ The current room manager is intentionally a single Render instance. Its in-memor
 
 ## Source extraction in CI
 
-`ICON 1.5.pdf` is intentionally untracked and is therefore unavailable to a normal GitHub Actions checkout. Hosted CI does not pretend to rerun `npm run extract:rules`; it validates the checked-in generated artifact's page count, section boundaries, cardinalities, provenance, and rules-source audit instead. Maintainers changing extraction logic or generated content must run `npm run extract:rules`, `npm test`, and review the generated artifact locally with the supplied PDF before committing the result.
+`ICON 1.5.pdf` is intentionally untracked and is therefore unavailable to a normal GitHub Actions checkout. Hosted CI explicitly runs `npm run verify:source-artifacts -- --expect-source-pdf=absent`: it validates the checked-in artifact structure and pinned artifact digests, and records that it did **not** rerun extraction. It cannot prove generated bytes came from the PDF without that input.
+
+Maintainers changing extraction logic or generated content must run `npm run verify:extraction` locally with the supplied PDF. That command verifies the pinned source SHA-256, regenerates each artifact into a temporary directory, and requires a byte-for-byte match with the checked-in result. Update the source digest only after reviewing an intentional source-PDF change; after any reviewed parser or source change, run `npm run extract:rules`, update the checked-in artifact evidence digests deliberately, and commit the result.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `npm run extract:rules` | Rebuild the generated compendium from `ICON 1.5.pdf` |
+| `npm run verify:source-artifacts` | Validate checked-in generated artifact evidence; validates the pinned PDF too when it is locally available |
+| `npm run verify:extraction` | Regenerate into a temporary directory and require byte-for-byte agreement with checked-in artifacts |
 | `npm run dev` | Start the GitHub Pages client locally |
 | `npm run dev:server` | Start the Render websocket/API service locally |
 | `npm test` | Run rules and reducer tests |

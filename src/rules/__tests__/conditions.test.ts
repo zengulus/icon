@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyRuleMutations, encounterRuleState, isBloodied } from '../automation/encounter-adapter.js';
+import { applyRuleMutations, encounterRuleState, isBloodied, retaliate } from '../automation/encounter-adapter.js';
 import { RULE_PROGRAM_SCHEMA_VERSION, type RuleExecutionContext, type RuleMutation, type RuleProgram } from '../automation/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, executeRuleProgramWithReactiveTriggers, orderCrossCharacterEffects } from '../encounter.js';
 import { planMovementPath } from '../movement.js';
@@ -74,13 +74,66 @@ describe('combat condition pipeline (p.104–105)', () => {
     expect(state.actors[foe.id].position).toEqual({ x: 6, y: 3 }); // entering (4,3) crosses Rampart
   });
 
-  it('Counter deals 2 damage back for each damage instance', () => {
+  it("Counter's raw damage enters the shared mitigation path", () => {
     const { state, hero, foe } = conditionEncounter({ allyAt: null });
     state.actors[foe.id].conditions.push({ ...counterCondition });
     const result = executeCommand(state, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(12, 6));
     expect(result.state.actors[foe.id].hp).toBe(22); // 32 - (6 + fray 4)
-    expect(result.state.actors[hero.id].hp).toBe(38); // 40 - 2 retaliation
+    // Counter supplies a raw normal-damage instance. Aster's Armor 2 then
+    // reduces it to zero through the same p.93 kernel as all other damage.
+    expect(result.state.actors[hero.id].hp).toBe(40);
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Counter preserves Gentleness reflection while suppressing only Counter recursion', () => {
+    const { state, hero, foe } = conditionEncounter({ allyAt: null });
+    state.actors[hero.id].conditions.push({ ...counterCondition });
+    state.actors[foe.id].conditions.push({ ...counterCondition });
+    state.actors[hero.id].armor = 0;
+    state.actors[hero.id].stance = {
+      id: 'fixture:gentleness', sourceId: 'fixture:gentleness', ownerId: hero.id,
+      stanceId: 'gentleness', state: {},
+    };
+
+    // The Counter source (the foe) is inside the hero's Gentleness aura. Its
+    // applied normal retaliation deals 2 damage, then takes 1 divine
+    // reflection. The hero's own Counter proves that only Counter
+    // recursion—not all reactions—is off.
+    retaliate(state, state.actors[hero.id], state.actors[foe.id]);
+
+    expect(state.actors[hero.id].hp).toBe(38);
+    expect(state.actors[foe.id].hp).toBe(31);
+  });
+
+  it('uses the same Defiance application path for dangerous terrain as ability damage', () => {
+    const { state, hero } = conditionEncounter({ heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 }, allyAt: null });
+    state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'dangerous', elevation: 0 });
+    state.actors[hero.id].hp = 2;
+    state.actors[hero.id].vigor = 0;
+    state.actors[hero.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+
+    const result = executeCommand(state, {
+      type: 'MOVE', actorId: hero.id, path: [{ x: 2, y: 1 }], mode: 'standard',
+    });
+
+    expect(result.state.actors[hero.id]).toMatchObject({ hp: 1, vigor: 0, defeated: false });
+    expect(result.state.actors[hero.id].conditions.some(({ id }) => id === 'defiance')).toBe(false);
+    expect(result.state.actors[hero.id].ruleState['damage-immune']).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('uses the canonical defeat lifecycle when replaying a recorded defeat', () => {
+    const { state, hero } = conditionEncounter({ allyAt: null });
+    applyRuleMutations(state, [
+      { kind: 'persistent', sourceId: 'fixture', ownerId: hero.id, operation: 'add', actorId: hero.id, effectId: 'fixture-effect', duration: { kind: 'combat' }, modifiers: [], triggers: [], state: {} },
+      { kind: 'stance', sourceId: 'fixture', sourceActorId: hero.id, operation: 'enter', actorId: hero.id, stanceId: 'fixture-stance', state: {} },
+      { kind: 'mark', sourceId: 'fixture', ownerId: hero.id, operation: 'apply', actorId: hero.id, markId: 'fixture-mark', state: {} },
+      { kind: 'entity', sourceId: 'fixture', operation: 'create', entityType: 'fixture-summon', ownerId: hero.id, positions: [{ x: 0, y: 0 }], count: 1, state: {} },
+    ]);
+
+    const defeated = applyEvents(state, [{ type: 'ACTOR_DEFEATED', actorId: hero.id, woundGained: true }]);
+    expect(defeated.actors[hero.id]).toMatchObject({ defeated: true, hp: 0, vigor: 0, statuses: [], conditions: [], activeEffects: [], marks: [], stance: null, wounds: 1 });
+    expect(Object.values(defeated.entities).some((entity) => entity.ownerId === hero.id)).toBe(false);
   });
 
   it('Counter retaliates against resolver-driven ability damage', () => {
@@ -89,7 +142,38 @@ describe('combat condition pipeline (p.104–105)', () => {
     state.actors[foe.id].conditions.push({ ...counterCondition });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id] }, scriptedDice(12, 4));
     expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + fray 4)
-    expect(result.state.actors[hero.id].hp).toBe(38); // 40 - 2 retaliation
+    expect(result.state.actors[hero.id].hp).toBe(40); // Armor absorbs the raw 2 Counter damage
+  });
+
+  it('Slashed only follows an actual self/ally ability movement, once per turn', () => {
+    const allied = conditionEncounter({ allyAt: { x: 1, y: 2 } });
+    // Conditions are the canonical durable form. Do not rely on the legacy
+    // status projection being populated by a migrated/imported snapshot.
+    allied.state.actors[allied.hero.id].conditions.push({
+      id: 'slashed', sourceId: 'fixture:slashed', ownerId: null, potency: 'normal', duration: null,
+    });
+    applyRuleMutations(allied.state, [{
+      kind: 'move', sourceId: 'fixture:ally-ability', sourceActorId: allied.ally!.id,
+      actorId: allied.hero.id, movement: 'rush', distance: null,
+      positions: [{ x: 2, y: 1 }], direction: null, phasing: false,
+    }, {
+      kind: 'move', sourceId: 'fixture:ally-ability', sourceActorId: allied.ally!.id,
+      actorId: allied.hero.id, movement: 'rush', distance: null,
+      positions: [{ x: 3, y: 1 }], direction: null, phasing: false,
+    }]);
+    // The fixture hero has Armor 2, so one 4-damage Slashed instance leaves
+    // 2 HP damage despite two qualifying ability moves.
+    expect(allied.state.actors[allied.hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+
+    const hostile = conditionEncounter({ allyAt: null });
+    hostile.state.actors[hostile.hero.id].statuses.push('slashed');
+    applyRuleMutations(hostile.state, [{
+      kind: 'move', sourceId: 'fixture:foe-ability', sourceActorId: hostile.foe.id,
+      actorId: hostile.hero.id, movement: 'shove', distance: 1,
+      positions: [], direction: { x: -1, y: 0 }, phasing: false,
+    }]);
+    // A foe forcing the character to move is outside p.104's self/ally gate.
+    expect(hostile.state.actors[hostile.hero.id]).toMatchObject({ hp: 40, slashedTriggeredThisTurn: false });
   });
 
   it('Hatred of X deals full damage to X and half damage to other foes', () => {
@@ -104,7 +188,9 @@ describe('combat condition pipeline (p.104–105)', () => {
     applyRuleMutations(halved.state, [{ kind: 'condition', sourceId: 'test', sourceActorId: halved.hero.id, actorId: halved.foe.id, conditionId: 'hatred', operation: 'apply', potency: 'normal' }]);
     const foeActiveB = executeCommand(halved.state, { type: 'END_TURN', actorId: halved.hero.id }, scriptedDice()).state;
     const againstAlly = executeCommand(foeActiveB, { type: 'BASIC_ATTACK', actorId: halved.foe.id, targetId: halved.ally!.id, weight: 'light' }, scriptedDice(12, 6));
-    expect(againstAlly.state.actors[halved.ally!.id].hp).toBe(37); // 40 - (ceil(9/2) - armor 2)
+    // ICON p.93 applies armor before the single Hatred halving: 9 - 2 = 7,
+    // then ceil(7 / 2) = 4. Multiple paths share this kernel now.
+    expect(againstAlly.state.actors[halved.ally!.id].hp).toBe(36);
   });
 
   it('Hatred ends when the hated target is defeated', () => {

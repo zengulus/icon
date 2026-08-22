@@ -225,11 +225,12 @@ export const RULES_COVERAGE = [
   { id: 'combat-core', label: 'Core movement, attacks, damage, saves, and turns', status: 'partial' },
   { id: 'advancement', label: 'Levels, AP, talents, masteries, relics, and respecialization', status: 'partial' },
   { id: 'job-structure', label: 'All 144 job abilities, talents, masteries, traits, and limit breaks', status: 'complete' },
-  { id: 'job-automation', label: 'Every job ability and triggered effect', status: 'partial' },
+  { id: 'job-ability-automation', label: 'All 144 independently reviewed Job ability programs', status: 'complete' },
+  { id: 'job-automation', label: 'Job traits, talents, masteries, Limit Breaks, summons, and remaining triggered effects', status: 'partial' },
   { id: 'relic-structure', label: 'All 40 relic ranks, aspects, and aspect quests', status: 'complete' },
   { id: 'relic-automation', label: 'Relic invokes and persistent effects', status: 'reference' },
   { id: 'foe-structure', label: 'Foe roles, jobs, variants, uniques, elites, legends, and components', status: 'complete' },
-  { id: 'foe-automation', label: 'Every foe and legend ability and triggered effect', status: 'reference' },
+  { id: 'foe-automation', label: 'Foe and legend ability/trait execution beyond reviewed recipes', status: 'reference' },
   { id: 'reward-structure', label: 'Trophies, camp fixtures, and expedition rewards', status: 'reference' },
 ] as const;
 

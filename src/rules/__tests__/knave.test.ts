@@ -72,6 +72,20 @@ describe('Knave ability automation (p.139–144)', () => {
     const hatred = executeCommand(preslashed.state, { type: 'USE_ABILITY', actorId: preslashed.hero.id, abilityId: 'knave:low-blow', targetIds: [preslashed.foe.id] }, scriptedDice(12, 4));
     expect(hatred.state.actors[preslashed.foe.id].statuses).toContain('hatred');
     expect(hatred.state.actors[preslashed.foe.id].ruleState['hatred-of']).toBe(preslashed.hero.id);
+
+    const dodging = knaveEncounter({ second: null });
+    dodging.state.actors[dodging.foe.id].conditions.push({ id: 'dodge', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    const missed = executeCommand(dodging.state, {
+      type: 'USE_ABILITY', actorId: dodging.hero.id, abilityId: 'knave:low-blow', targetIds: [dodging.foe.id],
+    }, scriptedDice(1));
+    // Low Blow's True Strike still misses its Defense 8 target, but p.104
+    // makes the resulting miss branch ignore Dodge. The source exception is
+    // carried on the damage mutation instead of disabling Dodge globally.
+    expect(mutationsOf(missed.events, 'knave:low-blow')).toContainEqual(expect.objectContaining({
+      kind: 'damage', actorId: dodging.foe.id, delivery: 'miss', ignoreDodge: true,
+    }));
+    expect(missed.state.actors[dodging.foe.id].hp).toBe(28);
+    expect(applyEvents(dodging.state, missed.events)).toEqual(missed.state);
   });
 
   it('Low Blow Combo (The Hook): spends combo, rushes, and slashes at range 2', () => {
@@ -296,7 +310,7 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(ended.pendingInterrupts).toHaveLength(0);
   });
 
-  it('Bleak Mercy: 2[D]+fray attack, ignoring armor and vigor when the target has three statuses', () => {
+  it('Bleak Mercy: 2[D]+fray attack, with only its named defenses bypassed at three statuses', () => {
     const { state, hero, foe } = knaveEncounter({ second: null });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:bleak-mercy', targetIds: [foe.id] }, scriptedDice(12, 4, 4));
     expect(mutationsOf(result.events, 'knave:bleak-mercy')).toMatchObject([
@@ -309,12 +323,33 @@ describe('Knave ability automation (p.139–144)', () => {
     const stacked = knaveEncounter({ second: null });
     const stackedFoe = stacked.state.actors[stacked.foe.id];
     stackedFoe.statuses.push('slashed', 'blind', 'dazed');
+    stackedFoe.armor = 10;
+    stackedFoe.vigor = 5;
+    stackedFoe.hp = 10;
+    stackedFoe.conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
     const empowered = executeCommand(stacked.state, { type: 'USE_ABILITY', actorId: stacked.hero.id, abilityId: 'knave:bleak-mercy', targetIds: [stacked.foe.id] }, scriptedDice(12, 4, 4));
-    expect(empowered.state.actors[stacked.foe.id].hp).toBe(20); // divine: 12 ignores armor/vigor
+    // p.144 bypasses exactly Armor, Vigor, and Defiance. The source damage is
+    // normal rather than Divine, so this assertion does not accidentally
+    // grant bypasses for unrelated defenses.
+    expect(empowered.state.actors[stacked.foe.id]).toMatchObject({ hp: 0, defeated: true });
     expect(mutationsOf(empowered.events, 'knave:bleak-mercy')).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 2 },
       { kind: 'attack', d20: 12, hit: true, trueStrike: true },
-      { kind: 'damage', actorId: stacked.foe.id, amount: 12, damageType: 'divine' },
+      {
+        kind: 'damage', actorId: stacked.foe.id, amount: 12, damageType: 'normal',
+        bypassVigor: true, ignoreArmor: true, ignoreDefiance: true,
+      },
     ]);
+
+    const resisted = knaveEncounter({ second: null });
+    const resistedFoe = resisted.state.actors[resisted.foe.id];
+    resistedFoe.statuses.push('slashed', 'blind', 'dazed');
+    resistedFoe.armor = 10;
+    resistedFoe.vigor = 5;
+    resistedFoe.conditions.push({ id: 'resistance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    const resistedResult = executeCommand(resisted.state, { type: 'USE_ABILITY', actorId: resisted.hero.id, abilityId: 'knave:bleak-mercy', targetIds: [resisted.foe.id] }, scriptedDice(12, 4, 4));
+    // The same source flags leave Resistance intact: p.93 halves the
+    // Armor-ignored 12 once, then p.144 routes the final 6 straight to HP.
+    expect(resistedResult.state.actors[resisted.foe.id]).toMatchObject({ hp: 26, vigor: 5, defeated: false });
   });
 });

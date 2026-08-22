@@ -73,8 +73,13 @@ export interface FoeAttackRecipe extends FoeRecipeBase {
   /** Fixed multi-instance damage (Pepperbox Riddle: 3 damage, three times). */
   hitInstances?: number;
   miss?: FoeAmount;
+  /** Attack: Autohit skips the d20/boon/Evasion roll, but not the shared
+   * direct-target legality gate (range, Stealth, and line of sight). */
+  autoHit?: boolean;
   trueStrike?: boolean;
   boons?: number;
+  /** ICON p.104 Pierce applies to every damage instance from this attack. */
+  damageType?: 'normal' | 'piercing' | 'divine';
   /** Ignore cover on all damage from this ability (tagged unerring). */
   unerring?: boolean;
   /** Ignore cover when the target holds this mark owned by the attacker. */
@@ -83,6 +88,9 @@ export interface FoeAttackRecipe extends FoeRecipeBase {
    * target has a condition or (optionally) a mark owned by the attacker. */
   bonusDamage?: { condition?: string; mark?: string };
   hitConditions?: string[];
+  /** Conditions declared by an `Effect:` clause after the attack resolve on
+   * either a hit or a miss (Chaos Shard, p.306). */
+  effectConditions?: string[];
   hitShove?: number;
   hitMark?: string;
   /** All foes adjacent to the source or the attack target take this damage. */
@@ -393,6 +401,34 @@ export const FOE_ABILITY_RECIPES: Readonly<Record<string, FoeRecipe>> = {
     range: 4,
     markId: 'hunter:hunt',
   },
+
+  // ── Cantrix (p.305) ───────────────────────────────────────────────────────
+  // Discord: attack, range 8, pierce. Autohit: fray damage. Auto-hit avoids
+  // the attack-roll/Evasion step, while the shared direct target gate still
+  // owns range, Stealth, and line-of-sight legality. Pierce means the Fray
+  // instance ignores Armor and Weakened (p.104).
+  'basic:cantrix:305:discord': {
+    kind: 'attack',
+    clauses: ['autohit'],
+    range: 8,
+    hit: { kind: 'fray' },
+    autoHit: true,
+    damageType: 'piercing',
+  },
+
+  // ── Chaos Wright (p.306) ──────────────────────────────────────────────────
+  // Chaos Shard: attack, range 6, pierce. On hit: [D]+fray. Miss: fray.
+  // Effect: foe is shattered. The Effect clause is deliberately separate
+  // from hitConditions: it applies after either attack outcome.
+  'basic:chaos-wright:306:chaos-shard': {
+    kind: 'attack',
+    clauses: ['on hit', 'miss', 'effect'],
+    range: 6,
+    hit: { kind: 'die-fray' },
+    miss: { kind: 'fray' },
+    damageType: 'piercing',
+    effectConditions: ['shattered'],
+  },
 };
 
 // ── Shared resolver helpers ──────────────────────────────────────────────────
@@ -429,8 +465,9 @@ function foeDamage(
   damageType: 'normal' | 'piercing' | 'divine' = 'normal',
   ignoreCover = false,
   instance = 1,
+  ignoreDodge = false,
 ): RuleMutation {
-  return { kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId, amount, damageType, instance, delivery, ignoreCover };
+  return { kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId, amount, damageType, instance, delivery, ignoreCover, ...(ignoreDodge ? { ignoreDodge: true } : {}) };
 }
 
 function rollAmount(context: RuleExecutionContext, source: RuleActorView, amount: FoeAmount | number): number {
@@ -514,8 +551,15 @@ function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
     const ignoreCover = Boolean(recipe.unerring
       || (atRange && recipe.atRange?.unerring)
       || (recipe.unerringWhenMarked && target.marks.some((mark) => mark.markId === recipe.unerringWhenMarked && mark.ownerId === context.actorId)));
-    const roll = resolveAttack(context, source, target, { boons: recipe.boons, trueStrike: recipe.trueStrike });
+    const roll = resolveAttack(context, source, target, {
+      boons: recipe.boons,
+      trueStrike: recipe.trueStrike,
+      autoHit: recipe.autoHit,
+    });
+    const attackIgnoreCover = ignoreCover || roll.damageProvenance.ignoreCover;
+    const attackIgnoreDodge = roll.damageProvenance.ignoreDodge;
     mutations.push(roll.attackMutation);
+    const damageType = recipe.damageType ?? 'normal';
     if (roll.hit) {
       const base = rollAmount(context, source, recipe.hit);
       const bonus = bonusDamageActive(recipe, context, target)
@@ -523,16 +567,17 @@ function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
         : 0;
       const instances = recipe.hitInstances ?? 1;
       for (let instance = 1; instance <= instances; instance += 1) {
-        mutations.push(foeDamage(context, target.id, base + bonus, 'hit', 'normal', ignoreCover, instance));
+        mutations.push(foeDamage(context, target.id, base + bonus, 'hit', damageType, attackIgnoreCover, instance, attackIgnoreDodge));
       }
-      if (roll.critical) mutations.push(foeDamage(context, target.id, context.dice.die(source.damageDie), 'hit', 'normal', ignoreCover, instances + 1));
+      if (roll.critical) mutations.push(foeDamage(context, target.id, context.dice.die(source.damageDie), 'hit', damageType, attackIgnoreCover, instances + 1, attackIgnoreDodge));
       for (const conditionId of recipe.hitConditions ?? []) mutations.push(conditionMutation(context, target.id, conditionId));
       if (recipe.hitShove) mutations.push(shoveMutation(context, target.id, recipe.hitShove, axisDirection(attackOrigin, target.position)));
       if (recipe.hitMark) mutations.push(markMutation(context, target.id, recipe.hitMark, {}));
     } else {
       const missAmount = recipe.miss ? rollAmount(context, source, recipe.miss) : source.fray;
-      mutations.push(foeDamage(context, target.id, missAmount, 'miss', 'normal', ignoreCover, 1));
+      mutations.push(foeDamage(context, target.id, missAmount, 'miss', damageType, attackIgnoreCover, 1, attackIgnoreDodge));
     }
+    for (const conditionId of recipe.effectConditions ?? []) mutations.push(conditionMutation(context, target.id, conditionId));
     if (atRange) for (const conditionId of recipe.atRange?.conditions ?? []) mutations.push(conditionMutation(context, target.id, conditionId));
     if (recipe.bloodiedEffect && target.hp <= target.maxHp / 2) {
       if (recipe.bloodiedEffect.shove) mutations.push(shoveMutation(context, target.id, recipe.bloodiedEffect.shove, axisDirection(attackOrigin, target.position)));
@@ -545,7 +590,7 @@ function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
         const exclude = sameCell(origin, source.position) ? source.id : target.id;
         for (const actor of adjacentActors(context, origin, foeSide, exclude)) victims.add(actor.id);
       }
-      for (const victimId of victims) mutations.push(foeDamage(context, victimId, rollAmount(context, source, recipe.splash.amount), 'area'));
+      for (const victimId of victims) mutations.push(foeDamage(context, victimId, rollAmount(context, source, recipe.splash.amount), 'area', damageType));
     }
     return mutations;
   };

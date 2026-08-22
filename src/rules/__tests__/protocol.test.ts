@@ -98,4 +98,67 @@ describe('realtime protocol validation', () => {
       command: { domain: 'encounter', command: { type: 'ADD_ACTOR', actor: oversizedActor } },
     }))).toThrow(/Record cannot contain more than 500 entries/i);
   });
+
+  it('accepts bounded explicit Blessing choices for command-time status saves', () => {
+    const message = {
+      type: 'command',
+      encounterId: 'encounter-1',
+      expectedRevision: 0,
+      command: {
+        domain: 'encounter',
+        command: {
+          type: 'EXECUTE_RULE',
+          actorId: 'mender',
+          sourceId: 'mendicant:trait:diaga',
+          actionId: 'default',
+          timing: 'use',
+          attackTargetId: 'patient',
+          input: { statusSaveChoices: { patient: { blind: { spendBlessing: true } } } },
+        },
+      },
+    };
+    expect(parseClientMessage(JSON.stringify(message))).toMatchObject({
+      type: 'command',
+      command: { domain: 'encounter', command: { input: { statusSaveChoices: { patient: { blind: { spendBlessing: true } } } } } },
+    });
+    expect(() => parseClientMessage(JSON.stringify({
+      ...message,
+      command: {
+        ...message.command,
+        command: {
+          ...message.command.command,
+          input: { statusSaveChoices: { patient: { blind: { spendBlessing: true, injected: true } } } },
+        },
+      },
+    }))).toThrow(/Invalid websocket message/);
+
+    const recoverMessage = {
+      type: 'command',
+      encounterId: 'encounter-1',
+      expectedRevision: 0,
+      command: {
+        domain: 'encounter',
+        command: {
+          type: 'RECOVER',
+          actorId: 'patient',
+          input: { statusSaveChoices: { patient: { blind: { spendBlessing: true } } } },
+        },
+      },
+    };
+    expect(parseClientMessage(JSON.stringify(recoverMessage))).toMatchObject({
+      type: 'command',
+      command: { domain: 'encounter', command: { type: 'RECOVER', input: { statusSaveChoices: { patient: { blind: { spendBlessing: true } } } } } },
+    });
+    expect(() => parseClientMessage(JSON.stringify({
+      ...recoverMessage,
+      command: {
+        ...recoverMessage.command,
+        command: {
+          ...recoverMessage.command.command,
+          // Core commands do not accept generic VM selectors or costs.
+          input: { actorIds: { target: ['spoofed'] } },
+        },
+      },
+    }))).toThrow(/Invalid websocket message/);
+  });
 });

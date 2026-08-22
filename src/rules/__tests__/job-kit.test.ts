@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { encounterRuleState } from '../automation/encounter-adapter.js';
-import type { RuleExecutionContext } from '../automation/types.js';
+import { CORE_RULE_RESOLVERS } from '../automation/core-resolvers.js';
+import type { RuleAction, RuleExecutionContext } from '../automation/types.js';
 import type { DiceSource } from '../dice.js';
 import type { EncounterState } from '../types.js';
 import {
@@ -129,10 +130,32 @@ describe('job-kit building blocks', () => {
     const strikeCtx = kitContext(state, hero.id, scriptedDice(12));
     const struck = resolveAttack(strikeCtx, sourceActor(strikeCtx, hero.id)!, sourceActor(strikeCtx, foe.id)!, { trueStrike: true });
     expect(struck.attackMutation).toMatchObject({ trueStrike: true, boon: 0, d20: 12 });
+    expect(struck.damageProvenance).toEqual({ ignoreDodge: true, ignoreCover: false });
+    expect(damageMutation(strikeCtx, foe.id, 3, 'miss')).toMatchObject({ ignoreDodge: true });
 
     const autoCtx = kitContext(state, hero.id, scriptedDice());
     const auto = resolveAttack(autoCtx, sourceActor(autoCtx, hero.id)!, sourceActor(autoCtx, foe.id)!, { autoHit: true });
     expect(auto.attackMutation).toMatchObject({ autoHit: true, d20: null, boon: 0, total: null, hit: true, critical: false });
+  });
+
+  it('propagates high-ground cover immunity through job-kit and core named attacks', () => {
+    const { state, hero, foe } = board();
+    state.grid.terrain.push({ position: { ...hero.position }, type: 'basic', elevation: 1 });
+
+    const kitCtx = kitContext(state, hero.id, scriptedDice(12, 1));
+    const roll = resolveAttack(kitCtx, sourceActor(kitCtx, hero.id)!, sourceActor(kitCtx, foe.id)!);
+    expect(roll.damageProvenance).toMatchObject({ ignoreCover: true });
+    expect(damageMutation(kitCtx, foe.id, 3, 'miss')).toMatchObject({ ignoreCover: true });
+
+    const coreCtx: RuleExecutionContext = {
+      ...kitContext(state, hero.id, scriptedDice(12, 1, 4)),
+      sourceId: 'core:light-attack',
+      input: { actorIds: { target: [foe.id] } },
+    };
+    const mutations = CORE_RULE_RESOLVERS['core:light-attack']!(coreCtx, {} as RuleAction);
+    // ICON p.89: an attack from higher elevation ignores cover for its lower
+    // target; this must hold for the core named resolver too.
+    expect(mutations[1]).toMatchObject({ kind: 'damage', actorId: foe.id, ignoreCover: true });
   });
 
   it('mutation builders produce the canonical mutation shapes', () => {

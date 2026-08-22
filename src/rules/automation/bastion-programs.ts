@@ -22,9 +22,9 @@ import {
  * Fidelity notes that stay visible on the resolved event (the full source
  * text is preserved on every RULE_MUTATIONS_APPLIED event):
  * - The VM resolves an attack roll, hit/miss/critical branches, and damage.
- *   High-ground boons, cover, and elevation are handled by the dedicated
- *   BASIC_ATTACK reducer path, not by this generic VM, so resolver-based
- *   ability attacks do not add an elevation boon.
+ *   The shared attack kernel applies high-ground boons and carries the
+ *   higher-attacker cover exception into this ability's direct damage branch;
+ *   cover itself remains part of the shared damage determination.
  * - Aura zones, stance refresh, and delayed end-of-turn effects are stored
  *   as deterministic marks/persistent effects/rule state with explicit
  *   provenance. Great Giorgios's delayed rush is resolved by the encounter

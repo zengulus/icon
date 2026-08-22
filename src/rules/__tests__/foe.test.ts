@@ -9,7 +9,8 @@ import { scriptedDice, validCharacter } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the recipe-driven foe ability slices
- * (ICON p.300–302: Crusher, Warrior, Soldier, Brute, Pepperbox, Hunter).
+ * (ICON p.300–306: Crusher, Warrior, Soldier, Brute, Pepperbox, Hunter,
+ * Cantrix, and Chaos Wright).
  * Every ability below is one declarative FoeRecipe in
  * `automation/foe-recipes.ts` — the generic factories resolve it — and each
  * scenario resolves through the shared encounter reducer and must replay to
@@ -80,9 +81,9 @@ function abilityIsAttack(abilityId: string) {
   return findRuleSourceUnit(abilityId)?.metadata.tags?.toString().includes('attack') ?? false;
 }
 
-describe('foe ability automation (p.300–302 recipes)', () => {
+describe('foe ability automation (p.300–306 recipes)', () => {
   it('marks every reviewed foe ability executable in the catalog and audit', () => {
-    expect(Object.keys(FOE_ABILITY_RECIPES)).toHaveLength(20);
+    expect(Object.keys(FOE_ABILITY_RECIPES)).toHaveLength(22);
     for (const abilityId of EXECUTABLE_FOE_ABILITY_IDS) {
       const unit = findRuleSourceUnit(abilityId)!;
       expect(unit.kind).toBe('foe-ability');
@@ -387,5 +388,66 @@ describe('foe ability automation (p.300–302 recipes)', () => {
     expect(hitDamage).toMatchObject({ amount: 10, ignoreCover: true }); // die 3 + fray 2 + max(5,1) bonus die
     expect(shot.state.actors[fixture.hero.id].hp).toBe(32); // 40 - (10 - armor 2)
     expect(applyEvents(marked.state, shot.events)).toEqual(shot.state);
+  });
+
+  it('Cantrix Discord: range-8 Pierce autohit bypasses Evasion but not the target gate', () => {
+    const fixture = foeFixture('basic:cantrix:305', { foe: { x: 1, y: 1 }, hero: { x: 9, y: 1 } });
+    // p.104 Pierce means this Fray instance ignores both Armor and the
+    // source's Weakened reduction. Autohit also skips the Evasion d6.
+    fixture.state.actors[fixture.foe.id].statuses.push('weakened');
+    fixture.state.actors[fixture.hero.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+
+    const result = foeAbility(fixture.state, fixture, 'basic:cantrix:305:discord', { targetId: fixture.hero.id });
+    expect(mutationsOf(result.events, 'basic:cantrix:305:discord')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'attack', d20: null, boon: 0, total: null, evasionRoll: null, hit: true, critical: false, trueStrike: false, autoHit: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: fixture.foe.fray, damageType: 'piercing', delivery: 'hit' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(40 - fixture.foe.fray);
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Cantrix Discord retains the shared range, line-of-sight, and Stealth target gates', () => {
+    const outOfRange = foeFixture('basic:cantrix:305', { foe: { x: 0, y: 1 }, hero: { x: 9, y: 1 } });
+    expect(() => foeAbility(outOfRange.state, outOfRange, 'basic:cantrix:305:discord', { targetId: outOfRange.hero.id })).toThrow(/outside this ability’s range/i);
+
+    const blocked = foeFixture('basic:cantrix:305', { foe: { x: 1, y: 1 }, hero: { x: 9, y: 1 } });
+    blocked.state.grid.terrain.push({ position: { x: 5, y: 1 }, type: 'impassable', elevation: 1 });
+    expect(() => foeAbility(blocked.state, blocked, 'basic:cantrix:305:discord', { targetId: blocked.hero.id })).toThrow(/line of sight/i);
+
+    const stealthy = foeFixture('basic:cantrix:305', { foe: { x: 1, y: 1 }, hero: { x: 9, y: 1 } });
+    stealthy.state.actors[stealthy.hero.id].conditions.push({ id: 'stealth', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    expect(() => foeAbility(stealthy.state, stealthy, 'basic:cantrix:305:discord', { targetId: stealthy.hero.id })).toThrow(/stealth/i);
+  });
+
+  it('Chaos Wright Chaos Shard: piercing [D]+fray hit and unconditional Shattered effect', () => {
+    const fixture = foeFixture('basic:chaos-wright:306', { foe: { x: 1, y: 1 }, hero: { x: 7, y: 1 } });
+    // Pierce preserves the full roll even if the source is Weakened, and
+    // ignores the hero's Armor when the shared damage kernel applies it.
+    fixture.state.actors[fixture.foe.id].statuses.push('weakened');
+    const result = foeAbility(fixture.state, fixture, 'basic:chaos-wright:306:chaos-shard', { targetId: fixture.hero.id, dice: [12, 3] });
+    expect(mutationsOf(result.events, 'basic:chaos-wright:306:chaos-shard')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'attack', d20: 12, total: 12, hit: true, critical: false },
+      { kind: 'damage', actorId: fixture.hero.id, amount: fixture.foe.fray + 3, damageType: 'piercing', delivery: 'hit' },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'shattered' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(40 - fixture.foe.fray - 3);
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('shattered');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Chaos Wright Chaos Shard: a miss deals piercing Fray and still Shatters', () => {
+    const fixture = foeFixture('basic:chaos-wright:306', { foe: { x: 1, y: 1 }, hero: { x: 7, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:chaos-wright:306:chaos-shard', { targetId: fixture.hero.id, dice: [1] });
+    expect(mutationsOf(result.events, 'basic:chaos-wright:306:chaos-shard')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'attack', d20: 1, total: 1, hit: false, critical: false },
+      { kind: 'damage', actorId: fixture.hero.id, amount: fixture.foe.fray, damageType: 'piercing', delivery: 'miss' },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'shattered' },
+    ]);
+    expect(result.state.actors[fixture.hero.id].hp).toBe(40 - fixture.foe.fray);
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('shattered');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
   });
 });

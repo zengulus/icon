@@ -5,7 +5,7 @@ import {
   axisDirection, sameCell, squareArea, withinGrid, occupied,
   constant,
   distance, sourceActor, walk, freeCellsInRange, resolveAttack, rushTowardFoes,
-  damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutation,
+  damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation,
   action, compilation,

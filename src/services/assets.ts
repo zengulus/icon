@@ -1,22 +1,5 @@
 import { supabase } from './supabase.js';
-
-export function safeAssetUrl(input: string): string {
-  const value = input.trim();
-  if (!value) return '';
-  try {
-    const url = new URL(value, window.location.origin);
-    if (url.protocol === 'https:') return url.href;
-    if (url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')) return url.href;
-    return '';
-  } catch {
-    return '';
-  }
-}
-
-export function assetBackground(input: string) {
-  const url = safeAssetUrl(input);
-  return url ? { backgroundImage: `url("${url.replaceAll('"', '%22')}")` } : undefined;
-}
+export { assetBackground, safeAssetUrl } from '../vtt/presentation.js';
 
 export async function uploadImage(file: File, userId: string) {
   if (!supabase) throw new Error('Supabase Storage is not configured.');

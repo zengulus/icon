@@ -1,22 +1,13 @@
 import type { EncounterActor, EncounterEntity, EncounterHeldDamage, EncounterPendingInterrupt, EncounterState, EncounterTerrainEffect, Position, StatusId } from '../types.js';
 import { resourceMaximum } from '../core.js';
+import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from './damage-resolution.js';
 import { AREA_INCLUSION_INTERRUPT_IDS, DEFEATED_INTERRUPT_IDS, SAVE_REROLL_INTERRUPT_IDS, TARGETED_BY_ABILITY_INTERRUPT_IDS, USES_ABILITY_INTERRUPT_IDS, WHEN_DAMAGED_INTERRUPT_IDS } from './manual-programs.js';
+import { projectedPassiveConditions } from './passive-projection.js';
 import type { RuleActorView, RuleMutation, RuleRuntimeState } from './types.js';
 
 const statusIds = new Set<StatusId>(['slashed', 'blind', 'dazed', 'hatred', 'pacified', 'sealed', 'shattered', 'stunned', 'weakened', 'vulnerable']);
 const samePosition = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
 const clone = <T>(value: T): T => structuredClone(value);
-
-const traitConditions: Readonly<Record<string, string>> = {
-  'stalwart:trait:fortify': 'fortify',
-  'vagabond:trait:skirmisher': 'skirmisher',
-  'vagabond:trait:dodge': 'dodge',
-  'vagabond:trait:finesse': 'finesse',
-  'wright:trait:slip': 'slip',
-  'wright:trait:aetherwall': 'aetherwall',
-  'wright:trait:chain-reaction': 'chain-reaction',
-  'wright:trait:aether': 'aether-user',
-};
 
 export function encounterConditionSet(actor: EncounterActor) {
   const conditions = new Set<string>(actor.statuses);
@@ -24,8 +15,71 @@ export function encounterConditionSet(actor: EncounterActor) {
   for (const effect of actor.activeEffects) {
     for (const modifier of effect.modifiers) if (modifier.operation === 'grant' && typeof modifier.value === 'string') conditions.add(modifier.value);
   }
-  for (const traitId of actor.traitIds) if (traitConditions[traitId]) conditions.add(traitConditions[traitId]);
+  // Trait-derived passives are a closed source-ID projection. Do not infer
+  // conditions from trait/role prose here: only reviewed recipes affect
+  // authoritative pathing or combat.
+  for (const condition of projectedPassiveConditions(actor.traitIds)) conditions.add(condition);
   return conditions;
+}
+
+/** ICON p.94: a matching + condition makes that status ongoing. */
+function projectedStatuses(actor: EncounterActor): RuleActorView['statuses'] {
+  const ongoing = new Set(actor.conditions
+    .filter(({ id, potency }) => potency === 'plus' && statusIds.has(id as StatusId))
+    .map(({ id }) => id));
+  const ids = new Set<string>(actor.statuses);
+  // Imported historical state can contain a status condition without the
+  // denormalized `statuses` entry.  Keep the projection authoritative rather
+  // than silently dropping a saveable/ongoing status from a command.
+  for (const condition of actor.conditions) if (statusIds.has(condition.id as StatusId)) ids.add(condition.id);
+  return [...ids].map((id) => ({ id, potency: ongoing.has(id) ? 'plus' : 'normal' }));
+}
+
+/** ICON p.186 Rot only applies its hostile cure/vigor/save effects to the foe-mark branch. */
+function hasFoeRotMark(state: EncounterState, actor: EncounterActor): boolean {
+  return actor.marks.some((mark) => {
+    if (mark.markId !== 'rot') return false;
+    const kind = mark.state['kind'];
+    if (kind === 'foe') return true;
+    if (kind === 'ally') return false;
+    // Legacy/imported marks predate the explicit `kind`; infer only when the
+    // owner is still known, never from a missing owner.
+    return state.actors[mark.ownerId]?.side !== undefined && state.actors[mark.ownerId]!.side !== actor.side;
+  });
+}
+
+function sweetTormentRadius(actor: EncounterActor): number | null {
+  const effect = actor.activeEffects.find(({ effectId }) => effectId === 'sweet-torment');
+  if (!effect) return null;
+  const value = effect.modifiers.find(({ operation, stat }) => operation === 'grant' && stat === 'aura')?.value;
+  if (typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'constant' && 'value' in value && typeof value.value === 'number') return Math.max(0, value.value);
+  return 1;
+}
+
+/** ICON p.144 Sweet Torment: foes in the active aura cannot be cured or save clear statuses. */
+function inSweetTormentAura(state: EncounterState, target: EncounterActor): boolean {
+  if (target.defeated || !target.onBattlefield) return false;
+  return Object.values(state.actors).some((source) => {
+    if (source.defeated || !source.onBattlefield || source.side === target.side) return false;
+    const radius = sweetTormentRadius(source);
+    return radius !== null && Math.max(Math.abs(source.position.x - target.position.x), Math.abs(source.position.y - target.position.y)) <= radius;
+  });
+}
+
+/**
+ * The command-time status-save policy is projected from durable encounter
+ * state.  It deliberately has no snapshot field or migration: p.94/p.144/
+ * p.186 are recomputed on every authoritative command and replay application.
+ */
+export function encounterStatusSavePolicy(state: EncounterState, actor: EncounterActor): RuleActorView['statusSavePolicy'] {
+  const rot = hasFoeRotMark(state, actor);
+  const sweetTorment = inSweetTormentAura(state, actor);
+  return {
+    cureDenied: rot || sweetTorment,
+    statusSaveDenied: sweetTorment,
+    saveBoon: 0,
+    saveCurse: rot ? 1 : 0,
+  };
 }
 
 export function encounterRuleState(state: EncounterState): RuleRuntimeState {
@@ -51,6 +105,8 @@ export function encounterRuleState(state: EncounterState): RuleRuntimeState {
       size: actor.size,
       defeated: actor.defeated,
       conditions: encounterConditionSet(actor),
+      statuses: projectedStatuses(actor),
+      statusSavePolicy: encounterStatusSavePolicy(state, actor),
       resources: { ...actor.resources, resolve: state.partyResolve + (actor.resources['personal-resolve'] ?? 0) },
       state: { ...actor.ruleState, phaseId: actor.ruleState.phaseId ?? null },
       marks: actor.marks.map(({ markId, ownerId }) => ({ markId, ownerId })),
@@ -75,6 +131,10 @@ export function encounterRuleState(state: EncounterState): RuleRuntimeState {
       for (const effect of state.terrainEffects) if (effect.positions.some((candidate) => samePosition(candidate, position))) values.add(effect.terrain);
       return values;
     },
+    elevationAt(position) {
+      const terrain = state.grid.terrain.find((cell) => samePosition(cell.position, position));
+      return (terrain?.elevation ?? 0) - (terrain?.type === 'pit' ? 1 : 0);
+    },
   };
 }
 
@@ -98,7 +158,12 @@ export function defyDeathActive(actor: EncounterActor): boolean {
   return actor.activeEffects.some((effect) => effect.effectId === 'defy-death');
 }
 
-function defeatActor(state: EncounterState, actor: EncounterActor) {
+/**
+ * The sole defeat lifecycle.  Event replay, delayed effects, damage, and an
+ * explicit defeat mutation all delegate here so incapacitation never leaves
+ * behind a stance, mark, active effect, or owned summon.
+ */
+export function defeatActor(state: EncounterState, actor: EncounterActor, options: { woundGained?: boolean } = {}) {
   if (actor.defeated) return;
   if (defyDeathActive(actor)) {
     actor.hp = Math.max(1, actor.hp);
@@ -112,7 +177,7 @@ function defeatActor(state: EncounterState, actor: EncounterActor) {
   actor.activeEffects = [];
   actor.marks = [];
   actor.stance = null;
-  if (actor.side === 'heroes') actor.wounds = Math.min(4, actor.wounds + 1);
+  if (options.woundGained ?? actor.side === 'heroes') actor.wounds = Math.min(4, actor.wounds + 1);
   removeOwnedEphemera(state, actor.id);
   // Hatred of X ends while X is untargetable: a defeated character can no
   // longer be the target of hatred, so clear any hatred aimed at this actor.
@@ -156,14 +221,151 @@ export function isBloodied(actor: EncounterActor): boolean {
   return actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2;
 }
 
+/**
+ * ICON p.105: Vigor is capped at the actor's Vitality.  Rot and Shattered are
+ * centralized here, so Cure, regeneration, and generic vigor mutations do
+ * not drift into different denial/cap behavior.
+ */
+export function gainVigor(
+  state: EncounterState,
+  actor: EncounterActor,
+  amount: number,
+  options: { uncapped?: boolean; ignoreDenial?: boolean } = {},
+): number {
+  if (actor.defeated || amount <= 0) return 0;
+  if (!options.ignoreDenial && (hasFoeRotMark(state, actor) || encounterConditionSet(actor).has('shattered'))) return 0;
+  const before = actor.vigor;
+  const maximum = options.uncapped ? Number.MAX_SAFE_INTEGER : actor.vitality;
+  actor.vigor = Math.min(maximum, actor.vigor + Math.max(0, amount));
+  return actor.vigor - before;
+}
+
+/** A fully typed, state-derived damage request.  New command paths should
+ * build this rather than recoding p.93 mitigation arithmetic. */
+export interface EncounterDamageIntent {
+  targetId: string;
+  sourceActorId?: string;
+  sourceRuleId: string;
+  amount: number;
+  damageType: Exclude<EncounterHeldDamage['damageType'], 'sacrifice'>;
+  delivery: DamageDelivery;
+  instance: number;
+  ignoreCover: boolean;
+  /** Piercing is not a global HP-routing rule.  This is present only for a
+   * source whose text explicitly says the instance bypasses vigor (p.89
+   * dangerous terrain, or divine damage's core rule). */
+  bypassVigor?: boolean;
+  /** Exact source exception to Armor; unlike Divine it preserves every
+   * non-Armor mitigation path. */
+  ignoreArmor?: boolean;
+  /** Exact source exception to Defiance's application-time HP floor. It does
+   * not bypass the generic `damage-immune` state: that state needs durable
+   * origin provenance before a source can be allowed to bypass only Defiance. */
+  ignoreDefiance?: boolean;
+  /** True Strike's direct-damage exception to Dodge (ICON p.104). */
+  ignoreDodge?: boolean;
+  /** Basic attacks derive terrain cover directly; other rule mutations use
+   * their target's persistent cover state until the spatial gateway exists. */
+  covered?: boolean;
+}
+
+/**
+ * Derive the final damage amount without mutating encounter state.  It is
+ * shared by event construction and VM mutation application, which makes the
+ * recorded event amount match replay's authoritative mitigation order.
+ */
+export function determineEncounterDamage(state: EncounterState, intent: EncounterDamageIntent): DeterminedDamage {
+  const target = state.actors[intent.targetId];
+  if (!target) return determineDamage({ amount: 0, damageType: intent.damageType, delivery: intent.delivery });
+  const source = intent.sourceActorId ? state.actors[intent.sourceActorId] : undefined;
+  const sourceConditions = source ? encounterConditionSet(source) : new Set<string>();
+  const targetConditions = encounterConditionSet(target);
+  const sourceDistance = source && source.onBattlefield && target.onBattlefield
+    ? Math.max(Math.abs(source.position.x - target.position.x), Math.abs(source.position.y - target.position.y))
+    : 0;
+  return determineDamage({
+    amount: intent.amount,
+    damageType: intent.damageType,
+    delivery: intent.delivery,
+    sourceWeakened: sourceConditions.has('weakened'),
+    sourcePacified: sourceConditions.has('pacified'),
+    sourceHatredDiverts: hatredDivertsDamage(state, source, target),
+    targetVulnerable: targetConditions.has('vulnerable'),
+    targetArmor: target.armor,
+    ignoreArmor: intent.ignoreArmor,
+    targetResistance: targetConditions.has('resistance'),
+    targetAetherwall: targetConditions.has('aetherwall') && sourceDistance > 2,
+    targetCovered: intent.covered ?? target.ruleState.cover === true,
+    targetIntangible: targetConditions.has('intangible'),
+    targetDodge: targetConditions.has('dodge'),
+    ignoreDodge: intent.ignoreDodge,
+    targetDamageImmune: target.ruleState['damage-immune'] === true,
+    ignoreCover: intent.ignoreCover,
+    hostile: Boolean(source && source.side !== target.side),
+  });
+}
+
+/**
+ * Determine and immediately apply a source damage instance.  This is the
+ * authoritative entry point for reducer/lifecycle damage whose event does
+ * not already carry a final determined amount.  Only historical replay and
+ * interrupt windows, which explicitly persist the post-mitigation amount,
+ * may call {@link applyDeterminedEncounterDamage} directly.
+ *
+ * Keeping those two entry points separate is deliberate: treating a raw
+ * source amount as determined skips p.93 reductions/halving, while
+ * determining an already-recorded legacy amount applies them twice.
+ *
+ * TODO(ICON-rules, pp.93–107): replace the remaining split event formats
+ * with a durable DamageIntent -> DeterminedDamage -> AppliedDamage ledger.
+ * That ledger must persist trigger/window provenance before these immediate
+ * paths can safely create or re-open interrupts during replay.
+ */
+export function determineAndApplyEncounterDamage(
+  state: EncounterState,
+  intent: EncounterDamageIntent,
+  options: DamageReactionOptions = {},
+): AppliedDamage | null {
+  const target = state.actors[intent.targetId];
+  if (!target || target.defeated) return null;
+  const source = intent.sourceActorId ? state.actors[intent.sourceActorId] : undefined;
+  const determination = determineEncounterDamage(state, intent);
+  if (determination.amount <= 0) return null;
+  return applyDeterminedEncounterDamage(state, target, source, {
+    amount: determination.amount,
+    damageType: intent.damageType,
+    bypassVigor: intent.bypassVigor ?? intent.damageType === 'divine',
+    ...(intent.ignoreDefiance ? { ignoreDefiance: true } : {}),
+    sourceActorId: intent.sourceActorId ?? intent.sourceRuleId,
+    sourceId: intent.sourceRuleId,
+    instance: intent.instance,
+    delivery: intent.delivery,
+    ignoreCover: intent.ignoreCover,
+  }, options);
+}
+
 /** ICON p.104 Counter: 2 damage back for each applied damage instance. The
- * retaliation does not itself trigger counter, so chains cannot recurse. */
-export function retaliate(state: EncounterState, attacker: EncounterActor) {
+ * retaliation does not itself trigger counter, so chains cannot recurse.
+ *
+ * TODO(ICON-rules, pp.104–107): invoke this only from a durable
+ * DamageWindow that proves the source was damaged by an ability. The current
+ * call-site compatibility behavior is deliberately not evidence that the
+ * Counter source unit has complete trigger coverage. */
+export function retaliate(state: EncounterState, attacker: EncounterActor, counterOwner?: EncounterActor) {
   if (!attacker || attacker.defeated || attacker.ruleState['damage-immune'] === true) return;
-  const vigorDamage = Math.min(attacker.vigor, 2);
-  attacker.vigor -= vigorDamage;
-  attacker.hp = Math.max(0, attacker.hp - (2 - vigorDamage));
-  if (attacker.hp <= 0) defeatActor(state, attacker);
+  determineAndApplyEncounterDamage(state, {
+    targetId: attacker.id,
+    sourceActorId: counterOwner?.id,
+    sourceRuleId: 'core:counter',
+    amount: 2,
+    damageType: 'normal',
+    instance: 1,
+    delivery: 'effect',
+    ignoreCover: true,
+  // Counter suppresses only another Counter response. It remains a damage
+  // instance, so other source-triggered reactions such as Gentleness still
+  // see it (ICON p.179).
+  }, { allowCounter: false });
 }
 
 /** ICON p.179 Gentleness: true when a gentleness-stance character's aura 1
@@ -176,12 +378,24 @@ export function inGentlenessAura(state: EncounterState, actor: EncounterActor): 
 }
 
 /** ICON p.179 Gentleness: any character that deals damage while in the stance's
- * aura takes 1 divine damage (applied directly, so it cannot reflect again). */
+ * aura takes 1 divine damage (applied directly, so it cannot reflect again).
+ * This remains raw source damage until it reaches the shared pipeline; divine
+ * bypasses mitigation and vigor there rather than by a special local write. */
 export function gentlenessReflection(state: EncounterState, attacker: EncounterActor) {
   if (attacker.defeated || !attacker.onBattlefield || attacker.ruleState['damage-immune'] === true) return;
   if (!inGentlenessAura(state, attacker)) return;
-  attacker.hp = Math.max(0, attacker.hp - 1);
-  if (attacker.hp <= 0) defeatActor(state, attacker);
+  determineAndApplyEncounterDamage(state, {
+    targetId: attacker.id,
+    sourceRuleId: 'core:gentleness',
+    amount: 1,
+    damageType: 'divine',
+    instance: 1,
+    delivery: 'effect',
+    ignoreCover: true,
+  // The reflection cannot start a reaction loop: it neither opens Counter
+  // nor reflects Gentleness again. This must stay narrower than Counter's
+  // recursion guard, because a Counter hit can itself trigger Gentleness.
+  }, { allowCounter: false, allowGentleness: false });
 }
 
 /** ICON p.104 Hatred of X: half damage to foes other than X. The hated target
@@ -363,40 +577,57 @@ export function saveRerollWindow(
 }
 
 /** Apply fully-determined damage (all mitigation already resolved) to the
- * target, including defeat, defiance, counter, and the damage-window hooks.
- * Shared by the immediate path and the held-damage re-application, so a held
- * blow produces exactly the effects it would have produced immediately. */
-function applyDeterminedDamage(
+ * target, including defeat, defiance, counter, and reaction hooks. Shared by
+ * direct event replay and the held-damage re-application, so a held blow
+ * produces exactly the effects it would have produced immediately.
+ *
+ * Damage-window creation stays in `applyDamage`: replayed core events do not
+ * have enough provenance yet to safely open a new interrupt window.  The
+ * TODO in `rules-foundations.md` tracks upgrading those events to a full
+ * DamageIntent ledger. */
+/**
+ * These switches intentionally name each reaction separately.  A single
+ * `reactions: false` flag made Counter accidentally disable Gentleness for
+ * the same source damage instance. Add a new reaction here only with a
+ * source-specific recursion decision and a cross-reaction fixture.
+ */
+export interface DamageReactionOptions {
+  allowCounter?: boolean;
+  allowGentleness?: boolean;
+}
+
+export function applyDeterminedEncounterDamage(
   state: EncounterState,
   target: EncounterActor,
   source: EncounterActor | undefined,
   damage: EncounterHeldDamage,
-) {
-  let { amount, damageType } = damage;
-  if (amount <= 0) return;
+  options: DamageReactionOptions = {},
+): AppliedDamage | null {
+  const { amount, damageType } = damage;
+  const bypassVigor = damage.bypassVigor ?? damageType === 'divine';
+  if (amount <= 0 || target.defeated || target.ruleState['damage-immune'] === true) return null;
   const targetConditions = encounterConditionSet(target);
-  // ICON p.138: while the user defies death (Boiling Blood), damage cannot
-  // reduce the actor past 1 hp. Clamped at application time so a held lethal
-  // blow that lands after the interrupt arms the effect behaves exactly like
-  // an immediate one.
-  if (defyDeathActive(target)) {
-    const ceiling = (damageType === 'divine' ? target.hp : target.vigor + target.hp) - 1;
-    amount = Math.min(amount, Math.max(0, ceiling));
-  }
-  if (damageType === 'divine') target.hp = Math.max(0, target.hp - amount);
-  else {
-    const vigorDamage = Math.min(target.vigor, amount);
-    target.vigor -= vigorDamage;
-    target.hp = Math.max(0, target.hp - (amount - vigorDamage));
-  }
+  const wouldDefeatWithoutDefiance = bypassVigor
+    ? amount >= target.hp
+    : amount >= target.vigor + target.hp;
+  const defiance = !damage.ignoreDefiance && targetConditions.has('defiance') && damageType !== 'divine' && wouldDefeatWithoutDefiance;
+  // ICON p.138 Defy Death and p.104 Defiance both impose an application-time
+  // HP floor. They are intentionally not folded into mitigation arithmetic.
+  const applied = applyDeterminedDamageToVitals(target, {
+    amount,
+    bypassVigor,
+    minimumHp: defyDeathActive(target) || defiance ? 1 : 0,
+  });
+  target.hp = applied.hp;
+  target.vigor = applied.vigor;
+  if (applied.amountApplied <= 0) return applied;
   if (source && source.side !== target.side) target.statuses = target.statuses.filter((status) => status !== 'pacified');
-  if (target.hp <= 0 && targetConditions.has('defiance') && damageType !== 'divine') {
-    target.hp = 1;
+  if (defiance) {
     target.conditions = target.conditions.filter(({ id }) => id !== 'defiance');
     target.ruleState['damage-immune'] = true;
-    target.ruleStateOwners['damage-immune'] = damage.sourceActorId;
+    target.ruleStateOwners['damage-immune'] = source?.id ?? null;
   } else if (target.hp <= 0) defeatActor(state, target);
-  if (source && source.side !== target.side && targetConditions.has('counter')) retaliate(state, source);
+  if (options.allowCounter !== false && source && source.side !== target.side && targetConditions.has('counter')) retaliate(state, source, target);
   // ICON p.178 Aria: foe damage while the performance is pending grows the
   // blast from small to medium to large at the start of the user's next turn.
   if (target.ruleState['aria:pending'] === true && source && source.side !== target.side) {
@@ -415,7 +646,8 @@ function applyDeterminedDamage(
   // ICON p.179 Gentleness: a character that deals damage while in the stance's
   // aura takes 1 divine damage. Applied directly (mirroring Counter) so the
   // reflection cannot recurse.
-  if (source && source.id !== target.id) gentlenessReflection(state, source);
+  if (options.allowGentleness !== false && source && source.id !== target.id) gentlenessReflection(state, source);
+  return applied;
 }
 
 /** ICON p.107: apply a window's held damage — the final mitigated amount that
@@ -427,30 +659,38 @@ export function applyHeldDamage(state: EncounterState, targetId: string, held: E
   const target = state.actors[targetId];
   const source = state.actors[held.sourceActorId];
   if (!target || target.defeated || target.ruleState['damage-immune'] === true) return;
-  applyDeterminedDamage(state, target, source, held);
+  applyDeterminedEncounterDamage(state, target, source, held);
 }
 
 function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { kind: 'damage' }>) {
   const target = state.actors[mutation.actorId];
   const source = state.actors[mutation.sourceActorId];
-  if (!target || target.defeated || target.ruleState['damage-immune'] === true) return;
+  if (!target || target.defeated) return;
   if (mutation.damageType === 'sacrifice') {
-    target.hp = Math.max(1, target.hp - mutation.amount);
+    const applied = applyDeterminedDamageToVitals(target, {
+      amount: mutation.amount,
+      bypassVigor: true,
+      minimumHp: 1,
+    });
+    target.hp = applied.hp;
+    target.vigor = applied.vigor;
     return;
   }
-  let amount = mutation.amount;
-  const sourceConditions = source ? encounterConditionSet(source) : new Set<string>();
-  const targetConditions = encounterConditionSet(target);
-  if (targetConditions.has('intangible') && source && source.side !== target.side) return;
-  if (targetConditions.has('dodge') && (mutation.delivery === 'miss' || mutation.delivery === 'area' || mutation.delivery === 'save-success')) return;
-  if (mutation.damageType !== 'divine' && mutation.damageType !== 'piercing' && sourceConditions.has('weakened')) amount = Math.max(0, amount - 2);
-  if (mutation.damageType !== 'divine' && sourceConditions.has('pacified')) amount = Math.ceil(amount / 2);
-  if (mutation.damageType !== 'divine' && hatredDivertsDamage(state, source, target)) amount = Math.ceil(amount / 2);
-  if (amount > 0 && targetConditions.has('vulnerable')) amount += 1;
-  if (mutation.damageType === 'normal') amount = Math.max(0, amount - target.armor);
-  const sourceDistance = source && source.onBattlefield && target.onBattlefield ? Math.max(Math.abs(source.position.x - target.position.x), Math.abs(source.position.y - target.position.y)) : 0;
-  const aetherwall = targetConditions.has('aetherwall') && sourceDistance > 2;
-  if (mutation.damageType !== 'divine' && (targetConditions.has('resistance') || aetherwall || (!mutation.ignoreCover && target.ruleState.cover === true))) amount = Math.ceil(amount / 2);
+  const determination = determineEncounterDamage(state, {
+    targetId: target.id,
+    sourceActorId: source?.id,
+    sourceRuleId: mutation.sourceId,
+    amount: mutation.amount,
+    damageType: mutation.damageType,
+    delivery: mutation.delivery,
+    instance: mutation.instance,
+    ignoreCover: mutation.ignoreCover,
+    ignoreDodge: mutation.ignoreDodge,
+    ignoreArmor: mutation.ignoreArmor,
+  });
+  const amount = determination.amount;
+  if (amount <= 0) return;
+  const bypassVigor = mutation.bypassVigor ?? mutation.damageType === 'divine';
   // ICON p.107: damage from a foe is held while the target has an available
   // when-damaged interrupt — the damage is determined but not applied yet, and
   // the interrupt resolves before it applies (p.128 Righteous Disdain). A
@@ -459,7 +699,7 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
   // being defeated. The held damage applies after the interrupt resolves, or
   // at the end of the turn; an interrupt that re-deals the damage consumes it.
   const whenDamagedAvailable = hasAvailableWhenDamagedInterrupt(target);
-  const defeatedAvailable = hasAvailableDefeatedInterrupt(target) && (mutation.damageType === 'divine' ? amount >= target.hp : amount >= target.vigor + target.hp);
+  const defeatedAvailable = hasAvailableDefeatedInterrupt(target) && (bypassVigor ? amount >= target.hp : amount >= target.vigor + target.hp);
   if (amount > 0 && source && source.side !== target.side && state.pendingInterrupts && (whenDamagedAvailable || defeatedAvailable)) {
     state.pendingInterrupts.push({
       id: `when-damaged:${target.id}:${state.revision}:${state.pendingInterrupts.length}`,
@@ -472,23 +712,29 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
       heldDamage: {
         amount,
         damageType: mutation.damageType,
+        bypassVigor,
         sourceActorId: mutation.sourceActorId,
         sourceId: mutation.sourceId,
         instance: mutation.instance,
         delivery: mutation.delivery,
         ignoreCover: mutation.ignoreCover,
+        ...(mutation.ignoreDodge ? { ignoreDodge: true } : {}),
+        ...(mutation.ignoreDefiance ? { ignoreDefiance: true } : {}),
       },
     });
     return;
   }
-  applyDeterminedDamage(state, target, source, {
+  applyDeterminedEncounterDamage(state, target, source, {
     amount,
     damageType: mutation.damageType,
+    bypassVigor,
     sourceActorId: mutation.sourceActorId,
     sourceId: mutation.sourceId,
     instance: mutation.instance,
     delivery: mutation.delivery,
     ignoreCover: mutation.ignoreCover,
+    ...(mutation.ignoreDodge ? { ignoreDodge: true } : {}),
+    ...(mutation.ignoreDefiance ? { ignoreDefiance: true } : {}),
   });
   // ICON p.107: damage dealt opens a 'when-damaged' interrupt window for the
   // target. Windows resolve most-recently-triggered first (LIFO by encounter
@@ -542,14 +788,20 @@ function shoveResolution(state: EncounterState, mutation: Extract<RuleMutation, 
   return { position, collided };
 }
 
-function applyMovement(state: EncounterState, mutation: Extract<RuleMutation, { kind: 'move' }>) {
+function applyMovement(state: EncounterState, mutation: Extract<RuleMutation, { kind: 'move' }>): boolean {
   const actor = state.actors[mutation.actorId];
-  if (!actor || actor.defeated || encounterConditionSet(actor).has('immobile')) return;
+  if (!actor || actor.defeated || encounterConditionSet(actor).has('immobile')) return false;
+  const beforePosition = { ...actor.position };
+  const beforeBattlefield = actor.onBattlefield;
+  const moved = () => beforeBattlefield !== actor.onBattlefield || !samePosition(beforePosition, actor.position);
   if (mutation.movement === 'remove') {
     actor.onBattlefield = false;
-    return;
+    return moved();
   }
   if (mutation.movement === 'place') {
+    // TODO(ICON-rules, pp.87–90, 107): replace these local destination paths
+    // with a shared SpatialIntent gateway (bounds, occupancy, footprint,
+    // rampart, hostile movement, line of effect, and source-specific choice).
     // Placement is forced movement (a throw, a summon), not a teleport, so
     // Rampart (p.104, which blocks dashing, flying, and teleporting only)
     // does not apply.
@@ -558,7 +810,7 @@ function applyMovement(state: EncounterState, mutation: Extract<RuleMutation, { 
       actor.position = { ...destination };
       actor.onBattlefield = true;
     }
-    return;
+    return moved();
   }
   if (mutation.movement === 'teleport') {
     const destination = mutation.positions.at(-1);
@@ -571,15 +823,51 @@ function applyMovement(state: EncounterState, mutation: Extract<RuleMutation, { 
         actor.onBattlefield = true;
       }
     }
-    return;
+    return moved();
   }
   if (mutation.positions.length > 0) {
     actor.position = { ...mutation.positions.at(-1)! };
     actor.onBattlefield = true;
-    return;
+    return moved();
   }
   const resolved = shoveResolution(state, mutation);
   if (resolved) actor.position = resolved.position;
+  return moved();
+}
+
+/**
+ * ICON p.104 Slashed is a post-move damage trigger only when the moved
+ * character or an ally used an ability to move them. Core Move/Dash do not
+ * enter here: they are reducer commands, not ability mutations.
+ *
+ * TODO(ICON-rules, pp.94, 107): when a durable MoveIntent exists, attach the
+ * source ability and trigger-window record there. Until then this is the sole
+ * source-side gate; do not reintroduce Slashed in the generic movement planner
+ * or infer it from position changes elsewhere.
+ */
+function applySlashedAfterAbilityMove(
+  state: EncounterState,
+  mutation: Extract<RuleMutation, { kind: 'move' }>,
+  moved: boolean,
+) {
+  if (!moved) return;
+  const actor = state.actors[mutation.actorId];
+  const source = state.actors[mutation.sourceActorId];
+  // Conditions are the canonical durable representation; `statuses` is a
+  // compatibility projection for legacy/core consumers and may be absent on
+  // a valid hydrated snapshot.
+  if (!actor || !actor.onBattlefield || actor.defeated || actor.slashedTriggeredThisTurn || !encounterConditionSet(actor).has('slashed')) return;
+  if (!source || source.side !== actor.side) return;
+  determineAndApplyEncounterDamage(state, {
+    targetId: actor.id,
+    sourceRuleId: 'core:slashed',
+    amount: 4,
+    damageType: 'normal',
+    instance: 1,
+    delivery: 'effect',
+    ignoreCover: true,
+  });
+  actor.slashedTriggeredThisTurn = true;
 }
 
 export function applyRuleMutation(state: EncounterState, mutation: RuleMutation, mutationIndex: number) {
@@ -593,7 +881,7 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
     }
     case 'vigor': {
       const actor = state.actors[mutation.actorId];
-      if (actor && !actor.defeated && !encounterConditionSet(actor).has('shattered')) actor.vigor = Math.min(mutation.uncapped ? Number.MAX_SAFE_INTEGER : actor.vitality, actor.vigor + mutation.amount);
+      if (actor) gainVigor(state, actor, mutation.amount, { uncapped: mutation.uncapped });
       break;
     }
     case 'condition': {
@@ -625,10 +913,22 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
     }
     case 'cure': {
       const actor = state.actors[mutation.actorId];
-      if (actor && !actor.defeated) actor.vigor = Math.min(actor.vitality, actor.vigor + (actor.hp <= actor.baseMaxHp / 2 ? actor.vitality : 4));
+      // The lifecycle-only Aria/Chastise reducer calls intentionally retain
+      // their existing no-dice behavior; command-time Cure emits its saves
+      // through status-saves.ts.  Both use this shared authoritative denial
+      // and wounded-max-HP vigor calculation.  Shattered independently bars
+      // vigor (p.104), but its normal-status save still follows this mutation.
+      if (actor && !actor.defeated && !encounterStatusSavePolicy(state, actor).cureDenied) {
+        const maximumHp = Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality);
+        gainVigor(state, actor, actor.hp <= maximumHp / 2 ? actor.vitality : 4);
+      }
       break;
     }
-    case 'move': applyMovement(state, mutation); break;
+    case 'move': {
+      const moved = applyMovement(state, mutation);
+      applySlashedAfterAbilityMove(state, mutation, moved);
+      break;
+    }
     case 'resource': {
       const actor = state.actors[mutation.actorId];
       if (!actor) break;
@@ -670,6 +970,9 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
       else {
         actor.marks = actor.marks.filter(({ ownerId }) => ownerId !== mutation.ownerId);
         actor.marks.push({ id: generatedId(state, mutation.sourceId, mutationIndex, 'mark'), sourceId: mutation.sourceId, ownerId: mutation.ownerId, markId: mutation.markId, duration: mutation.duration ?? null, state: { ...mutation.state } });
+        // TODO(ICON-rules, p.186): interpret reviewed Rot `noDefiance` and
+        // ally Regenerate effects through an explicit source-ID passive
+        // projection. Never make arbitrary mark state mechanically active.
       }
       break;
     }
