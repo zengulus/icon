@@ -37,7 +37,7 @@ replayed for every instance:
 
 - All 144 Job abilities: one `primitives/job-kit.ts` + `docs/job-template.md`, 16 thin
   program files.
-- 20 reviewed foe abilities: one `FOE_ABILITY_RECIPES` table + `primitives/foe-kit.ts` +
+- 22 reviewed foe abilities: one `FOE_ABILITY_RECIPES` table + `primitives/foe-kit.ts` +
   `docs/foe-template.md` — *zero* per-ability resolver code.
 - 36 foe trait IDs: one closed manifest in `content/foes/trait-recipes.ts` /
   `kernels/passive-projection.ts`.
@@ -459,4 +459,4 @@ window, turn-transition plan, trigger-window provenance, and passive/role
 recipes — each as a durable record + pure kernel + declarative template +
 closed source-ID manifest + replay matrix, in that order; then the 3,223
 unresolved clauses reduce to data-authoring rows in the existing recipe
-tables, exactly as the 144 Job abilities and 20 foe recipes already proved.
+tables, exactly as the 144 Job abilities and 22 foe recipes already proved.

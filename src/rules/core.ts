@@ -301,9 +301,9 @@ export const TABLE_FACING_MECHANICS: readonly TableFacingMechanic[] = [
     id: 'chanter:symphony:movement-entry',
     name: 'Symphony (p.178) — mote movement-entry detonation',
     sourcePage: 178,
-    mechanic: 'Motes detonate on movement-end and turn-start; the movement-entry interrupt is not auto-firing.',
-    ruling: 'The player calls the detonation when a character enters the mote\'s space (no movement-entry hook).',
-    status: 'documented',
+    mechanic: 'Motes detonate on voluntary-MOVE/DASH entry via the movement-entry trigger fold and on turn-start via the lifecycle hook.',
+    ruling: 'The entry trigger fires at the command boundary; the turn-start hook is a no-op when the mote was already consumed.',
+    status: 'wired',
   },
   {
     id: 'chanter:monogatari:tales',

@@ -12,7 +12,7 @@ import { applyDamageLedger } from './automation/kernels/damage-ledger.js';
 import { decideDamageWindow } from './automation/kernels/trigger-window.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
 import { applyCombatStartTraitEffects, planTurnTransition, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
-import { detonateSymphonyMote, tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
+import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
 import './automation/content/registry.js';
@@ -2056,8 +2056,8 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // belongs to the self/ally ability-mutation trigger in the encounter
         // adapter, not to a standard MOVE/DASH event. Leave old snapshots
         // readable without perpetuating their incorrect core-movement damage.
-        // ICON p.178 Symphony: entering a mote space detonates it.
-        detonateSymphonyMote(state, actor);
+        // Symphony mote movement-entry detonation is now handled by the
+        // movement-entry trigger fold (kernels/movement-triggers.ts), not here.
         break;
       }
       case 'ATTACK_RESOLVED': {

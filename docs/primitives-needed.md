@@ -56,7 +56,7 @@ consumer and the primitive that should replace the hand-written code.
 | **Sacrifice** — HP-for-effect, flat vs percent, cost overrides | Dropkick (sacrifice 6), Takedown (sacrifice 4), Great Suplex (up to 6 + fly half), Wolfheart (25%), Inner Furnace (Infuse cost), Crimson King ranks (cost overrides) | partial — `sacrifice` damage type exists; no HP-payment seam |
 | **Ability-use blessing/combo spend** — spend 1 token for a package, 3 for the bigger effect; spend combo to activate charge | Blessing of Faith / Rebirth / War (traits), Songweave (trait), Divine Grace (trait), Felicity (fly the marked ally), Umbra talent 2 | missing — resource registry exists, spend seam does not |
 | **Use ledger** — once-per-turn/round/combat gates with a recorded key | Midas (`midas:used`), Sucker Punch (`sucker-punch:used`), `interruptUses`, Chain Reaction (`chain-reaction-used`), Bull's Strength guard, Aether Deflection (once per combat) | partial — per-site keys; no shared gate |
-| **Movement-entry / -exit trigger hook** | Party Favor (enter → detonate), Symphony motes, Warding Bolts (start inside / end outside), Fortress (foe entry damage), Grapple (save to break adjacency), Mist Strider (consume cloud), Underway (portal teleport) | **missing** — the documented single-pass VM gap |
+| **Movement-entry / -exit trigger hook** | Symphony motes, Warding Bolts (start inside / end outside), Fortress (foe entry damage), Grapple (save to break adjacency), Mist Strider (consume cloud), Underway (portal teleport) | **partial** — voluntary-MOVE entry wired for Party Favor mine (`kernels/movement-triggers.ts`); remaining consumers need content rows; forced-movement entry is a future fold |
 | **Delay anchor** — record target at command time, resolve at the marked actor's boundary | Great Giorgios, Six Hells Trigram, Aria, Morrigan, Dragon Dive (`dragon-dive:target`), Assassinate, Showdown, Incubus, Stampede | partial — lifecycle recipes exist; anchor+resolve shape per ability |
 | **Area shapes as data** — arc, cross, rotation | Diablo (cross), Pandaemonium (rearrangement rotation); arc shape pending in `computeSpatialArea` | partial — burst/line done |
 | **Combo sub-action primitive** — base→combo version swap + token spend | Penumbra, The Hook, Indignation, FLEET, PURGATORIO, DAWN, CHARISM, Sweet Torment, Succubus, Flying Sleeves | partial — `combo` resource + `actionId: 'combo'` per ability |
@@ -137,7 +137,7 @@ The consolidated build list. A primitive is `existing` (usable today),
 | Sacrifice + cost overrides | jobs/traits/relics | partial | F0 |
 | Blessing / combo ability-use spend | jobs/traits | missing | resources |
 | Use ledger | jobs | partial | F3 |
-| Movement-entry/-exit hook | jobs/foes | missing | F1 |
+| Movement-entry/-exit hook | jobs/foes | partial | F1 |
 | Delay anchor | jobs | partial | F3 |
 | Area shapes (arc/cross/rotation) | jobs/foes | partial | F1 |
 | Combo sub-actions | jobs | partial | resources |
@@ -169,9 +169,9 @@ generic factory + fixture, and converts its consumers into data:
    Strive/Demon Strength/Spite/Wolfheart, and the relic invoke cost model.
 6. **Sacrifice + blessing/combo spend + use ledger** — the resource economy
    primitives that unlock the spend-gated traits and Crimson King.
-7. **Mark-trigger recipes + movement-entry hook + delay anchor** — the
+7. **Mark-trigger recipes + remaining movement-entry hooks + delay anchor** — the
    reactive job traits, mark abilities, and the remaining table-facing
-   windows (Party Favor, Symphony, Warding Bolts, Fortress).
+   windows (Symphony motes, Warding Bolts, Fortress).
 8. **Relic invoke / rank / aspect recipes** — the 120 ranks + 40 aspects as
    data rows.
 9. **Foe recipe primitives + mob model** — the remaining 1,247 foe abilities.

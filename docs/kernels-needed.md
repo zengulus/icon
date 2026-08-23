@@ -20,7 +20,7 @@ gateway, save window, turn lifecycle, trigger windows, passive projection +
 role baselines). Wired slices: 22/65 Job traits, 13/288 talents executable
 (10 fold-wired + 3 program-level — Demon Cutter t2's pre-ability rush,
 Draken Cross t2's charged medium blasts, and Pyre t1's comeback ally
-immunity), 20 foe ability recipes, 36 foe movement-trait IDs, the p.298 role
+immunity), 22 foe ability recipes, 36 foe movement-trait IDs, the p.298 role
 baselines. The audit backlog that the kernels below unblock:
 
 | Kind | Units | Kind | Units |
@@ -172,7 +172,7 @@ end-of-turn 28, start-of-turn 24, start-of-round 18, resistant 18, round-gated
 
 ### 2.2 Foe abilities — 1,247 remaining (`FOE_ABILITY_RECIPES`)
 
-Twenty recipes are wired as declarative data (primitives: attack, shove,
+Twenty-two recipes are wired as declarative data (primitives: attack, shove,
 rush, dash-strike, blast, terrain, mark, swap, vigor, end-turn-stealth). The
 remaining catalog needs these recipe primitives before it converts to data
 rows:

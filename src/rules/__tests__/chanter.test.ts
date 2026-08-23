@@ -337,4 +337,146 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(resolved.terrainEffects.some((effect) => effect.terrain === 'pit' && effect.positions[0]?.x === 3 && effect.positions[0]?.y === 1)).toBe(true);
     expect(resolved.actors[foe.id].marks.some(({ markId }) => markId === 'chastise-charism')).toBe(false);
   });
+
+  describe('Symphony mote movement-entry triggers (ICON p.178)', () => {
+    /** Orthogonal contiguous path from `from` to `to` (Manhattan routing). */
+    function orthogonalPath(from: Position, to: Position): Position[] {
+      const path: Position[] = [];
+      let cx = from.x, cy = from.y;
+      while (cx !== to.x) { cx += Math.sign(to.x - cx); path.push({ x: cx, y: cy }); }
+      while (cy !== to.y) { cy += Math.sign(to.y - cy); path.push({ x: cx, y: cy }); }
+      return path;
+    }
+
+    /** Use Symphony to create real motes, reposition the foe adjacent to the
+     * first mote, and hand the turn to the foe. Returns the mote position
+     * and a one-step path from the foe into the mote. */
+    function symphonyMoteFixture(options: { second?: Position | null } = {}) {
+      const { state: base, hero, foe } = chanterEncounter({
+        foe: { x: 5, y: 1 }, second: options.second ?? { x: 8, y: 8 }, ally: null, ally2: null,
+      });
+      base.actors[hero.id].resources.blessing = 4;
+      const placed = executeCommand(base, {
+        type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', targetIds: [],
+      }, scriptedDice()).state;
+      const motes = motesOf(placed);
+      expect(motes.length).toBeGreaterThanOrEqual(1);
+      const motePos = motes[0].positions[0];
+      // Reposition the foe in the state so it can reach the mote in one step.
+      const adjacent: Position[] = [
+        { x: motePos.x + 1, y: motePos.y }, { x: motePos.x - 1, y: motePos.y },
+        { x: motePos.x, y: motePos.y + 1 }, { x: motePos.x, y: motePos.y - 1 },
+      ];
+      const free = adjacent.find((c) =>
+        c.x >= 0 && c.y >= 0 && c.x < placed.grid.width && c.y < placed.grid.height
+        && !motes.some((m) => m.positions.some((p) => p.x === c.x && p.y === c.y))
+        && !Object.values(placed.actors).some((a) => a.onBattlefield && !a.defeated && a.position && a.position.x === c.x && a.position.y === c.y),
+      );
+      expect(free).toBeDefined();
+      // Mutate the foe's position in the live state (executeCommand may copy actors).
+      placed.actors[foe.id].position = { ...free! };
+      const foeTurn = executeCommand(placed, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+      // The foe in the returned state may be a copy; read it back.
+      const liveFoe = foeTurn.actors[foe.id];
+      return { state: foeTurn, hero, foe: liveFoe, motePos, foeAdjacent: free! };
+    }
+
+    it('a foe moving into a mote space detonates it: foe takes fray, pit created, mote removed', () => {
+      const { state, foe, motePos, foeAdjacent } = symphonyMoteFixture();
+      const moved = executeCommand(state, {
+        type: 'MOVE', actorId: foe.id, path: [motePos], mode: 'standard',
+      }, scriptedDice());
+      expect(moved.state.actors[foe.id].hp).toBe(28); // 32 - fray 4
+      expect(motesOf(moved.state)).toHaveLength(3);
+      expect(moved.state.terrainEffects.some((e) =>
+        e.terrain === 'pit' && e.positions[0]?.x === motePos.x && e.positions[0]?.y === motePos.y,
+      )).toBe(true);
+      const detonation = moved.events.filter((e) =>
+        e.type === 'RULE_MUTATIONS_APPLIED' && e.sourceId === 'chanter:symphony',
+      );
+      expect(detonation).toHaveLength(1);
+      expect(applyEvents(state, moved.events)).toEqual(moved.state);
+    });
+
+    it('a hero moving into a mote space detonates it: hero blessed + flies 1, no pit', () => {
+      // Create a fresh encounter where the hero is adjacent to a mote.
+      let state = createEncounter('Hero mote entry');
+      const hero = actorFromCharacter(validCharacter('Flying Skald'), { x: 1, y: 1 });
+      hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+      hero.chapter = 3;
+      const foe = createFoe('Relict', { x: 8, y: 8 });
+      state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+      state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+      state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+      // Set blessings AFTER start (START_ENCOUNTER resets per-encounter resources).
+      state.actors[hero.id].resources.blessing = 4;
+      // Place a mote at (2,1) — adjacent to the hero at (1,1).
+      state.terrainEffects.push({
+        id: 'hero-test-mote:1', sourceId: 'chanter:symphony', ownerId: hero.id,
+        terrain: 'symphony-mote', positions: [{ x: 2, y: 1 }], height: null, duration: null,
+      });
+      // Hero moves into the mote.
+      const moved = executeCommand(state, {
+        type: 'MOVE', actorId: hero.id, path: [{ x: 2, y: 1 }], mode: 'standard',
+      }, scriptedDice());
+      expect(motesOf(moved.state)).toHaveLength(0);
+      const heroActor = moved.state.actors[hero.id];
+      expect(heroActor.resources.blessing).toBe(5); // 4 base + 1 from detonation
+      // Hero flew 1 toward the nearest foe from the mote position.
+      expect(heroActor.position).not.toEqual({ x: 2, y: 1 }); // no longer at the mote
+      expect(moved.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(false);
+      expect(applyEvents(state, moved.events)).toEqual(moved.state);
+    });
+
+    it('a multi-cell path through a mote detonates it exactly once', () => {
+      const { state, foe, motePos, foeAdjacent } = symphonyMoteFixture();
+      const moved = executeCommand(state, {
+        type: 'MOVE', actorId: foe.id,
+        path: [motePos, foeAdjacent],
+        mode: 'standard',
+      }, scriptedDice());
+      const detonations = moved.events.filter((e) =>
+        e.type === 'RULE_MUTATIONS_APPLIED' && e.sourceId === 'chanter:symphony',
+      );
+      expect(detonations).toHaveLength(1);
+      expect(motesOf(moved.state)).toHaveLength(3);
+      expect(applyEvents(state, moved.events)).toEqual(moved.state);
+    });
+
+    it('movement that does not enter a mote space does not detonate (closed negative)', () => {
+      // Create a fresh encounter with a foe far from any motes.
+      let state = createEncounter('Mote negative test');
+      const hero = actorFromCharacter(validCharacter('Flying Skald'), { x: 1, y: 1 });
+      hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+      hero.chapter = 3;
+      const foe = createFoe('Relict', { x: 9, y: 9 });
+      state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+      state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+      state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+      // Place a mote far from the foe.
+      state.terrainEffects.push({
+        id: 'neg-mote:1', sourceId: 'chanter:symphony', ownerId: hero.id,
+        terrain: 'symphony-mote', positions: [{ x: 1, y: 2 }], height: null, duration: null,
+      });
+      // End the hero's turn so the foe becomes active.
+      state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+      // Foe at (9,9) moves one step — not entering any mote.
+      const moved = executeCommand(state, {
+        type: 'MOVE', actorId: foe.id, path: [{ x: 9, y: 8 }], mode: 'standard',
+      }, scriptedDice());
+      expect(motesOf(moved.state)).toHaveLength(1);
+      expect(moved.state.actors[foe.id].hp).toBe(32);
+      expect(applyEvents(state, moved.events)).toEqual(moved.state);
+    });
+
+    it('the turn-start lifecycle hook is a no-op when the mote was consumed by entry', () => {
+      const { state, foe, motePos } = symphonyMoteFixture();
+      const moved = executeCommand(state, {
+        type: 'MOVE', actorId: foe.id, path: [motePos], mode: 'standard',
+      }, scriptedDice()).state;
+      expect(motesOf(moved)).toHaveLength(3);
+      const afterTurn = executeCommand(moved, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+      expect(afterTurn.actors[foe.id].hp).toBe(28);
+    });
+  });
 });

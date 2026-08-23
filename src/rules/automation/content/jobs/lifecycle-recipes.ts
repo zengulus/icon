@@ -1,5 +1,6 @@
 import { applyRuleMutations, determineAndApplyEncounterDamage } from '../../kernels/encounter-adapter.js';
 import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, registerTurnDiceWindowPlanner } from '../../kernels/lifecycle.js';
+import { registerMovementEntryTrigger } from '../../kernels/movement-triggers.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-geometry.js';
 import type { DiceSource } from '../../../dice.js';
 import type { EncounterActor, EncounterMark, EncounterState, Position } from '../../../types.js';
@@ -31,44 +32,120 @@ export function tickGallowsHumorDie(actor: EncounterActor) {
   actor.ruleStateOwners['gallows-humor:die'] = actor.id;
 }
 
-/** ICON p.178 Symphony: a character that enters or starts a turn on a mote
- * detonates it — a small blast centered on them (foes take fray, allies gain
- * 2 vigor); a triggering hero is blessed and flies 1, a triggering foe gets a
- * pit under them. */
-export function detonateSymphonyMote(state: EncounterState, actor: EncounterActor) {
-  if (!actor.position) return;
-  const mote = state.terrainEffects.find((effect) => effect.terrain === 'symphony-mote' && effect.positions.some((cell) => samePosition(cell, actor.position)));
-  if (!mote) return;
-  state.terrainEffects = state.terrainEffects.filter((effect) => effect !== mote);
+/** Pure helper: compute the deterministic mutations for a Symphony mote
+ * detonation at `position`. No side effects — returns only the mutations that
+ * ride on `RULE_MUTATIONS_APPLIED` events. Used by both the movement-entry
+ * trigger (ICON p.178 "enters the space") and the turn-start lifecycle hook
+ * ("starts a turn on a mote"). */
+export function symphonyMoteDetonationMutations(
+  state: EncounterState,
+  actor: EncounterActor,
+  position: Position,
+): RuleMutation[] {
+  const mote = state.terrainEffects.find((effect) =>
+    effect.terrain === 'symphony-mote' && effect.positions.some((cell) => samePosition(cell, position)),
+  );
+  if (!mote) return [];
   const owner = mote.ownerId ? state.actors[mote.ownerId] : undefined;
   const ownerSide = owner?.side ?? actor.side;
-  const center = { ...actor.position };
+  const center = { ...position };
   const blast = squareArea(center, 1);
+  const mutations: RuleMutation[] = [];
   for (const character of Object.values(state.actors)) {
     if (character.defeated || !character.onBattlefield || !character.position) continue;
     if (!blast.some((cell) => samePosition(cell, character.position))) continue;
     if (character.side === ownerSide) {
-      applyRuleMutations(state, [{ kind: 'vigor', sourceId: 'chanter:symphony', actorId: character.id, amount: 2, uncapped: false }]);
+      mutations.push({ kind: 'vigor', sourceId: 'chanter:symphony', actorId: character.id, amount: 2, uncapped: false });
     } else {
-      applyRuleMutations(state, [{ kind: 'damage', sourceId: 'chanter:symphony', sourceActorId: actor.id, actorId: character.id, amount: owner?.fray ?? actor.fray, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false }]);
+      mutations.push({ kind: 'damage', sourceId: 'chanter:symphony', sourceActorId: actor.id, actorId: character.id, amount: owner?.fray ?? actor.fray, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false });
     }
   }
   if (actor.side === ownerSide) {
-    applyRuleMutations(state, [{ kind: 'resource', sourceId: 'chanter:symphony', actorId: actor.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null }]);
+    mutations.push({ kind: 'resource', sourceId: 'chanter:symphony', actorId: actor.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null });
     // May fly 1: deterministic — one step toward the nearest foe (or +x).
-    const foes = Object.values(state.actors).filter((candidate) => candidate.side !== actor.side && candidate.onBattlefield && !candidate.defeated && candidate.position);
+    const foes = Object.values(state.actors).filter((candidate) =>
+      candidate.side !== actor.side && candidate.onBattlefield && !candidate.defeated && candidate.position,
+    );
     const direction = foes.length > 0
-      ? axisDirection(actor.position, foes.sort((a, b) => distance(a.position!, actor.position!) - distance(b.position!, actor.position!) || a.id.localeCompare(b.id))[0].position!)
+      ? axisDirection(position, foes.sort((a, b) =>
+        distance(a.position!, position!) - distance(b.position!, position!) || a.id.localeCompare(b.id),
+      )[0].position!)
       : { x: 1, y: 0 };
     const next = { x: center.x + Math.sign(direction.x), y: center.y + Math.sign(direction.y) };
     const free = next.x >= 0 && next.y >= 0 && next.x < state.grid.width && next.y < state.grid.height
-      && !Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position && samePosition(candidate.position, next))
+      && !Object.values(state.actors).some((candidate) =>
+        candidate.onBattlefield && !candidate.defeated && candidate.position && samePosition(candidate.position, next),
+      )
       && !state.grid.terrain.some((cell) => samePosition(cell.position, next) && cell.type === 'impassable');
-    if (free) applyLifecycleAbilityMove(state, actor, 'chanter:symphony', 'fly', next);
-  } else {
-    state.terrainEffects.push({ id: `symphony-pit:${actor.id}:${state.revision}`, sourceId: 'chanter:symphony', ownerId: actor.id, terrain: 'pit', positions: [center], height: null, duration: null });
+    if (free) {
+      mutations.push({
+        kind: 'move', sourceId: 'chanter:symphony', sourceActorId: actor.id, actorId: actor.id,
+        movement: 'fly', distance: 1, positions: [next], direction, phasing: false,
+      });
+    }
+  }
+  return mutations;
+}
+
+/** ICON p.178 Symphony: a character that enters or starts a turn on a mote
+ * detonates it — a small blast centered on them (foes take fray, allies gain
+ * 2 vigor); a triggering hero is blessed and flies 1, a triggering foe gets a
+ * pit under them. The mote is consumed; the pit is a side effect. */
+export function detonateSymphonyMote(state: EncounterState, actor: EncounterActor) {
+  if (!actor.position) return;
+  const mote = state.terrainEffects.find((effect) => effect.terrain === 'symphony-mote' && effect.positions.some((cell) => samePosition(cell, actor.position)));
+  if (!mote) return;
+  // Compute mutations while the mote is still in state (the helper reads it).
+  const mutations = symphonyMoteDetonationMutations(state, actor, actor.position);
+  // Consume the mote.
+  state.terrainEffects = state.terrainEffects.filter((effect) => effect !== mote);
+  if (mutations.length > 0) applyRuleMutations(state, mutations);
+  // Pit creation is a side effect not representable as a pure mutation:
+  // the mote owner is a foe of the triggering actor.
+  const owner = mote.ownerId ? state.actors[mote.ownerId] : undefined;
+  const ownerSide = owner?.side ?? actor.side;
+  if (actor.side !== ownerSide) {
+    state.terrainEffects.push({
+      id: `symphony-pit:${actor.id}:${state.revision}`, sourceId: 'chanter:symphony',
+      ownerId: actor.id, terrain: 'pit', positions: [{ ...actor.position }], height: null, duration: null,
+    });
   }
 }
+
+/** ICON p.178 Symphony mote movement-entry trigger: "a character that enters
+ * [a mote] detonates it." Registered as a voluntary-MOVE entry trigger so
+ * the detonation fires at the command boundary and replays identically. The
+ * mote terrain is consumed through the returned terrain removal mutation;
+ * the turn-start lifecycle hook above handles the "starts a turn on a mote"
+ * case and is a no-op when the mote was already consumed. */
+registerMovementEntryTrigger({
+  sourceId: 'chanter:symphony',
+  matchesCell: (state, cell) => state.terrainEffects.some((effect) =>
+    effect.terrain === 'symphony-mote' && effect.positions.some((position) => samePosition(position, cell)),
+  ),
+  mutations: (state, mover, cell) => {
+    const mote = state.terrainEffects.find((effect) =>
+      effect.terrain === 'symphony-mote' && effect.positions.some((position) => samePosition(position, cell)),
+    );
+    if (!mote) return [];
+    // Compute detonation mutations while the mote is still in state.
+    const detonation = symphonyMoteDetonationMutations(state, mover, cell);
+    const owner = mote.ownerId ? state.actors[mote.ownerId] : undefined;
+    const ownerSide = owner?.side ?? mover.side;
+    const result: RuleMutation[] = [
+      { kind: 'terrain', sourceId: 'chanter:symphony', sourceActorId: mover.id, operation: 'remove', terrain: 'symphony-mote', positions: [...mote.positions], height: null },
+      ...detonation,
+    ];
+    // Pit creation for foes entering the mote (side effect baked into mutations).
+    if (mover.side !== ownerSide) {
+      result.push({
+        kind: 'terrain', sourceId: 'chanter:symphony', sourceActorId: mover.id,
+        operation: 'create', terrain: 'pit', positions: [{ ...cell }], height: null,
+      });
+    }
+    return result;
+  },
+});
 
 
 /** ICON p.150 Bomb summon effect: when all bombs are detonated, each explodes
