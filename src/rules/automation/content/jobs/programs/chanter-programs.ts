@@ -44,9 +44,10 @@ import {
  * - Aria's special \"damaged by a foe ability\" growth is a reducer counter;
  *   Monogatari tales 1 (Fury) and 6 (Triumph) and the \"roll an extra d6 and
  *   choose\" are documented — the Charge gamble takes the higher of two rolls.
- * - Symphony's motes detonate on movement-end and turn-start (the single-pass
- *   VM has no movement-entry interrupt), and the mote creation consumes up to
- *   four blessings deterministically.
+ * - Symphony's motes detonate on voluntary-MOVE/DASH entry via the movement-
+ *   entry trigger fold and on turn-start via the lifecycle hook; forced-
+ *   movement entry is an incomplete semantic boundary. The mote creation
+ *   consumes up to four blessings deterministically.
  */
 
 /** Resolver-driven autohit attack: the standard attack mutation with no roll. */

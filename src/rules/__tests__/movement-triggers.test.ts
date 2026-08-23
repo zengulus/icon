@@ -49,6 +49,9 @@ function mineAndFoeTurn(state: EncounterState, heroId: string, mineAt: Position)
 const partyFavorEvents = (events: ReturnType<typeof executeCommand>['events']) =>
   events.filter((event) => event.type === 'RULE_MUTATIONS_APPLIED' && event.sourceId === 'fool:party-favor');
 
+const partyFavorMutations = (events: ReturnType<typeof executeCommand>['events']) =>
+  events.flatMap((event) => event.type === 'RULE_MUTATIONS_APPLIED' && event.sourceId === 'fool:party-favor' ? event.mutations : []);
+
 describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
   it('a foe moving into the mine cell detonates it automatically and removes it', () => {
     const { state, hero, foe } = movementFixture();
@@ -110,6 +113,83 @@ describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
     expect(partyFavorEvents(moved.events)).toHaveLength(1);
     // The 4+ gamble blinds the entering foe.
     expect(moved.state.actors[foe.id].statuses).toContain('blind');
+    expect(applyEvents(foeTurn, moved.events)).toEqual(moved.state);
+  });
+
+  it('enter \u2192 leave \u2192 re-enter the same mine detonates only once (re-entry dedup)', () => {
+    // Regression: the fold evaluates cells against the original state, so a
+    // path that revisits the mine cell must not fire the trigger twice.
+    const { state, hero, foe } = movementFixture({ foe: { x: 1, y: 3 } });
+    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 3, y: 3 });
+    // Step-by-step path: (1,3)→(2,3)→(3,3) [mine] → (2,3) [leave] → (3,3) [re-enter]
+    const moved = executeCommand(foeTurn, {
+      type: 'MOVE', actorId: foe.id,
+      path: [{ x: 2, y: 3 }, { x: 3, y: 3 }, { x: 2, y: 3 }, { x: 3, y: 3 }],
+      mode: 'standard',
+    }, scriptedDice(3));
+    // The fold produces one event per trigger source, not per cell.
+    const detonation = partyFavorEvents(moved.events);
+    expect(detonation).toHaveLength(1);
+    // The event carries terrain removal for the mine (once) and one set of
+    // detonation mutations — not two.
+    const terrainRemovals = partyFavorMutations(moved.events).filter(
+      (m) => m.kind === 'terrain' && m.operation === 'remove' && m.terrain === 'party-favor',
+    );
+    expect(terrainRemovals).toHaveLength(1);
+    // Foe took 2 area damage (single detonation), not 4.
+    expect(moved.state.actors[foe.id].hp).toBe(30);
+    expect(moved.state.terrainEffects.some((e) => e.terrain === 'party-favor')).toBe(false);
+    expect(applyEvents(foeTurn, moved.events)).toEqual(moved.state);
+  });
+
+  it('two distinct mines at different positions both detonate in one movement', () => {
+    // Regression: distinct trigger sources at different cells must fire
+    // independently in the same fold.
+    const { state, hero, foe } = movementFixture({ foe: { x: 1, y: 3 } });
+    let placed = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [],
+      input: minePlacement({ x: 3, y: 3 }),
+    }, scriptedDice()).state;
+    // Place a second mine manually (the ability is once-per-turn).
+    placed.terrainEffects.push({
+      id: 'second-mine:fixture', sourceId: 'fool:party-favor', ownerId: hero.id,
+      terrain: 'party-favor', positions: [{ x: 4, y: 3 }], height: null, duration: null,
+    });
+    const foeTurn = executeCommand(placed, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    // Path crosses both mines step-by-step: (1,3)→(2,3)→(3,3)→(4,3)
+    const moved = executeCommand(foeTurn, {
+      type: 'MOVE', actorId: foe.id,
+      path: [{ x: 2, y: 3 }, { x: 3, y: 3 }, { x: 4, y: 3 }],
+      mode: 'standard',
+    }, scriptedDice(3));
+    const detonation = partyFavorEvents(moved.events);
+    expect(detonation).toHaveLength(1);
+    // The single event carries two terrain removals and two detonation batches.
+    const terrainRemovals = partyFavorMutations(moved.events).filter(
+      (m) => m.kind === 'terrain' && m.operation === 'remove' && m.terrain === 'party-favor',
+    );
+    expect(terrainRemovals).toHaveLength(2);
+    // Both mines removed.
+    expect(moved.state.terrainEffects.some((e) => e.terrain === 'party-favor')).toBe(false);
+    // Foe took 2 area damage twice = 4 total.
+    expect(moved.state.actors[foe.id].hp).toBe(28);
+    expect(applyEvents(foeTurn, moved.events)).toEqual(moved.state);
+  });
+
+  it('a DASH into the mine detonates it', () => {
+    // Place the foe far from the hero to avoid engagement complications.
+    const { state, hero, foe } = movementFixture({ foe: { x: 1, y: 5 }, hero: { x: 1, y: 1 } });
+    // Mine must be within range 3 of the hero at (1,1).
+    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 1, y: 4 });
+    // DASH from (1,5) into (1,4) [mine].
+    const moved = executeCommand(foeTurn, {
+      type: 'MOVE', actorId: foe.id,
+      path: [{ x: 1, y: 4 }],
+      mode: 'dash',
+    }, scriptedDice(3));
+    expect(partyFavorEvents(moved.events)).toHaveLength(1);
+    expect(moved.state.actors[foe.id].hp).toBe(30);
+    expect(moved.state.terrainEffects.some((e) => e.terrain === 'party-favor')).toBe(false);
     expect(applyEvents(foeTurn, moved.events)).toEqual(moved.state);
   });
 });

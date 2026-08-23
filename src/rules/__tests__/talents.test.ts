@@ -48,6 +48,7 @@ function talentEncounter(abilityId: string, talent: 1 | 2, options: { heroAt?: {
   hero.abilityIds = [abilityId];
   hero.traitIds = hero.traitIds.filter((id) => id !== 'stalwart:trait:fortify');
   hero.talents = { [abilityId]: talent };
+  hero.chapter = 3;
   if (options.bloodied) hero.hp = 1;
   // A profile foe carries its role baseline (dodge on skirmishers, armor on
   // heavies); the plain generic foe (armor 0, no traits) keeps blast-damage
@@ -87,8 +88,8 @@ describe('F7 closed talent inventory', () => {
     const recipes = getTalentRecipes(units);
     expect(Object.keys(recipes)).toHaveLength(288);
     expect(Object.keys(recipes).sort()).toEqual([...sourceIds].sort());
-    expect(getExecutableTalentIds().size).toBe(13);
-    expect(getDocumentedTalentIds(units).size).toBe(275);
+    expect(getExecutableTalentIds().size).toBe(29);
+    expect(getDocumentedTalentIds(units).size).toBe(259);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -359,5 +360,145 @@ describe('F7 always trigger (unconditional augmentations, magnitude from state)'
     expect(shoves).toHaveLength(2);
     expect(result.state.actors[foe.id].position).toEqual({ x: 5, y: 1 });
     expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 });
+  });
+});
+describe('F7 comeback trigger — Intimidate talent 1', () => {
+  it('Comeback: Rush 2 — bloodied user rushes 2 squares after the ability resolves', () => {
+    const { state, hero, foe } = talentEncounter('knave:intimidate', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 }, bloodied: true });
+    // Intimidate is chapter 2 — patch the hero's chapter before use
+    state.actors[hero.id].chapter = 2;
+    const comeback = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:intimidate', targetIds: [foe.id] }, scriptedDice());
+    const rushMutations = talentMutationsOf(comeback, 'knave:intimidate').filter((m) => m.kind === 'move' && m.movement === 'rush');
+    expect(rushMutations).toHaveLength(1);
+    expect(rushMutations[0]).toMatchObject({ distance: 2, movement: 'rush' });
+    expect(applyEvents(state, comeback.events)).toEqual(comeback.state); // replay
+  });
+
+  it('Comeback: Rush 2 — full HP user does not rush (control)', () => {
+    const { state, hero, foe } = talentEncounter('knave:intimidate', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    state.actors[hero.id].chapter = 2;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:intimidate', targetIds: [foe.id] }, scriptedDice());
+    const rushMutations = talentMutationsOf(result, 'knave:intimidate').filter((m) => m.kind === 'move' && m.movement === 'rush');
+    expect(rushMutations).toHaveLength(0);
+  });
+});
+
+describe('F7 exceed trigger — God-Hand talent 1', () => {
+  it('Exceed: gain evasion until the end of your next turn', () => {
+    const { state, hero, foe } = talentEncounter('sealer:god-hand', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    const exceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id] }, scriptedDice(20, 4));
+    const evasion = exceed.state.actors[hero.id].conditions.find(({ id }) => id === 'evasion');
+    expect(evasion).toBeDefined();
+    expect(evasion?.sourceId).toBe('sealer:god-hand:talent:1');
+    expect(evasion?.duration?.kind).toBe('turn-end');
+    expect(applyEvents(state, exceed.events)).toEqual(exceed.state); // replay
+
+    const noExceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id] }, scriptedDice(8, 4));
+    expect(noExceed.state.actors[hero.id].conditions.some(({ id }) => id === 'evasion')).toBe(false);
+  });
+});
+
+describe('F7 terrain-create always trigger', () => {
+  it('Upheaval talent 2: creates a pit at the boulder position', () => {
+    const { state, hero, foe } = talentEncounter('colossus:upheaval', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:upheaval', targetIds: [] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'colossus:upheaval').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Underway talent 2: creates up to 3 difficult terrain adjacent to the underway', () => {
+    const { state, hero, foe } = talentEncounter('warden:underway', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:underway', targetIds: [] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'warden:underway').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  // enochian:implode:talent:2 is reclassified — the pit is created by the
+  // delay detonation lifecycle hook, not the fold.
+
+  it('Eye of the Storm talent 1: creates pit and dangerous terrain at the target position', () => {
+    const { state, hero, foe } = talentEncounter('stormbender:eye-of-the-storm', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 4, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:eye-of-the-storm', targetIds: [foe.id] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'stormbender:eye-of-the-storm').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(2); // pit + dangerous
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Blitz talent 1: creates 2 spaces of dangerous terrain near the foe', () => {
+    const { state, hero, foe } = talentEncounter('spellblade:blitz', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:blitz', targetIds: [foe.id] }, scriptedDice(20, 4));
+    const terrainMutations = talentMutationsOf(result, 'spellblade:blitz').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Morrigan talent 2: creates 2 dangerous terrain spaces in range 2 of the target', () => {
+    const { state, hero, foe } = talentEncounter('warden:morrigan', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 4, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:morrigan', targetIds: [foe.id] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'warden:morrigan').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Sidhe talent 1: creates 1 dangerous terrain adjacent to the foe', () => {
+    const { state, hero, foe } = talentEncounter('warden:sidhe', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:sidhe', targetIds: [foe.id] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'warden:sidhe').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('The Tower talent 2: creates 2 difficult terrain spaces in the blast area', () => {
+    const { state, hero, foe } = talentEncounter('seer:the-tower', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:the-tower', targetIds: [foe.id] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'seer:the-tower').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Tsunami talent 1: creates a pit in the tsunami center space', () => {
+    const { state, hero, foe } = talentEncounter('stormbender:tsunami', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:tsunami', targetIds: [] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'stormbender:tsunami').filter((m) => m.kind === 'terrain' && m.operation === 'create');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Heave-Ho talent 1: creates pit under a foe', () => {
+    const { state, hero, foe } = talentEncounter('stormbender:heave-ho', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:heave-ho', targetIds: [] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'stormbender:heave-ho').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Waterspout talent 2: leaves difficult terrain at the vacated space', () => {
+    const { state, hero, foe } = talentEncounter('stormbender:waterspout', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:waterspout', targetIds: [] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'stormbender:waterspout').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Terraforming talent 2: creates up to 3 dangerous terrain spaces in the area', () => {
+    const { state, hero, foe } = talentEncounter('geomancer:terraforming', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id] }, scriptedDice());
+    const terrainMutations = talentMutationsOf(result, 'geomancer:terraforming').filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 });

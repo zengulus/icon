@@ -39,13 +39,16 @@ function isBloodied(actor: EncounterActor): boolean {
 export type TalentStatus = 'wired' | 'program-level' | 'documented';
 
 /** The resolved mutation kinds a wired talent may emit (each without its
- * sourceId — the kernel fills the talent's source id at fold time). */
+ * sourceId — the kernel fills the talent's source id at fold time).
+ * terrain mutations let talents create terrain effects (pits, difficult
+ * terrain, dangerous terrain) as post-resolution effects. */
 export type TalentEffect =
   | Omit<Extract<RuleMutation, { kind: 'vigor' }>, 'sourceId'>
   | Omit<Extract<RuleMutation, { kind: 'resource' }>, 'sourceId'>
   | Omit<Extract<RuleMutation, { kind: 'condition' }>, 'sourceId'>
   | Omit<Extract<RuleMutation, { kind: 'damage' }>, 'sourceId'>
-  | Omit<Extract<RuleMutation, { kind: 'move' }>, 'sourceId'>;
+  | Omit<Extract<RuleMutation, { kind: 'move' }>, 'sourceId'>
+  | Omit<Extract<RuleMutation, { kind: 'terrain' }>, 'sourceId'>;
 
 /** The fold context handed to a wired row's `condition`/`build`: the
  * encounter state, the ability's own produced mutations, and the ability's

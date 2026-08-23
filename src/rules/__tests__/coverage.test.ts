@@ -78,18 +78,18 @@ describe('rules automation coverage gate', () => {
     // pre-ability rush, Draken Cross t2's charged medium blasts, and Pyre
     // t1's comeback ally immunity, implemented in the ability programs and
     // gated on the equipped choice through the projected `talents` surface)
-    // audit as complete — 288 source talents, 10 wired / 3 program-level /
-    // 275 documented. The 43 documented Job traits and every other kind
+    // audit as complete — 288 source talents, 26 wired / 3 program-level /
+    // 259 documented. The 43 documented Job traits and every other kind
     // stay source-visible.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4750,
-      completePrograms: 387,
-      unsupportedPrograms: 2888,
-      completeClauses: 1527,
-      unsupportedClauses: 3223,
+      completePrograms: 403,
+      unsupportedPrograms: 2872,
+      completeClauses: 1543,
+      unsupportedClauses: 3207,
       unsupportedByKind: {
-        core: 70, 'class-trait': 8, 'job-trait': 43, 'limit-break': 16, 'talent': 275, 'mastery': 144,
+        core: 70, 'class-trait': 8, 'job-trait': 43, 'limit-break': 16, 'talent': 259, 'mastery': 144,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 612,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

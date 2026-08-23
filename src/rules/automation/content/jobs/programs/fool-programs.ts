@@ -29,9 +29,11 @@ import {
  *   gamble is taken deterministically).
  * - Party Favor's "when any character enters the space" explosion auto-fires
  *   through the movement-entry trigger fold (kernels/movement-triggers.ts): a
- *   standard MOVE into the mine's space detonates it with the gamble rolled at
- *   the command boundary and recorded on the event. The `detonate` sub-action
- *   through EXECUTE_RULE remains for manual resolution.
+ *   voluntary MOVE/DASH into the mine's space detonates it with the gamble
+ *   rolled at the command boundary and recorded on the event. The source text
+ *   uses unqualified "enters" — forced-movement entry is an incomplete
+ *   semantic boundary. The `detonate` sub-action through EXECUTE_RULE remains
+ *   for manual resolution.
  * - Masquerade is fully wired: a `targeted-by-ability` window holds an ability
  *   aimed at the user, the interrupt swaps places with a willing ally in range
  *   3, and the window's `retarget` redirects the held effects to that ally.

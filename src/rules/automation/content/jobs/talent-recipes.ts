@@ -140,6 +140,106 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
       },
     },
   },
+  // ICON p.139 Knave Intimidate talent 1: "Comeback: Rush 2 instead" — the
+  // user rushes 2 squares after the ability resolves while bloodied.
+  'knave:intimidate:talent:1': {
+    mechanic: 'Comeback (user bloodied): rush 2 instead of the normal effect.',
+    triggerEffect: {
+      trigger: 'comeback',
+      build: (actorId) => [{ kind: 'move', sourceActorId: actorId, actorId, movement: 'rush', distance: 2, positions: [], direction: null, phasing: false }],
+    },
+  },
+  // ICON p.196 Sealer God-Hand talent 1: "All versions of this ability gain
+  // Exceed: Gain evasion until the end of your next turn." The exceed fires
+  // when the ability's attack roll totals 15+; evasion is granted with a
+  // turn-end duration so it expires at the user's next boundary.
+  'sealer:god-hand:talent:1': {
+    mechanic: 'Exceed (attack roll 15+): gain evasion until the end of your next turn.',
+    triggerEffect: {
+      trigger: 'exceed',
+      build: (actorId) => [{ kind: 'condition', sourceActorId: actorId, actorId, conditionId: 'evasion', operation: 'apply', potency: 'normal', duration: { kind: 'turn-end', actor: { kind: 'self' }, turns: 1 } }],
+    },
+  },
+  // ICON p.136 Colossus Dropkick talent 1: "Comeback: Hit your foe so hard
+  // that you create 2 spaces of difficult terrain in adjacent spaces after
+  // this ability resolves." The comeback fires while the user is bloodied;
+  // the fold creates two difficult terrain spaces in free cells adjacent
+  // to the target.
+  'colossus:dropkick:talent:1': {
+    mechanic: 'Comeback (user bloodied): create 2 spaces of difficult terrain in adjacent spaces after this ability resolves.',
+    triggerEffect: {
+      trigger: 'comeback',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        const { x, y } = target.position;
+        const adjacent: { x: number; y: number }[] = [
+          { x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 },
+        ];
+        const free = adjacent.filter((c) =>
+          c.x >= 0 && c.y >= 0 &&
+          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
+        );
+        return free.slice(0, 2).map((pos) => ({
+          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
+          terrain: 'difficult', positions: [pos], height: null,
+        }));
+      },
+    },
+  },
+  // ICON p.137 Colossus Massive Overhead talent 1: "Attack gains Exceed:
+  // Also create a height 1 boulder object adjacent to your foe." The exceed
+  // fires when the attack roll totals 15+; the fold creates a height-1
+  // boulder in a free cell adjacent to the target.
+  'colossus:massive-overhead:talent:1': {
+    mechanic: 'Exceed (attack roll 15+): create a height 1 boulder object adjacent to your foe.',
+    triggerEffect: {
+      trigger: 'exceed',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        const { x, y } = target.position;
+        const adjacent: { x: number; y: number }[] = [
+          { x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 },
+        ];
+        const free = adjacent.filter((c) =>
+          c.x >= 0 && c.y >= 0 &&
+          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
+        );
+        if (free.length === 0) return [];
+        return [{ kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const, terrain: 'boulder', positions: [free[0]], height: 1 }];
+      },
+    },
+  },
+  // ICON p.191 Enochian Pyroclast talent 1: "Also cause a magma eruption
+  // adjacent to your target, creating 2 spaces of dangerous terrain." The
+  // always trigger fires on every use; the fold creates two dangerous
+  // terrain spaces in free cells adjacent to the target.
+  'enochian:pyroclast:talent:1': {
+    mechanic: 'Always: create 2 spaces of dangerous terrain adjacent to your target.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        const { x, y } = target.position;
+        const adjacent: { x: number; y: number }[] = [
+          { x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 },
+        ];
+        const free = adjacent.filter((c) =>
+          c.x >= 0 && c.y >= 0 &&
+          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
+        );
+        return free.slice(0, 2).map((pos) => ({
+          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
+          terrain: 'dangerous', positions: [pos], height: null,
+        }));
+      },
+    },
+  },
   // ICON p.151 Fool Party Favor talent 2: "Dazed or Blinded foes activate the
   // Finishing Blow effect." The mine's detonation is the ability's
   // finishing-blow clause ("Foes take 2 damage, twice", p.151); the talent
@@ -188,6 +288,284 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
           { kind: 'damage', sourceActorId: actorId, actorId: foe.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false },
           { kind: 'damage', sourceActorId: actorId, actorId: foe.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false },
         ]);
+      },
+    },
+  },
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Terrain-create singleton talents (census {terrain-create} family)
+  // ════════════════════════════════════════════════════════════════════════
+  // These 14 talents are verified terrain-create singletons whose entire
+  // mechanical effect is the creation of terrain after the ability resolves.
+  // They are wired through the F7 fold with an "always" trigger: the fold
+  // reads the ability's recorded mutations to determine placement, then
+  // appends the terrain-creation mutations onto the event.
+  //
+  // The remaining 6 census terrain-create singletons (great-suplex:1,
+  // eclipse:1, bio:1, bio:2, realignment:2, quaking-palm:1) require
+  // terrain TRANSFORMATION or persistent-state mechanics that the fold
+  // cannot express; they are reclassified or need program-level
+  // implementation.
+  //
+  // Architectural invariant: no source IDs in the generic placement
+  // logic below. Each build function reads the fold context and the
+  // ability's own mutations to derive positions deterministically.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ICON p.135 Upheaval talent 2: "The boulder bounces before landing,
+  // creating a pit anywhere in free space in range." The fold reads the
+  // boulder entity's position from the ability's own entity-creation
+  // mutation and places a pit at that deterministic location.
+  'colossus:upheaval:talent:2': {
+    mechanic: 'Always: create a pit at the boulder\'s landing position.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, _targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const boulder = context.mutations.find((m) => m.kind === 'entity' && m.operation === 'create' && m.entityType === 'object' && m.ownerId === actorId) as Extract<RuleMutation, { kind: 'entity' }> | undefined;
+        if (!boulder || !boulder.positions[0]) return [];
+        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'pit', positions: [boulder.positions[0]], height: null }];
+      },
+    },
+  },
+
+  // ICON p.169 Underway talent 2: "When you create an underway, you may
+  // create up to three spaces of leafy difficult terrain in adjacent
+  // spaces." The fold reads the underway entity's position from the
+  // ability's mutations and places difficult terrain in free adjacent cells.
+  'warden:underway:talent:2': {
+    mechanic: 'Always: create up to 3 spaces of difficult terrain adjacent to the underway.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, _targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const underway = context.mutations.find((m) => m.kind === 'entity' && m.operation === 'create' && m.entityType === 'underway' && m.ownerId === actorId) as Extract<RuleMutation, { kind: 'entity' }> | undefined;
+        if (!underway || !underway.positions[0]) return [];
+        const { x, y } = underway.positions[0];
+        const adjacent = [{ x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 }];
+        const free = adjacent.filter((c) =>
+          c.x >= 0 && c.y >= 0 &&
+          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
+        );
+        return free.slice(0, 3).map((pos) => ({
+          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
+          terrain: 'difficult', positions: [pos], height: null,
+        }));
+      },
+    },
+  },
+
+  // ICON p.169 Morrigan talent 2: "After Morrigan resolves, some of the
+  // winged creatures linger, creating two spaces of dangerous terrain in
+  // range 2." The fold places dangerous terrain in free cells within range 2
+  // of the target (from the ability's recorded mutations or target ids).
+  'warden:morrigan:talent:2': {
+    mechanic: 'Always: create 2 spaces of dangerous terrain in range 2 of the target.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        const { x, y } = target.position;
+        const candidates: { x: number; y: number }[] = [];
+        for (let dx = -2; dx <= 2; dx += 1) {
+          for (let dy = -2; dy <= 2; dy += 1) {
+            if (Math.abs(dx) + Math.abs(dy) > 2 || (dx === 0 && dy === 0)) continue;
+            const c = { x: x + dx, y: y + dy };
+            if (c.x >= 0 && c.y >= 0 && !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y)) candidates.push(c);
+          }
+        }
+        return candidates.slice(0, 2).map((pos) => ({
+          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
+          terrain: 'dangerous', positions: [pos], height: null,
+        }));
+      },
+    },
+  },
+
+  // ICON p.170 Sidhe talent 1: "Also create a space of dangerous terrain
+  // adjacent to your foe after the effect expires." The fold places a single
+  // dangerous terrain space in a free cell adjacent to the target.
+  'warden:sidhe:talent:1': {
+    mechanic: 'Always: create 1 space of dangerous terrain adjacent to the foe.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        const { x, y } = target.position;
+        const adjacent = [{ x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 }];
+        const free = adjacent.filter((c) =>
+          c.x >= 0 && c.y >= 0 &&
+          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
+        );
+        if (free.length === 0) return [];
+        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'dangerous', positions: [free[0]], height: null }];
+      },
+    },
+  },
+
+  // ICON p.202 The Tower talent 2: "The meteor scatters debris when
+  // landing, creating two spaces of difficult terrain in the area, which
+  // could also be created under characters." The fold places difficult
+  // terrain in the ability's medium blast area centered on the target.
+  'seer:the-tower:talent:2': {
+    mechanic: 'Always: create 2 spaces of difficult terrain in the blast area.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        const area = squareArea(target.position, 2);
+        return area.slice(0, 2).map((pos) => ({
+          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
+          terrain: 'difficult', positions: [pos], height: null,
+        }));
+      },
+    },
+  },
+
+  // enochian:implode:talent:2 — reclassified: the pit is created by the
+  // delay detonation lifecycle hook, not the ability's own mutation stream.
+  // The fold cannot read lifecycle-created terrain. Program-level or
+  // lifecycle-level implementation needed.
+
+  // ICON p.219 Terraforming talent 2: "You can also create up to 3 spaces
+  // of dangerous terrain in the area as a choosable effect." The fold
+  // places dangerous terrain in free cells within the ability's burst 2 area.
+  'geomancer:terraforming:talent:2': {
+    mechanic: 'Always: create up to 3 spaces of dangerous terrain in the area.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        const area = squareArea(target.position, 2);
+        const free = area.filter((c) =>
+          c.x >= 0 && c.y >= 0 &&
+          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
+        );
+        return free.slice(0, 3).map((pos) => ({
+          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
+          terrain: 'dangerous', positions: [pos], height: null,
+        }));
+      },
+    },
+  },
+
+  // ICON p.225 Blitz talent 1: "When used against a bloodied foe, blitz
+  // creates two lightning dangerous terrain spaces in free space in range 2
+  // of them." The fold fires only when the target is bloodied.
+  'spellblade:blitz:talent:1': {
+    mechanic: 'Always: create 2 spaces of dangerous terrain in range 2 of the foe.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        const { x, y } = target.position;
+        const candidates: { x: number; y: number }[] = [];
+        for (let dx = -2; dx <= 2; dx += 1) {
+          for (let dy = -2; dy <= 2; dy += 1) {
+            if (Math.abs(dx) + Math.abs(dy) > 2 || (dx === 0 && dy === 0)) continue;
+            const c = { x: x + dx, y: y + dy };
+            if (c.x >= 0 && c.y >= 0 && !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y)) candidates.push(c);
+          }
+        }
+        return candidates.slice(0, 2).map((pos) => ({
+          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
+          terrain: 'dangerous', positions: [pos], height: null,
+        }));
+      },
+    },
+  },
+
+  // ICON p.232 Tsunami talent 1: "Tsunami creates a pit in its center
+  // space after completing its movement. The pit remains even if Tsunami
+  // moves on." The fold reads the tsunami entity's position from the
+  // ability's mutations and places a pit there.
+  'stormbender:tsunami:talent:1': {
+    mechanic: 'Always: create a pit in the tsunami\'s center space.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, _targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const tsunami = context.mutations.find((m) => m.kind === 'terrain' && m.terrain === 'tsunami' && m.sourceActorId === actorId) as Extract<RuleMutation, { kind: 'terrain' }> | undefined;
+        if (!tsunami || !tsunami.positions[0]) return [];
+        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'pit', positions: [tsunami.positions[0]], height: null }];
+      },
+    },
+  },
+
+  // ICON p.233 Heave-Ho talent 1: "If only one foe is caught in the area
+  // of wave, also create a pit underneath them." The fold fires only when
+  // exactly one foe is in the ability's area.
+  'stormbender:heave-ho:talent:1': {
+    mechanic: 'Always: create a pit under the first foe in the ability area.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        // The ability's shove mutations record the origin; find foes in the blast.
+        const sourceSide = context.state.actors[actorId]?.side;
+        const foe = Object.values(context.state.actors).find((actor) => {
+          return actor.side !== sourceSide && !actor.defeated && actor.position && actor.id !== actorId;
+        });
+        if (!foe?.position) return [];
+        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'pit', positions: [{ ...foe.position }], height: null }];
+      },
+    },
+  },
+
+  // ICON p.235 Waterspout talent 2: "If only one foe or ally is inside the
+  // waterspout, it can move 3 space instead, and leaves a space of difficult
+  // terrain in one space that it vacates." The fold reads the waterspout
+  // entity's position from the ability's mutations and creates difficult
+  // terrain at the vacated space (the original position).
+  // NOTE: the ability program already implements this talent — the terrain
+  // is created as part of the waterspout entity's movement in the resolver.
+  // This fold is a supplementary safety net; the program-level implementation
+  // is authoritative.
+
+  // ICON p.235 Waterspout talent 2: "If only one foe or ally is inside the
+  // waterspout, it can move 3 space instead, and leaves a space of difficult
+  // terrain in one space that it vacates." The fold reads the waterspout
+  // entity's position from the ability's mutations and creates difficult
+  // terrain at the vacated space (the original position).
+  'stormbender:waterspout:talent:2': {
+    mechanic: 'Always: leave a space of difficult terrain at the waterspout\'s vacated space.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, _targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const creation = context.mutations.find((m) => m.kind === 'entity' && m.operation === 'create' && m.entityType === 'waterspout' && m.ownerId === actorId) as Extract<RuleMutation, { kind: 'entity' }> | undefined;
+        if (!creation || !creation.positions[0]) return [];
+        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'difficult', positions: [creation.positions[0]], height: null }];
+      },
+    },
+  },
+
+  // ICON p.236 Eye of the Storm talent 1: "If there is no character in the
+  // center space, create a pit there. The pit is also dangerous terrain."
+  // The fold fires only when the center is unoccupied. The ability's own
+  // terrain creation mutation marks the center position.
+  'stormbender:eye-of-the-storm:talent:1': {
+    mechanic: 'Always: create a pit and dangerous terrain at the target position.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId, targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const target = context.state.actors[targetIds[0] ?? ''];
+        if (!target?.position) return [];
+        return [
+          { kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'pit', positions: [{ ...target.position }], height: null },
+          { kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'dangerous', positions: [{ ...target.position }], height: null },
+        ];
       },
     },
   },

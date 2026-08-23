@@ -303,7 +303,7 @@ Every mechanic in the executable set that still needs a human ruling (or a calle
 | Underway — portal teleport free action | p.170 | documented |
 | Felicity — spend a combo to fly the marked ally | p.177 | documented |
 | Dervish — +1 boon on saves in the aura | p.178 | documented |
-| Symphony — mote movement-entry detonation | p.178 | documented |
+| Symphony — mote movement-entry detonation | p.178 | wired (voluntary-MOVE/DASH entry; forced-movement entry is an incomplete semantic boundary) |
 | Monogatari — tales 1 (Fury) and 6 (Triumph) | p.179 | documented |
 | Cover — exact edge-touch ambiguity | p.92 | documented |
 | Slow turn — turn-order deferral | p.95 | documented |

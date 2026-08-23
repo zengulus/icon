@@ -197,9 +197,9 @@ export const TABLE_FACING_MECHANICS: readonly TableFacingMechanic[] = [
     id: 'fool:party-favor:movement-entry',
     name: 'Party Favor (p.151) — movement-entry detonation',
     sourcePage: 151,
-    mechanic: 'The mine detonates through the movement-entry trigger fold (kernels/movement-triggers.ts) whenever a standard MOVE enters its space; the `detonate` sub-action remains for manual resolution.',
-    ruling: 'Auto-fires on a voluntary MOVE into the mine space; the gamble is pre-rolled at the command boundary and recorded on the event.',
-    status: 'documented',
+    mechanic: 'The mine detonates through the movement-entry trigger fold (kernels/movement-triggers.ts) on voluntary MOVE/DASH entry; the `detonate` sub-action remains for manual resolution. The source text says "when any character enters" — forced-movement entry (rush, shove, teleport) is an incomplete semantic boundary.',
+    ruling: 'Auto-fires on a voluntary MOVE/DASH into the mine space; the gamble is pre-rolled at the command boundary and recorded on the event. Forced-movement entry is not yet wired.',
+    status: 'wired',
   },
   {
     id: 'freelancer:trick-shot:rebound',
@@ -301,8 +301,8 @@ export const TABLE_FACING_MECHANICS: readonly TableFacingMechanic[] = [
     id: 'chanter:symphony:movement-entry',
     name: 'Symphony (p.178) — mote movement-entry detonation',
     sourcePage: 178,
-    mechanic: 'Motes detonate on voluntary-MOVE/DASH entry via the movement-entry trigger fold and on turn-start via the lifecycle hook.',
-    ruling: 'The entry trigger fires at the command boundary; the turn-start hook is a no-op when the mote was already consumed.',
+    mechanic: 'Motes detonate on voluntary-MOVE/DASH entry via the movement-entry trigger fold and on turn-start via the lifecycle hook. The source text says "a character that enters" — forced-movement entry is an incomplete semantic boundary.',
+    ruling: 'The entry trigger fires at the command boundary; the turn-start hook is a no-op when the mote was already consumed. Forced-movement entry is not yet wired.',
     status: 'wired',
   },
   {

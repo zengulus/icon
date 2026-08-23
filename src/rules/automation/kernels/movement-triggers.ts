@@ -18,9 +18,14 @@ import type { RuleMutation } from '../primitives/types.js';
  * boundary with the caller's dice source.
  *
  * The kernel holds no content source IDs — `sourceId` is a content-owned
- * provenance string recorded verbatim. Forced movement (ability-mutation
- * rushes, shoves, teleports) is a separate fold concern; this kernel covers
- * voluntary standard MOVE/DASH commands.
+ * provenance string recorded verbatim.
+ *
+ * Forced movement (ability-mutation rushes, shoves, teleports, place) is not
+ * covered by this kernel. The source text for both Party Favor ("when any
+ * character enters the space", p.151) and Symphony motes ("a character that
+ * enters", p.178) uses unqualified "enters", which semantically includes
+ * forced entry. That is an incomplete semantic boundary — forced-movement
+ * entry is a future fold that must pass the same deterministic-replay bar.
  */
 
 /** The movement the trigger is evaluated against. */
@@ -65,9 +70,17 @@ export interface MovementEntryFold {
   mutations: RuleMutation[];
 }
 
+function cellKey(cell: Position): string { return `${cell.x},${cell.y}`; }
+
 /** Fold the registered entry triggers over a voluntary movement's entered
  * cells. Deterministic: registration order, then path order. Pure — returns
- * mutation batches without mutating state. */
+ * mutation batches without mutating state.
+ *
+ * One-shot deduplication: once a trigger fires for a cell, that cell is
+ * marked consumed and the trigger will not fire again for it during the
+ * same movement fold. This prevents re-entry double-fires (a path that
+ * crosses the same consumed trigger source twice) while still allowing
+ * distinct trigger sources at different positions to fire independently. */
 export function movementEntryTriggerMutations(
   state: EncounterState,
   mover: EncounterActor,
@@ -81,13 +94,17 @@ export function movementEntryTriggerMutations(
   const context: MovementTriggerContext = { enteredCells: entered, exitedCells: exited, voluntary: true, dice };
   const folds: MovementEntryFold[] = [];
   for (const trigger of movementEntryTriggers) {
+    const consumed = new Set<string>();
     let folded: RuleMutation[] = [];
     for (const cell of entered) {
+      const key = cellKey(cell);
+      if (consumed.has(key)) continue;
       if (!trigger.matchesCell(state, cell)) continue;
       // The mover is at the entered cell at the moment of entry; a shallow
       // actor-record copy is enough for the trigger's read-only view.
       const view = { ...state, actors: { ...state.actors, [mover.id]: { ...mover, position: { ...cell } } } };
       folded.push(...trigger.mutations(view, view.actors[mover.id], cell, context));
+      consumed.add(key);
     }
     if (folded.length > 0) folds.push({ sourceId: trigger.sourceId, mutations: folded });
   }
