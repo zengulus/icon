@@ -1,6 +1,7 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { ABILITIES, JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';

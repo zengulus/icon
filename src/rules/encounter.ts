@@ -2,18 +2,29 @@ import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type Encou
 import { findAbility, findClass, findJob } from './catalog.js';
 import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
-import { randomDice, rollDamage, type DiceSource } from './dice.js';
-import { compileRuleSourceUnit } from './automation/compiler.js';
-import type { RuleExecutionContext, RuleExecutionResult, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/types.js';
-import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/manual-programs.js';
+import { randomDice, rollBoonOrCurse, rollDamage, type DiceSource } from './dice.js';
+import { compileRuleSourceUnit } from './automation/content/glue/compiler.js';
+import type { RuleExecutionContext, RuleExecutionResult, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
+import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
-import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, defeatActor, deferrableEffectWindow, defyDeathActive, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, saveRerollWindow } from './automation/encounter-adapter.js';
-import { applyDeterminedDamageToVitals } from './automation/damage-resolution.js';
-import { resolveAttackRoll } from './automation/attack-resolution.js';
-import { queryDirectTarget, type DirectTargetQuery } from './automation/targeting.js';
-import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/runtime.js';
-import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/status-saves.js';
-import { RULE_RESOLVERS } from './automation/resolvers.js';
+import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
+import { applyDamageLedger } from './automation/kernels/damage-ledger.js';
+import { decideDamageWindow } from './automation/kernels/trigger-window.js';
+import { resolveSaveWindow } from './automation/primitives/save-window.js';
+import { applyCombatStartTraitEffects, planTurnTransition, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
+import { detonateSymphonyMote, tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
+// Content registry: registers the lifecycle rows, passive projections, and
+// content hooks every kernel fold below reads. Must load before any command.
+import './automation/content/registry.js';
+import { talentReactiveTrigger, talentTriggerMutations, type TalentReactiveTargets } from './automation/kernels/talent-recipes.js';
+import { applyDeterminedDamageToVitals } from './automation/primitives/damage-resolution.js';
+import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
+import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
+import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
+import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
+import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
+import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
+import { RULE_RESOLVERS } from './automation/content/glue/resolvers.js';
 import { findRuleSourceUnit } from './source-units.js';
 import { planMovementPath } from './movement.js';
 import { durableAssetUrlProblem } from './durable-assets.js';
@@ -215,6 +226,12 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     marks: [],
     stance: null,
     traitIds: [...(jobClass?.traits.map(({ id }) => id) ?? []), ...job.traits.map(({ id }) => id)],
+    // F7: the equipped talent choice per ability (1 or 2), projected from the
+    // character's loadout so the talent fold sees the same durable selection
+    // on command and replay.
+    talents: Object.fromEntries(
+      character.abilities.filter(({ talent }) => talent !== null).map(({ abilityId, talent }) => [abilityId, talent as 1 | 2]),
+    ),
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -266,6 +283,7 @@ export function createFoe(name: string, position: Position): EncounterActor {
     marks: [],
     stance: null,
     traitIds: [],
+    talents: {},
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -347,6 +365,7 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     marks: [],
     stance: null,
     traitIds: foeTraitIds(profile.id),
+    talents: {},
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -538,8 +557,10 @@ function turnEndedEvent(
   cause: TurnEndCause = 'voluntary',
 ): Extract<EncounterEvent, { type: 'TURN_ENDED' }> {
   const next = nextActor(state, actor);
-  const carnevaleGamble = carnevaleGambleForTurnEnd(state, actor, dice);
-  const monogatariGamble = monogatariGambleForTurnEnd(state, actor, dice);
+  // F3: the command boundary plans the whole transition — rolls the dice
+  // windows (Carnevale/Monogatari gambles) and precomputes the ordered
+  // lifecycle participants — so the event carries a replayable intent.
+  const { intent } = planTurnTransition(state, actor, dice, { cause, nextActorId: next.actor.id, nextRound: next.round });
   const statusSaves = resolveEncounterStatusSaves(state, actor, dice, input, excluded, sourceId);
   return {
     type: 'TURN_ENDED',
@@ -549,8 +570,9 @@ function turnEndedEvent(
     saves: statusSaves.saves,
     statusSaveMutations: statusSaves.mutations,
     cause,
-    ...(carnevaleGamble !== undefined ? { carnevaleGamble } : {}),
-    ...(monogatariGamble !== undefined ? { monogatariGamble } : {}),
+    intent,
+    ...(intent.diceWindows.carnevaleGamble !== undefined ? { carnevaleGamble: intent.diceWindows.carnevaleGamble } : {}),
+    ...(intent.diceWindows.monogatariGamble !== undefined ? { monogatariGamble: intent.diceWindows.monogatariGamble } : {}),
   };
 }
 
@@ -563,13 +585,31 @@ function movementEvents(state: EncounterState, command: Extract<EncounterCommand
   const actor = state.actors[command.actorId]!;
   // Six Hells Trigram (p.129): while active, a foe inside that attempts to
   // exit must first pass a save. On a failed save the space outside is not
-  // valid to move to, so the exit move is rejected.
+  // valid to move to, so the exit move is rejected. The save is a recorded
+  // F2 movement-kind SaveWindow — it honors the projected save policy (e.g.
+  // Rot's curse) and the successful result rides the ACTOR_MOVED event so
+  // replay reads the same record. The failed branch's "unable to exit until
+  // the start of their next turn" continuation stays source-visible: it
+  // needs the F3 turn-transition lifecycle to clear a persistent lockout.
+  let exitSave: Extract<RuleMutation, { kind: 'save' }> | undefined;
   if (actor.side === 'foes') {
     const trigram = state.terrainEffects.find((effect) => effect.terrain === 'six-hells-trigram' && effect.ownerId && state.actors[effect.ownerId]?.ruleState['six-hells:stage'] === 'active');
     if (trigram) {
       const inside = (position: Position) => trigram.positions.some((cell) => samePosition(cell, position));
-      if (inside(actor.position) && !inside(plan.destination) && dice.die(20) < 10) {
-        throw new RuleViolation('move.trigram-boundary', `${actor.name} is trapped: the save to leave the Six Hells Trigram failed.`);
+      if (inside(actor.position) && !inside(plan.destination)) {
+        const projected = encounterRuleState(state);
+        const view = projected.actors[actor.id];
+        if (view) {
+          const save = resolveSaveWindow(
+            { state: projected, actorId: actor.id, sourceId: 'demon-slayer:six-hells-trigram', actionId: 'move', timing: 'use', input: {}, dice },
+            view,
+            { id: `demon-slayer:six-hells-trigram:exit:${actor.id}`, kind: 'movement', sourceId: 'demon-slayer:six-hells-trigram', actorId: actor.id },
+          ).mutation;
+          if (!save.success) {
+            throw new RuleViolation('move.trigram-boundary', `${actor.name} is trapped: the save to leave the Six Hells Trigram failed.`);
+          }
+          exitSave = save;
+        }
       }
     }
   }
@@ -592,8 +632,34 @@ function movementEvents(state: EncounterState, command: Extract<EncounterCommand
     bypassVigor: true,
     minimumHp: defyDeathActive(actor) || dangerousUsesDefiance ? 1 : 0,
   });
-  const events: EncounterEvent[] = [{ type: 'ACTOR_MOVED', actorId: actor.id, path: plan.path, mode: plan.mode, dangerousDamage: plan.dangerousDamage, slashedDamage: plan.slashedDamage }];
-  if (dangerous.hp === 0 && !defyDeathActive(actor) && !dangerousUsesDefiance) events.push({ type: 'ACTOR_DEFEATED', actorId: actor.id, woundGained: actor.side === 'heroes' });
+  const flooredAt1 = dangerous.hp === 1 && dangerousDetermination.amount >= actor.hp
+    ? (defyDeathActive(actor) ? 'defy-death' : 'defiance')
+    : null;
+  const defeated = dangerous.hp === 0 && !defyDeathActive(actor) && !dangerousUsesDefiance;
+  const events: EncounterEvent[] = [{ type: 'ACTOR_MOVED', actorId: actor.id, path: plan.path, mode: plan.mode, dangerousDamage: plan.dangerousDamage, slashedDamage: plan.slashedDamage, ...(exitSave ? { exitSave } : {}), ...(plan.dangerousDamage > 0 ? {
+    // F0 damage ledger (source handoff): the terrain amount replays through
+    // determineAndApplyEncounterDamage so p.93 mitigation is re-derived.
+    ledger: {
+      handoff: 'source',
+      targetId: actor.id,
+      sourceActorId: null,
+      sourceRuleId: 'core:dangerous-terrain',
+      instance: 1,
+      delivery: 'terrain',
+      damageType: 'piercing',
+      bypassVigor: true,
+      ignoreCover: true,
+      amount: plan.dangerousDamage,
+      appliedAmount: dangerous.amountApplied,
+      hpDamage: dangerous.hpDamage,
+      vigorDamage: dangerous.vigorDamage,
+      flooredAt1,
+      defeated,
+      woundGained: actor.side === 'heroes',
+      window: null,
+    },
+  } : {}) }];
+  if (defeated) events.push({ type: 'ACTOR_DEFEATED', actorId: actor.id, woundGained: actor.side === 'heroes' });
   return events;
 }
 
@@ -605,23 +671,35 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   if (actor.attackedThisTurn) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
   if (actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
   if (actor.actionsRemaining < cost) throw new RuleViolation('action.insufficient', `A ${command.weight} attack costs ${cost} action${cost === 1 ? '' : 's'}.`);
-  assertDirectTarget(state, actor, target, {
-    relation: 'foe',
+  const attackTargetQuery = {
+    relation: 'foe' as const,
     maximumRange: actor.basicAttackRange,
-    requireLineOfSight: true,
-  }, 'attack');
+    requireLineOfSight: true as const,
+  };
+  assertDirectTarget(state, actor, target, attackTargetQuery, 'attack');
   const actorElevation = elevationAt(state, actor.position);
   const targetElevation = elevationAt(state, target.position);
+  // F6 attack-path trait fold: armed one-shot modifiers (Demon Edge true
+  // strike, Hissatsu +1 boon / true strike / d10) and permanent elevation
+  // mechanics (Pulverize flat damage; the exceed threshold only matters on
+  // the VM path, where exceed effects fire).
+  const traitOwner = { traitIds: actor.traitIds, state: actor.ruleState };
+  const traitModifier = traitAttackModifier(traitOwner, actorElevation - targetElevation);
   const { d20, boon, total, hit, critical, evasionRoll } = resolveAttackRoll({
     defense: target.defense,
+    sourceBoon: traitModifier.boons,
     elevationModifier: actorElevation - targetElevation,
     sourceDazed: actor.statuses.includes('dazed'),
     targetEvasion: encounterConditionSet(target).has('evasion'),
+    trueStrike: traitModifier.trueStrike,
+    bonusDamageFlat: traitModifier.bonusDamageFlat,
   }, dice);
   if (massiveOverheadArmed(actor)) actor.resources['bonus-damage'] = (actor.resources['bonus-damage'] ?? 0) + 1;
   const bonusDice = (critical ? 1 : 0) + Math.max(0, actor.resources['bonus-damage'] ?? 0);
-  const damageRoll = rollDamage(actor.damageDie, hit ? (command.weight === 'heavy' ? 2 : 1) : 0, bonusDice, dice);
-  const rawDamage = (hit ? damageRoll.total : 0) + actor.fray;
+  const damageRoll = rollDamage(effectiveDamageDie({ ...traitOwner, damageDie: actor.damageDie }), hit ? (command.weight === 'heavy' ? 2 : 1) : 0, bonusDice, dice);
+  // Pulverize's +2 applies to the attack's damage on a hit (p.142).
+  const rawDamage = (hit ? damageRoll.total + traitModifier.bonusDamageFlat : 0) + actor.fray;
+  const covered = hasCoverFrom(state, target, actor) && actorElevation <= targetElevation;
   const determination = determineEncounterDamage(state, {
     targetId: target.id,
     sourceActorId: actor.id,
@@ -631,19 +709,76 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
     delivery: hit ? 'hit' : 'miss',
     instance: 1,
     ignoreCover: false,
-    covered: hasCoverFrom(state, target, actor) && actorElevation <= targetElevation,
+    covered,
   });
   const defiance = encounterConditionSet(target).has('defiance');
   const wouldDefeat = determination.amount >= target.vigor + target.hp;
+  // Defiance's application-time HP floor is a durable result, not something
+  // replay can re-infer: the recorded applied amount is already reduced to the
+  // floor, so a later replay from that number would miss the lethal blow and
+  // leave the condition unconsumed without its temporary immunity (p.104).
+  const defianceTriggered = defiance && wouldDefeat;
   const preview = applyDeterminedDamageToVitals(target, {
     amount: determination.amount,
     bypassVigor: false,
-    minimumHp: defyDeathActive(target) || (defiance && wouldDefeat) ? 1 : 0,
+    minimumHp: defyDeathActive(target) || defianceTriggered ? 1 : 0,
   });
   const appliedDamage = preview.amountApplied;
-  const willDefeat = !defyDeathActive(target) && !(defiance && wouldDefeat) && preview.hp === 0;
-  const events: EncounterEvent[] = [{ type: 'ATTACK_RESOLVED', actorId: actor.id, targetId: target.id, weight: command.weight, d20, boonDie: boon, total, evasionRoll, hit, critical, rawDamage, appliedDamage }];
-  if (willDefeat) events.push({ type: 'ACTOR_DEFEATED', actorId: target.id, woundGained: target.side === 'heroes' });
+  const willDefeat = !defyDeathActive(target) && !defianceTriggered && preview.hp === 0;
+  const flooredAt1 = preview.hp === 1 && wouldDefeat ? (defyDeathActive(target) ? 'defy-death' : 'defiance') : null;
+  // F4: the attack's interrupt-window decision is recorded at construction
+  // time — when the target has an armed when-damaged/defeated interrupt, the
+  // blow is held on the replay side (openDamageWindowFromLedger) exactly as
+  // the single-pass VM path would hold it. The record and the replay decision
+  // are the same TriggerWindow registry row.
+  const attackWindow = decideDamageWindow(state, target, {
+    targetId: target.id,
+    sourceActorId: actor.id,
+    determinedAmount: determination.amount,
+    bypassVigor: false,
+    damageType: 'normal',
+  });
+  const events: EncounterEvent[] = [{ type: 'ATTACK_RESOLVED', actorId: actor.id, targetId: target.id, weight: command.weight, d20, boonDie: boon, total, evasionRoll, hit, critical, rawDamage, appliedDamage, ...(defianceTriggered ? { defianceTriggered: true } : {}),
+    // F0 ledger — the AttackResolution (roll/authority provenance) with the
+    // downstream damage ledger (determined handoff) nested inside: the full
+    // post-mitigation amount plus the application result, so replay does not
+    // re-infer the floor from the reduced recorded amount. The attack-window
+    // record (F4) rides both levels.
+    attackResolution: {
+      target: {
+        relation: attackTargetQuery.relation,
+        maximumRange: attackTargetQuery.maximumRange,
+        lineOfSight: attackTargetQuery.requireLineOfSight,
+      },
+      covered,
+      window: attackWindow,
+      damage: {
+        handoff: 'determined',
+        targetId: target.id,
+        sourceActorId: actor.id,
+        sourceRuleId: command.weight === 'heavy' ? 'core:heavy-attack' : 'core:light-attack',
+        instance: 1,
+        delivery: hit ? 'hit' : 'miss',
+        damageType: 'normal',
+        ignoreCover: false,
+        covered,
+        amount: determination.amount,
+        appliedAmount: preview.amountApplied,
+        hpDamage: preview.hpDamage,
+        vigorDamage: preview.vigorDamage,
+        flooredAt1,
+        defeated: willDefeat,
+        woundGained: target.side === 'heroes',
+        window: attackWindow,
+      },
+    },
+  }];
+  // A held blow is not applied at replay (the window holds it), so the defeat
+  // event must not be emitted — ACTOR_DEFEATED defeats mechanically, and the
+  // interrupt (when-damaged or defeated) decides whether the target falls.
+  if (willDefeat && !attackWindow?.held) {
+    events.push({ type: 'ACTOR_DEFEATED', actorId: target.id, woundGained: target.side === 'heroes' });
+  }
   return events;
 }
 
@@ -673,14 +808,40 @@ function vigilanceEvents(state: EncounterState, command: Extract<EncounterComman
   const appliedDamage = command.use === 'guard' ? Math.max(0, (command.damage ?? 0) - roll) : roll;
   const defiance = encounterConditionSet(target).has('defiance');
   const wouldDefeat = appliedDamage >= target.vigor + target.hp;
+  // Like ATTACK_RESOLVED, the recorded amount is already floored at 1 HP by
+  // Defiance, so replay needs the durable trigger result to re-consume the
+  // condition and grant the temporary immunity (p.104).
+  const defianceTriggered = defiance && wouldDefeat;
   const preview = applyDeterminedDamageToVitals(target, {
     amount: appliedDamage,
     bypassVigor: false,
-    minimumHp: defyDeathActive(target) || (defiance && wouldDefeat) ? 1 : 0,
+    minimumHp: defyDeathActive(target) || defianceTriggered ? 1 : 0,
   });
   const appliedDamageAfterDefiance = preview.amountApplied;
-  const events: EncounterEvent[] = [{ type: 'VIGILANCE_SPENT', actorId: actor.id, targetId: target.id, use: command.use, roll, appliedDamage: appliedDamageAfterDefiance }];
-  if (!defyDeathActive(target) && !(defiance && wouldDefeat) && preview.hp === 0) events.push({ type: 'ACTOR_DEFEATED', actorId: target.id, woundGained: target.side === 'heroes' });
+  const flooredAt1 = preview.hp === 1 && wouldDefeat ? (defyDeathActive(target) ? 'defy-death' : 'defiance') : null;
+  const defeated = !defyDeathActive(target) && !defianceTriggered && preview.hp === 0;
+  const events: EncounterEvent[] = [{ type: 'VIGILANCE_SPENT', actorId: actor.id, targetId: target.id, use: command.use, roll, appliedDamage: appliedDamageAfterDefiance, ...(defianceTriggered ? { defianceTriggered: true } : {}),
+    // F0 damage ledger (determined handoff) — same rationale as ATTACK_RESOLVED.
+    ledger: {
+      handoff: 'determined',
+      targetId: target.id,
+      sourceActorId: actor.id,
+      sourceRuleId: 'core:vigilance',
+      instance: 1,
+      delivery: 'effect',
+      damageType: 'normal',
+      ignoreCover: true,
+      amount: appliedDamage,
+      appliedAmount: preview.amountApplied,
+      hpDamage: preview.hpDamage,
+      vigorDamage: preview.vigorDamage,
+      flooredAt1,
+      defeated,
+      woundGained: target.side === 'heroes',
+      window: null,
+    },
+  }];
+  if (defeated) events.push({ type: 'ACTOR_DEFEATED', actorId: target.id, woundGained: target.side === 'heroes' });
   return events;
 }
 
@@ -732,16 +893,24 @@ export function executeRuleProgramWithReactiveTriggers(
 ): RuleExecutionResult {
   const first = executeRuleProgram(program, context, resolvers);
   const missing = [...reactiveRuleTriggers(state, first.mutations)].filter((trigger) => !context.triggers?.has(trigger));
-  if (missing.length === 0) return first;
-  const additional = executeRuleProgram(program, {
-    ...context,
-    triggers: new Set([...(context.triggers ?? []), ...missing]),
-  }, resolvers, { onlyTriggers: new Set(missing) });
-  return {
-    ...first,
-    mutations: [...first.mutations, ...additional.mutations],
-    selectedSteps: orderedSelectedSteps(first.selectedAction, [...first.selectedSteps, ...additional.selectedSteps]),
-  };
+  let mutations = first.mutations;
+  let selectedSteps = first.selectedSteps;
+  if (missing.length > 0) {
+    const additional = executeRuleProgram(program, {
+      ...context,
+      triggers: new Set([...(context.triggers ?? []), ...missing]),
+    }, resolvers, { onlyTriggers: new Set(missing) });
+    mutations = [...first.mutations, ...additional.mutations];
+    selectedSteps = orderedSelectedSteps(first.selectedAction, [...first.selectedSteps, ...additional.selectedSteps]);
+  }
+  // F6 Bull's Strength (p.149): abilities gain "collide: deal 2 damage" —
+  // when one of the ability's shoves collided, the trait fold appends the
+  // 2-damage mutation against the shoved character and sets the once-per-
+  // turn guard (a plan-time decision recorded through the event's
+  // mutations; the guard clears at turn end via the lifecycle recipe).
+  const bullStrengthDamage = bullStrengthCollideMutations(state, mutations);
+  if (bullStrengthDamage.length > 0) mutations = [...mutations, ...bullStrengthDamage];
+  return { ...first, mutations, selectedSteps };
 }
 
 export function hasLineOfSight(state: EncounterState, from: Position, to: Position) {
@@ -827,6 +996,19 @@ export function hasCoverFrom(state: EncounterState, target: EncounterActor, atta
     if (terrain.type !== 'impassable' && terrainElevation < targetElevation + 1) return false;
     return lineIntersectsCellInterior(attacker.position, target.position, terrain.position);
   });
+}
+
+/** F7 reactive fold input: when the actor's equipped talent for this ability
+ * is a wired slay/collide row, compute the post-application trigger targets
+ * (the collided actors / the defeated actors) from the ability's recorded
+ * mutations — the same dry run that derives the ability's own reactive
+ * clauses. The dry run clones the encounter state, so it is skipped when no
+ * reactive talent is equipped. */
+function talentReactiveTargets(state: EncounterState, actor: EncounterActor, abilityId: string, mutations: RuleMutation[]): TalentReactiveTargets | undefined {
+  const trigger = talentReactiveTrigger(actor, abilityId);
+  if (trigger === 'collide') return { collidedActorIds: collidingShoveTargets(state, mutations) };
+  if (trigger === 'slay') return { slainActorIds: reactiveSlayTargets(state, mutations) };
+  return undefined;
 }
 
 function abilityEvents(state: EncounterState, command: Extract<EncounterCommand, { type: 'USE_ABILITY' }>, dice: DiceSource): EncounterEvent[] {
@@ -922,6 +1104,17 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     triggers: abilityTriggers,
   };
   const result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
+  // F7 talent fold: the equipped wired talent's trigger-effect mutations ride
+  // the same event, so replay applies exactly what the command decided. The
+  // slay/collide triggers receive the post-application reactive targets
+  // computed from the recorded mutations.
+  const talentMutations = talentTriggerMutations(state, actor, ability.id, result.mutations, targetIds, talentReactiveTargets(state, actor, ability.id, result.mutations));
+  // F6 Demon Edge: triggering a slow-turn or delay arms the trait's window
+  // (vigilance +1, bonus damage until the end of your next turn, and a
+  // one-shot true strike) as recorded mutations on the same event.
+  const demonEdgeMutations = actor.traitIds.includes(DEMON_EDGE_TRAIT)
+    ? demonEdgeSlowTurnMutations(ability.id, actor.id, actor.id, programAction, result.mutations, state.round)
+    : [];
   let events: EncounterEvent[] = [attachSaveReroll(state, actor.id, ability.id, ruleContext, dice, {
     type: 'RULE_MUTATIONS_APPLIED',
     actorId: actor.id,
@@ -929,7 +1122,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     actionId: programAction.id,
     timing,
     tags: [...programAction.tags],
-    mutations: result.mutations,
+    mutations: [...result.mutations, ...talentMutations, ...demonEdgeMutations],
   })];
   if (endsTurn && !interrupt) {
     const intermediate = applyEvents(state, events);
@@ -1068,6 +1261,11 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         if (error instanceof StatusSaveViolation) throw new RuleViolation(error.code, error.message);
         throw error;
       }
+      // F6 Demon Edge: the generic rule path arms the trait window the same
+      // way USE_ABILITY does (slow-turn/delay abilities execute here too).
+      const demonEdgeMutations = actor.traitIds.includes(DEMON_EDGE_TRAIT)
+        ? demonEdgeSlowTurnMutations(unit.id, actor.id, actor.id, action, result.mutations, state.round)
+        : [];
       const spentResources = new Map<string, number>();
       for (const mutation of result.mutations) {
         if (mutation.kind === 'actions' && mutation.operation === 'spend' && mutation.amount > actor.actionsRemaining) throw new RuleViolation('action.insufficient', `${unit.name} costs more actions than are available.`);
@@ -1088,7 +1286,9 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         actionId: command.actionId,
         timing: command.timing,
         tags: [...action.tags],
-        mutations: result.mutations,
+        // F7 talent fold: symmetric with USE_ABILITY (a no-op for non-ability
+        // sources, whose ids never appear in the actor's talent map).
+        mutations: [...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], talentReactiveTargets(state, actor, unit.id, result.mutations)), ...demonEdgeMutations],
       })];
       break;
     }
@@ -1408,9 +1608,16 @@ function attachSaveReroll(
   const roll = dice.die(20);
   // ICON p.144 Heroic: "The character rolls the new save with +1 curse." The
   // resolver records the curse as a mutation in this same event; the re-roll
-  // applies it here so the regenerated branch is replay-exact.
+  // applies it here so the regenerated branch is replay-exact. The durable
+  // modifiers breakdown (F2) reproduces the exact evaluated modifier; legacy
+  // held saves without it fall back to the recorded boon.
   const cursed = event.mutations.some((mutation) => mutation.kind === 'state' && mutation.actorId === heldSave.targetId && mutation.key === 'sucker-punch:curse' && mutation.value === true);
-  const boon = heldSave.boon - (cursed ? 1 : 0);
+  const modifier = heldSave.modifiers
+    ? heldSave.modifiers.sourceModifier + heldSave.modifiers.saveBoon - heldSave.modifiers.saveCurse + (heldSave.modifiers.blessing ? 1 : 0) - (cursed ? 1 : 0)
+    : heldSave.boon - (cursed ? 1 : 0);
+  // Re-rolling a save means a new d20 and a new boon/curse roll from the same
+  // modifier (p.143), not reusing the previous rolled boon value.
+  const boon = rollBoonOrCurse(modifier, dice).modifier;
   const total = roll + boon;
   return {
     ...event,
@@ -1418,7 +1625,7 @@ function attachSaveReroll(
       roll,
       boon,
       total,
-      success: total >= 10,
+      success: total >= (heldSave.threshold ?? 10),
       mutations: rerollSaveMutations(heldSave, context, roll, boon),
     },
   };
@@ -1591,568 +1798,16 @@ function consumeMassiveOverhead(state: EncounterState, actor: EncounterActor, ta
   }
 }
 
-/**
- * Deterministic turn-boundary lifecycle: duration expiry, Six Hells Trigram
- * activation, the slow-turn flag, and Comet pickup when a turn starts on an
- * adjacent space.
- */
-/** ICON p.141 Dark Knight: at the start of the user's turn the hatred+ target
- * refreshes to the currently closest foe; at the end of the turn the stance
- * grants vigilance +1. */
-function resolveDarkKnightTurnStart(state: EncounterState, actor: EncounterActor) {
-  if (actor.stance?.stanceId !== 'dark-knight' || !actor.position) return;
-  const closest = Object.values(state.actors)
-    .filter((foe) => foe.side !== actor.side && !foe.defeated && foe.onBattlefield && foe.position)
-    .sort((a, b) => distance(a.position, actor.position) - distance(b.position, actor.position) || a.id.localeCompare(b.id))[0];
-  if (closest) {
-    actor.ruleState['hatred-of'] = closest.id;
-    actor.ruleStateOwners['hatred-of'] = actor.id;
-  }
-}
-
-/** ICON p.142 Intimidate: starting your turn adjacent to the marked foe deals
- * fray damage, stuns them, and ends the mark. */
-function resolveIntimidateTurnStart(state: EncounterState, actor: EncounterActor) {
-  if (!actor.position) return;
-  for (const foe of Object.values(state.actors)) {
-    const mark = foe.marks.find((candidate) => candidate.markId === 'intimidate' && candidate.ownerId === actor.id);
-    if (!mark) continue;
-    if (foe.defeated || !foe.onBattlefield || !foe.position || distance(actor.position, foe.position) > 1) continue;
-    applyRuleMutations(state, [
-      { kind: 'damage', sourceId: 'knave:intimidate', sourceActorId: actor.id, actorId: foe.id, amount: actor.fray, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false },
-      { kind: 'condition', sourceId: 'knave:intimidate', sourceActorId: actor.id, actorId: foe.id, conditionId: 'stunned', operation: 'apply', potency: 'normal' },
-    ]);
-    foe.marks = foe.marks.filter((candidate) => candidate !== mark);
-  }
-}
-
-/** ICON p.151 Gallows Humor: the stance's d6 power die ticks up by 1 (to a
- * maximum of 6) when the stance refreshes at the start of the user's turn, or
- * whenever you or an ally misses or is missed by an attack anywhere. */
-function tickGallowsHumorDie(actor: EncounterActor) {
-  if (actor.stance?.stanceId !== 'gallows-humor') return;
-  actor.ruleState['gallows-humor:die'] = Math.min(6, Number(actor.ruleState['gallows-humor:die'] ?? 1) + 1);
-  actor.ruleStateOwners['gallows-humor:die'] = actor.id;
-}
-
+/** Gallows Humor (p.151): whenever you or an ally misses or is missed by an
+ * attack anywhere, the stance's d6 power die ticks up by 1 (capped at 6). */
 function tickGallowsHumorOnMiss(state: EncounterState) {
   for (const actor of Object.values(state.actors)) tickGallowsHumorDie(actor);
 }
 
-function resolveGallowsHumorTurnStart(state: EncounterState, actor: EncounterActor) {
-  tickGallowsHumorDie(actor);
-}
-
-/** ICON p.156 Exorcism: at the end of any turn where the owner ends in range 3
- * of the marked foe, or that foe ends in range 3 of the owner, set out the d4
- * power die at 1 (or tick it up) and shoot a projectile for 2 unerring damage.
- * When the die reaches its maximum of 4, every projectile flies for 2 damage
- * per charge and the mark ends. */
-function resolveExorcismTurnEnd(state: EncounterState, actor: EncounterActor) {
-  if (!actor.position) return;
-  const tick = (mark: EncounterMark, foe: EncounterActor, owner: EncounterActor) => {
-    const die = Math.min(4, Number(mark.state.die ?? 0) + 1);
-    const charges = Number(mark.state.charges ?? 0) + 1;
-    mark.state.die = die;
-    mark.state.charges = charges;
-    applyRuleMutations(state, [{
-      kind: 'damage', sourceId: 'freelancer:exorcism', sourceActorId: owner.id, actorId: foe.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true,
-    }]);
-    if (die >= 4) {
-      applyRuleMutations(state, [{
-        kind: 'damage', sourceId: 'freelancer:exorcism', sourceActorId: owner.id, actorId: foe.id, amount: 2 * charges, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true,
-      }]);
-      foe.marks = foe.marks.filter((candidate) => candidate !== mark);
-    }
-  };
-  // The owner ended their turn: tick the marks they own whose foe is in range.
-  for (const foe of Object.values(state.actors)) {
-    const mark = foe.marks.find((candidate) => candidate.markId === 'exorcism' && candidate.ownerId === actor.id);
-    if (!mark || foe.defeated || !foe.onBattlefield || !foe.position || distance(actor.position, foe.position) > 3) continue;
-    tick(mark, foe, actor);
-  }
-  // The marked foe ended their turn: tick the marks on this actor whose owner is in range.
-  for (const mark of [...actor.marks]) {
-    if (mark.markId !== 'exorcism') continue;
-    const owner = state.actors[mark.ownerId];
-    if (!owner || owner.defeated || !owner.onBattlefield || !owner.position || distance(owner.position, actor.position) > 3) continue;
-    tick(mark, actor, owner);
-  }
-}
-
-/** ICON p.156 Astral Chain: at the start of the user's turn a marked foe in
- * range 3 takes 2 unerring damage (twice, for 4, if at exactly range 3). */
-function resolveAstralChainTurnStart(state: EncounterState, actor: EncounterActor) {
-  if (!actor.position) return;
-  for (const foe of Object.values(state.actors)) {
-    const mark = foe.marks.find((candidate) => candidate.markId === 'astral-chain' && candidate.ownerId === actor.id);
-    if (!mark || foe.defeated || !foe.onBattlefield || !foe.position) continue;
-    const d = distance(actor.position, foe.position);
-    if (d > 3) continue;
-    applyRuleMutations(state, [{
-      kind: 'damage', sourceId: 'freelancer:astral-chain', sourceActorId: actor.id, actorId: foe.id, amount: d === 3 ? 4 : 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true,
-    }]);
-  }
-}
-
-/** ICON p.157 Showdown: at the end of the marked foe's next turn the user may
- * dash 2 (if the foe is within range 3) or the foe takes 2 unerring damage
- * twice (four times on a Finishing Blow) when at range 4 or higher; the mark
- * ends either way. */
-function resolveShowdownTurnEnd(state: EncounterState, actor: EncounterActor) {
-  const marks = actor.marks.filter((mark) => mark.markId === 'showdown');
-  if (marks.length === 0) return;
-  actor.marks = actor.marks.filter((mark) => mark.markId !== 'showdown');
-  const blocked = (position: Position, moverId: string) => position.x < 0 || position.y < 0
-    || position.x >= state.grid.width || position.y >= state.grid.height
-    || Object.values(state.actors).some((candidate) => candidate.id !== moverId && candidate.onBattlefield && !candidate.defeated && samePosition(candidate.position, position))
-    || state.grid.terrain.some((cell) => samePosition(cell.position, position) && cell.type === 'impassable');
-  for (const mark of marks) {
-    const owner = state.actors[mark.ownerId];
-    if (!owner || owner.defeated || !owner.onBattlefield || !owner.position || !actor.position) continue;
-    const d = distance(owner.position, actor.position);
-    if (d <= 3) {
-      let position = { ...owner.position };
-      for (let steps = 0; steps < 2; steps += 1) {
-        const dx = actor.position.x - position.x;
-        const dy = actor.position.y - position.y;
-        const next = Math.abs(dx) >= Math.abs(dy)
-          ? { x: position.x + Math.sign(dx), y: position.y }
-          : { x: position.x, y: position.y + Math.sign(dy) };
-        if (samePosition(next, position) || blocked(next, owner.id)) break;
-        position = next;
-      }
-      applyLifecycleAbilityMove(state, owner, 'freelancer:showdown', 'rush', position);
-    } else {
-      applyRuleMutations(state, [{
-        kind: 'damage', sourceId: 'freelancer:showdown', sourceActorId: owner.id, actorId: actor.id, amount: mark.state.finishing === true ? 8 : 4, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true,
-      }]);
-    }
-  }
-}
-
-/** ICON p.158 Warding Bolts: a foe that starts its turn inside the hover zone
- * and ends it outside is struck for 2 unerring damage and dazed. */
-function resolveWardingBoltsTurnStart(state: EncounterState, actor: EncounterActor) {
-  if (!actor.position) return;
-  const effect = state.terrainEffects.find((candidate) =>
-    candidate.terrain === 'warding-bolts'
-    && candidate.ownerId
-    && state.actors[candidate.ownerId]?.side !== actor.side
-    && candidate.positions.some((cell) => samePosition(cell, actor.position)));
-  if (effect) {
-    actor.ruleState['warding-bolts:owner'] = effect.ownerId;
-    actor.ruleStateOwners['warding-bolts:owner'] = actor.id;
-  }
-}
-
-/** ICON p.163 Assassinate: at the end of the marked foe's turn, if still in
- * range 3, the user teleports adjacent, deals 2 damage three times (or just 2
- * if the foe has an adjacent ally), blinds the foe, then flies 2 away. */
-function resolveAssassinateTurnEnd(state: EncounterState, actor: EncounterActor) {
-  const marks = actor.marks.filter((mark) => mark.markId === 'assassinate');
-  if (marks.length === 0) return;
-  actor.marks = actor.marks.filter((mark) => mark.markId !== 'assassinate');
-  const blocked = (position: Position, moverId: string) => position.x < 0 || position.y < 0
-    || position.x >= state.grid.width || position.y >= state.grid.height
-    || Object.values(state.actors).some((candidate) => candidate.id !== moverId && candidate.onBattlefield && !candidate.defeated && samePosition(candidate.position, position))
-    || state.grid.terrain.some((cell) => samePosition(cell.position, position) && cell.type === 'impassable');
-  for (const mark of marks) {
-    const owner = state.actors[mark.ownerId];
-    if (!owner || owner.defeated || !owner.onBattlefield || !owner.position || !actor.position) continue;
-    if (distance(owner.position, actor.position) > 3) continue;
-    const adjacent = orthogonalNeighbors(actor.position).find((cell) => !blocked(cell, owner.id));
-    if (adjacent) applyLifecycleAbilityMove(state, owner, 'shade:assassinate', 'teleport', adjacent);
-    if (owner.defeated) continue;
-    const hasAdjacentAlly = Object.values(state.actors).some((candidate) => candidate.side === actor.side && candidate.id !== actor.id && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, actor.position) <= 1);
-    applyRuleMutations(state, [
-      { kind: 'damage', sourceId: 'shade:assassinate', sourceActorId: owner.id, actorId: actor.id, amount: hasAdjacentAlly ? 2 : 6, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true },
-      { kind: 'condition', sourceId: 'shade:assassinate', sourceActorId: owner.id, actorId: actor.id, conditionId: 'blind', operation: 'apply', potency: 'normal' },
-    ]);
-    const away = axisDirection(actor.position, owner.position);
-    let position = { ...owner.position };
-    for (let step = 0; step < 2; step += 1) {
-      const next = { x: position.x + away.x, y: position.y + away.y };
-      if (blocked(next, owner.id)) break;
-      position = next;
-    }
-    applyLifecycleAbilityMove(state, owner, 'shade:assassinate', 'fly', position);
-  }
-}
-
-/** ICON p.164 Incubus: when a foe ends its turn adjacent to the marked foe (or
- * the marked foe ends its turn adjacent to another foe), the marked foe and
- * every adjacent foe take 2 damage and are dazed, once per round. */
-function resolveIncubusTurnEnd(state: EncounterState, actor: EncounterActor) {
-  if (actor.side !== 'foes' || !actor.position) return;
-  for (const marked of Object.values(state.actors)) {
-    const mark = marked.marks.find((candidate) => candidate.markId === 'incubus');
-    if (!mark || marked.defeated || !marked.onBattlefield || !marked.position) continue;
-    const owner = state.actors[mark.ownerId];
-    if (!owner || owner.defeated || owner.ruleState['incubus:triggered'] === true) continue;
-    const adjacent = actor.id === marked.id
-      ? Object.values(state.actors).some((candidate) => candidate.side === 'foes' && candidate.id !== marked.id && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, marked.position) <= 1)
-      : distance(actor.position, marked.position) <= 1;
-    if (!adjacent) continue;
-    const targets = [marked, ...Object.values(state.actors).filter((candidate) => candidate.side === 'foes' && candidate.id !== marked.id && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, marked.position) <= 1)];
-    for (const target of targets) {
-      applyRuleMutations(state, [
-        { kind: 'damage', sourceId: 'shade:incubus', sourceActorId: owner.id, actorId: target.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false },
-        { kind: 'condition', sourceId: 'shade:incubus', sourceActorId: owner.id, actorId: target.id, conditionId: 'dazed', operation: 'apply', potency: 'normal' },
-      ]);
-    }
-    owner.ruleState['incubus:triggered'] = true;
-    owner.ruleStateOwners['incubus:triggered'] = owner.id;
-  }
-}
-
-/** ICON p.163 Umbral Echo: at the end of the user's turn, if no foe is adjacent,
- * the stance refreshes and its power die ticks up by 1 (to a maximum of 4). */
-function resolveUmbralEchoTurnEnd(state: EncounterState, actor: EncounterActor) {
-  if (actor.stance?.stanceId !== 'umbral-echo' || !actor.position) return;
-  const adjacentFoe = Object.values(state.actors).some((candidate) => candidate.side !== actor.side && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, actor.position) <= 1);
-  if (adjacentFoe) return;
-  actor.ruleState['umbral-echo:die'] = Math.min(4, Number(actor.ruleState['umbral-echo:die'] ?? 2) + 1);
-  actor.ruleStateOwners['umbral-echo:die'] = actor.id;
-}
-
-function resolveWardingBoltsTurnEnd(state: EncounterState, actor: EncounterActor) {
-  const ownerId = actor.ruleState['warding-bolts:owner'];
-  if (typeof ownerId !== 'string' || !ownerId) return;
-  delete actor.ruleState['warding-bolts:owner'];
-  delete actor.ruleStateOwners['warding-bolts:owner'];
-  const effect = state.terrainEffects.find((candidate) => candidate.terrain === 'warding-bolts' && candidate.ownerId === ownerId);
-  if (!effect || !actor.position) return;
-  if (effect.positions.some((cell) => samePosition(cell, actor.position))) return;
-  applyRuleMutations(state, [
-    { kind: 'damage', sourceId: 'freelancer:warding-bolts', sourceActorId: ownerId, actorId: actor.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true },
-    { kind: 'condition', sourceId: 'freelancer:warding-bolts', sourceActorId: ownerId, actorId: actor.id, conditionId: 'dazed', operation: 'apply', potency: 'normal' },
-  ]);
-}
-
-/** ICON p.150 Bomb summon effect: when all bombs are detonated, each explodes
- * in a small blast dealing the (pre-rolled) gamble result; characters caught
- * in overlapping blasts are affected only once. The gamble is rolled at the
- * command boundary so replay stays deterministic. */
-function detonateBombs(state: EncounterState, owner: EncounterActor, gamble: number) {
-  const bombs = Object.values(state.entities).filter((entity) => entity.type === 'bomb' && entity.ownerId === owner.id);
-  if (bombs.length === 0) return;
-  const affected = new Set<string>();
-  for (const bomb of bombs) {
-    if (!bomb.positions[0]) continue;
-    for (const cell of squareArea(bomb.positions[0], 1)) {
-      for (const character of Object.values(state.actors)) {
-        if (!character.defeated && character.onBattlefield && character.position && samePosition(character.position, cell)) affected.add(character.id);
-      }
-    }
-  }
-  applyRuleMutations(state, [...affected].map((actorId) => ({
-    kind: 'damage' as const, sourceId: 'fool:carnevale', sourceActorId: owner.id, actorId, amount: gamble, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false,
-  })));
-  for (const bomb of bombs) delete state.entities[bomb.id];
-}
-
-/** First in-grid, unoccupied, non-impassable cell within Chebyshev `radius` of
- * `center` (orthogonal neighbors when `orthogonalOnly`), sorted by distance
- * then coordinates so default placement is deterministic (mirrors job-kit's
- * freeCellsInRange ordering). */
-function freeCellNear(state: EncounterState, center: Position, radius: number, orthogonalOnly = false): Position | null {
-  const occupiedCell = (cell: Position) => Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position && samePosition(candidate.position, cell))
-    || Object.values(state.entities).some((entity) => entity.positions[0] && samePosition(entity.positions[0], cell));
-  const cells = orthogonalOnly ? orthogonalNeighbors(center) : squareArea(center, radius);
-  const candidates: Position[] = [];
-  for (const cell of cells) {
-    if (samePosition(cell, center) || !positionWithinGrid(cell, state)) continue;
-    if (state.grid.terrain.some((t) => samePosition(t.position, cell) && t.type === 'impassable')) continue;
-    if (occupiedCell(cell)) continue;
-    candidates.push(cell);
-  }
-  return candidates.sort((a, b) => distance(center, a) - distance(center, b) || a.x - b.x || a.y - b.y)[0] ?? null;
-}
-
-/** ICON p.171 Sidhe: at the end of the marked foe's next turn the toxin
- * detonates for 6 damage (reduced to 3 if the foe ends adjacent to an ally),
- * then the mark ends. */
-function resolveSidheTurnEnd(state: EncounterState, actor: EncounterActor) {
-  const marks = actor.marks.filter((mark) => mark.markId === 'sidhe-toxin');
-  if (marks.length === 0) return;
-  actor.marks = actor.marks.filter((mark) => mark.markId !== 'sidhe-toxin');
-  for (const mark of marks) {
-    const owner = state.actors[mark.ownerId];
-    if (!owner || owner.defeated || !owner.onBattlefield || !actor.position) continue;
-    const adjacentAlly = Object.values(state.actors).some((candidate) =>
-      candidate.side === actor.side && candidate.id !== actor.id && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, actor.position) <= 1);
-    applyRuleMutations(state, [{
-      kind: 'damage', sourceId: 'warden:sidhe', sourceActorId: owner.id, actorId: actor.id, amount: adjacentAlly ? 3 : 6, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false,
-    }]);
-  }
-}
-
-/** ICON p.170 Stampede: once per round, at the end of the marked foe's turn,
- * the spirit beast charges in — 2 damage, shove 1 away from the user, then it
- * coalesces into a beast summon adjacent to the foe. The line-from-the-edge
- * geometry and side shoves are table-facing (documented in warden-programs.ts). */
-function resolveStampedeTurnEnd(state: EncounterState, actor: EncounterActor) {
-  if (!actor.position) return;
-  for (const mark of [...actor.marks]) {
-    if (mark.markId !== 'stampede') continue;
-    const owner = state.actors[mark.ownerId];
-    if (!owner || owner.defeated || !owner.onBattlefield || owner.ruleState['stampede:triggered'] === true) continue;
-    owner.ruleState['stampede:triggered'] = true;
-    owner.ruleStateOwners['stampede:triggered'] = owner.id;
-    applyRuleMutations(state, [{
-      kind: 'damage', sourceId: 'warden:stampede', sourceActorId: owner.id, actorId: actor.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false,
-    }]);
-    if (owner.position) {
-      const direction = axisDirection(owner.position, actor.position);
-      applyRuleMutations(state, [{
-        kind: 'move', sourceId: 'warden:stampede', sourceActorId: owner.id, actorId: actor.id, movement: 'shove', distance: 1, positions: [], direction, phasing: false,
-      }]);
-    }
-    const beastCell = freeCellNear(state, actor.position, 1, true);
-    if (beastCell) {
-      applyRuleMutations(state, [{
-        kind: 'entity', sourceId: 'warden:stampede', operation: 'create', entityType: 'beast', ownerId: owner.id, positions: [beastCell], count: 1, state: {},
-      }]);
-    }
-  }
-}
-
-/** ICON p.171 Morrigan: at the start of the user's (slow) next turn the flock
- * lashes out — allies in range 2 gain stealth (the optional dash 2 is
- * table-facing), foes in range 2 are shoved 2 away and blinded. */
-function resolveMorriganTurnStart(state: EncounterState, actor: EncounterActor) {
-  if (actor.ruleState['morrigan:pending'] !== true || !actor.position) return;
-  delete actor.ruleState['morrigan:pending'];
-  delete actor.ruleStateOwners['morrigan:pending'];
-  actor.ruleState['slow-turn'] = true;
-  actor.ruleStateOwners['slow-turn'] = actor.id;
-  for (const character of Object.values(state.actors)) {
-    if (character.defeated || !character.onBattlefield || !character.position) continue;
-    if (distance(character.position, actor.position) > 2) continue;
-    if (character.side === actor.side) {
-      applyRuleMutations(state, [{
-        kind: 'condition', sourceId: 'warden:morrigan', sourceActorId: actor.id, actorId: character.id, conditionId: 'stealth', operation: 'apply', potency: 'normal',
-      }]);
-    } else {
-      const direction = axisDirection(actor.position, character.position);
-      applyRuleMutations(state, [
-        { kind: 'move', sourceId: 'warden:morrigan', sourceActorId: actor.id, actorId: character.id, movement: 'shove', distance: 2, positions: [], direction, phasing: false },
-        { kind: 'condition', sourceId: 'warden:morrigan', sourceActorId: actor.id, actorId: character.id, conditionId: 'blind', operation: 'apply', potency: 'normal' },
-      ]);
-    }
-  }
-}
-
-/** ICON p.170 Strength of the Pack: when the stance refreshes at the start of
- * the user's turn, summon a beast in a free space in the aura. The optional
- * ally dash 1 is a player choice and is documented as table-facing. */
-function resolveStrengthOfThePackTurnStart(state: EncounterState, actor: EncounterActor) {
-  if (actor.stance?.stanceId !== 'strength-of-the-pack' || !actor.position) return;
-  const beastCell = freeCellNear(state, actor.position, 2);
-  if (beastCell) {
-    applyRuleMutations(state, [{
-      kind: 'entity', sourceId: 'warden:strength-of-the-pack', operation: 'create', entityType: 'beast', ownerId: actor.id, positions: [beastCell], count: 1, state: {},
-    }]);
-  }
-}
-
-/** ICON p.170 Underway: at the end of the user's turn, a second leafy portal
- * grows in a free adjacent space. */
-function resolveUnderwayTurnEnd(state: EncounterState, actor: EncounterActor) {
-  if (!actor.position) return;
-  const ownsPortal = Object.values(state.entities).some((entity) => entity.type === 'underway' && entity.ownerId === actor.id);
-  if (!ownsPortal) return;
-  const portalCell = freeCellNear(state, actor.position, 1, true);
-  if (portalCell) {
-    applyRuleMutations(state, [{
-      kind: 'entity', sourceId: 'warden:underway', operation: 'create', entityType: 'underway', ownerId: actor.id, positions: [portalCell], count: 1, state: {},
-    }]);
-  }
-}
-
-/** ICON p.178 Aria: at the start of the user's (slow) next turn the stunning
- * performance resolves — a blast (small, or medium/large per foe-ability
- * damage taken while pending) centered on the user: foes take fray twice and
- * are sealed, sealed or pacified foes are shoved 1 away, allies are cured. */
-function resolveAriaTurnStart(state: EncounterState, actor: EncounterActor) {
-  if (actor.ruleState['aria:pending'] !== true || !actor.position) return;
-  delete actor.ruleState['aria:pending'];
-  delete actor.ruleStateOwners['aria:pending'];
-  const damaged = Number(actor.ruleState['aria:damaged'] ?? 0);
-  delete actor.ruleState['aria:damaged'];
-  delete actor.ruleStateOwners['aria:damaged'];
-  actor.ruleState['slow-turn'] = true;
-  actor.ruleStateOwners['slow-turn'] = actor.id;
-  const radius = damaged >= 2 ? 3 : damaged >= 1 ? 2 : 1;
-  const area = squareArea(actor.position, radius);
-  for (const character of Object.values(state.actors)) {
-    if (character.defeated || !character.onBattlefield || !character.position) continue;
-    if (!area.some((cell) => samePosition(cell, character.position))) continue;
-    if (character.side === actor.side) {
-      // TODO(ICON-rules, pp.94/102): Aria's source "Cure" text needs a
-      // declared lifecycle SaveWindow policy before this turn-start hook can
-      // roll/save deterministically. Preserve the historical vigor-only path
-      // rather than inventing unrecorded dice.
-      applyRuleMutations(state, [{ kind: 'cure', sourceId: 'chanter:aria', actorId: character.id, all: false }]);
-    } else {
-      applyRuleMutations(state, [
-        { kind: 'damage', sourceId: 'chanter:aria', sourceActorId: actor.id, actorId: character.id, amount: actor.fray, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false },
-        { kind: 'damage', sourceId: 'chanter:aria', sourceActorId: actor.id, actorId: character.id, amount: actor.fray, damageType: 'normal', instance: 2, delivery: 'area', ignoreCover: false },
-        { kind: 'condition', sourceId: 'chanter:aria', sourceActorId: actor.id, actorId: character.id, conditionId: 'sealed', operation: 'apply', potency: 'normal' },
-      ]);
-    }
-  }
-  for (const character of Object.values(state.actors)) {
-    if (character.side === actor.side || character.defeated || !character.onBattlefield || !character.position) continue;
-    if (!area.some((cell) => samePosition(cell, character.position))) continue;
-    if (!character.statuses.includes('sealed') && !character.statuses.includes('pacified')) continue;
-    const direction = axisDirection(actor.position, character.position);
-    applyRuleMutations(state, [{
-      kind: 'move', sourceId: 'chanter:aria', sourceActorId: actor.id, actorId: character.id, movement: 'shove', distance: 1, positions: [], direction, phasing: false,
-    }]);
-  }
-}
-
-/** ICON p.178 Symphony: a character that enters or starts a turn on a mote
- * detonates it — a small blast centered on them (foes take fray, allies gain
- * 2 vigor); a triggering hero is blessed and flies 1, a triggering foe gets a
- * pit under them. */
-function detonateSymphonyMote(state: EncounterState, actor: EncounterActor) {
-  if (!actor.position) return;
-  const mote = state.terrainEffects.find((effect) => effect.terrain === 'symphony-mote' && effect.positions.some((cell) => samePosition(cell, actor.position)));
-  if (!mote) return;
-  state.terrainEffects = state.terrainEffects.filter((effect) => effect !== mote);
-  const owner = mote.ownerId ? state.actors[mote.ownerId] : undefined;
-  const ownerSide = owner?.side ?? actor.side;
-  const center = { ...actor.position };
-  const blast = squareArea(center, 1);
-  for (const character of Object.values(state.actors)) {
-    if (character.defeated || !character.onBattlefield || !character.position) continue;
-    if (!blast.some((cell) => samePosition(cell, character.position))) continue;
-    if (character.side === ownerSide) {
-      applyRuleMutations(state, [{ kind: 'vigor', sourceId: 'chanter:symphony', actorId: character.id, amount: 2, uncapped: false }]);
-    } else {
-      applyRuleMutations(state, [{ kind: 'damage', sourceId: 'chanter:symphony', sourceActorId: actor.id, actorId: character.id, amount: owner?.fray ?? actor.fray, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false }]);
-    }
-  }
-  if (actor.side === ownerSide) {
-    applyRuleMutations(state, [{ kind: 'resource', sourceId: 'chanter:symphony', actorId: actor.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null }]);
-    // May fly 1: deterministic — one step toward the nearest foe (or +x).
-    const foes = Object.values(state.actors).filter((candidate) => candidate.side !== actor.side && candidate.onBattlefield && !candidate.defeated && candidate.position);
-    const direction = foes.length > 0
-      ? axisDirection(actor.position, foes.sort((a, b) => distance(a.position!, actor.position!) - distance(b.position!, actor.position!) || a.id.localeCompare(b.id))[0].position!)
-      : { x: 1, y: 0 };
-    const next = { x: center.x + Math.sign(direction.x), y: center.y + Math.sign(direction.y) };
-    const free = next.x >= 0 && next.y >= 0 && next.x < state.grid.width && next.y < state.grid.height
-      && !Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position && samePosition(candidate.position, next))
-      && !state.grid.terrain.some((cell) => samePosition(cell.position, next) && cell.type === 'impassable');
-    if (free) applyLifecycleAbilityMove(state, actor, 'chanter:symphony', 'fly', next);
-  } else {
-    state.terrainEffects.push({ id: `symphony-pit:${actor.id}:${state.revision}`, sourceId: 'chanter:symphony', ownerId: actor.id, terrain: 'pit', positions: [center], height: null, duration: null });
-  }
-}
-
-function resolveSymphonyMoteTurnStart(state: EncounterState, actor: EncounterActor) {
-  detonateSymphonyMote(state, actor);
-}
-
-/** ICON p.179 Monogatari: while a tale is active, each hero character's
- * starting position is recorded so the Tale of Travels (move 4+ from start)
- * can be checked at their turn end. */
-function resolveMonogatariTurnStart(state: EncounterState, actor: EncounterActor) {
-  if (actor.side !== 'heroes' || !actor.position) return;
-  const taleActive = Object.values(state.actors).some((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined);
-  if (!taleActive) return;
-  actor.ruleState['monogatari:turn-start-pos'] = `${actor.position.x},${actor.position.y}`;
-  actor.ruleStateOwners['monogatari:turn-start-pos'] = actor.id;
-}
-
-/** The deterministic tale conditions the single-pass VM can evaluate: Travels
- * (moved 4+ from start), Green (did not attack), Cunning (used an interrupt),
- * and Boon Companions (ended adjacent to an ally). Fury and Triumph are
- * documented table-facing windows. */
-function monogatariTaleMet(state: EncounterState, actor: EncounterActor, tale: number): boolean {
-  switch (tale) {
-    case 2: {
-      const start = actor.ruleState['monogatari:turn-start-pos'];
-      if (typeof start !== 'string' || !actor.position) return false;
-      const [sx, sy] = start.split(',').map(Number);
-      return Math.max(Math.abs(actor.position.x - sx), Math.abs(actor.position.y - sy)) > 4;
-    }
-    case 3: return !actor.attackedThisTurn;
-    case 4: return actor.interruptUsedThisTurn;
-    case 5: return actor.position !== null && Object.values(state.actors).some((candidate) =>
-      candidate.side === actor.side && candidate.id !== actor.id && !candidate.defeated && candidate.onBattlefield && candidate.position && distance(candidate.position, actor.position) <= 1);
-    default: return false;
-  }
-}
-
-/** ICON p.179 Monogatari: at the end of a hero character's turn, if the active
- * tale's course of action was completed and it has not already been granted
- * this song, they are blessed (the optional fly 2 is a free-action choice). */
-function resolveMonogatariTurnEnd(state: EncounterState, actor: EncounterActor) {
-  if (actor.side !== 'heroes' || !actor.position || actor.defeated || actor.ruleState['monogatari:granted'] === true) return;
-  const owner = Object.values(state.actors).find((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined);
-  if (!owner) return;
-  if (!monogatariTaleMet(state, actor, Number(owner.ruleState['monogatari:tale']))) return;
-  actor.ruleState['monogatari:granted'] = true;
-  actor.ruleStateOwners['monogatari:granted'] = actor.id;
-  applyRuleMutations(state, [{ kind: 'resource', sourceId: 'chanter:monogatari', actorId: actor.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null }]);
-}
-
-/** ICON p.179 Chastise: at the end of the marked foe's next turn, the
- * retribution lands (1 divine three times) if it damaged a chosen character
- * with an ability, and the Charism combo cures or blesses allies in a small
- * blast centered on the foe (opening a pit under it with 2+ allies). */
-function resolveChastiseTurnEnd(state: EncounterState, actor: EncounterActor) {
-  if (actor.side !== 'foes' || !actor.position) return;
-  const marks = actor.marks.filter((mark) => mark.markId === 'chastise-retribution' || mark.markId === 'chastise-charism');
-  if (marks.length === 0) return;
-  actor.marks = actor.marks.filter((mark) => mark.markId !== 'chastise-retribution' && mark.markId !== 'chastise-charism');
-  for (const mark of marks) {
-    const owner = state.actors[mark.ownerId];
-    if (!owner || owner.defeated || !owner.onBattlefield) continue;
-    if (mark.markId === 'chastise-retribution') {
-      if (mark.state.triggered === true) {
-        for (let i = 0; i < 3; i += 1) {
-          applyRuleMutations(state, [{ kind: 'damage', sourceId: 'chanter:chastise', sourceActorId: owner.id, actorId: actor.id, amount: 1, damageType: 'divine', instance: i + 1, delivery: 'effect', ignoreCover: false }]);
-        }
-      }
-    } else {
-      const allies = Object.values(state.actors).filter((candidate) =>
-        candidate.side === owner.side && !candidate.defeated && candidate.onBattlefield && candidate.position && distance(candidate.position, actor.position) <= 1);
-      if (mark.state.choice === 'bless') {
-        for (const ally of allies) {
-          applyRuleMutations(state, [{ kind: 'resource', sourceId: 'chanter:chastise', actorId: ally.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null }]);
-        }
-      } else {
-        for (const ally of allies) {
-          // TODO(ICON-rules, pp.94/102): see Aria above; Chastise's delayed
-          // Cure needs the same explicit lifecycle SaveWindow decision.
-          applyRuleMutations(state, [{ kind: 'cure', sourceId: 'chanter:chastise', actorId: ally.id, all: false }]);
-        }
-      }
-      if (allies.length >= 2) {
-        state.terrainEffects.push({ id: `charism-pit:${actor.id}:${state.revision}`, sourceId: 'chanter:chastise', ownerId: owner.id, terrain: 'pit', positions: [{ ...actor.position }], height: null, duration: null });
-      }
-    }
-  }
-}
-
-function resolveTurnStart(state: EncounterState, next: EncounterActor) {
+function resolveTurnStart(state: EncounterState, next: EncounterActor, intent: TurnTransitionIntent) {
   expireBoundaryEffects(state, next.id, 'turn-start');
-  resolvePendingTrigram(state, next);
-  resolveDarkKnightTurnStart(state, next);
-  resolveIntimidateTurnStart(state, next);
-  resolveGallowsHumorTurnStart(state, next);
-  resolveAstralChainTurnStart(state, next);
-  resolveWardingBoltsTurnStart(state, next);
-  resolveMorriganTurnStart(state, next);
-  resolveStrengthOfThePackTurnStart(state, next);
-  resolveAriaTurnStart(state, next);
-  resolveSymphonyMoteTurnStart(state, next);
-  resolveMonogatariTurnStart(state, next);
+  // F3: the registered turn-start participants run in their recorded order.
+  runLifecyclePhase(state, next, 'turn-start', intent);
   // A Delay ability (Six Hells Trigram, p.129) makes the user's next turn
   // slow; the slow-turn flag is what the Charge trigger reads during it.
   if (next.ruleState['six-hells:slow-turn'] === true) {
@@ -2166,51 +1821,15 @@ function resolveTurnStart(state: EncounterState, next: EncounterActor) {
 
 /**
  * Turn-end lifecycle: expire turn-end durations owned by the ending actor,
- * clear the slow-turn flag, refresh Soul Blade when the user ended the turn
- * without attacking (p.129), and grant Dark Knight's vigilance (p.141).
+ * clear the slow-turn flag, and run the registered turn-end participants
+ * (stances, marks, terrain effects, and the Carnevale/Monogatari dice
+ * windows) in their recorded order.
  */
-function resolveTurnEnd(state: EncounterState, actor: EncounterActor, carnevaleGamble?: number, monogatariGamble?: number) {
+function resolveTurnEnd(state: EncounterState, actor: EncounterActor, intent: TurnTransitionIntent) {
   expireBoundaryEffects(state, actor.id, 'turn-end');
   actor.ruleState['slow-turn'] = false;
   actor.ruleStateOwners['slow-turn'] ??= null;
-  if (actor.stance?.stanceId === 'soul-blade' && !actor.attackedThisTurn) {
-    const die = Number(actor.ruleState['soul-blade:die'] ?? 0);
-    actor.ruleState['soul-blade:die'] = Math.min(6, die + 1);
-    actor.ruleStateOwners['soul-blade:die'] = actor.id;
-  }
-  if (actor.stance?.stanceId === 'dark-knight') {
-    actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
-  }
-  resolveExorcismTurnEnd(state, actor);
-  resolveShowdownTurnEnd(state, actor);
-  resolveWardingBoltsTurnEnd(state, actor);
-  resolveAssassinateTurnEnd(state, actor);
-  resolveIncubusTurnEnd(state, actor);
-  resolveUmbralEchoTurnEnd(state, actor);
-  resolveSidheTurnEnd(state, actor);
-  resolveStampedeTurnEnd(state, actor);
-  resolveUnderwayTurnEnd(state, actor);
-  resolveMonogatariTurnEnd(state, actor);
-  resolveChastiseTurnEnd(state, actor);
-  // ICON p.150 Carnevale: ending the turn without attacking detonates all of
-  // the user's bombs with the gamble rolled at the command boundary.
-  if (carnevaleGamble !== undefined) {
-    detonateBombs(state, actor, carnevaleGamble);
-    actor.ruleState['carnevale:armed'] = false;
-    actor.ruleStateOwners['carnevale:armed'] ??= null;
-  }
-  // ICON p.179 Monogatari: the song's tale is gambled at the end of the turn
-  // the ability was used (pre-rolled at the command boundary). A fresh tale
-  // resets the once-per-song grants for every hero character.
-  if (monogatariGamble !== undefined) {
-    actor.ruleState['monogatari:tale'] = monogatariGamble;
-    actor.ruleStateOwners['monogatari:tale'] = actor.id;
-    for (const candidate of Object.values(state.actors)) {
-      if (candidate.side !== 'heroes') continue;
-      delete candidate.ruleState['monogatari:granted'];
-      delete candidate.ruleStateOwners['monogatari:granted'];
-    }
-  }
+  runLifecyclePhase(state, actor, 'turn-end', intent);
 }
 
 /** Roll the Carnevale detonation gamble when the actor armed it, did not
@@ -2233,20 +1852,25 @@ function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor
 
 /**
  * Apply one already-planned turn boundary.  Command paths may differ in why
- * they end a turn, but every replayed boundary must use this one ordered
- * lifecycle.  `event.cause` is durable provenance for the future
- * TurnTransition participant registry; it deliberately does not change the
- * established hook order yet.
- *
- * TODO(ICON-rules, pp.87, 91, 94, 103–104, 107): replace this imperative
- * sequence with a replayable TurnTransitionIntent/participant plan before
- * adding lifecycle rules. Do not reorder hooks piecemeal in resolvers.
+ * they end a turn, but every replayed boundary consumes the same ordered
+ * `TurnTransitionIntent`: the recorded cause, dice windows, and lifecycle
+ * participants (F3).  Legacy events without an intent fall back to the
+ * applies gates and the event's top-level dice fields.
  */
 function applyTurnTransition(
   state: EncounterState,
   event: Extract<EncounterEvent, { type: 'TURN_ENDED' }>,
 ) {
   const actor = state.actors[event.actorId];
+  const intent: TurnTransitionIntent = event.intent ?? {
+    cause: event.cause ?? 'voluntary',
+    participants: [],
+    diceWindows: {
+      ...(event.carnevaleGamble !== undefined ? { carnevaleGamble: event.carnevaleGamble } : {}),
+      ...(event.monogatariGamble !== undefined ? { monogatariGamble: event.monogatariGamble } : {}),
+    },
+    roundAdvance: event.round > state.round,
+  };
   if (event.statusSaveMutations) {
     // New events retain every result as mutations so replay does not need
     // fresh dice or re-evaluate temporary status-save policy.
@@ -2261,9 +1885,12 @@ function applyTurnTransition(
   actor.ruleState['end-turn-requested'] = false;
   actor.ruleStateOwners['end-turn-requested'] ??= null;
   if (actor.traitIds.includes('stalwart:trait:fortify')) actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
-  if (actor.conditions.some(({ id }) => id === 'regeneration') && isBloodied(actor)) gainVigor(state, actor, 4);
+  // p.104 regeneration (4 vigor at turn end while bloodied) reads the
+  // projected condition set, so a durable regeneration condition and a
+  // reviewed source-ID mark projection (Rot REGENERATE, p.186) both count.
+  if (encounterConditionSet(actor).has('regeneration') && isBloodied(actor)) gainVigor(state, actor, 4);
   actor.turnTaken = true;
-  resolveTurnEnd(state, actor, event.carnevaleGamble, event.monogatariGamble);
+  resolveTurnEnd(state, actor, intent);
   if (event.round > state.round) {
     expireBoundaryEffects(state, actor.id, 'round-end');
     for (const candidate of Object.values(state.actors)) {
@@ -2277,6 +1904,15 @@ function applyTurnTransition(
     }
     state.partyResolve += 1;
     chargeWickedSheathDie(state);
+    // ICON p.298 Legend role baseline: Juggernaut clears a status or mark at
+    // the start of a round. Deterministic — every status, status-condition,
+    // and mark on each living legend is cleared before the new round begins.
+    for (const candidate of Object.values(state.actors)) {
+      if (candidate.roleId !== 'legend' || candidate.defeated) continue;
+      candidate.statuses = [];
+      candidate.conditions = [];
+      candidate.marks = [];
+    }
   }
   const next = state.actors[event.nextActorId];
   next.actionsRemaining = 2;
@@ -2294,15 +1930,22 @@ function applyTurnTransition(
     candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
     candidate.ruleStateOwners['gates-of-hell:vigilance-rushed'] ??= null;
   }
+  // The delayed phase (historical resolveDelayedMarkEffects position): runs
+  // after the per-actor flag reset so its fresh ability-moves (Great Giorgios
+  // rush) are on the next turn's clock and their triggers survive the boundary.
+  runLifecyclePhase(state, actor, 'delayed', intent);
   state.round = event.round;
+  // F6 round-start phase: every living actor's round-start recipes run (True
+  // Horn sturdy, round-5 rages, mantra die tick) with the new round number
+  // visible, executing exactly the recorded participants.
+  runLifecyclePhaseForAll(state, 'round-start', intent);
   state.activeActorId = event.nextActorId;
   state.lastSide = actor.side;
-  resolveDelayedMarkEffects(state, actor);
   // ICON p.107: interrupt windows close at the end of the turn; held damage
   // and held ability effects resolve now (the window was the opportunity).
   resolveHeldInterruptWindows(state);
   expireBoundaryEffects(state, next.id, 'round-start');
-  resolveTurnStart(state, next);
+  resolveTurnStart(state, next, intent);
 }
 
 export function applyEvents(input: EncounterState, events: EncounterEvent[]): EncounterState {
@@ -2332,6 +1975,12 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           actor.ruleStateOwners['damage-immune'] ??= null;
           if (actor.traitIds.includes('stalwart:trait:armor-2')) actor.armor = Math.max(2, actor.armor);
         }
+        // F6: round 1 is the combat start — durable consumable grants
+        // (Defiance), companion summons, and the round-start lifecycle phase
+        // (True Horn sturdy, mantra die seed) all apply here, idempotently,
+        // so the replayed ENCOUNTER_STARTED event is deterministic.
+        applyCombatStartTraitEffects(state);
+        runLifecyclePhaseForAll(state, 'round-start', { cause: 'voluntary', participants: [], diceWindows: {}, roundAdvance: true });
         break;
       case 'ACTOR_MOVED': {
         const actor = state.actors[event.actorId];
@@ -2340,15 +1989,24 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         actor.standardMoveUsed ||= event.mode === 'standard';
         pickupThrownWeapon(state, actor, [from, actor.position, ...event.path]);
         if (event.mode === 'dash') {
-          actor.actionsRemaining -= 1;
+          // ICON p.168 Path of the Aesi: while the owner has Stealth the Dash
+          // action is free. Closed source-ID check — a trait name or a bare
+          // condition could never accidentally waive the core Dash cost.
+          const freeDash = actor.traitIds.includes('warden:trait:path-of-the-aesi') && encounterConditionSet(actor).has('stealth');
+          if (!freeDash) actor.actionsRemaining -= 1;
           actor.usedAbilityIds.push('basic:dash');
         }
         // Movement events intentionally retain source amounts.  Do not route
         // them through applyDeterminedEncounterDamage: that API is only for
         // a persisted post-mitigation amount and would bypass p.93 here.
-        // TODO(ICON-rules, pp.89, 93–107): replace these loose numeric fields
-        // with a durable DamageIntent ledger before adding new terrain damage.
-        if (event.dangerousDamage) {
+        // New events carry the F0 damage ledger (source handoff); historical
+        // events replay the loose numeric field the same way.
+        if (event.ledger) {
+          if (event.ledger.amount > 0) {
+            applyDamageLedger(state, event.ledger);
+            actor.dangerousTerrainTriggeredThisTurn = true;
+          }
+        } else if (event.dangerousDamage) {
           determineAndApplyEncounterDamage(state, {
             targetId: actor.id,
             sourceRuleId: 'core:dangerous-terrain',
@@ -2376,16 +2034,29 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         actor.attackedThisTurn = true;
         if (event.hit) discardWickedSheathDie(actor);
         breakStealth(actor);
-        applyDeterminedEncounterDamage(state, target, actor, {
-          amount: event.appliedDamage,
-          damageType: 'normal',
-          sourceActorId: actor.id,
-          sourceId: event.weight === 'heavy' ? 'core:heavy-attack' : 'core:light-attack',
-          instance: 1,
-          delivery: event.hit ? 'hit' : 'miss',
-          ignoreCover: false,
-        });
+        // New events replay the durable AttackResolution ledger (the full
+        // determined amount nested in its downstream damage record, plus the
+        // recorded floor/defeat result). Historical events without the ledger
+        // replay the reduced applied amount plus the durable defiance flag.
+        if (event.attackResolution) applyDamageLedger(state, event.attackResolution.damage);
+        else {
+          applyDeterminedEncounterDamage(state, target, actor, {
+            amount: event.appliedDamage,
+            damageType: 'normal',
+            sourceActorId: actor.id,
+            sourceId: event.weight === 'heavy' ? 'core:heavy-attack' : 'core:light-attack',
+            instance: 1,
+            delivery: event.hit ? 'hit' : 'miss',
+            ignoreCover: false,
+            ...(event.defianceTriggered === true ? { defianceTriggered: true } : {}),
+          });
+        }
         consumeMassiveOverhead(state, actor, target);
+        // F6: armed one-shot trait modifiers (Demon Edge true strike,
+        // Hissatsu) are consumed by the attack that read them, exactly like
+        // Massive Overhead's arm — a reducer-time decision on the rebuilt
+        // state, so replay consumes identically.
+        consumeTraitAttackModifiers(actor.ruleState);
         if (!event.hit) tickGallowsHumorOnMiss(state);
         break;
       }
@@ -2404,15 +2075,20 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         if (event.endsTurn) actor.statuses = actor.statuses.filter((status) => status !== 'stunned');
         if (event.attack) {
           const target = state.actors[event.attack.targetId];
-          applyDeterminedEncounterDamage(state, target, actor, {
-            amount: event.attack.appliedDamage,
-            damageType: event.attack.bypassVigor ? 'divine' : 'normal',
-            sourceActorId: actor.id,
-            sourceId: event.abilityId,
-            instance: 1,
-            delivery: event.attack.hit ? 'hit' : 'miss',
-            ignoreCover: false,
-          });
+          // New events carry the durable ledger; historical ABILITY_RESOLVED
+          // events keep the documented lossy bypassVigor → divine mapping.
+          if (event.attack.ledger) applyDamageLedger(state, event.attack.ledger);
+          else {
+            applyDeterminedEncounterDamage(state, target, actor, {
+              amount: event.attack.appliedDamage,
+              damageType: event.attack.bypassVigor ? 'divine' : 'normal',
+              sourceActorId: actor.id,
+              sourceId: event.abilityId,
+              instance: 1,
+              delivery: event.attack.hit ? 'hit' : 'miss',
+              ignoreCover: false,
+            });
+          }
         }
         break;
       }
@@ -2472,6 +2148,10 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           const overheadTarget = attackMutation ? state.actors[attackMutation.targetId] : undefined;
           if (overheadTarget && !overheadTarget.defeated) consumeMassiveOverhead(state, actor, overheadTarget);
         }
+        // F6: the VM's attack roll consumed armed one-shot trait modifiers at
+        // plan time; clear them on the rebuilt state so replay sees the same
+        // post-attack ruleState (the roll itself is already recorded).
+        if (event.mutations.some((mutation) => mutation.kind === 'attack')) consumeTraitAttackModifiers(actor.ruleState);
         if (event.timing === 'interrupt') {
           // Track per-ability interrupt uses the same way ABILITY_RESOLVED
           // does, so resolver-based interrupts obey the source usage limit.
@@ -2556,15 +2236,21 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         const actor = state.actors[event.actorId];
         const target = state.actors[event.targetId];
         actor.resources.vigilance = Math.max(0, (actor.resources.vigilance ?? 0) - 1);
-        applyDeterminedEncounterDamage(state, target, actor, {
-          amount: event.appliedDamage,
-          damageType: 'normal',
-          sourceActorId: actor.id,
-          sourceId: 'core:vigilance',
-          instance: 1,
-          delivery: 'effect',
-          ignoreCover: true,
-        });
+        // New events replay the durable ledger; historical events replay the
+        // reduced applied amount plus the durable defiance flag.
+        if (event.ledger) applyDamageLedger(state, event.ledger);
+        else {
+          applyDeterminedEncounterDamage(state, target, actor, {
+            amount: event.appliedDamage,
+            damageType: 'normal',
+            sourceActorId: actor.id,
+            sourceId: 'core:vigilance',
+            instance: 1,
+            delivery: 'effect',
+            ignoreCover: true,
+            ...(event.defianceTriggered === true ? { defianceTriggered: true } : {}),
+          });
+        }
         break;
       }
       case 'ACTOR_RECOVERED': {

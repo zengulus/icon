@@ -1,6 +1,7 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { findAbility, JOBS } from '../catalog.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
@@ -26,11 +27,16 @@ interface DemonSlayerFixture {
   ally: EncounterActor;
 }
 
-function demonSlayerEncounter(options: { foe?: Position; second?: Position; ally?: Position | null; chapter?: 1 | 2 | 3 } = {}): DemonSlayerFixture {
+function demonSlayerEncounter(options: { foe?: Position; second?: Position; ally?: Position | null; chapter?: 1 | 2 | 3; talents?: Record<string, 1 | 2>; slowTurn?: boolean } = {}): DemonSlayerFixture {
   let state = createEncounter('Demon Slayer fixture');
   const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
   hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
   hero.chapter = options.chapter ?? 3;
+  if (options.talents) hero.talents = { ...hero.talents, ...options.talents };
+  if (options.slowTurn) {
+    hero.ruleState['slow-turn'] = true;
+    hero.ruleStateOwners['slow-turn'] = hero.id;
+  }
   const foe = createFoe('Relict', options.foe ?? { x: 3, y: 1 });
   const second = createFoe('Grim', options.second ?? { x: 5, y: 1 });
   const ally = options.ally === null ? null : actorFromCharacter(validCharacter('Bryn'), options.ally ?? { x: 7, y: 1 });
@@ -101,6 +107,67 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
       { kind: 'damage', actorId: foe.id, amount: 9 },
     ]);
     expect(result.state.actors[second.id].hp).toBe(28); // hit by the second line
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Demon Cutter talent 2: rush 1 before the attack, and the line originates from the new position', () => {
+    // The first program-level talent variant (F7): the program reads the
+    // equipped choice through the projected `talents` surface and emits the
+    // pre-ability rush itself, so the changed attack origin rides the same
+    // deterministic event (never a post-mutation fold effect).
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    const mutations = mutationsOf(result.events, 'demon-slayer:demon-cutter');
+    expect(mutations).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'move', actorId: hero.id, movement: 'rush', positions: [{ x: 2, y: 1 }] },
+      { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
+      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
+      { kind: 'attack', d20: 12, hit: true },
+      { kind: 'damage', actorId: foe.id, amount: 9 },
+    ]);
+    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 });
+    expect(result.state.actors[foe.id].hp).toBe(19); // 32 - 4 area fray - 9 attack, hit from the new origin
+    expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Demon Cutter talent 2: a slow turn rushes 3 instead, and the charge line follows the new origin', () => {
+    // The range gate checks the target against the pre-rush origin, so the
+    // foe sits within range 3 of (1,1); the rush-3 path (2,1),(3,1),(4,1) is
+    // clear and the post-rush line from (4,1) reaches the foe at (4,2).
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 4, y: 2 }, second: { x: 6, y: 1 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 }, slowTurn: true });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    const mutations = mutationsOf(result.events, 'demon-slayer:demon-cutter');
+    expect(mutations).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'move', actorId: hero.id, movement: 'rush', positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }] },
+      { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
+      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
+      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' }, // second line from the post-rush origin
+      { kind: 'attack', d20: 12, hit: true },
+      { kind: 'damage', actorId: foe.id, amount: 9 },
+    ]);
+    expect(result.state.actors[hero.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.state.actors[foe.id].hp).toBe(19);
+    expect(result.state.actors[second.id].hp).toBe(28);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Demon Cutter: the pre-ability rush is gated on talent 2 — a slow turn alone never rushes', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 1, y: 3 }, slowTurn: true });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    const mutations = mutationsOf(result.events, 'demon-slayer:demon-cutter');
+    expect(mutations).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 1 },
+      { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
+      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
+      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' }, // the charge line still fires
+      { kind: 'attack', d20: 12, hit: true },
+      { kind: 'damage', actorId: foe.id, amount: 9 },
+    ]);
+    expect(mutations.some((mutation) => mutation.kind === 'move')).toBe(false);
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 });
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

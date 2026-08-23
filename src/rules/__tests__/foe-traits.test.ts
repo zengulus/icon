@@ -1,8 +1,10 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
-import { encounterConditionSet } from '../automation/encounter-adapter.js';
-import { FOE_TRAIT_MOVEMENT_RECIPES, foeTraitMovementRecipe, projectedFoeTraitMovementConditions } from '../automation/foe-trait-recipes.js';
-import { isIndependentlyExecutableManualProgram } from '../automation/manual-programs.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
+import { FOE_TRAIT_MOVEMENT_RECIPES } from '../automation/content/foes/trait-recipes.js';
+import { foeTraitMovementRecipe, projectedFoeTraitMovementConditions } from '../automation/kernels/foe-trait-recipes.js';
+import { isIndependentlyExecutableManualProgram } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand } from '../encounter.js';
 import { FOE_PROFILES } from '../foes.js';
 import { planMovementPath } from '../movement.js';

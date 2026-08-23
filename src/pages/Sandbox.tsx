@@ -13,7 +13,7 @@ import { actorFromCharacter, createEncounter, createFoe, createFoeFromProfile } 
 import { seededDice } from '../rules/dice.js';
 import { FOE_PROFILES } from '../rules/foes.js';
 import { planMovement } from '../rules/movement.js';
-import { isIndependentlyExecutableAbility } from '../rules/automation/manual-programs.js';
+import { isIndependentlyExecutableAbility } from '../rules/automation/content/glue/manual-programs.js';
 import { auditRuleSourceUnits, collectRuleSourceUnits, type RuleSourceKind } from '../rules/source-units.js';
 import {
   applyRoomEvents,

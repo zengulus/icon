@@ -1,7 +1,8 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_FOE_ABILITY_IDS } from '../automation/manual-programs.js';
-import { FOE_ABILITY_RECIPES } from '../automation/foe-recipes.js';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
+import { EXECUTABLE_FOE_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { FOE_ABILITY_RECIPES } from '../automation/content/foes/ability-recipes.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
@@ -42,6 +43,10 @@ function foeFixture(profileId: string, layout: FoeLayout): FoeFixture {
   // Foe damage must apply in fixtures: strip the when-damaged (p.128) and
   // defeated (p.138) interrupts that would otherwise hold every foe blow.
   hero.abilityIds = hero.abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain' && id !== 'colossus:boiling-blood');
+  // Drop the Stalwart Fortify trait so its projected rampart (p.116, p.104)
+  // does not block the foe's own rushes/dashes into melee — the recipes under
+  // test are the foe moves, not the defensive rampart.
+  hero.traitIds = hero.traitIds.filter((id) => id !== 'stalwart:trait:fortify');
   const foe = createFoeFromProfile(profileId, layout.foe);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;

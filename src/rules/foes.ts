@@ -1,5 +1,5 @@
 import foes from '../content/generated/foes-1.5.json' with { type: 'json' };
-import { foeTraitMovementRecipe } from './automation/foe-trait-recipes.js';
+import { foeTraitMovementRecipe } from './automation/kernels/foe-trait-recipes.js';
 import type { FoeKind, FoeProfileDefinition, FoeRoleDefinition, FoeRoleId } from './types.js';
 
 export const FOE_ROLES: readonly FoeRoleDefinition[] = [

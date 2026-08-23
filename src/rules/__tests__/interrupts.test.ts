@@ -1,6 +1,7 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, orderInterrupts } from '../encounter.js';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterEvent, EncounterPendingInterrupt, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
 

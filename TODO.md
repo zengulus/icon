@@ -46,22 +46,49 @@ These are concrete replay/authority defects found after the latest damage
 work. Repair them before promoting new damage, trait, or foe coverage.
 
 1. **Persist Defiance’s application result for legacy attack/Vigilance events.**
-   `ATTACK_RESOLVED` and `VIGILANCE_SPENT` currently record an amount after
-   the 1-HP Defiance floor, then replay re-infers Defiance from that reduced
-   amount. A lethal hit can replay with Defiance still present and without its
-   temporary immunity. Start at `src/rules/encounter.ts` event construction
-   and replay branches. Preserve a pre-application determined amount or a
-   durable `defianceTriggered` result; add a Defiance replay fixture for both
-   event shapes.
+   **Repaired.** `ATTACK_RESOLVED` and `VIGILANCE_SPENT` previously recorded an
+   amount after the 1-HP Defiance floor, then replay re-inferred Defiance from
+   that reduced amount, so a lethal hit could replay with Defiance still
+   present and without its temporary immunity. Event construction now records
+   a durable `defianceTriggered` result (`src/rules/encounter.ts`); the
+   application kernel honors it via an `EncounterHeldDamage.defianceTriggered`
+   override (`src/rules/automation/encounter-adapter.ts`
+   `applyDeterminedEncounterDamage`); and replay passes it through for both
+   event shapes. Fresh held interrupt windows never persist the flag — they
+   carry the full determined amount and still re-infer. Defiance replay
+   fixtures cover both event shapes (`__tests__/encounter.test.ts`,
+   `__tests__/conditions.test.ts`).
 2. **Open a defeated interrupt window only for an actual defeat.**
-   VM `applyDamage` currently considers the raw determined amount but not
-   Defiance/Defy Death’s application-time HP floor. Start at
-   `src/rules/automation/encounter-adapter.ts`; compute prospective applied
-   defeat, then add fixtures for a protected actor with only a defeated
-   interrupt available.
+   **Repaired.** VM `applyDamage` now computes prospective applied defeat —
+   the determined amount against HP+vigor, minus Defiance (p.104) and Defy
+   Death (p.138) application-time floors — before arming Boiling Blood’s
+   `defeated` window, mirroring the exact test the application kernel uses.
+   Fixtures cover a defiant hero and an already-defy-death hero with only the
+   defeated interrupt available (`__tests__/colossus.test.ts`).
+3. **Do not preempt Masquerade using raw damage.**
+   **Repaired.** `deferrableEffectWindow` previously let a hypothetical
+   defeated/when-damaged window suppress Masquerade from the raw mutation
+   amount, so armor/resistance absorption or a Defiance/Defy Death floor could
+   prevent that window and leave neither interrupt. The priority check now
+   mirrors the damage pipeline: it determines the blow through the shared
+   kernel, lets Masquerade win when no damage window would actually open
+   (including a fully mitigated amount), and uses the shared
+   `prospectiveAppliedDefeat` gate before preferring a `defeated` window
+   (`src/rules/automation/encounter-adapter.ts`). Window-order regressions
+   cover armor mitigation, Defiance protection, and the genuinely-lethal
+   control (`__tests__/fool.test.ts`).
+4. **Gate Bleak Mercy on statuses, not broad conditions.**
+   **Repaired.** ICON p.144 requires three or more *statuses*; the resolver
+   now counts the status-only projection instead of every projected condition,
+   so passive positive conditions (Counter, Defiance, Resistance) can no
+   longer grant the true-strike/bypass package
+   (`src/rules/automation/knave-programs.ts`). A three-positive-conditions
+   negative fixture joins the existing p.144 replay cases
+   (`__tests__/knave.test.ts`).
 
-Do not paper over either repair by removing replay tests, reclassifying the
-amount as raw, or weakening Defiance/Defy Death.
+All four repairs are closed and replay-verified. Do not reopen them by
+removing replay tests, reclassifying a recorded amount as raw, weakening
+Defiance/Defy Death, or changing the source text.
 
 ## Active work tracks and safe order
 
@@ -129,6 +156,29 @@ Treat `server/rooms.ts` and Supabase migrations as security-sensitive.
   supplied PDF and `npm run verify:extraction`; hosted CI intentionally checks
   the no-PDF evidence path instead.
 
+## Content coverage inventory — concrete future work
+
+Catalog presence, a rendered rules card, or a parser-complete source unit is
+not automation coverage. Consult [`docs/rules-coverage.md`](docs/rules-coverage.md)
+and `npm run audit:automation` before claiming any item below is complete.
+
+| Area | What exists now | Concrete remaining work and safe entry point |
+| --- | --- | --- |
+| **Job abilities** | All 16 Jobs / 144 active abilities have reviewed typed programs and replay fixtures. This does **not** release Phase 2. | Keep source-specific behavior honest while foundations are incomplete. Any new conditional behavior must use the shared damage/target/save/turn contracts, not an ability-local shortcut. Start in `src/rules/automation/*-programs.ts` and its job fixture. |
+| **Class and Job traits** | A few narrowly reviewed traits/passive recipes exist (for example Mendicant Diaga/Bless/Succor and exact foe mobility recipes). The audit still lists **8 class-trait** and **65 job-trait** source units unresolved. | Implement closed source-ID recipes only after their prerequisite foundation works. Do not infer a trait from title or prose. Start in `automation/passive-projection.ts`, `manual-programs.ts`, and the exact source unit/fixture. |
+| **Talents and masteries** | Catalogued and validated for builds. The audit lists **288 talents** and **144 masteries** unresolved. | Sort into passive projection, command-time resolution, lifecycle hook, table-facing choice, or unavailable. Promote a small exact-ID slice with source-page/replay evidence; do not bulk-enable by parser result. |
+| **Limit Breaks and Job summons** | Structured in catalog/loadout validation; not encounter-complete. The audit lists **16 limit-break** and **6 job-summon-rule** units unresolved. | Finish `SpatialIntent`, targeting, entities, areas, lifecycle, and ownership/projection semantics before automation. Start in `src/rules/automation/`, `src/rules/encounter.ts`, and `src/rules/vtt-room.ts`; add server redaction tests for owner-visible state. |
+| **Relics** | All 40 Relics, ranks I–III, aspects, and character validation exist. The audit lists **120 relic-rank** and **40 relic-aspect** units unresolved. | Relic invokes, persistent effects, aspect transitions, and table choices must be classified individually. Do not route a Relic through generic `EXECUTE_RULE` without an explicit recipe and durable lifecycle/projection design. Start in `src/rules/catalog.ts`, `src/rules/character.ts`, and relic source units. |
+| **Foe abilities** | 449 profiles/components with 1,365 catalogued abilities; 20 exact reviewed recipe abilities are active. | The remaining catalog abilities are not independent authority. The audit separately tracks **1,247 traceable foe-ability** units plus phases/chapter rules. Prefer bounded attack-tagged recipes only after target/damage contracts are ready; do not implement mobs, areas, summons, or phases through client assertions. Start in `automation/foe-recipes.ts`, `foes.ts`, and `__tests__/foe.test.ts`. |
+| **Foe traits, roles, phases, and chapter rules** | Only exact-ID Flying/Phasing mobility recipes are projected. The audit lists **655 foe traits**, **19 foe phases**, and **116 foe chapter rules** unresolved. | Do role baselines (Skirmisher/Heavy/Artillery/Legend) only after damage/target/lifecycle contracts. Build exact source-ID manifests; never derive mechanics from a role label or trait text at runtime. |
+| **Core combat** | Shared reducer and initial damage/attack/save/target/turn seams exist. The audit still lists **70 core** source units unresolved. | Complete the immediate repair queue and foundations before promoting Defiance, Counter, Dodge, Sturdy, Vigilance, Regeneration, broad areas, summons, and trigger ordering. See `docs/rules-foundations.md`. |
+| **Bonds, powers, rewards, trophies, camp** | Character choices and content are visible/validated; narrative outcomes are table-facing. Audit backlog includes **68 trophies**, **16 camp fixtures**, **85 camp features**, and **9 reward rules**. | Keep narrative/freeform choices visible and non-authoritative until a deterministic source-backed model exists. Do not fabricate combat outcomes from descriptive text. |
+
+When selecting a coverage slice, pick one exact source behavior whose target,
+cost, timing, save/damage/movement semantics, ownership, and replay shape are
+already supported. If any prerequisite is missing, leave it source-visible and
+add a source-linked TODO at that prerequisite instead of approximating it.
+
 ## What not to do
 
 - Do not relax phase gates, RLS, server-side authorization, checkpoint
@@ -190,4 +240,3 @@ A task is done only when its behavior is implemented within the correct
 authority boundary, its durable representation is validated and replay-safe,
 its user-visible surface is covered where relevant, its source/docs/audit
 claims are truthful, and the appropriate checks above pass.
-

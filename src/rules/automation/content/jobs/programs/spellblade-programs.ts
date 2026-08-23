@@ -1,0 +1,418 @@
+import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import type { RuleSourceUnit } from '../../../../source-units.js';
+import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
+import {
+  axisDirection, sameCell, squareArea, withinGrid,
+  constant,
+  distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe, rushTowardFoes,
+  damageMutation, conditionMutation, stateMutation,
+  resourceMutation, stanceMutation, markMutation,
+  teleportMutation, shoveMutation, terrainMutation,
+  action, compilation,
+} from '../../../primitives/job-kit.js';
+
+/**
+ * Independently reviewed Spellblade ability implementations (ICON p.222–229),
+ * the third Wright job. Every ability below has typed costs, targets, ranges,
+ * and tags from the source catalog plus a hand-authored typed RuleProgram and
+ * a named deterministic resolver. Aether is the `aether` resource.
+ *
+ * The lightning wall and wind wall are `bifrost-arch` / `atherwand` terrain
+ * effects; lightning spikes are `lightning-spike` entities.
+ *
+ * Fidelity notes (the full source text is preserved on every event):
+ * - Odinforce's bolts (called on entering the stance or any teleport, ticking
+ *   the die down) and the slay-triggered +2 bolts are modeled on the stance
+ *   with a `spellblade:odinforce:die` state counter; the automatic
+ *   start-of-turn refresh is a documented stance window.
+ * - Ätherwand's end-of-turn shatter, cover, and the once-a-round infuse
+ *   teleport; Fulminate's start-of-turn aura teleports; Bifröst's grab-on
+ *   free action; and Rampant Nail's damage-triggered die ticks, charged
+ *   detonation, and free-action explosion are documented terrain/summon
+ *   windows.
+ * - Sturmreiten's trigger (you are damaged by a foe ability after it
+ *   resolves) is a post-resolution interrupt window; Drifting Leaf's Leaf on
+ *   the Wind interrupt (a foe enters a space adjacent to you) is a
+ *   movement-entry window — both execute through EXECUTE_RULE at `interrupt`
+ *   timing.
+ */
+
+/** Standard resolver-driven autohit attack mutation (no roll). */
+const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
+  kind: 'attack', sourceId: context.sourceId, actorId: context.actorId, targetId: context.attackTargetId ?? '',
+  d20: null, boon: 0, total: null, hit: true, critical: false, evasionRoll: null, trueStrike: true, autoHit: true,
+});
+
+/** ICON p.225 Blitz: [D] on hit (1 on miss), the foe is vulnerable, then teleport
+ * 1 and deal 1 piercing to a foe in range 3, twice. Slay or Infuse 3 (GRAN
+ * BLITZ) repeats the teleport-and-pierce effect. */
+const blitzEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  if (!source.position || !target?.position) return [];
+  const mutations: RuleMutation[] = [];
+  const roll = resolveAttack(context, source, target);
+  mutations.push(roll.attackMutation);
+  mutations.push(roll.hit
+    ? damageMutation(context, target.id, context.dice.die(source.damageDie), 'hit')
+    : damageMutation(context, target.id, 1, 'miss'));
+  mutations.push(conditionMutation(context, target.id, 'vulnerable'));
+  const repeats = context.triggers?.has('slay') || context.actionTags?.has('infuse') ? 2 : 1;
+  for (let i = 0; i < repeats; i += 1) {
+    const hop = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
+    if (!sameCell(hop, source.position)) mutations.push(teleportMutation(context, source.id, hop));
+    mutations.push(damageMutation(context, target.id, 1, 'effect', 'piercing'));
+  }
+  return mutations;
+};
+
+/** ICON p.225 Odinforce: enter the stance with a d6 power die starting at 3.
+ * Calling a bolt down (1 piercing to a foe in range 3, die −1) and the
+ * slay-triggered +2 bolts are modeled on the stance's die counter; the
+ * automatic start-of-turn refresh is a documented stance window. */
+const odinforceEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  return [
+    stanceMutation(context, source.id, 'enter', 'odinforce'),
+    stateMutation(context, source.id, 'spellblade:odinforce:die', 3),
+  ];
+};
+
+/** ICON p.225 Odinforce bolt: deal 1 piercing to a foe in range 3 (as an area
+ * effect) and reduce the power die by 1; with no bolts left the stance ends. */
+const odinforceBoltEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  if (!source.position) return [];
+  const mutations: RuleMutation[] = [];
+  const current = Number(source.state['spellblade:odinforce:die'] ?? 3);
+  if (current <= 0) return mutations;
+  mutations.push(stateMutation(context, source.id, 'spellblade:odinforce:die', current - 1));
+  if (current - 1 <= 0) mutations.push({ kind: 'stance', sourceId: context.sourceId, sourceActorId: context.actorId, operation: 'exit', actorId: source.id, stanceId: 'odinforce', state: {} });
+  if (target?.position && distance(source.position, target.position) <= 3) {
+    mutations.push(damageMutation(context, target.id, 1, 'area', 'piercing'));
+  }
+  return mutations;
+};
+
+/** ICON p.225 Nothung: teleport 1 toward the target, 2[D]+fray on hit (fray on
+ * miss), fray to the other characters in the arc, teleport 1, then deal 1
+ * piercing to the target for every foe or ally adjacent to them (max 4). */
+const nothungEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  if (!source.position || !target?.position) return [];
+  const mutations: RuleMutation[] = [];
+  const first = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
+  if (!sameCell(first, source.position)) mutations.push(teleportMutation(context, source.id, first));
+  const roll = resolveAttack(context, source, target);
+  mutations.push(roll.attackMutation);
+  mutations.push(roll.hit
+    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    : damageMutation(context, target.id, source.fray, 'miss'));
+  const arc = squareArea(target.position, 1);
+  for (const character of Object.values(context.state.actors)) {
+    const position = character.position;
+    if (character.id === target.id || character.id === source.id || !position || !arc.some((cell) => sameCell(cell, position))) continue;
+    mutations.push(damageMutation(context, character.id, source.fray, 'area'));
+  }
+  const second = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
+  if (!sameCell(second, source.position)) mutations.push(teleportMutation(context, source.id, second));
+  const targetPosition = target.position;
+  const adjacent = Object.values(context.state.actors).filter((character) => {
+    const position = character.position;
+    return position && character.id !== source.id && character.id !== target.id && distance(position, targetPosition) <= 1;
+  });
+  const strikes = Math.min(4, adjacent.length);
+  if (strikes > 0) mutations.push(damageMutation(context, target.id, strikes, 'effect', 'piercing'));
+  return mutations;
+};
+
+/** ICON p.225 Nothung slay/infuse (GRAM): after the ability resolves, release a
+ * flurry of slashes in a burst 2 (self) area — 1 piercing twice to all foes. */
+const gramEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  if (!source.position) return [];
+  const mutations: RuleMutation[] = [];
+  const area = squareArea(source.position, 2);
+  for (const character of Object.values(context.state.actors)) {
+    const position = character.position;
+    if (!position || character.side === source.side || !area.some((cell) => sameCell(cell, position))) continue;
+    mutations.push(damageMutation(context, character.id, 1, 'area', 'piercing'));
+    mutations.push(damageMutation(context, character.id, 1, 'area', 'piercing'));
+  }
+  return mutations;
+};
+
+/** ICON p.225 Ätherwand: create a line 3 of crackling winds in range 4 —
+ * difficult terrain that allies may use for cover as height 1 terrain and that
+ * shatters foes ending their turn in it. The cover, the end-of-turn shatter,
+ * and the once-a-round infuse teleport are documented terrain windows. */
+const atherwandEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
+  const target = targetId ? sourceActor(context, targetId) : undefined;
+  if (!source.position) return [];
+  const center = target?.position ?? source.position;
+  if (distance(source.position, center) > 4) throw new RuleProgramViolation('choice.actor-range', 'Ätherwand requires its center in range 4.');
+  const direction = context.input.directions?.line ?? axisDirection(source.position, center);
+  const cells: { x: number; y: number }[] = [];
+  for (let step = 1; step <= 3; step += 1) {
+    const cell = { x: center.x + direction.x * step, y: center.y + direction.y * step };
+    if (!withinGrid(cell, context)) break;
+    cells.push(cell);
+  }
+  const mutations: RuleMutation[] = [];
+  if (cells.length > 0) mutations.push(terrainMutation(context, 'create', 'atherwand', cells));
+  const extend = Math.max(0, Math.trunc(context.input.numbers?.aether ?? 0));
+  for (let step = 4; step <= 3 + Math.min(3, extend); step += 1) {
+    const cell = { x: center.x + direction.x * step, y: center.y + direction.y * step };
+    if (!withinGrid(cell, context)) break;
+    mutations.push(terrainMutation(context, 'create', 'atherwand', [cell]));
+  }
+  return mutations;
+};
+
+/** ICON p.226 Fulminate: mark a character in range 6 — they gain aura 2 while
+ * marked. The start-of-turn aura teleport is a documented stance/turn window. */
+const fulminateEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
+  const target = targetId ? sourceActor(context, targetId) : undefined;
+  if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Fulminate requires a character in range 6.');
+  if (distance(source.position, target.position) > 6) throw new RuleProgramViolation('choice.actor-range', 'Fulminate requires a character in range 6.');
+  return [markMutation(context, target.id, 'fulminate', {})];
+};
+
+/** ICON p.226 Bifröst: sweep a line 3 crackling lightning arch dealing 2
+ * piercing to all characters in the area. The arch remains as terrain that
+ * allies can grab as a free action to teleport between its spaces (a
+ * documented free-action window). */
+const bifrostEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  if (!source.position) return [];
+  const direction = context.input.directions?.line ?? rushTowardFoes(context, source.position);
+  const cells: { x: number; y: number }[] = [];
+  for (let step = 1; step <= 3; step += 1) {
+    const cell = { x: source.position.x + direction.x * step, y: source.position.y + direction.y * step };
+    if (!withinGrid(cell, context)) break;
+    cells.push(cell);
+  }
+  const mutations: RuleMutation[] = [];
+  for (const character of Object.values(context.state.actors)) {
+    const position = character.position;
+    if (character.id === source.id || !position || !cells.some((cell) => sameCell(cell, position))) continue;
+    mutations.push(damageMutation(context, character.id, 2, 'area', 'piercing'));
+  }
+  if (cells.length > 0) mutations.push(terrainMutation(context, 'create', 'bifrost-arch', cells));
+  return mutations;
+};
+
+/** ICON p.227 Rampant Nail: impale a lightning spike in a space in range 3 with
+ * aura 2. The damage-triggered die ticks, the charged detonation, and the
+ * free-action explosion are documented summon windows. */
+const rampantNailEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
+  const target = targetId ? sourceActor(context, targetId) : undefined;
+  if (!source.position) return [];
+  const cell = target?.position ?? source.position;
+  if (distance(source.position, cell) > 3) throw new RuleProgramViolation('choice.actor-range', 'Rampant Nail requires a space in range 3.');
+  const mutations: RuleMutation[] = [
+    { kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'lightning-spike', ownerId: source.id, positions: [cell], count: 1, state: { charged: false } },
+    stateMutation(context, source.id, 'spellblade:rampant-nail:die', 0),
+  ];
+  return mutations;
+};
+
+/** ICON p.227 Sturmreiten (interrupt): draw a line 3 area effect, teleport to
+ * the end space, and deal 2 piercing to every other character in the area. */
+const sturmreitenEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  if (!source.position) return [];
+  const direction = context.input.directions?.line ?? rushTowardFoes(context, source.position);
+  const cells: { x: number; y: number }[] = [];
+  for (let step = 1; step <= 3; step += 1) {
+    const cell = { x: source.position.x + direction.x * step, y: source.position.y + direction.y * step };
+    if (!withinGrid(cell, context)) break;
+    cells.push(cell);
+  }
+  const end = cells.at(-1);
+  if (!end) return [];
+  const mutations: RuleMutation[] = [teleportMutation(context, source.id, end)];
+  for (const character of Object.values(context.state.actors)) {
+    const position = character.position;
+    if (character.id === source.id || !position || !cells.some((cell) => sameCell(cell, position))) continue;
+    mutations.push(damageMutation(context, character.id, 2, 'area', 'piercing'));
+  }
+  return mutations;
+};
+
+/** ICON p.227 Drifting Leaf: 2[D]+fray on hit (fray on miss), shatter the foe,
+ * fray to the other characters in the line, then teleport 1 and gain the Leaf
+ * on the Wind interrupt (a foe enters a space adjacent to you — teleport 2 and
+ * 1 piercing) until the start of your next turn. */
+const driftingLeafEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  if (!source.position || !target?.position) return [];
+  const mutations: RuleMutation[] = [];
+  const roll = resolveAttack(context, source, target);
+  mutations.push(roll.attackMutation);
+  mutations.push(roll.hit
+    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    : damageMutation(context, target.id, source.fray, 'miss'));
+  mutations.push(conditionMutation(context, target.id, 'shattered'));
+  const direction = axisDirection(source.position, target.position);
+  for (const character of Object.values(context.state.actors)) {
+    const position = character.position;
+    if (character.id === target.id || character.id === source.id || !position) continue;
+    const dx = position.x - source.position.x;
+    const dy = position.y - source.position.y;
+    const along = (dx === 0 || Math.sign(dx) === direction.x) && (dy === 0 || Math.sign(dy) === direction.y);
+    if (along && Math.max(Math.abs(dx), Math.abs(dy)) <= 6) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
+  }
+  const away = nearestFoe(context, source.position, source.id)?.position ? axisDirection(nearestFoe(context, source.position, source.id)!.position!, source.position) : direction;
+  const hop = walk(context, source.position, away, 1, false, source.id);
+  if (!sameCell(hop, source.position)) mutations.push(teleportMutation(context, source.id, hop));
+  mutations.push(stateMutation(context, source.id, 'spellblade:leaf-on-the-wind', true));
+  return mutations;
+};
+
+/** ICON p.227 Leaf on the Wind: teleport 2 and deal 1 piercing to the foe that
+ * entered a space adjacent to you. */
+const leafOnTheWindEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const foeId = context.triggerTargetIds?.[0] ?? context.input.actorIds?.target?.[0];
+  const foe = foeId ? sourceActor(context, foeId) : undefined;
+  if (!source.position || !foe?.position) return [];
+  const direction = axisDirection(foe.position, source.position);
+  const landing = walk(context, source.position, direction, 2, false, source.id);
+  const mutations: RuleMutation[] = [];
+  if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
+  mutations.push(damageMutation(context, foe.id, 1, 'effect', 'piercing'));
+  return mutations;
+};
+
+export const SPELLBLADE_RULE_RESOLVERS: RuleResolverRegistry = {
+  'spellblade:blitz:effects': blitzEffects,
+  'spellblade:odinforce:effects': odinforceEffects,
+  'spellblade:odinforce:bolt': odinforceBoltEffects,
+  'spellblade:nothung:effects': nothungEffects,
+  'spellblade:nothung:gram': gramEffects,
+  'spellblade:atherwand:effects': atherwandEffects,
+  'spellblade:fulminate:effects': fulminateEffects,
+  'spellblade:bifrost:effects': bifrostEffects,
+  'spellblade:rampant-nail:effects': rampantNailEffects,
+  'spellblade:sturmreiten:effects': sturmreitenEffects,
+  'spellblade:drifting-leaf:effects': driftingLeafEffects,
+  'spellblade:drifting-leaf:leaf-on-the-wind': leafOnTheWindEffects,
+};
+
+export const SPELLBLADE_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourceUnit) => RuleProgramCompilation>> = {
+  'spellblade:blitz': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: ['attack', 'pierce', 'range'],
+    range: constant(3),
+    resolverId: 'spellblade:blitz:effects',
+    steps: [],
+  })], ['attack', 'on hit', 'miss', 'effect', 'slay']),
+
+  'spellblade:odinforce': (unit) => compilation(unit, [
+    action({
+      name: unit.name, timing: 'use',
+      costs: [{ kind: 'action', amount: constant(1) }],
+      tags: ['stance', 'power die'],
+      resolverId: 'spellblade:odinforce:effects',
+      steps: [],
+    }),
+    action({
+      id: 'bolt', name: 'Lightning Bolt', timing: 'use',
+      costs: [],
+      tags: ['attack'],
+      range: constant(3),
+      resolverId: 'spellblade:odinforce:bolt',
+      steps: [],
+    }),
+  ], ['stance', 'power die', 'refresh']),
+
+  'spellblade:nothung': (unit) => compilation(unit, [
+    action({
+      name: unit.name, timing: 'use',
+      costs: [{ kind: 'action', amount: constant(2) }],
+      tags: ['attack', 'arc', 'range'],
+      range: constant(2),
+      resolverId: 'spellblade:nothung:effects',
+      steps: [],
+    }),
+    action({
+      id: 'gram', name: 'GRAM', timing: 'use',
+      costs: [{ kind: 'aether', amount: constant(3) }],
+      tags: [],
+      resolverId: 'spellblade:nothung:gram',
+      steps: [],
+    }),
+  ], ['attack', 'on hit', 'miss', 'area effect', 'slay']),
+
+  'spellblade:atherwand': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: ['terrain effect', 'range'],
+    range: constant(4),
+    resolverId: 'spellblade:atherwand:effects',
+    steps: [],
+  })], ['terrain effect', 'effect']),
+
+  'spellblade:fulminate': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: ['mark'],
+    range: constant(6),
+    resolverId: 'spellblade:fulminate:effects',
+    steps: [],
+  })], ['mark', 'effect']),
+
+  'spellblade:bifrost': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: [],
+    resolverId: 'spellblade:bifrost:effects',
+    steps: [],
+  })], ['area effect', 'terrain effect']),
+
+  'spellblade:rampant-nail': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: ['range', 'power die'],
+    range: constant(3),
+    resolverId: 'spellblade:rampant-nail:effects',
+    steps: [],
+  })], ['terrain effect', 'effect']),
+
+  'spellblade:sturmreiten': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'interrupt',
+    costs: [{ kind: 'interrupt', amount: constant(1) }],
+    tags: [],
+    resolverId: 'spellblade:sturmreiten:effects',
+    steps: [],
+  })], ['interrupt', 'area effect']),
+
+  'spellblade:drifting-leaf': (unit) => compilation(unit, [
+    action({
+      name: unit.name, timing: 'use',
+      costs: [{ kind: 'action', amount: constant(2) }],
+      tags: ['attack', 'line'],
+      range: constant(6),
+      resolverId: 'spellblade:drifting-leaf:effects',
+      steps: [],
+    }),
+    action({
+      id: 'leaf-on-the-wind', name: 'Leaf on the Wind', timing: 'interrupt',
+      costs: [{ kind: 'interrupt', amount: constant(2) }],
+      tags: [],
+      resolverId: 'spellblade:drifting-leaf:leaf-on-the-wind',
+      steps: [],
+    }),
+  ], ['attack', 'on hit', 'miss', 'effect', 'area effect', 'interrupt']),
+};

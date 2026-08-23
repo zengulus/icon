@@ -7,7 +7,7 @@ unresolved `job-ability`. All sixteen current Job slices now use this recipe;
 follow it when adding a future sourcebook Job so the coverage invariant stays
 honest.
 
-The shared building blocks live in `src/rules/automation/job-kit.ts`. It
+The shared building blocks live in `src/rules/automation/primitives/job-kit.ts`. It
 consolidates the selectors, number/effect builders, mutation builders,
 movement/geometry helpers, and the `clause`/`action`/`compilation` helpers the
 early jobs used to inline. New jobs import from it instead of redefining them.
@@ -94,7 +94,7 @@ Rules of thumb baked into the kit and the existing slices:
 
 ## 2. Wire the four points
 
-1. **`src/rules/automation/manual-programs.ts`**
+1. **`src/rules/automation/content/glue/manual-programs.ts`**
    - Import `STRAY_ABILITY_PROGRAMS`.
    - Add all nine `stray:*` ability ids to `EXECUTABLE_JOB_ABILITY_IDS`.
    - Add the lookup to the `compileManualRuleProgram` chain:
@@ -102,7 +102,7 @@ Rules of thumb baked into the kit and the existing slices:
      const stray = STRAY_ABILITY_PROGRAMS[unit.id];
      if (stray) return stray(unit);
      ```
-2. **`src/rules/automation/resolvers.ts`**
+2. **`src/rules/automation/content/glue/resolvers.ts`**
    - Import `STRAY_RULE_RESOLVERS` and spread it into `RULE_RESOLVERS`.
 3. **`src/rules/automation/index.ts`**
    - `export * from './<job>-programs.js';`

@@ -542,7 +542,7 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
     'actorKind', 'size', 'tokenUrl', 'classId', 'chapter', 'abilityIds', 'position',
     'vitality', 'baseMaxHp', 'hp', 'vigor', 'wounds', 'defense', 'armor', 'speed',
     'dash', 'fray', 'damageDie', 'basicAttackRange', 'statuses', 'conditions',
-    'resources', 'ruleState', 'ruleStateOwners', 'activeEffects', 'marks', 'stance', 'traitIds',
+    'resources', 'ruleState', 'ruleStateOwners', 'activeEffects', 'marks', 'stance', 'traitIds', 'talents',
     'onBattlefield', 'defeated', 'actionsRemaining', 'standardMoveUsed',
     'attackedThisTurn', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn',
     'slashedTriggeredThisTurn', 'dangerousTerrainTriggeredThisTurn', 'turnTaken',
@@ -635,6 +635,14 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
     strictPrimitiveRecord(stance.state, `${path}.stance.state`);
   }
   strictIdentifierArray(actor.traitIds, `${path}.traitIds`, 500);
+  // F7: the equipped talent choice per ability — an exact 1-or-2 enum, keyed
+  // by the ability id, bounded like the interrupt-uses record.
+  const talents = strictRecord(actor.talents, `${path}.talents`);
+  if (Object.keys(talents).length > 200) invalidSnapshot(`${path}.talents`, 'cannot contain more than 200 values.');
+  for (const [abilityId, talent] of Object.entries(talents)) {
+    strictIdentifier(abilityId, `${path}.talents key`);
+    strictInteger(talent, `${path}.talents.${abilityId}`, 1, 2);
+  }
   strictBoolean(actor.onBattlefield, `${path}.onBattlefield`);
   strictBoolean(actor.defeated, `${path}.defeated`);
   strictInteger(actor.actionsRemaining, `${path}.actionsRemaining`, 0);
@@ -775,11 +783,24 @@ function strictEncounter(value: unknown): EncounterState {
       // the held effects it came from) plus identifiers.
       const heldSavePath = `${windowPath}.heldSave`;
       const heldSave = strictRecord(item.heldSave, heldSavePath);
-      assertExactKeys(heldSave, heldSavePath, ['targetId', 'boon', 'sourceId', 'sourceActorId', 'onSuccess', 'onFailure']);
+      assertExactKeys(heldSave, heldSavePath, ['targetId', 'boon', 'sourceId', 'sourceActorId', 'onSuccess', 'onFailure'], ['windowKind', 'windowId', 'statusId', 'modifiers', 'threshold']);
       strictIdentifier(heldSave.targetId, `${heldSavePath}.targetId`);
       strictFinite(heldSave.boon, `${heldSavePath}.boon`, -100, 100);
       strictIdentifier(heldSave.sourceId, `${heldSavePath}.sourceId`);
       strictIdentifier(heldSave.sourceActorId, `${heldSavePath}.sourceActorId`);
+      if (heldSave.windowKind !== undefined) strictEnum(heldSave.windowKind, `${heldSavePath}.windowKind`, new Set(['status-clear', 'cure-immediate', 'effect', 'movement']));
+      if (heldSave.windowId !== undefined) strictIdentifier(heldSave.windowId, `${heldSavePath}.windowId`);
+      if (heldSave.statusId !== undefined) strictIdentifier(heldSave.statusId, `${heldSavePath}.statusId`);
+      if (heldSave.modifiers !== undefined) {
+        const modifiersPath = `${heldSavePath}.modifiers`;
+        const modifiers = strictRecord(heldSave.modifiers, modifiersPath);
+        assertExactKeys(modifiers, modifiersPath, ['sourceModifier', 'saveBoon', 'saveCurse', 'blessing']);
+        strictFinite(modifiers.sourceModifier, `${modifiersPath}.sourceModifier`, -100, 100);
+        strictFinite(modifiers.saveBoon, `${modifiersPath}.saveBoon`, -100, 100);
+        strictFinite(modifiers.saveCurse, `${modifiersPath}.saveCurse`, -100, 100);
+        strictBoolean(modifiers.blessing, `${modifiersPath}.blessing`);
+      }
+      if (heldSave.threshold !== undefined) strictFinite(heldSave.threshold, `${heldSavePath}.threshold`, 1, 100);
       for (const branch of ['onSuccess', 'onFailure'] as const) {
         if (!Array.isArray(heldSave[branch]) || heldSave[branch]!.length > 1_000) invalidSnapshot(`${heldSavePath}.${branch}`, 'contains too many save effects.');
         heldSave[branch]!.forEach((effect, effectIndex) => strictJson(effect, `${heldSavePath}.${branch}[${effectIndex}]`));

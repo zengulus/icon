@@ -1,6 +1,7 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
@@ -27,6 +28,10 @@ function knaveEncounter(options: { foe?: Position; second?: Position | null } = 
   const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
   hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
   hero.chapter = 3;
+  // Isolate knave mechanics: the shared bastion fixture character carries
+  // Bull's Strength, whose collide fold would add incidental 2 damage to
+  // shove tests.
+  hero.traitIds = hero.traitIds.filter((id) => id !== 'bastion:trait:bull-s-strength');
   const foe = createFoe('Relict', options.foe ?? { x: 2, y: 1 });
   const second = options.second === null ? null : createFoe('Grim', options.second ?? { x: 4, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
@@ -221,12 +226,19 @@ describe('Knave ability automation (p.139–144)', () => {
         kind: 'save' as const,
         sourceId: 'fixture:save-ability',
         actorId: foeId,
+        // The F2 durable SaveWindow record: an effect-kind save with a
+        // declarative continuation branch and its modifier breakdown.
+        windowKind: 'effect' as const,
+        windowId: 'fixture:save-ability:default:effect-save:1:foe',
         roll: 12,
         boon: 0,
         total: 12,
         success: true,
-        reroll: {
+        threshold: 10,
+        modifiers: { sourceModifier: 0, saveBoon: 0, saveCurse: 0, blessing: false },
+        branch: {
           boon: 0,
+          threshold: 10,
           onSuccess: [{ kind: 'damage' as const, target: { kind: 'trigger-targets' as const }, amount: { kind: 'constant' as const, value: 2 }, damageType: 'normal' as const, delivery: 'save-success' as const }],
           onFailure: [{ kind: 'damage' as const, target: { kind: 'trigger-targets' as const }, amount: { kind: 'constant' as const, value: 8 }, damageType: 'normal' as const, delivery: 'effect' as const }],
         },
@@ -259,6 +271,16 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(interrupt.state.actors[hero.id].interruptUses['knave:sucker-punch']).toBe(1);
     expect(interrupt.state.actors[hero.id].ruleState['sucker-punch:used']).toBe(true);
     expect(interrupt.state.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'save-rolled')).toBe(false);
+    // The regenerated save carries the same durable F2 record as the original
+    // (windowKind, modifiers, threshold), so the re-roll stays replay-exact.
+    const rerollEvent = interrupt.events.find((event) => event.type === 'RULE_MUTATIONS_APPLIED' && 'reroll' in event);
+    expect(rerollEvent).toBeDefined();
+    const regenerated = (rerollEvent as { reroll: { mutations: { kind: string }[] } }).reroll.mutations[0];
+    expect(regenerated).toMatchObject({
+      kind: 'save', actorId: foe.id, windowKind: 'effect', windowId: 'fixture:save-ability:default:effect-save:1:foe',
+      roll: 3, boon: 0, total: 3, success: false, threshold: 10,
+      modifiers: { sourceModifier: 0, saveBoon: 0, saveCurse: 0, blessing: false },
+    });
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
   });
 
@@ -290,7 +312,9 @@ describe('Knave ability automation (p.139–144)', () => {
       timing: 'interrupt',
       input: { actorIds: { target: [foe.id] } },
       triggers: ['heroic'],
-    }, scriptedDice(10));
+      // The re-roll rolls a new d20 and a new boon/curse die from the same
+      // modifier (-1 with Heroic's curse): d20 10, d6 1 → boon -1.
+    }, scriptedDice(10, 1));
     const rerollEvent = interrupt.events.find((event) => event.type === 'RULE_MUTATIONS_APPLIED' && 'reroll' in event);
     expect(rerollEvent).toBeDefined();
     const reroll = (rerollEvent as { reroll?: { roll: number; boon: number; total: number; success: boolean } }).reroll;
@@ -351,5 +375,33 @@ describe('Knave ability automation (p.139–144)', () => {
     // The same source flags leave Resistance intact: p.93 halves the
     // Armor-ignored 12 once, then p.144 routes the final 6 straight to HP.
     expect(resistedResult.state.actors[resisted.foe.id]).toMatchObject({ hp: 26, vigor: 5, defeated: false });
+  });
+
+  it('Bleak Mercy: three positive conditions that are not statuses do not empower it (p.144)', () => {
+    const { state, hero, foe } = knaveEncounter({ second: null });
+    // Counter, Defiance, and Resistance are conditions, not statuses. Counting
+    // the broad projected condition set would reach three and grant true
+    // strike plus the bypass package; p.144's escalation sees only statuses.
+    const foeActor = state.actors[foe.id];
+    foeActor.armor = 10;
+    foeActor.vigor = 5;
+    foeActor.conditions.push(
+      { id: 'counter', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null },
+      { id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null },
+      { id: 'resistance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null },
+    );
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:bleak-mercy', targetIds: [foe.id] }, scriptedDice(12, 4, 4));
+    // Not empowered: normal determination applies armor (12 - 10 = 2) and then
+    // the single Resistance halving (ceil(2 / 2) = 1) to vigor. No defense is
+    // bypassed and the attack stays a plain roll.
+    expect(result.state.actors[foe.id]).toMatchObject({ hp: 32, vigor: 4, defeated: false });
+    expect(mutationsOf(result.events, 'knave:bleak-mercy')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'attack', d20: 12, hit: true, trueStrike: false },
+      { kind: 'damage', actorId: foe.id, amount: 12, damageType: 'normal' },
+    ]);
+    const damageMutations = mutationsOf(result.events, 'knave:bleak-mercy').filter((mutation) => mutation.kind === 'damage');
+    expect(damageMutations.every((mutation) => !('bypassVigor' in mutation || 'ignoreArmor' in mutation || 'ignoreDefiance' in mutation))).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 });

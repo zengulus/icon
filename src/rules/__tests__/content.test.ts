@@ -1,7 +1,8 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import sourcebook from '../../content/generated/icon-1.5.json';
 import { ABILITIES, BONDS, JOBS, PHASE_TWO_READY, RELICS, RULES_COVERAGE } from '../catalog.js';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { FOE_ABILITIES, FOE_PROFILES, FOE_ROLES } from '../foes.js';
 import { CAMP_FIXTURES, GENERAL_TROPHIES, REWARD_RULES } from '../rewards.js';
 import { auditRuleSourceUnits } from '../source-units.js';

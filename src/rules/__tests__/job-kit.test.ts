@@ -1,8 +1,9 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { encounterRuleState } from '../automation/encounter-adapter.js';
-import { CORE_RULE_RESOLVERS } from '../automation/core-resolvers.js';
-import type { RuleAction, RuleExecutionContext } from '../automation/types.js';
+import { encounterRuleState } from '../automation/kernels/encounter-adapter.js';
+import { CORE_RULE_RESOLVERS } from '../automation/kernels/core-resolvers.js';
+import type { RuleAction, RuleExecutionContext } from '../automation/primitives/types.js';
 import type { DiceSource } from '../dice.js';
 import type { EncounterState } from '../types.js';
 import {
@@ -21,7 +22,7 @@ import {
   stateMutation,
   untilNextTurnEnd,
   walk,
-} from '../automation/job-kit.js';
+} from '../automation/primitives/job-kit.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
 
@@ -130,7 +131,7 @@ describe('job-kit building blocks', () => {
     const strikeCtx = kitContext(state, hero.id, scriptedDice(12));
     const struck = resolveAttack(strikeCtx, sourceActor(strikeCtx, hero.id)!, sourceActor(strikeCtx, foe.id)!, { trueStrike: true });
     expect(struck.attackMutation).toMatchObject({ trueStrike: true, boon: 0, d20: 12 });
-    expect(struck.damageProvenance).toEqual({ ignoreDodge: true, ignoreCover: false });
+    expect(struck.damageProvenance).toEqual({ ignoreDodge: true, ignoreCover: false, bonusFlat: 0 });
     expect(damageMutation(strikeCtx, foe.id, 3, 'miss')).toMatchObject({ ignoreDodge: true });
 
     const autoCtx = kitContext(state, hero.id, scriptedDice());

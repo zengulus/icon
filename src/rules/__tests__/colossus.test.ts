@@ -1,7 +1,8 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
-import { applyRuleMutations } from '../automation/encounter-adapter.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+import { applyRuleMutations } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
@@ -271,5 +272,61 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(interrupt.state.actors[hero.id].defeated).toBe(false);
     expect(interrupt.state.actors[hero.id].interruptUses['colossus:boiling-blood']).toBe(1);
     expect(applyEvents(held, interrupt.events)).toEqual(interrupt.state);
+  });
+
+  it('Boiling Blood: a defiant hero\'s lethal blow never opens a defeated window (p.104 floor)', () => {
+    const { state, hero, foe } = colossusEncounter({ second: null });
+    // Without Righteous Disdain, the only damage hold available would be the
+    // defeated trigger — so this proves the protected blow is not treated as
+    // a defeat at all.
+    state.actors[hero.id].abilityIds = state.actors[hero.id].abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain');
+    state.actors[hero.id].hp = 2;
+    state.actors[hero.id].vigor = 0;
+    state.actors[hero.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+
+    // 10 normal - armor 2 = 8 determined; lethal (8 >= 2), but Defiance
+    // floors the application at 1 HP, so there is no defeat to interrupt.
+    const blown = applyEvents(state, [{
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: foe.id,
+      sourceId: 'fixture:foe-blow',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [{ kind: 'damage', sourceId: 'fixture:foe-blow', sourceActorId: foe.id, actorId: hero.id, amount: 10, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: false }],
+    }]);
+    expect(blown.actors[hero.id]).toMatchObject({ hp: 1, defeated: false });
+    expect(blown.actors[hero.id].conditions.some(({ id }) => id === 'defiance')).toBe(false);
+    expect(blown.actors[hero.id].ruleState['damage-immune']).toBe(true);
+    expect(blown.pendingInterrupts.some((window) => window.actorId === hero.id && window.trigger === 'defeated')).toBe(false);
+    expect(blown.pendingInterrupts.every((window) => !window.heldDamage)).toBe(true); // nothing was held
+  });
+
+  it('Boiling Blood: a defy-death hero\'s lethal blow never opens a defeated window (p.138 floor)', () => {
+    const { state, hero, foe } = colossusEncounter({ second: null });
+    state.actors[hero.id].abilityIds = state.actors[hero.id].abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain');
+    state.actors[hero.id].hp = 2;
+    state.actors[hero.id].vigor = 0;
+    // The hero is already defying death (Boiling Blood's persistent effect
+    // shape from colossus-programs.ts) and still has an unused defeated
+    // interrupt, so only the application-time floor stands between them and
+    // defeat.
+    state.actors[hero.id].activeEffects.push({
+      id: 'fixture:defy-death', sourceId: 'colossus:boiling-blood', ownerId: hero.id, effectId: 'defy-death',
+      duration: { kind: 'turn-end', actor: { kind: 'self' }, turns: 2 }, modifiers: [], triggers: ['defeated'], state: {},
+    });
+
+    const blown = applyEvents(state, [{
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: foe.id,
+      sourceId: 'fixture:foe-blow',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [{ kind: 'damage', sourceId: 'fixture:foe-blow', sourceActorId: foe.id, actorId: hero.id, amount: 10, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: false }],
+    }]);
+    expect(blown.actors[hero.id]).toMatchObject({ hp: 1, defeated: false });
+    expect(blown.pendingInterrupts.some((window) => window.actorId === hero.id && window.trigger === 'defeated')).toBe(false);
+    expect(blown.pendingInterrupts.every((window) => !window.heldDamage)).toBe(true);
   });
 });

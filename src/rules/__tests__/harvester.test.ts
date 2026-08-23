@@ -1,6 +1,8 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
@@ -164,6 +166,111 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(mark).toBeDefined();
     expect(mark?.state.kind).toBe('ally');
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Rot: a noDefiance foe-mark suppresses Defiance while the mark is active (p.186)', () => {
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    // Marking a foe at 25% of Relict's 32 HP (8) records noDefiance; the
+    // closed mark projection then removes Defiance from the ephemeral set, so
+    // a lethal blow defeats the marked foe instead of flooring at 1 HP.
+    state.actors[foe.id].hp = 8;
+    state.actors[foe.id].vigor = 0;
+    state.actors[foe.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:rot', targetIds: [foe.id] }, scriptedDice());
+    const mark = result.state.actors[foe.id].marks.find(({ markId }) => markId === 'rot');
+    expect(mark?.state.noDefiance).toBe(true);
+    expect(encounterConditionSet(result.state.actors[foe.id]).has('defiance')).toBe(false);
+
+    const blown = applyEvents(result.state, [{
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: hero.id,
+      sourceId: 'fixture:lethal',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [{ kind: 'damage', sourceId: 'fixture:lethal', sourceActorId: hero.id, actorId: foe.id, amount: 999, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: true }],
+    }]);
+    expect(blown.actors[foe.id]).toMatchObject({ hp: 0, defeated: true });
+    // The baseline is an explicit false (encounter start); the immunity grant
+    // would flip it to true, which must not happen without Defiance.
+    expect(blown.actors[foe.id].ruleState['damage-immune']).not.toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Rot: a foe above 25% keeps Defiance while marked (noDefiance false)', () => {
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    state.actors[foe.id].hp = 16;
+    state.actors[foe.id].vigor = 0;
+    state.actors[foe.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:rot', targetIds: [foe.id] }, scriptedDice());
+    const mark = result.state.actors[foe.id].marks.find(({ markId }) => markId === 'rot');
+    expect(mark?.state.noDefiance).toBe(false);
+    expect(encounterConditionSet(result.state.actors[foe.id]).has('defiance')).toBe(true);
+
+    // Above 25% the mark does not suppress Defiance, so the same lethal blow
+    // floors at 1 HP, consumes the condition, and grants the temporary
+    // immunity instead of defeating the foe.
+    const blown = applyEvents(result.state, [{
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: hero.id,
+      sourceId: 'fixture:lethal',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [{ kind: 'damage', sourceId: 'fixture:lethal', sourceActorId: hero.id, actorId: foe.id, amount: 999, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: true }],
+    }]);
+    expect(blown.actors[foe.id]).toMatchObject({ hp: 1, defeated: false });
+    expect(blown.actors[foe.id].ruleState['damage-immune']).toBe(true);
+    expect(blown.actors[foe.id].conditions.some(({ id }) => id === 'defiance')).toBe(false); // consumed
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Rot combo (REGENERATE): the ally-mark projects regeneration at turn end while bloodied (p.186)', () => {
+    const { state, hero, foe, ally } = harvesterEncounter({ second: null, ally: { x: 3, y: 1 } });
+    state.actors[hero.id].resources.combo = 1;
+    const marked = executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'harvester:rot',
+      actionId: 'combo',
+      timing: 'use',
+      input: { actorIds: { target: [ally!.id] } },
+    }, scriptedDice());
+    // The reviewed mark projection grants a literal regeneration condition
+    // (p.104: gain 4 vigor at turn end while bloodied).
+    expect(encounterConditionSet(marked.state.actors[ally!.id]).has('regeneration')).toBe(true);
+    expect(applyEvents(state, marked.events)).toEqual(marked.state);
+
+    // Bloodied (at or below half of 40 HP), ending the ally's own turn
+    // restores 4 vigor through the shared kernel.
+    marked.state.actors[ally!.id].hp = 20;
+    marked.state.actors[ally!.id].vigor = 0;
+    const afterHero = executeCommand(marked.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const afterFoe = executeCommand(afterHero, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const endedResult = executeCommand(afterFoe, { type: 'END_TURN', actorId: ally!.id }, scriptedDice());
+    expect(endedResult.state.actors[ally!.id].vigor).toBe(4);
+    expect(applyEvents(afterFoe, endedResult.events)).toEqual(endedResult.state);
+  });
+
+  it('Rot projection is closed: non-recipe marks and trait IDs stay unprojected (negative)', () => {
+    const { state, hero, foe, ally } = harvesterEncounter({ second: null, ally: { x: 3, y: 1 } });
+    // A mark that merely resembles Rot (same markId from a non-recipe source)
+    // must never project: the registry is keyed on the exact sourceId +
+    // markId + reviewed state, never on shape or prose.
+    state.actors[ally!.id].marks.push({ id: 'x:fake-source', sourceId: 'fixture:fake-rot', ownerId: hero.id, markId: 'rot', duration: null, state: { kind: 'ally' } });
+    expect(encounterConditionSet(state.actors[ally!.id]).has('regeneration')).toBe(false);
+    // An unreviewed mark kind carrying a noDefiance-shaped state is inert too.
+    state.actors[foe.id].hp = 8;
+    state.actors[foe.id].vigor = 0;
+    state.actors[foe.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    state.actors[foe.id].marks.push({ id: 'x:fake-kind', sourceId: 'harvester:rot', ownerId: hero.id, markId: 'rot', duration: null, state: { kind: 'fixture', noDefiance: true } });
+    expect(encounterConditionSet(state.actors[foe.id]).has('defiance')).toBe(true);
+    // A fabricated trait ID adds nothing (no title or prose inference): the
+    // hero's only projected condition is the reviewed Fortify recipe.
+    const before = encounterConditionSet(state.actors[hero.id]);
+    expect([...before]).toEqual(['fortify']);
+    state.actors[hero.id].traitIds.push('fixture:fake-trait');
+    expect([...encounterConditionSet(state.actors[hero.id])]).toEqual(['fortify']);
   });
 
   it('Crimson Bloom: marks a character with a d6 power die starting at 0', () => {

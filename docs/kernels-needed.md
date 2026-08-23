@@ -1,0 +1,323 @@
+# Kernels needed for full automation coverage
+
+Reference ledger of the shared engine kernels that must exist before the
+`documented` / table-facing content rows in **Job**, **foe**, **advancement**,
+and **Relic** automation can promote to `wired`. This is a planning document,
+not a coverage claim — `npm run audit:automation`, the phase gates, and the
+source fixtures remain the only authority for "done". It pairs with
+[`rules-foundations.md`](rules-foundations.md) (the implementation-order
+ledger) and `freebuff-plan.md` (the ordered plan).
+
+A **kernel** is a shared, framework-free engine mechanic (pure function,
+recipe registry, or reducer seam) that content rows plug into instead of
+getting their own per-content resolver. A content row promotes only when its
+kernel exists and it has a durable record, a closed source-ID manifest, and a
+deterministic replay fixture — the same five foundation requirements the F6
+job-trait and F7 talent slices already ship.
+
+**Status recap.** Foundations F0–F5 are executed (damage ledger, spatial
+gateway, save window, turn lifecycle, trigger windows, passive projection +
+role baselines). Wired slices: 22/65 Job traits, 11/288 talents executable
+(10 fold-wired + 1 program-level — Demon Cutter t2's pre-ability rush), 20
+foe ability recipes, 36 foe movement-trait IDs, the p.298 role baselines.
+The audit backlog that the kernels below unblock:
+
+| Kind | Units | Kind | Units |
+| --- | ---: | --- | ---: |
+| core | 70 | relic-rank | 120 |
+| class-trait | 8 | relic-aspect | 40 |
+| job-trait | 43 | foe-ability | 1,247 |
+| talent | 281 | foe-trait | 655 |
+| mastery | 144 | foe-phase | 19 |
+| limit-break | 16 | foe-chapter-rule | 116 |
+| job-summon-rule | 6 | trophy | 68 |
+| camp-fixture | 16 | camp-feature | 85 |
+| reward-rule | 9 | bond-power (narrative) | 120 |
+
+## 1. Job kernels
+
+### 1.1 Job traits — 43 documented rows in `JOB_TRAIT_RECIPES`
+
+| Kernel | Consumers (exact trait ids) | Prerequisite |
+| --- | --- | --- |
+| **Heroics economy** — make-any-ability-Heroic choice, no-attack/no-Heroics lockout, half-damage-until-next-turn penalty, +1 shove/movement distance | `bastion:trait:strive`, `demon-slayer:trait:demon-strength`, `knave:trait:spite`, `colossus:trait:wolfheart` (sacrifice-25%-to-Heroic) | F0, F3 (lockout boundary) |
+| **Attack-path modifier gates** — extend the shared `kernels/attack-modifiers.ts` fold with distance / round / terrain / stealth reads | distance: `freelancer:trait:trigrammaton` (exactly range 3), `geomancer:trait:resonance` (exactly range 3); round: `freelancer:trait:aether-shot` (rounds 3/6); terrain: `shade:trait:underworld`, `stormbender:trait:sea-legs`; stealth: `warden:trait:ambush-master` | F6 kernel exists; extend the `traitAttackModifier` read surface |
+| **Comeback-gated threshold hook** — critical/exceed thresholds conditioned on the user's HP (18+/13+, 15+/10+ at 1 hp) | `enochian:trait:soulfire` | F0, attack-path kernel |
+| **Attack-miss reactive window** | `fool:trait:cheap-trick` | F4 (new trigger) |
+| **Attack-completion hook** — attacks bless adjacent allies + 2 vigor | `sealer:trait:mantra-of-sealing` | F0, F4 |
+| **Slay-trigger cure hook** | `harvester:trait:balance` | F7 fold exists (slay); extend to cure |
+| **Once-a-round reactive windows** — shove→rush (Press the Advantage), finishing-blow/slay→stacked die (Stack Dice), combo gain/spend→fly+Bless (Divine Grace) | `bastion:trait:press-the-advantage`, `fool:trait:stack-dice`, `chanter:trait:divine-grace` | F3 (per-round use ledger), F4 |
+| **Ability-use blessing-spend hook** — spend 1 token for a package, 3 for the bigger effect | `chanter:trait:blessing-of-faith`, `harvester:trait:blessing-of-rebirth`, `sealer:trait:blessing-of-war` | resource registry exists; ability-use spend seam |
+| **Ability-use combo-spend hook** — spend a combo token to activate charge effects | `chanter:trait:songweave` | resource registry exists; ability-use spend seam |
+| **Infuse-cost kernel hook** — cost reduction with a foe in range 2, infuse-as-slay | `spellblade:trait:conqueror-s-edge` | F0, Infuse cost seam |
+| **Use ledger** — once-per-combat use + spend-2-Aether regain | `spellblade:trait:aether-deflection` (also needs the `targeted-by-ability` window, F4) | F3/F4 |
+| **Movement-vacate hook** — drop an object on first vacating a space | `shade:trait:darkside` (shadow), `geomancer:trait:stone-double` (height-1 statue) | F1 |
+| **Occupancy-cost rule** — phase through characters and end a movement in a space for 1 movement | `fool:trait:tumbling` | F1 (movement planner) |
+| **Movement-planner elevation hook** — flying for a movement that ends lower | `colossus:trait:great-leap` | F1 |
+| **Fly-ability hook** — first fly ability per round lets allies fly 1 | `chanter:trait:uplift` | F1, F3 |
+| **Entity-position mutation** — swap with a shadow in range 3 | `shade:trait:meld` | F1, entity model |
+| **Teleport-all-marked position choice** | `freelancer:trait:astral-binding` (with the mark-stack gate) | F1 |
+| **Spatial-aura mechanic** — distance-based grants/penalties with activation and size changes | `bastion:trait:shieldmaster` (aura 1 + sturdy-until-turn-start), `stormbender:trait:pelagic-rage` (round-5 aura 2) | F1, F3, new aura registry |
+| **Stance-entry gate** — permit a second stance only for this trait | `knave:trait:martial-master` | stance model |
+| **Mark-stack gate + summon-damage modifier** | `freelancer:trait:astral-binding`, `harvester:trait:gardener-of-kin` | mark model |
+| **Area-inclusion ally hook** — allies immune to your area effects, gain 2 vigor + a Blessing | `seer:trait:karma` | F4 (area-inclusion exists for Perseus; generalize) |
+| **13-card deck bookkeeping** — draw/discard/shuffle across combats (narrative) | `seer:trait:the-wheel-of-fate`, `seer:trait:skein`, `seer:trait:foretell`, `seer:trait:bend-fate` (bend-fate also needs the gamble hook) | may stay table-facing by design |
+
+### 1.2 Talents — 277 documented rows in `TALENT_RECIPES`
+
+The closed classifier in `content/jobs/talent-recipes.ts` (`documentedTalentDetail`)
+enumerates the exact kernel families; a talent promotes when its family's
+kernel lands (exactly as the wired slay/collide tranche did):
+
+- **finishing-blow trigger** — wired (fires against a bloodied target, the
+  `deriveTriggers` rule, with per-row eligibility extensions — Party Favor
+  t2). Remaining rows name their blockers: Death Blossom t1 needs the
+  teleport destinations (player choices the command/protocol surface must
+  carry); Stampede t1 needs a may-choice mark redirect across commands.
+- **charge trigger** — slow-turn state already derives; the fold's `always`
+  trigger covers unconditional augmentations whose magnitude reads the
+  charged state (Dropkick t2). The first ability-behavior variant is now
+  implemented **program-level**: Demon Cutter t2 ("Your can rush 1 before
+  using Demon Cutter. Charge: Rush 3 instead.") — the Demon Cutter resolver
+  reads the equipped choice through the projected `talents` surface
+  (`context.state.actors[id].talents[abilityId]`, populated by
+  `encounterRuleState`) and emits the pre-ability rush before the attack
+  mutations, gated on the talent (never on the charge trigger alone). The
+  rest of the family ("Large blast", range boosts) belongs in the ability
+  programs' charge clauses, the way the Chanter programs already implement
+  them (`context.triggers?.has('charge')`), not the fold.
+- **comeback extras** — the remaining rows are modifiers (range, bonus
+  damage, interrupt cost, ally immunity) whose home is the ability
+  programs' comeback clauses; the fold's comeback trigger covers the
+  grant-type rows (Riposte t2).
+- **pre/post-ability movement** — rush-before / fly-after / dash movement
+  shift hooks (F1); Demon Cutter t2's rush-before landed program-level
+  above, the rest of the family still needs the hook.
+- **Heroics / sacrifice economies** — the same kernels as §1.1.
+- **blessing / combo spend** — the same ability-use spend seams as §1.1.
+- **aura / stance / summon-entity / terrain / cover / range / shove /
+  teleport modifier hooks** — the shared families in §5.
+- **cure, condition-grant, bloodied gates, mark triggers** — extensions of
+  existing kernels.
+- **ability-specific modifier hooks** — a typed resolver for that ability.
+
+### 1.3 Masteries — 144 units
+
+Masteries are mostly **ability-recipe modifier hooks**: a flag plus a typed
+override on the ability's recipe row. Families:
+
+- **Round-gated timing** — ability becomes a free action / upgrades at round 4+
+  (`bastion:valiant:mastery`, `bastion:endless-battlement:mastery`). F3.
+- **Interrupt-rank upgrades** — Interrupt 1→2→3 (`bastion:catapult:mastery`,
+  `bastion:endless-battlement:mastery`). F4.
+- **Extra-trigger / repeat upgrades** — "+1 more time", once-a-turn reuse
+  (`bastion:heracule:mastery`, `bastion:battering-ram:mastery`). F0/F4.
+- **Value / terrain / damage overrides** — "deals 4 instead of 2", "creates a
+  boulder before resolving" (`bastion:land-waster:mastery`). F0/F1.
+- **Loadout gate** — mastery acquisition/equip validation already validates;
+  the combat halves need the overrides above.
+
+### 1.4 Limit Breaks — 16 units
+
+A **resolve-spend + action-timing kernel** (`limit-break-recipes.ts`):
+party/personal resolve split (spent at the beginning of the action, p.99),
+the 1-action/2-action cost, end-turn and Delay variants (e.g.
+`demon-slayer:limit-break` Split Heaven and Hell), and the Ultimate repeat
+rule. Prerequisites F0 (damage ledgers for the resolve-cost effects) and F3
+(delay/end-turn lifecycle rows already exist).
+
+### 1.5 Job summon action suites — 6 `job-summon-rule` units
+
+Placement ranges, ownership, the six-per-type entity cap, and survival of the
+owner's defeat are wired (`content/jobs/summon-recipes.ts`, `state.companion`). Remaining:
+
+- **Summon-trigger windows + entity action resolution** — the companions'
+  own suites: seraph lash-out (Bound Spirit), great beast dash-2-bite/shove
+  (Beast Master), selkie end-of-turn fly-3 (Selkie), plus the Fool bomb,
+  Shade shadow/shadow-cloud, Warden beast, Harvester thrall/plant, Seer wild
+  card, and Stormbender Salt Sprite placement/action suites. F1 (entity
+  placement) + F3 (end-of-turn triggers) + F4 (summon windows).
+
+## 2. Foe kernels
+
+### 2.1 Foe traits — 655 units (`content/foes/trait-recipes.ts` / `kernels/passive-projection.ts`)
+
+The 36 Flying/Phasing IDs and the p.298 role baselines are wired. Everything
+else projects nothing. Keyword census of the full corpus (691 source units =
+655 unresolved + 36 wired): immune 22, aura 42, bloodied 35, end-of-turn 28,
+start-of-turn 24, start-of-round 18, resistant 18, round-gated 12, counter
+10, 25%-hp 10, sacrifice 9, when-damaged 1. Kernel families:
+
+| Kernel | Consumers (examples) | Prerequisite |
+| --- | --- | --- |
+| **Whole-combat condition grants** — Sturdy, Defiance, Counter, Dodge, Regeneration as closed-ID passive rows | `basic:impaler:300:trait:special-traits` (Sturdy), `basic:berserker:301:trait:special-traits` (Defiance), `basic:priest:303:trait:special-traits` | F5 extension (never inferred from prose) |
+| **Conditional passive gates** — bloodied, 25%-hp, terrain, stealth, status-gated, adjacency-gated | `basic:berserker:301:trait:enrage` (+1 action while bloodied), `basic:seismatist:305:trait:earth-bond` (resistance adjacent to object/pit), `basic:hunter:302:trait:wayfinding` (evasion in difficult/dangerous), `basic:assassin:302:trait:nimble` (evasion unless suffering a status), `basic:knuckle:301:trait:heavy-armor` (resistance from adjacent) | F5, condition-set gates |
+| **Aura passives** — distance-based ally/foe effects | `basic:commander:304:trait:commander-s-aura` (+1 boon), `basic:abjurer:304:trait:aura-of-shielding` (dodge) | aura kernel (§5) |
+| **Per-status immunity** | 22 immunity traits | condition/status immunity provenance |
+| **When-defeated / when-damaged triggers** | `basic:saint:305:trait:martyrdom` (cure allies when defeated) | F4 |
+| **Resistance provenance** in the damage kernel — positional/conditional resistance | 18 traits (`basic:sledge:301:trait:bullheaded`, `earth-bond`, `heavy-armor`) | F0 (narrow typed flags, like `bypassVigor`/`ignoreArmor`/`ignoreDefiance`) |
+| **Counter-granting traits** | 10 traits | F4 (Counter's "damaged by an ability" trigger) |
+
+### 2.2 Foe abilities — 1,247 remaining (`FOE_ABILITY_RECIPES`)
+
+Twenty recipes are wired as declarative data (primitives: attack, shove,
+rush, dash-strike, blast, terrain, mark, swap, vigor, end-turn-stealth). The
+remaining catalog needs these recipe primitives before it converts to data
+rows:
+
+- teleport / place / remove-position movement,
+- summon entity + entity actions,
+- delayed / held effects and end-turn sequences,
+- save effects (`effect`-kind SaveWindows),
+- gamble rolls,
+- aura creation,
+- movement-entry triggers (Party Favor-style),
+- reactive when-damaged / defeated windows for foes,
+- pierce / divine / multi-instance damage variants,
+- "free action after X" multi-step sequences (Soldier Valiant's free Bash),
+- **mob member state** — member-level HP/positions, "up to three members"
+  sequencing, area targeting of mobs (blocked until the mob model exists).
+
+### 2.3 Foe phases — 19 units
+
+A **phase-recipe kernel** on the F3 lifecycle: round-start cycling
+(Nocturnal I→II→III→I), bloodied-triggered transitions (`relict:i-vessel-knight:336:phase:phase-ii` — intangible on bloodied; `demon:limb-demon:417:phase:phases`), destroyed-section transitions (`imperial:veridian-weapon:401:phase:phases` — megabomb counter), and round-action rotations (`relict:iii-dread-lords:341:phase:phases`). Prerequisite F3 (round-start/turn-start gates + `round` reads exist).
+
+### 2.4 Foe chapter rules — 116 units
+
+**Chapter-gated recipe overrides**: availability gates ("Available from
+Chapter 1/2/3") and per-chapter ability rewrites (`relict:executioner:326:chapter:2:1` — Death March becomes free when bloodied; `relict:heliolite:326:chapter:3:1` — deals fray instead; `relict:embalmer:327:chapter:2:1` — creates a grasping-dead terrain). Prerequisites F0–F5 as needed, applied as override rows on the ability recipes.
+
+### 2.5 Foe roles and mobs
+
+The p.298 baselines are executed (skirmisher dodge, artillery slip +
+aetherwall, heavy rampart, Heavy Guard armor, Legend Juggernaut clear).
+Remaining: the **mob member model** (member-level state) and any role halves
+not covered by the six p.298 rows — role labels must never map beyond them.
+
+## 3. Advancement kernels
+
+### 3.1 Trophies — 68 units
+
+`trophy-recipes.ts` rows by trigger family:
+
+- **Uses** — "as 2 actions / free action / round action at the start of any
+  round" commands (`relict:i-vessel-knight:336:trophy:helm-of-command`). F3.
+- **Combat passives** — attack modifiers (Darklight Infuser's "attacks gain
+  slay: cure yourself"), aura grants (`soul-fragment:339:trophy:the-black-book` —
+  aura 2 + end-of-turn effect). F0/F4, aura kernel.
+- **Expedition effects** — persistent buffs and recorded rolls
+  (`soul-fragment:339:trophy:golden-mask` — d20/d10/d8/d6/d4 recording). F2/F3.
+
+### 3.2 Camp fixtures — 16 fixtures + 85 features
+
+A **camp-boundary kernel** (F3 camp boundary + F2): purchase/upgrade Dust
+costs, gear swaps, healing, and mechanical features (`camp:aetherpearls`
+networks, `camp:aethervault` dust storage, telepathic features). Narrative
+features stay table-facing.
+
+### 3.3 Reward rules — 9 units
+
+A deterministic **reward-application kernel**: expedition XP + Dust
+(`expedition-reward`), combat-dust Relic infusion (`combat-dust`), dust-cap
+enforcement (`dust-cap`). Mostly bookkeeping; the deterministic reward
+application is the only mechanic.
+
+### 3.4 Bonds — 120 powers
+
+Explicitly **stay narrative / table-facing** (Effort/Strain resources are
+modeled, p.56; power outcomes are free-form). This is a boundary decision,
+not a kernel — do not fabricate combat outcomes from bond prose.
+
+### 3.5 Advancement bookkeeping
+
+Levels, XP/AP, chapter boundaries, Job slots, Relic slots, talents, and
+mastery loadouts validate; Refocus (p.113) and Relic infusion/aspect
+transitions (p.245) already run as dedicated validated engine functions. The
+missing halves are the combat/expedition kernels above, not more validation.
+
+## 4. Relic kernels
+
+### 4.1 Relic ranks — 120 units
+
+- **Invoke kernel** (`relic-recipes.ts`): invoke = cost + effects. Families
+  in the corpus: attack-tagged invokes with a trigger threshold
+  (`relic:ape-god:rank:1` — "Invoke (Attack, 17+)"), when-condition invokes
+  (`relic:ape-god:rank:3` — when you stun), free-action gambits
+  (`relic:crimson-king:rank:3` — "Gambit: Free Action: Sacrifice 4, deal 4
+  damage in range 4"). Prerequisites F0–F3.
+- **Rank passive kernels**: per-status immunity (`ape-god:rank:2` — immune to
+  stun), **wound-taking hook** (`crimson-king:rank:2` — d6 wound gamble with
+  improvement), **sacrifice-cost override hook** (`crimson-king:rank:1/3` —
+  costs reduce to sacrifice 2 or 1), stun-spread triggers (`ape-god:rank:3`),
+  HP-gated passives (`crimson-king:rank:1` — 25% hp or lower). F5 + new
+  wound/sacrifice seams.
+
+### 4.2 Relic aspects — 40 units
+
+- **Invoke augmentation** — bonus damage, extra shoves, self-shoves on a
+  successful invoke (`relic:ape-god:aspect`). F0.
+- **Damage-type / provenance overrides** — Counter becomes piercing
+  (`relic:maiden:aspect`); needs a counter damage-type override (F4).
+- **Movement exceptions** — diagonal shoves that must move further away
+  (`relic:erys:aspect`). F1.
+- **Condition grants on hooks** — defiance when rescued (`relic:orpheo:aspect`);
+  needs a rescue hook (F3). Cost overrides mirror §4.1.
+- Aspect passives are F5 recipes; the invocation halves ride the invoke
+  kernel.
+
+## 5. The shared kernel families
+
+Most of the sections above reduce to a small set of shared contracts. Build
+each once; it converts its consumers into data + fixtures:
+
+| # | Shared kernel | Consumers (count) | Prerequisite |
+| --- | --- | --- | --- |
+| 1 | **Aura mechanic** — spatial distance-based grants/penalties, activation, size changes | 2 job traits + 42 foe traits + trophies + Perseus/Rook/Dervish abilities | F1 |
+| 2 | **Attack-path modifier gates** — distance/round/terrain/stealth/threshold reads on the existing fold | 7 job traits + ~30 talents | F6 kernel exists |
+| 3 | **Conditional passive projection** — bloodied/25%/terrain/stealth/status/round gates | ~150 foe traits + relic ranks | F5 exists |
+| 4 | **Reactive trigger windows** — attack-miss, attack-completion, movement-entry, summon, targeted-by-ability (generalize), save-rolled | 7 job traits + dozens of talents/abilities | F4 exists |
+| 5 | **Spend / economy hooks** — blessing, combo, sacrifice, Infuse-cost, gamble, use-ledgers | 6 job traits + 4 talents + 3 relic ranks | resource registry exists |
+| 6 | **Movement kernels** — vacate, occupancy-cost, elevation-fly, pre/post movement, position-swap, teleport-all | 5 job traits + movement talents | F1 |
+| 7 | **Lifecycle phase rows** — bloodied/round-gated phases, chapter-rule overrides | 19 foe phases + 116 chapter rules + masteries | F3 exists |
+| 8 | **Stance / mark kernels** — multi-stance gate, mark-stack gate, mark-trigger effects | 3 job traits + talents | stance/mark models exist |
+| 9 | **Damage-intent provenance** — resistance, wound-taking, counter-type overrides | 18 foe traits + 4 relic aspects | F0 exists |
+| 10 | **Entity / summon kernel** — entity actions, entity-position mutation | 6 summon suites + Meld + objects | F1 |
+| 11 | **Mob member model** | 1,247 foe abilities' mob subset | F1 + foe roles |
+| 12 | **Wound-taking kernel** | Crimson King ranks + wound-gated content | F0 |
+| 13 | **Trophy / camp / reward bookkeeping** — uses, expedition effects, reward application | 68 trophies + 101 camp + 9 rewards | F2/F3 |
+| 14 | **Heroics economy** | 4 job traits + Heroic masteries/talents | F0/F3 |
+
+## 6. Suggested build order
+
+Order by (gate already passed) × (consumers unblocked), matching the
+foundations' sequencing discipline — nothing promotes without its matrix:
+
+1. **Finishing-blow + charge talent tranche** — both triggers already derive;
+   extend the F7 fold, wire the qualifying talents. No new kernel.
+2. **Aura kernel (family 1)** — unlocks Shieldmaster, Pelagic Rage, 42 foe
+   traits, the Black Book trophy, and tightens Rook/Perseus/Dervish.
+3. **Heroics economy (family 14)** — unlocks the four Heroics job traits and
+   the Heroic-gated masteries.
+4. **Spend hooks (family 5)** — blessing/combo/Infuse/sacrifice seams unlock
+   six job traits, four talents, and the Crimson King relic ranks.
+5. **Conditional passive gates (family 3)** — the ~150 gated foe traits and
+   relic rank passives convert to closed-ID rows.
+6. **Movement kernels (family 6)** — vacate/occupancy/elevation hooks unlock
+   Darkside, Stone Double, Tumbling, Great Leap, Uplift, and the movement
+   talents.
+7. **Reactive windows (family 4)** — attack-miss/completion, summon windows,
+   and generalized targeted-by-ability unlock the reactive job traits and the
+   summon action suites.
+8. **Foe recipe primitives + mob model (families 10/11)** — the remaining
+   foe abilities convert to `FOE_ABILITY_RECIPES` data.
+9. **Phase + chapter-rule recipes (family 7)** — the 19 phases and 116
+   chapter rules become lifecycle/override rows.
+10. **Relic invoke kernel + aspect passives** — the 120 ranks and 40 aspects,
+    then the trophy/camp/reward bookkeeping (family 13) closes advancement.
+
+Gate discipline (from `freebuff-plan.md`): a reducer improvement does not
+change audit numbers on its own — only an allowlist entry plus a source-page
+fixture plus a deterministic replay test does. `PHASE_TWO_READY` /
+`PHASE_THREE_READY` stay `false` until the gates genuinely pass, and no
+mechanic is ever inferred from trait/role prose or a role label at runtime.

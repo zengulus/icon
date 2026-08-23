@@ -151,6 +151,29 @@ describe('ICON encounter reducer', () => {
     expect(result.events.find((event) => event.type === 'ATTACK_RESOLVED')).toMatchObject({ rawDamage: 5, appliedDamage: 4 });
   });
 
+  it('persists Defiance\'s application result on a lethal basic attack so replay consumes it (p.104)', () => {
+    const { state, hero, foe } = activeEncounter();
+    // A determined 9 is lethal against 3 HP, so Defiance floors the applied
+    // amount at the 1-HP floor: the recorded appliedDamage (2) is no longer
+    // lethal on its own. Replay must trust the durable defianceTriggered
+    // result instead of re-inferring from the reduced amount.
+    state.actors[foe.id].hp = 3;
+    state.actors[foe.id].vigor = 0;
+    state.actors[foe.id].armor = 0;
+    state.actors[foe.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+
+    const result = executeCommand(state, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(12, 5));
+    const attack = result.events.find((event) => event.type === 'ATTACK_RESOLVED');
+    expect(attack).toMatchObject({ rawDamage: 9, appliedDamage: 2, defianceTriggered: true });
+    expect(result.state.actors[foe.id]).toMatchObject({ hp: 1, vigor: 0, defeated: false });
+    expect(result.state.actors[foe.id].conditions.some(({ id }) => id === 'defiance')).toBe(false);
+    expect(result.state.actors[foe.id].ruleState['damage-immune']).toBe(true);
+    // Replay from the recorded post-floor amount must reproduce the identical
+    // state: defiance consumed and the temporary immunity granted, not a
+    // no-op blow that leaves the condition armed.
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('derives cover and line of sight from terrain instead of trusting a client attack flag', () => {
     const { state, hero, foe } = activeEncounter();
     state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'basic', elevation: 1 });

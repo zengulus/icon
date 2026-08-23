@@ -1,5 +1,6 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { applyDeterminedDamageToVitals, determineDamage } from '../automation/damage-resolution.js';
+import { applyDeterminedDamageToVitals, determineDamage } from '../automation/primitives/damage-resolution.js';
 
 describe('shared damage resolution kernel', () => {
   it('applies flat reductions before a single shared halving', () => {

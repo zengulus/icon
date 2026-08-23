@@ -1,5 +1,6 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { eligibleTargets, isEligibleTarget, matchesTargetRelation, queryDirectTarget } from '../automation/targeting.js';
+import { eligibleTargets, isEligibleTarget, matchesTargetRelation, queryDirectTarget } from '../automation/primitives/targeting.js';
 
 const source = { id: 'hero', side: 'heroes', position: { x: 1, y: 1 }, defeated: false };
 const ally = { id: 'ally', side: 'heroes', position: { x: 2, y: 1 }, defeated: false };

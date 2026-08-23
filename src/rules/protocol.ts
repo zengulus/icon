@@ -90,6 +90,8 @@ const actor = z.object({
   marks: z.array(z.object({ id: identifier, sourceId: identifier, ownerId: identifier, markId: identifier, duration: duration.nullable(), state: stateRecord }).strict()).max(100),
   stance: z.object({ id: identifier, sourceId: identifier, ownerId: identifier.nullable(), stanceId: identifier, state: stateRecord }).strict().nullable(),
   traitIds: z.array(identifier).max(500),
+  // F7: the equipped talent choice per ability (1 or 2).
+  talents: boundedRecord(z.union([z.literal(1), z.literal(2)])),
   onBattlefield: z.boolean(),
   defeated: z.boolean(),
   actionsRemaining: z.number().int().min(0).max(20),

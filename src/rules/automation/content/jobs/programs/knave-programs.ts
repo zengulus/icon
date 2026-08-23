@@ -1,0 +1,477 @@
+import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { resolveAttackRoll } from '../../../primitives/attack-resolution.js';
+import type { RuleSourceUnit } from '../../../../source-units.js';
+import type { Position } from '../../../../types.js';
+import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
+import {
+  axisDirection, sameCell,
+  constant, attackStep, comboCost,
+  distance, sourceActor, impassable, walk, nearestFoe, ringAround,
+  damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
+  resourceMutation, stanceMutation, markMutation,
+  shoveMutation, rushMutation, placeMutation,
+  untilNextTurnEnd, action, compilation,
+} from '../../../primitives/job-kit.js';
+
+/**
+ * Independently reviewed Knave ability implementations (ICON p.139–144).
+ *
+ * Every ability below has typed costs, targets, ranges, and tags from the
+ * source catalog plus a hand-authored typed RuleProgram. Combat stances
+ * (Riposte, Dark Knight), marks with delayed/reactive triggers (Intimidate),
+ * gamble rolls, and status-count gating (Bleak Mercy) resolve through named
+ * deterministic resolvers and reducer lifecycle hooks so they stay replayable.
+ *
+ * The Combo upgrades are modeled as separate actions with a `combo` resource
+ * cost, executable through EXECUTE_RULE (action id `combo`) the same way
+ * stance-refresh and interrupt sub-actions are; USE_ABILITY resolves the base
+ * ability. Fidelity notes (the full source text is preserved on every event):
+ * - Sucker Punch is fully wired: a foe's save-rolled window holds the save
+ *   record and branch, the interrupt re-rolls it through the command layer,
+ *   and the regenerated branch keeps the second result. Heroic's +1 curse is
+ *   recorded on the target and consumed by the re-roll itself (see
+ *   `attachSaveReroll`), so the second save is rolled with the curse.
+ * - Riposte's "refresh when a foe damages you or an adjacent ally" and
+ *   Revenge's "rush once per turn when damaged" are wired as reducer hooks keyed
+ *   on damage events; Dark Knight's turn-start hatred and turn-end vigilance
+ *   are the equivalent stance lifecycle hooks.
+ * - Strongarm's circular shove traverses the eight surrounding spaces in the
+ *   caller's chosen direction (clockwise by default), phasing through
+ *   characters and stopping at impassable terrain or the grid edge.
+ */
+
+/** Walk up to `steps` cells in `direction`, stopping at the grid edge,
+ * impassable terrain, or occupancy; returns null when no cell is moved. */
+function plannedRush(context: Parameters<RuleResolver>[0], actorId: string, steps: number, direction: Position, extraExcludedIds: ReadonlySet<string> = new Set()): Position | null {
+  const source = sourceActor(context, actorId);
+  if (!source.position) return null;
+  const destination = walk(context, source.position, direction, steps, false, actorId, { excludeIds: extraExcludedIds });
+  return sameCell(destination, source.position) ? null : destination;
+}
+
+/** ICON p.139: rush 1, true-strike attack, slash; a target already slashed gains hatred. */
+const lowBlowEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  if (!source || !source.position) return [];
+  const mutations: RuleMutation[] = [];
+  if (target?.position && distance(source.position, target.position) > 1) {
+    const rush = plannedRush(context, source.id, 1, axisDirection(source.position, target.position));
+    if (rush) mutations.push(rushMutation(context, source.id, rush));
+  }
+  if (target) {
+    const alreadySlashed = target.conditions.has('slashed');
+    mutations.push(conditionMutation(context, target.id, 'slashed'));
+    if (alreadySlashed) mutations.push(conditionMutation(context, target.id, 'hatred'));
+  }
+  if (context.triggers?.has('slay') || context.triggers?.has('heroic')) {
+    mutations.push(...cureMutations(context, source.id));
+  }
+  return mutations;
+};
+
+/** ICON p.139 Combo (The Hook): range 2 and shove the target 1 toward the user. */
+const lowBlowComboEffects: RuleResolver = (context, action) => {
+  const source = sourceActor(context, context.actorId);
+  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  if (!source || !source.position || !target || !target.position) return [];
+  const mutations: RuleMutation[] = [...lowBlowEffects(context, action)];
+  mutations.push(shoveMutation(context, target.id, 1, axisDirection(target.position, source.position)));
+  return mutations;
+};
+
+/** ICON p.139: adjacent foes deal 1 piercing damage back, then 2 damage to all adjacent foes (up to three times). */
+const provokeEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  if (!source || !source.position) return [];
+  const range = context.triggers?.has('heroic') ? 2 : 1;
+  const direction = context.input.directions?.['rush-direction'] ?? { x: 1, y: 0 };
+  const mutations: RuleMutation[] = [];
+  const rush = plannedRush(context, source.id, 1, direction);
+  if (rush) mutations.push(rushMutation(context, source.id, rush));
+  const position = rush ?? source.position;
+  const adjacentFoes = Object.values(context.state.actors)
+    .filter((foe) => foe.id !== source.id && foe.side !== source.side && foe.position && distance(foe.position, position) <= range)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  for (const foe of adjacentFoes) {
+    mutations.push(damageMutation(context, source.id, 1, 'effect', 'piercing'));
+  }
+  const hits = Math.min(3, adjacentFoes.length);
+  for (let index = 0; index < hits; index += 1) {
+    for (const foe of adjacentFoes) {
+      mutations.push(damageMutation(context, foe.id, 2, 'effect'));
+    }
+  }
+  if (context.triggers?.has('slay')) {
+    for (const foe of adjacentFoes) {
+      mutations.push(shoveMutation(context, foe.id, 1, axisDirection(position, foe.position!)));
+    }
+  }
+  return mutations;
+};
+
+/** ICON p.139: attack, gain unstoppable + counter until the end of your next turn. */
+const revengeEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  if (!source) return [];
+  const mutations: RuleMutation[] = [
+    conditionMutation(context, source.id, 'unstoppable', 'normal', untilNextTurnEnd),
+    conditionMutation(context, source.id, 'counter', 'normal', untilNextTurnEnd),
+  ];
+  if (context.triggers?.has('slay') || context.triggers?.has('heroic')) {
+    mutations.push(stateMutation(context, source.id, 'revenge:active', true));
+  }
+  return mutations;
+};
+
+/** ICON p.139 Combo (Indignation): true strike, vigilance per foe status (max 3), counter. */
+const revengeComboEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  if (!source) return [];
+  const statuses = target ? target.conditions.size : 0;
+  const vigilance = Math.min(3, statuses);
+  const mutations: RuleMutation[] = [];
+  if (vigilance > 0) mutations.push(resourceMutation(context, source.id, 'vigilance', 'gain', vigilance));
+  mutations.push(conditionMutation(context, source.id, 'counter', 'normal', untilNextTurnEnd));
+  return mutations;
+};
+
+/** ICON p.140: enter the Riposte stance and arm the Dire Parry interrupt. */
+const riposteEnter: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  if (!source) return [];
+  const mutations: RuleMutation[] = [
+    stanceMutation(context, source.id, 'enter', 'riposte'),
+    stateMutation(context, source.id, 'riposte:armed', true),
+  ];
+  if (context.triggers?.has('heroic')) {
+    const gamble = context.dice.die(6);
+    mutations.push(vigorMutation(context, source.id, gamble));
+    mutations.push(stateMutation(context, source.id, 'riposte:last-gamble', gamble));
+  }
+  return mutations;
+};
+
+/** ICON p.140 Dire Parry: gamble, deal that much damage to the triggering foe; a 6 slashes and shoves 1. */
+const direParry: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0];
+  if (!source || !foeId) throw new RuleProgramViolation('choice.actor-count', 'Dire Parry requires a triggering foe.');
+  const foe = sourceActor(context, foeId);
+  if (!foe || foe.side === source.side) throw new RuleProgramViolation('choice.actor-range', 'Dire Parry requires a foe.');
+  const extraDice = Math.max(0, Math.floor(context.input.numbers?.vigilance ?? 0));
+  const spendVigilance = extraDice > 0;
+  const rolls = Array.from({ length: 1 + extraDice }, () => context.dice.die(6));
+  const gamble = Math.max(...rolls);
+  const mutations: RuleMutation[] = [];
+  if (spendVigilance) mutations.push(resourceMutation(context, source.id, 'vigilance', 'spend', extraDice));
+  mutations.push(damageMutation(context, foe.id, gamble, 'effect'));
+  if (gamble === 6 && source.position && foe.position) {
+    mutations.push(conditionMutation(context, foe.id, 'slashed'));
+    mutations.push(shoveMutation(context, foe.id, 1, axisDirection(source.position, foe.position)));
+  }
+  mutations.push(stateMutation(context, source.id, 'riposte:last-gamble', gamble));
+  return mutations;
+};
+
+/** ICON p.141: enter the Dark Knight stance, hatred+ of the closest foe, and sturdy. */
+const darkKnightEnter: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  if (!source || !source.position) return [];
+  const mutations: RuleMutation[] = [
+    stanceMutation(context, source.id, 'enter', 'dark-knight'),
+    conditionMutation(context, source.id, 'sturdy'),
+  ];
+  const closest = nearestFoe(context, source.position, source.id);
+  if (closest) {
+    mutations.push(conditionMutation(context, source.id, 'hatred', 'plus'));
+    mutations.push(stateMutation(context, source.id, 'hatred-of', closest.id));
+  }
+  if (context.triggers?.has('heroic')) {
+    mutations.push(vigorMutation(context, source.id, 2 * source.conditions.size));
+  }
+  return mutations;
+};
+
+/** ICON p.141: circular shove with pass-through damage and a final shove. */
+const strongarmEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const targetId = context.input.actorIds?.target?.[0];
+  const target = targetId ? sourceActor(context, targetId) : undefined;
+  if (!source || !source.position || !target || !target.position || distance(source.position, target.position) !== 1) {
+    throw new RuleProgramViolation('choice.actor-range', 'Strongarm requires an adjacent foe.');
+  }
+  if (target.side === source.side) throw new RuleProgramViolation('choice.actor-range', 'Strongarm requires an adjacent foe.');
+  const sourcePosition = source.position;
+  const targetPosition = target.position;
+  const clockwise = (context.input.options?.direction ?? 'clockwise') !== 'counter-clockwise';
+  const ring = ringAround(sourcePosition);
+  const startIndex = ring.findIndex((cell) => sameCell(cell, targetPosition));
+  if (startIndex < 0) throw new RuleProgramViolation('choice.actor-range', 'Strongarm requires an adjacent foe.');
+  const mutations: RuleMutation[] = [];
+  const passed = new Set<string>();
+  let position = { ...targetPosition };
+  let collided = false;
+  let steps = 0;
+  for (let step = 1; step <= 8; step += 1) {
+    const index = (startIndex + (clockwise ? step : -step) + 16) % 8;
+    const next = ring[index];
+    if (impassable(next, context)) {
+      collided = true;
+      break;
+    }
+    position = next;
+    steps += 1;
+    const occupant = Object.values(context.state.actors)
+      .find((candidate) => candidate.id !== source.id && candidate.id !== target.id && candidate.position && sameCell(candidate.position, next));
+    if (occupant && !passed.has(occupant.id) && passed.size < 3) passed.add(occupant.id);
+  }
+  if (steps > 0) mutations.push(placeMutation(context, target.id, position));
+  for (const passedId of passed) {
+    const passedActor = sourceActor(context, passedId);
+    mutations.push(damageMutation(context, passedId, 2, 'effect'));
+    if (passedActor?.position) mutations.push(shoveMutation(context, passedId, 1, axisDirection(position, passedActor.position)));
+  }
+  const heroicExtra = context.triggers?.has('heroic') ? Math.min(4, passed.size) : 0;
+  mutations.push(shoveMutation(context, target.id, 1 + heroicExtra, axisDirection(source.position, position)));
+  if (collided) {
+    for (const foe of Object.values(context.state.actors)) {
+      if (foe.side === source.side || foe.id === source.id) continue;
+      mutations.push(conditionMutation(context, foe.id, 'weakened'));
+    }
+  }
+  return mutations;
+};
+
+/** ICON p.142: mark a distant foe and end the turn. */
+const intimidateEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const targetId = context.input.actorIds?.target?.[0];
+  const target = targetId ? sourceActor(context, targetId) : undefined;
+  if (!source || !source.position || !target || !target.position) {
+    throw new RuleProgramViolation('choice.actor-count', 'Intimidate requires a foe.');
+  }
+  if (target.side === source.side) throw new RuleProgramViolation('choice.actor-range', 'Intimidate requires a foe.');
+  const minimumRange = context.triggers?.has('heroic') ? 2 : 4;
+  if (distance(source.position, target.position) < minimumRange) {
+    throw new RuleProgramViolation('choice.actor-range', `Intimidate requires a foe at or beyond range ${minimumRange}.`);
+  }
+  return [
+    markMutation(context, target.id, 'intimidate', { ownerId: source.id }),
+    stateMutation(context, source.id, 'end-turn-requested', true),
+  ];
+};
+
+/** ICON p.143: re-roll an adjacent foe's save, keeping the second result. The
+ * re-roll itself happens at the command layer (see `attachSaveReroll`); this
+ * resolver records the usage and, on Heroic, marks the target so the re-roll
+ * is rolled with +1 curse. */
+const suckerPunchEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const targetId = context.input.actorIds?.target?.[0];
+  const target = targetId ? sourceActor(context, targetId) : undefined;
+  if (!source || !source.position || !target || !target.position || target.side === source.side) {
+    throw new RuleProgramViolation('choice.actor-range', 'Sucker Punch requires an adjacent foe.');
+  }
+  if (distance(source.position, target.position) > 1) throw new RuleProgramViolation('choice.actor-range', 'Sucker Punch requires an adjacent foe.');
+  const mutations: RuleMutation[] = [stateMutation(context, source.id, 'sucker-punch:used', true)];
+  if (context.triggers?.has('heroic')) {
+    // Heroic: the re-rolled save is made with +1 curse (consumed by the re-roll).
+    mutations.push(stateMutation(context, target.id, 'sucker-punch:curse', true));
+  }
+  return mutations;
+};
+
+/** ICON p.144: 2[D]+fray attack that becomes true strike and ignores defenses at 3+ statuses. */
+const bleakMercyEffects: RuleResolver = (context) => {
+  const source = sourceActor(context, context.actorId);
+  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  if (!source || !target || !target.position) return [];
+  // ICON p.144: Bleak Mercy escalates against three or more *statuses* on the
+  // target. Counting the broad projected condition set would let passive
+  // positive conditions (Counter, Defiance, Resistance) grant the true-strike
+  // and defense-bypass package without any actual statuses. The status-only
+  // projection is the authoritative count.
+  const empowered = target.statuses.length >= 3;
+  const attack = resolveAttackRoll({
+    defense: target.defense,
+    elevationModifier: source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0,
+    sourceDazed: source.conditions.has('dazed'),
+    targetEvasion: target.conditions.has('evasion'),
+    trueStrike: empowered,
+  }, context.dice);
+  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover } = attack;
+  const damageProvenance = {
+    ignoreDodge,
+    ignoreCover,
+    // p.144 names only these three exceptions. In particular this must not
+    // use Divine as a shortcut: Divine also ignores Resistance, Cover,
+    // Aetherwall, Pacified, and Hatred, none of which Bleak Mercy names.
+    ...(empowered ? { bypassVigor: true, ignoreArmor: true, ignoreDefiance: true } : {}),
+  };
+  const mutations: RuleMutation[] = [{
+    kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
+  }];
+  if (hit) {
+    const dice = context.dice.die(source.damageDie) + context.dice.die(source.damageDie);
+    mutations.push(damageMutation(context, target.id, dice + source.fray, 'hit', 'normal', damageProvenance));
+  } else {
+    mutations.push(damageMutation(context, target.id, source.fray, 'miss', 'normal', damageProvenance));
+  }
+  if (critical) mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'hit', 'normal', damageProvenance));
+  if (context.triggers?.has('slay') || context.triggers?.has('heroic')) {
+    mutations.push(...cureMutations(context, source.id));
+    if (source.position) {
+      for (const foe of Object.values(context.state.actors)) {
+        if (foe.side === source.side || !foe.position || distance(foe.position, source.position) > 2) continue;
+        mutations.push(shoveMutation(context, foe.id, 1, axisDirection(source.position, foe.position)));
+      }
+    }
+  }
+  return mutations;
+};
+
+/** ICON p.144 Combo (Sweet Torment): aura 1 that stops cures and save clearing. */
+const bleakMercyComboEffects: RuleResolver = (context, action) => {
+  const source = sourceActor(context, context.actorId);
+  if (!source) return [];
+  const mutations: RuleMutation[] = [{
+    kind: 'persistent', sourceId: context.sourceId, ownerId: source.id, operation: 'add', actorId: source.id,
+    effectId: 'sweet-torment', duration: untilNextTurnEnd, modifiers: [{ operation: 'grant', stat: 'aura', value: { kind: 'constant', value: 1 } }], triggers: [], state: {},
+  }];
+  mutations.push(...bleakMercyEffects(context, action));
+  return mutations;
+};
+
+export const KNAVE_RULE_RESOLVERS: RuleResolverRegistry = {
+  'knave:low-blow:effects': lowBlowEffects,
+  'knave:low-blow:combo': lowBlowComboEffects,
+  'knave:provoke': provokeEffects,
+  'knave:revenge:effects': revengeEffects,
+  'knave:revenge:combo': revengeComboEffects,
+  'knave:riposte:enter': riposteEnter,
+  'knave:riposte:dire-parry': direParry,
+  'knave:dark-knight:enter': darkKnightEnter,
+  'knave:strongarm': strongarmEffects,
+  'knave:intimidate': intimidateEffects,
+  'knave:sucker-punch': suckerPunchEffects,
+  'knave:bleak-mercy:effects': bleakMercyEffects,
+  'knave:bleak-mercy:combo': bleakMercyComboEffects,
+};
+
+export const KNAVE_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourceUnit) => RuleProgramCompilation>> = {
+  'knave:low-blow': (unit) => compilation(unit, [
+    action({
+      name: unit.name, timing: 'use',
+      costs: [{ kind: 'action', amount: constant(1) }],
+      tags: ['attack', 'true strike'],
+      range: constant(1),
+      resolverId: 'knave:low-blow:effects',
+      steps: [{ id: 'attack', timing: 'use', effects: [attackStep({ trueStrike: true })] }],
+    }),
+    action({
+      id: 'combo', name: 'The Hook', timing: 'use',
+      costs: [comboCost()],
+      tags: ['attack', 'true strike'],
+      range: constant(2),
+      resolverId: 'knave:low-blow:combo',
+      steps: [{ id: 'attack', timing: 'use', effects: [attackStep({ trueStrike: true })] }],
+    }),
+  ], ['effect', 'attack', 'on hit', 'miss', 'effect', 'slay or heroic', 'combo']),
+
+  'knave:provoke': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: [],
+    resolverId: 'knave:provoke',
+    steps: [],
+  })], ['effect', 'effect', 'effect', 'heroic', 'slay']),
+
+  'knave:revenge': (unit) => compilation(unit, [
+    action({
+      name: unit.name, timing: 'use',
+      costs: [{ kind: 'action', amount: constant(2) }],
+      tags: ['attack'],
+      range: constant(1),
+      resolverId: 'knave:revenge:effects',
+      steps: [{ id: 'attack', timing: 'use', effects: [attackStep()] }],
+    }),
+    action({
+      id: 'combo', name: 'Indignation', timing: 'use',
+      costs: [{ kind: 'action', amount: constant(2) }, comboCost()],
+      tags: ['attack', 'true strike'],
+      range: constant(1),
+      resolverId: 'knave:revenge:combo',
+      steps: [{ id: 'attack', timing: 'use', effects: [attackStep({ trueStrike: true })] }],
+    }),
+  ], ['attack', 'on hit', 'miss', 'effect', 'slay or heroic', 'combo']),
+
+  'knave:riposte': (unit) => compilation(unit, [
+    action({
+      name: unit.name, timing: 'use',
+      costs: [{ kind: 'action', amount: constant(1) }],
+      tags: ['stance'],
+      resolverId: 'knave:riposte:enter',
+      steps: [],
+    }),
+    action({
+      id: 'dire-parry', name: 'Dire Parry', timing: 'interrupt',
+      costs: [{ kind: 'interrupt', amount: constant(1) }],
+      tags: ['interrupt'],
+      resolverId: 'knave:riposte:dire-parry',
+      steps: [],
+    }),
+  ], ['stance', 'trigger', 'effect', 'refresh', 'heroic']),
+
+  'knave:dark-knight': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: ['stance'],
+    resolverId: 'knave:dark-knight:enter',
+    steps: [],
+  })], ['stance', 'effect', 'effect', 'effect', 'heroic', 'refresh']),
+
+  'knave:strongarm': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: [],
+    resolverId: 'knave:strongarm',
+    steps: [],
+  })], ['effect', 'effect', 'collide', 'heroic']),
+
+  'knave:intimidate': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'use',
+    costs: [{ kind: 'action', amount: constant(1) }],
+    tags: ['mark', 'end turn'],
+    resolverId: 'knave:intimidate',
+    steps: [],
+  })], ['end your turn and mark', 'effect', 'heroic']),
+
+  'knave:sucker-punch': (unit) => compilation(unit, [action({
+    name: unit.name, timing: 'interrupt',
+    costs: [{ kind: 'interrupt', amount: constant(1) }],
+    tags: ['interrupt'],
+    resolverId: 'knave:sucker-punch',
+    steps: [],
+  })], ['trigger', 'effect', 'heroic']),
+
+  'knave:bleak-mercy': (unit) => compilation(unit, [
+    action({
+      name: unit.name, timing: 'use',
+      costs: [{ kind: 'action', amount: constant(2) }],
+      tags: ['attack'],
+      range: constant(1),
+      resolverId: 'knave:bleak-mercy:effects',
+      steps: [],
+    }),
+    action({
+      id: 'combo', name: 'Sweet Torment', timing: 'use',
+      costs: [{ kind: 'action', amount: constant(2) }, comboCost()],
+      tags: ['attack'],
+      range: constant(1),
+      resolverId: 'knave:bleak-mercy:combo',
+      steps: [],
+    }),
+  ], ['attack', 'on hit', 'miss', 'effect', 'slay or heroic', 'combo']),
+};

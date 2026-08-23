@@ -1,7 +1,8 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { initialCharacterResources, perEncounterCharacterResourceIds, resourceMaximum, SHARED_RESOURCE_IDS, SHARED_RESOURCE_RULES } from '../core.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
 

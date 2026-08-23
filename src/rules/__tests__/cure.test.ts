@@ -1,7 +1,8 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { encounterRuleState } from '../automation/encounter-adapter.js';
-import { resolveStatusSaveMutations } from '../automation/status-saves.js';
-import type { RuleExecutionContext, RuleExecutionInput } from '../automation/types.js';
+import { encounterRuleState } from '../automation/kernels/encounter-adapter.js';
+import { resolveStatusSaveMutations } from '../automation/primitives/status-saves.js';
+import type { RuleExecutionContext, RuleExecutionInput } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter } from './fixtures.js';

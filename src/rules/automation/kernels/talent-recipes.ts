@@ -1,0 +1,233 @@
+/**
+ * Talent fold kernel (F7, docs/rules-foundations.md §8, freebuff-plan.md §4).
+ *
+ * A wired talent declares a trigger-effect (`exceed` when the ability's
+ * attack roll is 15+, `comeback` while the user is bloodied, `slay` when the
+ * ability reduces a foe to 0 HP, `collide` when one of the ability's shoves
+ * collides — the slay/collide triggers are post-application, decided by the
+ * shared reactive dry run on the ability's recorded mutations —
+ * `finishing-blow` when the ability targets a bloodied foe, the same rule
+ * `deriveTriggers` uses, and `always` for unconditional ability
+ * augmentations whose magnitude reads state — e.g. a charge-scaled effect
+ * reading the user's slow-turn state) and the effect mutations are folded
+ * into the ability's mutation stream at command time, so replay carries
+ * them on the event (F0 durable-record principle).
+ *
+ * A row may declare a `condition` override for its trigger (a per-row fired
+ * check, e.g. a finishing-blow row whose eligibility extends to dazed or
+ * blinded foes), and `build` receives a `TalentFoldContext` (the encounter
+ * state and the ability's own produced mutations) when it needs them.
+ *
+ * The wired rows themselves live in `content/jobs/talent-recipes.ts` and
+ * register through `registerWiredTalentRecipe`; program-level talents (the
+ * ability programs read the equipped choice themselves and emit the variant
+ * in their own mutation stream, e.g. Demon Cutter t2's pre-ability rush)
+ * register through `registerProgramLevelTalent`. This module contains only
+ * the fold and the executable allowlists, and deliberately no source IDs of
+ * its own.
+ */
+import type { EncounterActor, EncounterState } from '../../types.js';
+import type { RuleMutation } from '../primitives/types.js';
+
+/** ICON p.102: bloodied at or below half maximum HP (same formula as the
+ * kernel's isBloodied — inlined here to keep the module graph acyclic: the
+ * adapter imports manual-programs, which imports this module). */
+function isBloodied(actor: EncounterActor): boolean {
+  return actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2;
+}
+
+export type TalentStatus = 'wired' | 'program-level' | 'documented';
+
+/** The resolved mutation kinds a wired talent may emit (each without its
+ * sourceId — the kernel fills the talent's source id at fold time). */
+export type TalentEffect =
+  | Omit<Extract<RuleMutation, { kind: 'vigor' }>, 'sourceId'>
+  | Omit<Extract<RuleMutation, { kind: 'resource' }>, 'sourceId'>
+  | Omit<Extract<RuleMutation, { kind: 'condition' }>, 'sourceId'>
+  | Omit<Extract<RuleMutation, { kind: 'damage' }>, 'sourceId'>
+  | Omit<Extract<RuleMutation, { kind: 'move' }>, 'sourceId'>;
+
+/** The fold context handed to a wired row's `condition`/`build`: the
+ * encounter state, the ability's own produced mutations, and the ability's
+ * target ids. */
+export interface TalentFoldContext {
+  state: EncounterState;
+  mutations: readonly RuleMutation[];
+  targetIds: readonly string[];
+}
+
+/** A wired talent's declared trigger-effect. The `build` factory fills the
+ * actor/target ids at fold time; the kernel adds the talent's sourceId. */
+export interface TalentTriggerEffect {
+  /** `exceed` fires when the ability's attack roll totals 15+ (ICON p.85);
+   * `comeback` fires while the user is bloodied (ICON p.102); `finishing-
+   * blow` fires when the ability targets a bloodied foe (the `deriveTriggers`
+   * rule, ICON p.95); `always` fires on every use of the ability (an
+   * unconditional augmentation; the build reads the fold context for
+   * magnitudes, e.g. a charge-scaled shove reading the user's slow-turn
+   * state); `slay` and `collide` are post-application triggers (ICON p.95)
+   * decided by the shared reactive dry run on the ability's recorded
+   * mutations. */
+  trigger: 'exceed' | 'comeback' | 'slay' | 'collide' | 'finishing-blow' | 'always';
+  /** Optional per-row override of the trigger's fired check (e.g. a
+   * finishing-blow row whose eligibility extends to dazed or blinded foes).
+   * When present it replaces the trigger kind's default condition. */
+  condition?(context: TalentFoldContext): boolean;
+  /** Deterministic effect mutations for the firing actor, the ability's
+   * target ids, the trigger's own targets (the collided actors for
+   * `collide`, the defeated actors for `slay`, the bloodied foe targets for
+   * `finishing-blow`), and the fold context. */
+  build(actorId: string, targetIds: readonly string[], triggerTargetIds: readonly string[], context?: TalentFoldContext): TalentEffect[];
+}
+
+export interface TalentRecipe {
+  sourceId: string;
+  /** The ability whose source block owns this talent. */
+  abilityId: string;
+  name: string;
+  status: TalentStatus;
+  /** What the engine resolves deterministically. */
+  mechanic: string;
+  /** The ruling / remaining kernel need (documented rows). */
+  detail: string;
+  /** Wired rows carry their trigger-effect; documented rows never do. */
+  triggerEffect?: TalentTriggerEffect;
+}
+
+/** A registered wired talent row: the trigger-effect plus its mechanic text. */
+export interface WiredTalentRow {
+  mechanic: string;
+  triggerEffect: TalentTriggerEffect;
+}
+
+const wiredTalentRecipes: Record<string, WiredTalentRow> = {};
+
+/** Register a wired talent row (content/jobs/talent-recipes.ts). */
+export function registerWiredTalentRecipe(sourceId: string, row: WiredTalentRow): void {
+  wiredTalentRecipes[sourceId] = row;
+}
+
+/** Program-level talent implementations: talents the ability programs
+ * themselves gate on the equipped choice (`context.state.actors[id]
+ * .talents[abilityId]`) and emit in their own mutation stream — e.g. Demon
+ * Cutter t2's pre-ability rush (a charge-scaled movement variant that changes
+ * the ability's own origin, which a post-mutation fold cannot express). They
+ * are executable (audit-complete) but deliberately not fold rows: the fold
+ * must not double-apply them. */
+const programLevelTalentRecipes: Record<string, string> = {};
+
+/** Register a program-level talent implementation (content/jobs/
+ * talent-recipes.ts). */
+export function registerProgramLevelTalent(sourceId: string, mechanic: string): void {
+  programLevelTalentRecipes[sourceId] = mechanic;
+}
+
+/** The executable talent ids — the allowlist that makes each talent's
+ * compilation complete (audit authority: allowlist + source fixture + replay
+ * test). Both the wired fold rows and the program-level implementations are
+ * explicit, so this never touches the source manifest. */
+export function getExecutableTalentIds(): ReadonlySet<string> {
+  return new Set([...Object.keys(wiredTalentRecipes), ...Object.keys(programLevelTalentRecipes)]);
+}
+
+export const isExecutableTalent = (sourceId: string): boolean =>
+  Object.prototype.hasOwnProperty.call(wiredTalentRecipes, sourceId)
+  || Object.prototype.hasOwnProperty.call(programLevelTalentRecipes, sourceId);
+
+/** The mechanic text of a program-level talent implementation, or undefined
+ * for a fold-wired or documented talent. */
+export function getProgramLevelTalentMechanic(sourceId: string): string | undefined {
+  return programLevelTalentRecipes[sourceId];
+}
+
+/** The post-application trigger targets a wired slay/collide talent needs.
+ * The caller computes them from the ability's recorded mutations via the
+ * shared reactive dry run (`collidingShoveTargets` / `reactiveSlayTargets`)
+ * — the same kernel that decides the ability's own collide/slay clauses — so
+ * the fold stays framework-free and the module graph stays acyclic. */
+export interface TalentReactiveTargets {
+  collidedActorIds?: readonly string[];
+  slainActorIds?: readonly string[];
+}
+
+/** The reactive trigger a wired slay/collide talent needs, or null when the
+ * actor's equipped talent for this ability is not a wired slay/collide row.
+ * Callers use this to decide whether the post-application dry run is needed
+ * before folding (the dry run clones the encounter state). */
+export function talentReactiveTrigger(actor: EncounterActor, abilityId: string): 'slay' | 'collide' | null {
+  const chosen = actor.talents?.[abilityId];
+  if (!chosen) return null;
+  const trigger = wiredTalentRecipes[`${abilityId}:talent:${chosen}`]?.triggerEffect?.trigger;
+  return trigger === 'slay' || trigger === 'collide' ? trigger : null;
+}
+
+/**
+ * The shared talent fold (F7): after an ability's program produced its
+ * mutations, append the equipped wired talent's trigger-effect mutations when
+ * its trigger fired. The trigger decision is deterministic and derived from
+ * the same engine semantics the program used:
+ *
+ * - `comeback` — the user is bloodied (the same check as `deriveTriggers`).
+ * - `exceed` — any produced `attack` mutation rolled 15+ (the engine's
+ *   exceed threshold, runtime.ts), so no re-roll and no re-decision happen.
+ * - `finishing-blow` — any ability target is a bloodied foe (the same check
+ *   as `deriveTriggers`); the bloodied foe targets are handed to `build` as
+ *   its third argument.
+ * - `always` — fires on every use of the ability (an unconditional
+ *   augmentation); the row's `build` reads the fold context for magnitudes
+ *   (e.g. a charge-scaled shove reading the user's slow-turn state).
+ * - `collide` / `slay` — post-application triggers: the caller passes the
+ *   reactive targets (`collidedActorIds` / `slainActorIds`) computed from
+ *   the ability's recorded mutations by the same dry run that derives the
+ *   ability's own reactive clauses, and the fold fires when the relevant
+ *   set is non-empty. The trigger's own targets (the collided / defeated
+ *   actors) are handed to `build` as its third argument.
+ * - A row's `condition` override replaces the trigger kind's default check.
+ *
+ * The returned mutations ride the ability's RULE_MUTATIONS_APPLIED event, so
+ * replay applies exactly what the command boundary decided (F0 durable
+ * record). A talent outside the wired table, or one whose trigger did not
+ * fire, contributes nothing.
+ */
+export function talentTriggerMutations(
+  state: EncounterState,
+  actor: EncounterActor,
+  abilityId: string,
+  mutations: readonly RuleMutation[],
+  targetIds: readonly string[] = [],
+  reactive: TalentReactiveTargets = {},
+): RuleMutation[] {
+  const chosen = actor.talents?.[abilityId];
+  if (!chosen) return [];
+  // The runtime fold reads the explicit wired table — never the manifest.
+  const recipe = wiredTalentRecipes[`${abilityId}:talent:${chosen}`];
+  const triggerEffect = recipe?.triggerEffect;
+  if (!triggerEffect) return [];
+  const context: TalentFoldContext = { state, mutations, targetIds };
+  const finishedBlowTargets = targetIds.filter((id) => {
+    const target = state.actors[id];
+    return Boolean(target && target.side !== actor.side && isBloodied(target));
+  });
+  const fired = triggerEffect.condition
+    ? triggerEffect.condition(context)
+    : triggerEffect.trigger === 'comeback'
+      ? isBloodied(actor)
+      : triggerEffect.trigger === 'exceed'
+        ? mutations.some((mutation) => mutation.kind === 'attack' && (mutation.total ?? 0) >= 15)
+        : triggerEffect.trigger === 'collide'
+          ? (reactive.collidedActorIds?.length ?? 0) > 0
+          : triggerEffect.trigger === 'slay'
+            ? (reactive.slainActorIds?.length ?? 0) > 0
+            : triggerEffect.trigger === 'finishing-blow'
+              ? finishedBlowTargets.length > 0
+              : triggerEffect.trigger === 'always'
+                ? true
+                : false;
+  if (!fired) return [];
+  const sourceId = `${abilityId}:talent:${chosen}`;
+  const triggerTargetIds = triggerEffect.trigger === 'collide' ? (reactive.collidedActorIds ?? [])
+    : triggerEffect.trigger === 'slay' ? (reactive.slainActorIds ?? [])
+    : triggerEffect.trigger === 'finishing-blow' ? finishedBlowTargets
+    : [];
+  return triggerEffect.build(actor.id, targetIds, triggerTargetIds, context).map((mutation) => ({ ...mutation, sourceId } as RuleMutation));
+}

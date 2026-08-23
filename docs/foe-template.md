@@ -2,7 +2,7 @@
 
 A foe ability becomes "independently executable" when it has a reviewed entry in
 the recipe table `FOE_ABILITY_RECIPES` in
-`src/rules/automation/foe-recipes.ts` — one declarative recipe per ability,
+`src/rules/automation/content/foes/ability-recipes.ts` — one declarative recipe per ability,
 compiled into a typed `RuleProgram` with a named deterministic resolver by the
 generic factories in the same file — plus a source-page replay fixture in
 `__tests__/foe.test.ts`. The audit stops counting it as an unresolved
@@ -15,8 +15,8 @@ most of them, so **no per-ability resolver code exists**. Adding a new slice is
 a data change plus a fixture: a recipe entry, an allowlist line that derives
 from the table automatically, and golden mutation/replay assertions.
 
-The shared building blocks live in `src/rules/automation/foe-kit.ts` (which
-re-exports `job-kit.ts` and adds foe-specific selectors such as
+The shared building blocks live in `src/rules/automation/primitives/foe-kit.ts` (which
+re-exports `primitives/job-kit.ts` and adds foe-specific selectors such as
 `adjacentActors`). The first slices are the Crusher pilot (p.301, 3 abilities)
 and the basic faction slice (p.300–302: Warrior, Soldier, Brute, Pepperbox,
 Hunter — 17 abilities), covering every recipe kind below.
@@ -40,7 +40,7 @@ metadata, so the entry only carries the review decision:
 },
 ```
 
-Recipe kinds (each maps to one generic resolver factory in `foe-recipes.ts`):
+Recipe kinds (each maps to one generic resolver factory in `kernels/foe-recipes.ts`):
 
 | Kind | Behavior | Example |
 | --- | --- | --- |
@@ -79,11 +79,11 @@ Rules of thumb baked into the factories:
 
 ## 2. Wire (automatic)
 
-- **`src/rules/automation/manual-programs.ts`** — `EXECUTABLE_FOE_ABILITY_IDS`
+- **`src/rules/automation/content/glue/manual-programs.ts`** — `EXECUTABLE_FOE_ABILITY_IDS`
   is derived from the table (`new Set(Object.keys(FOE_ABILITY_RECIPES))`), and
   the `foe-ability` branch of `compileManualRuleProgram` calls
   `compileFoeAbilityRecipe(unit, recipe)`. No hand-editing per ability.
-- **`src/rules/automation/resolvers.ts`** — `FOE_RULE_RESOLVERS` is built from
+- **`src/rules/automation/content/glue/resolvers.ts`** — `FOE_RULE_RESOLVERS` is built from
   the table (`<abilityId>:effects`), so the registry is always in sync.
 - **`src/rules/automation/index.ts`** — already re-exports `foe-recipes.js`.
 

@@ -1,5 +1,6 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { resolveAttackRoll } from '../automation/attack-resolution.js';
+import { resolveAttackRoll } from '../automation/primitives/attack-resolution.js';
 import { scriptedDice } from './fixtures.js';
 
 describe('attack-resolution kernel', () => {
@@ -29,9 +30,11 @@ describe('attack-resolution kernel', () => {
       evasionRoll: 4,
       trueStrike: false,
       autoHit: false,
+      exceedThreshold: null,
       ignoreDodge: false,
       ignoreCover: false,
       netBoon: 0,
+      bonusFlat: 0,
     });
   });
 

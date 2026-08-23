@@ -1,5 +1,5 @@
 import type { EncounterActor, EncounterState, Position, TerrainCell } from './types.js';
-import { encounterConditionSet, rampartObstructs } from './automation/encounter-adapter.js';
+import { encounterConditionSet, rampartObstructs } from './automation/kernels/encounter-adapter.js';
 
 /** The two built-in movement abilities available to an actor. */
 export type MovementMode = 'standard' | 'dash';
@@ -137,7 +137,10 @@ function ignoresObstructionWhileMoving(actor: EncounterActor) {
 }
 
 function ignoresTerrainCosts(actor: EncounterActor) {
-  return movementConditions(actor).has('flying');
+  // F6: ICON p.168 Green Kenning — "You and your summons ignore all movement
+  // penalties from terrain." Closed source-ID check on the trait, never a
+  // condition/prose inference. The granted-dash half stays table-facing.
+  return movementConditions(actor).has('flying') || actor.traitIds.includes('warden:trait:green-kenning');
 }
 
 function ignoresEngagement(actor: EncounterActor, mode: MovementMode) {

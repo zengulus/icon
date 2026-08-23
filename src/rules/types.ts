@@ -1,4 +1,7 @@
-import type { RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleTiming } from './automation/types.js';
+import type { RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleTiming } from './automation/primitives/types.js';
+import type { SaveWindowKind, SaveWindowModifiers } from './automation/primitives/save-window.js';
+import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
+import type { TurnTransitionIntent } from './automation/kernels/lifecycle.js';
 
 export const RULES_VERSION = '1.5' as const;
 export const CHARACTER_SCHEMA_VERSION = 3 as const;
@@ -415,6 +418,9 @@ export interface EncounterActor {
   marks: EncounterMark[];
   stance: EncounterStance | null;
   traitIds: string[];
+  /** The equipped talent choice per ability (1 or 2) — the F7 talent fold
+   * reads this to fold a wired talent's trigger-effect into ability use. */
+  talents: Record<string, 1 | 2>;
   onBattlefield: boolean;
   defeated: boolean;
   actionsRemaining: number;
@@ -463,6 +469,13 @@ export interface EncounterHeldDamage {
   /** Audit provenance for a determined True-Strike damage instance. The held
    * amount is already final, so replay does not recalculate this exception. */
   ignoreDodge?: boolean;
+  /** Durable proof that Defiance's application-time HP floor was applied to
+   * this already-determined amount (ICON p.104). Legacy `ATTACK_RESOLVED` /
+   * `VIGILANCE_SPENT` events record the post-floor applied amount, so replay
+   * cannot re-infer Defiance from that reduced number. Only event replay sets
+   * this; fresh held interrupt windows carry the full determined amount and
+   * must never persist it. */
+  defianceTriggered?: boolean;
 }
 
 /** ICON p.107 — an interrupt window opened by an effect. `triggeredAt` is the
@@ -495,7 +508,10 @@ export interface EncounterPendingInterrupt {
   /** Present when the window opened on a rolled save (Sucker Punch, p.143: an
    * enemy adjacent to the interrupt user rolled a save). `heldEffects` carries
    * the save's original branch; the interrupt re-rolls it, keeping the second
-   * result, and the regenerated branch replaces it (see the event `reroll`). */
+   * result, and the regenerated branch replaces it (see the event `reroll`).
+   * New windows carry the full F2 SaveWindow record (`windowKind`, `windowId`,
+   * `statusId`, `modifiers`, `threshold`) so the re-roll reproduces the exact
+   * evaluated modifier; historical windows fall back to the recorded `boon`. */
   heldSave?: {
     targetId: string;
     /** Evaluated save modifier (boon/curse) applied to both rolls. */
@@ -503,6 +519,12 @@ export interface EncounterPendingInterrupt {
     /** Provenance of the triggering ability, reused for the regenerated branch. */
     sourceId: string;
     sourceActorId: string;
+    /** F2 durable record — the held save's window nature and modifier breakdown. */
+    windowKind?: SaveWindowKind;
+    windowId?: string;
+    statusId?: string;
+    modifiers?: SaveWindowModifiers;
+    threshold?: number;
     onSuccess: RuleEffect[];
     onFailure: RuleEffect[];
   };
@@ -590,13 +612,23 @@ export type EncounterEvent =
   | { type: 'ACTOR_REMOVED'; actorId: string }
   | { type: 'TERRAIN_SET'; cell: TerrainCell }
   | { type: 'ENCOUNTER_STARTED'; firstActorId: string }
-  | { type: 'ACTOR_MOVED'; actorId: string; path: Position[]; mode: 'standard' | 'dash'; dangerousDamage: number; slashedDamage: number }
+  | { type: 'ACTOR_MOVED'; actorId: string; path: Position[]; mode: 'standard' | 'dash'; dangerousDamage: number; slashedDamage: number; /** Durable damage ledger for the movement's dangerous-terrain damage (p.89, source handoff). New events carry it; historical events replay the legacy numeric field. */
+      ledger?: DamageLedgerEntry; /** F2 movement-kind SaveWindow: the recorded save this move passed to leave a
+   * Six Hells Trigram (p.129). Provenance only — replay does not re-roll it;
+   * a future save-reroll interrupt or held window reads the same record. */
+      exitSave?: Extract<RuleMutation, { kind: 'save' }> }
   /**
    * The roll is recorded rather than recalculated during replay.  Evasion
    * resolves before a d20 is rolled, so an evaded basic attack deliberately
    * has null d20/total and its d6 result is retained for the event log.
    */
-  | { type: 'ATTACK_RESOLVED'; actorId: string; targetId: string; weight: 'light' | 'heavy'; d20: number | null; boonDie: number; total: number | null; evasionRoll: number | null; hit: boolean; critical: boolean; rawDamage: number; appliedDamage: number }
+  | {      type: 'ATTACK_RESOLVED'; actorId: string; targetId: string; weight: 'light' | 'heavy'; d20: number | null; boonDie: number; total: number | null; evasionRoll: number | null; hit: boolean; critical: boolean; rawDamage: number; appliedDamage: number; /** Durable Defiance result: the applied amount is already floored at 1 HP and
+   * the condition was consumed at command time. Present only when it triggered. */
+      defianceTriggered?: boolean; /** Durable F0 ledger — the attack-roll/authority provenance (legal target,
+   * range, line of effect, cover, attack-window choices) with the attack's
+   * downstream damage ledger nested inside. New events carry it; historical
+   * events replay the legacy appliedDamage + defianceTriggered fields. */
+      attackResolution?: AttackResolutionLedger }
   | {
       type: 'ABILITY_RESOLVED';
       actorId: string;
@@ -616,6 +648,9 @@ export type EncounterEvent =
         rawDamage: number;
         appliedDamage: number;
         bypassVigor: boolean;
+        /** Durable damage ledger (determined handoff). Replay prefers it over
+         * the legacy bypassVigor → divine mapping, which is documented lossy. */
+        ledger?: DamageLedgerEntry;
       } | null;
       resolvedEffects: string[];
       pendingRulesText: string;
@@ -630,9 +665,13 @@ export type EncounterEvent =
    */
   | { type: 'ACTOR_RECOVERED'; actorId: string; vigorGained: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[] }
   | { type: 'STATUS_APPLIED'; actorId: string; targetId: string; status: StatusId }
-  | { type: 'TURN_ENDED'; actorId: string; nextActorId: string; round: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[]; carnevaleGamble?: number; monogatariGamble?: number; cause?: TurnEndCause }
+  | { type: 'TURN_ENDED'; actorId: string; nextActorId: string; round: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[]; carnevaleGamble?: number; monogatariGamble?: number; cause?: TurnEndCause; intent?: TurnTransitionIntent }
   | { type: 'ACTOR_DEFEATED'; actorId: string; woundGained: boolean }
-  | { type: 'VIGILANCE_SPENT'; actorId: string; targetId: string; use: 'guard' | 'punish'; roll: number; appliedDamage: number }
+  | { type: 'VIGILANCE_SPENT'; actorId: string; targetId: string; use: 'guard' | 'punish'; roll: number; appliedDamage: number; /** Durable Defiance result: the applied amount is already floored at 1 HP and
+   * the condition was consumed at command time. Present only when it triggered. */
+      defianceTriggered?: boolean; /** Durable damage ledger (determined handoff). New events carry it; historical
+   * events replay the legacy appliedDamage + defianceTriggered fields. */
+      ledger?: DamageLedgerEntry }
   | { type: 'ENCOUNTER_ENDED' }
   | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[]; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] } };
 

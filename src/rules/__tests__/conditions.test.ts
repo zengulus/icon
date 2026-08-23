@@ -1,6 +1,7 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { applyRuleMutations, encounterRuleState, isBloodied, retaliate } from '../automation/encounter-adapter.js';
-import { RULE_PROGRAM_SCHEMA_VERSION, type RuleExecutionContext, type RuleMutation, type RuleProgram } from '../automation/types.js';
+import { applyRuleMutations, encounterRuleState, isBloodied, retaliate } from '../automation/kernels/encounter-adapter.js';
+import { RULE_PROGRAM_SCHEMA_VERSION, type RuleExecutionContext, type RuleMutation, type RuleProgram } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, executeRuleProgramWithReactiveTriggers, orderCrossCharacterEffects } from '../encounter.js';
 import { planMovementPath } from '../movement.js';
 import type { EncounterActor, EncounterCondition, EncounterState, Position } from '../types.js';
@@ -237,6 +238,25 @@ describe('combat condition pipeline (p.104–105)', () => {
     expect(result.events[0]).toMatchObject({ type: 'VIGILANCE_SPENT', roll: 5, appliedDamage: 5 });
     expect(result.state.actors[foe.id].hp).toBe(27); // 32 - 5
     expect(result.state.actors[hero.id].resources.vigilance).toBe(1);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Vigilance: punish records Defiance\'s result and replays it identically (p.104)', () => {
+    const { state, hero, foe } = conditionEncounter({ allyAt: null });
+    state.actors[hero.id].resources.vigilance = 2;
+    // A roll of 5 is lethal against 3 HP, so Defiance floors the applied
+    // amount at 1 HP: the recorded appliedDamage (2) is no longer lethal on
+    // its own. Replay must trust the durable defianceTriggered result.
+    state.actors[foe.id].hp = 3;
+    state.actors[foe.id].vigor = 0;
+    state.actors[foe.id].armor = 0;
+    state.actors[foe.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+
+    const result = executeCommand(state, { type: 'SPEND_VIGILANCE', actorId: hero.id, targetId: foe.id, use: 'punish' }, scriptedDice(5));
+    expect(result.events[0]).toMatchObject({ type: 'VIGILANCE_SPENT', roll: 5, appliedDamage: 2, defianceTriggered: true });
+    expect(result.state.actors[foe.id]).toMatchObject({ hp: 1, vigor: 0, defeated: false });
+    expect(result.state.actors[foe.id].conditions.some(({ id }) => id === 'defiance')).toBe(false);
+    expect(result.state.actors[foe.id].ruleState['damage-immune']).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

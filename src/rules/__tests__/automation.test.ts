@@ -1,6 +1,7 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { executeRuleProgram, RuleProgramViolation } from '../automation/runtime.js';
-import type { RuleActorView, RuleExecutionContext, RuleProgram, RuleRuntimeState } from '../automation/types.js';
+import { executeRuleProgram, RuleProgramViolation } from '../automation/kernels/runtime.js';
+import type { RuleActorView, RuleExecutionContext, RuleProgram, RuleRuntimeState } from '../automation/primitives/types.js';
 import { scriptedDice } from './fixtures.js';
 
 const actor = (id: string, side: RuleActorView['side'], x: number, overrides: Partial<RuleActorView> = {}): RuleActorView => ({
@@ -24,6 +25,8 @@ const actor = (id: string, side: RuleActorView['side'], x: number, overrides: Pa
   conditions: new Set(),
   resources: {},
   state: {},
+  traitIds: [],
+  talents: {},
   marks: [],
   ...overrides,
   statuses: overrides.statuses ?? [],

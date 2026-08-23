@@ -1,5 +1,6 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { auditRuleCompilations, compileRuleSourceUnit } from '../automation/compiler.js';
+import { auditRuleCompilations, compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { collectRuleSourceUnits, findRuleSourceUnit } from '../source-units.js';
 import { validCharacter } from './fixtures.js';
@@ -67,16 +68,28 @@ describe('rules automation coverage gate', () => {
 
   it('reports every source unit and leaves unresolved mechanics visible', () => {
     const { audit } = auditRuleCompilations(collectRuleSourceUnits());
+    // F6: the 22 wired Job traits (incl. the attack-path modifier group —
+    // Demon Edge, Hissatsu, Pulverize, Bull's Strength) + 6 summon suites
+    // are complete programs; F7: the 10 wired talents (the closed
+    // `talent-recipes.ts` tranche: exceed, comeback, finishing-blow with
+    // per-row eligibility extensions, the always trigger for unconditional
+    // charge-scaled augmentations, and the slay/collide post-application
+    // fold) plus the first program-level talent (Demon Cutter t2's
+    // pre-ability rush, implemented in the ability program and gated on the
+    // equipped choice through the projected `talents` surface) audit as
+    // complete — 288 source talents, 10 wired / 1 program-level / 277
+    // documented. The 43 documented Job traits and every other kind stay
+    // source-visible.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
-      totalClauses: 4793,
-      completePrograms: 303,
-      unsupportedPrograms: 2972,
-      completeClauses: 1443,
-      unsupportedClauses: 3350,
+      totalClauses: 4750,
+      completePrograms: 342,
+      unsupportedPrograms: 2933,
+      completeClauses: 1482,
+      unsupportedClauses: 3268,
       unsupportedByKind: {
-        core: 70, 'class-trait': 8, 'job-trait': 65, 'limit-break': 16, 'talent': 288, 'mastery': 144,
-        'job-summon-rule': 6, 'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 655,
+        core: 70, 'class-trait': 8, 'job-trait': 43, 'limit-break': 16, 'talent': 277, 'mastery': 144,
+        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 655,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
     });

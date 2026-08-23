@@ -1,5 +1,6 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { Position } from '../types.js';

@@ -1,6 +1,7 @@
+import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/compiler.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
@@ -216,6 +217,124 @@ describe('Fool ability automation (p.150–152)', () => {
     expect(interrupt.state.actors[hero.id].interruptUses['fool:masquerade']).toBe(1);
     expect(interrupt.state.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(false);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
+  });
+
+  it('Masquerade: an armor-mitigated blow is not preempted by a hypothetical defeated window', () => {
+    const { state, hero, foe, ally } = foolEncounter({ foe: { x: 5, y: 1 }, ally: { x: 3, y: 1 }, second: null });
+    // Boiling Blood is available but Righteous Disdain is not, so only a
+    // defeated window could hold the blow — and it must not open: the raw 30
+    // is lethal against 25 HP, but armor 12 leaves a determined 18 that
+    // cannot defeat. Judging the priority from the raw amount would suppress
+    // Masquerade for that hypothetical window, leaving neither interrupt.
+    state.actors[hero.id].abilityIds = state.actors[hero.id].abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain');
+    state.actors[hero.id].hp = 25;
+    state.actors[hero.id].vigor = 0;
+    state.actors[hero.id].armor = 12;
+    const deferred = applyEvents(state, [{
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: foe.id,
+      sourceId: 'fixture:foe-ability',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [
+        { kind: 'actions', sourceId: 'fixture:foe-ability', actorId: foe.id, operation: 'spend', amount: 1 },
+        { kind: 'damage', sourceId: 'fixture:foe-ability', sourceActorId: foe.id, actorId: hero.id, amount: 30, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: false },
+      ],
+    }]);
+    expect(deferred.actors[hero.id].hp).toBe(25); // held by Masquerade, not applied
+    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability');
+    expect(window).toBeDefined();
+    expect(window!.retarget).toEqual({ fromActorId: hero.id, toActorId: ally!.id });
+    expect(deferred.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'defeated')).toBe(false);
+
+    // The redirected mutation re-enters the determination pipeline against the
+    // ally's own armor: 30 - 2 = 28.
+    const interrupt = executeCommand(deferred, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'fool:masquerade',
+      actionId: 'default',
+      timing: 'interrupt',
+      input: { actorIds: { target: [ally!.id] } },
+    }, scriptedDice());
+    expect(interrupt.state.actors[ally!.id].hp).toBe(12); // 40 - (30 - 2)
+    expect(interrupt.state.actors[hero.id].hp).toBe(25);
+    expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
+  });
+
+  it('Masquerade: Defiance-protected lethal damage opens Masquerade instead of a defeated window', () => {
+    const { state, hero, foe, ally } = foolEncounter({ foe: { x: 5, y: 1 }, ally: { x: 3, y: 1 }, second: null });
+    state.actors[hero.id].abilityIds = state.actors[hero.id].abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain');
+    state.actors[hero.id].hp = 25;
+    state.actors[hero.id].vigor = 0;
+    state.actors[hero.id].armor = 2;
+    state.actors[hero.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+
+    // The determined 28 is lethal, but Defiance's application floor means the
+    // blow lands at 1 HP — never a defeat, so no defeated window will open
+    // and Masquerade must win the redirect instead of being suppressed.
+    const deferred = applyEvents(state, [{
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: foe.id,
+      sourceId: 'fixture:foe-ability',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [
+        { kind: 'actions', sourceId: 'fixture:foe-ability', actorId: foe.id, operation: 'spend', amount: 1 },
+        { kind: 'damage', sourceId: 'fixture:foe-ability', sourceActorId: foe.id, actorId: hero.id, amount: 30, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: false },
+      ],
+    }]);
+    expect(deferred.actors[hero.id].hp).toBe(25); // held, not applied
+    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability');
+    expect(window).toBeDefined();
+    expect(deferred.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'defeated')).toBe(false);
+
+    // The redirected mutation re-enters the determination pipeline against the
+    // ally's own armor: 30 - 2 = 28. The hero's defiance is untouched because
+    // the blow was redirected.
+    const interrupt = executeCommand(deferred, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'fool:masquerade',
+      actionId: 'default',
+      timing: 'interrupt',
+      input: { actorIds: { target: [ally!.id] } },
+    }, scriptedDice());
+    expect(interrupt.state.actors[ally!.id].hp).toBe(12); // 40 - (30 - 2)
+    expect(interrupt.state.actors[hero.id].hp).toBe(25);
+    expect(interrupt.state.actors[hero.id].conditions.some(({ id }) => id === 'defiance')).toBe(true);
+    expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
+  });
+
+  it('Masquerade: a genuinely lethal blow still prefers the defeated window (p.107)', () => {
+    const { state, hero, foe, ally } = foolEncounter({ foe: { x: 5, y: 1 }, ally: { x: 3, y: 1 }, second: null });
+    state.actors[hero.id].abilityIds = state.actors[hero.id].abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain');
+    state.actors[hero.id].hp = 25;
+    state.actors[hero.id].vigor = 0;
+    state.actors[hero.id].armor = 2;
+
+    // Determined 28 >= 25 with no Defiance/Defy Death protection: an actual
+    // defeat, so the defeated window holds the blow and Masquerade must not
+    // hijack the redirect.
+    const deferred = applyEvents(state, [{
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: foe.id,
+      sourceId: 'fixture:foe-ability',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [
+        { kind: 'actions', sourceId: 'fixture:foe-ability', actorId: foe.id, operation: 'spend', amount: 1 },
+        { kind: 'damage', sourceId: 'fixture:foe-ability', sourceActorId: foe.id, actorId: hero.id, amount: 30, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: false },
+      ],
+    }]);
+    const defeated = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'defeated');
+    expect(defeated).toBeDefined();
+    expect(defeated!.heldDamage).toMatchObject({ amount: 28, sourceActorId: foe.id });
+    expect(deferred.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(false);
+    expect(deferred.actors[hero.id].hp).toBe(25); // held, not applied
   });
 
   it('Diablo: a +1-boon unerring cross attack that blinds and deals area damage per end-space character', () => {

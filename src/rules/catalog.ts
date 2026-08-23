@@ -1,5 +1,5 @@
 import mechanics from '../content/generated/mechanics-1.5.json' with { type: 'json' };
-import { EXECUTABLE_JOB_ABILITY_IDS } from './automation/manual-programs.js';
+import { EXECUTABLE_JOB_ABILITY_IDS } from './automation/content/glue/manual-programs.js';
 import type {
   AbilityDefinition,
   ActionDefinition,

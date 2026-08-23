@@ -1,4 +1,5 @@
-import { auditRuleCompilations } from '../src/rules/automation/compiler.js';
+import '../src/rules/automation/content/registry.js';
+import { auditRuleCompilations } from '../src/rules/automation/content/glue/compiler.js';
 import { collectRuleSourceUnits } from '../src/rules/source-units.js';
 
 const { audit, compilations } = auditRuleCompilations(collectRuleSourceUnits());
