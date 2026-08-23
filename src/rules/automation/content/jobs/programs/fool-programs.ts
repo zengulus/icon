@@ -1,5 +1,8 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { registerMovementEntryTrigger } from '../../../kernels/movement-triggers.js';
+import { isBloodied } from '../../../kernels/encounter-adapter.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
+import type { Position } from '../../../../types.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
@@ -24,10 +27,11 @@ import {
  *   caller can dash through the normal movement command. Its "end your turn
  *   without attacking" detonation is auto-resolved at turn end (the optional
  *   gamble is taken deterministically).
- * - Party Favor's "when any character enters the space" explosion is modeled
- *   as a `detonate` sub-action through EXECUTE_RULE, matching the existing
- *   triggered-extra convention; the movement-trigger itself remains a
- *   table-facing gap because the single-pass VM has no movement-entry hook.
+ * - Party Favor's "when any character enters the space" explosion auto-fires
+ *   through the movement-entry trigger fold (kernels/movement-triggers.ts): a
+ *   standard MOVE into the mine's space detonates it with the gamble rolled at
+ *   the command boundary and recorded on the event. The `detonate` sub-action
+ *   through EXECUTE_RULE remains for manual resolution.
  * - Masquerade is fully wired: a `targeted-by-ability` window holds an ability
  *   aimed at the user, the interrupt swaps places with a willing ally in range
  *   3, and the window's `retarget` redirects the held effects to that ally.
@@ -164,6 +168,52 @@ const partyFavorEffects: RuleResolver = (context) => {
   return [terrainMutation(context, 'create', 'party-favor', [cell])];
 };
 
+/** ICON p.151: the deterministic mutations of a Party Favor mine detonation
+ * — shared by the manual detonate sub-action (EXECUTE_RULE) and the
+ * movement-entry trigger below, so the two paths cannot diverge. Allies of
+ * the owner in the medium blast fly 1 away from the mine center (the
+ * reducer's F1 gateway validates the destination); foes take 2 area damage
+ * plus the Finishing Blow clause when active; a 4+ gamble blinds foes and a
+ * 6 gives allies stealth. The mine terrain effect is removed last. */
+function partyFavorDetonationMutations(
+  ownerId: string,
+  ownerSide: string,
+  mineCell: Position,
+  gamble: number,
+  finishingBlow: boolean,
+  actors: Readonly<Record<string, { id: string; side: string; position: Position | null }>>,
+): RuleMutation[] {
+  const area = squareArea(mineCell, 2);
+  const mutations: RuleMutation[] = [];
+  for (const character of Object.values(actors)) {
+    const characterPosition = character.position;
+    if (!characterPosition || !area.some((cell) => sameCell(cell, characterPosition))) continue;
+    if (character.side === ownerSide) {
+      const direction = axisDirection(mineCell, characterPosition);
+      const target = { x: characterPosition.x + Math.sign(direction.x), y: characterPosition.y + Math.sign(direction.y) };
+      mutations.push({
+        kind: 'move', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id,
+        movement: 'fly', distance: null, positions: [target], direction, phasing: false,
+      });
+    } else {
+      mutations.push({
+        kind: 'damage', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id,
+        amount: 2, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false,
+      });
+      if (finishingBlow) {
+        mutations.push(
+          { kind: 'damage', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false },
+          { kind: 'damage', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false },
+        );
+      }
+      if (gamble >= 4) mutations.push({ kind: 'condition', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id, conditionId: 'blind', operation: 'apply', potency: 'normal' });
+    }
+    if (gamble >= 6 && character.side === ownerSide) mutations.push({ kind: 'condition', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id, conditionId: 'stealth', operation: 'apply', potency: 'normal' });
+  }
+  mutations.push({ kind: 'terrain', sourceId: 'fool:party-favor', sourceActorId: ownerId, operation: 'remove', terrain: 'party-favor', positions: [mineCell], height: null });
+  return mutations;
+}
+
 /** ICON p.151: detonate a Party Favor mine — gamble, then a medium blast whose
  * effects stack (allies fly 1 and foes take 2 damage; 4+ blinds foes; 6 gives
  * allies stealth; a Finishing Blow doubles the foe damage). */
@@ -175,26 +225,46 @@ const partyFavorDetonate: RuleResolver = (context) => {
     .filter((effect) => effect.terrain === 'party-favor' && effect.ownerId === source.id)
     .flatMap((effect) => effect.positions);
   if (positions.length === 0) throw new RuleProgramViolation('choice.position-count', 'Party Favor detonation requires a placed mine.');
-  const center = positions[0];
-  const gamble = context.dice.die(6);
-  const area = squareArea(center, 2);
-  const mutations: RuleMutation[] = [];
-  for (const character of Object.values(context.state.actors)) {
-    const characterPosition = character.position;
-    if (!characterPosition || !area.some((cell) => sameCell(cell, characterPosition))) continue;
-    if (character.side === source.side) {
-      const flyTo = walk(context, characterPosition, axisDirection(center, characterPosition), 1, true, character.id);
-      if (!sameCell(flyTo, characterPosition)) mutations.push(flyMutation(context, character.id, flyTo));
-    } else {
-      mutations.push(damageMutation(context, character.id, 2, 'area'));
-      if (context.triggers?.has('finishing-blow')) mutations.push(damageMutation(context, character.id, 2, 'area'), damageMutation(context, character.id, 2, 'area'));
-      if (gamble >= 4) mutations.push(conditionMutation(context, character.id, 'blind'));
-    }
-    if (gamble >= 6 && character.side === source.side) mutations.push(conditionMutation(context, character.id, 'stealth'));
-  }
-  mutations.push(terrainMutation(context, 'remove', 'party-favor', positions));
-  return mutations;
+  return partyFavorDetonationMutations(
+    source.id,
+    source.side,
+    positions[0],
+    context.dice.die(6),
+    Boolean(context.triggers?.has('finishing-blow')),
+    context.state.actors,
+  );
 };
+
+// ICON p.151: "When any character enters the space, the mine explodes" — the
+// movement-entry trigger the manual detonate sub-action used to stand in for
+// (the former "no movement-entry hook" core ruling). The gamble is pre-rolled
+// at the MOVE command boundary (recorded in the event's mutations), and the
+// Finishing Blow clause auto-fires on a bloodied foe in the blast — or, with
+// talent 2 equipped, on a dazed or blinded foe — matching the ability's own
+// clause without a caller flag.
+registerMovementEntryTrigger({
+  sourceId: 'fool:party-favor',
+  matchesCell: (state, cell) => state.terrainEffects.some((effect) =>
+    effect.terrain === 'party-favor' && effect.positions.some((position) => sameCell(position, cell))),
+  mutations: (state, mover, cell, context) => {
+    const mine = state.terrainEffects.find((effect) =>
+      effect.terrain === 'party-favor' && effect.positions.some((position) => sameCell(position, cell)));
+    if (!mine) return [];
+    const owner = mine.ownerId ? state.actors[mine.ownerId] : undefined;
+    const ownerSide = owner?.side ?? mover.side;
+    const area = squareArea(cell, 2);
+    const areaFoes = Object.values(state.actors).filter((actor) => {
+      const position = actor.position;
+      return Boolean(actor.side !== ownerSide && position && area.some((c) => sameCell(c, position)));
+    });
+    const bloodiedFoe = areaFoes.some((foe) => isBloodied(foe));
+    const talentTwo = owner?.talents?.['fool:party-favor'] === 2;
+    const extendedFoe = talentTwo && areaFoes.some((foe) =>
+      foe.conditions.some((condition) => condition.id === 'dazed' || condition.id === 'blind'));
+    const gamble = context.dice.die(6);
+    return partyFavorDetonationMutations(owner?.id ?? mover.id, ownerSide, cell, gamble, bloodiedFoe || extendedFoe, state.actors);
+  },
+});
 
 /** ICON p.151: swap places with a willing ally in range 3, teleporting both. */
 const masqueradeEffects: RuleResolver = (context) => {

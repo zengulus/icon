@@ -25,12 +25,12 @@ says it plainly:
 | Measure | Count |
 | --- | ---: |
 | Traceable source programs | 3,275 |
-| Reviewed executable programs | 303 |
-| Explicitly unresolved clauses | 3,350 |
+| Reviewed executable programs | 387 |
+| Explicitly unsupported clauses | 3,223 |
 
-The interesting fact: the remaining 3,350 unresolved clauses are **not** 3,350
-unique mechanics. They are 3,350 instances of a few dozen source behaviors,
-repeated across ~1,365 foe abilities, 655 foe traits, 288 talents, 144
+The interesting fact: the remaining 3,223 unsupported clauses are **not** 3,223
+unique mechanics. They are 3,223 instances of a few dozen source behaviors,
+repeated across ~1,365 foe abilities, 612 foe traits, 288 talents, 144
 masteries, 120 relic ranks, and the supporting/core rules. Everything that is
 already complete was completed **once** by building a shared contract, then
 replayed for every instance:
@@ -259,7 +259,7 @@ not the content.
   conditions have no reviewed passive source yet — they stay fixture-only
   until a source unit is promoted with its damage/trigger/lifecycle matrix
   (never inferred from trait/role prose).
-- **Unblocks:** 8 class traits, 65 job traits, 655 foe traits, 19 foe phases,
+- **Unblocks:** 8 class traits, 65 job traits, 612 foe traits, 19 foe phases,
   and the role baselines that make 1,365 foe abilities behave correctly.
 
 ### F6 — Job traits: closed inventory, five wiring homes
@@ -333,14 +333,14 @@ missing stays source-visible (never approximated).
 | Core combat units | 70 | F0, F2, F3, F4 | `damage-ledger.ts`, save/turn templates | `__tests__/core*.test.ts` |
 | Class traits | 8 | F5 | `kernels/passive-projection.ts` recipes | `__tests__/traits.test.ts` |
 | Job traits | 65 | F5, F6 | passive + lifecycle + resolver recipes (`content/jobs/job-trait-recipes.ts`) | `__tests__/job-traits.test.ts`, `__tests__/summons.test.ts` |
-| Talents | 288 | F0, F2, F5, F7 | `content/jobs/talent-recipes.ts` inventory + `kernels/talent-recipes.ts` trigger-effect fold (10 wired + 1 program-level) | `__tests__/talents.test.ts`, `__tests__/demon-slayer.test.ts` |
+| Talents | 288 | F0, F2, F5, F7 | `content/jobs/talent-recipes.ts` inventory + `kernels/talent-recipes.ts` trigger-effect fold (10 wired + 3 program-level) | `__tests__/talents.test.ts`, `__tests__/demon-slayer.test.ts`, `__tests__/enochian.test.ts` |
 | Masteries | 144 | F0, F2, F3 | mastery recipes (often a flag on the ability recipe) | `__tests__/masteries.test.ts` |
 | Limit Breaks | 16 | F3, F0 | `limit-break-recipes.ts` (resolve spend, action timing) | `__tests__/limit-breaks.test.ts` |
 | Job summon rules | 6 | F1, F3 | `content/jobs/summon-recipes.ts` (entities + ownership + lifecycle) | `__tests__/summons.test.ts` |
 | Relic ranks | 120 | F0, F1, F2, F3 | `relic-recipes.ts` (invoke = cost + effects) | `__tests__/relics.test.ts` |
 | Relic aspects | 40 | F5 (+ character engine already covers transitions) | aspect passive recipes | `__tests__/relics.test.ts` |
 | Foe abilities | 1,247 | F0, F1, F2, F3 | `FOE_ABILITY_RECIPES` rows (data only) | `__tests__/foe.test.ts` |
-| Foe traits | 655 | F5 | `content/foes/trait-recipes.ts` rows | `__tests__/foe-traits.test.ts` |
+| Foe traits | 612 | F5 | `content/foes/trait-recipes.ts` rows | `__tests__/foe-traits.test.ts` |
 | Foe roles (baselines) | 6 roles | F5 + F0 | `FoeRoleBaselineRecipe` | `__tests__/foe-traits.test.ts` |
 | Foe phases | 19 | F3 | phase recipe (round/turn lifecycle) | `__tests__/foe.test.ts` |
 | Foe chapter rules | 116 | F0–F5 as needed | chapter-rule recipes | `__tests__/foe.test.ts` |
@@ -349,7 +349,7 @@ missing stays source-visible (never approximated).
 | Reward rules | 9 | F2, F3 | reward recipes | `__tests__/rewards.test.ts` |
 | Bond powers (narrative) | 120 | stays table-facing | none — keep non-authoritative | existing narrative tests |
 
-**Executed slice — Talents (F7, 11/288 executable: 10 wired + 1 program-level):**
+**Executed slice — Talents (F7, 13/288 executable: 10 wired + 3 program-level):**
 `content/jobs/talent-recipes.ts` — the closed 288-row inventory (two talents
 per ability, exact source ids) with a wired tranche that executes through one
 shared kernel, `talentTriggerMutations`
@@ -372,18 +372,24 @@ and the **always trigger** for unconditional augmentations whose magnitude
 reads state: Dropkick t2 (shove foe + self, charged/slow turns shove 2). The
 actor now carries the durable `talents` map (validated by the room validator
 and protocol schema); fixtures in `__tests__/talents.test.ts`
-(19, bite-verified); `rules-foundations.md` §8. The first **program-level**
-talent is Demon Cutter t2 (p.128, "Your can rush 1 before using Demon
+(19, bite-verified); `rules-foundations.md` §8. The **program-level**
+talents are Demon Cutter t2 (p.128, "Your can rush 1 before using Demon
 Cutter. Charge: Rush 3 instead."): the Demon Cutter resolver reads the
 projected `talents` surface and emits the pre-ability rush itself (gated on
-the equipped choice, never on the charge trigger alone), fixtures in
-`__tests__/demon-slayer.test.ts`. Remaining 277 rows stay
-source-visible with their kernel need (movement/sacrifice/aura/blessing-
-combo hooks; the documented finishing-blow rows — Death Blossom's teleport
-choices and Stampede's may-choice mark transfer — and the `charge` family's
-remaining ability-behavior variants, which belong in the ability programs'
-charge clauses the way the Chanter programs already implement them, not the
-fold).
+the equipped choice, never on the charge trigger alone); Draken Cross t2
+(p.128, "Charge: Increase range to 5, and all areas may be increased to
+medium blasts instead."): on a slow turn both blasts become medium (radius
+2) with the second-blast search extended to range 5 — fixtures for both in
+`__tests__/demon-slayer.test.ts`; and Pyre t1 (p.209, "Comeback: Allies are
+immune to damage from this ability."): the first program-level comeback
+clause — while bloodied, the Pyre resolver skips allies in the blast fray
+and the comeback/exceed re-explosion, fixtures in `__tests__/enochian.test.ts`.
+Remaining 275 rows stay source-visible with their kernel need
+(movement/sacrifice/aura/blessing-combo hooks; the documented finishing-blow
+rows — Death Blossom's teleport choices and Stampede's may-choice mark
+transfer — and the `charge` family's remaining ability-behavior variants,
+which belong in the ability programs' charge clauses the way the Chanter
+programs already implement them, not the fold).
 
 ---
 
@@ -451,6 +457,6 @@ Do not:
 Build the six shared contracts — damage ledger, spatial gateway, save
 window, turn-transition plan, trigger-window provenance, and passive/role
 recipes — each as a durable record + pure kernel + declarative template +
-closed source-ID manifest + replay matrix, in that order; then the 3,350
+closed source-ID manifest + replay matrix, in that order; then the 3,223
 unresolved clauses reduce to data-authoring rows in the existing recipe
 tables, exactly as the 144 Job abilities and 20 foe recipes already proved.

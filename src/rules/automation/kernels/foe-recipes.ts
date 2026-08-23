@@ -18,6 +18,7 @@ import {
   conditionMutation, markMutation, rushMutation, shoveMutation, terrainMutation, vigorMutation,
   action, compilation,
 } from '../primitives/foe-kit.js';
+import { footprintDistance } from '../primitives/spatial-intent.js';
 import { adjacentActors } from '../primitives/foe-kit.js';
 
 /**
@@ -197,7 +198,9 @@ function chosenTarget(context: RuleExecutionContext): RuleActorView | undefined 
  * the target must exist, be a foe of the source, and be within `range`. */
 function requireFoeInRange(context: RuleExecutionContext, source: RuleActorView, target: RuleActorView | undefined, abilityName: string, range: number): RuleActorView {
   if (!source?.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', `${abilityName} needs a target.`);
-  if (target.side === source.side || distance(source.position, target.position) > range) {
+  // F1: p.92 range is footprint-aware ("at least 1 space of its area within
+  // the listed range") through the shared spatial kernel, not a point metric.
+  if (target.side === source.side || footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size }) > range) {
     throw new RuleProgramViolation('choice.actor-range', `${abilityName} targets a foe within ${range}.`);
   }
   return target;
@@ -205,7 +208,7 @@ function requireFoeInRange(context: RuleExecutionContext, source: RuleActorView,
 
 function requireAllyInRange(context: RuleExecutionContext, source: RuleActorView, target: RuleActorView | undefined, abilityName: string, range: number): RuleActorView {
   if (!source?.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', `${abilityName} needs a target.`);
-  if (target.side !== source.side || distance(source.position, target.position) > range) {
+  if (target.side !== source.side || footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size }) > range) {
     throw new RuleProgramViolation('choice.actor-range', `${abilityName} targets an ally within ${range}.`);
   }
   return target;
@@ -450,12 +453,13 @@ function blastResolver(recipe: FoeBlastRecipe): RuleResolver {
       requireCenterInBounds: true,
     });
     if (!area.legal) throw new RuleProgramViolation('choice.area-illegal', `${context.sourceId} cannot center its blast there.`);
-    const cells = area.cells;
+    // F1: inclusion comes from the shared gateway (p.290: a large foe counts
+    // as inside the area when any of its footprint spaces is hit).
+    const included = new Set(area.includedActorIds);
     const mutations: RuleMutation[] = [];
     const foeSide = source.side === 'heroes' ? 'foes' : 'heroes';
     for (const actor of sortedActors(context)) {
-      const actorPosition = actor.position;
-      if (!actorPosition || !cells.some((cell) => sameCell(cell, actorPosition))) continue;
+      if (!included.has(actor.id)) continue;
       if (actor.side === foeSide) {
         for (let instance = 1; instance <= (recipe.instances ?? 1); instance += 1) {
           mutations.push(foeDamage(context, actor.id, rollAmount(context, source, recipe.damage), 'area', 'normal', false, instance));

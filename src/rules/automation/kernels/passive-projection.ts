@@ -1,4 +1,4 @@
-import { projectedFoeTraitMovementConditions } from './foe-trait-recipes.js';
+import { projectedFoeTraitConditions } from './foe-trait-recipes.js';
 import type { EncounterMark, FoeRoleId } from '../../types.js';
 
 /**
@@ -107,7 +107,7 @@ export function projectedPassiveConditions(traitIds: readonly string[]): Readonl
   for (const traitId of traitIds) {
     for (const condition of characterTraitConditionRecipes[traitId] ?? []) conditions.add(condition);
     for (const condition of jobTraitConditionRecipes[traitId] ?? []) conditions.add(condition);
-    for (const condition of projectedFoeTraitMovementConditions(traitId)) conditions.add(condition);
+    for (const condition of projectedFoeTraitConditions(traitId)) conditions.add(condition);
   }
   return conditions;
 }

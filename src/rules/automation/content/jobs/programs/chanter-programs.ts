@@ -105,10 +105,11 @@ const holyComboEffects: RuleResolver = (context) => {
  * a Charge). The \"can fly 2\" and combo-spend flight are free-action windows. */
 const felicityEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
-  const allyId = context.input.actorIds?.target?.[0] ?? source.id;
+  const allyId = context.input.actorIds?.target?.[0];
+  if (!allyId) throw new RuleProgramViolation('choice.actor-count', 'Felicity requires an ally in range 5.');
   const ally = sourceActor(context, allyId);
   if (!source.position || !ally.position) throw new RuleProgramViolation('choice.actor-count', 'Felicity requires an ally in range 5.');
-  if (ally.side !== source.side || distance(source.position, ally.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'Felicity requires an ally in range 5.');
+  if (ally.id === source.id || ally.side !== source.side || distance(source.position, ally.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'Felicity requires a different ally in range 5.');
   return [
     markMutation(context, ally.id, 'felicity', {}),
     resourceMutation(context, ally.id, 'blessing', 'gain', context.triggers?.has('charge') ? 2 : 1),
@@ -120,10 +121,11 @@ const felicityEffects: RuleResolver = (context) => {
  * 2 vigor per character passed over. */
 const felicityComboEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
-  const allyId = context.input.actorIds?.target?.[0] ?? source.id;
+  const allyId = context.input.actorIds?.target?.[0];
+  if (!allyId) throw new RuleProgramViolation('choice.actor-count', 'FLEET requires an ally in range 5.');
   const ally = sourceActor(context, allyId);
   if (!source.position || !ally.position) throw new RuleProgramViolation('choice.actor-count', 'FLEET requires an ally in range 5.');
-  if (ally.side !== source.side || distance(source.position, ally.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'FLEET requires an ally in range 5.');
+  if (ally.id === source.id || ally.side !== source.side || distance(source.position, ally.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'FLEET requires a different ally in range 5.');
   const mutations: RuleMutation[] = [resourceMutation(context, ally.id, 'blessing', 'gain', 1)];
   const direction = rushTowardFoes(context, ally.position);
   const path: { x: number; y: number }[] = [];

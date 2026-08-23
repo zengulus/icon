@@ -26,18 +26,26 @@ interface EnochianFixture {
 
 function enochianEncounter(options: {
   foe?: Position; second?: Position | null; ally?: Position | null;
+  talents?: Record<string, 1 | 2>; bloodied?: boolean;
 } = {}): EnochianFixture {
   let state = createEncounter('Enochian fixture');
   const hero = actorFromCharacter(validCharacter('Pyromancer'), { x: 1, y: 1 });
   hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
   hero.chapter = 3;
+  if (options.talents) hero.talents = { ...hero.talents, ...options.talents };
+  if (options.bloodied) hero.hp = 1;
   const foe = createFoe('Relict', options.foe ?? { x: 3, y: 1 });
   const second = options.second === null ? null : createFoe('Grim', options.second ?? { x: 5, y: 1 });
   const ally = options.ally === null || options.ally === undefined ? null : actorFromCharacter(validCharacter('Mira'), options.ally);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-  if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
+  if (ally) {
+    ally.id = 'actor:mira'; // validCharacter shares the hero's timestamp-derived id
+    ally.characterId = 'mira';
+    ally.abilityIds = [];
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
+  }
   state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
   return { state, hero, foe, second, ally };
 }
@@ -74,6 +82,38 @@ describe('Enochian ability automation (p.206–214)', () => {
     }, scriptedDice(12, 4, 5));
     expect(result.state.actors[foe.id].hp).toBe(17); // 32 - (4 + 5 + fray 4) - 2 piercing (exceed)
     expect(result.state.actors[second!.id].hp).toBe(26); // 32 - fray 4 (area) - 2 piercing (exceed)
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Pyre talent 1: while bloodied, allies are immune to the ability\u2019s area damage', () => {
+    // The first program-level comeback clause (F7): the resolver reads the
+    // equipped choice and, on the bloodied trigger, skips allies in both the
+    // blast fray and the comeback re-explosion.
+    const { state, hero, foe, ally } = enochianEncounter({ foe: { x: 3, y: 1 }, second: null, ally: { x: 2, y: 1 }, talents: { 'enochian:pyre': 1 }, bloodied: true });
+    const allyHp = ally!.hp;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'enochian:pyre', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    const mutations = mutationsOf(result.events, 'enochian:pyre');
+    expect(mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === ally!.id)).toHaveLength(0);
+    expect(result.state.actors[ally!.id].hp).toBe(allyHp);
+    expect(result.state.actors[foe.id].hp).toBe(17); // 32 - (4 + 5 + fray 4) - 2 piercing (comeback re-explosion)
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Pyre talent 1: the ally immunity is gated on the bloodied trigger', () => {
+    const { state, hero, foe, ally } = enochianEncounter({ foe: { x: 3, y: 1 }, second: null, ally: { x: 2, y: 1 }, talents: { 'enochian:pyre': 1 } });
+    const allyHp = ally!.hp;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'enochian:pyre', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[ally!.id].hp).toBe(allyHp - 2); // blast fray 4, reduced by the ally's armor 2; no re-explosion without the trigger
+    expect(result.state.actors[foe.id].hp).toBe(19); // 32 - (4 + 5 + fray 4)
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Pyre: without talent 1, a bloodied user still damages allies in the blast', () => {
+    const { state, hero, foe, ally } = enochianEncounter({ foe: { x: 3, y: 1 }, second: null, ally: { x: 2, y: 1 }, bloodied: true });
+    const allyHp = ally!.hp;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'enochian:pyre', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[ally!.id].hp).toBe(allyHp - 4); // blast fray 4 (armor-reduced to 2) + 2 piercing re-explosion
+    expect(result.state.actors[foe.id].hp).toBe(17);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

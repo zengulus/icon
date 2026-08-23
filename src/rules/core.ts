@@ -197,8 +197,8 @@ export const TABLE_FACING_MECHANICS: readonly TableFacingMechanic[] = [
     id: 'fool:party-favor:movement-entry',
     name: 'Party Favor (p.151) — movement-entry detonation',
     sourcePage: 151,
-    mechanic: 'The mine detonates via the `detonate` sub-action; the "when a character enters the space" trigger is not auto-firing.',
-    ruling: 'The player calls the detonate sub-action when a character enters the mine\'s space (no movement-entry hook).',
+    mechanic: 'The mine detonates through the movement-entry trigger fold (kernels/movement-triggers.ts) whenever a standard MOVE enters its space; the `detonate` sub-action remains for manual resolution.',
+    ruling: 'Auto-fires on a voluntary MOVE into the mine space; the gamble is pre-rolled at the command boundary and recorded on the event.',
     status: 'documented',
   },
   {

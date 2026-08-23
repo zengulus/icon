@@ -16,14 +16,14 @@ early jobs used to inline. New jobs import from it instead of redefining them.
 
 ## 1. Author the program file
 
-Create `src/rules/automation/<job>-programs.ts` from this skeleton. Keep the
-job-specific work to the two exports at the bottom; everything above the
-resolvers comes from the kit.
+Create `src/rules/automation/content/jobs/programs/<job>-programs.ts` from this
+skeleton. Keep the job-specific work to the two exports at the bottom;
+everything above the resolvers comes from the kit.
 
 ```ts
-import { RuleProgramViolation } from './runtime.js';
-import type { RuleSourceUnit } from '../source-units.js';
-import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from './types.js';
+import { RuleProgramViolation } from '../../primitives/runtime.js';
+import type { RuleSourceUnit } from '../../../source-units.js';
+import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../primitives/types.js';
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, attackStep, comboCost,
@@ -33,7 +33,7 @@ import {
   shoveMutation, rushMutation, flyMutation, placeMutation, entityMutation, terrainMutation,
   untilNextTurnEnd, untilNextTurnStart,
   action, compilation,
-} from './job-kit.js';
+} from '../../primitives/job-kit.js';
 
 /**
  * Independently reviewed <Job> ability implementations (ICON p.XXX–XXX).

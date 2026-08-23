@@ -18,12 +18,15 @@ import { detonateSymphonyMote, tickGallowsHumorDie } from './automation/content/
 import './automation/content/registry.js';
 import { talentReactiveTrigger, talentTriggerMutations, type TalentReactiveTargets } from './automation/kernels/talent-recipes.js';
 import { applyDeterminedDamageToVitals } from './automation/primitives/damage-resolution.js';
+import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
 import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
 import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
 import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
+import { hasLineOfSight as lineOfSightKernel } from './automation/primitives/line-of-sight.js';
+import { movementEntryTriggerMutations } from './automation/kernels/movement-triggers.js';
 import { RULE_RESOLVERS } from './automation/content/glue/resolvers.js';
 import { findRuleSourceUnit } from './source-units.js';
 import { planMovementPath } from './movement.js';
@@ -329,6 +332,11 @@ export function createFoeFromProfile(profileId: string, position: Position, play
   const listedHp = Number(profile.traitsText.match(/\bHP\s*:\s*(\d+)/i)?.[1] ?? 0);
   const roleHp = role.id === 'legend' ? Math.max(role.minimumHp ?? 0, (role.hpPerPlayer ?? 0) * Math.max(1, playerCount)) : role.hp ?? 1;
   const maxHp = profile.stats.hp ?? (listedHp || (profile.kind === 'elite' ? roleHp * 2 : roleHp));
+  // F5: p.298 Size/Armor/Speed keywords on the profile's reviewed special-
+  // traits rows override the role defaults (the generated catalog does not
+  // carry them in stats). The durable actor fields are the record; the p.92
+  // footprint half of Size stays pending until the footprint matrix lands.
+  const traitStats = projectedFoeTraitStats(foeTraitIds(profile.id));
   return {
     id: `foe:${makeId()}`,
     name: profile.name,
@@ -338,7 +346,7 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     foeProfileId: profile.id,
     roleId: profile.roleId,
     actorKind: 'foe',
-    size: profile.stats.size ?? 1,
+    size: traitStats.size ?? profile.stats.size ?? 1,
     tokenUrl: '',
     classId: 'foe',
     chapter,
@@ -350,8 +358,8 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     vigor: 0,
     wounds: 0,
     defense: profile.stats.defense ?? role.defense,
-    armor: profile.stats.armor ?? (role.id === 'heavy' ? 2 : 0),
-    speed: profile.stats.speed ?? role.speed,
+    armor: traitStats.armor ?? profile.stats.armor ?? (role.id === 'heavy' ? 2 : 0),
+    speed: traitStats.speed ?? profile.stats.speed ?? role.speed,
     dash: profile.stats.dash ?? role.dash,
     fray: profile.stats.fray ?? role.fray,
     damageDie: profile.stats.damageDie ?? role.damageDie,
@@ -382,6 +390,18 @@ export function createFoeFromProfile(profileId: string, position: Position, play
 
 function terrainAt(state: EncounterState, position: Position) {
   return state.grid.terrain.find((cell) => samePosition(cell.position, position));
+}
+
+/** The per-cell union of base terrain and overlay effects, matching the
+ * movement planner's view so every spatial kernel sees the same terrain. */
+function terrainTypesAt(state: EncounterState, position: Position): ReadonlySet<string> {
+  const types = new Set<string>();
+  const base = terrainAt(state, position);
+  if (base) types.add(base.type);
+  for (const effect of state.terrainEffects) {
+    if (effect.positions.some((candidate) => samePosition(candidate, position))) types.add(effect.terrain);
+  }
+  return types;
 }
 
 /** ICON p.89: a pit counts as one elevation lower than its base space. */
@@ -660,6 +680,22 @@ function movementEvents(state: EncounterState, command: Extract<EncounterCommand
     },
   } : {}) }];
   if (defeated) events.push({ type: 'ACTOR_DEFEATED', actorId: actor.id, woundGained: actor.side === 'heroes' });
+  // Movement-entry triggers (Party Favor mines, p.151; the same seam serves
+  // bubbles, motes, and "when a character enters" terrain effects). The fold
+  // runs at the command boundary against the recorded path, so the resulting
+  // mutations ride RULE_MUTATIONS_APPLIED events and replay identically;
+  // any roll (a detonation gamble) is rolled once with the caller's dice.
+  for (const fold of movementEntryTriggerMutations(state, actor, plan.path, dice)) {
+    events.push({
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: actor.id,
+      sourceId: fold.sourceId,
+      actionId: `${fold.sourceId}:movement-entry`,
+      timing: 'movement-end',
+      tags: [],
+      mutations: fold.mutations,
+    });
+  }
   return events;
 }
 
@@ -913,18 +949,15 @@ export function executeRuleProgramWithReactiveTriggers(
   return { ...first, mutations, selectedSteps };
 }
 
+/** F1: the reducer's line of sight is the shared kernel (primitives/
+ * line-of-sight.ts, ICON p.92) — grid impassable terrain blocks, and overlay
+ * effects block only when an explicit LoS-blocking type is registered
+ * (none exist in the current catalog, so reducer behavior is unchanged). */
 export function hasLineOfSight(state: EncounterState, from: Position, to: Position) {
-  const steps = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y)) * 4;
-  if (steps <= 1) return true;
-  for (let step = 1; step < steps; step += 1) {
-    const ratio = step / steps;
-    const position = {
-      x: Math.floor(from.x + 0.5 + (to.x - from.x) * ratio),
-      y: Math.floor(from.y + 0.5 + (to.y - from.y) * ratio),
-    };
-    if (!samePosition(position, from) && !samePosition(position, to) && terrainAt(state, position)?.type === 'impassable') return false;
-  }
-  return true;
+  return lineOfSightKernel({
+    grid: state.grid,
+    terrainAt: (position) => terrainTypesAt(state, position),
+  }, from, to);
 }
 
 /**

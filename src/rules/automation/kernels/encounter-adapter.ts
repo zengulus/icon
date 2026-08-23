@@ -735,13 +735,19 @@ export function applyDeterminedEncounterDamage(
   });
   target.hp = applied.hp;
   target.vigor = applied.vigor;
-  if (applied.amountApplied <= 0) return applied;
-  if (source && source.side !== target.side) target.statuses = target.statuses.filter((status) => status !== 'pacified');
+  // Defiance's consumption is independent of how much of the blow the floor
+  // absorbed: even a blow fully prevented by the 1-hp floor (the target was
+  // already at 1) still ends Defiance and grants damage immunity (p.104).
+  // Consume it before the fully-prevented early return so a full-floor blow
+  // cannot be re-answered by the same Defiance. The floor keeps hp >= 1, so
+  // the defeat branch cannot both run and be skipped incorrectly.
   if (defiance) {
     target.conditions = target.conditions.filter(({ id }) => id !== 'defiance');
     target.ruleState['damage-immune'] = true;
     target.ruleStateOwners['damage-immune'] = source?.id ?? null;
   } else if (target.hp <= 0) defeatActor(state, target);
+  if (applied.amountApplied <= 0) return applied;
+  if (source && source.side !== target.side) target.statuses = target.statuses.filter((status) => status !== 'pacified');
   if (options.allowCounter !== false && source && source.side !== target.side && targetConditions.has('counter')) retaliate(state, source, target);
   // Content on-damage-dealt hooks (Gentleness reflection, Aria's pending-
   // damage count, Chastise retribution trigger — content/jobs/encounter-

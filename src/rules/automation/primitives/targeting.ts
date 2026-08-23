@@ -1,14 +1,16 @@
 /**
  * Shared target-eligibility primitives. The direct-target query additionally
- * receives a line-of-sight result from its encounter caller, but area
- * footprint, line of effect, and movement legality still require a fuller
- * EncounterState spatial gateway. These give the VM and command gates one
- * source of truth for relation, self, defeated, and off-board eligibility.
+ * receives a line-of-sight result from its encounter caller, but line of
+ * effect and movement legality still require a fuller EncounterState spatial
+ * gateway. These give the VM and command gates one source of truth for
+ * relation, self, defeated, off-board eligibility, range, and footprint.
  *
  * TODO(ICON-rules, pp.87–92, 94, 107): extend TargetQuery from direct
- * Blind/True Strike/Stealth/LoS checks to listed ranges, line of effect,
- * footprint/area, and occupancy.
+ * Blind/True Strike/Stealth/LoS checks to line of effect and movement
+ * destinations.
  */
+
+import { footprintDistance } from './spatial-intent.js';
 
 export type TargetRelation = 'self' | 'ally' | 'foe' | 'any';
 
@@ -19,6 +21,9 @@ export interface TargetCandidate {
   /** Encounter actors retain their last cell after leaving the battlefield. */
   onBattlefield?: boolean;
   defeated: boolean;
+  /** ICON p.92 Size — the N×N footprint range is measured against, not the
+   * point cell. Absent means Size 1 (the historical point metric). */
+  size?: number;
 }
 
 export interface TargetEligibility {
@@ -85,16 +90,14 @@ export interface DirectTargetResult {
   distance: number | null;
 }
 
-const gridDistance = (first: NonNullable<TargetCandidate['position']>, second: NonNullable<TargetCandidate['position']>) =>
-  Math.max(Math.abs(first.x - second.x), Math.abs(first.y - second.y));
-
 /**
- * Validate a one-target direct nomination. This preserves the existing
- * point-cell metric for now; p.92's footprint/area distance is a deliberate
- * TODO rather than an unreviewed approximation hidden inside a command.
+ * Validate a one-target direct nomination. Range uses the shared p.92
+ * footprint distance ("a target must have at least 1 space of its area within
+ * the listed range"), which for Size-1 actors is exactly the point-cell
+ * Chebyshev metric the reducer historically used.
  */
 export function queryDirectTarget(
-  source: Pick<TargetCandidate, 'id' | 'side' | 'position'>,
+  source: Pick<TargetCandidate, 'id' | 'side' | 'position' | 'size'>,
   target: TargetCandidate,
   query: DirectTargetQuery,
 ): DirectTargetResult {
@@ -105,7 +108,7 @@ export function queryDirectTarget(
     return { legal: false, problem: 'relation', maximumRange: query.maximumRange, distance: null };
   }
   if (!source.position) return { legal: false, problem: 'unavailable', maximumRange: query.maximumRange, distance: null };
-  const distance = gridDistance(source.position, target.position);
+  const distance = footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size });
   const trueStrike = query.trueStrike ?? false;
   const maximumRange = query.maximumRange === null
     ? null

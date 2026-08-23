@@ -12,7 +12,7 @@ stays inert.
 
 This is the "one shared contract, replayed per instance" pattern from
 `docs/foe-template.md`, applied to passives: the 8 class traits, 65 job
-traits, 655 foe traits, 19 foe phases, and 6 foe role baselines are all
+traits, 612 foe traits, 19 foe phases, and 6 foe role baselines are all
 instances of a few dozen source behaviors, so **no per-passive resolver code
 exists**.
 

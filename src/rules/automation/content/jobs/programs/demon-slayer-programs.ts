@@ -136,18 +136,18 @@ const cometEffects: RuleResolver = (context) => {
 };
 
 /** Deterministic non-overlapping second small-blast center within range 3. */
-function secondBlastCenter(context: Parameters<RuleResolver>[0], sourcePosition: Position, firstCenter: Position): Position | null {
-  const primary = squareArea(firstCenter, 1);
+function secondBlastCenter(context: Parameters<RuleResolver>[0], sourcePosition: Position, firstCenter: Position, radius = 1, blastRange = 3): Position | null {
+  const primary = squareArea(firstCenter, radius);
   const candidates: Position[] = [];
-  for (let dy = -3; dy <= 3; dy += 1) {
-    for (let dx = -3; dx <= 3; dx += 1) {
+  for (let dy = -blastRange; dy <= blastRange; dy += 1) {
+    for (let dx = -blastRange; dx <= blastRange; dx += 1) {
       const cell = { x: sourcePosition.x + dx, y: sourcePosition.y + dy };
-      if (withinGrid(cell, context) && distance(sourcePosition, cell) <= 3 && !sameCell(cell, firstCenter)) candidates.push(cell);
+      if (withinGrid(cell, context) && distance(sourcePosition, cell) <= blastRange && !sameCell(cell, firstCenter)) candidates.push(cell);
     }
   }
   candidates.sort((a, b) => distance(a, sourcePosition) - distance(b, sourcePosition) || a.x - b.x || a.y - b.y);
   for (const cell of candidates) {
-    if (squareArea(cell, 1).some((candidate) => primary.some((first) => sameCell(candidate, first)))) continue;
+    if (squareArea(cell, radius).some((candidate) => primary.some((first) => sameCell(candidate, first)))) continue;
     return cell;
   }
   return null;
@@ -160,8 +160,20 @@ const drakenCrossEffects: RuleResolver = (context) => {
   if (!source || !source.position || !target || !target.position) return [];
   const sourcePosition = source.position;
   const targetPosition = target.position;
-  const primary = squareArea(targetPosition, 1);
   const mutations: RuleMutation[] = [];
+  // Talent 2 (p.128): "Charge: Increase range to 5, and all areas may be
+  // increased to medium blasts instead." A program-level charge variant gated
+  // on the equipped talent: on a slow turn both blasts become medium (radius
+  // 2) and the second blast may center anywhere within range 5. The "may"
+  // upgrade resolves deterministically as the charged reading (the player's
+  // option is only a downgrade from the talent's benefit). The attack target
+  // itself stays capped by the generic USE_ABILITY range gate (range 3), so
+  // the range boost lives in the resolver's second-blast search.
+  const charged = source.talents?.['demon-slayer:draken-cross'] === 2
+    && (context.triggers?.has('charge') || context.triggers?.has('heroic'));
+  const blastRadius = charged ? 2 : 1;
+  const blastRange = charged ? 5 : 3;
+  const primary = squareArea(targetPosition, blastRadius);
   const blastFray = (cells: Position[]) => {
     for (const foe of Object.values(context.state.actors)) {
       if (foe.side === source.side || !foe.position || !cells.some((cell) => sameCell(cell, foe.position!))) continue;
@@ -169,7 +181,7 @@ const drakenCrossEffects: RuleResolver = (context) => {
     }
   };
   blastFray(primary);
-  const secondCenter = context.input.positions?.['second-area-center']?.[0] ?? secondBlastCenter(context, sourcePosition, targetPosition);
+  const secondCenter = context.input.positions?.['second-area-center']?.[0] ?? secondBlastCenter(context, sourcePosition, targetPosition, blastRadius, blastRange);
   if (secondCenter) {
     const second = squareArea(secondCenter, 1);
     const overlaps = second.some((cell) => primary.some((first) => sameCell(cell, first)));

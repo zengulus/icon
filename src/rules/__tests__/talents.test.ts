@@ -81,22 +81,26 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 10 wired / 1 program-level / 277 documented', () => {
+  it('covers exactly the 288 source talents with 10 wired / 3 program-level / 275 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
     expect(Object.keys(recipes)).toHaveLength(288);
     expect(Object.keys(recipes).sort()).toEqual([...sourceIds].sort());
-    expect(getExecutableTalentIds().size).toBe(11);
-    expect(getDocumentedTalentIds(units).size).toBe(277);
+    expect(getExecutableTalentIds().size).toBe(13);
+    expect(getDocumentedTalentIds(units).size).toBe(275);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
       else expect(recipe.triggerEffect).toBeUndefined();
     }
-    // The program-level row (Demon Cutter t2) is executable through its
-    // ability program but carries no fold trigger-effect of its own.
+    // The program-level rows (Demon Cutter t2's pre-ability rush, Draken
+    // Cross t2's charged medium blasts, Pyre t1's comeback ally immunity)
+    // are executable through their ability programs but carry no fold
+    // trigger-effect of their own.
     expect(recipes['demon-slayer:demon-cutter:talent:2']?.status).toBe('program-level');
+    expect(recipes['demon-slayer:draken-cross:talent:2']?.status).toBe('program-level');
+    expect(recipes['enochian:pyre:talent:1']?.status).toBe('program-level');
   });
 
   it('a documented talent is never executable (closed negative)', () => {

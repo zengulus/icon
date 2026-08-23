@@ -1,5 +1,5 @@
 import foes from '../content/generated/foes-1.5.json' with { type: 'json' };
-import { foeTraitMovementRecipe } from './automation/kernels/foe-trait-recipes.js';
+import { isFullyExecutableFoeTraitRecipe } from './automation/kernels/foe-trait-recipes.js';
 import type { FoeKind, FoeProfileDefinition, FoeRoleDefinition, FoeRoleId } from './types.js';
 
 export const FOE_ROLES: readonly FoeRoleDefinition[] = [
@@ -51,9 +51,12 @@ export const FOE_PROFILES: readonly FoeProfileDefinition[] = foes.profiles.map((
   traits: profile.traits.map((trait) => ({
     ...trait,
     source: { page: trait.source.page, sectionId: trait.source.sectionId },
-    // These passives are automatically projected from traitIds, unlike an
-    // active foe ability that would need an EXECUTE_RULE command.
-    automation: foeTraitMovementRecipe(trait.id) ? 'executable' as const : 'structured' as const,
+    // A reviewed keyword row is automatically projected from traitIds
+    // (conditions and durable stats), unlike an active foe ability that would
+    // need an EXECUTE_RULE command. Only rows whose every keyword is wired
+    // audit as fully executable; rows with pending keywords stay structured
+    // while their wired subset still projects.
+    automation: isFullyExecutableFoeTraitRecipe(trait.id) ? 'executable' as const : 'structured' as const,
   })),
   phases: profile.phases.map((phase) => ({
     ...phase,

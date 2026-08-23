@@ -18,7 +18,7 @@ Read, in order:
 | Public Lab | `#/lab` is a browser-local human-testing service at **every** phase. It uses no Supabase, Render, authentication, realtime connection, or shared checkpoint, and may deploy on GitHub Pages. | `src/App.tsx`, `src/pages/BrowserVtt.tsx`, `src/vtt/`, browser E2E |
 | Authoritative VTT | `#/vtt/:encounterId` is the real shared room and remains phase-gated until release criteria are genuinely met. | `src/App.tsx`, `src/rules/phase.ts`, `server/index.ts`, transport E2E |
 | Server authority | Browser clients never write live encounter state or durable checkpoints. Render validates commands, permissions, revisions, and redaction; its service role is the checkpoint writer. | `server/rooms.ts`, `server/checkpoints.ts`, `supabase/migrations/` |
-| Conservative automation | Parser output is not execution authority. A rule becomes executable only through an explicit reviewed program/recipe with source-page and replay evidence. | `docs/rules-coverage.md`, `src/rules/automation/manual-programs.ts` |
+| Conservative automation | Parser output is not execution authority. A rule becomes executable only through an explicit reviewed program/recipe with source-page and replay evidence. | `docs/rules-coverage.md`, `src/rules/automation/content/glue/manual-programs.ts` |
 | Replayability | Durable events and checkpoints must yield the same canonical state on replay/hydration. | `src/rules/encounter.ts`, `src/rules/vtt-room.ts`, `server/__tests__/` |
 | Single live authority | The realtime room manager is deliberately single-instance. Do not horizontally scale or overlap Render deployments until there is a fenced lease/relay design. | `README.md`, `server/rooms.ts` |
 
@@ -34,7 +34,7 @@ subsystem.
 | Character creation, import, local/cloud persistence | `src/rules/character.ts`, `src/services/characters.ts`, `src/context/CharacterContext.tsx` | `src/rules/__tests__/character.test.ts`, `src/services/__tests__/characters.test.ts` |
 | Shared combat state and replay | `src/rules/encounter.ts`, `src/rules/types.ts`, `src/rules/vtt-room.ts` | `src/rules/__tests__/encounter.test.ts`, `server/__tests__/rooms.test.ts` |
 | Rules programs, source coverage, extraction | `src/rules/automation/`, `src/rules/source-units.ts` | [`docs/rules-coverage.md`](docs/rules-coverage.md), `scripts/audit-automation.ts` |
-| Damage, target, save, and turn foundations | `src/rules/automation/encounter-adapter.ts` | [`docs/rules-foundations.md`](docs/rules-foundations.md) |
+| Damage, target, save, and turn foundations | `src/rules/automation/kernels/encounter-adapter.ts` | [`docs/rules-foundations.md`](docs/rules-foundations.md) |
 | Realtime client/server | `src/services/realtime.ts`, `server/index.ts`, `server/rooms.ts` | `scripts/e2e-realtime.mjs`, `src/services/__tests__/realtime.test.ts` |
 | Checkpoints and Supabase schema | `server/checkpoints.ts`, `supabase/migrations/` | `server/__tests__/checkpoints.test.ts`, README Supabase section |
 | Geometry/table/fog/annotations | `src/vtt/`, `src/rules/vtt-room.ts` | `src/vtt/__tests__/`, `src/rules/__tests__/vtt-room.test.ts` |
@@ -52,7 +52,7 @@ work. Repair them before promoting new damage, trait, or foe coverage.
    present and without its temporary immunity. Event construction now records
    a durable `defianceTriggered` result (`src/rules/encounter.ts`); the
    application kernel honors it via an `EncounterHeldDamage.defianceTriggered`
-   override (`src/rules/automation/encounter-adapter.ts`
+   override (`src/rules/automation/kernels/encounter-adapter.ts`
    `applyDeterminedEncounterDamage`); and replay passes it through for both
    event shapes. Fresh held interrupt windows never persist the flag — they
    carry the full determined amount and still re-infer. Defiance replay
@@ -74,7 +74,7 @@ work. Repair them before promoting new damage, trait, or foe coverage.
    kernel, lets Masquerade win when no damage window would actually open
    (including a fully mitigated amount), and uses the shared
    `prospectiveAppliedDefeat` gate before preferring a `defeated` window
-   (`src/rules/automation/encounter-adapter.ts`). Window-order regressions
+   (`src/rules/automation/kernels/encounter-adapter.ts`). Window-order regressions
    cover armor mitigation, Defiance protection, and the genuinely-lethal
    control (`__tests__/fool.test.ts`).
 4. **Gate Bleak Mercy on statuses, not broad conditions.**
@@ -82,7 +82,7 @@ work. Repair them before promoting new damage, trait, or foe coverage.
    now counts the status-only projection instead of every projected condition,
    so passive positive conditions (Counter, Defiance, Resistance) can no
    longer grant the true-strike/bypass package
-   (`src/rules/automation/knave-programs.ts`). A three-positive-conditions
+   (`src/rules/automation/content/jobs/programs/knave-programs.ts`). A three-positive-conditions
    negative fixture joins the existing p.144 replay cases
    (`__tests__/knave.test.ts`).
 
@@ -164,13 +164,13 @@ and `npm run audit:automation` before claiming any item below is complete.
 
 | Area | What exists now | Concrete remaining work and safe entry point |
 | --- | --- | --- |
-| **Job abilities** | All 16 Jobs / 144 active abilities have reviewed typed programs and replay fixtures. This does **not** release Phase 2. | Keep source-specific behavior honest while foundations are incomplete. Any new conditional behavior must use the shared damage/target/save/turn contracts, not an ability-local shortcut. Start in `src/rules/automation/*-programs.ts` and its job fixture. |
-| **Class and Job traits** | A few narrowly reviewed traits/passive recipes exist (for example Mendicant Diaga/Bless/Succor and exact foe mobility recipes). The audit still lists **8 class-trait** and **65 job-trait** source units unresolved. | Implement closed source-ID recipes only after their prerequisite foundation works. Do not infer a trait from title or prose. Start in `automation/passive-projection.ts`, `manual-programs.ts`, and the exact source unit/fixture. |
-| **Talents and masteries** | Catalogued and validated for builds. The audit lists **288 talents** and **144 masteries** unresolved. | Sort into passive projection, command-time resolution, lifecycle hook, table-facing choice, or unavailable. Promote a small exact-ID slice with source-page/replay evidence; do not bulk-enable by parser result. |
-| **Limit Breaks and Job summons** | Structured in catalog/loadout validation; not encounter-complete. The audit lists **16 limit-break** and **6 job-summon-rule** units unresolved. | Finish `SpatialIntent`, targeting, entities, areas, lifecycle, and ownership/projection semantics before automation. Start in `src/rules/automation/`, `src/rules/encounter.ts`, and `src/rules/vtt-room.ts`; add server redaction tests for owner-visible state. |
+| **Job abilities** | All 16 Jobs / 144 active abilities have reviewed typed programs and replay fixtures. This does **not** release Phase 2. | Keep source-specific behavior honest while foundations are incomplete. Any new conditional behavior must use the shared damage/target/save/turn contracts, not an ability-local shortcut. Start in `src/rules/automation/content/jobs/programs/*-programs.ts` and its job fixture. |
+| **Class and Job traits** | 22 Job traits are wired with engine mechanics across five wiring homes (condition projections, combat-start grants/companion summons, lifecycle recipes, active resolvers, command/kernel hooks); 43 remain documented. The audit still lists **8 class-trait** and **43 job-trait** source units unresolved. | Implement closed source-ID recipes only after their prerequisite foundation works. Do not infer a trait from title or prose. Start in `automation/passive-projection.ts`, `manual-programs.ts`, and the exact source unit/fixture. |
+| **Talents and masteries** | Catalogued and validated for builds. 13 talents are executable (10 wired fold + 3 program-level); 275 remain documented. The audit lists **275 talents** and **144 masteries** unresolved. | Sort into passive projection, command-time resolution, lifecycle hook, table-facing choice, or unavailable. Promote a small exact-ID slice with source-page/replay evidence; do not bulk-enable by parser result. |
+| **Limit Breaks and Job summons** | Limit Breaks structured in catalog/loadout validation; summon placement, ownership, and entity caps are wired (`summon-recipes.ts`). The audit lists **16 limit-break** units unresolved; the 6 summon-rule source units are complete. | Finish `SpatialIntent`, targeting, entities, areas, lifecycle, and ownership/projection semantics before automation. Start in `src/rules/automation/`, `src/rules/encounter.ts`, and `src/rules/vtt-room.ts`; add server redaction tests for owner-visible state. |
 | **Relics** | All 40 Relics, ranks I–III, aspects, and character validation exist. The audit lists **120 relic-rank** and **40 relic-aspect** units unresolved. | Relic invokes, persistent effects, aspect transitions, and table choices must be classified individually. Do not route a Relic through generic `EXECUTE_RULE` without an explicit recipe and durable lifecycle/projection design. Start in `src/rules/catalog.ts`, `src/rules/character.ts`, and relic source units. |
 | **Foe abilities** | 449 profiles/components with 1,365 catalogued abilities; 20 exact reviewed recipe abilities are active. | The remaining catalog abilities are not independent authority. The audit separately tracks **1,247 traceable foe-ability** units plus phases/chapter rules. Prefer bounded attack-tagged recipes only after target/damage contracts are ready; do not implement mobs, areas, summons, or phases through client assertions. Start in `automation/foe-recipes.ts`, `foes.ts`, and `__tests__/foe.test.ts`. |
-| **Foe traits, roles, phases, and chapter rules** | Only exact-ID Flying/Phasing mobility recipes are projected. The audit lists **655 foe traits**, **19 foe phases**, and **116 foe chapter rules** unresolved. | Do role baselines (Skirmisher/Heavy/Artillery/Legend) only after damage/target/lifecycle contracts. Build exact source-ID manifests; never derive mechanics from a role label or trait text at runtime. |
+| **Foe traits, roles, phases, and chapter rules** | The p.298 role baselines (Skirmisher/Heavy/Artillery/Legend) project through closed `FOE_ROLE_BASELINE_RECIPES`; 36 Flying/Phasing foe trait IDs project through the manifest. The audit lists **612 foe traits**, **19 foe phases**, and **116 foe chapter rules** unresolved. | Extend passive-projection closed-ID rows after damage/target/lifecycle contracts. Build exact source-ID manifests; never derive mechanics from a role label or trait text at runtime. |
 | **Core combat** | Shared reducer and initial damage/attack/save/target/turn seams exist. The audit still lists **70 core** source units unresolved. | Complete the immediate repair queue and foundations before promoting Defiance, Counter, Dodge, Sturdy, Vigilance, Regeneration, broad areas, summons, and trigger ordering. See `docs/rules-foundations.md`. |
 | **Bonds, powers, rewards, trophies, camp** | Character choices and content are visible/validated; narrative outcomes are table-facing. Audit backlog includes **68 trophies**, **16 camp fixtures**, **85 camp features**, and **9 reward rules**. | Keep narrative/freeform choices visible and non-authoritative until a deterministic source-backed model exists. Do not fabricate combat outcomes from descriptive text. |
 

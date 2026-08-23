@@ -74,22 +74,23 @@ describe('rules automation coverage gate', () => {
     // `talent-recipes.ts` tranche: exceed, comeback, finishing-blow with
     // per-row eligibility extensions, the always trigger for unconditional
     // charge-scaled augmentations, and the slay/collide post-application
-    // fold) plus the first program-level talent (Demon Cutter t2's
-    // pre-ability rush, implemented in the ability program and gated on the
-    // equipped choice through the projected `talents` surface) audit as
-    // complete — 288 source talents, 10 wired / 1 program-level / 277
-    // documented. The 43 documented Job traits and every other kind stay
-    // source-visible.
+    // fold) plus the three program-level talents (Demon Cutter t2's
+    // pre-ability rush, Draken Cross t2's charged medium blasts, and Pyre
+    // t1's comeback ally immunity, implemented in the ability programs and
+    // gated on the equipped choice through the projected `talents` surface)
+    // audit as complete — 288 source talents, 10 wired / 3 program-level /
+    // 275 documented. The 43 documented Job traits and every other kind
+    // stay source-visible.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4750,
-      completePrograms: 342,
-      unsupportedPrograms: 2933,
-      completeClauses: 1482,
-      unsupportedClauses: 3268,
+      completePrograms: 387,
+      unsupportedPrograms: 2888,
+      completeClauses: 1527,
+      unsupportedClauses: 3223,
       unsupportedByKind: {
-        core: 70, 'class-trait': 8, 'job-trait': 43, 'limit-break': 16, 'talent': 277, 'mastery': 144,
-        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 655,
+        core: 70, 'class-trait': 8, 'job-trait': 43, 'limit-break': 16, 'talent': 275, 'mastery': 144,
+        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 612,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
     });

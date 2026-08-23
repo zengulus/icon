@@ -53,12 +53,21 @@ const charactersIn = (context: RuleExecutionContext, cells: { x: number; y: numb
 
 /** ICON p.209 Pyre: 2[D]+fray on hit (fray on miss), fray to the other
  * characters in the medium blast. Comeback or Exceed: the area explodes again
- * for 2 piercing to all characters. */
+ * for 2 piercing to all characters. Talent 1 gates the comeback ally-immunity
+ * clause (below). */
 const pyreEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
+  // Talent 1 (p.209): "Comeback: Allies are immune to damage from this
+  // ability." The first program-level comeback clause (F7): a modifier on
+  // the ability's own resolution, gated on the equipped choice through the
+  // projected `talents` surface AND the bloodied trigger (the same check
+  // `deriveTriggers` turns into `comeback`). While it holds, the ability's
+  // area damage — the blast fray and the comeback/exceed re-explosion —
+  // skips allies; the attack target itself is always a foe.
+  const alliesImmune = source.talents?.['enochian:pyre'] === 1 && context.triggers?.has('comeback');
   const roll = resolveAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
@@ -66,10 +75,13 @@ const pyreEffects: RuleResolver = (context) => {
     : damageMutation(context, target.id, source.fray, 'miss'));
   const blast = squareArea(target.position, 2);
   for (const character of charactersIn(context, blast, source.id)) {
-    if (character.id !== target.id) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
+    if (character.id !== target.id && !(alliesImmune && character.side === source.side)) {
+      mutations.push(damageMutation(context, character.id, source.fray, 'area'));
+    }
   }
   if (context.triggers?.has('comeback') || context.triggers?.has('exceed')) {
     for (const character of charactersIn(context, blast, source.id)) {
+      if (alliesImmune && character.side === source.side) continue;
       mutations.push(damageMutation(context, character.id, 2, 'area', 'piercing'));
     }
   }

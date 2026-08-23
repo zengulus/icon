@@ -217,6 +217,56 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Draken Cross talent 2: charged blasts become medium and catch a foe outside the small blast', () => {
+    // The second program-level talent variant (F7), same seam as Demon Cutter
+    // t2: the program reads the equipped choice through the projected
+    // `talents` surface and upgrades both blasts to medium (radius 2) on a
+    // slow turn. The foe at (4,2) sits inside the medium blast around the
+    // target (2,1) but outside the small one.
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    expect(mutations).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
+      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' },
+      { kind: 'attack', d20: 12, hit: true },
+      { kind: 'damage', actorId: foe.id, amount: 15 }, // 2[D] = 11 + fray 4
+    ]);
+    expect(result.state.actors[hero.id].actionsRemaining).toBe(0);
+    expect(result.state.actors[foe.id].hp).toBe(13);
+    expect(result.state.actors[second.id].hp).toBe(28); // hit by the medium primary blast
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross talent 2: the medium-blast upgrade is gated on the slow turn', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    expect(mutations).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
+      { kind: 'attack', d20: 12, hit: true },
+      { kind: 'damage', actorId: foe.id, amount: 15 },
+    ]);
+    expect(result.state.actors[second.id].hp).toBe(32); // outside the small blast
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross: the medium-blast upgrade also requires talent 2 — a slow turn alone keeps small blasts', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, slowTurn: true });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    expect(mutations).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
+      { kind: 'attack', d20: 12, hit: true },
+      { kind: 'damage', actorId: foe.id, amount: 15 },
+    ]);
+    expect(result.state.actors[second.id].hp).toBe(32); // the charge repeat re-frays the second blast, not the primary
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Righteous Disdain: interrupt splits determined damage and grants sturdy', () => {
     const { state, hero, foe, ally } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, ally: { x: 2, y: 1 } });
     const result = executeCommand(state, {

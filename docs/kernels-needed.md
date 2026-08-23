@@ -17,22 +17,23 @@ job-trait and F7 talent slices already ship.
 
 **Status recap.** Foundations F0–F5 are executed (damage ledger, spatial
 gateway, save window, turn lifecycle, trigger windows, passive projection +
-role baselines). Wired slices: 22/65 Job traits, 11/288 talents executable
-(10 fold-wired + 1 program-level — Demon Cutter t2's pre-ability rush), 20
-foe ability recipes, 36 foe movement-trait IDs, the p.298 role baselines.
-The audit backlog that the kernels below unblock:
+role baselines). Wired slices: 22/65 Job traits, 13/288 talents executable
+(10 fold-wired + 3 program-level — Demon Cutter t2's pre-ability rush,
+Draken Cross t2's charged medium blasts, and Pyre t1's comeback ally
+immunity), 20 foe ability recipes, 36 foe movement-trait IDs, the p.298 role
+baselines. The audit backlog that the kernels below unblock:
 
 | Kind | Units | Kind | Units |
 | --- | ---: | --- | ---: |
 | core | 70 | relic-rank | 120 |
 | class-trait | 8 | relic-aspect | 40 |
 | job-trait | 43 | foe-ability | 1,247 |
-| talent | 281 | foe-trait | 655 |
+| talent | 275 | foe-trait | 612 |
 | mastery | 144 | foe-phase | 19 |
 | limit-break | 16 | foe-chapter-rule | 116 |
-| job-summon-rule | 6 | trophy | 68 |
-| camp-fixture | 16 | camp-feature | 85 |
-| reward-rule | 9 | bond-power (narrative) | 120 |
+| trophy | 68 | camp-fixture | 16 |
+| camp-feature | 85 | reward-rule | 9 |
+| bond-power (narrative) | 120 | | |
 
 ## 1. Job kernels
 
@@ -63,7 +64,7 @@ The audit backlog that the kernels below unblock:
 | **Area-inclusion ally hook** — allies immune to your area effects, gain 2 vigor + a Blessing | `seer:trait:karma` | F4 (area-inclusion exists for Perseus; generalize) |
 | **13-card deck bookkeeping** — draw/discard/shuffle across combats (narrative) | `seer:trait:the-wheel-of-fate`, `seer:trait:skein`, `seer:trait:foretell`, `seer:trait:bend-fate` (bend-fate also needs the gamble hook) | may stay table-facing by design |
 
-### 1.2 Talents — 277 documented rows in `TALENT_RECIPES`
+### 1.2 Talents — 275 documented rows in `TALENT_RECIPES`
 
 The closed classifier in `content/jobs/talent-recipes.ts` (`documentedTalentDetail`)
 enumerates the exact kernel families; a talent promotes when its family's
@@ -76,20 +77,28 @@ kernel lands (exactly as the wired slay/collide tranche did):
   carry); Stampede t1 needs a may-choice mark redirect across commands.
 - **charge trigger** — slow-turn state already derives; the fold's `always`
   trigger covers unconditional augmentations whose magnitude reads the
-  charged state (Dropkick t2). The first ability-behavior variant is now
-  implemented **program-level**: Demon Cutter t2 ("Your can rush 1 before
-  using Demon Cutter. Charge: Rush 3 instead.") — the Demon Cutter resolver
-  reads the equipped choice through the projected `talents` surface
-  (`context.state.actors[id].talents[abilityId]`, populated by
-  `encounterRuleState`) and emits the pre-ability rush before the attack
-  mutations, gated on the talent (never on the charge trigger alone). The
-  rest of the family ("Large blast", range boosts) belongs in the ability
-  programs' charge clauses, the way the Chanter programs already implement
-  them (`context.triggers?.has('charge')`), not the fold.
-- **comeback extras** — the remaining rows are modifiers (range, bonus
-  damage, interrupt cost, ally immunity) whose home is the ability
-  programs' comeback clauses; the fold's comeback trigger covers the
-  grant-type rows (Riposte t2).
+  charged state (Dropkick t2). Two ability-behavior variants are now
+  implemented **program-level**, both reading the equipped choice through
+  the projected `talents` surface (`context.state.actors[id].talents
+  [abilityId]`, populated by `encounterRuleState`) and gated on the talent
+  (never on the charge trigger alone): Demon Cutter t2 ("Your can rush 1
+  before using Demon Cutter. Charge: Rush 3 instead.") — the resolver emits
+  the pre-ability rush before the attack mutations — and Draken Cross t2
+  ("Charge: Increase range to 5, and all areas may be increased to medium
+  blasts instead.") — on a slow turn both blasts become medium (radius 2)
+  with the second-blast search extended to range 5 (the attack target stays
+  capped by the generic USE_ABILITY range gate). The rest of the family
+  ("Large blast", range boosts) belongs in the ability programs' charge
+  clauses, the way the Chanter programs already implement them
+  (`context.triggers?.has('charge')`), not the fold.
+- **comeback extras** — the first program-level comeback clause is now
+  implemented: Pyre t1 ("Comeback: Allies are immune to damage from this
+  ability.") — the Pyre resolver reads the equipped choice and, while
+  bloodied, skips allies in the blast fray and the comeback/exceed
+  re-explosion. The remaining rows are modifiers (range, bonus damage,
+  interrupt cost, ally immunity) whose home is the ability programs'
+  comeback clauses; the fold's comeback trigger covers the grant-type rows
+  (Riposte t2).
 - **pre/post-ability movement** — rush-before / fly-after / dash movement
   shift hooks (F1); Demon Cutter t2's rush-before landed program-level
   above, the rest of the family still needs the hook.
@@ -140,17 +149,20 @@ owner's defeat are wired (`content/jobs/summon-recipes.ts`, `state.companion`). 
 
 ## 2. Foe kernels
 
-### 2.1 Foe traits — 655 units (`content/foes/trait-recipes.ts` / `kernels/passive-projection.ts`)
+### 2.1 Foe traits — 612 remaining units (`content/foes/trait-recipes.ts` / `kernels/passive-projection.ts`)
 
-The 36 Flying/Phasing IDs and the p.298 role baselines are wired. Everything
-else projects nothing. Keyword census of the full corpus (691 source units =
-655 unresolved + 36 wired): immune 22, aura 42, bloodied 35, end-of-turn 28,
-start-of-turn 24, start-of-round 18, resistant 18, round-gated 12, counter
-10, 25%-hp 10, sacrifice 9, when-damaged 1. Kernel families:
+The 79 fully-executable keyword rows (F5: the closed `content/foes/trait-recipes.ts`
+manifest — conditions, durable Defiance, Size/Armor/Speed stats, role baselines)
+plus the p.298 role baselines are wired; 36 partial rows project their wired
+keywords while their Counter/Diaga/Size-footprint clause stays pending.
+Everything else projects nothing. Keyword census of the full corpus (691
+source units = 612 unresolved + 79 wired): immune 22, aura 42, bloodied 35,
+end-of-turn 28, start-of-turn 24, start-of-round 18, resistant 18, round-gated
+12, counter 10, 25%-hp 10, sacrifice 9, when-damaged 1. Kernel families:
 
 | Kernel | Consumers (examples) | Prerequisite |
 | --- | --- | --- |
-| **Whole-combat condition grants** — Sturdy, Defiance, Counter, Dodge, Regeneration as closed-ID passive rows | `basic:impaler:300:trait:special-traits` (Sturdy), `basic:berserker:301:trait:special-traits` (Defiance), `basic:priest:303:trait:special-traits` | F5 extension (never inferred from prose) |
+| **Whole-combat condition grants** — Sturdy, Defiance, Dodge, Regeneration, Flying, Phasing, Skirmisher, Aetherwall, Slip, Rampart, Immobile as closed-ID passive rows | **DONE** — the F5 keyword kernel (`kernels/foe-trait-recipes.ts` + `content/foes/trait-recipes.ts`) wired 79 rows; Defiance is a durable combat-start grant, the rest are projections. Remaining: Counter-only rows | Counter needs a durable "damaged by an ability" damage window (F4 provenance) |
 | **Conditional passive gates** — bloodied, 25%-hp, terrain, stealth, status-gated, adjacency-gated | `basic:berserker:301:trait:enrage` (+1 action while bloodied), `basic:seismatist:305:trait:earth-bond` (resistance adjacent to object/pit), `basic:hunter:302:trait:wayfinding` (evasion in difficult/dangerous), `basic:assassin:302:trait:nimble` (evasion unless suffering a status), `basic:knuckle:301:trait:heavy-armor` (resistance from adjacent) | F5, condition-set gates |
 | **Aura passives** — distance-based ally/foe effects | `basic:commander:304:trait:commander-s-aura` (+1 boon), `basic:abjurer:304:trait:aura-of-shielding` (dodge) | aura kernel (§5) |
 | **Per-status immunity** | 22 immunity traits | condition/status immunity provenance |
@@ -171,7 +183,10 @@ rows:
 - save effects (`effect`-kind SaveWindows),
 - gamble rolls,
 - aura creation,
-- movement-entry triggers (Party Favor-style),
+- movement-entry triggers (Party Favor-style) — **the voluntary-MOVE seam is
+  wired** (`kernels/movement-triggers.ts`, Party Favor p.151 exemplar); the
+  remaining bubble/mote/terrain-entry effects still need content rows, and
+  forced-movement entry is a future fold,
 - reactive when-damaged / defeated windows for foes,
 - pierce / divine / multi-instance damage variants,
 - "free action after X" multi-step sequences (Soldier Valiant's free Bash),
@@ -276,7 +291,7 @@ each once; it converts its consumers into data + fixtures:
 | 1 | **Aura mechanic** — spatial distance-based grants/penalties, activation, size changes | 2 job traits + 42 foe traits + trophies + Perseus/Rook/Dervish abilities | F1 |
 | 2 | **Attack-path modifier gates** — distance/round/terrain/stealth/threshold reads on the existing fold | 7 job traits + ~30 talents | F6 kernel exists |
 | 3 | **Conditional passive projection** — bloodied/25%/terrain/stealth/status/round gates | ~150 foe traits + relic ranks | F5 exists |
-| 4 | **Reactive trigger windows** — attack-miss, attack-completion, movement-entry, summon, targeted-by-ability (generalize), save-rolled | 7 job traits + dozens of talents/abilities | F4 exists |
+| 4 | **Reactive trigger windows** — attack-miss, attack-completion, summon, targeted-by-ability (generalize), save-rolled | 7 job traits + dozens of talents/abilities | F4 exists; **movement-entry on voluntary MOVE is done** (`kernels/movement-triggers.ts`, Party Favor p.151) |
 | 5 | **Spend / economy hooks** — blessing, combo, sacrifice, Infuse-cost, gamble, use-ledgers | 6 job traits + 4 talents + 3 relic ranks | resource registry exists |
 | 6 | **Movement kernels** — vacate, occupancy-cost, elevation-fly, pre/post movement, position-swap, teleport-all | 5 job traits + movement talents | F1 |
 | 7 | **Lifecycle phase rows** — bloodied/round-gated phases, chapter-rule overrides | 19 foe phases + 116 chapter rules + masteries | F3 exists |

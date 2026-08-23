@@ -5,8 +5,8 @@ source-linked engineering ledger, not an automation-coverage claim. None of
 these foundations changes the independently executable program audit or the
 Phase 1/2 gates by itself.
 
-The project currently has 303 reviewed executable programs and 3,350
-unresolved clauses. `PHASE_TWO_READY` and `PHASE_THREE_READY` remain `false`.
+The project currently has 387 reviewed executable programs and 3,223
+unsupported clauses. `PHASE_TWO_READY` and `PHASE_THREE_READY` remain `false`.
 
 ## 0. Automation module layout (architecture)
 
@@ -21,11 +21,10 @@ dependency rule — **content → kernels → primitives**:
 - **`kernels/`** — shared engine mechanics and their registry machinery, also
   free of source IDs: `encounter-adapter.ts` (damage/defeat/reactive
   pipeline), `damage-ledger.ts`, `trigger-window.ts`, `lifecycle.ts`
-  (turn-transition plan/run), `kernels/passive-projection.ts` (the projection fold),
-  `kernels/attack-modifiers.ts` (the trait attack-modifier fold), `content/jobs/talent-recipes.ts`
-  (the talent trigger-effect fold), `kernels/foe-recipes.ts` /
-  `content/foes/trait-recipes.ts` (generic resolver factories), `content/jobs/summon-recipes.ts`
-  (entity placement machinery), `runtime.ts`, `core-resolvers.ts`.
+  (turn-transition plan/run), `passive-projection.ts` (the projection fold),
+  `attack-modifiers.ts` (the trait attack-modifier fold), `talent-recipes.ts`
+  (the talent trigger-effect fold), `foe-recipes.ts`
+  (generic resolver factories), `runtime.ts`, `core-resolvers.ts`.
 - **`content/`** — everything keyed by source IDs, referencing only the two
   layers above: `classes/` and `jobs/` (trait-condition recipes, the 45
   lifecycle rows + dice-window planners, attack-modifier and talent wired
@@ -125,11 +124,6 @@ events keep the legacy fallback.
 
 ### Still TODO
 
-- `TODO(ICON-rules, pp.93–107)`: the ledger record is durable, but replay
-  still cannot safely **open** a new interrupt window from it — the F4
-  trigger-provenance foundation must consume `DamageLedgerEntry.window` /
-  `AttackResolutionLedger.window` to re-open a held window during replay
-  instead of relying on mutable `pendingInterrupts` state.
 - `TODO(ICON-rules, pp.93–105)`: source-specific damage exceptions must stay
   typed and narrow. The p.144 Bleak Mercy flags are the model: mark the
   determination exception (`ignoreArmor`) separately from application
@@ -137,18 +131,10 @@ events keep the legacy fallback.
   in held damage, and prove that every unnamed defense still works. Do **not**
   use `divine` as a shortcut, and do not let `ignoreDefiance` bypass the
   generic `damage-immune` bit until immunity has durable origin provenance.
-- `TODO(ICON-rules, pp.93–105)`: source-specific damage exceptions must stay
-  typed and narrow. The p.144 Bleak Mercy flags are the model: mark the
-  determination exception (`ignoreArmor`) separately from application
-  exceptions (`bypassVigor`, `ignoreDefiance`), persist any application flag
-  in held damage, and prove that every unnamed defense still works. Do **not**
-  use `divine` as a shortcut, and do not let `ignoreDefiance` bypass the
-  generic `damage-immune` bit until immunity has durable origin provenance.
-- `TODO(ICON-rules, pp.87–94, 107)`: make the recorded attack roll one part
-  of a durable `AttackResolution` ledger with legal target/range/line-of-effect
-  provenance, attack-window choices, cover, and its downstream DamageIntent.
-  The roll arithmetic is unified; target authority and trigger windows are
-  not yet unified.
+- `TODO(ICON-rules, pp.87–94, 107)`: target authority and trigger windows
+  are not yet unified with the `AttackResolutionLedger`. The roll arithmetic
+  is unified; promote Counter/Vigilance/Sturdy once the ledger drives their
+  decision points (F4).
 - `TODO(ICON-rules, p.104)`: do not promote Defiance, Counter, Dodge, Sturdy,
   or broad foe traits merely because one path is routed. Counter's exact
   “damaged by an ability” trigger, Dodge delivery coverage, and Sturdy's
@@ -158,6 +144,9 @@ events keep the legacy fallback.
   `TriggerWindow` action. Its legacy command does not yet prove range 2,
   adjacency-breaking/damaged trigger provenance, or one use per triggering
   event.
+- `Done`: The F4 trigger-window foundation now consumes `DamageLedgerEntry.window` /
+  `AttackResolutionLedger.window` via `openDamageWindowFromLedger`, closing
+  the ledger handoff for replay.
 - `Done`: Rot's `noDefiance` mark state and its REGENERATE ally-mark branch
   now project through the closed source-ID registry in
   `automation/kernels/passive-projection.ts` (see the F5 entry below).
@@ -194,23 +183,25 @@ is the authoring procedure with the p.92 footprint fixture matrix;
 ### Still TODO
 
 - `TODO(ICON-rules, pp.87–92)`: extend the state-derived `TargetQuery` from
-  one direct target to listed target sets/cardinality, footprint/size range,
-  all ability input shapes, and targetability. Point-cell distance remains a
-  compatibility metric until the p.92 footprint fixture matrix exists.
-Area center legality and inclusion parity are also routed today:
+  one direct target to listed target sets/cardinality and all ability input
+  shapes. Area center legality and inclusion parity are routed today:
 `computeSpatialArea` validates a burst/line center (bounds, source reach,
 free-center occupancy/passability) and derives the p.95 cells plus
 inclusion, and the generic foe blast resolver consumes it.
 
-- `TODO(ICON-rules, pp.87–90, 107)`: footprint (p.92) and line-of-effect
-  fixture rows and the arc shape remain, and the direct gates/VM selectors
-  still use point-cell distance; see `docs/target-template.md` for the
-  remaining matrix rows.
-- `TODO(ICON-rules, p.298)`: add an explicit source-ID `FoeRoleBaselineRecipe`
-  after the damage/target/lifecycle hooks are correct. Skirmisher Dodge,
-  Heavy Guard, Artillery Slip/Aetherwall, and Legend Juggernaut must never be
-  inferred from role prose at runtime.
-
+- **Done (F1 + spatial authority pass):** the shared kernel
+  (`primitives/line-of-sight.ts`) now owns line of sight (p.92: impassable
+  terrain + explicitly registered LoS-blocking effects) and line of effect
+  (p.109: a distinct gate blocked only by explicit sources); the reducer's
+  `hasLineOfSight` delegates to it, so command gates and the VM share one
+  sampler. `queryDirectTarget`, the foe `requireFoeInRange`/`requireAllyInRange`
+  gates, and `computeSpatialArea`'s center reach all use the p.92 footprint
+  distance (`footprintDistance` — "at least 1 space of its area within the
+  listed range", measured from the edge of the origin character); area
+  inclusion is footprint-aware (p.290: a large foe is inside when any of its
+  spaces is hit); Burst X cells can be filtered by line of sight from the
+  center (p.95). The arc shape and listed target sets/cardinality remain; see
+  `docs/target-template.md` for the remaining matrix rows.
 ### Passive projection registry
 
 `automation/kernels/passive-projection.ts` is now the only trait-to-condition
@@ -482,17 +473,33 @@ override (a per-row fired check that replaces the trigger kind's default,
 e.g. an extended-eligibility finishing blow), and `build` receives a fold
 context (encounter state + the ability's own mutations) when it needs them.
 
-Separate from the fold, the first `program-level` talent is **Demon Cutter
-talent 2** (p.128, "Your can rush 1 before using Demon Cutter. Charge: Rush
-3 instead."): a pre-ability movement that changes the line attack's origin,
-which a post-mutation fold cannot express. The Demon Cutter resolver reads
-the equipped choice through the projected `talents` surface
-(`context.state.actors[id].talents[abilityId]`, populated by
-`encounterRuleState` alongside `traitIds`) and emits the rush mutation
-before the attack mutations, gated on the talent — never on the `charge`
-trigger alone — with the direction a caller choice defaulting to the
-nearest-foe axis. It audits as complete (342 complete programs) with its
-source fixtures and replay pairs in `__tests__/demon-slayer.test.ts`.
+Separate from the fold, the `program-level` talents are implemented by the
+ability programs themselves, gated on the equipped choice through the
+projected `talents` surface (`context.state.actors[id].talents[abilityId]`,
+populated by `encounterRuleState` alongside `traitIds`):
+
+- **Demon Cutter talent 2** (p.128, "Your can rush 1 before using Demon
+  Cutter. Charge: Rush 3 instead.") — a pre-ability movement that changes
+  the line attack's origin, which a post-mutation fold cannot express. The
+  resolver emits the rush mutation before the attack mutations, gated on
+  the talent — never on the `charge` trigger alone — with the direction a
+  caller choice defaulting to the nearest-foe axis.
+- **Draken Cross talent 2** (p.128, "Charge: Increase range to 5, and all
+  areas may be increased to medium blasts instead.") — on a slow turn both
+  blasts become medium (radius 2) and the second-blast search extends to
+  range 5. The "may" upgrade resolves deterministically as the charged
+  reading (the player's option is only a downgrade); the attack target
+  itself stays capped by the generic USE_ABILITY range gate, so the range
+  boost lives in the resolver's second-blast placement.
+- **Pyre talent 1** (p.209, "Comeback: Allies are immune to damage from
+  this ability.") — the first program-level comeback clause: while the
+  user is bloodied (the same flag `deriveTriggers` turns into the
+  `comeback` trigger), the Pyre resolver skips allies in the ability's
+  area damage — the blast fray and the comeback/exceed re-explosion.
+
+All three audit as complete (387 complete programs) with their source
+fixtures and replay pairs in `__tests__/demon-slayer.test.ts` and
+`__tests__/enochian.test.ts`.
 
 - **`exceed`** — fires when the ability's produced `attack` mutation rolled
   15+ (the engine's exceed threshold, runtime.ts); Demon Cutter talent 1
@@ -548,7 +555,7 @@ pairs, the un-equipped negative, and the documented-talent closed negative
 
 ### Still TODO
 
-- 281 of 288 talents remain `documented` — pre/post-ability movement,
+- 275 of 288 talents remain `documented` — pre/post-ability movement,
   Heroics/sacrifice economies, blessing/combo spend hooks, aura mechanics,
   and the ability-specific modifier hooks each need their home kernel
   before promotion, exactly as their rows describe.

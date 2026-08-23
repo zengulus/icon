@@ -1,0 +1,302 @@
+import { describe, expect, it } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import {
+  auditArchitecture,
+  parseImports,
+  resolveImport,
+  layerFor,
+  walk,
+} from '../../../scripts/audit-architecture-core.js';
+
+// ---------------------------------------------------------------------------
+// parseImports
+// ---------------------------------------------------------------------------
+
+describe('parseImports', () => {
+  it('extracts side-effect imports', () => {
+    expect(parseImports("import './foo.js';")).toEqual(['./foo.js']);
+  });
+
+  it('extracts from-imports', () => {
+    expect(parseImports("import { x } from '../kernels/runtime.js';")).toEqual([
+      '../kernels/runtime.js',
+    ]);
+  });
+
+  it('extracts export from-imports', () => {
+    expect(parseImports("export { x } from './types.js';")).toEqual(['./types.js']);
+  });
+
+  it('ignores external packages', () => {
+    expect(parseImports("import { readFileSync } from 'node:fs';")).toEqual([]);
+  });
+
+  it('ignores comment lines', () => {
+    const code = [
+      '// import "./bad.js";',
+      "import './good.js';",
+      ' * import "./also-comment.js";',
+    ].join('\n');
+    expect(parseImports(code)).toEqual(['./good.js']);
+  });
+
+  it('handles multiple imports on separate lines', () => {
+    const code = [
+      "import './a.js';",
+      "import { x } from './b.js';",
+      "import 'external-pkg';",
+    ].join('\n');
+    expect(parseImports(code)).toEqual(['./a.js', './b.js']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// layerFor
+// ---------------------------------------------------------------------------
+
+describe('layerFor', () => {
+  const root = '/automation';
+
+  it('classifies primitives', () => {
+    expect(layerFor('/automation/primitives/types.ts', root)).toBe('primitives');
+  });
+
+  it('classifies kernels', () => {
+    expect(layerFor('/automation/kernels/runtime.ts', root)).toBe('kernels');
+  });
+
+  it('classifies content', () => {
+    expect(layerFor('/automation/content/registry.ts', root)).toBe('content');
+  });
+
+  it('classifies index.ts as other', () => {
+    expect(layerFor('/automation/index.ts', root)).toBe('other');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration: audit the real codebase
+// ---------------------------------------------------------------------------
+
+describe('auditArchitecture (real codebase)', () => {
+  const AUTOMATION = join(import.meta.dirname, '../automation');
+
+  it('passes with no violations', () => {
+    const result = auditArchitecture(AUTOMATION);
+    expect(result.violations).toEqual([]);
+    expect(result.checked.totalFiles).toBeGreaterThan(0);
+    expect(result.checked.primitives).toBeGreaterThan(0);
+    expect(result.checked.kernels).toBeGreaterThan(0);
+    expect(result.checked.content).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Negative tests: create temporary bad structures and verify detection
+// ---------------------------------------------------------------------------
+
+describe('auditArchitecture (violation detection)', () => {
+  let tmpDir: string;
+
+  function setup() {
+    tmpDir = mkdtempSync(join(tmpdir(), 'arch-audit-test-'));
+    // Create the standard directory layout
+    mkdirSync(join(tmpDir, 'primitives'), { recursive: true });
+    mkdirSync(join(tmpDir, 'kernels'), { recursive: true });
+    mkdirSync(join(tmpDir, 'content', 'glue'), { recursive: true });
+    mkdirSync(join(tmpDir, 'content', 'jobs'), { recursive: true });
+    writeFileSync(join(tmpDir, 'content', 'registry.ts'), '// empty registry\n');
+  }
+
+  it('detects primitives importing from kernels', () => {
+    setup();
+    writeFileSync(join(tmpDir, 'primitives', 'foo.ts'), "import '../kernels/bar.js';\n");
+    writeFileSync(join(tmpDir, 'kernels', 'bar.ts'), 'export const x = 1;\n');
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'import-direction',
+          file: 'primitives/foo.ts',
+          detail: expect.stringContaining('primitives must not import from kernels'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('detects primitives importing from content', () => {
+    setup();
+    writeFileSync(join(tmpDir, 'primitives', 'foo.ts'), "import '../content/jobs/bar.js';\n");
+    writeFileSync(join(tmpDir, 'content', 'jobs', 'bar.ts'), 'export const x = 1;\n');
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'import-direction',
+          detail: expect.stringContaining('primitives must not import from content'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('detects kernels importing from content', () => {
+    setup();
+    writeFileSync(join(tmpDir, 'kernels', 'foo.ts'), "import '../content/jobs/bar.js';\n");
+    writeFileSync(join(tmpDir, 'content', 'jobs', 'bar.ts'), 'export const x = 1;\n');
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'import-direction',
+          detail: expect.stringContaining('kernels must not import from content'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('allows primitives importing from primitives', () => {
+    setup();
+    writeFileSync(join(tmpDir, 'primitives', 'foo.ts'), "import './bar.js';\n");
+    writeFileSync(join(tmpDir, 'primitives', 'bar.ts'), 'export const x = 1;\n');
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations.filter((v) => v.check === 'import-direction')).toEqual([]);
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('allows kernels importing from primitives', () => {
+    setup();
+    writeFileSync(join(tmpDir, 'kernels', 'foo.ts'), "import '../primitives/bar.js';\n");
+    writeFileSync(join(tmpDir, 'primitives', 'bar.ts'), 'export const x = 1;\n');
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations.filter((v) => v.check === 'import-direction')).toEqual([]);
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('allows content importing from kernels and primitives', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'content', 'jobs', 'foo.ts'),
+      ["import '../../kernels/bar.js';", "import '../../primitives/baz.js';"].join('\n'),
+    );
+    writeFileSync(join(tmpDir, 'kernels', 'bar.ts'), 'export const x = 1;\n');
+    writeFileSync(join(tmpDir, 'primitives', 'baz.ts'), 'export const y = 2;\n');
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations.filter((v) => v.check === 'import-direction')).toEqual([]);
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('detects hardcoded source IDs in primitives', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'primitives', 'foo.ts'),
+      "const id = 'core:standard-move';\n",
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'source-id-in-generic-layer',
+          file: 'primitives/foo.ts',
+          detail: expect.stringContaining('hardcoded source ID'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('detects hardcoded source IDs in kernels', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'foo.ts'),
+      "const name = 'bastion:trait:strive';\n",
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'source-id-in-generic-layer',
+          file: 'kernels/foo.ts',
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('does not flag type annotations as source IDs', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'primitives', 'foo.ts'),
+      ['export interface Foo {', '  sourceId: string;', '}', 'const x: string = "hello";'].join(
+        '\n',
+      ),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations.filter((v) => v.check === 'source-id-in-generic-layer')).toEqual([]);
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('detects unmapped registration modules', () => {
+    setup();
+    // A content file that calls registerFoo() but is NOT imported by registry.ts
+    writeFileSync(
+      join(tmpDir, 'content', 'jobs', 'new-recipes.ts'),
+      'registerNewRecipe("test", {});\n',
+    );
+    // Registry only imports the empty file
+    writeFileSync(join(tmpDir, 'content', 'registry.ts'), '// no imports\n');
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'registry-completeness',
+          file: 'content/jobs/new-recipes.ts',
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('passes when a registration module IS imported by registry.ts', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'content', 'jobs', 'recipes.ts'),
+      'registerMyRecipe("test", {});\n',
+    );
+    writeFileSync(
+      join(tmpDir, 'content', 'registry.ts'),
+      "import './jobs/recipes.js';\n",
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations.filter((v) => v.check === 'registry-completeness')).toEqual([]);
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('ignores glue/ and programs/ for registry completeness', () => {
+    setup();
+    // glue/ files that call register* should NOT trigger registry-completeness
+    writeFileSync(
+      join(tmpDir, 'content', 'glue', 'manual-programs.ts'),
+      'registerInterruptAllowlist("test", []);\n',
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations.filter((v) => v.check === 'registry-completeness')).toEqual([]);
+    rmSync(tmpDir, { recursive: true });
+  });
+});

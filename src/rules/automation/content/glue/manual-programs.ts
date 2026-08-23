@@ -18,7 +18,7 @@ import { SPELLBLADE_ABILITY_PROGRAMS } from '../jobs/programs/spellblade-program
 import { STORMBENDER_ABILITY_PROGRAMS } from '../jobs/programs/stormbender-programs.js';
 import { FOE_ABILITY_RECIPES } from '../foes/ability-recipes.js';
 import { compileFoeAbilityRecipe } from '../../kernels/foe-recipes.js';
-import { compileFoeTraitMovementRecipe } from '../../kernels/foe-trait-recipes.js';
+import { compileFoeTraitKeywordRecipe } from '../../kernels/foe-trait-recipes.js';
 import { EXECUTABLE_JOB_TRAIT_IDS } from '../jobs/job-trait-recipes.js';
 import { JOB_SUMMON_SUITES } from '../jobs/summon-recipes.js';
 import { documentedTalentDetail } from '../jobs/talent-recipes.js';
@@ -380,7 +380,7 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
     const recipe = FOE_ABILITY_RECIPES[unit.id];
     return recipe ? compileFoeAbilityRecipe(unit, recipe) : null;
   }
-  if (unit.kind === 'foe-trait') return compileFoeTraitMovementRecipe(unit);
+  if (unit.kind === 'foe-trait') return compileFoeTraitKeywordRecipe(unit);
   // F7: a talent is not an executable action — it folds into its ability's
   // mutation stream through the shared talentTriggerMutations kernel. A wired
   // talent audits as a complete program (allowlist + source fixture + replay

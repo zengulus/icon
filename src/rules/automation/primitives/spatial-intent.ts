@@ -1,5 +1,57 @@
 import type { EncounterState, Position } from '../../types.js';
 import { lineCells, sameCell, squareArea } from '../../area-geometry.js';
+import { hasLineOfSight, type SpatialLineView } from './line-of-sight.js';
+
+// ── Footprint (Size) ─────────────────────────────────────────────────────────
+
+/** ICON p.92: "Size: How many spaces square you take up on the battlefield".
+ * A Size-N actor occupies an N×N square whose top-left corner is its position
+ * cell (ICON has no facing/orientation concept; the grid is square and the
+ * anchor is deterministic). Size 1 is the single position cell. */
+export function footprintCells(position: Position, size: number): Position[] {
+  const cells: Position[] = [];
+  // Row-major (top row first, left to right) — the grid's natural reading
+  // order, deterministic across platforms.
+  for (let dy = 0; dy < size; dy += 1) {
+    for (let dx = 0; dx < size; dx += 1) {
+      cells.push({ x: position.x + dx, y: position.y + dy });
+    }
+  }
+  return cells;
+}
+
+/** ICON p.92: "To be in range, a target must have at least 1 space of its
+ * area within the listed range" — and range is measured "from the edge of the
+ * origin space (or character)". This is the L∞ (Chebyshev) distance between
+ * two axis-aligned footprints: 0 when they touch or overlap, otherwise the
+ * minimum space gap. For two Size-1 actors it is exactly the point-cell
+ * Chebyshev distance the reducer historically used. */
+export function footprintDistance(
+  first: { position: Position; size?: number },
+  second: { position: Position; size?: number },
+): number {
+  const firstSize = Math.max(1, first.size ?? 1);
+  const secondSize = Math.max(1, second.size ?? 1);
+  const firstMaxX = first.position.x + firstSize - 1;
+  const firstMaxY = first.position.y + firstSize - 1;
+  const secondMaxX = second.position.x + secondSize - 1;
+  const secondMaxY = second.position.y + secondSize - 1;
+  const dx = Math.max(0, first.position.x - secondMaxX, second.position.x - firstMaxX);
+  const dy = Math.max(0, first.position.y - secondMaxY, second.position.y - firstMaxY);
+  return Math.max(dx, dy);
+}
+
+/** ICON p.290 large foes: "count as being `inside' any [area]" when one of
+ * their spaces is hit. True when any footprint cell of the actor lies in the
+ * area's cells. Size 1 degenerates to the plain position-cell check. */
+export function footprintIntersectsCells(
+  actor: { position: Position; size?: number },
+  cells: readonly Position[],
+): boolean {
+  const size = Math.max(1, actor.size ?? 1);
+  const footprint = size === 1 ? [actor.position] : footprintCells(actor.position, size);
+  return footprint.some((cell) => cells.some((areaCell) => sameCell(areaCell, cell)));
+}
 
 /**
  * F1 — the shared spatial gateway (ICON pp.87–92, 94, 107).
@@ -108,6 +160,15 @@ export interface SpatialAreaIntent {
   /** The center cell must be unoccupied and passable — for areas centered on
    * a chosen space rather than a character. */
   requireFreeCenter?: boolean;
+  /** ICON p.95 Burst X: "all spaces in range X and line of sight from that
+   * space" — filter the derived cells to those with line of sight from the
+   * burst center. Applies to the burst shape only; Blast templates have no
+   * from-center LoS clause (the origin-side LoS on p.96 is a caller
+   * concern). */
+  cellsRequireLineOfSightFromCenter?: boolean;
+  /** LoS-blocking overlay effect types for the burst center filter (p.92
+   * smog/poison clouds). Passed through to the shared line-of-sight kernel. */
+  lineOfSightBlockingEffectTypes?: ReadonlySet<string>;
 }
 
 export interface SpatialAreaResult {
@@ -125,7 +186,7 @@ export interface SpatialAreaResult {
  * arrives as `grid.terrain` (reducer) or `terrainAt` (resolver view). */
 export interface SpatialAreaStateView {
   grid: { width: number; height: number; terrain?: readonly { position: Position; type: string }[] };
-  actors: Readonly<Record<string, { id: string; position: Position | null; onBattlefield?: boolean; defeated: boolean }>>;
+  actors: Readonly<Record<string, { id: string; position: Position | null; onBattlefield?: boolean; defeated: boolean; size?: number }>>;
   terrainAt?: (position: Position) => ReadonlySet<string>;
 }
 
@@ -140,7 +201,10 @@ export function computeSpatialArea(state: SpatialAreaStateView, intent: SpatialA
     return { legal: false, problem: 'out-of-bounds', cells: [], includedActorIds: [] };
   }
   if (intent.maximumRangeFromSource !== undefined && source.position) {
-    const distance = Math.max(Math.abs(source.position.x - center.x), Math.abs(source.position.y - center.y));
+    // F1: p.92 range is measured "from the edge of the origin space (or
+    // character)" — footprint-aware even for an area center, which is a
+    // one-cell target.
+    const distance = footprintDistance({ position: source.position, size: source.size }, { position: center });
     if (distance > intent.maximumRangeFromSource) return { legal: false, problem: 'range', cells: [], includedActorIds: [] };
   }
   if (intent.requireFreeCenter) {
@@ -155,12 +219,19 @@ export function computeSpatialArea(state: SpatialAreaStateView, intent: SpatialA
   const cells = intent.shape === 'line'
     ? lineCells(center, intent.direction ?? { x: 1, y: 0 }, intent.radius)
     : squareArea(center, intent.radius);
+  // ICON p.95 Burst X includes only spaces with line of sight from the burst
+  // center. The filter uses the shared line-of-sight kernel so the VM and the
+  // reducer agree on exactly what an impassable blocker hides.
+  const areaCells = intent.shape === 'burst' && intent.cellsRequireLineOfSightFromCenter
+    ? cells.filter((cell) => hasLineOfSight({ grid: state.grid, terrainAt: state.terrainAt, lineOfSightBlockingEffectTypes: intent.lineOfSightBlockingEffectTypes }, center, cell))
+    : cells;
   // `onBattlefield` is absent on the resolver view; absent means on-field.
+  // ICON p.290: a large foe counts as inside the area when any of its
+  // footprint spaces is hit, not only its position cell.
   const includedActorIds: string[] = [];
   for (const candidate of Object.values(state.actors)) {
     if (candidate.onBattlefield === false || candidate.defeated || candidate.position === null) continue;
-    const position = candidate.position;
-    if (cells.some((cell) => sameCell(cell, position))) includedActorIds.push(candidate.id);
+    if (footprintIntersectsCells({ position: candidate.position, size: candidate.size }, areaCells)) includedActorIds.push(candidate.id);
   }
-  return { legal: true, problem: null, cells, includedActorIds };
+  return { legal: true, problem: null, cells: areaCells, includedActorIds };
 }

@@ -213,6 +213,27 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   'demon-slayer:demon-cutter:talent:2': {
     mechanic: 'Rush 1 before using Demon Cutter (charged/slow turn: rush 3 instead); the line attack originates from the post-rush position.',
   },
+  // ICON p.128 Draken Cross talent 2: "Charge: Increase range to 5, and all
+  // areas may be increased to medium blasts instead." The program reads the
+  // equipped choice and, on a slow turn, upgrades both blasts to medium
+  // (radius 2) and extends the second-blast search to range 5. The "may"
+  // upgrade resolves deterministically as the charged reading (the player's
+  // option is only a downgrade). The attack target itself stays capped by
+  // the generic USE_ABILITY range gate, so the range boost lives in the
+  // resolver's second-blast placement.
+  'demon-slayer:draken-cross:talent:2': {
+    mechanic: 'Charged (slow turn): both blasts become medium (radius 2) and the second blast may center within range 5; the attack target stays within the ability\u2019s listed range 3.',
+  },
+  // ICON p.209 Enochian Pyre talent 1: "Comeback: Allies are immune to
+  // damage from this ability." The first program-level comeback clause: the
+  // Pyre resolver reads the equipped choice and, while the user is bloodied
+  // (the same flag `deriveTriggers` turns into the `comeback` trigger),
+  // skips allies in the ability's area damage — the blast fray and the
+  // comeback/exceed re-explosion. The attack target is always a foe, and the
+  // pyrotic infuse path is a separate resolver (documented).
+  'enochian:pyre:talent:1': {
+    mechanic: 'Comeback (user bloodied): allies are immune to this ability\u2019s area damage (the blast fray and the comeback/exceed re-explosion); the pyrotic infuse path stays a separate resolver.',
+  },
 };
 
 for (const [sourceId, row] of Object.entries(PROGRAM_LEVEL_TALENT_RECIPES)) {
