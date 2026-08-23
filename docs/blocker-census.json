@@ -1,0 +1,4921 @@
+{
+  "baseline": 466,
+  "byKind": {
+    "class-trait": 8,
+    "job-trait": 42,
+    "talent": 256,
+    "mastery": 144,
+    "limit-break": 16
+  },
+  "records": [
+    {
+      "sourceId": "stalwart:trait:armor-2",
+      "kind": "class-trait",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "stalwart:trait:fortify",
+      "kind": "class-trait",
+      "blockers": [
+        "resource-management"
+      ]
+    },
+    {
+      "sourceId": "vagabond:trait:dodge",
+      "kind": "class-trait",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "vagabond:trait:finesse",
+      "kind": "class-trait",
+      "blockers": [
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "wright:trait:slip",
+      "kind": "class-trait",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "wright:trait:aetherwall",
+      "kind": "class-trait",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "wright:trait:chain-reaction",
+      "kind": "class-trait",
+      "blockers": [
+        "resource-management",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "wright:trait:aether",
+      "kind": "class-trait",
+      "blockers": [
+        "infuse-cost"
+      ]
+    },
+    {
+      "sourceId": "bastion:trait:strive",
+      "kind": "job-trait",
+      "blockers": [
+        "heroics-economy"
+      ]
+    },
+    {
+      "sourceId": "bastion:trait:press-the-advantage",
+      "kind": "job-trait",
+      "blockers": [
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "bastion:trait:shieldmaster",
+      "kind": "job-trait",
+      "blockers": [
+        "aura",
+        "resource-management"
+      ]
+    },
+    {
+      "sourceId": "bastion:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "bastion:heracule:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "bastion:heracule:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "bastion:heracule:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "attack-modifier",
+        "effect-count",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "bastion:battering-ram:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "pre-ability-movement",
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "bastion:battering-ram:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "bastion:battering-ram:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "heroics-economy",
+        "mastery-attachment",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "bastion:land-waster:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "bastion:land-waster:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "cure-on-trigger",
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "bastion:land-waster:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "range-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "bastion:valiant:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "bastion:endless-battlement:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "bastion:endless-battlement:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "bastion:endless-battlement:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "bastion:catapult:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier"
+      ]
+    },
+    {
+      "sourceId": "bastion:catapult:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "bastion:catapult:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "bastion:perseus:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "resource-management",
+        "use-ledger",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "bastion:perseus:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "bastion:perseus:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "bastion:rook:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "bastion:rook:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "bastion:rook:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "aura",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "bastion:great-giorgios:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "bastion:great-giorgios:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "bastion:great-giorgios:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "charge-state",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:trait:demon-strength",
+      "kind": "job-trait",
+      "blockers": [
+        "heroics-economy"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "area-define",
+        "charge-state",
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:demon-cutter:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:comet:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "resource-management"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:comet:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:comet:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:draken-cross:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:draken-cross:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:righteous-disdain:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "pre-ability-movement",
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:righteous-disdain:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:righteous-disdain:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:demon-claw:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:demon-claw:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:demon-claw:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:gates-of-hell:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:gates-of-hell:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:gates-of-hell:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:soul-blade:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:soul-blade:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "attack-modifier",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:soul-blade:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:six-hells-trigram:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:six-hells-trigram:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:six-hells-trigram:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "range-modifier",
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:wicked-sheath:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "charge-state"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:wicked-sheath:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "charge-state"
+      ]
+    },
+    {
+      "sourceId": "demon-slayer:wicked-sheath:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "colossus:trait:wolfheart",
+      "kind": "job-trait",
+      "blockers": [
+        "heroics-economy",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "colossus:trait:great-leap",
+      "kind": "job-trait",
+      "blockers": [
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "colossus:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "range-modifier",
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "colossus:valkyrie:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "colossus:valkyrie:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "charge-state",
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "colossus:valkyrie:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "fly-grant",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "colossus:upheaval:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "charge-state",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "colossus:upheaval:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "range-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "colossus:dropkick:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "colossus:massive-overhead:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "colossus:massive-overhead:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "colossus:takedown:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant",
+        "pre-ability-movement",
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "colossus:takedown:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "colossus:takedown:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "colossus:great-suplex:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "colossus:great-suplex:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "colossus:great-suplex:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "colossus:gigaton-whip:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "colossus:gigaton-whip:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "charge-state",
+        "fly-grant",
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "colossus:gigaton-whip:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "charge-state",
+        "mastery-attachment",
+        "range-modifier",
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "colossus:raging-wolf:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "pre-ability-movement"
+      ]
+    },
+    {
+      "sourceId": "colossus:raging-wolf:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "colossus:raging-wolf:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "colossus:boiling-blood:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "colossus:boiling-blood:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant",
+        "pre-ability-movement"
+      ]
+    },
+    {
+      "sourceId": "colossus:boiling-blood:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "knave:trait:martial-master",
+      "kind": "job-trait",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "knave:trait:spite",
+      "kind": "job-trait",
+      "blockers": [
+        "heroics-economy"
+      ]
+    },
+    {
+      "sourceId": "knave:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:low-blow:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:low-blow:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "resource-management",
+        "rush-modifier",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "knave:provoke:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "knave:provoke:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:revenge:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "save-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:revenge:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "combo-spend",
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "knave:revenge:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "damage-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "knave:riposte:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "knave:riposte:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "knave:dark-knight:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "rush-modifier",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "knave:dark-knight:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "knave:dark-knight:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "aura",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "knave:strongarm:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:strongarm:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "knave:strongarm:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "pre-ability-movement",
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:intimidate:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "knave:intimidate:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "knave:sucker-punch:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier",
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "knave:sucker-punch:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:sucker-punch:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "pre-ability-movement",
+        "range-modifier",
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:bleak-mercy:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "knave:bleak-mercy:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "pre-ability-movement",
+        "range-modifier",
+        "rush-modifier"
+      ]
+    },
+    {
+      "sourceId": "knave:bleak-mercy:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "aura",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "fool:trait:tumbling",
+      "kind": "job-trait",
+      "blockers": [
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "fool:trait:curse-of-chaos",
+      "kind": "job-trait",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "fool:trait:cheap-trick",
+      "kind": "job-trait",
+      "blockers": [
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "fool:trait:stack-dice",
+      "kind": "job-trait",
+      "blockers": [
+        "gamble-state",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "fool:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "area-define",
+        "entity-create",
+        "gamble-state"
+      ]
+    },
+    {
+      "sourceId": "fool:cavaliere:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier",
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "fool:cavaliere:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "fool:cavaliere:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "fly-grant",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "fool:carnevale:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "charge-state",
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "fool:carnevale:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "pre-ability-movement",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "fool:carnevale:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "entity-create",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "fool:spinning-top:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "gamble-state"
+      ]
+    },
+    {
+      "sourceId": "fool:spinning-top:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "charge-state"
+      ]
+    },
+    {
+      "sourceId": "fool:spinning-top:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "mastery-attachment",
+        "pre-ability-movement"
+      ]
+    },
+    {
+      "sourceId": "fool:death:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "fool:death:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "fool:death:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "fool:gallows-humor:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "fool:gallows-humor:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "effect-count",
+        "threshold-modifier"
+      ]
+    },
+    {
+      "sourceId": "fool:gallows-humor:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "fool:party-favor:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "fool:party-favor:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "gamble-state",
+        "mark-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "fool:masquerade:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "fool:masquerade:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "fool:masquerade:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "fool:diablo:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "fool:diablo:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "charge-state",
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "fool:diablo:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "charge-state",
+        "mark-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "fool:chronotemper:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "movement-modifier"
+      ]
+    },
+    {
+      "sourceId": "fool:chronotemper:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "fool:chronotemper:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "freelancer:trait:aether-shot",
+      "kind": "job-trait",
+      "blockers": [
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:trait:trigrammaton",
+      "kind": "job-trait",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:trait:astral-binding",
+      "kind": "job-trait",
+      "blockers": [
+        "action-type-change",
+        "mark-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "freelancer:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "action-type-change",
+        "aura",
+        "charge-state",
+        "entity-create",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "freelancer:strafe-shot:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "freelancer:strafe-shot:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "freelancer:exorcism:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:exorcism:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "charge-state",
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:exorcism:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "gamble-state",
+        "mark-modifier",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:trick-shot:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "freelancer:trick-shot:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:trick-shot:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:astral-chain:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:astral-chain:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier",
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:astral-chain:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mark-modifier",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:deus-ex-machina:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "freelancer:deus-ex-machina:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:deus-ex-machina:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "freelancer:ace:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:ace:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "freelancer:ace:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "freelancer:showdown:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "freelancer:showdown:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "cover-mechanic",
+        "mastery-attachment",
+        "terrain-create",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "freelancer:warding-bolts:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "action-type-change",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:warding-bolts:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:warding-bolts:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "aura",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "freelancer:soul-shot:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "freelancer:soul-shot:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "freelancer:soul-shot:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "fly-grant",
+        "mastery-attachment",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "shade:trait:underworld",
+      "kind": "job-trait",
+      "blockers": [
+        "damage-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "shade:trait:darkside",
+      "kind": "job-trait",
+      "blockers": [
+        "entity-vacate"
+      ]
+    },
+    {
+      "sourceId": "shade:trait:meld",
+      "kind": "job-trait",
+      "blockers": [
+        "range-modifier",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "shade:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "shade:umbra:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "combo-spend",
+        "range-modifier",
+        "sacrifice-cost",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:umbra:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "shade:harrow:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:harrow:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier",
+        "sacrifice-cost",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "shade:harrow:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "shade:death-blossom:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:death-blossom:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:death-blossom:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:nightmare:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "range-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:nightmare:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "shade:nightmare:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "aura",
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "shade:shadow-play:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:shadow-play:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "choice-input"
+      ]
+    },
+    {
+      "sourceId": "shade:shadow-play:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "shade:umbral-echo:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "stance-gate",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "shade:umbral-echo:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "shade:umbral-echo:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment",
+        "range-modifier",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "shade:assassinate:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "shade:assassinate:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "shade:assassinate:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "shade:nocturne:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "action-type-change",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:nocturne:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "shade:nocturne:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "range-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "shade:incubus:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "shade:incubus:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "shade:incubus:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mark-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "warden:trait:ambush-master",
+      "kind": "job-trait",
+      "blockers": [
+        "cover-mechanic",
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "warden:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "action-type-change",
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "warden:apex:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "warden:apex:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "warden:apex:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "entity-create",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "warden:gwynt:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "warden:gwynt:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "warden:gwynt:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "entity-create",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "warden:circle-the-oak:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "warden:circle-the-oak:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "warden:circle-the-oak:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "warden:mist-strider:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "warden:mist-strider:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "warden:mist-strider:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "warden:stampede:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "action-type-change",
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "warden:stampede:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "warden:stampede:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "warden:strength-of-the-pack:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "warden:strength-of-the-pack:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "aura",
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "warden:strength-of-the-pack:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "aura",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "warden:underway:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "action-type-change"
+      ]
+    },
+    {
+      "sourceId": "warden:underway:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "teleport",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "warden:morrigan:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "cover-mechanic"
+      ]
+    },
+    {
+      "sourceId": "warden:morrigan:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "cover-mechanic",
+        "mastery-attachment",
+        "range-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "warden:sidhe:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "warden:sidhe:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "cover-mechanic",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "chanter:trait:blessing-of-faith",
+      "kind": "job-trait",
+      "blockers": [
+        "blessing-spend",
+        "charge-state",
+        "fly-grant",
+        "pre-ability-movement"
+      ]
+    },
+    {
+      "sourceId": "chanter:trait:songweave",
+      "kind": "job-trait",
+      "blockers": [
+        "charge-state",
+        "combo-spend"
+      ]
+    },
+    {
+      "sourceId": "chanter:trait:divine-grace",
+      "kind": "job-trait",
+      "blockers": [
+        "combo-spend",
+        "fly-grant",
+        "range-modifier",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "chanter:trait:uplift",
+      "kind": "job-trait",
+      "blockers": [
+        "fly-grant",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "chanter:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "blessing-spend",
+        "cover-mechanic",
+        "fly-grant",
+        "range-modifier",
+        "resource-management",
+        "shove-modifier",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "chanter:holy:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "gamble-state",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "chanter:holy:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant",
+        "pre-ability-movement"
+      ]
+    },
+    {
+      "sourceId": "chanter:holy:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "fly-grant",
+        "mastery-attachment",
+        "resource-management",
+        "terrain-create",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "chanter:felicity:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "chanter:felicity:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "chanter:felicity:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "blessing-spend",
+        "fly-grant",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "chanter:pandaemonium:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "gamble-state"
+      ]
+    },
+    {
+      "sourceId": "chanter:pandaemonium:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "chanter:pandaemonium:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "damage-modifier",
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "chanter:aria:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "chanter:aria:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "effect-count"
+      ]
+    },
+    {
+      "sourceId": "chanter:aria:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "charge-state",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "chanter:dervish:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "chanter:dervish:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "chanter:dervish:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "charge-state",
+        "combo-spend",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "chanter:symphony:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "chanter:symphony:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "cure-on-trigger"
+      ]
+    },
+    {
+      "sourceId": "chanter:symphony:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "chanter:gentleness:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "aura",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "chanter:gentleness:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "aura",
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "chanter:gentleness:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "aura",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "chanter:monogatari:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "chanter:monogatari:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "blessing-spend",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "chanter:monogatari:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "cure-on-trigger",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "chanter:chastise:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "chanter:chastise:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "chanter:chastise:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "harvester:trait:blessing-of-rebirth",
+      "kind": "job-trait",
+      "blockers": [
+        "blessing-spend",
+        "damage-modifier",
+        "resource-management"
+      ]
+    },
+    {
+      "sourceId": "harvester:trait:gardener-of-kin",
+      "kind": "job-trait",
+      "blockers": [
+        "entity-create",
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:trait:balance",
+      "kind": "job-trait",
+      "blockers": [
+        "cure-on-trigger"
+      ]
+    },
+    {
+      "sourceId": "harvester:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "action-type-change",
+        "area-define",
+        "entity-create"
+      ]
+    },
+    {
+      "sourceId": "harvester:sow:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:sow:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "harvester:sow:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "harvester:growing-season:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "harvester:growing-season:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "harvester:growing-season:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mark-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "harvester:gravebirth:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "harvester:gravebirth:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "harvester:gravebirth:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "aura",
+        "cure-on-trigger",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:harvest:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "harvester:harvest:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:harvest:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "blessing-spend",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:blood-grove:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "harvester:blood-grove:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "harvester:blood-grove:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "entity-create",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "harvester:rot:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:rot:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:rot:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "entity-create",
+        "mark-modifier",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:crimson-bloom:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "damage-preview"
+      ]
+    },
+    {
+      "sourceId": "harvester:crimson-bloom:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "harvester:crimson-bloom:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "gamble-state",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "harvester:fairy-ring:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "resource-management"
+      ]
+    },
+    {
+      "sourceId": "harvester:fairy-ring:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "harvester:fairy-ring:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "blessing-spend",
+        "interrupt-modifier",
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "harvester:dark-sliver:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "harvester:dark-sliver:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier",
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "harvester:dark-sliver:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "blessing-spend",
+        "entity-create",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "sealer:trait:blessing-of-war",
+      "kind": "job-trait",
+      "blockers": [
+        "blessing-spend",
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:trait:mantra-of-sealing",
+      "kind": "job-trait",
+      "blockers": [
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "sealer:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "range-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "sealer:god-hand:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "combo-spend",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "sealer:god-hand:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment",
+        "range-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "sealer:grand-seal:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:grand-seal:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:grand-seal:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mark-modifier",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:matsuri:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "sealer:matsuri:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:matsuri:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "damage-modifier",
+        "mastery-attachment",
+        "teleport",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "sealer:spirit-shrine:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "aura",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "sealer:spirit-shrine:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "aura",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "sealer:spirit-shrine:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "aura",
+        "interrupt-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "sealer:sanctify:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "sealer:sanctify:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "sealer:sanctify:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "area-define",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "sealer:grand-banishment:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "cover-mechanic",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:grand-banishment:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "sealer:grand-banishment:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "sealer:divine-aegis:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "action-type-change",
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:divine-aegis:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:divine-aegis:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mark-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "sealer:justice:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "sealer:justice:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "sealer:justice:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "interrupt-modifier",
+        "mastery-attachment",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "sealer:open-the-gates:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "sealer:open-the-gates:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "sealer:open-the-gates:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "damage-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "seer:trait:the-wheel-of-fate",
+      "kind": "job-trait",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "seer:trait:skein",
+      "kind": "job-trait",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "seer:trait:foretell",
+      "kind": "job-trait",
+      "blockers": [
+        "area-define",
+        "blessing-spend",
+        "cure-on-trigger",
+        "pre-ability-movement",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "seer:trait:bend-fate",
+      "kind": "job-trait",
+      "blockers": [
+        "gamble-state"
+      ]
+    },
+    {
+      "sourceId": "seer:trait:karma",
+      "kind": "job-trait",
+      "blockers": [
+        "area-define",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "seer:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "action-type-change",
+        "aura"
+      ]
+    },
+    {
+      "sourceId": "seer:sleight-of-hand:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "seer:sleight-of-hand:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "charge-state",
+        "gamble-state"
+      ]
+    },
+    {
+      "sourceId": "seer:sleight-of-hand:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "gamble-state",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "seer:chaos-tarot:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "blessing-spend"
+      ]
+    },
+    {
+      "sourceId": "seer:chaos-tarot:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "charge-state",
+        "gamble-state"
+      ]
+    },
+    {
+      "sourceId": "seer:chaos-tarot:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "entity-create",
+        "gamble-state",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "seer:astra:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "charge-state",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "seer:astra:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "seer:astra:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "seer:polaris:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier"
+      ]
+    },
+    {
+      "sourceId": "seer:polaris:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "gamble-state",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "seer:polaris:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "seer:sisyphus:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "entity-vacate",
+        "save-modifier"
+      ]
+    },
+    {
+      "sourceId": "seer:sisyphus:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "cure-on-trigger",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "seer:sisyphus:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "seer:gran-reversa:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "gamble-state"
+      ]
+    },
+    {
+      "sourceId": "seer:gran-reversa:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "seer:gran-reversa:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "seer:eclipse:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "seer:eclipse:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "seer:eclipse:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "seer:wish:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier"
+      ]
+    },
+    {
+      "sourceId": "seer:wish:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "cure-on-trigger"
+      ]
+    },
+    {
+      "sourceId": "seer:wish:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "damage-preview",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "seer:the-tower:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "charge-state",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "seer:the-tower:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "enochian:trait:inner-furnace",
+      "kind": "job-trait",
+      "blockers": [
+        "infuse-cost",
+        "sacrifice-cost",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "enochian:trait:soulfire",
+      "kind": "job-trait",
+      "blockers": [
+        "threshold-modifier"
+      ]
+    },
+    {
+      "sourceId": "enochian:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "entity-create",
+        "infuse-cost",
+        "range-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "enochian:pyre:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "enochian:pyre:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "infuse-cost",
+        "mastery-attachment",
+        "range-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "enochian:elden-rune:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "action-type-change",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "enochian:elden-rune:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "infuse-cost"
+      ]
+    },
+    {
+      "sourceId": "enochian:elden-rune:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "enochian:lance:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "enochian:lance:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "enochian:lance:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "cover-mechanic",
+        "infuse-cost",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "enochian:soul-burn:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "effect-count"
+      ]
+    },
+    {
+      "sourceId": "enochian:soul-burn:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "enochian:soul-burn:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "action-type-change",
+        "damage-modifier",
+        "mastery-attachment",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "enochian:blazing-bond:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "enochian:blazing-bond:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mark-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "enochian:aethershard:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier",
+        "resource-management"
+      ]
+    },
+    {
+      "sourceId": "enochian:aethershard:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "aura",
+        "pierce"
+      ]
+    },
+    {
+      "sourceId": "enochian:aethershard:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "movement-modifier"
+      ]
+    },
+    {
+      "sourceId": "enochian:implode:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "enochian:implode:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "enochian:implode:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "enochian:pyroclast:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "sacrifice-cost"
+      ]
+    },
+    {
+      "sourceId": "enochian:pyroclast:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "enochian:blackstar:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "resource-management"
+      ]
+    },
+    {
+      "sourceId": "enochian:blackstar:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "enochian:blackstar:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "geomancer:trait:aftershock",
+      "kind": "job-trait",
+      "blockers": [
+        "area-define",
+        "charge-state"
+      ]
+    },
+    {
+      "sourceId": "geomancer:trait:resonance",
+      "kind": "job-trait",
+      "blockers": [
+        "damage-modifier",
+        "range-modifier",
+        "resource-management",
+        "vigor-grant"
+      ]
+    },
+    {
+      "sourceId": "geomancer:trait:stone-double",
+      "kind": "job-trait",
+      "blockers": [
+        "entity-vacate"
+      ]
+    },
+    {
+      "sourceId": "geomancer:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "area-define",
+        "charge-state",
+        "entity-create",
+        "shove-modifier"
+      ]
+    },
+    {
+      "sourceId": "geomancer:bio:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:bio:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:bio:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "infuse-cost",
+        "mastery-attachment",
+        "range-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:dragon-dive:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "geomancer:dragon-dive:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "geomancer:geo:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:geo:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:geo:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "infuse-cost",
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:helix-heel:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "geomancer:helix-heel:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "geomancer:helix-heel:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "shove-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:terraforming:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "charge-state"
+      ]
+    },
+    {
+      "sourceId": "geomancer:terraforming:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "charge-state",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "geomancer:obsidian-flesh:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "geomancer:obsidian-flesh:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "geomancer:obsidian-flesh:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "geomancer:realignment:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "geomancer:realignment:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:realignment:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "geomancer:midas:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "geomancer:midas:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "geomancer:midas:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "cover-mechanic",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "geomancer:quaking-palm:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "geomancer:quaking-palm:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "geomancer:quaking-palm:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "spellblade:trait:aether-deflection",
+      "kind": "job-trait",
+      "blockers": [
+        "interrupt-modifier",
+        "range-modifier",
+        "resource-management"
+      ]
+    },
+    {
+      "sourceId": "spellblade:trait:conqueror-s-edge",
+      "kind": "job-trait",
+      "blockers": [
+        "infuse-cost",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "spellblade:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "action-type-change",
+        "area-define",
+        "entity-create",
+        "infuse-cost",
+        "teleport",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "spellblade:blitz:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "spellblade:blitz:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment",
+        "teleport",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "spellblade:odinforce:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "effect-count",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "spellblade:odinforce:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "effect-count"
+      ]
+    },
+    {
+      "sourceId": "spellblade:odinforce:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "cover-mechanic",
+        "mastery-attachment",
+        "range-modifier",
+        "stance-gate"
+      ]
+    },
+    {
+      "sourceId": "spellblade:nothung:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier"
+      ]
+    },
+    {
+      "sourceId": "spellblade:nothung:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "spellblade:nothung:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "damage-modifier",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "spellblade:atherwand:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "spellblade:atherwand:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "spellblade:atherwand:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "spellblade:fulminate:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "spellblade:fulminate:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "aura",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "spellblade:fulminate:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "cover-mechanic",
+        "damage-modifier",
+        "mark-modifier",
+        "mastery-attachment",
+        "range-modifier"
+      ]
+    },
+    {
+      "sourceId": "spellblade:bifrost:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "spellblade:bifrost:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "spellblade:bifrost:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "spellblade:rampant-nail:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "spellblade:rampant-nail:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "gamble-state"
+      ]
+    },
+    {
+      "sourceId": "spellblade:rampant-nail:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "aura",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "spellblade:sturmreiten:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "spellblade:sturmreiten:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "spellblade:sturmreiten:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "spellblade:drifting-leaf:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier",
+        "interrupt-modifier"
+      ]
+    },
+    {
+      "sourceId": "spellblade:drifting-leaf:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier",
+        "teleport"
+      ]
+    },
+    {
+      "sourceId": "spellblade:drifting-leaf:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "infuse-cost",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "stormbender:trait:sea-legs",
+      "kind": "job-trait",
+      "blockers": [
+        "damage-modifier",
+        "fly-grant",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:trait:pelagic-rage",
+      "kind": "job-trait",
+      "blockers": [
+        "aura",
+        "cover-mechanic",
+        "fly-grant",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:limit-break",
+      "kind": "limit-break",
+      "blockers": [
+        "action-type-change",
+        "aura",
+        "cover-mechanic",
+        "fly-grant",
+        "teleport",
+        "terrain-create",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "stormbender:rime:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:rime:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define",
+        "range-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:rime:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "entity-create",
+        "infuse-cost",
+        "mastery-attachment",
+        "range-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:tsunami:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "stormbender:tsunami:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "fly-grant",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "stormbender:cryo:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "stormbender:cryo:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "irreducible"
+      ]
+    },
+    {
+      "sourceId": "stormbender:cryo:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "damage-modifier",
+        "infuse-cost",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "stormbender:geyser:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "cover-mechanic"
+      ]
+    },
+    {
+      "sourceId": "stormbender:geyser:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "entity-create",
+        "range-modifier",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "stormbender:geyser:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "fly-grant",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "stormbender:gust:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "cover-mechanic"
+      ]
+    },
+    {
+      "sourceId": "stormbender:gust:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "fly-grant"
+      ]
+    },
+    {
+      "sourceId": "stormbender:gust:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "irreducible",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "stormbender:heave-ho:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "interrupt-modifier"
+      ]
+    },
+    {
+      "sourceId": "stormbender:heave-ho:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "infuse-cost",
+        "mastery-attachment"
+      ]
+    },
+    {
+      "sourceId": "stormbender:deepwrath:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "mark-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:deepwrath:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "damage-modifier",
+        "mark-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:deepwrath:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mark-modifier",
+        "mastery-attachment",
+        "terrain-create",
+        "use-ledger"
+      ]
+    },
+    {
+      "sourceId": "stormbender:waterspout:talent:1",
+      "kind": "talent",
+      "blockers": [
+        "shove-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:waterspout:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "area-define",
+        "mastery-attachment",
+        "shove-modifier",
+        "terrain-create"
+      ]
+    },
+    {
+      "sourceId": "stormbender:eye-of-the-storm:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "area-define"
+      ]
+    },
+    {
+      "sourceId": "stormbender:eye-of-the-storm:mastery",
+      "kind": "mastery",
+      "blockers": [
+        "mastery-attachment",
+        "terrain-create"
+      ]
+    }
+  ],
+  "blockerFrequencies": {
+    "{irreducible}": 58,
+    "{resource-management}": 4,
+    "{area-define}": 9,
+    "{damage-modifier}": 7,
+    "{range-modifier}": 13,
+    "{resource-management, use-ledger}": 1,
+    "{infuse-cost}": 2,
+    "{heroics-economy}": 3,
+    "{use-ledger}": 4,
+    "{aura, resource-management}": 1,
+    "{shove-modifier}": 6,
+    "{attack-modifier, effect-count, mastery-attachment}": 1,
+    "{pre-ability-movement, rush-modifier}": 2,
+    "{heroics-economy, mastery-attachment, use-ledger}": 1,
+    "{cure-on-trigger, shove-modifier}": 1,
+    "{mastery-attachment, range-modifier, terrain-create}": 2,
+    "{action-type-change, mastery-attachment}": 5,
+    "{aura}": 7,
+    "{interrupt-modifier, mastery-attachment}": 7,
+    "{interrupt-modifier}": 5,
+    "{resource-management, use-ledger, vigor-grant}": 1,
+    "{area-define, aura}": 1,
+    "{aura, mastery-attachment}": 6,
+    "{charge-state, mastery-attachment}": 2,
+    "{area-define, charge-state, rush-modifier}": 1,
+    "{mastery-attachment, resource-management, vigor-grant}": 1,
+    "{resource-management, vigor-grant}": 6,
+    "{mastery-attachment, teleport}": 3,
+    "{irreducible, mastery-attachment}": 23,
+    "{action-type-change, mastery-attachment, terrain-create}": 1,
+    "{area-define, stance-gate}": 1,
+    "{attack-modifier, stance-gate}": 1,
+    "{mastery-attachment, range-modifier, shove-modifier}": 1,
+    "{charge-state}": 3,
+    "{area-define, charge-state}": 2,
+    "{heroics-economy, use-ledger}": 1,
+    "{fly-grant}": 6,
+    "{range-modifier, sacrifice-cost}": 2,
+    "{charge-state, fly-grant}": 3,
+    "{fly-grant, mastery-attachment}": 4,
+    "{area-define, charge-state, terrain-create}": 1,
+    "{area-define, mastery-attachment}": 3,
+    "{terrain-create}": 9,
+    "{fly-grant, pre-ability-movement, rush-modifier}": 1,
+    "{damage-modifier, terrain-create}": 2,
+    "{rush-modifier}": 1,
+    "{charge-state, fly-grant, shove-modifier}": 1,
+    "{charge-state, mastery-attachment, range-modifier, rush-modifier}": 1,
+    "{pre-ability-movement}": 1,
+    "{fly-grant, pre-ability-movement}": 2,
+    "{mastery-attachment, use-ledger}": 2,
+    "{mastery-attachment, resource-management, rush-modifier, vigor-grant}": 1,
+    "{sacrifice-cost}": 5,
+    "{mastery-attachment, rush-modifier}": 1,
+    "{area-define, save-modifier}": 1,
+    "{combo-spend, sacrifice-cost}": 1,
+    "{area-define, damage-modifier, mastery-attachment}": 1,
+    "{rush-modifier, use-ledger}": 1,
+    "{stance-gate}": 2,
+    "{mastery-attachment, pre-ability-movement, rush-modifier}": 1,
+    "{mastery-attachment}": 1,
+    "{interrupt-modifier, sacrifice-cost}": 1,
+    "{mastery-attachment, pre-ability-movement, range-modifier, shove-modifier}": 1,
+    "{pre-ability-movement, range-modifier, rush-modifier}": 1,
+    "{entity-create}": 6,
+    "{teleport}": 7,
+    "{gamble-state, use-ledger}": 1,
+    "{area-define, entity-create, gamble-state}": 1,
+    "{damage-modifier, entity-create}": 1,
+    "{pre-ability-movement, range-modifier}": 1,
+    "{entity-create, mastery-attachment, range-modifier}": 1,
+    "{gamble-state}": 5,
+    "{action-type-change, mastery-attachment, pre-ability-movement}": 1,
+    "{entity-create, terrain-create}": 1,
+    "{effect-count, threshold-modifier}": 1,
+    "{mastery-attachment, stance-gate}": 2,
+    "{gamble-state, mark-modifier, mastery-attachment}": 1,
+    "{entity-create, fly-grant}": 1,
+    "{area-define, charge-state, mark-modifier, mastery-attachment}": 1,
+    "{movement-modifier}": 1,
+    "{action-type-change, mark-modifier, teleport}": 1,
+    "{action-type-change, aura, charge-state, entity-create, teleport}": 1,
+    "{mark-modifier}": 7,
+    "{area-define, charge-state, mark-modifier}": 1,
+    "{gamble-state, mark-modifier, mastery-attachment, range-modifier}": 1,
+    "{entity-create, teleport}": 2,
+    "{mastery-attachment, range-modifier}": 4,
+    "{mark-modifier, range-modifier}": 2,
+    "{damage-modifier, mark-modifier}": 1,
+    "{mark-modifier, mastery-attachment, range-modifier}": 2,
+    "{area-define, range-modifier}": 2,
+    "{range-modifier, teleport}": 5,
+    "{area-define, cover-mechanic, mastery-attachment, terrain-create, use-ledger}": 1,
+    "{action-type-change, range-modifier}": 1,
+    "{fly-grant, mastery-attachment, resource-management, vigor-grant}": 1,
+    "{entity-vacate}": 2,
+    "{range-modifier, use-ledger}": 1,
+    "{combo-spend, range-modifier, sacrifice-cost, teleport}": 1,
+    "{range-modifier, sacrifice-cost, terrain-create}": 1,
+    "{area-define, teleport}": 1,
+    "{entity-create, range-modifier, teleport}": 1,
+    "{aura, mastery-attachment, terrain-create}": 1,
+    "{choice-input}": 1,
+    "{entity-create, stance-gate, use-ledger}": 1,
+    "{interrupt-modifier, mastery-attachment, range-modifier, stance-gate}": 1,
+    "{action-type-change, teleport}": 2,
+    "{area-define, sacrifice-cost}": 1,
+    "{mastery-attachment, range-modifier, teleport}": 1,
+    "{mark-modifier, mastery-attachment}": 4,
+    "{cover-mechanic, damage-modifier}": 1,
+    "{action-type-change, entity-create}": 1,
+    "{entity-create, mastery-attachment}": 3,
+    "{mastery-attachment, shove-modifier}": 1,
+    "{action-type-change, mark-modifier}": 2,
+    "{aura, entity-create}": 1,
+    "{action-type-change, aura, mastery-attachment}": 1,
+    "{action-type-change}": 1,
+    "{mastery-attachment, teleport, use-ledger}": 1,
+    "{cover-mechanic}": 3,
+    "{area-define, cover-mechanic, mastery-attachment, range-modifier, terrain-create}": 1,
+    "{cover-mechanic, mastery-attachment}": 1,
+    "{blessing-spend, charge-state, fly-grant, pre-ability-movement}": 1,
+    "{charge-state, combo-spend}": 1,
+    "{combo-spend, fly-grant, range-modifier, use-ledger}": 1,
+    "{fly-grant, use-ledger}": 1,
+    "{blessing-spend, cover-mechanic, fly-grant, range-modifier, resource-management, shove-modifier, stance-gate}": 1,
+    "{area-define, gamble-state, terrain-create}": 1,
+    "{area-define, fly-grant, mastery-attachment, resource-management, terrain-create, vigor-grant}": 1,
+    "{action-type-change, blessing-spend, fly-grant, mastery-attachment, range-modifier}": 1,
+    "{area-define, damage-modifier, mastery-attachment, terrain-create}": 1,
+    "{effect-count}": 3,
+    "{action-type-change, charge-state, mastery-attachment}": 1,
+    "{charge-state, combo-spend, mastery-attachment}": 1,
+    "{cure-on-trigger}": 3,
+    "{action-type-change, mastery-attachment, range-modifier}": 1,
+    "{aura, stance-gate}": 1,
+    "{aura, damage-modifier}": 1,
+    "{blessing-spend, range-modifier}": 1,
+    "{cure-on-trigger, mastery-attachment}": 1,
+    "{blessing-spend, damage-modifier, resource-management}": 1,
+    "{entity-create, mark-modifier}": 2,
+    "{action-type-change, area-define, entity-create}": 1,
+    "{area-define, mastery-attachment, resource-management, vigor-grant}": 1,
+    "{mark-modifier, terrain-create}": 3,
+    "{entity-create, sacrifice-cost}": 1,
+    "{action-type-change, aura, cure-on-trigger, mastery-attachment, range-modifier}": 1,
+    "{area-define, blessing-spend, mastery-attachment, range-modifier}": 1,
+    "{entity-create, mark-modifier, mastery-attachment, range-modifier}": 1,
+    "{damage-preview}": 1,
+    "{action-type-change, gamble-state, mastery-attachment}": 1,
+    "{blessing-spend, interrupt-modifier, mastery-attachment, terrain-create}": 1,
+    "{blessing-spend, entity-create, mastery-attachment}": 1,
+    "{blessing-spend, damage-modifier}": 1,
+    "{combo-spend, teleport}": 1,
+    "{area-define, mastery-attachment, range-modifier, teleport}": 1,
+    "{damage-modifier, mastery-attachment, teleport, use-ledger}": 1,
+    "{aura, resource-management, vigor-grant}": 1,
+    "{aura, teleport}": 2,
+    "{aura, interrupt-modifier, mastery-attachment}": 1,
+    "{action-type-change, area-define, mastery-attachment}": 1,
+    "{cover-mechanic, range-modifier}": 1,
+    "{interrupt-modifier, resource-management, vigor-grant}": 1,
+    "{interrupt-modifier, teleport}": 4,
+    "{interrupt-modifier, mastery-attachment, resource-management, vigor-grant}": 1,
+    "{damage-modifier, mastery-attachment}": 2,
+    "{area-define, blessing-spend, cure-on-trigger, pre-ability-movement, teleport}": 1,
+    "{area-define, resource-management, vigor-grant}": 1,
+    "{action-type-change, aura}": 1,
+    "{charge-state, gamble-state}": 2,
+    "{gamble-state, mastery-attachment, range-modifier}": 1,
+    "{blessing-spend}": 1,
+    "{entity-create, gamble-state, mastery-attachment}": 1,
+    "{charge-state, terrain-create}": 1,
+    "{area-define, damage-modifier}": 1,
+    "{gamble-state, terrain-create}": 1,
+    "{entity-vacate, save-modifier}": 1,
+    "{cure-on-trigger, resource-management, vigor-grant}": 1,
+    "{damage-preview, mastery-attachment}": 1,
+    "{charge-state, range-modifier}": 1,
+    "{infuse-cost, sacrifice-cost, use-ledger}": 1,
+    "{threshold-modifier}": 1,
+    "{entity-create, infuse-cost, range-modifier, terrain-create}": 1,
+    "{area-define, infuse-cost, mastery-attachment, range-modifier, terrain-create}": 2,
+    "{area-define, cover-mechanic, infuse-cost, mastery-attachment}": 1,
+    "{action-type-change, damage-modifier, mastery-attachment, stance-gate}": 1,
+    "{mark-modifier, teleport}": 1,
+    "{range-modifier, resource-management}": 1,
+    "{aura, pierce}": 1,
+    "{mastery-attachment, movement-modifier}": 1,
+    "{area-define, mastery-attachment, terrain-create}": 2,
+    "{damage-modifier, range-modifier, resource-management, vigor-grant}": 1,
+    "{area-define, charge-state, entity-create, shove-modifier}": 1,
+    "{area-define, terrain-create}": 3,
+    "{area-define, infuse-cost, mastery-attachment, terrain-create}": 1,
+    "{fly-grant, teleport}": 1,
+    "{mastery-attachment, shove-modifier, terrain-create}": 1,
+    "{area-define, cover-mechanic, mastery-attachment}": 1,
+    "{interrupt-modifier, range-modifier, resource-management}": 1,
+    "{infuse-cost, range-modifier}": 1,
+    "{action-type-change, area-define, entity-create, infuse-cost, teleport, terrain-create}": 1,
+    "{area-define, mastery-attachment, teleport, terrain-create}": 1,
+    "{effect-count, use-ledger}": 1,
+    "{cover-mechanic, mastery-attachment, range-modifier, stance-gate}": 1,
+    "{mastery-attachment, terrain-create}": 2,
+    "{cover-mechanic, damage-modifier, mark-modifier, mastery-attachment, range-modifier}": 1,
+    "{damage-modifier, interrupt-modifier}": 1,
+    "{infuse-cost, mastery-attachment}": 2,
+    "{damage-modifier, fly-grant, terrain-create}": 1,
+    "{aura, cover-mechanic, fly-grant, terrain-create}": 1,
+    "{action-type-change, aura, cover-mechanic, fly-grant, teleport, terrain-create, use-ledger}": 1,
+    "{area-define, range-modifier, terrain-create}": 1,
+    "{area-define, entity-create, infuse-cost, mastery-attachment, range-modifier, terrain-create}": 1,
+    "{area-define, damage-modifier, infuse-cost, mastery-attachment}": 1,
+    "{entity-create, range-modifier, use-ledger}": 1,
+    "{damage-modifier, mark-modifier, terrain-create}": 1,
+    "{mark-modifier, mastery-attachment, terrain-create, use-ledger}": 1,
+    "{shove-modifier, terrain-create}": 1,
+    "{area-define, mastery-attachment, shove-modifier, terrain-create}": 1
+  },
+  "singletonFamilies": {
+    "irreducible": [
+      "stalwart:trait:armor-2",
+      "wright:trait:slip",
+      "bastion:heracule:talent:1",
+      "bastion:heracule:talent:2",
+      "bastion:battering-ram:talent:2",
+      "demon-slayer:draken-cross:talent:1",
+      "demon-slayer:righteous-disdain:talent:2",
+      "demon-slayer:demon-claw:talent:2",
+      "demon-slayer:gates-of-hell:talent:2",
+      "demon-slayer:six-hells-trigram:talent:1",
+      "demon-slayer:six-hells-trigram:talent:2",
+      "colossus:takedown:talent:2",
+      "colossus:gigaton-whip:talent:1",
+      "colossus:raging-wolf:talent:2",
+      "colossus:boiling-blood:talent:1",
+      "knave:trait:martial-master",
+      "knave:strongarm:talent:2",
+      "knave:intimidate:talent:2",
+      "knave:bleak-mercy:talent:1",
+      "fool:trait:curse-of-chaos",
+      "fool:cavaliere:talent:2",
+      "fool:death:talent:1",
+      "fool:gallows-humor:talent:1",
+      "fool:party-favor:talent:1",
+      "freelancer:strafe-shot:talent:2",
+      "shade:umbral-echo:talent:2",
+      "shade:assassinate:talent:1",
+      "shade:assassinate:talent:2",
+      "warden:gwynt:talent:1",
+      "warden:circle-the-oak:talent:1",
+      "warden:mist-strider:talent:2",
+      "warden:stampede:talent:2",
+      "chanter:felicity:talent:1",
+      "chanter:dervish:talent:2",
+      "chanter:symphony:talent:1",
+      "chanter:monogatari:talent:1",
+      "chanter:chastise:talent:1",
+      "chanter:chastise:talent:2",
+      "harvester:sow:talent:2",
+      "harvester:blood-grove:talent:1",
+      "harvester:fairy-ring:talent:2",
+      "sealer:sanctify:talent:1",
+      "seer:trait:the-wheel-of-fate",
+      "seer:trait:skein",
+      "seer:sleight-of-hand:talent:1",
+      "seer:gran-reversa:talent:2",
+      "enochian:lance:talent:2",
+      "enochian:implode:talent:1",
+      "geomancer:helix-heel:talent:1",
+      "geomancer:obsidian-flesh:talent:1",
+      "geomancer:realignment:talent:1",
+      "geomancer:midas:talent:1",
+      "geomancer:quaking-palm:talent:2",
+      "spellblade:atherwand:talent:1",
+      "spellblade:bifrost:talent:2",
+      "stormbender:tsunami:talent:2",
+      "stormbender:cryo:talent:1",
+      "stormbender:cryo:talent:2"
+    ],
+    "resource-management": [
+      "stalwart:trait:fortify",
+      "demon-slayer:comet:talent:1",
+      "harvester:fairy-ring:talent:1",
+      "enochian:blackstar:talent:1"
+    ],
+    "area-define": [
+      "vagabond:trait:dodge",
+      "freelancer:soul-shot:talent:2",
+      "warden:sidhe:talent:2",
+      "seer:eclipse:talent:2",
+      "enochian:pyre:talent:2",
+      "geomancer:midas:talent:2",
+      "spellblade:atherwand:talent:2",
+      "spellblade:sturmreiten:talent:2",
+      "stormbender:eye-of-the-storm:talent:2"
+    ],
+    "damage-modifier": [
+      "vagabond:trait:finesse",
+      "knave:low-blow:talent:1",
+      "freelancer:trait:aether-shot",
+      "shade:incubus:talent:2",
+      "harvester:dark-sliver:talent:1",
+      "sealer:matsuri:talent:2",
+      "spellblade:nothung:talent:1"
+    ],
+    "range-modifier": [
+      "wright:trait:aetherwall",
+      "colossus:valkyrie:talent:1",
+      "knave:limit-break",
+      "knave:strongarm:talent:1",
+      "freelancer:trait:trigrammaton",
+      "freelancer:trick-shot:talent:2",
+      "freelancer:soul-shot:talent:1",
+      "shade:incubus:talent:1",
+      "warden:apex:talent:2",
+      "harvester:harvest:talent:2",
+      "sealer:open-the-gates:talent:2",
+      "enochian:lance:talent:1",
+      "spellblade:blitz:talent:2"
+    ],
+    "infuse-cost": [
+      "wright:trait:aether",
+      "enochian:elden-rune:talent:2"
+    ],
+    "heroics-economy": [
+      "bastion:trait:strive",
+      "demon-slayer:trait:demon-strength",
+      "knave:trait:spite"
+    ],
+    "use-ledger": [
+      "bastion:trait:press-the-advantage",
+      "bastion:rook:talent:2",
+      "fool:masquerade:talent:1",
+      "warden:mist-strider:talent:1"
+    ],
+    "shove-modifier": [
+      "bastion:limit-break",
+      "bastion:land-waster:talent:1",
+      "bastion:catapult:talent:2",
+      "bastion:great-giorgios:talent:1",
+      "bastion:great-giorgios:talent:2",
+      "enochian:soul-burn:talent:2"
+    ],
+    "aura": [
+      "bastion:endless-battlement:talent:1",
+      "bastion:endless-battlement:talent:2",
+      "bastion:rook:talent:1",
+      "shade:nightmare:talent:2",
+      "chanter:dervish:talent:1",
+      "harvester:gravebirth:talent:1",
+      "sealer:trait:mantra-of-sealing"
+    ],
+    "interrupt-modifier": [
+      "bastion:catapult:talent:1",
+      "knave:sucker-punch:talent:2",
+      "freelancer:deus-ex-machina:talent:2",
+      "seer:wish:talent:1",
+      "stormbender:heave-ho:talent:2"
+    ],
+    "charge-state": [
+      "demon-slayer:wicked-sheath:talent:1",
+      "fool:spinning-top:talent:2",
+      "geomancer:terraforming:talent:1"
+    ],
+    "fly-grant": [
+      "colossus:trait:great-leap",
+      "fool:chronotemper:talent:2",
+      "chanter:felicity:talent:2",
+      "chanter:aria:talent:1",
+      "geomancer:dragon-dive:talent:2",
+      "stormbender:gust:talent:2"
+    ],
+    "terrain-create": [
+      "colossus:massive-overhead:talent:2",
+      "chanter:pandaemonium:talent:2",
+      "seer:eclipse:talent:1",
+      "enochian:implode:talent:2",
+      "geomancer:bio:talent:1",
+      "geomancer:geo:talent:1",
+      "geomancer:geo:talent:2",
+      "geomancer:realignment:talent:2",
+      "geomancer:quaking-palm:talent:1"
+    ],
+    "rush-modifier": [
+      "colossus:great-suplex:talent:2"
+    ],
+    "pre-ability-movement": [
+      "colossus:raging-wolf:talent:1"
+    ],
+    "sacrifice-cost": [
+      "knave:provoke:talent:2",
+      "knave:riposte:talent:1",
+      "harvester:blood-grove:talent:2",
+      "harvester:crimson-bloom:talent:2",
+      "enochian:pyroclast:talent:2"
+    ],
+    "stance-gate": [
+      "knave:dark-knight:talent:2",
+      "warden:strength-of-the-pack:talent:1"
+    ],
+    "mastery-attachment": [
+      "knave:intimidate:mastery"
+    ],
+    "entity-create": [
+      "fool:trait:tumbling",
+      "fool:diablo:talent:1",
+      "shade:limit-break",
+      "warden:apex:talent:1",
+      "warden:gwynt:talent:2",
+      "warden:circle-the-oak:talent:2"
+    ],
+    "teleport": [
+      "fool:trait:cheap-trick",
+      "freelancer:showdown:talent:1",
+      "shade:shadow-play:talent:1",
+      "sealer:matsuri:talent:1",
+      "sealer:grand-banishment:talent:2",
+      "spellblade:nothung:talent:2",
+      "spellblade:fulminate:talent:1"
+    ],
+    "gamble-state": [
+      "fool:spinning-top:talent:1",
+      "chanter:pandaemonium:talent:1",
+      "seer:trait:bend-fate",
+      "seer:gran-reversa:talent:1",
+      "spellblade:rampant-nail:talent:2"
+    ],
+    "movement-modifier": [
+      "fool:chronotemper:talent:1"
+    ],
+    "mark-modifier": [
+      "freelancer:exorcism:talent:1",
+      "freelancer:warding-bolts:talent:2",
+      "harvester:rot:talent:2",
+      "sealer:grand-seal:talent:1",
+      "sealer:grand-seal:talent:2",
+      "sealer:divine-aegis:talent:2",
+      "seer:polaris:talent:1"
+    ],
+    "entity-vacate": [
+      "shade:trait:darkside",
+      "geomancer:trait:stone-double"
+    ],
+    "choice-input": [
+      "shade:shadow-play:talent:2"
+    ],
+    "action-type-change": [
+      "warden:underway:talent:1"
+    ],
+    "cover-mechanic": [
+      "warden:morrigan:talent:1",
+      "stormbender:geyser:talent:1",
+      "stormbender:gust:talent:1"
+    ],
+    "effect-count": [
+      "chanter:aria:talent:2",
+      "enochian:soul-burn:talent:1",
+      "spellblade:odinforce:talent:2"
+    ],
+    "cure-on-trigger": [
+      "chanter:symphony:talent:2",
+      "harvester:trait:balance",
+      "seer:wish:talent:2"
+    ],
+    "damage-preview": [
+      "harvester:crimson-bloom:talent:1"
+    ],
+    "blessing-spend": [
+      "seer:chaos-tarot:talent:1"
+    ],
+    "threshold-modifier": [
+      "enochian:trait:soulfire"
+    ]
+  },
+  "marginalTableAll": {
+    "irreducible": {
+      "immediate": 58,
+      "oneCloser": 23,
+      "multiCloser": 0,
+      "totalContaining": 81
+    },
+    "resource-management": {
+      "immediate": 4,
+      "oneCloser": 9,
+      "multiCloser": 15,
+      "totalContaining": 28
+    },
+    "area-define": {
+      "immediate": 9,
+      "oneCloser": 16,
+      "multiCloser": 32,
+      "totalContaining": 57
+    },
+    "damage-modifier": {
+      "immediate": 7,
+      "oneCloser": 11,
+      "multiCloser": 10,
+      "totalContaining": 28
+    },
+    "range-modifier": {
+      "immediate": 13,
+      "oneCloser": 23,
+      "multiCloser": 35,
+      "totalContaining": 71
+    },
+    "use-ledger": {
+      "immediate": 4,
+      "oneCloser": 9,
+      "multiCloser": 11,
+      "totalContaining": 24
+    },
+    "infuse-cost": {
+      "immediate": 2,
+      "oneCloser": 3,
+      "multiCloser": 9,
+      "totalContaining": 14
+    },
+    "heroics-economy": {
+      "immediate": 3,
+      "oneCloser": 1,
+      "multiCloser": 1,
+      "totalContaining": 5
+    },
+    "aura": {
+      "immediate": 7,
+      "oneCloser": 15,
+      "multiCloser": 8,
+      "totalContaining": 30
+    },
+    "shove-modifier": {
+      "immediate": 6,
+      "oneCloser": 3,
+      "multiCloser": 7,
+      "totalContaining": 16
+    },
+    "attack-modifier": {
+      "immediate": 0,
+      "oneCloser": 1,
+      "multiCloser": 1,
+      "totalContaining": 2
+    },
+    "effect-count": {
+      "immediate": 3,
+      "oneCloser": 2,
+      "multiCloser": 1,
+      "totalContaining": 6
+    },
+    "mastery-attachment": {
+      "immediate": 1,
+      "oneCloser": 80,
+      "multiCloser": 63,
+      "totalContaining": 144
+    },
+    "pre-ability-movement": {
+      "immediate": 1,
+      "oneCloser": 5,
+      "multiCloser": 7,
+      "totalContaining": 13
+    },
+    "rush-modifier": {
+      "immediate": 1,
+      "oneCloser": 4,
+      "multiCloser": 6,
+      "totalContaining": 11
+    },
+    "cure-on-trigger": {
+      "immediate": 3,
+      "oneCloser": 2,
+      "multiCloser": 3,
+      "totalContaining": 8
+    },
+    "terrain-create": {
+      "immediate": 9,
+      "oneCloser": 14,
+      "multiCloser": 29,
+      "totalContaining": 52
+    },
+    "action-type-change": {
+      "immediate": 1,
+      "oneCloser": 12,
+      "multiCloser": 15,
+      "totalContaining": 28
+    },
+    "interrupt-modifier": {
+      "immediate": 5,
+      "oneCloser": 13,
+      "multiCloser": 6,
+      "totalContaining": 24
+    },
+    "vigor-grant": {
+      "immediate": 0,
+      "oneCloser": 6,
+      "multiCloser": 12,
+      "totalContaining": 18
+    },
+    "charge-state": {
+      "immediate": 3,
+      "oneCloser": 12,
+      "multiCloser": 11,
+      "totalContaining": 26
+    },
+    "teleport": {
+      "immediate": 7,
+      "oneCloser": 22,
+      "multiCloser": 12,
+      "totalContaining": 41
+    },
+    "stance-gate": {
+      "immediate": 2,
+      "oneCloser": 5,
+      "multiCloser": 5,
+      "totalContaining": 12
+    },
+    "fly-grant": {
+      "immediate": 6,
+      "oneCloser": 12,
+      "multiCloser": 11,
+      "totalContaining": 29
+    },
+    "sacrifice-cost": {
+      "immediate": 5,
+      "oneCloser": 6,
+      "multiCloser": 3,
+      "totalContaining": 14
+    },
+    "save-modifier": {
+      "immediate": 0,
+      "oneCloser": 2,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "combo-spend": {
+      "immediate": 0,
+      "oneCloser": 3,
+      "multiCloser": 3,
+      "totalContaining": 6
+    },
+    "entity-create": {
+      "immediate": 6,
+      "oneCloser": 13,
+      "multiCloser": 14,
+      "totalContaining": 33
+    },
+    "gamble-state": {
+      "immediate": 5,
+      "oneCloser": 4,
+      "multiCloser": 7,
+      "totalContaining": 16
+    },
+    "threshold-modifier": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "mark-modifier": {
+      "immediate": 7,
+      "oneCloser": 15,
+      "multiCloser": 11,
+      "totalContaining": 33
+    },
+    "movement-modifier": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "cover-mechanic": {
+      "immediate": 3,
+      "oneCloser": 3,
+      "multiCloser": 9,
+      "totalContaining": 15
+    },
+    "entity-vacate": {
+      "immediate": 2,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 3
+    },
+    "choice-input": {
+      "immediate": 1,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 1
+    },
+    "blessing-spend": {
+      "immediate": 1,
+      "oneCloser": 2,
+      "multiCloser": 8,
+      "totalContaining": 11
+    },
+    "damage-preview": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "pierce": {
+      "immediate": 0,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 1
+    }
+  },
+  "marginalTableImplementable": {
+    "mastery-attachment": {
+      "immediate": 1,
+      "oneCloser": 80,
+      "multiCloser": 63,
+      "totalContaining": 144
+    },
+    "range-modifier": {
+      "immediate": 13,
+      "oneCloser": 23,
+      "multiCloser": 35,
+      "totalContaining": 71
+    },
+    "area-define": {
+      "immediate": 9,
+      "oneCloser": 16,
+      "multiCloser": 32,
+      "totalContaining": 57
+    },
+    "terrain-create": {
+      "immediate": 9,
+      "oneCloser": 14,
+      "multiCloser": 29,
+      "totalContaining": 52
+    },
+    "teleport": {
+      "immediate": 7,
+      "oneCloser": 22,
+      "multiCloser": 12,
+      "totalContaining": 41
+    },
+    "entity-create": {
+      "immediate": 6,
+      "oneCloser": 13,
+      "multiCloser": 14,
+      "totalContaining": 33
+    },
+    "mark-modifier": {
+      "immediate": 7,
+      "oneCloser": 15,
+      "multiCloser": 11,
+      "totalContaining": 33
+    },
+    "aura": {
+      "immediate": 7,
+      "oneCloser": 15,
+      "multiCloser": 8,
+      "totalContaining": 30
+    },
+    "fly-grant": {
+      "immediate": 6,
+      "oneCloser": 12,
+      "multiCloser": 11,
+      "totalContaining": 29
+    },
+    "resource-management": {
+      "immediate": 4,
+      "oneCloser": 9,
+      "multiCloser": 15,
+      "totalContaining": 28
+    },
+    "damage-modifier": {
+      "immediate": 7,
+      "oneCloser": 11,
+      "multiCloser": 10,
+      "totalContaining": 28
+    },
+    "action-type-change": {
+      "immediate": 1,
+      "oneCloser": 12,
+      "multiCloser": 15,
+      "totalContaining": 28
+    },
+    "charge-state": {
+      "immediate": 3,
+      "oneCloser": 12,
+      "multiCloser": 11,
+      "totalContaining": 26
+    },
+    "use-ledger": {
+      "immediate": 4,
+      "oneCloser": 9,
+      "multiCloser": 11,
+      "totalContaining": 24
+    },
+    "interrupt-modifier": {
+      "immediate": 5,
+      "oneCloser": 13,
+      "multiCloser": 6,
+      "totalContaining": 24
+    },
+    "vigor-grant": {
+      "immediate": 0,
+      "oneCloser": 6,
+      "multiCloser": 12,
+      "totalContaining": 18
+    },
+    "shove-modifier": {
+      "immediate": 6,
+      "oneCloser": 3,
+      "multiCloser": 7,
+      "totalContaining": 16
+    },
+    "gamble-state": {
+      "immediate": 5,
+      "oneCloser": 4,
+      "multiCloser": 7,
+      "totalContaining": 16
+    },
+    "cover-mechanic": {
+      "immediate": 3,
+      "oneCloser": 3,
+      "multiCloser": 9,
+      "totalContaining": 15
+    },
+    "infuse-cost": {
+      "immediate": 2,
+      "oneCloser": 3,
+      "multiCloser": 9,
+      "totalContaining": 14
+    },
+    "sacrifice-cost": {
+      "immediate": 5,
+      "oneCloser": 6,
+      "multiCloser": 3,
+      "totalContaining": 14
+    },
+    "pre-ability-movement": {
+      "immediate": 1,
+      "oneCloser": 5,
+      "multiCloser": 7,
+      "totalContaining": 13
+    },
+    "stance-gate": {
+      "immediate": 2,
+      "oneCloser": 5,
+      "multiCloser": 5,
+      "totalContaining": 12
+    },
+    "rush-modifier": {
+      "immediate": 1,
+      "oneCloser": 4,
+      "multiCloser": 6,
+      "totalContaining": 11
+    },
+    "blessing-spend": {
+      "immediate": 1,
+      "oneCloser": 2,
+      "multiCloser": 8,
+      "totalContaining": 11
+    },
+    "cure-on-trigger": {
+      "immediate": 3,
+      "oneCloser": 2,
+      "multiCloser": 3,
+      "totalContaining": 8
+    },
+    "effect-count": {
+      "immediate": 3,
+      "oneCloser": 2,
+      "multiCloser": 1,
+      "totalContaining": 6
+    },
+    "combo-spend": {
+      "immediate": 0,
+      "oneCloser": 3,
+      "multiCloser": 3,
+      "totalContaining": 6
+    },
+    "heroics-economy": {
+      "immediate": 3,
+      "oneCloser": 1,
+      "multiCloser": 1,
+      "totalContaining": 5
+    },
+    "entity-vacate": {
+      "immediate": 2,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 3
+    },
+    "attack-modifier": {
+      "immediate": 0,
+      "oneCloser": 1,
+      "multiCloser": 1,
+      "totalContaining": 2
+    },
+    "save-modifier": {
+      "immediate": 0,
+      "oneCloser": 2,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "threshold-modifier": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "movement-modifier": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "damage-preview": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "choice-input": {
+      "immediate": 1,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 1
+    },
+    "pierce": {
+      "immediate": 0,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 1
+    }
+  },
+  "residualCount": 58,
+  "greedySimulation": [
+    {
+      "step": 1,
+      "implement": "range-modifier",
+      "unlocks": 13,
+      "cumulative": 13,
+      "remaining": 453
+    },
+    {
+      "step": 2,
+      "implement": "area-define",
+      "unlocks": 11,
+      "cumulative": 24,
+      "remaining": 442
+    },
+    {
+      "step": 3,
+      "implement": "terrain-create",
+      "unlocks": 13,
+      "cumulative": 37,
+      "remaining": 429
+    },
+    {
+      "step": 4,
+      "implement": "teleport",
+      "unlocks": 13,
+      "cumulative": 50,
+      "remaining": 416
+    },
+    {
+      "step": 5,
+      "implement": "mark-modifier",
+      "unlocks": 13,
+      "cumulative": 63,
+      "remaining": 403
+    },
+    {
+      "step": 6,
+      "implement": "aura",
+      "unlocks": 10,
+      "cumulative": 73,
+      "remaining": 393
+    },
+    {
+      "step": 7,
+      "implement": "damage-modifier",
+      "unlocks": 13,
+      "cumulative": 86,
+      "remaining": 380
+    },
+    {
+      "step": 8,
+      "implement": "entity-create",
+      "unlocks": 14,
+      "cumulative": 100,
+      "remaining": 366
+    },
+    {
+      "step": 9,
+      "implement": "fly-grant",
+      "unlocks": 9,
+      "cumulative": 109,
+      "remaining": 357
+    },
+    {
+      "step": 10,
+      "implement": "shove-modifier",
+      "unlocks": 7,
+      "cumulative": 116,
+      "remaining": 350
+    },
+    {
+      "step": 11,
+      "implement": "interrupt-modifier",
+      "unlocks": 10,
+      "cumulative": 126,
+      "remaining": 340
+    },
+    {
+      "step": 12,
+      "implement": "gamble-state",
+      "unlocks": 8,
+      "cumulative": 134,
+      "remaining": 332
+    },
+    {
+      "step": 13,
+      "implement": "sacrifice-cost",
+      "unlocks": 11,
+      "cumulative": 145,
+      "remaining": 321
+    },
+    {
+      "step": 14,
+      "implement": "resource-management",
+      "unlocks": 7,
+      "cumulative": 152,
+      "remaining": 314
+    },
+    {
+      "step": 15,
+      "implement": "use-ledger",
+      "unlocks": 9,
+      "cumulative": 161,
+      "remaining": 305
+    },
+    {
+      "step": 16,
+      "implement": "charge-state",
+      "unlocks": 16,
+      "cumulative": 177,
+      "remaining": 289
+    },
+    {
+      "step": 17,
+      "implement": "cover-mechanic",
+      "unlocks": 6,
+      "cumulative": 183,
+      "remaining": 283
+    },
+    {
+      "step": 18,
+      "implement": "cure-on-trigger",
+      "unlocks": 4,
+      "cumulative": 187,
+      "remaining": 279
+    },
+    {
+      "step": 19,
+      "implement": "effect-count",
+      "unlocks": 4,
+      "cumulative": 191,
+      "remaining": 275
+    },
+    {
+      "step": 20,
+      "implement": "heroics-economy",
+      "unlocks": 4,
+      "cumulative": 195,
+      "remaining": 271
+    },
+    {
+      "step": 21,
+      "implement": "infuse-cost",
+      "unlocks": 5,
+      "cumulative": 200,
+      "remaining": 266
+    },
+    {
+      "step": 22,
+      "implement": "stance-gate",
+      "unlocks": 5,
+      "cumulative": 205,
+      "remaining": 261
+    },
+    {
+      "step": 23,
+      "implement": "entity-vacate",
+      "unlocks": 2,
+      "cumulative": 207,
+      "remaining": 259
+    },
+    {
+      "step": 24,
+      "implement": "mastery-attachment",
+      "unlocks": 89,
+      "cumulative": 296,
+      "remaining": 170
+    },
+    {
+      "step": 25,
+      "implement": "action-type-change",
+      "unlocks": 26,
+      "cumulative": 322,
+      "remaining": 144
+    },
+    {
+      "step": 26,
+      "implement": "pre-ability-movement",
+      "unlocks": 6,
+      "cumulative": 328,
+      "remaining": 138
+    },
+    {
+      "step": 27,
+      "implement": "rush-modifier",
+      "unlocks": 10,
+      "cumulative": 338,
+      "remaining": 128
+    },
+    {
+      "step": 28,
+      "implement": "blessing-spend",
+      "unlocks": 11,
+      "cumulative": 349,
+      "remaining": 117
+    },
+    {
+      "step": 29,
+      "implement": "threshold-modifier",
+      "unlocks": 2,
+      "cumulative": 351,
+      "remaining": 115
+    },
+    {
+      "step": 30,
+      "implement": "movement-modifier",
+      "unlocks": 2,
+      "cumulative": 353,
+      "remaining": 113
+    },
+    {
+      "step": 31,
+      "implement": "damage-preview",
+      "unlocks": 2,
+      "cumulative": 355,
+      "remaining": 111
+    },
+    {
+      "step": 32,
+      "implement": "choice-input",
+      "unlocks": 1,
+      "cumulative": 356,
+      "remaining": 110
+    },
+    {
+      "step": 33,
+      "implement": "vigor-grant",
+      "unlocks": 18,
+      "cumulative": 374,
+      "remaining": 92
+    },
+    {
+      "step": 34,
+      "implement": "combo-spend",
+      "unlocks": 6,
+      "cumulative": 380,
+      "remaining": 86
+    },
+    {
+      "step": 35,
+      "implement": "attack-modifier",
+      "unlocks": 2,
+      "cumulative": 382,
+      "remaining": 84
+    },
+    {
+      "step": 36,
+      "implement": "save-modifier",
+      "unlocks": 2,
+      "cumulative": 384,
+      "remaining": 82
+    },
+    {
+      "step": 37,
+      "implement": "pierce",
+      "unlocks": 1,
+      "cumulative": 385,
+      "remaining": 81
+    }
+  ],
+  "invariants": [
+    "✓ All source IDs are unique",
+    "✓ Every unresolved unit appears exactly once",
+    "✓ No executable unit appears in the unresolved census",
+    "✓ Per-kind totals sum to unresolved total (466)",
+    "✓ All blocker-set frequencies derive from per-unit records",
+    "✓ All marginal values derive from per-unit records",
+    "✓ Marginal assertion: immediate + oneCloser + multiCloser === totalContaining for every blocker",
+    "✓ Cumulative unlocked + remaining = baseline at every step",
+    "✓ No non-implementable classifications in greedy simulation",
+    "✓ Final remaining: 81 (residual: 58 units need non-implementable capabilities)"
+  ]
+}

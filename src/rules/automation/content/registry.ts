@@ -18,6 +18,7 @@ import './jobs/trait-condition-recipes.js';
 import './jobs/lifecycle-recipes.js';
 import './jobs/attack-modifier-recipes.js';
 import './jobs/talent-recipes.js';
+import './jobs/trait-reactions.js';
 import './jobs/summon-recipes.js';
 import './jobs/encounter-hooks.js';
 import './foes/role-baseline-recipes.js';

@@ -29,7 +29,7 @@
 import type { RuleSourceUnit } from '../../../source-units.js';
 import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
 import type { RuleMutation } from '../../primitives/types.js';
-import { registerProgramLevelTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
+import { affectedFoeIds, registerProgramLevelTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
 import type { TalentEffect } from '../../kernels/talent-recipes.js';
 
 /** The party-favor mine's position from the ability's recorded terrain
@@ -80,6 +80,26 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
         const effects: TalentEffect[] = [{ kind: 'condition', sourceActorId: actorId, actorId, conditionId: 'defiance', operation: 'apply', potency: 'normal' }];
         if (targetIds[0]) effects.push({ kind: 'condition', sourceActorId: actorId, actorId: targetIds[0], conditionId: 'defiance', operation: 'apply', potency: 'normal' });
         return effects;
+      },
+    },
+  },
+  // ICON p.122 Bastion Valiant talent 2: "If you only shove one foe, they
+  // gain hatred of you after this ability resolves." The single-foe
+  // predicate counts the distinct foes the ability's shove mutations
+  // affected; the always trigger's post-application timing is the
+  // "after this ability resolves" boundary. Hatred is a status, applied
+  // through the shared condition mutation.
+  'bastion:valiant:talent:2': {
+    mechanic: 'If the ability shoved exactly one foe, that foe gains hatred after the ability resolves.',
+    triggerEffect: {
+      trigger: 'always',
+      condition: ({ state, mutations, actorId }) =>
+        affectedFoeIds(mutations, state, actorId, ['shove']).length === 1,
+      build: (actorId, _targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const foes = affectedFoeIds(context.mutations, context.state, actorId, ['shove']);
+        if (foes.length !== 1) return [];
+        return [{ kind: 'condition', sourceActorId: actorId, actorId: foes[0], conditionId: 'hatred', operation: 'apply', potency: 'normal' }];
       },
     },
   },
@@ -137,6 +157,25 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
           { kind: 'move', sourceActorId: actorId, actorId: foe.id, movement: 'shove', distance, positions: [], direction: away, phasing: false },
           { kind: 'move', sourceActorId: actorId, actorId, movement: 'shove', distance, positions: [], direction: { x: -away.x, y: -away.y }, phasing: false },
         ];
+      },
+    },
+  },
+  // ICON p.139 Knave Provoke talent 1: "If this ability only affects one
+  // foe, they gain hatred of you." The single-foe predicate counts the
+  // distinct foes the ability's damage mutations affected (the adjacent
+  // foes it hit); the always trigger fires after the ability resolves.
+  // Hatred is a status, applied through the shared condition mutation.
+  'knave:provoke:talent:1': {
+    mechanic: 'If the ability damaged exactly one foe, that foe gains hatred.',
+    triggerEffect: {
+      trigger: 'always',
+      condition: ({ state, mutations, actorId }) =>
+        affectedFoeIds(mutations, state, actorId, ['damage']).length === 1,
+      build: (actorId, _targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const foes = affectedFoeIds(context.mutations, context.state, actorId, ['damage']);
+        if (foes.length !== 1) return [];
+        return [{ kind: 'condition', sourceActorId: actorId, actorId: foes[0], conditionId: 'hatred', operation: 'apply', potency: 'normal' }];
       },
     },
   },
@@ -238,6 +277,16 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
           terrain: 'dangerous', positions: [pos], height: null,
         }));
       },
+    },
+  },
+  // ICON p.157 Freelancer Showdown talent 2: "When you activate showdown,
+  // gain stealth." The always trigger fires on every use of the ability;
+  // stealth is granted to the user through the shared condition mutation.
+  'freelancer:showdown:talent:2': {
+    mechanic: 'When the ability is used, the user gains stealth.',
+    triggerEffect: {
+      trigger: 'always',
+      build: (actorId) => [{ kind: 'condition', sourceActorId: actorId, actorId, conditionId: 'stealth', operation: 'apply', potency: 'normal' }],
     },
   },
   // ICON p.151 Fool Party Favor talent 2: "Dazed or Blinded foes activate the

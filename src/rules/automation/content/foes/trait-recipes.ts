@@ -12,20 +12,23 @@ import type { FoeTraitKeywordEffect, FoeTraitKeywordRecipe } from '../../kernels
  * A row is fully executable (audits complete, `automation: 'executable'`)
  * only when every keyword maps to a wired mechanic: a consumed condition
  * (p.104), a consumed stat (Armor/Speed), or a p.298 role baseline. Keywords
- * with no wired engine path yet — Counter's "damaged by an ability" window,
- * Diaga's active Leader cure, the p.92 Size footprint — are registered as
- * `pending` so the row's other keywords still project while the audit stays
- * honestly incomplete.
+ * with no wired engine path yet — Diaga's active Leader cure, the p.92 Size
+ * footprint — are registered as `pending` so the row's other keywords still
+ * project while the audit stays honestly incomplete.
+ *
+ * `Counter` (p.104) is wired: the damage pipeline retaliates 2 per applied
+ * damage instance on any actor carrying the `counter` condition (see
+ * `encounter-adapter.ts` `retaliate`, `allowCounter`). So Counter-only rows
+ * (howler, war-beast, crystalline-demon, blade-of-agony, fanged-hob) and
+ * mixed rows whose other keywords are wired (doomcloak) are fully executable.
  *
  * Deliberately absent (no projection, no row): prose rows that are not pure
  * keyword lists (Elite/Legend suffixes, `Enrage`, `Mob`, `Shelter`,
- * `Phasing. This trait also transfers to a rider`), and rows whose only
- * keywords are unwired (Counter-only rows such as howler/war-beast). They
- * stay source-visible with their kernel need in `docs/kernels-needed.md`.
+ * `Phasing. This trait also transfers to a rider`). They stay source-visible
+ * with their kernel need in `docs/kernels-needed.md`.
  */
 
 const SIZE_FOOTPRINT_PENDING = 'Size footprint (p.92) is not enforced yet (F1 footprint matrix pending).';
-const COUNTER_PENDING = 'Counter needs a durable "damaged by an ability" damage window (p.104, F4 provenance).';
 const DIAGA_PENDING = 'Diaga is the Leader role active cure ability (p.298), not a passive projection.';
 
 const cond = (keyword: string, condition = keyword.toLocaleLowerCase()): FoeTraitKeywordEffect => ({
@@ -147,9 +150,15 @@ export const FOE_TRAIT_KEYWORD_RECIPES: Readonly<Record<string, FoeTraitKeywordR
   'ruin-beast:doomcloak:353:trait:special-traits': row('ruin-beast:doomcloak:353:trait:special-traits', [
     cond('Flying'),
     cond('Sturdy'),
-    pending('Counter', COUNTER_PENDING),
+    cond('Counter'),
     durable('Defiance', 'defiance'),
   ]),
+  // Pure-Counter rows (p.104 Counter is wired — `retaliate` on applied damage).
+  'ruin-beast:howler:346:trait:special-traits': row('ruin-beast:howler:346:trait:special-traits', [cond('Counter')]),
+  'imperial:war-beast:393:trait:special-traits': row('imperial:war-beast:393:trait:special-traits', [cond('Counter')]),
+  'demon:crystalline-demon:409:trait:traits': row('demon:crystalline-demon:409:trait:traits', [cond('Counter')]),
+  'demon:blade-of-agony:420:trait:traits': row('demon:blade-of-agony:420:trait:traits', [cond('Counter')]),
+  'hob:fanged-hob:470:trait:traits': row('hob:fanged-hob:470:trait:traits', [cond('Counter')]),
   'ruin-beast:hellhound:354:trait:special-traits': row('ruin-beast:hellhound:354:trait:special-traits', [
     stat('Size 2', 'size', 2, SIZE_FOOTPRINT_PENDING),
   ]),

@@ -11,6 +11,13 @@ the content.
 This is a planning document, not a coverage claim — `npm run audit:automation`
 and the phase gates are the only authority for "done".
 
+**Authority:** [`rules-foundations.md`](rules-foundations.md) is the primary
+source-ontology-first map (combat ontology → primitive/kernel → consumer
+matrices → dependency graph → build order → `FOUNDATION_COMPLETE` gate). This
+file is its primitive-level build ledger; `kernels-needed.md` is the
+kernel-level ledger. Both defer to `rules-foundations.md` for ordering and
+status.
+
 There are two layers:
 
 1. **The declarative VM vocabulary** — `automation/primitives/types.ts`: 24 `RuleEffect`
@@ -136,7 +143,7 @@ The consolidated build list. A primitive is `existing` (usable today),
 | Gamble | jobs/traits/relics/trophies | partial | F3 |
 | Sacrifice + cost overrides | jobs/traits/relics | partial | F0 |
 | Blessing / combo ability-use spend | jobs/traits | missing | resources |
-| Use ledger | jobs | partial | F3 |
+| Use ledger / round-ledger | jobs | partial → **once-per-round done** (F9) | F3; the reactive job-trait fold + durable round ledger (`kernels/trait-reactions.ts`) covers once-per-round; once-per-combat / once-per-turn variants remain |
 | Movement-entry/-exit hook | jobs/foes | partial | F1 |
 | Delay anchor | jobs | partial | F3 |
 | Area shapes (arc/cross/rotation) | jobs/foes | partial | F1 |
@@ -152,30 +159,35 @@ The consolidated build list. A primitive is `existing` (usable today),
 
 ## 6. Suggested build order
 
-Aligned with `kernels-needed.md` §6; each primitive ships as a recipe row +
-generic factory + fixture, and converts its consumers into data:
+The build order is owned by [`rules-foundations.md`](rules-foundations.md)
+§10 (source-ontology-first; prerequisites × glossary completeness × shared
+leverage), mirrored by the kernel families. Ordering the *primitives* within
+that kernel sequence:
 
-1. **Gamble** — the `TurnDiceWindows` pre-roll seam already exists; a shared
-   gamble effect unblocks Riposte/Spinning Top/Carnevale/Monogatari/Party
-   Favor/Death and later the Stack Dice trait.
-2. **Power-die stance** — one recipe shape (size, start, tick, consume)
-   replaces the five hand-rolled stance dies and the Exorcism/Godly Smite
-   dies.
-3. **Armed one-shot attack window** — generalize the F6 armed-state consume;
-   folds in Massive Overhead, Trick Shot, Ace, Riposte, Carnevale.
-4. **Aura** — radius + per-distance grants + entry effects; unlocks the trait
-   and foe-trait aura rows (Shieldmaster, Pelagic Rage, Commander, Abjurer).
-5. **Heroics economy + Infuse/Aether cost** — the class-trait triggers,
+1. **Resource-economy / spend primitives** — the HP-payment seam (sacrifice),
+   ability-use spend (blessing/combo), Infuse-cost, a shared use ledger,
+   Gamble (recorded d6 + result branch → Riposte/Spinning Top/Carnevale/
+   Monogatari/Party Favor/Stack Dice).
+2. **Aura kernel primitives** — radius + per-distance grants + entry effects;
+   unlocks Shieldmaster, Pelagic Rage, Commander, Abjurer, the Black Book.
+3. **Movement primitives** — vacate, occupancy-cost, elevation-fly,
+   pre/post-ability movement, position-swap, teleport-all; then the
+   forced-movement-entry fold.
+4. **Conditional passive gates** — bloodied/25%/terrain/stealth/status/round
+   predicates; converts ~150 foe traits and relic passives.
+5. **Armed one-shot + power-die primitives** — generalize the F6 armed-state
+   consume (Massive Overhead, Trick Shot, Ace, Riposte, Carnevale) and the
+   stance dies (soul-blade, wicked-sheath, gallows-humor).
+6. **Mark-trigger + delay-anchor primitives** — reactive job traits, mark
+   abilities, and the remaining table-facing windows (Symphony motes,
+   Warding Bolts, Fortress).
+7. **Damage-intent provenance** — resistance, wound-taking, counter-type
+   overrides.
+8. **Heroics economy + Infuse/Aether cost** — the class-trait triggers,
    Strive/Demon Strength/Spite/Wolfheart, and the relic invoke cost model.
-6. **Sacrifice + blessing/combo spend + use ledger** — the resource economy
-   primitives that unlock the spend-gated traits and Crimson King.
-7. **Mark-trigger recipes + remaining movement-entry hooks + delay anchor** — the
-   reactive job traits, mark abilities, and the remaining table-facing
-   windows (Symphony motes, Warding Bolts, Fortress).
-8. **Relic invoke / rank / aspect recipes** — the 120 ranks + 40 aspects as
-   data rows.
 9. **Foe recipe primitives + mob model** — the remaining 1,247 foe abilities.
-10. **Trophy / camp / reward primitives** — closes advancement.
+10. **Relic invoke / rank / aspect + trophy / camp / reward primitives** —
+   closes advancement.
 
 Gate discipline (from `freebuff-plan.md`): a primitive only counts when it
 ships the five foundation requirements — durable record, shared factory,

@@ -68,29 +68,31 @@ describe('rules automation coverage gate', () => {
 
   it('reports every source unit and leaves unresolved mechanics visible', () => {
     const { audit } = auditRuleCompilations(collectRuleSourceUnits());
-    // F6: the 22 wired Job traits (incl. the attack-path modifier group —
-    // Demon Edge, Hissatsu, Pulverize, Bull's Strength) + 6 summon suites
-    // are complete programs; F7: the 10 wired talents (the closed
+    // F6: the 23 wired Job traits (incl. the attack-path modifier group —
+    // Demon Edge, Hissatsu, Pulverize, Bull's Strength — and the F9
+    // once-per-round reactive fold row Dash on the Rocks) + 6 summon suites
+    // are complete programs; F7: the 29 wired talents (the closed
     // `talent-recipes.ts` tranche: exceed, comeback, finishing-blow with
     // per-row eligibility extensions, the always trigger for unconditional
-    // charge-scaled augmentations, and the slay/collide post-application
-    // fold) plus the three program-level talents (Demon Cutter t2's
-    // pre-ability rush, Draken Cross t2's charged medium blasts, and Pyre
-    // t1's comeback ally immunity, implemented in the ability programs and
-    // gated on the equipped choice through the projected `talents` surface)
-    // audit as complete — 288 source talents, 26 wired / 3 program-level /
-    // 259 documented. The 43 documented Job traits and every other kind
-    // stay source-visible.
+    // charge-scaled augmentations and the single-foe condition-grant family,
+    // and the slay/collide post-application fold) plus the three
+    // program-level talents (Demon Cutter t2's pre-ability rush, Draken
+    // Cross t2's charged medium blasts, and Pyre t1's comeback ally
+    // immunity, implemented in the ability programs and gated on the
+    // equipped choice through the projected `talents` surface) audit as
+    // complete — 288 source talents, 29 wired / 3 program-level / 256
+    // documented. The 42 documented Job traits and every other kind stay
+    // source-visible.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4750,
-      completePrograms: 403,
-      unsupportedPrograms: 2872,
-      completeClauses: 1543,
-      unsupportedClauses: 3207,
+      completePrograms: 413,
+      unsupportedPrograms: 2862,
+      completeClauses: 1553,
+      unsupportedClauses: 3197,
       unsupportedByKind: {
-        core: 70, 'class-trait': 8, 'job-trait': 43, 'limit-break': 16, 'talent': 259, 'mastery': 144,
-        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 612,
+        core: 70, 'class-trait': 8, 'job-trait': 42, 'limit-break': 16, 'talent': 256, 'mastery': 144,
+        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 606,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
     });

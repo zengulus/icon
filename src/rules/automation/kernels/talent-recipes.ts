@@ -51,12 +51,44 @@ export type TalentEffect =
   | Omit<Extract<RuleMutation, { kind: 'terrain' }>, 'sourceId'>;
 
 /** The fold context handed to a wired row's `condition`/`build`: the
- * encounter state, the ability's own produced mutations, and the ability's
- * target ids. */
+ * encounter state, the ability's own produced mutations, the ability's
+ * target ids, and the acting actor's id (so side-relative predicates such
+ * as "the ability affected exactly one foe" can be expressed without
+ * re-deriving the source from the mutation stream). */
 export interface TalentFoldContext {
   state: EncounterState;
   mutations: readonly RuleMutation[];
   targetIds: readonly string[];
+  actorId: string;
+}
+
+/** The distinct foe actor ids a set of the ability's own mutations affected
+ * through the given interaction kinds (shove / damage). Shared by the
+ * single-foe conditional talent family (e.g. "If you only shove one foe,
+ * they gain hatred of you"): the predicate reads the ability's recorded
+ * mutations — never re-decides anything — so replay applies exactly what the
+ * command boundary folded. Source-ID-free: it derives purely from the
+ * mutation stream and the actors' sides. */
+export function affectedFoeIds(
+  mutations: readonly RuleMutation[],
+  state: EncounterState,
+  sourceActorId: string,
+  kinds: ReadonlyArray<'shove' | 'damage'>,
+): string[] {
+  const sourceSide = state.actors[sourceActorId]?.side;
+  const foeIds = new Set<string>();
+  for (const mutation of mutations) {
+    if (mutation.kind === 'damage') {
+      if (!kinds.includes('damage')) continue;
+      const target = state.actors[mutation.actorId];
+      if (target && target.side !== sourceSide) foeIds.add(mutation.actorId);
+    } else if (mutation.kind === 'move' && mutation.movement === 'shove') {
+      if (!kinds.includes('shove')) continue;
+      const target = state.actors[mutation.actorId];
+      if (target && target.side !== sourceSide) foeIds.add(mutation.actorId);
+    }
+  }
+  return [...foeIds];
 }
 
 /** A wired talent's declared trigger-effect. The `build` factory fills the
@@ -206,7 +238,7 @@ export function talentTriggerMutations(
   const recipe = wiredTalentRecipes[`${abilityId}:talent:${chosen}`];
   const triggerEffect = recipe?.triggerEffect;
   if (!triggerEffect) return [];
-  const context: TalentFoldContext = { state, mutations, targetIds };
+  const context: TalentFoldContext = { state, mutations, targetIds, actorId: actor.id };
   const finishedBlowTargets = targetIds.filter((id) => {
     const target = state.actors[id];
     return Boolean(target && target.side !== actor.side && isBloodied(target));

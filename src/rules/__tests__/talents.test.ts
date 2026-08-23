@@ -42,7 +42,7 @@ interface TalentFixture {
   ally?: EncounterActor;
 }
 
-function talentEncounter(abilityId: string, talent: 1 | 2, options: { heroAt?: { x: number; y: number }; foeAt?: { x: number; y: number }; allyAt?: { x: number; y: number }; bloodied?: boolean; plainFoe?: boolean; terrainCells?: TerrainCell[] } = {}): TalentFixture {
+function talentEncounter(abilityId: string, talent: 1 | 2, options: { heroAt?: { x: number; y: number }; foeAt?: { x: number; y: number }; allyAt?: { x: number; y: number }; bloodied?: boolean; plainFoe?: boolean; terrainCells?: TerrainCell[]; extraFoes?: Array<{ name?: string; at: { x: number; y: number } }> } = {}): TalentFixture {
   let state = createEncounter('Talent fixture');
   const hero = actorFromCharacter(validCharacter('Aster'), options.heroAt ?? { x: 1, y: 1 });
   hero.abilityIds = [abilityId];
@@ -58,6 +58,9 @@ function talentEncounter(abilityId: string, talent: 1 | 2, options: { heroAt?: {
     : createFoeFromProfile('basic:knuckle:301', options.foeAt ?? { x: 3, y: 1 }, 4);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+  for (const extra of options.extraFoes ?? []) {
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: createFoe(extra.name ?? 'Knuckle two', extra.at) }).state;
+  }
   if (options.allyAt) {
     const ally = actorFromCharacter(validCharacter('Rook'), options.allyAt);
     ally.id = 'actor:rook'; // validCharacter shares the hero's timestamp-derived id
@@ -82,14 +85,14 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 10 wired / 3 program-level / 275 documented', () => {
+  it('covers exactly the 288 source talents with 29 wired / 3 program-level / 256 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
     expect(Object.keys(recipes)).toHaveLength(288);
     expect(Object.keys(recipes).sort()).toEqual([...sourceIds].sort());
-    expect(getExecutableTalentIds().size).toBe(29);
-    expect(getDocumentedTalentIds(units).size).toBe(259);
+    expect(getExecutableTalentIds().size).toBe(32);
+    expect(getDocumentedTalentIds(units).size).toBe(256);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -327,6 +330,72 @@ describe('F7 comeback extras (the remaining user-bloodied trigger-effects)', () 
     const notBloodied = executeCommand(full.state, { type: 'USE_ABILITY', actorId: full.hero.id, abilityId: 'knave:riposte', targetIds: [] }, scriptedDice());
     expect(talentMutationsOf(notBloodied, 'knave:riposte')).toHaveLength(0);
     expect(notBloodied.state.actors[full.hero.id].resources.vigilance ?? 0).toBe(0);
+  });
+});
+
+describe('F7 single-foe condition-grant family (the always trigger reads the ability\u2019s own mutations)', () => {
+  it('Valiant talent 2: shoving exactly one foe grants that foe hatred after the ability resolves', () => {
+    const { state, hero, foe } = talentEncounter('bastion:valiant', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:valiant', targetIds: [] }, scriptedDice());
+    // The foe is the only adjacent character across both rushes; the talent
+    // folds hatred onto it. Hatred is a status (core.ts p.104) — the status
+    // lands in the foe's `statuses`, with the hated target recorded as
+    // `ruleState['hatred-of']` for the damage pipeline's halving.
+    expect(result.state.actors[foe.id].statuses).toContain('hatred');
+    expect(result.state.actors[foe.id].ruleState['hatred-of']).toBe(hero.id);
+    expect(talentMutationsOf(result, 'bastion:valiant')).toEqual([expect.objectContaining({ kind: 'condition', conditionId: 'hatred', operation: 'apply', sourceId: 'bastion:valiant:talent:2', actorId: foe.id })]);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Valiant talent 2: shoving two or more foes never grants hatred (control)', () => {
+    // A second adjacent foe means the single-foe predicate fails.
+    const { state, hero, foe } = talentEncounter('bastion:valiant', 2, {
+      heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 },
+      extraFoes: [{ at: { x: 1, y: 2 } }],
+    });
+    const foe2 = Object.values(state.actors).find((actor) => actor.side === 'foes' && actor.id !== foe.id)!;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:valiant', targetIds: [] }, scriptedDice());
+    expect(result.state.actors[foe.id].statuses).not.toContain('hatred');
+    expect(result.state.actors[foe2.id].statuses).not.toContain('hatred');
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Provoke talent 1: affecting exactly one foe grants that foe hatred', () => {
+    const { state, hero, foe } = talentEncounter('knave:provoke', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:provoke', targetIds: [] }, scriptedDice());
+    expect(result.state.actors[foe.id].statuses).toContain('hatred');
+    expect(result.state.actors[foe.id].ruleState['hatred-of']).toBe(hero.id);
+    expect(talentMutationsOf(result, 'knave:provoke')).toEqual([expect.objectContaining({ kind: 'condition', conditionId: 'hatred', operation: 'apply', sourceId: 'knave:provoke:talent:1', actorId: foe.id })]);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Provoke talent 1: affecting two or more foes never grants hatred (control)', () => {
+    // A second adjacent foe means the single-foe predicate fails.
+    const { state, hero, foe } = talentEncounter('knave:provoke', 1, {
+      heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 },
+      extraFoes: [{ at: { x: 1, y: 2 } }],
+    });
+    const foe2 = Object.values(state.actors).find((actor) => actor.side === 'foes' && actor.id !== foe.id)!;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:provoke', targetIds: [] }, scriptedDice());
+    expect(result.state.actors[foe.id].statuses).not.toContain('hatred');
+    expect(result.state.actors[foe2.id].statuses).not.toContain('hatred');
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Showdown talent 2: activating showdown grants the user stealth', () => {
+    const { state, hero, foe } = talentEncounter('freelancer:showdown', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:showdown', targetIds: [foe.id] }, scriptedDice());
+    const stealth = result.state.actors[hero.id].conditions.find(({ id }) => id === 'stealth');
+    expect(stealth).toBeDefined();
+    expect(stealth?.sourceId).toBe('freelancer:showdown:talent:2');
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Showdown talent 2: the un-equipped ability grants no stealth (control)', () => {
+    const { state, hero, foe } = talentEncounter('freelancer:showdown', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    const withoutTalent = { ...state, actors: { ...state.actors, [hero.id]: { ...state.actors[hero.id], talents: {} } } };
+    const result = executeCommand(withoutTalent, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:showdown', targetIds: [foe.id] }, scriptedDice());
+    expect(result.state.actors[hero.id].conditions.some(({ id }) => id === 'stealth')).toBe(false);
   });
 });
 

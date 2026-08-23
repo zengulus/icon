@@ -1,580 +1,624 @@
 # Rules-engine foundations
 
-This is the implementation order for cross-cutting ICON mechanics. It is a
-source-linked engineering ledger, not an automation-coverage claim. None of
-these foundations changes the independently executable program audit or the
-Phase 1/2 gates by itself.
-
-The project currently has 387 reviewed executable programs and 3,223
-unsupported clauses. `PHASE_TWO_READY` and `PHASE_THREE_READY` remain `false`.
-
-## 0. Automation module layout (architecture)
-
-`src/rules/automation/` is split into three layers with a one-direction
-dependency rule — **content → kernels → primitives**:
-
-- **`primitives/`** — content-agnostic vocabulary and builders with no source
-  IDs: the declarative VM types (`types.ts`), the runtime compiler and
-  targeting/spatial-intent seeds, the pure damage/attack/save/status-save
-  kernels, and the job-kit/foe-kit program builders. Nothing here knows a
-  source ID or a job name.
-- **`kernels/`** — shared engine mechanics and their registry machinery, also
-  free of source IDs: `encounter-adapter.ts` (damage/defeat/reactive
-  pipeline), `damage-ledger.ts`, `trigger-window.ts`, `lifecycle.ts`
-  (turn-transition plan/run), `passive-projection.ts` (the projection fold),
-  `attack-modifiers.ts` (the trait attack-modifier fold), `talent-recipes.ts`
-  (the talent trigger-effect fold), `foe-recipes.ts`
-  (generic resolver factories), `runtime.ts`, `core-resolvers.ts`.
-- **`content/`** — everything keyed by source IDs, referencing only the two
-  layers above: `classes/` and `jobs/` (trait-condition recipes, the 45
-  lifecycle rows + dice-window planners, attack-modifier and talent wired
-  rows, summon suites, encounter hooks, the closed `JOB_TRAIT_RECIPES`
-  inventory, the 16 job `programs/`), `foes/` (role baselines, mark recipes,
-  `FOE_ABILITY_RECIPES`, the foe-trait manifest), and `glue/` (compiler,
-  manual-programs, resolvers — content-aware dispatch).
-
-**The registry seam:** content modules register their rows into kernel
-registries at module scope; `content/registry.ts` imports every content
-module for those side effects. Production entry points (`encounter.ts`,
-`movement.ts`, `catalog.ts`, `foes.ts`) and the automation barrel import the
-registry, and every test that exercises registered content does too — a
-missing registry import silently undercounts complete programs in the audit
-(regression-guarded by `__tests__/coverage.test.ts` and the
-`npm run audit:automation` script, both of which import it first).
-
-## 1. Damage and defeat kernel — started
-
-Source: pp.89, 93–95, 102–105, 107.
-
-`automation/primitives/damage-resolution.ts` now owns pure damage determination and the
-HP/vigor application split. `encounter-adapter.ts` derives encounter conditions
-into a typed `EncounterDamageIntent`, applies one final halving only after flat
-reductions, and owns the canonical `defeatActor` lifecycle.
-
-The determined-damage handoff carries an explicit `bypassVigor` flag: p.89
-dangerous terrain is piercing damage that bypasses vigor, while piercing is
-not silently treated as a global bypass rule. Historical held-damage windows
-retain their former divine-only default until they are regenerated.
-
-`automation/primitives/attack-resolution.ts` now owns the pre-damage roll itself. Basic
-attacks, VM effects, job-kit resolvers, core-resolver compatibility calls, and
-Bleak Mercy use its recorded Evasion → d20 → capped boon/curse → total →
-critical sequence, including terrain elevation and Dazed. An Evasion success
-is durably represented as a null d20/total plus its d6 result rather than a
-made-up attack roll.
-
-The same attack result now carries only the two source-backed downstream
-exceptions that damage needs: high ground ignores cover against a lower target
-(p.89), and True Strike ignores Dodge (p.104). They follow only the matching
-attack target's direct hit/miss damage branch; they do not leak into collateral
-areas or unrelated later effects.
-
-The following replay paths now use that application kernel:
-
-- VM damage and held damage;
-- basic attacks;
-- dangerous terrain and Slashed self/ally ability-movement damage;
-- legacy `ABILITY_RESOLVED` records;
-- Vigilance's already-determined legacy event amount;
-- Great Giorgios's delayed damage;
-- Counter and Gentleness reflection.
-
-Source amounts and already-determined amounts are now intentionally distinct:
-`determineAndApplyEncounterDamage()` is for direct reducer/lifecycle source
-damage (terrain, Slashed, delayed Great Giorgios, Counter, and Gentleness),
-while `applyDeterminedEncounterDamage()` is reserved for persisted legacy
-`appliedDamage` records and held interrupt windows. This prevents both
-accidental mitigation bypasses and accidental double mitigation.
-
-`gainVigor` likewise owns the Vitality cap recorded by the checked-in p.105
-source unit plus Rot/Shattered denial. Cure, generic vigor mutations,
-historical Recover replay, and literal Regeneration use it. Bloodied remains
-wound-aware through `isBloodied`.
-
-### Damage ledger (F0)
-
-`automation/kernels/damage-ledger.ts` is now the durable, replay-safe record of one
-damage instance. Every new damage-carrying event shape serializes a
-`DamageLedgerEntry` that declares **which side of the handoff it is**: a
-`handoff: 'source'` entry (p.89 terrain, VM source amounts) replays through
-`determineAndApplyEncounterDamage`; a `handoff: 'determined'` entry (basic
-attack, Vigilance, legacy `ABILITY_RESOLVED`) replays through
-`applyDeterminedEncounterDamage` via the shared `applyDamageLedger` consumer.
-The entry carries the intent provenance (source, target, delivery,
-cover/dodge exceptions), the application ledger (determined/applied amounts,
-HP/vigor split), the application-time HP floor (`flooredAt1` — Defiance p.104
-and Defy Death p.138, never re-inferred from a reduced amount), the defeat
-result, and interrupt-window state. The four split event shapes
-(`ACTOR_MOVED` terrain, `ATTACK_RESOLVED`, `VIGILANCE_SPENT`, and
-`ABILITY_RESOLVED.attack`) are migrated: new events carry the ledger and
-replay consumes it, historical events fall back to their documented legacy
-fields. `docs/damage-template.md` is the authoring procedure, and
-`__tests__/damage-ledger.test.ts` is the required matrix — the same damage
-through basic attack, VM, terrain, held damage, delayed/Slashed, and reactive
-Counter, plus a defiant-target floor case, a legacy-fallback case, and a
-ledger-only case proving replay consumes the record.
-
-The recorded attack roll is now the second half of the F0 ledger: new
-`ATTACK_RESOLVED` events carry an `AttackResolutionLedger`
-(`automation/kernels/damage-ledger.ts`) with the legal target/range/line-of-effect
-provenance the direct gate validated, the command-time cover resolution, the
-attack-window choices (`null` until F4), and the attack's downstream damage
-instance nested inside. Replay consumes `attackResolution.damage`; historical
-events keep the legacy fallback.
-
-### Still TODO
-
-- `TODO(ICON-rules, pp.93–105)`: source-specific damage exceptions must stay
-  typed and narrow. The p.144 Bleak Mercy flags are the model: mark the
-  determination exception (`ignoreArmor`) separately from application
-  exceptions (`bypassVigor`, `ignoreDefiance`), persist any application flag
-  in held damage, and prove that every unnamed defense still works. Do **not**
-  use `divine` as a shortcut, and do not let `ignoreDefiance` bypass the
-  generic `damage-immune` bit until immunity has durable origin provenance.
-- `TODO(ICON-rules, pp.87–94, 107)`: target authority and trigger windows
-  are not yet unified with the `AttackResolutionLedger`. The roll arithmetic
-  is unified; promote Counter/Vigilance/Sturdy once the ledger drives their
-  decision points (F4).
-- `TODO(ICON-rules, p.104)`: do not promote Defiance, Counter, Dodge, Sturdy,
-  or broad foe traits merely because one path is routed. Counter's exact
-  “damaged by an ability” trigger, Dodge delivery coverage, and Sturdy's
-  per-turn forced-movement ledger require the durable damage/trigger model
-  (F0/F4).
-- `TODO(ICON-rules, p.105)`: Vigilance must become a `DamageWindow` /
-  `TriggerWindow` action. Its legacy command does not yet prove range 2,
-  adjacency-breaking/damaged trigger provenance, or one use per triggering
-  event.
-- `Done`: The F4 trigger-window foundation now consumes `DamageLedgerEntry.window` /
-  `AttackResolutionLedger.window` via `openDamageWindowFromLedger`, closing
-  the ledger handoff for replay.
-- `Done`: Rot's `noDefiance` mark state and its REGENERATE ally-mark branch
-  now project through the closed source-ID registry in
-  `automation/kernels/passive-projection.ts` (see the F5 entry below).
-
-## 2. Target and spatial gateway — seed in place
-
-Source: pp.87–92, 94, 104, 107.
-
-`automation/primitives/targeting.ts` is the framework-free seed used by VM selectors and
-the direct one-target gates for basic attacks, reviewed ability commands, and
-reviewed raw rule commands. It makes `self` and `ally` distinct (an ally is
-another living ally under p.92), excludes defeated/off-battlefield actor
-inputs by default, and gives the direct gate one ordered handling of Blind,
-True Strike, Stealth, point-cell range, and line of sight. This also closes
-the former direct-`EXECUTE_RULE` Blind range bypass.
-
-### Spatial gateway (F1)
-
-`automation/primitives/spatial-intent.ts` is now the shared destination-authority
-kernel: every explicit-destination VM path (`place`, `teleport`, and explicit
-`rush`/`fly` positions) builds a `SpatialIntent` and routes through
-`validateSpatialIntent` / `applySpatialIntent`, so bounds, occupancy,
-impassable terrain, and Rampart (p.104) are decided once instead of per
-resolver. The durable record of an applied intent is the serialized
-`move` `RuleMutation`; the gateway consumes the caller's condition-derived
-`rampartObstructed` (fortify/rampart/slip/unstoppable projection) and the
-`coMovedActorIds` batch set so paired swaps validate atomically. This closes
-the former unvalidated `place`/`teleport`/plain-position paths (including a
-real fix: VM rushes/dashes into a Fortify-projected rampart cell are now
-denied, matching the movement planner's MOVE-command rule). `docs/target-template.md`
-is the authoring procedure with the p.92 footprint fixture matrix;
-`__tests__/spatial-intent.test.ts` pins each authority row.
-
-### Still TODO
-
-- `TODO(ICON-rules, pp.87–92)`: extend the state-derived `TargetQuery` from
-  one direct target to listed target sets/cardinality and all ability input
-  shapes. Area center legality and inclusion parity are routed today:
-`computeSpatialArea` validates a burst/line center (bounds, source reach,
-free-center occupancy/passability) and derives the p.95 cells plus
-inclusion, and the generic foe blast resolver consumes it.
-
-- **Done (F1 + spatial authority pass):** the shared kernel
-  (`primitives/line-of-sight.ts`) now owns line of sight (p.92: impassable
-  terrain + explicitly registered LoS-blocking effects) and line of effect
-  (p.109: a distinct gate blocked only by explicit sources); the reducer's
-  `hasLineOfSight` delegates to it, so command gates and the VM share one
-  sampler. `queryDirectTarget`, the foe `requireFoeInRange`/`requireAllyInRange`
-  gates, and `computeSpatialArea`'s center reach all use the p.92 footprint
-  distance (`footprintDistance` — "at least 1 space of its area within the
-  listed range", measured from the edge of the origin character); area
-  inclusion is footprint-aware (p.290: a large foe is inside when any of its
-  spaces is hit); Burst X cells can be filtered by line of sight from the
-  center (p.95). The arc shape and listed target sets/cardinality remain; see
-  `docs/target-template.md` for the remaining matrix rows.
-### Passive projection registry
-
-`automation/kernels/passive-projection.ts` is now the only trait-to-condition
-projection point used by the encounter adapter. It combines the closed
-character trait entries with the separately audited 36-ID foe
-Flying/Phasing manifest. Unknown trait text and role labels have no mechanical
-effect. This registry is deliberately a staging point—not evidence that
-Defiance, Counter, Regeneration, Dodge, Sturdy, or p.298 role baselines are
-complete.
-
-## 3. Save windows — generalized (F2)
-
-Source: pp.94, 102, 104, 129, 143–144, 186.
-
-`automation/primitives/save-window.ts` is now the one durable `SaveWindow` record every
-save emits: `resolveSaveWindow` fills in the **kind** (`status-clear`,
-`cure-immediate`, `effect`, `movement`), the **modifiers** breakdown
-(`sourceModifier`, policy `saveBoon`/`saveCurse`, `blessing`), the
-**threshold**, the denial policy (`forced` records a roll denied without a
-die, e.g. Penumbra vs a blinded foe), and the **continuation branch** (the
-`onSuccess`/`onFailure` AST, retained so a save-reroll interrupt regenerates
-either outcome). It is used by ordinary status saves, Cure/Recover, generic
-VM `save` effects, Penumbra, the legacy core Recover resolver, and — new —
-the Six Hells Trigram exit save: `movementEvents` now resolves that gate
-through the recorded `movement`-kind window (honoring the projected save
-policy, e.g. Rot's curse) and carries the successful record on
-`ACTOR_MOVED.exitSave` instead of a raw command-time d20 (p.129). Each save
-has a stable `windowId`; Rot's curse applies to saves generally, while Sweet
-Torment remains limited to Cure/status-clearing denial.
-
-Sucker Punch (p.143) is extended deliberately by kind: `saveRerollWindow`
-holds only `effect`-kind saves with a declarative `branch` — the only saves a
-foe rolls mid-turn during an ability resolution, where an adjacent hero's
-interrupt can answer within the same turn. `status-clear`/`cure-immediate`
-saves resolve at turn boundaries (closed before any interrupt can answer) or
-are self-rolled (Cure), and `movement` saves are command gates (the failed
-Six Hells exit save rejects the move at command time, so no window exists);
-their durable records are still retained for replay and future interrupt
-coverage. The re-roll itself now recomputes the evaluated modifier from the
-held `modifiers` record and rolls a fresh boon/curse die instead of reusing
-the previous rolled value. `__tests__/save-window.test.ts` is the required
-matrix — a replay pair per kind plus modifier-policy, denial-policy, and
-branch-record fixtures — and `docs/save-template.md` is the authoring
-procedure (relic/legend saves are `effect`-kind windows that construct the
-same spec).
-
-### Still TODO
-
-- `TODO(ICON-rules, p.102)`: expose Blessing choices for generic saves by
-  stable `windowId`, with bounded transport validation and replay consumption.
-  The record already persists the `modifiers.blessing` spend; the generic
-  *input* plumbing (a `saveChoices` map keyed by `windowId` on the VM
-  `save` effect) is what remains. The current actor/status choice map
-  intentionally remains only for known core status windows.
-- `TODO(ICON-rules, p.129)`: the failed Six Hells exit save's "unable to
-  exit until the start of their next turn" continuation is source-visible — a
-  persistent lockout needs the F3 turn-transition lifecycle to clear it.
-  Today a failed attempt is rejected deterministically and the foe may try
-  again; the movement record documents the window.
-- `TODO(ICON-rules)`: delayed/multiple save choices in a first-class
-  window/event record are still pending; the single-save continuation branch
-  is retained on every record today.
-
-## 4. Turn transitions and lifecycle — `TurnTransitionIntent` + registry (F3, executed)
-
-Source: pp.87, 91, 94, 103–104, 107, 129, 186.
-
-Every `TURN_ENDED` event now carries the durable **`TurnTransitionIntent`**:
-`cause` (`voluntary` / `ability-tag` / `forced-status` / `rule-requested`),
-the **ordered lifecycle participants** that ran (the `LIFECYCLE_RECIPES`
-rows whose `applies` gates passed at the command boundary), the **dice
-windows** pre-rolled at the boundary (Carnevale detonation p.150, Monogatari
-song p.179 — recorded JSON-clean so the checkpoint boundary accepts them),
-and `roundAdvance`. `planTurnTransition` builds the intent at command time;
-`runLifecyclePhase` executes exactly the recorded participants — replay never
-re-rolls or re-decides which hooks run.
-
-Every hand-wired hook migrated into the closed registry
-(`src/rules/automation/kernels/lifecycle.ts`): turn-end (soul-blade, Dark
-Knight vigilance, Exorcism, Showdown, Warding Bolts, Assassinate, Incubus,
-Umbral Echo, Sidhe, Stampede, Underway, Monogatari, Chastise, Carnevale),
-the **`delayed` phase** (Great Giorgios — runs after the per-actor flag
-reset at its historical `resolveDelayedMarkEffects` position so its fresh
-rush is on the next turn's clock), and turn-start (Six Hells Trigram, Dark
-Knight hatred, Intimidate, Gallows Humor, Astral Chain, Warding Bolts,
-Morrigan, Strength of the Pack, Aria, Symphony, Monogatari). The dead
-hand-wired resolvers were deleted from `encounter.ts`; a hook joins the
-boundary as a recipe row (see `docs/lifecycle-template.md`), never by
-editing the drivers.
-
-### Still TODO
-
-- `TODO(ICON-rules, pp.102, 178–179)`: make lifecycle Cure callers such as
-  Aria and Chastise declare whether they open a full Cure save window. They
-  presently preserve historical deterministic vigor-only behavior rather than
-  silently rolling unrecorded dice.
-- `TODO(ICON-rules, p.129)`: the Six Hells failed-exit continuation ("unable
-  to exit until the start of their next turn") can now be expressed as a
-  turn-start lifecycle recipe once its state is reviewed.
-
-## 5. Trigger/window provenance — `TriggerWindow` registry (F4, executed)
-
-Source: p.107 (and the interrupt suites: pp.122–128, 138, 143, 151).
-
-The interrupt-window protocol now has **one decision point and one replay
-entry point** in `src/rules/automation/kernels/trigger-window.ts`:
-
-- `TRIGGER_WINDOW_RECIPES` — the closed registry keyed by trigger
-  (`when-damaged`, `defeated`), each row answering from durable provenance
-  whether a window opens. Ordered so the more specific trigger wins
-  (when-damaged before defeated), matching p.107.
-- `decideDamageWindow` — the single decision point, shared by the single-pass
-  VM path (`applyDamage` now routes its hold decision through it) and the
-  split-event path (`attackEvents` records the decision on the attack's
-  `AttackResolutionLedger.window` and the nested damage ledger at
-  construction time).
-- `openDamageWindowFromLedger` — replay opens the window from the recorded
-  `DamageLedgerEntry.window`; it never re-evaluates the target's availability
-  or the blow's lethality, and a held blow is not applied until the interrupt
-  answers or the boundary drains it. A held `ACTOR_DEFEATED` is suppressed for
-  a held blow (the interrupt decides whether the target falls); a held record
-  whose trigger is outside the closed registry is declined so the damage
-  still applies.
-
-This closes the F0 handoff: the ledger's `window` record is now consumed, so
-Counter's "damaged by an ability" trigger, Vigilance's range-2 attack window,
-and Sturdy's per-turn forced-movement ledger can be promoted from the ledger
-records (F5). See `docs/trigger-template.md` for the authoring procedure and
-`__tests__/trigger-window.test.ts` for the matrix.
-
-### Still TODO
-
-- `TODO(ICON-rules, pp.104–107)`: promote Counter to fire only from a durable
-  damage window proving "damaged by an ability" (the ledger records the
-  delivery/instance provenance it needs).
-- `TODO(ICON-rules, p.105)`: bind Vigilance's `guard`/`punish` uses to a real
-  trigger record with range 2/adjacency and a full DamageIntent before
-  promoting it.
-- `TODO(ICON-rules, p.104)`: give Sturdy its per-turn forced-movement ledger
-  (the movement record currently re-derives the maximum from the condition
-  set at replay).
-
-## 6. Passive projection and role baselines — closed source-ID recipes (F5, executed)
-
-Source: pp.104–105, 186, 298 (+ the foe trait corpus).
-
-The p.298 foe-role baselines now project through the closed
-`FOE_ROLE_BASELINE_RECIPES` table in `kernels/passive-projection.ts`, keyed by
-`FoeRoleId` — never parsed from `traitsText` prose:
-
-- **Skirmisher** → `dodge` (missed attacks and area effects deal no damage).
-- **Artillery** → `slip` (ignores Rampart) + `aetherwall` (halves damage from
-  beyond range 2).
-- **Heavy** → `rampart` (foes cannot dash/fly/teleport into spaces adjacent to
-  the heavy).
-- **Mob / Leader / Legend** → no condition projection.
-
-Non-condition halves stay with their dedicated mechanics: the Heavy Guard's
-armor-2 reduction is `guardArmorBonus` in the damage kernel (self + same-side
-orthogonally adjacent allies, Manhattan 1), and the Legend Juggernaut clears
-the legend's statuses and marks at the round-start boundary. `encounterConditionSet`
-folds `projectedRoleConditions(actor.roleId)` in with the trait and mark
-projections, so every consumer sees the same set.
-
-### Still TODO
-
-- `TODO(ICON-rules, pp.104–105)`: the Defiance, Counter, Dodge, Sturdy,
-  Stealth, and Unstoppable conditions still have no reviewed passive source;
-  they remain fixture-only until a source unit (trait/role/phase) is promoted
-  with its damage/trigger/lifecycle matrix. Role labels must not be mapped
-  beyond the p.298 rows above.
-- `TODO(ICON-rules, p.298)`: the Legend Juggernaut clear is handled at the
-  round boundary today; it can move into a round-start lifecycle recipe phase
-  when the registry grows one.
-
-## 7. Job traits — closed inventory, five wiring homes (F6, executed)
-
-All 65 Job traits are cataloged in `automation/content/jobs/job-trait-recipes.ts`
-(`JOB_TRAIT_RECIPES`): each row is `wired` (real engine mechanics, source
-fixtures) or `documented` (source-visible ruling, never approximated). A row
-is wired only when it has a durable record, a shared kernel, a declarative
-recipe, a closed source-ID manifest, and a deterministic replay fixture.
-
-The five wiring homes:
-
-- **Condition projections** (`kernels/passive-projection.ts`
-  `JOB_TRAIT_CONDITION_RECIPES`, folded into `encounterConditionSet`): Sealer
-  martial arts → dodge, Shade shadow arts → phasing, Colossus furious
-  berserk / Enochian embersoul → regeneration. Consumable conditions are
-  never projected — Defiance is granted durably at combat start.
-- **Combat-start grants + companion summons** (`COMBAT_START_TRAIT_RECIPES`,
-  applied once on `ENCOUNTER_STARTED`, idempotent): Embersoul and Furious
-  Berserk durable Defiance; Godly Smite mantra die seed 1; Beast Master
-  great beast, Bound Spirit seraph, Selkie elemental — persistent
-  companions (`state.companion`) that survive the owner's defeat, placed at
-  the trait's range. The six summon suites cap active entities per owner at
-  six per type (`content/jobs/summon-recipes.ts`).
-- **Lifecycle recipes** (`kernels/lifecycle.ts` `LIFECYCLE_RECIPES`, incl. the
-  new `round-start` phase): True Horn sturdy round-start/turn-start halves;
-  Blackheart status-counted vigilance + bonus-damage at turn end (the count
-  is recorded on `TurnDiceWindows` before the end-of-turn saves consume the
-  statuses); Mark of Tsumi 2 piercing per marked foe + blessing at turn end;
-  Godly Smite mantra +1 per round from round 2; Furious Berserk bloodied
-  vigilance; Phoenix Rage / Orogenic Rage / Storm Hilt Rage from round 5.
-  Replay executes exactly the recorded participants — the recorded list is
-  the decision, never re-decided at replay — and `planTurnTransition`
-  evaluates the turn-start/round-start gates against the **next** round so
-  round-gated rows are recorded before the boundary advances.
-- **Active resolvers** (`content/jobs/job-trait-resolvers.ts` `JOB_TRAIT_RULE_RESOLVERS`,
-  registered in `RULE_RESOLVERS`; executed via `EXECUTE_RULE`): Knave taunt
-  (Hatred of the user in range 3), Spellblade klingenkunst (teleport 2).
-- **Attack-path modifier kernel** (`kernels/attack-modifiers.ts`): Demon Edge,
-  Hissatsu, Pulverize, and Bull's Strength execute through shared hooks
-  instead of per-site code. `traitAttackModifier(owner, elevationDiff)` is
-  the single fold both attack sites read — the declarative VM
-  (`runtime.ts` `case 'attack'`: boon/true-strike merge into the roll
-  intent, Pulverize's +2 flat rides the damage provenance into the
-  attack's direct damage, the exceed threshold feeds the roll's
-  `exceedThreshold` so 13+ fires at two elevations higher) and the direct
-  basic attack (`encounter.ts` `attackEvents`, plus `effectiveDamageDie`
-  for Hissatsu's d10). Armed one-shot state is consumed by the attack that
-  reads it (VM: mid-command view mutation so a multi-target ability only
-  applies to its first roll, plus reducer-time consume; direct path:
-  reducer-time consume next to `consumeMassiveOverhead`). Demon Edge
-  arming rides the ability's event as recorded mutations when the ability
-  triggered a slow-turn or delay (a delay tag or a `six-hells:slow-turn`
-  state mutation), and the bonus-damage window expires at the end of the
-  owner's next turn (turn-end recipe gated on the recorded armed round);
-  Hissatsu arms at turn end when the owner did not attack (turn-end
-  recipe); Bull's Strength appends collide damage through
-  `bullStrengthCollideMutations` in `executeRuleProgramWithReactiveTriggers`
-  (the shared `collidingShoveTargets` detection, once per turn — the guard
-  is a recorded ruleState mutation, cleared by the turn-end recipe).
-- **Command/kernel hooks**: Path of the Aesi free Dash while Stealthy
-  (`encounter.ts` `ACTOR_MOVED`), Green Kenning terrain-penalty immunity
-  (`movement.ts`), the entity cap and companion-survival exempt in
-  `removeOwnedEphemera` (`encounter-adapter.ts`).
-
-### Still TODO
-
-- 43 of 65 traits remain `documented` — Heroics-economy choices (Strive,
-  Wolfheart, Spite), spatial-aura mechanics (Shieldmaster), and reactive
-  windows (Press the Advantage, Great Leap, martial-master double-stance,
-  the summon lash-outs) need their home kernels first.
-- `TODO(ICON-rules, p.141)`: Blackheart's legacy no-intent fallback counts
-  only post-save statuses; only the recorded-window path is faithful (no
-  legacy blackheart events exist, so this is inert today).
-
-## 8. Talents — closed inventory + trigger-effect fold (F7, executed tranche)
-
-All 288 Job talents (two per ability) are cataloged in
-`automation/content/jobs/talent-recipes.ts` (`getTalentRecipes(units)` — the closed
-inventory built from the source manifest, exact by construction; the catalog
-test enforces the same 288-id equality). Each row is `wired` (real engine
-mechanics through the shared fold), `program-level` (implemented by the
-ability's own program, which reads the equipped choice through the projected
-`talents` surface and emits the variant itself — executable but not a fold
-row, so the fold never double-applies it), or `documented` (source-visible
-ruling with the kernel it needs — classifier-backed, never approximated).
-The wired table is explicit and never touches the manifest, so the module
-stays out of the catalog ↔ manual-programs import cycle.
-
-The wired tranche (10) executes through one shared kernel,
-`talentTriggerMutations`, folded into `abilityEvents` and `EXECUTE_RULE` at
-command time: a talent declares a `triggerEffect` and its mutations ride the
-ability's RULE_MUTATIONS_APPLIED event, so replay applies exactly what the
-command decided (F0 durable record). A row may declare a `condition`
-override (a per-row fired check that replaces the trigger kind's default,
-e.g. an extended-eligibility finishing blow), and `build` receives a fold
-context (encounter state + the ability's own mutations) when it needs them.
-
-Separate from the fold, the `program-level` talents are implemented by the
-ability programs themselves, gated on the equipped choice through the
-projected `talents` surface (`context.state.actors[id].talents[abilityId]`,
-populated by `encounterRuleState` alongside `traitIds`):
-
-- **Demon Cutter talent 2** (p.128, "Your can rush 1 before using Demon
-  Cutter. Charge: Rush 3 instead.") — a pre-ability movement that changes
-  the line attack's origin, which a post-mutation fold cannot express. The
-  resolver emits the rush mutation before the attack mutations, gated on
-  the talent — never on the `charge` trigger alone — with the direction a
-  caller choice defaulting to the nearest-foe axis.
-- **Draken Cross talent 2** (p.128, "Charge: Increase range to 5, and all
-  areas may be increased to medium blasts instead.") — on a slow turn both
-  blasts become medium (radius 2) and the second-blast search extends to
-  range 5. The "may" upgrade resolves deterministically as the charged
-  reading (the player's option is only a downgrade); the attack target
-  itself stays capped by the generic USE_ABILITY range gate, so the range
-  boost lives in the resolver's second-blast placement.
-- **Pyre talent 1** (p.209, "Comeback: Allies are immune to damage from
-  this ability.") — the first program-level comeback clause: while the
-  user is bloodied (the same flag `deriveTriggers` turns into the
-  `comeback` trigger), the Pyre resolver skips allies in the ability's
-  area damage — the blast fray and the comeback/exceed re-explosion.
-
-All three audit as complete (387 complete programs) with their source
-fixtures and replay pairs in `__tests__/demon-slayer.test.ts` and
-`__tests__/enochian.test.ts`.
-
-- **`exceed`** — fires when the ability's produced `attack` mutation rolled
-  15+ (the engine's exceed threshold, runtime.ts); Demon Cutter talent 1
-  (6 vigor), Strafe Shot talent 1 (evasion until the start of your next
-  turn, a `turn-start` boundary duration).
-- **`comeback`** — fires while the user is bloodied (the same check as
-  `deriveTriggers`); Low Blow talent 2 (vigilance +1), Blazing Bond talent 2
-  (durable defiance on the user and the bonded ally), Riposte talent 2
-  (vigilance +1 after the ability resolves).
-- **`finishing-blow`** — fires when the ability targets a bloodied foe (the
-  same check as `deriveTriggers`, ICON p.95), with per-row eligibility
-  extensions via the `condition` override. Party Favor talent 2 (p.151,
-  "Dazed or Blinded foes activate the Finishing Blow effect"): the mine's
-  detonation is the ability's clause ("Foes take 2 damage, twice"); the
-  row's condition fires only when the detonation happened (area damage is
-  present), a dazed or blinded foe is in the blast, and the ability's own
-  clause did not already fire — it extends eligibility, it never doubles.
-- **`always`** — fires on every use of the ability (an unconditional
-  augmentation whose magnitude reads the fold context). Dropkick talent 2
-  (p.136, "Shove your foe 1, then shove yourself 1 away from your foe.
-  Charge: Increase shoves to 2"): the shoves always fire, and the charged
-  variant reads the user's slow-turn state (the same flag `deriveTriggers`
-  turns into the `charge` trigger) for the distance.
-- **`slay` / `collide`** — post-application triggers (ICON p.95): the
-  caller passes the reactive targets (`collidedActorIds` / `slainActorIds`)
-  computed from the ability's recorded mutations by the same reactive dry
-  run that derives the ability's own clauses (`collidingShoveTargets` /
-  `reactiveSlayTargets` in the adapter — `talentReactiveTrigger` gates the
-  dry run to equipped slay/collide talents only), and the fold fires when
-  the relevant set is non-empty. Valiant talent 1 (collide → unstoppable
-  until the end of your turn), Umbra talent 1 (slay → defiance), Dragon
-  Dive talent 1 (collide → each collided character becomes vulnerable).
-
-The remaining finishing-blow rows stay documented with their precise
-blockers: Death Blossom talent 1 (p.162, "Teleport all characters in the
-area 1") needs the teleport destinations, which are player choices the
-command/protocol surface deliberately does not carry (USE_ABILITY input is
-restricted to Blessing choices); Stampede talent 1 (p.170, "may transfer
-the mark to them") needs a may-choice mark redirect across commands. The
-rest of the `charge` family (and the comeback modifier rows) stay
-documented too: they are ability-behavior variants ("Rush 3 instead",
-"Increase range to 5", "Large blast") that change the ability's own
-resolution, so their home is the ability programs' charge variants — the
-pattern the Chanter programs already follow
-(`context.triggers?.has('charge')`), not the fold.
-
-The actor now carries `talents: Record<abilityId, 1 | 2>` (projected from
-the character loadout in `actorFromCharacter`; validated by the room
-validator and the protocol schema). Fixtures in `__tests__/talents.test.ts`
-(19): inventory exactness, each wired behavior with its control, replay
-pairs, the un-equipped negative, and the documented-talent closed negative
-— bite-verified (disabling the fold fails the behavior tests).
-
-### Still TODO
-
-- 275 of 288 talents remain `documented` — pre/post-ability movement,
-  Heroics/sacrifice economies, blessing/combo spend hooks, aura mechanics,
-  and the ability-specific modifier hooks each need their home kernel
-  before promotion, exactly as their rows describe.
-- `TODO(ICON-rules, p.85)`: the fold's exceed check reads the produced
-  attack mutation's total; asserted-exceed abilities (massive overhead's
-  armed pit, Ace) need the same total/assertion parity the programs already
-  keep.
-
-## Required foundation tests before promotion
-
-Any later source-ID trait/ability promotion that relies on these systems must
-add the appropriate matrix, not just a happy-path unit fixture:
-
-- the same damage through basic attack, VM, terrain/Slashed, delayed effect,
-  held damage, and reactive damage;
-- target legality parity across `USE_ABILITY`, `EXECUTE_RULE`, and VM inputs;
-- a replay pair for each `SaveWindow` kind and its modifier/denial policy;
-- normal, forced, tagged, and state-requested turn-end parity;
-- a closed source-ID passive recipe plus a non-recipe exclusion assertion.
-
-Until those matrices exist, the relevant source text stays visible and the
-automation audit remains conservative.
+**Primary architecture authority.** This document maps the ICON 1.5 combat
+ontology (core rules + Combat Glossary + Advanced Combat, the *Book of Battle*)
+to the engine's primitive/kernel vocabulary. It is the source-to-foundation
+index for the repository and is the reference the derived ledgers
+([`kernels-needed.md`](kernels-needed.md), [`primitives-needed.md`](primitives-needed.md),
+[`blocker-census.md`](blocker-census.md)) defer to.
+
+Authority ordering (from `AGENTS.md`):
+
+1. ICON source text — semantic authority.
+2. Implementation code — execution authority.
+3. Automation audit — coverage authority.
+4. Documentation — never execution authority.
+
+So this file is **not** a coverage claim and its status column never overrides
+`npm run audit:automation` or the phase gates. Where this file and the docs'
+older prose conflict, this file wins — it is derived first from the source
+vocabulary, then validated against implementation.
+
+---
+
+## 1. Method
+
+This pass derives architecture from the game's own combat ontology rather than
+from unresolved talents or census blocker names. The sequence:
+
+1. Read the core combat rules (pp.81–101), the **Combat Glossary** (the
+   source-defined inventory of named reusable combat mechanics, pp.102–105),
+   and **Advanced Combat** (interaction/edge-case authority, pp.106–109).
+2. Decompose each named mechanic into orthogonal engine semantics (timing /
+   predicate / selector / cost / state / mutation / modifier / duration /
+   lifecycle / interaction).
+3. Classify each against implementation: **COMPLETE / PARTIAL / MISSING /
+   DUPLICATED / MISPLACED**.
+4. Map every glossary term to a primitive, a kernel, or a composition.
+5. Scan the content corpus (jobs, talents, masteries, limit breaks, relics,
+   foes, trophies, camp/rewards) only *after* the ontology is fixed, to find
+   compositions and genuinely non-glossary foundations.
+6. Regenerate the blocker census and consent to a given primitive only from the
+   regenerated dependency graph.
+
+The default expectation for any unresolved source unit is that it **composes**
+glossary/core vocabulary, possibly with a reusable modifier. Architecture is
+never inferred from an ability name.
+
+---
+
+## 2. Source combat ontology
+
+Everything below is a named mechanic with an exact source contract. Terms are
+grouped by their role in the rules (state vs trigger vs operation vs modifier)
+so that repeated decompositions share one vocabulary.
+
+### 2.1 Core combat framework (pp.81, 87–90)
+
+| Source mechanic | Contract (exact) | Page |
+| --- | --- | --- |
+| **Turn structure** | Move + two actions, any order; one ability with the Attack tag per turn; no repeats of any costed ability | 87, 91 |
+| **Round** | All allies and foes have taken a turn; new round begins | 81 |
+| **Slow Turn** | Acts after all non-slow characters; same ally/foe alternation; some abilities charge on slow turns | 87, 103 |
+| **Interrupt** | Used off your turn, a set number between turns (Interrupt 1/2), one per turn, refreshed at your turn start; has a trigger; resolves before continuing the action | 91, 106 |
+| **Standard Move** | Free action; move up to Speed orthogonally | 87, 103 |
+| **Engagement** | Exiting a space adjacent to a hostile +1 movement | 88, 103 |
+| **Orthogonal only** | All movement orthogonal unless specified | 88 |
+
+### 2.2 Character model (p.81–82)
+
+| Source mechanic | Contract | Page |
+| --- | --- | --- |
+| **Vitality (VIT)** | 25% of base max HP shorthand | 81 |
+| **Hit Points (HP)** | 4× VIT; 0 = defeated | 81 |
+| **Wound** | 25% of HP permanently (until interlude) off max; 4 wounds = fallen | 81, 101 |
+| **Vigor** | Temporary shield over HP; damage goes to vigor first; stacks to the VIT cap; vigor surge = fill; all vigor lost at combat end | 81, 100 |
+| **Defense** | To-hit must reach it | 82 |
+| **Speed / Size** | Move distance; 1×1 footprint for PCs | 82 |
+| **Damage die [D] / Fray** | Class die; fixed fray damage | 82, 92 |
+| **Saves** | d20, success on 10+ | 82, 94 |
+| **Resolve** | Party (reset each round) + personal pools; spent at the beginning of the action | 82, 99 |
+| **Traits / Abilities / Talents / Mastery** | Passive scope; up to six abilities + one limit break; talents enhance abilities; mastering enhances further | 82 |
+| **Bloodied** | At or under 50% of base max HP | 94, 104 |
+| **Incapacitated** | At 0 HP; cannot act; statuses/marks/created effects end; summons/objects placed by it removed unless terrain/objects | 94, 104 |
+| **Defeated** | At 0 HP clears all statuses/marks/stances/vigor/effects; no turn; PC gains a wound; rescue ends incapacitation and heals to full minus wounds | 101 |
+| **Fallen** | 4 wounds | 101 |
+| **Fleeing** | Spend 1 movement at the edge with no adjacent foe | 101 |
+
+### 2.3 Movement and the battlefield (pp.87–90)
+
+| Source mechanic | Contract | Page |
+| --- | --- | --- |
+| **Dash** | Ignore engagement; half speed at 1 action | 88, 103 |
+| **Rush X** | Move X; unstoppable and immune to all damage while moving | 88, 103 |
+| **Fly** | Ignore engagement, terrain, height cost, obstruction while moving | 88, 104 |
+| **Teleport** | Instantly move to an unoccupied space in range X; ignore everything in between | 88, 104 |
+| **Remove / place** | Not movement; no movement triggers (vigilance/rampart); removed characters skip turns | 88 |
+| **Shove X** | Move involuntarily X in a straight line away; collide into characters/objects/higher elevation | 103 |
+| **OBstruction** | Cannot enter a space occupied by it (foes/terrain/objects) | 103 |
+| **Basic Terrain** | No effect; has elevation | 89 |
+| **Difficult Terrain** | +1 to exit | 89, 103 |
+| **Dangerous Terrain** | 2 piercing damage to enter/exit, ignoring armor & vigor; once per turn | 89, 103 |
+| **Impassable** | Obstruction and cover, blocks line of sight | 89 |
+| **Slope** | Exiting ignores one elevation level | 89 |
+| **Pit** | Counts as one lower elevation | 89 |
+| **Object** | Size 1–3; obstruction/cover; immune to damage unless specified; can be destroyed (10 HP, auto-hit, fail saves) | 89, 95 |
+| **Terrain effect** | Modifies terrain spaces; overlaps; not removed on defeat | 95–96 |
+| **Cover** | Half damage from ranged abilities; determined at application; adjacent foes ignore it; higher elevation ignores lower cover | 89, 92 |
+| **Height advantage / disadvantage** | +1 boon per level attacking down; +1 curse per level attacking up | 89 |
+
+### 2.4 Abilities, targeting, areas (pp.91–98)
+
+| Source mechanic | Contract | Page |
+| --- | --- | --- |
+| **Targeting kinds** | Self / Ally / Foe / Characters / Others / Space / Object / Summon | 91–92 |
+| **Range** | ≥1 space of the target's area inside the listed range; measured from the edge | 87, 92 |
+| **Line of sight** | See and interact; blocked by impassable terrain + explicit LoS blockers | 92 |
+| **Line of effect** | Ability must trace a clear path; blocked only by explicit sources | 107 |
+| **Area patterns** | Line X, Arc X, Blast (small/medium/large), Burst X | 97 |
+| **AoE / attack space** | Cover & LoS counted from origin; AoE hits all specified; attack space rolls an attack | 97 |
+| **Summon** | Intangible; not a foe/ally; not marked; summon action/effect on summoner's turn; removed when summoner defeated; only free space + LoS unless specified | 95, 104 |
+| **Auto-hit** | No attack roll, always a hit, never crit/miss | 102 |
+| **Critical Hit** | Total 20+; +[D] base damage; still a hit | 94, 103 |
+| **Exceed** | Total 15+; a triggered effect | 95, 103 |
+| **Effects** | Simply happen; no roll/save; some off-turn no-cost | 94, 103 |
+| **Delay** | Next turn must be slow; activates at start of that turn before all else | 95, 103 |
+| **End turn** | Ability ends your turn; only one chosen if multiple | 103 |
+
+### 2.5 Statuses (pp.104–105)
+
+| Status | Contract |
+| --- | --- |
+| **Slashed** | Take 4 damage after you or an ally uses an ability that moves you; once per turn |
+| **Blind** | Max range of all abilities is 2 |
+| **Dazed** | +1 curse on attacks |
+| **Hatred of X** | Half damage to foes other than X; ends at your turn end or if X is untargetable/immune |
+| **Pacified** | Half damage; breaks when damaged by a foe's ability |
+| **Sealed** | Cannot inflict statuses |
+| **Shattered** | Cannot gain or benefit from vigor |
+| **Stunned** | Cannot take interrupts; your next ability ends your turn, then Stunned ends |
+| **Weakened** | All damage dealt reduced by 2 |
+| **Vulnerable** | All damage taken increased by 1 |
+| **Ongoing (+)** | Cannot be saved against, removed, or ignored until the source ends |
+
+### 2.6 Positive effects / special states (pp.104–105)
+
+| Effect | Contract |
+| --- | --- |
+| **Bloodied** | At or under 50% HP (special state) |
+| **Immobile** | Cannot move, be moved, or be removed (special state) |
+| **Counter** | When damaged by an ability, deal 2 damage back per applied instance |
+| **Defiance** | Prevent HP below 1 once; then immune to all damage for the rest of the turn |
+| **Divine** | Damage cannot be mitigated except immunity; bypasses vigor |
+| **Dodge** | Immune to damage from misses, successful saves, and area effects |
+| **Evasion** | d6 on attack; 4+ auto-misses, checked before the roll |
+| **Flying** | Ignore terrain/height/obstruction/engagement |
+| **Intangible** | Immune to foe damage/effects; no obstruction/engagement |
+| **Phasing** | Pass through obstructions, not end in their space |
+| **Pierce** | Ignore armor and Weakened |
+| **Rampart** | Foes cannot enter/exit by dash/fly/teleport |
+| **Regeneration** | If bloodied, gain 4 vigor at turn end |
+| **Skirmisher** | Move diagonally; dash is full speed |
+| **Stealth** | Cannot be directly targeted except from adjacency; breaks on abilities other than dash/standard move |
+| **Sturdy** | Foe move/place effects move at most 1 space per turn |
+| **True Strike** | Ignores dodge, blind, evasion, stealth |
+| **Unerring** | Ignores cover and aetherwall |
+| **Unstoppable** | Immune to statuses; cannot be moved by foes; movement ignores engagement and rampart |
+| **Vigilance X** | X charges; spend for damage reduction on an ally in range 2, or damage on adjacency-break; once per trigger |
+| **Vigor** | Shield over HP; see §2.2 |
+| **Aura X** | Continuous ongoing effect on all in range X of an origin; only while inside |
+
+### 2.7 Triggered effects (pp.95, 102–103)
+
+| Trigger | Contract |
+| --- | --- |
+| **Chain Reaction** | Wright; when this ability damages two or more foes |
+| **Charge** | When the ability is used on a slow turn |
+| **Collide** | On any character shoved into an obstruction by this ability |
+| **Comeback** | When the user of this ability is bloodied |
+| **Heroic** | Stalwart; when its job-specific condition is fulfilled |
+| **Infuse** | Wright; when Aether is spent on an ability |
+| **Exceed** | On a total attack roll of 15+ |
+| **Finishing Blow** | Vagabond; when this ability targets a bloodied foe |
+| **Slay** | When this ability reduces a character to 0 HP |
+
+Each unique triggered effect can only trigger **once per ability** (once per
+trigger), p.95, 103, 107.
+
+### 2.8 Other named glossary mechanics (pp.102–104)
+
+| Mechanic | Contract |
+| --- | --- |
+| **Armor X** | Reduce all damage taken by X; take the highest value |
+| **Bonus damage** | Roll one more [D] per instance and pick the highest |
+| **Blessing** | Token; default spend = +1 boon on a save; all discarded at combat end |
+| **Cure** | Gain 4 vigor, or a vigor surge if bloodied; then may save against all statuses |
+| **Combo** | Base + combo version; use base → gain a combo token; use combo & have a token → combo version, discard; one token at a time; discarded at combat end |
+| **Gamble** | Roll 1d6; trigger the effect on the listed result or higher |
+| **Mark** | Ongoing effect; one mark per ability per character; replacing choice; ends if the placer is defeated or listed conditions |
+| **Ongoing (+)** | Cannot be purged/removed/avoided until its source is ended |
+| **Power Die** | A point-of-contact die, ticked up/down by conditions, discarded at 0; unique to the granting ability |
+| **Rebound** | Bounce an ability off a character in range; it redirects from that character's space; does not stack |
+| **Resistance** | Take half damage, rounded up |
+| **Sacrifice X** | Reduce HP by X as a cost; paid at ability start; cannot be reduced/ignored/transferred/resisted; cannot go below 1; may pay even if not enough HP |
+| **Stance** | Ongoing positive; one active at a time; drop by new stance or as a free action at turn start; refresh regains effects |
+| **Triggered effect** | Effect that activates under a condition; each unique effect once per ability |
+
+### 2.9 Advanced-combat interaction rules (pp.106–109)
+
+These refine kernel contracts and must be engine semantics, not content
+exceptions:
+
+- **Adjacent** includes higher/lower elevation; a character is not adjacent to
+  itself.
+- **Ability stacking** — same-name abilities/effects do not stack.
+- **On hit / miss / crit** — improvements only improve the attack portion;
+  critical hits may trigger hit effects.
+- **Damage order** — attacker effects (bonus damage) first, then defender
+  reductions (armor), then defender multiplications (resistance/halving);
+  halving once; vulnerable/weak per instance.
+- **Interrupt/effect order** — effects in listed order; external effects before
+  the actor's own; hostile before beneficial; interrupts resolve most-recent
+  first and by turn order on ties.
+- **Can/May** — unless an effect says may/can, it is mandatory.
+- **Range increase** — only if the ability already has a listed range.
+- **Shoves** — not optional; straight lines; may not shove off the edge.
+- **Immunity / intangibility** — untargetable/immune characters don't trigger
+  damage-reliant effects.
+- **Valid spaces** — summon/teleport/place require free, unobstructed, LoS.
+- **Turn breakdown** — start-of-turn endings, delay activation, actions, then
+  post-ability triggers, then end-of-turn saves, then end-of-turn triggers;
+  interrupts always take priority.
+- **Specific tag interactions** — Blessing non-unique; Counter triggers on
+  ranged and unseen; Evasion only vs attack components; Hatred not vs
+  untargetable/immune; Immobile blocks all move forms; Marks per-character;
+  Pacified only breaks on foe-ability damage; Stealth breaks and AoE rules;
+  Unstoppable vs statuses/movement; Vigilance is an effect not interrupt;
+  Vulnerable/Weakened per instance.
+
+---
+
+## 3. Primitive map
+
+The **primitive layer** holds source-ID-free atomic semantics: values/state,
+selectors, predicates, numbers, costs, typed mutations, typed modifiers,
+durations, recorded choices/dice. Found at `automation/primitives/`.
+
+### 3.1 Declarative VM vocabulary (`primitives/types.ts`)
+
+The execution-complete layer. Effect kinds: attack, damage, heal, vigor,
+condition, cure, move, resource, actions, terrain, entity, mark, stance,
+persistent, modifier, save, if, repeat, defeat, phase, end-turn, state.
+Selectors (12), number expressions (18), predicates (11), durations (8),
+movement kinds (7: rush/shove/fly/teleport/place/remove/swap), shared resources
+(resolve, personal-resolve, blessing, combo, vigilance, aether, bonus-damage,
+effort, strain), and the trigger set (charge, comeback, finishing-blow, exceed,
+heroic, infuse + reactive collide, slay + the window triggers when-damaged,
+defeated, uses-ability, area-inclusion, targeted-by-ability, save-rolled).
+**Every effect kind executes in `runtime.ts`; this layer is complete.**
+
+### 3.2 Primitive inventory (status vs foundation)
+
+"Existing" here means usable through a shared seam today; "partial" means a
+hand-rolled shape that should become a recipe row; "missing" means no seam.
+
+| Primitive | Domain | Status | Notes |
+| --- | --- | --- | --- |
+| VM vocabulary (effects/selectors/numbers/predicates/durations) | all | existing | §3.1 |
+| **Damage resolution** (`damage-resolution.ts`) — determine + apply, HP/vigor split, armor/reduction/halving order, bypassVigor/ignoreArmor/ignoreDefiance flags | all | existing | §4 damage kernel |
+| **Attack resolution** (`attack-resolution.ts`) — Evasion → d20 → boon/curse → crit/exceed; high ground; true strike | all | existing | §4 |
+| **Save window** (`save-window.ts`) — kind, modifiers, threshold, denial policy, continuation branch | all | existing | F2 |
+| **Spatial intent** (`spatial-intent.ts`) — bounds/occupancy/impassable/rampart authority for place/teleport/rush/fly | all | existing | F1 |
+| **Line of sight / effect** (`line-of-sight.ts`) | all | existing | F1 |
+| **Targeting** (`targeting.ts`) — self/ally/foe distinct, footprint range, blind/stealth | all | existing partial | single target; target sets pending |
+| **Condition / status mutation** (`status-saves.ts`) | all | existing | apply/remove + status save |
+| **Move mutations** (rush/shove/fly/teleport/place/remove/swap) | all | existing | via VM + spatial kernel |
+| **Terrain mutations** | all | existing partial | basic/difficult/dangerous/pit/object; object destroy pending |
+| **Stance mutation** | all | existing | enter/refresh/exit, exclusivity |
+| **Mark mutation** | all | existing | single-mark-per-ability-owner model |
+| **Resource mutations** (resolve/vigor/blessing/combo/vigilance/aether/bonus-damage) | all | existing | shared resource registry |
+| Power-die stance | jobs/classes | partial | soul-blade, wicked-sheath, gallows-humor, etc. |
+| Armed one-shot attack window | jobs/classes | partial | F6 kernel arm/consume |
+| Gamble (recorded d6 + result branch) | jobs/traits/relics/trophies | partial | TurnDiceWindows pre-rolls exist; no shared effect |
+| Sacrifice + cost override (HP payment, floor 1) | jobs/traits/relics | partial | sacrifice damage type exists; no HP-payment seam |
+| Blessing/combo ability-use spend | jobs/traits | missing | registry exists; spend seam doesn't |
+| Use ledger (once-per-turn/round/combat gates) | jobs | partial → **existing (once-per-round)** | the F9 reactive job-trait fold + durable round ledger (`kernels/trait-reactions.ts`); once-per-turn/combat variants still per-site |
+| Aura mechanic (spatial membership projection) | jobs/foes/traits | missing | persistent `aura` effect exists; no membership kernel |
+| Heroics economy | classes/traits | missing | |
+| Infuse / Aether cost | classes/traits/relics | missing | `aether` resource exists |
+| Entity / summon action suite | jobs/foes | partial | entity model exists; actions hand-authored |
+| Ally-buff grant selector | jobs | partial | condition/vigor mutations exist |
+| Mob member model | foes | missing | |
+| Relic invoke/rank/aspect recipes | relics | missing | |
+
+---
+
+## 4. Kernel map
+
+A **kernel** is a shared, framework-free engine mechanic (pure function, recipe
+registry, or reducer seam) that content rows plug into. Found at
+`automation/kernels/`.
+
+| Kernel | Responsibility (source-backed) | Primitives consumed | Status |
+| --- | --- | --- | --- |
+| **Damage ledger** (`damage-ledger.ts`, F0) | Durable, replay-safe single damage instance; handoff provenance; defeat; interrupt-window state | damage-resolution, attack-resolution | existing |
+| **Encounter damage adapter** (`encounter-adapter.ts`) | condition→intent derivation, one final halving, `defeatActor` lifecycle, reactive slay/collide dry-runs | damage, spatial | existing |
+| **Spatial gateway** (F1) | one destination authority for place/teleport/rush/fly | spatial-intent, line-of-sight, targeting | existing |
+| **Save window registry** (F2) | one SaveWindow record for every save; modifier/denial/branch | save-window | existing |
+| **Turn lifecycle** (`lifecycle.ts`, F3) | TurnTransitionIntent; turn-end/turn-start/round-start/round-end/delayed phases | all mutations | existing |
+| **Trigger windows** (`trigger-window.ts`, F4) | one decision + one replay entry; when-damaged/defeated/uses-ability/area-inclusion/targeted-by-ability/save-rolled | damage ledger windows | existing |
+| **Passive projection** (`passive-projection.ts`, F5) | trait/role→condition projection fold; closed source-ID recipes | condition | existing |
+| **Attack-path modifiers** (`attack-modifiers.ts`, F6) | trait attack-modifier fold (boon, exceed threshold, +damage, die) | attack, damage | existing |
+| **Talent trigger-effect fold** (`talent-recipes.ts`, F7) | `talentTriggerMutations` folded into ability events; exceed/comeback/finishing-blow/slay/collide/always; condition-grant via `affectedFoeIds` | all mutations | existing (tranche) |
+| **Movement-entry triggers** (`movement-triggers.ts`) | voluntary-MOVE entry seam (Party Favor exemplar) | move | partial (forced-movement entry pending) |
+| **Reactive job-trait fold + round ledger** (`trait-reactions.ts`, F9) | once-per-round reactive job traits (collide/shove/slay) with a durable round-ledger gate reset at the round-start boundary | damage, resource, state, spatial | existing (Dash on the Rocks p.230 wired) |
+| **Foe ability recipes** (`foe-recipes.ts`) | generic resolver factories; 22 recipe kinds | all | existing (22 kinds) |
+| **Foe trait recipes** (`foe-trait-recipes.ts`) | closed foe keyword rows | condition | existing |
+| **Summon recipes** (`summon-recipes.ts`) | placement ranges, per-owner caps, companion survival | entity | existing |
+
+### Missing kernels named by the ontology
+
+| Kernel | Source responsibility | Consumers |
+| --- | --- | --- |
+| **Aura membership kernel** | spatial distance-based grants/penalties, activation/size/entry | Shieldmaster, Pelagic Rage, 42 foe traits, Black Book; glossary *Aura X* |
+| **Resource-economy spend kernel** | blessing/combo/Infuse/sacrifice spend, use ledgers, gamble | glossary *Blessing/Combo/Sacrifice/Gamble/Mark* + relic/trait rows |
+| **Heroics economy** | make-Heroic choice, lockout, half-damage penalty | glossary *Heroic* + Stalwart traits |
+| **Movement-phase kernels** | vacate, occupancy-cost, elevation-fly, pre/post ability movement, position swap, teleport-all | glossary *Dash/Rush/Fly/Teleport/Place/Remove* + movement talents/foes |
+| **Stance / mark trigger kernels** | multi-stance gate, mark-stack gate, mark-trigger gates | glossary *Stance/Mark* + Reactive windows |
+| **Damage-intent provenance** | resistance provenance, wound-taking, counter damage-type override | glossary *Armor/Resistance/Weakened/Vulnerable* + relic aspects/foe traits |
+| **Entity / summon action kernel** | companions' own suites, entity position mutation | glossary *Summon* + summon suites |
+| **Mob member model** | member-level state, up to three members | foe mob subset |
+| **Foe phase / chapter rule** | round-start cycling, bloodied transitions, chapter overrides | 19 phases + 116 chapter rules |
+| **Relic invoke / trophy / camp / reward** | invoke cost+effects; trophy uses/passives; camp boundary; reward application | 120 ranks + 40 aspects + trophies/camp/rewards |
+
+---
+
+## 5. Source-term → foundation matrix
+
+Every glossary/core term and its foundation home. Status: the audit is the only
+authority for "complete"; here **existing** = a kernel/primitive seam exists
+(not that all its content is wired).
+
+| Source mechanic | Primitives | Kernel | Status | Consumers |
+| --- | --- | --- | --- | --- |
+| Armor / Resistance / Pierce | damage-resolution | damage ledger | existing | core + foes |
+| Bonus damage / Critical / Exceed | attack-resolution | attack-modifiers, talent fold | existing | attacks, talents |
+| Weakened / Vulnerable | damage-resolution | damage ledger | existing | core |
+| Divine | damage-resolution (`ignoreDefiance`,`bypassVigor`) | damage ledger | existing(partial) | justice, nothung mastery |
+| Attack roll / hit/miss | attack-resolution | F4 | existing | attacks |
+| Save / Cure / Blessing | save-window, status-saves | F3 | existing (save), partial (blessing input) | core + lives |
+| Statuses (10) | status mutation | object-position sort | existing | core + traits |
+| Positive effects (18+) | condition mutation | passive-projection | existing (kept) | traits/roles |
+| Special states (bloodied/immobile/incapacitated/defeated) | state | F0/F3 | existing | core |
+| Move / Dash / Rush / Fly / Teleport / Shove / Place/Remove | move mutation, spatial-intent | F1, movement-triggers | existing (motion entry partial) | movement |
+| Terrain (difficult/dangerous/impassable/pit/object) | terrain mutation | F1 | existing partial | classes/jobs/foes |
+| Cover / LoS / LoE / Range / Height | targeting, line-of-sight, spatial | F1 | existing | targeting |
+| Area patterns (line/arc/blast/burst) | spatial (`computeSpatialArea`) | F1 | existing (burst/line; arc pending) | areas |
+| Attack tag / auto-hit | VM attack | runtime | existing | attacks |
+| Mark | mark mutation | F4 passive | existing | marks |
+| Stance | stance mutation | F3 | existing | stances |
+| Summon | entity mutation | summon-recipes | partial | summons |
+| Triggered effects (charge/comeback/collide/exceed/finishing-blow/slay/heroic/infuse/chain-reaction) | VM triggers | talent fold, trigger-window | existing (charge/collide/etc.) | talents |
+| Gamble | (recorded dice) | TurnDiceWindows | partial | gambles |
+| Sacrifice | sacrifice damage | (cost seam) | partial | sacrifices |
+| Combo / Blessing / Vigilance / Resolve | resource mutations | resource registry | partial (spend seams) | economies |
+| Power Die | (die mutations) | lifecycle | partial | stance dies |
+| Rebound | (attack direction) | (attack modifier) | missing | trick shot, heracule mastery |
+| Aura | persistent effect | (aura kernel) | missing | auras |
+
+---
+
+## 6. Foundation → consumer matrix (inverse)
+
+Answers: *"what content becomes harvestable when kernel X lands?"* Counts
+derive from the canonical blocker census (regenerate before trusting a number).
+
+| Foundation | Source mechanics served | Consumer families | Representative IDs | Status |
+| --- | --- | --- | --- | --- |
+| Damage ledger F0 | damage/defeat/reaction | core, basic attacks, terrain, held damage | — | existing |
+| Spatial gateway F1 | targeting/range/LoS/place | VM selectors, area centers, teleport/rush/fly | — | existing |
+| Save window F2 | saves/cure/blessing | status clears, relic/legend saves | — | existing |
+| Turn lifecycle F3 | turn/round transitions, delay/end-turn | 45 lifecycle rows, traits, masteries | — | existing |
+| Trigger windows F4 | reactive windows | when-damaged/defeated/uses-ability | — | existing |
+| Passive projection F5 | condition/role baselines | 79 foe keyword rows, job traits | — | existing |
+| Attack-modifier fold F6 | attack-path reads | Demon Edge/Hissatsu/Pulverize/Bull's Strength | — | existing |
+| Talent fold F7 | trigger effects | 29 wired + condition-grant tranche | — | existing |
+| Aura kernel (missing) | Aura X | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | needed |
+| Spend/economy hooks (missing) | Blessing/Combo/Sacrifice/Infuse/Gamble/use-ledger | ~6 job traits + talents + 3 relic ranks | strive, demon-strength, crimson-king | needed |
+| Movement-phase kernels (missing) | vacate/occupancy/elevation/pre-post/swap/teleport-all | 5 job traits + movement talents/foes | darkside, stone-double, tumbling, great-leap | needed |
+| Conditional passive gates (missing) | bloodied/25%/terrain/stealth/status/round | ~150 foe traits + relic ranks | berserker-enrage, earth-bond, wayfinding | needed |
+| Reactive windows (missing triggers) | attack-miss/completion, summon, generalized targeted | 7 job traits + dozens of talents | cheap-trick, mantra-of-sealing, balance | needed |
+| Stance/mark kernels (missing) | multi-stance, mark-stack/trigger | 3 job traits + talents | martial-master, astral-binding | needed |
+| Damage-intent provenance (missing) | resistance, wound, counter-type | 18 foe traits + 4 relic aspects | bullheaded, maiden-aspect | needed |
+| Entity/summon action kernel (missing) | entity actions, position mutation | 6 summon suites + Meld | bound-spirit, beast-master, meld | needed |
+| Mob model (missing) | member state | foe mob subset | — | needed |
+| Foe phase/chapter kernel (missing) | phase cycling, chapter override | 19 phases + 116 chapter rules | i-vessel-knight, veridian-weapon | needed |
+| Relic/trophy/camp/reward (missing) | invoke/aspect/use/camp/reward | 120+40 relics, 68 trophies, 101 camp, 9 rewards | ape-god, crimson-king | needed |
+
+---
+
+## 7. Advanced-combat interaction matrix
+
+Engine semantics (not content exceptions), with current handling:
+
+| Interaction | Source rule | Engine home | Status |
+| --- | --- | --- | --- |
+| Counter vs attack/range/visibility | triggers on any damage instance, even unseen | damage ledger + F4 window | kept/should promote when ledger drives it |
+| Dodge vs Evasion | evasion only on attack component; dodge ignores misses/AoE | attack-resolution | existing |
+| Hatred vs untargetable/immune | does not apply or gain vs untargetable/immune | status (`hatred`) | existing |
+| Immobile vs all move forms | blocks move/be moved/be removed | spatial-intent | existing |
+| Mark ownership/replacement | one mark per ability per character | mark mutation | existing |
+| Pacified break | only on foe-ability damage | status (`pacified`) | existing |
+| Stealth vs target/area/movement | direct only from adjacent; AoE bypasses; dash/standard-move don't break | targeting + VM | existing |
+| Unstoppable vs statuses/movement/rampart | immune to statuses & hostile movement | positive-effect | existing |
+| Vigilance vs voluntary/off-turn move | breaks adjacency for any reason | F4/ledger | partial |
+| Vulnerable/Weakened per instance | per separate damage instance | damage-resolution | existing |
+| On hit/miss/crit scoping | only attack portion | attack path | existing |
+| Damage ordering | attacker→defender reductions→defender mult+round up | damage-resolution | existing |
+| Interrupt/effect ordering | most-recent first; turn order on ties; hostile before beneficial | trigger-window + lifecycle | existing |
+
+---
+
+## 8. Non-glossary foundations
+
+Reusable architecture **required by the corpus** but **not explicitly named by
+the Combat Glossary**. These justify foundation work the glossary alone does
+not name:
+
+1. **Generalized ability-parameter modification** — the modifier layer that
+   lets masteries/talents override range, area, target count, action cost,
+   interrupt rank, repeat count, damage amount/type, movement distance/type,
+   trigger threshold, duration, cost, save. The glossary has no single term
+   for "modify another ability," yet masteries and many talents are exactly
+   that.
+2. **Aura membership projection** — distance-based grants with activation,
+   size change, and entry effects; the glossary defines *Aura X* as an effect
+   but provides no engine shape for continuous membership.
+3. **Delayed anchors** — record a target/effect at command time, resolve at a
+   marked actor's boundary; the glossary's *Delay* is a special case, but the
+   corpus (Great Giorgios, Assassinate, Showdown, etc.) needs a general anchor.
+4. **Entity / summon action suites** — the companions' own actions
+   (lash-out, dash-bite, fly, detonate); the glossary defines *Summon* as a
+   character type but not the per-entity action suites.
+5. **Mob member state** — member-level HP/positions for mob profiles.
+6. **Relic invocation / uses** — the Invoke command shape (cost + trigger
+   threshold) and trophy use commands.
+7. **Camp / reward execution** — deterministic camp-boundary and reward
+   application (mostly narrative/bookkeeping, needs a deterministic kernel).
+8. **Once-per-round/combat use ledgers** — the repeated "once per round"
+   gate the corpus uses heavily; the glossary has no keyword for it.
+
+---
+
+## 9. Dependency graph
+
+Derived from the source ontology (not the reverse). Arrows: `↓` = depends on.
+
+```
+recorded dice (primitives: numbers, state)
+        ↓
+      Gamble  (threshold/result mapping + replay persistence)
+        ↓
+   triggered-effect kernel  (charge/collide/comeback/exceed/slay/finishing-blow/heroic/infuse/chain-reaction)
+        ↓
+   condition-on-trigger / terrain-on-trigger / summon-on-trigger / movement-on-trigger
+
+predicates + selectors + typed mutations (primitives)
+        ↓
+   triggered-effect kernel
+        ↓
+   Comeback / Slay / condition-grant / terrain-grant  [F7 talent fold]
+
+spatial authority (targeting + line-of-sight/spatial-intent) + persistent projection
+        ↓
+             Aura membership kernel
+        ↓
+             aura grants / aura-adjacent helpers
+
+damage resolution + attack resolution + save window
+        ↓
+             damage ledger (F0) → trigger windows (F4) → Counter/Vigilance/Sturdy
+
+costs + resources (resolve/vigor/blessing/combo/aether)
+        ↓
+             spend/economy kernel → Sacrifice / Infuse / Heroics / Combo / use-ledger
+```
+
+**Collapsing blockers:** several census blocker labels collapse into one
+reusable abstraction:
+- `gamble-state`, `charge-state` → **recorded-state / triggered-effect** kernel.
+- `aura`, `cover-mechanic`, `range-modifier` → **spatial / modifier** layer.
+- `sacrifice-cost`, `infuse-cost`, `blessing-spend`, `combo-spend`,
+  `use-ledger`, `heroics-economy`, `resource-management` → **resource-economy /
+  spend** kernel.
+- `fly-grant`, `pre-ability-movement`, `movement-modifier` → **movement-phase**
+  kernel.
+- `mark-modifier`, `stance-gate` → **status/mark/stance** kernel.
+
+---
+
+## 10. Foundation build order
+
+Prioritized by dependencies, glossary completeness, shared leverage,
+elimination of duplicated content-local rules, correctness/replay risk, and
+content unlock counts — **not** by census immediate completions alone.
+
+1. **Resource-economy / spend kernel** (sacrifice, blessing, combo, infuse,
+   gamble, use-ledger, heroics) — the glossary's own economy vocabulary; the
+   biggest shared leverage across job traits, talents, and relic ranks.
+   **Landing:** the once-per-round reactive job-trait fold + durable round
+   ledger (F9) is done — see `__tests__/trait-reactions.test.ts`; the
+   spend-augment (blessing/combo/infuse) side and Press The Advantage's
+   ally-choice still need the tighten-input seam.
+2. **Aura membership kernel** — unlocks the largest browse-level family (2 job
+   traits + 42 foe traits + trophies).
+3. **Movement-phase kernels** — vacate/occupancy/elevation/pre-post movement;
+   unlocks movement traits + talents + the movement-entry forced fold.
+4. **Conditional passive gates** — bloodied/25%/terrain/stealth/status/round
+   predicates; converts ~150 foe traits and relic passives to closed rows.
+5. **Reactive windows (new triggers)** — attack-miss, attack-completion,
+   summon windows, generalized targeted-by-ability; unlocks reactive job traits
+   and summon suites.
+6. **Stance / mark trigger kernels** — multi-stance, mark-stack, mark triggers.
+7. **Damage-intent provenance** — resistance, wound-taking, counter-type
+   overrides; unlocks relic aspects + resistance foe traits.
+8. **Foe recipe primitives + mob model** — the remaining 1,247 foe abilities.
+9. **Phase + chapter-rule kernels** — 19 phases, 116 chapter rules.
+10. **Relic invoke / trophy / camp / reward** — closes advancement.
+
+DeepSeek owns the architectural/foundation tasks; MiMo must not bulk-harvest a
+family until its foundation contract is stable.
+
+---
+
+## 11. FOUNDATION_COMPLETE gate
+
+`FOUNDATION_COMPLETE` is the point at which:
+
+- every named glossary/core combat mechanic maps to a **stable** primitive/
+  kernel implementation **or** an explicit intentional table-facing
+  classification (AGENTS.md §10 conservative rule);
+- every known unresolved source mechanic maps to (a) existing foundation
+  vocabulary, (b) a specifically documented missing foundation, or (c) a
+  deliberate table-facing handling;
+- no large content family requires discovering a **new execution
+  architecture**;
+- remaining content work is predominantly bounded recipes/data;
+- replay/timing/spatial authority boundaries are explicit in this document.
+
+At `FOUNDATION_COMPLETE`, MiMo can run large harvest passes without designing
+new mechanics. `PHASE_TWO_READY` / `PHASE_THREE_READY` remain `false` until the
+gates genuinely pass; this document records architecture, not gate status.
+
+---
+
+## 12. Implementation-status ledger (compact)
+
+The F0–F8 execution ledger, retained for continuity. This is an engineering
+ledger, not a coverage claim — the automation audit and phase gates are the
+only authority for "done."
+
+- **F0 Damage + defeat kernel** — `damage-resolution.ts`/`attack-resolution.ts`;
+  durable `DamageLedgerEntry` + `AttackResolutionLedger`; `defeatActor`
+  lifecycle; `gainVigor` cap. Available for basic attacks, terrain, held/Slashed
+  damage, Vigilance, delayed damage, Counter/Gentleness reflection.
+- **F1 Target + spatial gateway** — `targeting.ts`, `spatial-intent.ts`,
+  `line-of-sight.ts`; area center legality; shared destination authority.
+- **F2 Save windows** — one durable `SaveWindow` per save, four kinds; modifier/
+  denial/continuation branch.
+- **F3 Turn lifecycle** — `TurnTransitionIntent` + closed `LIFECYCLE_RECIPES`
+  (turn-end/start, round-start, delayed); slow-turn derivation.
+- **F4 Trigger/window provenance** — one decision + one replay entry;
+  `TRIGGER_WINDOW_RECIPES`; ledger-consumed windows.
+- **F5 Passive projection + role baselines** — closed `FOE_ROLE_BASELINE_RECIPES`
+  + job-trait condition recipes; feature/mark projection.
+- **F6 Job traits / attack-path kernel** — closed `JOB_TRAIT_RECIPES`; five
+  wiring homes; `attack-modifiers.ts` fold; plus the F9 reactive fold rows.
+  23/65 traits wired.
+- **F7 Talents fold** — closed `TALENT_RECIPES` (288); `talentTriggerMutations`
+  (exceed/comeback/finishing-blow/slay/collide/always) + `affectedFoeIds`
+  condition-grant; 3 program-level. 32/288 executable.
+- **F8 Mastery attachment** — every mastery needs a typed ability-recipe
+  modifier hook + mastery attachment; uniformly reflected in the census
+  (`mastery-attachment` on all 144).
+- **F9 Once-per-round reactive job-trait fold** — `kernels/trait-reactions.ts`
+  (a `collide`/`shove`/`slay` reaction with an optional durable round ledger
+  reset at the round-start boundary), folded into the ability mutation stream
+  in `abilityEvents`/the rule path. Wired row: `stormbender:trait:
+  dash-on-the-rocks` (p.230) — 1/round on collide, gain 1 aether + burst-1
+  piercing centered on the collided character (never the ability user).
+  Fixtures: `__tests__/trait-reactions.test.ts`. This is the first home of
+  the once-per-round economy/reactive-trait family (`use-ledger`);
+  once-per-combat and the spend-augment (blessing/combo/infuse) halves remain.
+
+### Explicit incomplete semantic boundaries
+
+- Counter/Vigilance/Sturdy/Defiance promotion waits on full ledger-driven
+  trigger/durable-provenance coverage (F4).
+- Forced-movement entry remains an incomplete semantic boundary; one-shot
+  movement-entry triggers must not double-fire, and distinct triggers must stay
+  independent (AGENTS.md §8).
+- Mastery and limit-break machinery is structurally present only through the
+  blocker census; no mastery or limit break is wired.
+- Rebound (attack bounce) is not a modeled mechanic beyond Trick Shot's armed
+  variant.
+- The seer 13-card deck mechanics may stay table-facing by design.
+
+---
+
+## 13. Documentation authority and reconciliation
+
+- [`kernels-needed.md`](kernels-needed.md) — the kernel build ledger; mirrors
+  §3/§4 here. It is the "which content promotes when kernel X lands" detail.
+- [`primitives-needed.md`](primitives-needed.md) — the primitive build ledger;
+  mirrors §3 here at recipe granularity. It is the "which recipe primitive is
+  missing" detail.
+- [`blocker-census.md`](blocker-census.md) — the live dependency graph of
+  unresolved Class/Job units; regenerate after any implementation, never trust a
+  stale snapshot.
+- [`glossary-executable-inventory.md`](glossary-executable-inventory.md) — the
+  Combat Glossary term-by-term executable-status map (the "make each glossary
+  mechanic executable" gap analysis) and its prioritized implementation queue.
+- [This file] is the primary source-to-foundation authority and the build-order
+  arbiter. Where the derived ledgers made stale claims (e.g. range-modifier
+  "documented" vs `documented`), the implementation and this ontology govern.

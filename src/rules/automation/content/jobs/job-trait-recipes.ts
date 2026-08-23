@@ -362,9 +362,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
     detail: 'The selkie\u2019s end-of-turn fly-3 (removing and re-placing characters in its space) is a summon-trigger window.',
   },
   'stormbender:trait:dash-on-the-rocks': {
-    sourceId: 'stormbender:trait:dash-on-the-rocks', name: 'Dash on the Rocks', status: 'documented',
-    mechanic: '',
-    detail: 'The 1/round collide trigger gaining 1 Aether and dealing 1 piercing burst needs a collide-trigger kernel hook.',
+    sourceId: 'stormbender:trait:dash-on-the-rocks', name: 'Dash on the Rocks', status: 'wired',
+    mechanic: '1/round when you cause a character to collide, fold into the ability\u2019s mutation stream: gain 1 aether and deal 1 piercing damage as a burst-1 area effect centered on the collided character (the burst never affects the ability user, p.97). The once-per-round gate is a durable round ledger reset at each round start via the reactive job-trait fold (kernels/trait-reactions.ts, content/jobs/trait-reactions.ts).',
+    detail: '',
   },
   'stormbender:trait:sea-legs': {
     sourceId: 'stormbender:trait:sea-legs', name: 'Sea Legs', status: 'documented',

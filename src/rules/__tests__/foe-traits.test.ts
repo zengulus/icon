@@ -244,17 +244,16 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
     }
   });
 
-  it('partial rows project their wired keywords while auditing incomplete with the pending reason', () => {
-    // Doomcloak: Flying, Sturdy, Counter, Defiance — Counter stays pending.
+  it('Doomcloak is fully executable (Flying, Sturdy, Counter, Defiance all wired)', () => {
     const doomcloak = findRuleSourceUnit('ruin-beast:doomcloak:353:trait:special-traits')!;
     const compilation = compileRuleSourceUnit(doomcloak);
-    expect(compilation.unsupportedClauses.length).toBeGreaterThan(0);
-    expect(compilation.unsupportedClauses[0]?.unsupportedText).toContain('Counter');
+    expect(compilation.unsupportedClauses).toEqual([]);
     const actor = createFoe('Doomcloak projection fixture', { x: 1, y: 1 });
     actor.traitIds = [doomcloak.id];
     const conditions = encounterConditionSet(actor);
     expect(conditions.has('flying')).toBe(true);
     expect(conditions.has('sturdy')).toBe(true);
+    expect(conditions.has('counter')).toBe(true);
     expect(conditions.has('defiance')).toBe(false); // durable: granted at combat start
     expect(durableFoeTraitGrantConditions(doomcloak.id)).toEqual(['defiance']);
 
@@ -262,6 +261,34 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
     const broker = findRuleSourceUnit('scavenger:broker:381:trait:traits')!;
     expect(compileRuleSourceUnit(broker).unsupportedClauses[0]?.unsupportedText).toContain('Diaga');
     expect(durableFoeTraitGrantConditions(broker.id)).toEqual(['defiance']);
+  });
+
+  it('wired Counter rows project the condition and the reflect takes 2 (p.104)', () => {
+    let state = createEncounter('Counter fixture');
+    const hero = actorFromCharacter(validCharacter('Counter witness'), { x: 2, y: 1 });
+    const foe = createFoe('Howler Counter fixture', { x: 1, y: 1 });
+    foe.traitIds = ['ruin-beast:howler:346:trait:special-traits'];
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    expect(encounterConditionSet(state.actors[foe.id]!).has('counter')).toBe(true);
+    // The fixture hero has Armor 2, which absorbs the raw 2 Counter reflect.
+    // Strip the armor so the reflect provably lands back on the attacker (the
+    // resolver-driven reflect itself is covered in conditions.test.ts).
+    const heroActor = state.actors[hero.id]!;
+    heroActor.armor = 0;
+    determineAndApplyEncounterDamage(state, {
+      targetId: foe.id,
+      sourceActorId: hero.id,
+      sourceRuleId: 'test:strike',
+      amount: 3,
+      damageType: 'normal',
+      instance: 1,
+      delivery: 'hit',
+      ignoreCover: false,
+    });
+    expect(state.actors[foe.id]!.hp).toBe(32 - 3); // the Counter foe took the 3
+    expect(state.actors[hero.id]!.hp).toBe(40 - 2); // and reflected 2 back (armor stripped)
   });
 
   it('keeps every unregistered keyword-list trait unprojected (closed negative)', () => {
@@ -273,16 +300,11 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
       expect(durableFoeTraitGrantConditions(source.id), source.id).toEqual([]);
       expect(compileRuleSourceUnit(source).unsupportedClauses.length, source.id).toBeGreaterThan(0);
     }
-    // The specific keyword-list rows without a projection: Mob, Enrage,
-    // Counter-only rows, and the Leader Diaga rows stay source-visible.
+    // The specific keyword-list rows without a projection: Mob, Enrage, and
+    // the Leader Diaga rows stay source-visible.
     for (const id of [
       'basic:minions:311:trait:traits', // Mob
       'ruin-beast:brawler-beast:346:trait:special-traits', // Enrage
-      'ruin-beast:howler:346:trait:special-traits', // Counter
-      'imperial:war-beast:393:trait:special-traits', // Counter
-      'demon:crystalline-demon:409:trait:traits', // Counter
-      'demon:blade-of-agony:420:trait:traits', // Counter
-      'hob:fanged-hob:470:trait:traits', // Counter
       'scavenger:sharkie:381:trait:traits', // Diaga
       'scavenger:monger:381:trait:traits', // Diaga
       'ruin-beast:symbiote:348:trait:traits', // Shelter, Diaga

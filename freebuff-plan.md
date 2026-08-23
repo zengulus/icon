@@ -89,7 +89,7 @@ not the content.
 | F3 TurnTransitionIntent | **Executed.** Every `TURN_ENDED` carries the durable intent: `cause`, ordered lifecycle `participants`, JSON-clean `diceWindows` (Carnevale p.150 / Monogatari p.179 gambles pre-rolled at the command boundary), and `roundAdvance`. `planTurnTransition` plans at command time; `runLifecyclePhase` executes exactly the recorded participants (bite-tested: stripping a participant suppresses the hook even when its gate still passes; legacy events without an intent fall back to the applies gates). All hand-wired hooks migrated into the closed `LIFECYCLE_RECIPES` registry incl. the `delayed` phase (Great Giorgios at its historical post-reset position); dead resolvers deleted from `encounter.ts`; `docs/lifecycle-template.md`; cause parity (voluntary / ability-tag / forced-status / rule-requested) and registry replay pairs in `__tests__/turn-transition.test.ts`. Remaining: p.102 Blessing input per `windowId`, the failed-exit lockout as a turn-start recipe, round-start/round-end recipe phases for content that needs them. | `kernels/lifecycle.ts`, `docs/lifecycle-template.md`, `__tests__/turn-transition.test.ts`, `rules-foundations.md` §4 |
 | F4 TriggerWindow | **Executed.** `trigger-window.ts` — the closed `TRIGGER_WINDOW_RECIPES` registry keyed by trigger (`when-damaged` / `defeated`, ordered by p.107 specificity), `decideDamageWindow` as the single decision point shared by the VM path (`applyDamage` now routes its hold decision through it) and the split-event path (`attackEvents` records the decision on `AttackResolutionLedger.window` + the nested damage ledger at construction). `applyDamageLedger` opens the window from the recorded `DamageLedgerEntry.window` — the F0 handoff — holding the blow until the interrupt answers or the boundary drains it, with `ACTOR_DEFEATED` suppressed for a held blow and unknown triggers declined safely; `docs/trigger-template.md`; fixtures in `__tests__/trigger-window.test.ts` (when-damaged + defeated windows, VM/split parity, record-bite, closed-registry negative). Remaining: Counter/Vigilance/Sturdy promotions from the ledger records (F5), Masquerade-style deferred-effect windows as registry rows. | `trigger-window.ts`, `docs/trigger-template.md`, `__tests__/trigger-window.test.ts`, `rules-foundations.md` §5 |
 | F5 Passive projection + role baselines | **Executed.** Rot mark projection (p.186) from the first slice, plus the p.298 role baselines: `FOE_ROLE_BASELINE_RECIPES` keyed by role (`skirmisher` → `dodge`, `artillery` → `slip` + `aetherwall`, `heavy` → `rampart`; mob/leader/legend none) folded into `encounterConditionSet` via `projectedRoleConditions`, the Heavy Guard armor-2 kernel mechanic (`guardArmorBonus`: self + same-side orthogonally adjacent allies), and the Legend Juggernaut round-start status/mark clear; fixtures in `__tests__/role-baseline.test.ts` (dodge prevention, slip-rampart dash, aetherwall halving, heavy rampart denial, guard-armor self/ally, juggernaut round clear, closed-registry negatives — bite-verified). Remaining: Defiance/Counter/Dodge/Sturdy/Stealth/Unstoppable still have no reviewed passive source (fixture-only until a source unit is promoted with its matrix). | `kernels/passive-projection.ts`, `docs/passive-template.md`, `__tests__/role-baseline.test.ts`, `rules-foundations.md` §6 |
-| F6 Job traits | **Executed.** All 65 Job traits cataloged in the closed `JOB_TRAIT_RECIPES` inventory (22 `wired` / 43 `documented`). Wiring homes: condition projections (`JOB_TRAIT_CONDITION_RECIPES`: martial-arts dodge, shadow-arts phasing, regeneration), combat-start durable grants + companion summons (`COMBAT_START_TRAIT_RECIPES`, applied once on `ENCOUNTER_STARTED`; companions survive the owner's defeat; entity caps per type at six via `content/jobs/summon-recipes.ts`), lifecycle recipes incl. the `round-start` phase (True Horn, Blackheart status-counted vigilance, Mark of Tsumi, Godly Smite mantra tick, Furious Berserk, the round-5 rages, Hissatsu arming, Demon Edge window expiry, Bull's Strength guard clear), typed active resolvers (taunt, klingenkunst through `EXECUTE_RULE`), the **attack-path modifier kernel** (`kernels/attack-modifiers.ts`: Demon Edge slow-turn/delay arming + true strike, Hissatsu no-attack arming + boon/true strike/d10, Pulverize elevation flat +2 and exceed on 13+, Bull's Strength collide damage through `collidingShoveTargets`, shared by both attack sites), and command/kernel hooks (Path of the Aesi free Dash, Green Kenning terrain immunity). Replay executes exactly the recorded participants and `planTurnTransition` evaluates turn-start/round-start gates against the next round; fixtures in `__tests__/job-traits.test.ts` (20) + `__tests__/summons.test.ts` (7) + `__tests__/attack-modifiers.test.ts` (13), bite-verified; `docs/job-trait-template.md`. | `content/jobs/job-trait-recipes.ts`, `content/jobs/job-trait-resolvers.ts`, `content/jobs/summon-recipes.ts`, `kernels/attack-modifiers.ts`, `docs/job-trait-template.md`, `__tests__/job-traits.test.ts`, `__tests__/summons.test.ts`, `__tests__/attack-modifiers.test.ts`, `rules-foundations.md` §7 |
+| F6 Job traits | **Executed.** All 65 Job traits cataloged in the closed `JOB_TRAIT_RECIPES` inventory (23 `wired` / 42 `documented`, incl. the new F9 once-per-round reactive job-trait fold + durable round ledger in `kernels/trait-reactions.ts` — wired row Dash on the Rocks p.230). Wiring homes: condition projections (`JOB_TRAIT_CONDITION_RECIPES`), combat-start durable grants + companion summons (`COMBAT_START_TRAIT_RECIPES`), lifecycle recipes incl. the `round-start` phase (True Horn, Blackheart, Mark of Tsumi, Godly Smite, Furious Berserk, the round-5 rages, Hissatsu, Demon Edge, Bull's Strength, plus the `core:round-ledger-reset` clear), typed active resolvers (taunt, klingenkunst), the **attack-path modifier kernel** (`kernels/attack-modifiers.ts`), the **reactive job-trait fold** (`kernels/trait-reactions.ts`), and command/kernel hooks (Path of the Aesi free Dash, Green Kenning terrain immunity). Replay executes exactly the recorded participants and `planTurnTransition` evaluates turn-start/round-start gates against the next round; fixtures in `__tests__/job-traits.test.ts` (20) + `__tests__/summons.test.ts` (7) + `__tests__/attack-modifiers.test.ts` (13), bite-verified; `docs/job-trait-template.md`. | `content/jobs/job-trait-recipes.ts`, `content/jobs/job-trait-resolvers.ts`, `content/jobs/summon-recipes.ts`, `kernels/attack-modifiers.ts`, `docs/job-trait-template.md`, `__tests__/job-traits.test.ts`, `__tests__/summons.test.ts`, `__tests__/attack-modifiers.test.ts`, `rules-foundations.md` §7 |
 
 ---
 
@@ -269,7 +269,7 @@ not the content.
   the kernel had no reviewed trait hooks, and nothing cataloged what each
   trait actually does.
 - **Done:** `content/jobs/job-trait-recipes.ts` — the closed `JOB_TRAIT_RECIPES`
-  inventory of all 65 traits (22 `wired` / 43 `documented`), each row
+  inventory of all 65 traits (23 `wired` / 42 `documented`), each row
   stating its mechanic or its table-facing ruling; `EXECUTABLE_JOB_TRAIT_IDS`
   / `DOCUMENTED_JOB_TRAIT_IDS` derive from it. The five wiring homes:
   - **Condition projections** (`kernels/passive-projection.ts`
@@ -310,11 +310,11 @@ not the content.
   the three projection tests, disabling the round-start phase fails the
   mantra/rage tests, and dropping the companion exempt fails the
   survival test.
-- **Remaining:** 43 documented traits need their home kernels first
+- **Remaining:** 42 documented traits need their home kernels first
   (Heroics-economy choices, spatial-aura mechanics, reactive windows, and
   the gated attack-path modifier hooks — distance/terrain/round/stealth-gated
   reads, threshold hooks, and the collide-trigger kernel).
-- **Unblocks:** the job-trait row of the coverage table; the 43 documented
+- **Unblocks:** the job-trait row of the coverage table; the 42 documented
   rows promote through `docs/job-trait-template.md` as their kernels land.
   The attack-path modifier group (Demon Edge, Hissatsu, Pulverize, Bull's
   Strength) promoted with the shared `kernels/attack-modifiers.ts` kernel and the
@@ -333,7 +333,7 @@ missing stays source-visible (never approximated).
 | Core combat units | 70 | F0, F2, F3, F4 | `damage-ledger.ts`, save/turn templates | `__tests__/core*.test.ts` |
 | Class traits | 8 | F5 | `kernels/passive-projection.ts` recipes | `__tests__/traits.test.ts` |
 | Job traits | 65 | F5, F6 | passive + lifecycle + resolver recipes (`content/jobs/job-trait-recipes.ts`) | `__tests__/job-traits.test.ts`, `__tests__/summons.test.ts` |
-| Talents | 288 | F0, F2, F5, F7 | `content/jobs/talent-recipes.ts` inventory + `kernels/talent-recipes.ts` trigger-effect fold (10 wired + 3 program-level) | `__tests__/talents.test.ts`, `__tests__/demon-slayer.test.ts`, `__tests__/enochian.test.ts` |
+| Talents | 288 | F0, F2, F5, F7 | `content/jobs/talent-recipes.ts` inventory + `kernels/talent-recipes.ts` trigger-effect fold (29 wired + 3 program-level) | `__tests__/talents.test.ts`, `__tests__/demon-slayer.test.ts`, `__tests__/enochian.test.ts` |
 | Masteries | 144 | F0, F2, F3 | mastery recipes (often a flag on the ability recipe) | `__tests__/masteries.test.ts` |
 | Limit Breaks | 16 | F3, F0 | `limit-break-recipes.ts` (resolve spend, action timing) | `__tests__/limit-breaks.test.ts` |
 | Job summon rules | 6 | F1, F3 | `content/jobs/summon-recipes.ts` (entities + ownership + lifecycle) | `__tests__/summons.test.ts` |
@@ -349,7 +349,7 @@ missing stays source-visible (never approximated).
 | Reward rules | 9 | F2, F3 | reward recipes | `__tests__/rewards.test.ts` |
 | Bond powers (narrative) | 120 | stays table-facing | none — keep non-authoritative | existing narrative tests |
 
-**Executed slice — Talents (F7, 13/288 executable: 10 wired + 3 program-level):**
+**Executed slice — Talents (F7, 32/288 executable: 29 wired + 3 program-level):**
 `content/jobs/talent-recipes.ts` — the closed 288-row inventory (two talents
 per ability, exact source ids) with a wired tranche that executes through one
 shared kernel, `talentTriggerMutations`
@@ -384,12 +384,18 @@ medium blasts instead."): on a slow turn both blasts become medium (radius
 immune to damage from this ability."): the first program-level comeback
 clause — while bloodied, the Pyre resolver skips allies in the blast fray
 and the comeback/exceed re-explosion, fixtures in `__tests__/enochian.test.ts`.
-Remaining 275 rows stay source-visible with their kernel need
+Remaining 256 rows stay source-visible with their kernel need
 (movement/sacrifice/aura/blessing-combo hooks; the documented finishing-blow
 rows — Death Blossom's teleport choices and Stampede's may-choice mark
 transfer — and the `charge` family's remaining ability-behavior variants,
 which belong in the ability programs' charge clauses the way the Chanter
-programs already implement them, not the fold).
+programs already implement them, not the fold). The condition-grant blocker
+family is closed: the 28 claimed `{condition-grant}` singletons re-audited to
+3 genuine (wired via `affectedFoeIds` — Valiant t2, Provoke t1, Showdown t2)
+and 25 reclassified with source-verified blocker sets; see
+docs/condition-grant-handoff.md for the harvest boundary (no safe bulk
+tranche remains — the rest need other primitives or small generic
+capabilities).
 
 ---
 

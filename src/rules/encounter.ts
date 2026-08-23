@@ -17,6 +17,7 @@ import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes
 // content hooks every kernel fold below reads. Must load before any command.
 import './automation/content/registry.js';
 import { talentReactiveTrigger, talentTriggerMutations, type TalentReactiveTargets } from './automation/kernels/talent-recipes.js';
+import { traitReactionMutations, traitReactionNeededTriggers } from './automation/kernels/trait-reactions.js';
 import { applyDeterminedDamageToVitals } from './automation/primitives/damage-resolution.js';
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
@@ -1031,17 +1032,20 @@ export function hasCoverFrom(state: EncounterState, target: EncounterActor, atta
   });
 }
 
-/** F7 reactive fold input: when the actor's equipped talent for this ability
- * is a wired slay/collide row, compute the post-application trigger targets
- * (the collided actors / the defeated actors) from the ability's recorded
+/** F7/F9 reactive fold input: when the actor's equipped talent for this
+ * ability is a wired slay/collide row, or any equipped job trait registers a
+ * collide/slay reaction, compute the post-application trigger targets (the
+ * collided actors / the defeated actors) from the ability's recorded
  * mutations — the same dry run that derives the ability's own reactive
  * clauses. The dry run clones the encounter state, so it is skipped when no
- * reactive talent is equipped. */
-function talentReactiveTargets(state: EncounterState, actor: EncounterActor, abilityId: string, mutations: RuleMutation[]): TalentReactiveTargets | undefined {
-  const trigger = talentReactiveTrigger(actor, abilityId);
-  if (trigger === 'collide') return { collidedActorIds: collidingShoveTargets(state, mutations) };
-  if (trigger === 'slay') return { slainActorIds: reactiveSlayTargets(state, mutations) };
-  return undefined;
+ * reactive consumer is equipped. */
+function talentReactiveTargets(state: EncounterState, actor: EncounterActor, abilityId: string, mutations: RuleMutation[]): TalentReactiveTargets {
+  const talentTrigger = talentReactiveTrigger(actor, abilityId);
+  const traitNeeds = traitReactionNeededTriggers(actor);
+  const out: TalentReactiveTargets = {};
+  if (talentTrigger === 'collide' || traitNeeds.has('collide')) out.collidedActorIds = collidingShoveTargets(state, mutations);
+  if (talentTrigger === 'slay' || traitNeeds.has('slay')) out.slainActorIds = reactiveSlayTargets(state, mutations);
+  return out;
 }
 
 function abilityEvents(state: EncounterState, command: Extract<EncounterCommand, { type: 'USE_ABILITY' }>, dice: DiceSource): EncounterEvent[] {
@@ -1141,7 +1145,12 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // the same event, so replay applies exactly what the command decided. The
   // slay/collide triggers receive the post-application reactive targets
   // computed from the recorded mutations.
-  const talentMutations = talentTriggerMutations(state, actor, ability.id, result.mutations, targetIds, talentReactiveTargets(state, actor, ability.id, result.mutations));
+  const reactive = talentReactiveTargets(state, actor, ability.id, result.mutations);
+  const talentMutations = talentTriggerMutations(state, actor, ability.id, result.mutations, targetIds, reactive);
+  // F9 reactive job-trait fold: equipped wired job-trait reactions (e.g. a
+  // once-per-round collide reaction) ride the same event, so replay applies
+  // exactly what the command decided.
+  const traitReactionMutations_ = traitReactionMutations(state, actor, result.mutations, reactive);
   // F6 Demon Edge: triggering a slow-turn or delay arms the trait's window
   // (vigilance +1, bonus damage until the end of your next turn, and a
   // one-shot true strike) as recorded mutations on the same event.
@@ -1155,7 +1164,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     actionId: programAction.id,
     timing,
     tags: [...programAction.tags],
-    mutations: [...result.mutations, ...talentMutations, ...demonEdgeMutations],
+    mutations: [...result.mutations, ...talentMutations, ...traitReactionMutations_, ...demonEdgeMutations],
   })];
   if (endsTurn && !interrupt) {
     const intermediate = applyEvents(state, events);
@@ -1299,6 +1308,10 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const demonEdgeMutations = actor.traitIds.includes(DEMON_EDGE_TRAIT)
         ? demonEdgeSlowTurnMutations(unit.id, actor.id, actor.id, action, result.mutations, state.round)
         : [];
+      // F7 talent fold + F9 reactive job-trait fold: symmetric with
+      // USE_ABILITY (a no-op for non-ability sources, whose ids never appear
+      // in the actor's talent map).
+      const reactive = talentReactiveTargets(state, actor, unit.id, result.mutations);
       const spentResources = new Map<string, number>();
       for (const mutation of result.mutations) {
         if (mutation.kind === 'actions' && mutation.operation === 'spend' && mutation.amount > actor.actionsRemaining) throw new RuleViolation('action.insufficient', `${unit.name} costs more actions than are available.`);
@@ -1319,9 +1332,8 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         actionId: command.actionId,
         timing: command.timing,
         tags: [...action.tags],
-        // F7 talent fold: symmetric with USE_ABILITY (a no-op for non-ability
-        // sources, whose ids never appear in the actor's talent map).
-        mutations: [...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], talentReactiveTargets(state, actor, unit.id, result.mutations)), ...demonEdgeMutations],
+        // F7 talent fold + F9 reactive job-trait fold: symmetric with USE_ABILITY.
+        mutations: [...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations],
       })];
       break;
     }

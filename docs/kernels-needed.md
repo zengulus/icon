@@ -4,9 +4,13 @@ Reference ledger of the shared engine kernels that must exist before the
 `documented` / table-facing content rows in **Job**, **foe**, **advancement**,
 and **Relic** automation can promote to `wired`. This is a planning document,
 not a coverage claim — `npm run audit:automation`, the phase gates, and the
-source fixtures remain the only authority for "done". It pairs with
-[`rules-foundations.md`](rules-foundations.md) (the implementation-order
-ledger) and `freebuff-plan.md` (the ordered plan).
+source fixtures remain the only authority for "done".
+
+**Authority:** [`rules-foundations.md`](rules-foundations.md) is the primary
+source-ontology-first map (combat ontology → primitive/kernel → consumer
+matrices → dependency graph → build order → `FOUNDATION_COMPLETE` gate). This
+file is its kernel-level build ledger; `primitives-needed.md` is the primitive-
+level ledger. Both defer to `rules-foundations.md` for ordering and status.
 
 A **kernel** is a shared, framework-free engine mechanic (pure function,
 recipe registry, or reducer seam) that content rows plug into instead of
@@ -17,18 +21,21 @@ job-trait and F7 talent slices already ship.
 
 **Status recap.** Foundations F0–F5 are executed (damage ledger, spatial
 gateway, save window, turn lifecycle, trigger windows, passive projection +
-role baselines). Wired slices: 22/65 Job traits, 13/288 talents executable
-(10 fold-wired + 3 program-level — Demon Cutter t2's pre-ability rush,
+role baselines). Wired slices: 23/65 Job traits (incl. the F9 once-per-round
+reactive fold row Dash on the Rocks), 32/288 talents executable
+(29 fold-wired + 3 program-level — Demon Cutter t2's pre-ability rush,
 Draken Cross t2's charged medium blasts, and Pyre t1's comeback ally
-immunity), 22 foe ability recipes, 36 foe movement-trait IDs, the p.298 role
+immunity; the single-foe condition-grant family via `affectedFoeIds` — see
+docs/condition-grant-handoff.md for the re-audit and the MiMo harvest
+boundary), 22 foe ability recipes, 36 foe movement-trait IDs, the p.298 role
 baselines. The audit backlog that the kernels below unblock:
 
 | Kind | Units | Kind | Units |
 | --- | ---: | --- | ---: |
 | core | 70 | relic-rank | 120 |
 | class-trait | 8 | relic-aspect | 40 |
-| job-trait | 43 | foe-ability | 1,247 |
-| talent | 275 | foe-trait | 612 |
+| job-trait | 42 | foe-ability | 1,247 |
+| talent | 256 | foe-trait | 612 |
 | mastery | 144 | foe-phase | 19 |
 | limit-break | 16 | foe-chapter-rule | 116 |
 | trophy | 68 | camp-fixture | 16 |
@@ -37,7 +44,7 @@ baselines. The audit backlog that the kernels below unblock:
 
 ## 1. Job kernels
 
-### 1.1 Job traits — 43 documented rows in `JOB_TRAIT_RECIPES`
+### 1.1 Job traits — 42 documented rows in `JOB_TRAIT_RECIPES`
 
 | Kernel | Consumers (exact trait ids) | Prerequisite |
 | --- | --- | --- |
@@ -47,7 +54,12 @@ baselines. The audit backlog that the kernels below unblock:
 | **Attack-miss reactive window** | `fool:trait:cheap-trick` | F4 (new trigger) |
 | **Attack-completion hook** — attacks bless adjacent allies + 2 vigor | `sealer:trait:mantra-of-sealing` | F0, F4 |
 | **Slay-trigger cure hook** | `harvester:trait:balance` | F7 fold exists (slay); extend to cure |
-| **Once-a-round reactive windows** — shove→rush (Press the Advantage), finishing-blow/slay→stacked die (Stack Dice), combo gain/spend→fly+Bless (Divine Grace) | `bastion:trait:press-the-advantage`, `fool:trait:stack-dice`, `chanter:trait:divine-grace` | F3 (per-round use ledger), F4 |
+| **Once-a-round reactive windows** — the round-ledger + reactive job-trait
+  fold is **DONE** (F9, `kernels/trait-reactions.ts`, wired row Dash on the
+  Rocks p.230). Remaining reactive rows need extra seams: shove→rush (Press
+  the Advantage needs the ally-choice-input seam), finishing-blow/slay→
+  stacked die (Stack Dice needs the gamble/die-state seam), combo
+  gain/spend→fly+Bless (Divine Grace needs the ally-choice seam) | `bastion:trait:press-the-advantage`, `fool:trait:stack-dice`, `chanter:trait:divine-grace` | F9 fold exists; per-row choice-input / gamble seams
 | **Ability-use blessing-spend hook** — spend 1 token for a package, 3 for the bigger effect | `chanter:trait:blessing-of-faith`, `harvester:trait:blessing-of-rebirth`, `sealer:trait:blessing-of-war` | resource registry exists; ability-use spend seam |
 | **Ability-use combo-spend hook** — spend a combo token to activate charge effects | `chanter:trait:songweave` | resource registry exists; ability-use spend seam |
 | **Infuse-cost kernel hook** — cost reduction with a foe in range 2, infuse-as-slay | `spellblade:trait:conqueror-s-edge` | F0, Infuse cost seam |
@@ -64,7 +76,7 @@ baselines. The audit backlog that the kernels below unblock:
 | **Area-inclusion ally hook** — allies immune to your area effects, gain 2 vigor + a Blessing | `seer:trait:karma` | F4 (area-inclusion exists for Perseus; generalize) |
 | **13-card deck bookkeeping** — draw/discard/shuffle across combats (narrative) | `seer:trait:the-wheel-of-fate`, `seer:trait:skein`, `seer:trait:foretell`, `seer:trait:bend-fate` (bend-fate also needs the gamble hook) | may stay table-facing by design |
 
-### 1.2 Talents — 275 documented rows in `TALENT_RECIPES`
+### 1.2 Talents — 256 documented rows in `TALENT_RECIPES`
 
 The closed classifier in `content/jobs/talent-recipes.ts` (`documentedTalentDetail`)
 enumerates the exact kernel families; a talent promotes when its family's
@@ -291,7 +303,7 @@ each once; it converts its consumers into data + fixtures:
 | 1 | **Aura mechanic** — spatial distance-based grants/penalties, activation, size changes | 2 job traits + 42 foe traits + trophies + Perseus/Rook/Dervish abilities | F1 |
 | 2 | **Attack-path modifier gates** — distance/round/terrain/stealth/threshold reads on the existing fold | 7 job traits + ~30 talents | F6 kernel exists |
 | 3 | **Conditional passive projection** — bloodied/25%/terrain/stealth/status/round gates | ~150 foe traits + relic ranks | F5 exists |
-| 4 | **Reactive trigger windows** — attack-miss, attack-completion, summon, targeted-by-ability (generalize), save-rolled | 7 job traits + dozens of talents/abilities | F4 exists; **movement-entry on voluntary MOVE is done** (`kernels/movement-triggers.ts`, Party Favor p.151) |
+| 4 | **Reactive trigger windows** — attack-miss, attack-completion, summon, targeted-by-ability (generalize), save-rolled, plus the **once-per-round job-trait reactive fold** (collide/shove/slay — F9 done, `kernels/trait-reactions.ts`, wired Dash on the Rocks) | 7 job traits + dozens of talents/abilities | F4 exists; **movement-entry on voluntary MOVE is done** (`kernels/movement-triggers.ts`, Party Favor p.151); F9 reactive-trait fold exists |
 | 5 | **Spend / economy hooks** — blessing, combo, sacrifice, Infuse-cost, gamble, use-ledgers | 6 job traits + 4 talents + 3 relic ranks | resource registry exists |
 | 6 | **Movement kernels** — vacate, occupancy-cost, elevation-fly, pre/post movement, position-swap, teleport-all | 5 job traits + movement talents | F1 |
 | 7 | **Lifecycle phase rows** — bloodied/round-gated phases, chapter-rule overrides | 19 foe phases + 116 chapter rules + masteries | F3 exists |
@@ -305,31 +317,37 @@ each once; it converts its consumers into data + fixtures:
 
 ## 6. Suggested build order
 
-Order by (gate already passed) × (consumers unblocked), matching the
-foundations' sequencing discipline — nothing promotes without its matrix:
+The build order is owned by [`rules-foundations.md`](rules-foundations.md)
+§10 (derived from the source ontology, prioritized by dependencies × glossary
+completeness × shared leverage × correctness/replay risk — not by census
+immediate completions alone). For continuity, the mapping to the shared
+families in §5:
 
-1. **Finishing-blow + charge talent tranche** — both triggers already derive;
-   extend the F7 fold, wire the qualifying talents. No new kernel.
+1. **Resource-economy / spend kernel (family 5)** — the glossary's own economy
+   vocabulary (sacrifice, blessing, combo, infuse, gamble, use-ledger,
+   heroics); unlocks six job traits, four talents, and the Crimson King relic
+   ranks.
 2. **Aura kernel (family 1)** — unlocks Shieldmaster, Pelagic Rage, 42 foe
    traits, the Black Book trophy, and tightens Rook/Perseus/Dervish.
-3. **Heroics economy (family 14)** — unlocks the four Heroics job traits and
-   the Heroic-gated masteries.
-4. **Spend hooks (family 5)** — blessing/combo/Infuse/sacrifice seams unlock
-   six job traits, four talents, and the Crimson King relic ranks.
-5. **Conditional passive gates (family 3)** — the ~150 gated foe traits and
+3. **Movement kernels (family 6)** — vacate/occupancy/elevation hooks unlock
+   Darkside, Stone Double, Tumbling, Great Leap, Uplift, and the
+   movement talents; also the forced-movement-entry fold.
+4. **Conditional passive gates (family 3)** — the ~150 gated foe traits and
    relic rank passives convert to closed-ID rows.
-6. **Movement kernels (family 6)** — vacate/occupancy/elevation hooks unlock
-   Darkside, Stone Double, Tumbling, Great Leap, Uplift, and the movement
-   talents.
-7. **Reactive windows (family 4)** — attack-miss/completion, summon windows,
-   and generalized targeted-by-ability unlock the reactive job traits and the
-   summon action suites.
+5. **Reactive windows (family 4 — new triggers)** — attack-miss/completion,
+   summon windows, generalized targeted-by-ability; unlock the reactive job
+   traits and summon action suites.
+6. **Stance / mark kernels (family 8)** — multi-stance, mark-stack, mark
+   triggers.
+7. **Damage-intent provenance (family 9)** — resistance, wound-taking,
+   counter-type overrides; unlock relic aspects + resistance foe traits.
 8. **Foe recipe primitives + mob model (families 10/11)** — the remaining
    foe abilities convert to `FOE_ABILITY_RECIPES` data.
 9. **Phase + chapter-rule recipes (family 7)** — the 19 phases and 116
    chapter rules become lifecycle/override rows.
-10. **Relic invoke kernel + aspect passives** — the 120 ranks and 40 aspects,
-    then the trophy/camp/reward bookkeeping (family 13) closes advancement.
+10. **Relic invoke kernel + aspect passives (family 13)** — the 120 ranks
+   and 40 aspects, then the trophy/camp/reward bookkeeping closes
+   advancement.
 
 Gate discipline (from `freebuff-plan.md`): a reducer improvement does not
 change audit numbers on its own — only an allowlist entry plus a source-page

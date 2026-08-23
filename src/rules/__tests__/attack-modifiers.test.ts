@@ -84,7 +84,7 @@ describe('F6 attack-path trait registry', () => {
       expect(JOB_TRAIT_RECIPES[id].status).toBe('wired');
       expect(JOB_TRAIT_RECIPES[id].mechanic.length).toBeGreaterThan(0);
     }
-    expect(Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired')).toHaveLength(22);
+    expect(Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired')).toHaveLength(23);
   });
 });
 

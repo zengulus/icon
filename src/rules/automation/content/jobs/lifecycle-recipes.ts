@@ -1118,3 +1118,23 @@ registerLifecycleRecipe({
   },
 });
 
+/** Once-per-round reactive gates (e.g. Dash on the Rocks, p.230) hold a durable
+ * `ledger:round:<sourceId>` ruleState flag written when the reaction fires. A
+ * round boundary resets every actor's round ledger so the gate is fresh each
+ * round (ICON "1/round"). Registered per-actor like the other round-start rows;
+ * it participates only when some living actor's gate is set, clearing nothing
+ * otherwise. */
+registerLifecycleRecipe({
+  sourceId: 'core:round-ledger-reset',
+  phase: 'round-start',
+  applies: (actor) => Object.keys(actor.ruleState).some((key) => key.startsWith('ledger:round:')),
+  resolve: (state, actor) => {
+    for (const key of Object.keys(actor.ruleState)) {
+      if (key.startsWith('ledger:round:')) {
+        delete actor.ruleState[key];
+        delete actor.ruleStateOwners[key];
+      }
+    }
+  },
+});
+
