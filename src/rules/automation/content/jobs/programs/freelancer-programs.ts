@@ -1,6 +1,7 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { auraDefinitionFor, auraRuntimeView, isInAura } from '../../../kernels/aura.js';
 import { hasMastery } from '../../../kernels/mastery.js';
+import { effectiveAreaFor } from '../../../kernels/area.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
@@ -248,9 +249,20 @@ const soulShot: RuleResolver = (context) => {
   const targetPosition = target?.position;
   if (!sourcePosition || !targetPosition) return [];
   const direction = context.input.directions?.['line-direction'] ?? axisDirection(sourcePosition, targetPosition);
-  const line = lineCells(sourcePosition, direction, 3);
+  // Talent 2 (p.158): "At round 4 or greater, Soul Shot becomes Line 6" — the
+  // shared area kernel derives the effective line length from the equipped
+  // choice and the current round, so the line generation (and the must-
+  // include-the-target validation below) uses the authoritative descriptor.
+  const { length } = effectiveAreaFor(
+    { round: context.state.round, actor: { ...source, maximumHp: source.maxHp } },
+    source.id,
+    'freelancer:soul-shot',
+    'line',
+    3,
+  );
+  const line = lineCells(sourcePosition, direction, length);
   if (!line.some((cell) => sameCell(cell, targetPosition))) {
-    throw new RuleProgramViolation('choice.position-range', 'Soul Shot Line 3 must include the attack target.');
+    throw new RuleProgramViolation('choice.position-range', `Soul Shot Line ${length} must include the attack target.`);
   }
   const roll = resolveAttack(context, source, target, { boons: 1 + armedBoon(context, source) });
   const mutations: RuleMutation[] = [roll.attackMutation];

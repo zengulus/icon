@@ -237,6 +237,59 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'spellblade:blitz:talent:2': ['effect-redirect'],
   // "grant Blitz's first effect to any ally in range 2 instead" — an
   // effect-redirect target change; the range-2 check is expressible
+
+  // ── Area re-audit (after the generic area kernel landed) ──
+  // kernels/area.ts + area-geometry.ts now implement the reusable area
+  // authority: the deterministic line/arc/burst geometry (arc paths are
+  // validated player choices, never auto-shaped) and the registered
+  // shape/length modifier seam (`effectiveAreaFor`) folded at command time.
+  // Four former `{area-define}` singletons whose COMPLETE semantics were an
+  // area shape/size change or an area-carried trigger with existing
+  // authority (Soul Shot t2, Sturmreiten mastery, Pyre t2, Eye of the
+  // Storm t2) are executable and dropped out of the census entirely.
+  //
+  // The remaining singletons were re-audited: `area-define` conflated
+  // several genuinely different families. Small/medium/large blast
+  // templates are visual-only in the PDF and deliberately NOT approximated
+  // (the classifier now emits `blast-template` for them); the other rows
+  // were misclassified or need a distinct delivery/lifecycle seam,
+  // reclassified below.
+  'vagabond:trait:dodge': ['delivery-immunity'],
+  // "Immune to damage from missed attacks, successful saves, and area
+  // effects" — a damage-delivery immunity predicate on the trait owner,
+  // NOT an area definition; the delivery filter family is missing
+  'bastion:perseus:talent:2': ['aura-to-area-conversion'],
+  // "extend the area as a line 5 area effect instead of an aura" —
+  // converting the Perseus AURA delivery into a one-shot line area is a
+  // delivery-type conversion; the area kernel's shape overrides cover
+  // line/arc bases, not an aura base
+  'colossus:dropkick:mastery': ['ability-attack-modifier'],
+  // "At round 4 or later, dropkick gains true strike and a line 4 area
+  // effect that must include your target" — the round-gated line-4 area
+  // itself is expressible through the area kernel; "gains true strike" on
+  // a mastery-owned ability needs the per-ability attack-modifier
+  // attachment gate (the same family as Umbra's unerring)
+  'warden:sidhe:talent:2': ['blast-template'],
+  // "your foe explodes with a medium blast area effect" — exact medium
+  // blast geometry is visual-only in the source
+  'seer:eclipse:talent:2': ['choice-input'],
+  // "dealing 3 damage again to up to three characters in its area effect"
+  // — the player chooses up to three targets in the area
+  'enochian:elden-rune:mastery': ['blast-template'],
+  // "Arkenrunes … extend to a small blast area" — exact small blast
+  // geometry is visual-only in the source
+  'geomancer:midas:talent:2': ['entity-vacate'],
+  // "When your chosen character returns, the shell explodes off them" —
+  // the shell-entity vacate/return lifecycle; the burst-1 area is
+  // expressible
+  'spellblade:atherwand:talent:2': ['terrain-move-lifecycle'],
+  // "At the start of your turn, you can move the area 1 space in any
+  // direction … shoves them 1" — moving an existing terrain area at a
+  // turn boundary is a lifecycle terrain-move, not an area definition
+  'spellblade:sturmreiten:talent:2': ['area-extension'],
+  // "Comeback: You may extend Sturmreiten's area by another line 3 area,
+  // drawn in a different direction" — an additional secondary area (the
+  // kernel's seam overrides one area; it does not place a second one)
 };
 
 /** Classify a source unit's rules text into a blocker set.
@@ -259,10 +312,23 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('condition-grant');
   }
 
-  // Area definition: burst, blast, area, arc, line effects
-  if (/\b(?:burst|blast|area|arc|line)\s*(?:\d+|of effect|effect|damage)/.test(text)
-    || /\b(?:medium|large|small)\s+(?:burst|blast)/.test(text)
-    || /\baround\s+(?:yourself|self|the target|them)/.test(text)) {
+  // Blast template: a small/medium/large blast area whose exact template
+  // geometry is visual-only in the source (the area kernel implements the
+  // deterministic line/arc/burst patterns with exact authority; blast
+  // templates are deliberately NOT approximated). Distinct from `area-define`
+  // — a unit that names a blast size needs the template, not a shape/size
+  // modifier.
+  const blastTemplate = /\b(?:small|medium|large)\s+blast\b/.test(text);
+  if (blastTemplate) {
+    blockers.push('blast-template');
+  }
+
+  // Area definition: burst, area, arc, line effects (blast templates are
+  // classified above as `blast-template`, not here — a unit naming a blast
+  // size carries the more precise blocker).
+  if (!blastTemplate && (/\b(?:burst|blast|area|arc|line)\s*(?:\d+|of effect|effect|damage)/.test(text)
+    || /\b(?:medium|large|small)\s+burst\b/.test(text)
+    || /\baround\s+(?:yourself|self|the target|them)/.test(text))) {
     blockers.push('area-define');
   }
 

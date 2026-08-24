@@ -29,7 +29,7 @@
 import type { RuleSourceUnit } from '../../../source-units.js';
 import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
 import type { RuleMutation } from '../../primitives/types.js';
-import { affectedFoeIds, registerPassiveProjectionTalent, registerProgramLevelTalent, registerRangeModifierTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
+import { affectedFoeIds, registerAreaModifierTalent, registerPassiveProjectionTalent, registerProgramLevelTalent, registerRangeModifierTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
 import type { TalentEffect } from '../../kernels/talent-recipes.js';
 
 /** The party-favor mine's position from the ability's recorded terrain
@@ -599,6 +599,36 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
     },
   },
 
+  // ICON p.210 Enochian Pyre talent 2: "Exceed: You may shove all characters
+  // in the area 2 spaces." The exceed trigger rides the ability's attack
+  // roll (the same rule the VM uses); the characters in the area are the
+  // attack target (the blast center) plus every character the ability's
+  // area-delivery damage affected — exactly the blast membership, since the
+  // alternative talent 1 (comeback ally immunity) cannot be equipped
+  // simultaneously. Each is shoved 2 away from the Pyre user.
+  'enochian:pyre:talent:2': {
+    mechanic: 'Exceed (attack roll 15+): shove the attack target and every character in the blast area 2 spaces away from you.',
+    triggerEffect: {
+      trigger: 'exceed',
+      build: (actorId, targetIds, _triggerTargetIds, context): TalentEffect[] => {
+        if (!context) return [];
+        const source = context.state.actors[actorId];
+        if (!source?.position) return [];
+        const areaIds = new Set<string>(targetIds);
+        for (const mutation of context.mutations) {
+          if (mutation.kind === 'damage' && mutation.delivery === 'area') areaIds.add(mutation.actorId);
+        }
+        const results: TalentEffect[] = [];
+        for (const id of areaIds) {
+          const character = context.state.actors[id];
+          if (!character?.position) continue;
+          results.push({ kind: 'move', sourceActorId: actorId, actorId: id, movement: 'shove', distance: 2, positions: [], direction: axisDirection(source.position, character.position), phasing: false });
+        }
+        return results;
+      },
+    },
+  },
+
   // ICON p.236 Eye of the Storm talent 1: "If there is no character in the
   // center space, create a pit there. The pit is also dangerous terrain."
   // The fold fires only when the center is unoccupied. The ability's own
@@ -667,6 +697,14 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   // hp-threshold.ts`) at mark time — the exact at-or-under-25% boundary.
   'sealer:divine-aegis:talent:2': {
     mechanic: 'Marking an ally at 25% hp or lower with Divine Aegis also grants them defiance (the threshold read is the shared quarter predicate).',
+  },
+  // ICON p.236 Eye of the Storm talent 2: "The center character may also
+  // take 1 piercing damage, once, for every foe or ally in the area effect,
+  // up to three times." The resolver counts the characters in the storm's
+  // blast (other than the center), capped at three, and deals that many
+  // piercing to the center character when the talent is equipped.
+  'stormbender:eye-of-the-storm:talent:2': {
+    mechanic: 'The center character takes 1 piercing damage for every other character in the area effect (foe or ally), up to three times.',
   },
 };
 
@@ -737,6 +775,26 @@ for (const [sourceId, row] of Object.entries(RANGE_MODIFIER_TALENT_RECIPES)) {
   registerRangeModifierTalent(sourceId, row.mechanic);
 }
 
+/** Area-modifier talents: the talent's COMPLETE semantics are a shape/size
+ * change on its parent ability's area, executed by the shared area kernel
+ * (`kernels/area.ts`) inside the parent resolver (the reviewed rules live in
+ * `content/jobs/area-recipes.ts`). Each row audits as complete through
+ * `registerAreaModifierTalent` with its source fixture + replay test in
+ * __tests__/area.test.ts. */
+const AREA_MODIFIER_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }>> = {
+  // ICON p.158 Soul Shot talent 2: "At round 4 or greater, Soul Shot becomes
+  // Line 6." The line length derives from the shared effective-area
+  // authority (round gate + equipped choice) inside the Soul Shot resolver;
+  // the attack target must still lie in the effective line.
+  'freelancer:soul-shot:talent:2': {
+    mechanic: 'Soul Shot\u2019s line extends to Line 6 from round 4 onward through the shared effective-area authority; the attack target must still lie in the effective line.',
+  },
+};
+
+for (const [sourceId, row] of Object.entries(AREA_MODIFIER_TALENT_RECIPES)) {
+  registerAreaModifierTalent(sourceId, row.mechanic);
+}
+
 /** Classify a documented talent by the kernel it needs. Advisory build-time
  * categorization, never parsed at runtime — the runtime fold only reads the
  * explicit `wired` rows. */
@@ -793,13 +851,14 @@ export function getTalentRecipes(units: readonly RuleSourceUnit[]): Readonly<Rec
         const programLevel = PROGRAM_LEVEL_TALENT_RECIPES[unit.id];
         const passive = PASSIVE_PROJECTION_TALENT_RECIPES[unit.id];
         const rangeModifier = RANGE_MODIFIER_TALENT_RECIPES[unit.id];
-        const executable = wired ?? programLevel ?? passive ?? rangeModifier;
+        const areaModifier = AREA_MODIFIER_TALENT_RECIPES[unit.id];
+        const executable = wired ?? programLevel ?? passive ?? rangeModifier ?? areaModifier;
         return [unit.id, {
           sourceId: unit.id,
           abilityId: unit.parentId ?? '',
           name: unit.name,
-          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : passive ? 'passive-projection' as const : rangeModifier ? 'range-modifier' as const : 'documented' as const,
-          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? passive?.mechanic ?? rangeModifier?.mechanic ?? '',
+          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : passive ? 'passive-projection' as const : rangeModifier ? 'range-modifier' as const : areaModifier ? 'area-modifier' as const : 'documented' as const,
+          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? passive?.mechanic ?? rangeModifier?.mechanic ?? areaModifier?.mechanic ?? '',
           detail: executable ? '' : documentedTalentDetail(unit),
           ...(wired ? { triggerEffect: wired.triggerEffect } : {}),
         }];

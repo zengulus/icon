@@ -245,6 +245,20 @@ const eyeOfTheStormEffects: RuleResolver = (context) => {
     } else {
       mutations.push(conditionMutation(context, centerActor.id, 'vulnerable'));
     }
+    // Talent 2 (p.236): "The center character may also take 1 piercing
+    // damage, once, for every foe or ally in the area effect, up to three
+    // times." Count the characters in the blast other than the center
+    // (capped at three) and deal that many piercing to the center.
+    if (source.talents?.['stormbender:eye-of-the-storm'] === 2) {
+      const count = Math.min(
+        3,
+        Object.values(context.state.actors).filter((character) => {
+          const position = character.position;
+          return position && !sameCell(position, center) && blast.some((cell) => sameCell(cell, position));
+        }).length,
+      );
+      if (count > 0) mutations.push(damageMutation(context, centerActor.id, count, 'effect', 'piercing'));
+    }
   }
   return mutations;
 };

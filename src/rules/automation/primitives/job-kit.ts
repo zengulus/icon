@@ -1,6 +1,6 @@
 import { resolveCureMutations } from './status-saves.js';
 import { attackDamageProvenance, resolveAttackRoll, type AttackDamageProvenance } from './attack-resolution.js';
-import { axisDirection, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../../area-geometry.js';
+import { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../../area-geometry.js';
 import type { Position } from '../../types.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import type {
@@ -48,7 +48,7 @@ import type {
  */
 
 // Re-export area geometry so a job file has a single import point.
-export { axisDirection, lineCells, orthogonalNeighbors, sameCell, squareArea };
+export { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, sameCell, squareArea };
 
 // ── Selectors ────────────────────────────────────────────────────────────────
 export const self: RuleSelector = { kind: 'self' };

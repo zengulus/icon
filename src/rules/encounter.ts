@@ -22,8 +22,9 @@ import { applyDeterminedDamageToVitals } from './automation/primitives/damage-re
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
-import { rangeStateView } from './automation/kernels/encounter-adapter.js';
+import { areaStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
 import { effectiveAbilityRange } from './automation/kernels/range.js';
+import { effectiveAreaFor } from './automation/kernels/area.js';
 import { footprintDistance } from './automation/primitives/spatial-intent.js';
 import { auraStateView, projectedAuraAttackModifiers } from './automation/kernels/aura.js';
 import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
@@ -920,6 +921,15 @@ function abilityRange(header: string, listedRange: number | null) {
   return area ? Number(area[1]) : 1;
 }
 
+/** ICON p.97: for a Line X ability, the attack space is any character in the
+ * area, and the line extends `length` from the user — so the target's legal
+ * range IS the effective line length (a Line 6 talent extends target
+ * legality with the pattern). Arc abilities keep the range rules (where the
+ * pattern starts) as their range authority. */
+function isLineShaped(header: string): boolean {
+  return /\bline\s+\d+/i.test(header);
+}
+
 /**
  * State-derived triggers (ICON p.95) are inferred from the current encounter
  * before a resolver runs, instead of relying on the caller to assert them:
@@ -1130,9 +1140,14 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     // The effective listed range folds every registered range-modifier rule
     // (listed/conditional/dynamic) for this ability against the current
     // encounter state, so a talent like "Valkyrie gains range 4" genuinely
-    // widens target legality — it is never UI-only.
+    // widens target legality — it is never UI-only. A Line X ability's
+    // target legality is its effective line length (p.97: the attack space
+    // is any character in the area), so the area kernel's shape/size
+    // overrides feed the same gate.
     const baseRange = abilityRange(ability.header, ability.range);
-    const maximumRange = effectiveAbilityRange(rangeStateView(state), actor.id, ability.id, baseRange);
+    const maximumRange = isLineShaped(ability.header)
+      ? effectiveAreaFor(areaStateView(state, actor.id), actor.id, ability.id, 'line', baseRange).length
+      : effectiveAbilityRange(rangeStateView(state), actor.id, ability.id, baseRange);
     assertDirectTarget(state, actor, attackTargetActor, {
       relation: 'foe',
       maximumRange,

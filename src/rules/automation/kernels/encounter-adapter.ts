@@ -5,6 +5,7 @@ import { projectedMarkConditionGrants, projectedMarkConditionSuppressions, proje
 import { auraEffectRadius, auraStateView, projectedAuraArmorBonus, projectedAuraConditions, projectedAuraConditionPotencies } from './aura.js';
 import { projectedHpThresholdConditions } from './hp-threshold.js';
 import type { RangeStateView } from './range.js';
+import type { AreaStateView } from './area.js';
 import { applySpatialIntent, footprintDistance, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { summonCap } from './summon-recipes.js';
@@ -115,6 +116,25 @@ export function rangeStateView(state: EncounterState): RangeStateView {
     const actor = state.actors[actorId];
     return actor ? encounterConditionSet(actor, state) : new Set<string>();
   } };
+}
+
+/** Adapt the reducer state to the area kernel's read surface for one actor
+ * (the round plus the actor's authoritative HP/talent/mastery/condition
+ * reads), so the effective-area authority is evaluated from command-time
+ * state — the same discipline as `rangeStateView`. */
+export function areaStateView(state: EncounterState, actorId: string): AreaStateView {
+  const actor = state.actors[actorId];
+  return {
+    round: state.round,
+    actor: {
+      hp: actor?.hp,
+      maximumHp: actor ? Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) : undefined,
+      abilityIds: actor?.abilityIds,
+      masteredAbilityIds: actor?.masteredAbilityIds,
+      talents: actor?.talents,
+      conditions: actor ? encounterConditionSet(actor, state) : undefined,
+    },
+  };
 }
 
 export function encounterConditionSet(actor: EncounterActor, state?: EncounterState) {

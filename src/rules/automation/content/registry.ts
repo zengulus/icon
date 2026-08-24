@@ -25,6 +25,7 @@ import './jobs/aura-recipes.js';
 import './jobs/mastery-recipes.js';
 import './jobs/hp-threshold-recipes.js';
 import './jobs/range-recipes.js';
+import './jobs/area-recipes.js';
 import './foes/role-baseline-recipes.js';
 import './foes/mark-recipes.js';
 import './foes/ability-recipes.js';

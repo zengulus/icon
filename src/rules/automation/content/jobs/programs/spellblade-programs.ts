@@ -1,8 +1,9 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { effectiveAreaFor } from '../../../kernels/area.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
-  axisDirection, sameCell, squareArea, withinGrid,
+  axisDirection, arcCells, sameCell, squareArea, withinGrid,
   constant,
   distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation,
@@ -226,16 +227,39 @@ const rampantNailEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.227 Sturmreiten (interrupt): draw a line 3 area effect, teleport to
- * the end space, and deal 2 piercing to every other character in the area. */
+ * the end space, and deal 2 piercing to every other character in the area.
+ * The MJÖLLNIR mastery (p.227) replaces the area with an arc 5: the player
+ * chooses the arc's orthogonal path (`input.positions['arc-path']`), the
+ * shared arc geometry validates it, and the teleport goes to the arc's end. */
 const sturmreitenEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source.position) return [];
-  const direction = context.input.directions?.line ?? rushTowardFoes(context, source.position);
-  const cells: { x: number; y: number }[] = [];
-  for (let step = 1; step <= 3; step += 1) {
-    const cell = { x: source.position.x + direction.x * step, y: source.position.y + direction.y * step };
-    if (!withinGrid(cell, context)) break;
-    cells.push(cell);
+  const { shape, length } = effectiveAreaFor(
+    { round: context.state.round, actor: { ...source, maximumHp: source.maxHp } },
+    source.id,
+    'spellblade:sturmreiten',
+    'line',
+    3,
+  );
+  let cells: { x: number; y: number }[];
+  if (shape === 'arc') {
+    const path = context.input.positions?.['arc-path'] ?? [];
+    if (path.length !== length) {
+      throw new RuleProgramViolation('choice.position-count', `Sturmreiten's arc requires exactly ${length} chosen spaces.`);
+    }
+    const arc = arcCells(source.position, path);
+    if (!arc || arc.some((cell) => sameCell(cell, source.position!))) {
+      throw new RuleProgramViolation('choice.position-range', 'Sturmreiten\'s arc must be an orthogonal, non-overlapping path that never enters your space.');
+    }
+    cells = arc;
+  } else {
+    const direction = context.input.directions?.line ?? rushTowardFoes(context, source.position);
+    cells = [];
+    for (let step = 1; step <= length; step += 1) {
+      const cell = { x: source.position.x + direction.x * step, y: source.position.y + direction.y * step };
+      if (!withinGrid(cell, context)) break;
+      cells.push(cell);
+    }
   }
   const end = cells.at(-1);
   if (!end) return [];

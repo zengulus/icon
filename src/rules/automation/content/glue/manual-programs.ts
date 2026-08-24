@@ -23,6 +23,7 @@ import { compileAuraFoeTraitRecipe } from '../../kernels/aura.js';
 import { compileHpThresholdFoeTraitRecipe } from '../../kernels/hp-threshold.js';
 import { compileAttackModifierFoeTraitRecipe } from '../../kernels/attack-modifiers.js';
 import { compileRangeModifierRecipe } from '../../kernels/range.js';
+import { compileAreaModifierRecipe } from '../../kernels/area.js';
 import { EXECUTABLE_JOB_TRAIT_IDS } from '../jobs/job-trait-recipes.js';
 import { JOB_SUMMON_SUITES } from '../jobs/summon-recipes.js';
 import { documentedTalentDetail } from '../jobs/talent-recipes.js';
@@ -400,9 +401,13 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
     // A range-modifier talent (Valkyrie gains range 4, Incubus range 3/5,
     // Harvest range 2/5, Open the Gates range = round) is fully represented
     // by its reviewed range rule: the kernel compiles it complete, and the
-    // rule itself is the audit authority (folded at both command gates).
+    // rule itself is the audit authority (folded at both command gates). An
+    // area-modifier talent (Soul Shot becomes Line 6) is the same shape for
+    // the area kernel: the parent resolver derives the effective area.
     const rangeCompiled = compileRangeModifierRecipe(unit);
     if (rangeCompiled) return rangeCompiled;
+    const areaCompiled = compileAreaModifierRecipe(unit);
+    if (areaCompiled) return areaCompiled;
     const wired = isExecutableTalent(unit.id);
     const clause: RuleClauseCompilation = {
       id: `${unit.id}:clause:1`,

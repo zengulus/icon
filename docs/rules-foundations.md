@@ -318,6 +318,7 @@ registry, or reducer seam) that content rows plug into. Found at
 | **Aura membership kernel** (`aura.ts`) | generic Aura authority: origin resolution (trait/state/stance/aura-effect/entity), continuous membership from current positions through the canonical p.92 footprint range (`footprintDistance`), and ephemeral condition/modifier projection onto current members; lifecycle recipes query it with `isInAura` | spatial-intent, condition, attack | existing (Commander's Aura, Aura of Shielding, Rook t1, Dervish t1, Gentleness base+t1, Shieldmaster, Bleak Mercy) |
 | **HP-threshold projection kernel** (`hp-threshold.ts`) | generic conditional-passive authority for the two canonical HP states — bloodied (at or under 50% of the wounds-adjusted maximum, p.94/p.104) and at-or-under-25% (the exact quarter mark) — answering "is this passive active" (`isAtHpThreshold`) and projecting conditions / the turn-start +actions bonus onto the owner, with an inverted gate for "loses X when bloodied"; the shared predicates also feed the VM (`quarter` predicate) and the attack-modifier fold (target-threshold bonus damage) | condition, attack, state | existing (Rogue Slippery, the Enrage family ×9, True Enrage, Arkentech Hover Chair, Furious Berserk sturdy, Strigoi Blood Hunger, Divine Aegis t2) |
 | **Range / distance kernel** (`range.ts`, F12) | the single reusable authority for ICON's range family: canonical distance (`distanceBetween`/`isWithinRange`/`isExactlyRange` over the shared p.92 footprint metric), authoritative listed-range modification (`effectiveAbilityRange` folding registered `RangeModifierRule`s — fixed override, conditional override under stealth/comeback/mastery gates, dynamic round-number — at both command gates, so a range change genuinely widens target legality), and distance-gated effects (exact-range attack modifiers via the attack-modifier fold's `exactRange`/unerring, Aetherwall's outside-range-2 damage halving through the same footprint distance). Distance predicates never change targeting range, and listed-range changes never affect damage | spatial-intent, attack, damage | existing (Valkyrie t1, Incubus t1, Harvest t2, Open the Gates t2, Trigrammaton, Aetherwall) |
+| **Area kernel** (`area.ts`, F13) | the reusable authority for ICON's p.97 AoE patterns. The geometry module (`area-geometry.ts`) owns the deterministic pattern math — orthogonal `lineCells`, validated orthogonal `arcCells` (a chosen path: contiguous, one-step, no self-overlap, never the user's space; never auto-shaped), and `squareArea` for burst/blast-center squares. The kernel folds registered `AreaModifierRule`s (shape and/or length override under round/talent/mastery gates) into an EFFECTIVE area descriptor (`effectiveAreaFor`) that the parent resolver reads at command time — the same discipline as the range kernel — and the reducer's target-legality gate consumes it for line-shaped abilities, so a shape/size change genuinely alters legal execution, never just metadata. Small/medium/large blast templates are visual-only in the source and deliberately NOT approximated; units needing an exact template carry the `blast-template` blocker | spatial-intent, area-geometry | existing (Soul Shot t2 line 6, Sturmreiten mastery arc 5) |
 
 ### Missing kernels named by the ontology
 
@@ -355,7 +356,7 @@ authority for "complete"; here **existing** = a kernel/primitive seam exists
 | Move / Dash / Rush / Fly / Teleport / Shove / Place/Remove | move mutation, spatial-intent | F1, movement-triggers | existing (motion entry partial) | movement |
 | Terrain (difficult/dangerous/impassable/pit/object) | terrain mutation | F1 | existing partial | classes/jobs/foes |
 | Cover / LoS / LoE / Range / Height | targeting, line-of-sight, spatial | F1 | existing | targeting |
-| Area patterns (line/arc/blast/burst) | spatial (`computeSpatialArea`) | F1 | existing (burst/line; arc pending) | areas |
+| Area patterns (line/arc/blast/burst) | area-geometry (`lineCells`/`arcCells`/`squareArea`) + area kernel | F13 | existing (line/arc/burst; blast template pending) | areas |
 | Attack tag / auto-hit | VM attack | runtime | existing | attacks |
 | Mark | mark mutation | F4 passive | existing | marks |
 | Stance | stance mutation | F3 | existing | stances |
@@ -366,7 +367,8 @@ authority for "complete"; here **existing** = a kernel/primitive seam exists
 | Combo / Blessing / Vigilance / Resolve | resource mutations | resource registry | partial (spend seams) | economies |
 | Power Die | (die mutations) | lifecycle | partial | stance dies |
 | Rebound | (attack direction) | (attack modifier) | missing | trick shot, heracule mastery |
-| Aura | persistent effect | (aura kernel) | missing | auras |
+| Aura | persistent effect | (aura kernel) | existing | auras |
+| Area patterns (line/arc/burst; blast pending) | area-geometry + area kernel | F13 | existing (line/arc/burst) | areas |
 
 ---
 
@@ -579,8 +581,10 @@ only authority for "done."
   and Trigrammaton's exactly-range-3 row (F12). 25/65 traits wired.
 - **F7 Talents fold** — closed `TALENT_RECIPES` (288); `talentTriggerMutations`
   (exceed/comeback/finishing-blow/slay/collide/always) + `affectedFoeIds`
-  condition-grant; 3 program-level + 4 range-modifier (F12).
-  40/288 executable.
+  condition-grant; 30 wired + 5 program-level + 3 passive-projection + 4
+  range-modifier (F12) + 1 area-modifier (F13; the area-carried rows — Pyre
+  t2 exceed blast shove, Eye of the Storm t2 center piercing — ride the
+  wired/program-level homes). 43/288 executable.
 - **F8 Mastery attachment** — `kernels/mastery.ts`: the typed mastery
   attachment mechanism. `EncounterActor.masteredAbilityIds` (projected from
   `CharacterAbility.mastered`, migrated deterministically for old snapshots)
@@ -641,6 +645,21 @@ only authority for "done."
   from stealth), Harvest t2 (2/5 Comeback), Open the Gates t2 (range = round
   number), Trigrammaton (exactly-range-3 boon + unerring), Aetherwall
   (outside-range-2 halving). Fixtures: `__tests__/range.test.ts`.
+- **F13 Area kernel** — `kernels/area.ts` + `area-geometry.ts`: the reusable
+  authority for ICON's p.97 AoE patterns. `arcCells` validates a player-chosen
+  orthogonal arc path (contiguous, one step at a time, no self-overlap, never
+  the ability user's space) and returns the exact cells — an Arc is a chosen
+  path, never an auto-shaped approximation; `lineCells`/`squareArea` cover the
+  orthogonal line and the burst/center squares. A content row registers a
+  reviewed `AreaModifierRule` (shape and/or length override with round /
+  talent / mastery gates); `effectiveAreaFor` derives the parent ability's
+  EFFECTIVE area at command time and the reducer's target-legality gate for
+  line-shaped abilities reads it, so a change genuinely alters legal
+  execution. Blast templates are visual-only in the source and deliberately
+  NOT approximated (units needing one carry `blast-template`). Rows: Soul
+  Shot t2 (Line 6 from round 4), Sturmreiten mastery (Arc 5), plus the
+  area-carried triggers on Pyre t2 (exceed blast shove) and Eye of the Storm
+  t2 (center piercing per area character). Fixtures: `__tests__/area.test.ts`.
 - **F11 HP-threshold passive projection kernel** — `kernels/hp-threshold.ts`:
   the source-ID-free authority for the canonical conditional passives
   ("while bloodied, X" / "while at or under 25% HP, X"). Bloodied is at or
@@ -682,6 +701,18 @@ only authority for "done."
   effect-redirect family all remain unresolved by design — the census exposes
   each as its own blocker family (`distance-predicate`, `unlimited-range`,
   `object-distance`, `ability-attack-modifier`, `effect-redirect`).
+- Areas are NOT globally complete: the deterministic line/arc/burst geometry
+  and the registered shape/length modifier seam are generic authority, but
+  source-defined area semantics still unresolved include the exact
+  small/medium/large blast templates (visual-only in the PDF — units naming
+  a blast size carry the precise `blast-template` blocker and are never
+  approximated), delivery-type conversions (Perseus t2's aura → line-5
+  area, `aura-to-area-conversion`), an additional secondary area (Sturmreiten
+  t2's comeback line-3 extension, `area-extension`), moving an existing
+  terrain area at a turn boundary (Atherwand t2, `terrain-move-lifecycle`),
+  and player-target choice inside an area (Eclipse t2, `choice-input`). The
+  area kernel answers "what is this ability's effective area right now" and
+  never absorbs the payload semantics of an area-carried effect.
 - The seer 13-card deck mechanics may stay table-facing by design.
 - Aura is NOT globally complete: source-defined aura semantics still
   unresolved include the ability-user-presence gate over an ally-carried aura

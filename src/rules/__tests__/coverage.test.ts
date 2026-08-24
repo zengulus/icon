@@ -90,15 +90,18 @@ describe('rules automation coverage gate', () => {
     // documented Job traits and every other kind stay source-visible.
     // F9 range: the four range-modifier talents, Trigrammaton, and the
     // Aetherwall trait compile complete through the shared range kernel.
+    // F10 area: Soul Shot t2 (Line 6), Pyre t2 (exceed shove), Eye of the
+    // Storm t2 (count damage), and the Sturmreiten MJÖLLNIR mastery (arc 5)
+    // compile complete through the shared area authority.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 445,
-      unsupportedPrograms: 2830,
-      completeClauses: 1585,
-      unsupportedClauses: 3115,
+      completePrograms: 449,
+      unsupportedPrograms: 2826,
+      completeClauses: 1589,
+      unsupportedClauses: 3111,
       unsupportedByKind: {
-        core: 70, 'class-trait': 7, 'job-trait': 40, 'limit-break': 16, 'talent': 248, 'mastery': 137,
+        core: 70, 'class-trait': 7, 'job-trait': 40, 'limit-break': 16, 'talent': 245, 'mastery': 136,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 592,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

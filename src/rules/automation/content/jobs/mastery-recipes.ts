@@ -83,3 +83,13 @@ registerMasteryRecipe({
   mechanic: 'Characters that start their turn adjacent to the nail become vulnerable (turn-start lifecycle grant); vulnerable characters are vulnerable+ instead while inside the nail\'s aura (an upgrade-only aura projection), p.227.',
   detail: '',
 });
+
+registerMasteryRecipe({
+  sourceId: 'spellblade:sturmreiten:mastery',
+  abilityId: 'spellblade:sturmreiten',
+  name: 'Mjölnir',
+  status: 'implemented',
+  attachment: 'program-level',
+  mechanic: 'Any area Sturmreiten would create is an arc 5 instead (the shared area kernel\'s shape override, gated on mastery): the player chooses the arc\'s orthogonal path, the arc geometry validates it (contiguous, orthogonal, no self-overlap, never the user\'s space), and the resolver teleports to the arc\'s end and pierces the characters in it, p.227.',
+  detail: '',
+});
