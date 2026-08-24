@@ -377,6 +377,24 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // AFTER seeing the roll, with card resources and result-selection.
   // The Gamble foundation rolls the die; the post-roll reactive-choice
   // window and card resource system are separate missing foundations.
+
+  // ── Gamble-extension reclassification (extra dice / result selection) ──
+  'knave:riposte:talent:1': ['gamble-dice-pool-modifier'],
+  // "sacrifice 2 to roll 1 more d6 while gambling" — extra Gamble die
+  // via sacrifice cost; the sacrifice-cost itself is a cost modifier but
+  // the core mechanic is dice-pool extension.
+  'fool:death:talent:1': ['gamble-dice-pool-modifier', 'gamble-result-selection'],
+  // "roll 1 more d6 and choose any result" — extra Gamble die plus
+  // result-selection from the expanded pool; distinct from result-override
+  // (Stack Dice) and post-roll reactive choice (Bend Fate).
+  'chanter:monogatari:talent:2': ['gamble-dice-pool-modifier'],
+  // "roll 1 extra d6 per blessing spent when gambling" — extra Gamble
+  // dice via blessing spend; the blessing-spend is a cost modifier but
+  // the core mechanic is dice-pool extension.
+  'chanter:monogatari:mastery': ['gamble-dice-pool-modifier', 'gamble-result-selection'],
+  // "roll 1 extra d6 when gambling, and choose any two results" —
+  // extra Gamble die plus result-selection from the expanded pool;
+  // the cure-on-trigger clause is a separate lifecycle mechanic.
 };
 
 /** Classify a source unit's rules text into a blocker set.

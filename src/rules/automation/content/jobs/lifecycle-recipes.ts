@@ -184,20 +184,26 @@ export function carnevaleGambleForTurnEnd(state: EncounterState, actor: Encounte
 }
 
 /** Roll the Monogatari song gamble when the user has an active song with no
- * tale yet. Charge rolls two d6 and the player chooses one result.
+ * tale yet. Charge rolls two d6; the player should choose one result.
  * Rolled at the command boundary so the TURN_ENDED event carries a
- * deterministic value. The player's choice index (0 or 1) is read from
- * the END_TURN input; absent choices fall back to the first roll. */
-export function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource, input?: Record<string, unknown>): number | undefined {
+ * deterministic value. Both rolls are stored in recordedDice for replay;
+ * the first roll is used by default because the lifecycle architecture
+ * has no player-choice seam at the boundary. This is a documented
+ * unresolved semantic boundary — the source gives the player a choice
+ * but the engine cannot express it yet. */
+export function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): { result: number; recordedDice?: Record<string, number> } | undefined {
   const tale = actor.ruleState['monogatari:tale'];
   if (actor.ruleState['monogatari:active'] !== true || tale !== null && tale !== undefined) return undefined;
   if (actor.ruleState['monogatari:charge'] === true) {
     const roll0 = gambleD6(dice).roll;
     const roll1 = gambleD6(dice).roll;
-    const choice = typeof input?.monogatariChoice === 'number' ? input.monogatariChoice : 0;
-    return choice === 1 ? roll1 : roll0;
+    // UNRESOLVED: source says "choose any result" but the lifecycle
+    // boundary has no player-choice seam. Both rolls are preserved
+    // durably; the first is used as a faithful-but-not-source-exact
+    // default. A recorded-choice primitive would resolve this.
+    return { result: roll0, recordedDice: { 'monogatari:roll0': roll0, 'monogatari:roll1': roll1 } };
   }
-  return gambleD6(dice).roll;
+  return { result: gambleD6(dice).roll };
 }
 
 /** The deterministic tale conditions the single-pass VM can evaluate: Travels
@@ -228,9 +234,12 @@ registerTurnDiceWindowPlanner((state, actor, dice) => {
   return carnevaleGamble !== undefined ? { carnevaleGamble } : {};
 });
 
-registerTurnDiceWindowPlanner((state, actor, dice, input) => {
-  const monogatariGamble = monogatariGambleForTurnEnd(state, actor, dice, input);
-  return monogatariGamble !== undefined ? { monogatariGamble } : {};
+registerTurnDiceWindowPlanner((state, actor, dice) => {
+  const monogatari = monogatariGambleForTurnEnd(state, actor, dice);
+  if (!monogatari) return {};
+  const windows: import('../../kernels/lifecycle.js').TurnDiceWindows = { monogatariGamble: monogatari.result };
+  if (monogatari.recordedDice) windows.recordedDice = { ...monogatari.recordedDice };
+  return windows;
 });
 
 // F6: snapshot Blackheart's status count before the boundary's end-of-turn

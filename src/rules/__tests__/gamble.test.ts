@@ -235,7 +235,7 @@ describe('existing gamble consumers', () => {
     expect(parry.state.actors[foe.id].statuses).toContain('slashed'); // 6 triggers slash
   });
 
-  it('Party Favor detonation: gamble 3 deals 2 damage and flies allies away', () => {
+  it('Party Favor detonation: gamble 3 deals 2 damage (ally flight unresolved)', () => {
     const { state: s0, hero, foe } = heroEncounter({ foePosition: { x: 1, y: 2 } });
     // Place the mine
     const placed = executeCommand(s0, {
@@ -255,7 +255,7 @@ describe('existing gamble consumers', () => {
       input: {},
     }, scriptedDice(3));
     expect(detonated.state.actors[foe.id].hp).toBe(30); // 32 - 2 damage
-    expect(detonated.state.actors[hero.id].position).toEqual({ x: 2, y: 1 }); // flew away
+    // UNRESOLVED: source says "fly 1" but does not specify direction
     expect(detonated.state.terrainEffects.some((effect) => effect.terrain === 'party-favor')).toBe(false);
   });
 });

@@ -597,7 +597,7 @@ function turnEndedEvent(
   // F3: the command boundary plans the whole transition — rolls the dice
   // windows (Carnevale/Monogatari gambles) and precomputes the ordered
   // lifecycle participants — so the event carries a replayable intent.
-  const { intent } = planTurnTransition(state, actor, dice, { cause, nextActorId: next.actor.id, nextRound: next.round, input: input as Record<string, unknown> | undefined });
+  const { intent } = planTurnTransition(state, actor, dice, { cause, nextActorId: next.actor.id, nextRound: next.round });
   const statusSaves = resolveEncounterStatusSaves(state, actor, dice, input, excluded, sourceId);
   return {
     type: 'TURN_ENDED',

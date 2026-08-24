@@ -192,12 +192,10 @@ function partyFavorDetonationMutations(
     const characterPosition = character.position;
     if (!characterPosition || !area.some((cell) => sameCell(cell, characterPosition))) continue;
     if (character.side === ownerSide) {
-      const direction = axisDirection(mineCell, characterPosition);
-      const target = { x: characterPosition.x + Math.sign(direction.x), y: characterPosition.y + Math.sign(direction.y) };
-      mutations.push({
-        kind: 'move', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id,
-        movement: 'fly', distance: null, positions: [target], direction, phasing: false,
-      });
+      // UNRESOLVED: source says "fly 1" but does not specify direction.
+      // The engine has no player-choice seam for movement direction at
+      // detonation time. The fly mutation is omitted rather than forcing
+      // an arbitrary direction. A movement-choice primitive would resolve this.
     } else {
       mutations.push({
         kind: 'damage', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id,

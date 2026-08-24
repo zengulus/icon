@@ -273,7 +273,7 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(blessed.actors[hero.id].ruleState['monogatari:granted']).toBe(true);
   });
 
-  it('Monogatari Charge: rolls two dice and the player chooses which result becomes the tale', () => {
+  it('Monogatari Charge: rolls two dice, both recorded durably (choice unresolved)', () => {
     const { state, hero, foe } = chanterEncounter({ second: null });
     // Use Monogatari with the charge trigger via EXECUTE_RULE
     const used = executeCommand(state, {
@@ -288,21 +288,19 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(used.state.actors[hero.id].ruleState['monogatari:active']).toBe(true);
     expect(used.state.actors[hero.id].ruleState['monogatari:charge']).toBe(true);
 
-    // End turn with scripted dice [2, 5] and player chooses index 1 (the 5)
+    // End turn with scripted dice [2, 5]; both rolls are recorded durably
+    // but the first roll (2) is used as default because the lifecycle
+    // boundary has no player-choice seam (UNRESOLVED semantic boundary).
     const ended = executeCommand(used.state, {
       type: 'END_TURN',
       actorId: hero.id,
-      input: { monogatariChoice: 1 },
     }, scriptedDice(2, 5));
-    expect(ended.state.actors[hero.id].ruleState['monogatari:tale']).toBe(5);
+    expect(ended.state.actors[hero.id].ruleState['monogatari:tale']).toBe(2);
 
-    // Verify: with choice 0, the other result would have been selected
-    const ended2 = executeCommand(used.state, {
-      type: 'END_TURN',
-      actorId: hero.id,
-      input: { monogatariChoice: 0 },
-    }, scriptedDice(2, 5));
-    expect(ended2.state.actors[hero.id].ruleState['monogatari:tale']).toBe(2);
+    // Both rolls are stored in the dice windows for replay
+    const intent = ended.events[0]?.type === 'TURN_ENDED' ? ended.events[0].intent : undefined;
+    expect(intent?.diceWindows.recordedDice?.['monogatari:roll0']).toBe(2);
+    expect(intent?.diceWindows.recordedDice?.['monogatari:roll1']).toBe(5);
   });
 
   it('Chastise: autohits fray, seals the foe, and marks the retribution', () => {

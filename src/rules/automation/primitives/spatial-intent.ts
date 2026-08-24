@@ -20,6 +20,45 @@ export function footprintCells(position: Position, size: number): Position[] {
   return cells;
 }
 
+/** True when two footprints share at least one cell. Size 1 degenerates to
+ * the plain position-cell overlap check. */
+export function footprintsOverlap(
+  first: { position: Position; size?: number },
+  second: { position: Position; size?: number },
+): boolean {
+  const firstSize = Math.max(1, first.size ?? 1);
+  const secondSize = Math.max(1, second.size ?? 1);
+  const firstMaxX = first.position.x + firstSize - 1;
+  const firstMaxY = first.position.y + firstSize - 1;
+  const secondMaxX = second.position.x + secondSize - 1;
+  const secondMaxY = second.position.y + secondSize - 1;
+  return first.position.x <= secondMaxX && second.position.x <= firstMaxX
+    && first.position.y <= secondMaxY && second.position.y <= firstMaxY;
+}
+
+/** True when any cell of the first footprint is orthogonally adjacent
+ * (not diagonally) to any cell of the second footprint. Two adjacent
+ * Size-1 actors at distance 1 are adjacent; two large actors whose
+ * anchors are far apart can still be adjacent via their edges. */
+export function footprintsAdjacent(
+  first: { position: Position; size?: number },
+  second: { position: Position; size?: number },
+): boolean {
+  const firstCells = footprintCells(first.position, Math.max(1, first.size ?? 1));
+  const secondCells = footprintCells(second.position, Math.max(1, second.size ?? 1));
+  const secondSet = new Set(secondCells.map((c) => `${c.x},${c.y}`));
+  for (const cell of firstCells) {
+    const orth = [
+      `${cell.x},${cell.y - 1}`,
+      `${cell.x + 1},${cell.y}`,
+      `${cell.x},${cell.y + 1}`,
+      `${cell.x - 1},${cell.y}`,
+    ];
+    if (orth.some((key) => secondSet.has(key))) return true;
+  }
+  return false;
+}
+
 /** ICON p.92: "To be in range, a target must have at least 1 space of its
  * area within the listed range" — and range is measured "from the edge of the
  * origin space (or character)". This is the L∞ (Chebyshev) distance between

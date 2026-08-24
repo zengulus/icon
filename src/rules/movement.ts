@@ -1,5 +1,6 @@
 import type { EncounterActor, EncounterState, Position, TerrainCell } from './types.js';
 import { encounterConditionSet, rampartObstructs } from './automation/kernels/encounter-adapter.js';
+import { footprintCells, footprintsOverlap, footprintsAdjacent } from './automation/primitives/spatial-intent.js';
 
 /** The two built-in movement abilities available to an actor. */
 export type MovementMode = 'standard' | 'dash';
@@ -85,6 +86,39 @@ const inBounds = (state: EncounterState, position: Position) => position.x >= 0
   && position.y >= 0
   && position.x < state.grid.width
   && position.y < state.grid.height;
+
+/** True when every cell of the actor's footprint is within the battlefield. */
+function footprintInBounds(state: EncounterState, actor: EncounterActor, position: Position): boolean {
+  const cells = footprintCells(position, actor.size);
+  return cells.every((cell) => inBounds(state, cell));
+}
+
+/** True when any cell of the actor's footprint overlaps impassable terrain. */
+function footprintImpassable(state: EncounterState, actor: EncounterActor, position: Position): boolean {
+  const cells = footprintCells(position, actor.size);
+  return cells.some((cell) => terrainTypesAt(state, cell).has('impassable'));
+}
+
+/** True when any cell of the actor's footprint overlaps an object. */
+function footprintObject(state: EncounterState, actor: EncounterActor, position: Position): boolean {
+  const cells = footprintCells(position, actor.size);
+  return cells.some((cell) => objectAt(state, cell) !== undefined);
+}
+
+/** Another actor whose footprint overlaps the given position's footprint. */
+function footprintOccupant(state: EncounterState, actor: EncounterActor, position: Position): EncounterActor | undefined {
+  return Object.values(state.actors).find((other) =>
+    !other.defeated && other.onBattlefield && other.id !== actor.id
+    && footprintsOverlap({ position, size: actor.size }, { position: other.position, size: other.size }));
+}
+
+/** A hostile actor whose footprint is orthogonally adjacent to the given
+ * position's footprint. Used for engagement checks. */
+function footprintEngagedHostile(state: EncounterState, actor: EncounterActor, position: Position): boolean {
+  return Object.values(state.actors).some((other) =>
+    other.side !== actor.side && !other.defeated && other.onBattlefield
+    && footprintsAdjacent({ position, size: actor.size }, { position: other.position, size: other.size }));
+}
 const terrainAt = (state: EncounterState, position: Position): TerrainCell | undefined => state.grid.terrain.find((cell) => samePosition(cell.position, position));
 
 /**
@@ -216,20 +250,22 @@ function occupantAt(state: EncounterState, actor: EncounterActor, position: Posi
 }
 
 function destinationIssue(state: EncounterState, actor: EncounterActor, destination: Position): MovementIssue | null {
-  if (!inBounds(state, destination)) return issue('move.out-of-bounds', 'Movement cannot leave the battlefield.');
-  const occupant = occupantAt(state, actor, destination);
+  // ICON p.92: Size-N actors occupy an N×N square; the entire footprint
+  // must remain within the battlefield bounds.
+  if (!footprintInBounds(state, actor, destination)) return issue('move.out-of-bounds', 'Movement cannot leave the battlefield.');
+  const occupant = footprintOccupant(state, actor, destination);
   if (occupant) {
     return issue(
       'move.obstructed',
       occupant.side === actor.side
-        ? 'Movement can pass through an ally but cannot end in their space.'
+        ? 'Movement can pass through an ally but cannot end overlapping them.'
         : 'A foe obstructs that space.',
     );
   }
-  if (objectAt(state, destination)) {
+  if (footprintObject(state, actor, destination)) {
     return issue('move.obstructed', 'An object obstructs that space.');
   }
-  if (terrainTypesAt(state, destination).has('impassable')) {
+  if (footprintImpassable(state, actor, destination)) {
     return issue('move.impassable', 'Impassable terrain obstructs movement.');
   }
   return null;
@@ -246,7 +282,9 @@ function resolveStep(
   to: Position,
   mode: MovementMode,
 ): ResolvedStep {
-  if (!inBounds(state, to)) {
+  // ICON p.92: the entire footprint must remain within bounds even for
+  // intermediate waypoints, not just the anchor cell.
+  if (!footprintInBounds(state, actor, to)) {
     return { step: null, issue: issue('move.out-of-bounds', 'Movement cannot leave the battlefield.') };
   }
   const dx = Math.abs(to.x - from.x);
@@ -256,11 +294,13 @@ function resolveStep(
   if (!orthogonal && !(diagonal && canMoveDiagonally(actor, state))) {
     return { step: null, issue: issue('move.orthogonal', 'Movement must follow an orthogonal, contiguous path unless the character has Skirmisher.') };
   }
-  const occupant = occupantAt(state, actor, to);
+  // Footprint-aware obstruction: check whether the moving actor's footprint
+  // overlaps any hostile footprint at the destination.
+  const occupant = footprintOccupant(state, actor, to);
   if (occupant && occupant.side !== actor.side && !ignoresObstructionWhileMoving(actor, state)) {
     return { step: null, issue: issue('move.obstructed', 'A foe obstructs that space.') };
   }
-  if ((objectAt(state, to) || terrainTypesAt(state, to).has('impassable')) && !ignoresObstructionWhileMoving(actor, state)) {
+  if ((footprintObject(state, actor, to) || footprintImpassable(state, actor, to)) && !ignoresObstructionWhileMoving(actor, state)) {
     return { step: null, issue: issue('move.impassable', 'Impassable terrain obstructs movement.') };
   }
   const flying = ignoresTerrainCosts(actor, state);
@@ -279,7 +319,8 @@ function resolveStep(
   if (elevationPenalty >= 4) {
     return { step: null, issue: issue('move.elevation', 'Normal movement cannot climb four or more elevation levels at once.') };
   }
-  const engagementPenalty = ignoresEngagement(actor, state, mode) || !Object.values(state.actors).some((other) => other.side !== actor.side && !other.defeated && other.onBattlefield && distance(other.position, from) <= 1)
+  // ICON p.92: engagement is adjacency between footprints, not anchor cells.
+  const engagementPenalty = ignoresEngagement(actor, state, mode) || !footprintEngagedHostile(state, actor, from)
     ? 0
     : 1;
   const penalty = Math.max(difficultTerrainPenalty, elevationPenalty, engagementPenalty);
