@@ -290,6 +290,57 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "Comeback: You may extend Sturmreiten's area by another line 3 area,
   // drawn in a different direction" — an additional secondary area (the
   // kernel's seam overrides one area; it does not place a second one)
+
+  // ── Gamble re-audit (after the generic gambleD6 kernel landed) ──
+  // job-kit.ts now provides `gambleD6(context, threshold?)` — a source-ID-
+  // free d6 gamble through the deterministic dice source. Existing programs
+  // that already used `context.dice.die(6)` inline have been converted to
+  // use the shared helper. The `gamble-state` blocker was a syntactic
+  // classifier matching any source text mentioning "gamble" or "power die",
+  // but many units' programs already handle the mechanic. Reclassified below.
+  'fool:spinning-top:talent:1': ['passive'],
+  // "Spinning Top gambles the dash distance" — resolver already uses
+  // gambleD6 for the d6 result; the talent's passive (non-USE_ABILITY)
+  // component is the remaining blocker
+  'chanter:pandaemonium:talent:1': ['passive'],
+  // "gambles" in the source text, but the resolver auto-hits and deals
+  // fray damage — no gamble roll is part of the automated mechanics;
+  // the talent's passive component is the remaining blocker
+  'seer:gran-reversa:talent:1': ['passive'],
+  // "The power die" is the Gran Reversa stance die, initialized on
+  // enter; the reverseFate resolver uses gambleD6 for the d6 tick-down;
+  // the talent's passive component is the remaining blocker
+  'seer:sleight-of-hand:talent:2': ['charge-state'],
+  // Sleight of Hand's resolver is wired (autohit + pacified + area);
+  // "charge" is the Seer's card charge resource, still missing
+  'seer:chaos-tarot:talent:2': ['charge-state'],
+  // chaosTarotEffects uses gambleD6 for the tarot roll; charge-state
+  // is the remaining blocker (card charge resource)
+  'seer:polaris:talent:2': ['terrain-create'],
+  // Polaris marks a space for the meteor gamble (terrain entity);
+  // the gamble itself is wired via the end-of-turn dice window
+  'fool:party-favor:mastery': ['mark-modifier'],
+  // Party Favor's movement-trigger gamble is wired; the mastery's
+  // mark-modifier effect on detonation is the remaining blocker
+  'freelancer:exorcism:mastery': ['mark-modifier', 'range-modifier'],
+  // Exorcism's lifecycle + dice are wired; the mastery's mark-modifier
+  // and range-change effects are the remaining blockers
+  'chanter:holy:talent:1': ['blast-template', 'terrain-create'],
+  // "gambles" in the source but the program is wired; the medium blast
+  // geometry and terrain creation are the real blockers
+  'harvester:crimson-bloom:mastery': ['action-type-change'],
+  // Crimson Bloom's mark + dice are wired; the mastery's action-type
+  // change is the remaining blocker
+  'seer:sleight-of-hand:mastery': ['range-modifier'],
+  // The mastery's range-change effect is the remaining blocker
+  'seer:chaos-tarot:mastery': ['entity-create'],
+  // The mastery's entity-creation effect is the remaining blocker
+  'spellblade:rampant-nail:talent:2': ['passive'],
+  // Rampant Nail's die mechanic is wired through the mastery lifecycle;
+  // the talent's passive component is the remaining blocker
+  'fool:limit-break': ['area-define', 'entity-create'],
+  // "gamble" is mentioned but the real blockers are area-define and
+  // entity-create; the gamble itself is not the missing primitive
 };
 
 /** Classify a source unit's rules text into a blocker set.

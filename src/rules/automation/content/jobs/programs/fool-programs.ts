@@ -10,6 +10,7 @@ import {
   distance, sourceActor, occupied, impassable, walk, freeCellsInRange, resolveAttack,
   damageMutation, conditionMutation, stateMutation, resourceMutation, stanceMutation, markMutation,
   rushMutation, flyMutation, placeMutation, entityMutation, terrainMutation,
+  gambleD6,
   untilNextTurnStart, action, compilation,
 } from '../../../primitives/job-kit.js';
 
@@ -89,7 +90,7 @@ const carnevaleEffects: RuleResolver = (context) => {
 const spinningTopEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source?.position) return [];
-  const gamble = context.dice.die(6);
+  const { roll: gamble } = gambleD6(context);
   const spaces = gamble + 2;
   const direction = context.input.directions?.['direction'] ?? { x: 1, y: 0 };
   const landed = walk(context, source.position, direction, spaces, false, source.id);

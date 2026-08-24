@@ -396,6 +396,33 @@ export const terrainMutation = (
   kind: 'terrain', sourceId: context.sourceId, sourceActorId: context.actorId, operation, terrain, positions, height: null,
 });
 
+// ── Gamble ──────────────────────────────────────────────────────────────────
+
+/** The result of a Gamble roll (ICON Combat Glossary). The caller owns
+ * the source-defined threshold — the kernel provides the die value and the
+ * pass/fail test. Consumers that need only the roll can ignore `success`;
+ * consumers that branch on the exact result read `roll`. */
+export interface GambleResult {
+  /** The d6 result, 1–6. */
+  roll: number;
+  /** True when `roll >= threshold`. */
+  success: boolean;
+}
+
+/** Roll a single d6 Gamble through the deterministic context dice source.\ *
+ * Usage in a resolver:
+ * ```ts
+ * const { roll, success } = gambleD6(context, 4); // threshold 4+
+ * if (success) mutations.push(...);
+ * ```
+ *
+ * The die is consumed from the context's dice source so replay uses the
+ * same recorded value. There is no parallel RNG. */
+export function gambleD6(context: RuleExecutionContext, threshold = 1): GambleResult {
+  const roll = context.dice.die(6);
+  return { roll, success: roll >= threshold };
+}
+
 // ── Compilation ──────────────────────────────────────────────────────────────
 export function clause(unit: RuleSourceUnit, label: string, complete = true): RuleClauseCompilation {
   return {

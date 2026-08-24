@@ -91,7 +91,7 @@ Status legend:
 | Boon / Curse | ±highest d6, cancel 1:1 (82) | `rollBoonOrCurse` | EXECUTABLE | — |
 | Blessing | token; default +1 boon on a save (102) | blessing resource + `save-window.modifiers` | EXECUTABLE | — |
 | Combo | base→token→combo version (103) | `combo` resource + combo actions | PARTIAL | the **spend-augment** seam (spend tokens to augment/charge any ability — Songweave, blessing traits, Infuse) needs a durable spent-choice input on USE_ABILITY |
-| Gamble | d6, effect on result-or-higher (103) | program-level recorded gambles | PARTIAL | a shared, source-ID-free `gamble` primitive (recorded die + threshold branch + replay persistence) so non-ability content (Stack Dice, Bend Fate, Golden Mask) can consume it |
+| Gamble | d6, effect on result-or-higher (103) | `gambleD6` in `job-kit` + `recordedDice` in `TurnDiceWindows` | **EXECUTABLE** | the trait-level dice-window consumers (Stack Dice, Bend Fate, Golden Mask) need a non-ability gamble hook |
 | Sacrifice X | cost at start, non-mitigable, floor 1, may overpay (102) | VM `sacrifice` cost | PARTIAL | a reusable **cost-override** seam (reduce/ignore a sacrifice cost — Crimson King, Conqueror's Edge Infuse) with the exact non-mitigable/floor-1 contract as a typed modifier |
 | Power Die | point-contact die, tick/discard-at-0 (103) | per-stance `ruleState` dies | PARTIAL | a shared power-die primitive (size/start/tick/consume/discard-at-0) replacing the hand-rolled stance dies |
 | Mark | ongoing; one per ability per char; replace choice (103) | `mark` mutation + ownership | EXECUTABLE | mark **trigger** windows (turn-start/adjacency/etc.) remain reactive-window work |
@@ -135,14 +135,13 @@ recipe, and the **Vigilance-granting** trait rows. Each = a closed-id recipe
 row + fixture + positive/negative/replay test.
 
 B. **Engine mechanisms genuinely missing (subsystems):**
-   1. **Gamble primitive** — shared recorded-die + threshold-branch effect.
-   2. **Power-die primitive** — one recipe shape for the hand-rolled stance dies.
-   3. **Ability-use spend-augment seam** — durable spent-choice input on USE_ABILITY.
-   4. **Cost-override seam** — sacrifice/Infuse cost reduction (non-mitigable/floor-1).
-   5. **Aura membership kernel** — distance-based grants/penalties/entry.
-   6. **Rebound seam** — origin re-placement + LoS/cover from the new origin.
-   7. **Entity action seams + object-destroy model** — companions' suites; destructible objects.
-   8. **Mark-trigger windows** — turn-start/adjacency mark gates.
+   1. **Power-die primitive** — one recipe shape for the hand-rolled stance dies.
+   2. **Ability-use spend-augment seam** — durable spent-choice input on USE_ABILITY.
+   3. **Cost-override seam** — sacrifice/Infuse cost reduction (non-mitigable/floor-1).
+   4. **Aura membership kernel** — distance-based grants/penalties/entry.
+   5. **Rebound seam** — origin re-placement + LoS/cover from the new origin.
+   6. **Entity action seams + object-destroy model** — companions' suites; destructible objects.
+   7. **Mark-trigger windows** — turn-start/adjacency mark gates.
 
 None of the B items is safely completable mid-stream; each is a focused
 foundation-sized pass (the ontology build order already sequences them).

@@ -8,6 +8,7 @@ import {
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation,
+  gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 
@@ -73,7 +74,7 @@ const chaosTarotEffects: RuleResolver = (context) => {
   if (distance(source.position, center) > 5) throw new RuleProgramViolation('choice.actor-range', 'Chaos Tarot requires its center in range 5.');
   const area = squareArea(center, 1);
   const mutations: RuleMutation[] = [];
-  const roll = context.dice.die(6);
+  const { roll } = gambleD6(context);
   const inArea = Object.values(context.state.actors).filter((character) => {
     const position = character.position;
     return position && area.some((cell) => sameCell(cell, position));
@@ -140,7 +141,7 @@ const astraEffects: RuleResolver = (context) => {
   const extra = Math.max(0, Math.trunc(context.input.numbers?.blessings ?? 0));
   const gamble = (() => {
     let total = 0;
-    for (let i = 0; i <= extra; i += 1) total += context.dice.die(6);
+    for (let i = 0; i <= extra; i += 1) total += gambleD6(context).roll;
     return total;
   })();
   for (const character of Object.values(context.state.actors)) {
@@ -243,7 +244,7 @@ const reverseFateEffects: RuleResolver = (context) => {
   const current = Number(source.state['gran-reversa:die'] ?? 4);
   mutations.push(stateMutation(context, source.id, 'gran-reversa:die', Math.max(0, current - ticks)));
   let total = 0;
-  for (let i = 0; i < ticks; i += 1) total += context.dice.die(6);
+  for (let i = 0; i < ticks; i += 1) total += gambleD6(context).roll;
   mutations.push(vigorMutation(context, ally.id, total * 2));
   return mutations;
 };
