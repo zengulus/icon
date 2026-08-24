@@ -2,7 +2,7 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { createEncounter, createFoe, executeCommand, hasLineOfSight } from '../encounter.js';
 import { hasLineOfEffect, hasLineOfSight as kernelLineOfSight, lineOfSightCells, type SpatialLineView } from '../automation/primitives/line-of-sight.js';
-import { computeSpatialArea, footprintCells, footprintDistance, footprintIntersectsCells } from '../automation/primitives/spatial-intent.js';
+import { computeSpatialArea, footprintCells, footprintsAdjacent, footprintDistance, footprintIntersectsCells } from '../automation/primitives/spatial-intent.js';
 import { queryDirectTarget } from '../automation/primitives/targeting.js';
 import type { Position } from '../types.js';
 
@@ -143,6 +143,32 @@ describe('Size footprints (ICON p.92, p.290)', () => {
     expect(footprintDistance({ position: { x: 1, y: 1 }, size: 2 }, { position: { x: 2, y: 1 }, size: 2 })).toBe(0);
     // One space gap between (1,1)-(2,2) and (3,1)-(4,2).
     expect(footprintDistance({ position: { x: 1, y: 1 }, size: 2 }, { position: { x: 3, y: 1 }, size: 2 })).toBe(1);
+  });
+
+  it('footprintsAdjacent: Size-1 diagonal adjacency => engaged', () => {
+    // Diagonal neighbors at Chebyshev distance 1
+    expect(footprintsAdjacent({ position: { x: 1, y: 1 } }, { position: { x: 2, y: 2 } })).toBe(true);
+    expect(footprintsAdjacent({ position: { x: 0, y: 0 } }, { position: { x: 1, y: 1 } })).toBe(true);
+    // Not adjacent: Chebyshev distance > 1
+    expect(footprintsAdjacent({ position: { x: 0, y: 0 } }, { position: { x: 2, y: 2 } })).toBe(false);
+  });
+
+  it('footprintsAdjacent: Size-2+ footprints touching diagonally => engaged', () => {
+    // Two Size-2 actors whose corners touch diagonally:
+    // A at (1,1) occupies (1,1)-(2,2); B at (3,3) occupies (3,3)-(4,4).
+    // B cell (3,3) is Chebyshev distance 1 from A cell (2,2).
+    expect(footprintsAdjacent({ position: { x: 1, y: 1 }, size: 2 }, { position: { x: 3, y: 3 }, size: 2 })).toBe(true);
+    // Two Size-2 actors whose edges touch diagonally:
+    // A at (0,0) occupies (0,0)-(1,1); B at (2,2) occupies (2,2)-(3,3).
+    // B cell (2,2) is Chebyshev distance 1 from A cell (1,1).
+    expect(footprintsAdjacent({ position: { x: 0, y: 0 }, size: 2 }, { position: { x: 2, y: 2 }, size: 2 })).toBe(true);
+    // Separated by more than one cell:
+    expect(footprintsAdjacent({ position: { x: 0, y: 0 }, size: 2 }, { position: { x: 3, y: 3 }, size: 2 })).toBe(false);
+  });
+
+  it('footprintsAdjacent: footprints separated by more than one cell => not engaged', () => {
+    expect(footprintsAdjacent({ position: { x: 0, y: 0 } }, { position: { x: 3, y: 0 } })).toBe(false);
+    expect(footprintsAdjacent({ position: { x: 0, y: 0 }, size: 2 }, { position: { x: 5, y: 5 }, size: 2 })).toBe(false);
   });
 
   it('a large foe counts as inside an area when any footprint space is hit (p.290)', () => {

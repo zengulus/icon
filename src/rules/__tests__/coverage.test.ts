@@ -96,13 +96,13 @@ describe('rules automation coverage gate', () => {
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 449,
-      unsupportedPrograms: 2826,
-      completeClauses: 1589,
-      unsupportedClauses: 3111,
+      completePrograms: 453,
+      unsupportedPrograms: 2822,
+      completeClauses: 1593,
+      unsupportedClauses: 3107,
       unsupportedByKind: {
-        core: 70, 'class-trait': 7, 'job-trait': 40, 'limit-break': 16, 'talent': 245, 'mastery': 136,
-        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 592,
+        core: 70, 'class-trait': 7, 'job-trait': 38, 'limit-break': 16, 'talent': 245, 'mastery': 136,
+        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
     });

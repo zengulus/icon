@@ -85,8 +85,9 @@ describe('F6 attack-path trait registry', () => {
       expect(JOB_TRAIT_RECIPES[id].mechanic.length).toBeGreaterThan(0);
     }
     // Trigrammaton joined the wired rows through the range kernel's
-    // exactly-range-3 attack fold, so the closed inventory is now 25.
-    expect(Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired')).toHaveLength(25);
+    // exactly-range-3 attack fold, and the merge added additional attack
+    // path traits, so the closed inventory is now 27.
+    expect(Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired')).toHaveLength(27);
   });
 });
 

@@ -34,6 +34,8 @@ import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from '.
 import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
 import { hasLineOfSight as lineOfSightKernel } from './automation/primitives/line-of-sight.js';
 import { movementEntryTriggerMutations } from './automation/kernels/movement-triggers.js';
+import { resolveAbilityUseChoices } from './automation/kernels/ability-use-choices.js';
+import { AbilityUseChoiceViolation } from './automation/primitives/ability-use-choices.js';
 import { RULE_RESOLVERS } from './automation/content/glue/resolvers.js';
 import { findRuleSourceUnit } from './source-units.js';
 import { planMovementPath } from './movement.js';

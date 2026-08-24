@@ -36,10 +36,10 @@ export function footprintsOverlap(
     && first.position.y <= secondMaxY && second.position.y <= firstMaxY;
 }
 
-/** True when any cell of the first footprint is orthogonally adjacent
- * (not diagonally) to any cell of the second footprint. Two adjacent
- * Size-1 actors at distance 1 are adjacent; two large actors whose
- * anchors are far apart can still be adjacent via their edges. */
+/** ICON p.92: two footprints are adjacent when any cell of one is within
+ * Chebyshev distance ≤ 1 of any cell of the other — includes diagonals.
+ * Two adjacent Size-1 actors at distance 1 (including diagonal) are
+ * adjacent; two large actors whose edges touch diagonally are adjacent. */
 export function footprintsAdjacent(
   first: { position: Position; size?: number },
   second: { position: Position; size?: number },
@@ -48,13 +48,13 @@ export function footprintsAdjacent(
   const secondCells = footprintCells(second.position, Math.max(1, second.size ?? 1));
   const secondSet = new Set(secondCells.map((c) => `${c.x},${c.y}`));
   for (const cell of firstCells) {
-    const orth = [
-      `${cell.x},${cell.y - 1}`,
-      `${cell.x + 1},${cell.y}`,
-      `${cell.x},${cell.y + 1}`,
-      `${cell.x - 1},${cell.y}`,
-    ];
-    if (orth.some((key) => secondSet.has(key))) return true;
+    // Chebyshev neighbors: all 8 surrounding cells (orthogonal + diagonal)
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        if (dx === 0 && dy === 0) continue;
+        if (secondSet.has(`${cell.x + dx},${cell.y + dy}`)) return true;
+      }
+    }
   }
   return false;
 }

@@ -54,7 +54,7 @@ describe('monogatari gamble (migrated through the seam)', () => {
     const plain = monogatariGambleForTurnEnd(state, actor, scriptedDice(5));
     // Both are valid d6 results; the charge branch is the higher of two
     // successive rolls from the same source, the plain branch a single roll.
-    expect([1, 2, 3, 4, 5, 6]).toContain(charged);
-    expect([1, 2, 3, 4, 5, 6]).toContain(plain);
+    expect([1, 2, 3, 4, 5, 6]).toContain(charged?.result);
+    expect([1, 2, 3, 4, 5, 6]).toContain(plain?.result);
   });
 });

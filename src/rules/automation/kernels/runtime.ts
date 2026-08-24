@@ -239,7 +239,7 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
             targetEvasion: target.conditions.has('evasion'),
             trueStrike: (effect.trueStrike ?? false) || traitModifier.trueStrike,
             autoHit: effect.autoHit ?? false,
-            bonusDamageFlat: traitModifier.bonusDamageFlat + (abilityUse?.bonusDamage ?? 0),
+            bonusDamageFlat: traitModifier.bonusDamageFlat + (context.abilityUseModifiers?.bonusDamage ?? 0),
             exceedThreshold: traitModifier.exceedThreshold ?? undefined,
             unerring: traitModifier.unerring,
           }, context.dice);

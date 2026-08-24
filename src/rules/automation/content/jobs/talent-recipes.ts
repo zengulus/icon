@@ -796,6 +796,16 @@ for (const [sourceId, row] of Object.entries(AREA_MODIFIER_TALENT_RECIPES)) {
   registerAreaModifierTalent(sourceId, row.mechanic);
 }
 
+// ICON p.122 Rook talent 1: "You also have counter while Rook's aura is
+// active." The aura self-grant is projected while the bearer's own Rook aura
+// effect is active (the bearer is always a member of its own aura) and the
+// bearer still has Rook talent 1. Registered as an aura-conditional
+// self-grant through the passive-projection kernel (derived from the durable
+// activeEffects record — replay-safe).
+registerAuraSelfGrantRecipes({
+  'bastion:rook:talent:1': [{ auraSourceId: 'bastion:rook', requiredAbilityId: 'bastion:rook', requiredTalent: 1, conditions: ['counter'] }],
+});
+
 /** Classify a documented talent by the kernel it needs. Advisory build-time
  * categorization, never parsed at runtime — the runtime fold only reads the
  * explicit `wired` rows. */

@@ -1,7 +1,7 @@
 import type { EncounterActor, EncounterEntity, EncounterHeldDamage, EncounterPendingInterrupt, EncounterState, EncounterTerrainEffect, Position, StatusId } from '../../types.js';
 import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
-import { projectedMarkConditionGrants, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
+import { projectedAuraSelfGrants, projectedMarkConditionGrants, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
 import { auraEffectRadius, auraStateView, projectedAuraArmorBonus, projectedAuraConditions, projectedAuraConditionPotencies } from './aura.js';
 import { projectedHpThresholdConditions } from './hp-threshold.js';
 import type { RangeStateView } from './range.js';
