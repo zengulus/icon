@@ -73,7 +73,7 @@ const NON_IMPLEMENTABLE = new Set(['irreducible']);
  *  set would be executable — so it must never appear in the census. The
  *  claim is grounded in the executable allowlists (the compiler's
  *  `unsupportedClauses` check) rather than this set alone. */
-const IMPLEMENTED_PRIMITIVES = new Set(['condition-grant']);
+const IMPLEMENTED_PRIMITIVES = new Set(['condition-grant', 'aura']);
 
 /** Audit-verified reclassifications: source units whose syntactic first-pass
  *  blocker set is WRONG (the regex keyword pass matched "gain/grant/become"
@@ -89,7 +89,16 @@ const IMPLEMENTED_PRIMITIVES = new Set(['condition-grant']);
  *  Re-audit: 3 of the 28 claimed `{condition-grant}` singletons were
  *  genuine (bastion:valiant:talent:2, knave:provoke:talent:1,
  *  freelancer:showdown:talent:2 — now executable through the F7 talent
- *  fold); the other 25 are corrected below. */
+ *  fold); the other 25 are corrected below.
+ *
+ *  Aura re-audit (after the generic Aura kernel landed): `aura` is now an
+ *  implemented primitive (kernels/aura.ts), so the 7 singleton aura
+ *  candidates were re-read against the kernel. bastion:rook:talent:1 and
+ *  chanter:dervish:talent:1 became executable (projected counter through
+ *  the shared condition fold) and dropped out of the census entirely. The
+ *  other five are corrected below: their `{aura}` singleton was an
+ *  incomplete classification — each still needs a genuinely missing
+ *  capability beyond the Aura kernel itself. */
 const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // The corrected sets are the units' CURRENT blockers: the condition-grant
   // component of a reclassified unit (rebound, unstoppable, defiance,
@@ -135,9 +144,33 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "If Aria's special effect triggers twice, gain defiance and become unstoppable" (condition-grant — implemented)
   'harvester:crimson-bloom:talent:1': ['damage-preview'],
   // "If Crimson Bloom's damage would reduce an ally to 1 hp or below, they gain defiance" (condition-grant — implemented)
-  'sealer:trait:mantra-of-sealing': ['aura'],
-  // "attacks bless all adjacent allies and grant them 2 vigor" — the fixed
-  // 2-vigor grant is expressible; the adjacency projection on attacks is the aura
+  'sealer:trait:mantra-of-sealing': ['attack-trigger-grant'],
+  // "Your attacks bless all adjacent allies to you and grant them 2 vigor" —
+  // an ON-ATTACK area grant of a blessing token + vigor, not a continuous
+  // membership projection: the Aura kernel projects conditions and attack
+  // modifiers, never tokens/resources, so the attack-triggered area grant is
+  // still missing (the fixed 2-vigor grant and the bless action themselves
+  // are expressible)
+
+  // ── Aura re-audit: the five remaining `{aura}` singletons ──
+  'bastion:endless-battlement:talent:1': ['aura-user-gate'],
+  // "While you are in the aura, attacks against your ally gain +1 curse" —
+  // the targetCurses projection exists, but the aura sits on the ALLY while
+  // the gate is the ability USER's own position inside it (the parent
+  // Endless Battlement stance/interrupt is itself unimplemented)
+  'bastion:endless-battlement:talent:2': ['aura-user-gate'],
+  // "You and your ally both have counter while you are in the aura" — same
+  // user-presence gate over the ally-carried aura
+  'shade:nightmare:talent:2': ['rebound', 'entity-consume'],
+  // "rebound abilities off shadows in the aura; doing so consumes the
+  // shadow" — the attack-bounce modifier (NOT a condition) and the
+  // shadow-entity consumption are both missing; the aura kernel does not
+  // give entity membership or consumption
+  'harvester:gravebirth:talent:1': ['entity-vacate', 'choice-input'],
+  // "all thralls of your choice burrow … then you may place them in free
+  // space in your aura" — the free-space-in-aura placement is expressible
+  // (auraCells + the shared free-cell search); the thrall burrow/removal
+  // and the player's choice of thralls are still missing
   'sealer:open-the-gates:talent:2': ['range-modifier'],
   // "gains a range equal to the round number" (dynamic range)
   'seer:sisyphus:talent:1': ['save-modifier', 'entity-vacate'],

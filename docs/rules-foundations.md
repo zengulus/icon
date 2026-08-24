@@ -315,12 +315,12 @@ registry, or reducer seam) that content rows plug into. Found at
 | **Foe ability recipes** (`foe-recipes.ts`) | generic resolver factories; 22 recipe kinds | all | existing (22 kinds) |
 | **Foe trait recipes** (`foe-trait-recipes.ts`) | closed foe keyword rows | condition | existing |
 | **Summon recipes** (`summon-recipes.ts`) | placement ranges, per-owner caps, companion survival | entity | existing |
+| **Aura membership kernel** (`aura.ts`) | generic Aura authority: origin resolution (trait/state/stance/aura-effect/entity), continuous membership from current positions through the canonical p.92 footprint range (`footprintDistance`), and ephemeral condition/modifier projection onto current members; lifecycle recipes query it with `isInAura` | spatial-intent, condition, attack | existing (Commander's Aura, Aura of Shielding, Rook t1, Dervish t1, Gentleness base+t1, Shieldmaster, Bleak Mercy) |
 
 ### Missing kernels named by the ontology
 
 | Kernel | Source responsibility | Consumers |
 | --- | --- | --- |
-| **Aura membership kernel** | spatial distance-based grants/penalties, activation/size/entry | Shieldmaster, Pelagic Rage, 42 foe traits, Black Book; glossary *Aura X* |
 | **Resource-economy spend kernel** | blessing/combo/Infuse/sacrifice spend, use ledgers, gamble | glossary *Blessing/Combo/Sacrifice/Gamble/Mark* + relic/trait rows |
 | **Heroics economy** | make-Heroic choice, lockout, half-damage penalty | glossary *Heroic* + Stalwart traits |
 | **Movement-phase kernels** | vacate, occupancy-cost, elevation-fly, pre/post ability movement, position swap, teleport-all | glossary *Dash/Rush/Fly/Teleport/Place/Remove* + movement talents/foes |
@@ -590,6 +590,21 @@ only authority for "done."
   Fixtures: `__tests__/trait-reactions.test.ts`. This is the first home of
   the once-per-round economy/reactive-trait family (`use-ledger`);
   once-per-combat and the spend-augment (blessing/combo/infuse) halves remain.
+- **F10 Aura membership kernel** — `kernels/aura.ts`: the single reusable,
+  source-ID-free mechanism answering which characters are inside an aura and
+  what membership projects onto them. A content row registers a reviewed
+  `AuraDefinition` (origin resolution, radius, relations, includes-origin,
+  optional talent gate, projected conditions and attack modifiers); the kernel
+  derives membership continuously from current positions through the
+  canonical p.92 footprint range, so entering/leaving and origin movement
+  update immediately and replay needs no membership snapshots. Projection
+  feeds the existing condition fold (`encounterConditionSet`) and the shared
+  attack-modifier netBoon fold — Aura never resolves attacks/saves/damage
+  itself. Lifecycle recipes (Shieldmaster turn-end, Dervish expiry) ask the
+  same kernel with `isInAura`. Rows: Commander's Aura (p.304, +1 boon on
+  attacks), Aura of Shielding (p.304, dodge), Rook t1 counter, Dervish t1
+  counter, Gentleness base (+1 curse) + t1 counter, Shieldmaster turn-end
+  vigilance/sturdy, Bleak Mercy combo. Fixtures: `__tests__/aura.test.ts`.
 
 ### Explicit incomplete semantic boundaries
 
@@ -603,6 +618,16 @@ only authority for "done."
 - Rebound (attack bounce) is not a modeled mechanic beyond Trick Shot's armed
   variant.
 - The seer 13-card deck mechanics may stay table-facing by design.
+- Aura is NOT globally complete: source-defined aura semantics still
+  unresolved include the ability-user-presence gate over an ally-carried aura
+  (Endless Battlement t1/t2), entity members/consumption inside an aura
+  (Nightmare t2 shadows), and attack-triggered token/resource grants to
+  adjacent characters (Mantra of Sealing). Aura membership and projection
+  themselves are the implemented boundary; the large-footprint origin edge
+  (an origin's occupied footprint as the measured edge) follows the p.290
+  member-side footprint rule and stays covered by `footprintDistance` for
+  members — origin-footprint-edge aura measurement is the one geometric
+  detail left to the footprint matrix.
 
 ---
 

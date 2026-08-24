@@ -85,14 +85,17 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 29 wired / 3 program-level / 256 documented', () => {
+  it('covers exactly the 288 source talents with 29 wired / 3 program-level / 3 passive-projection / 253 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
     expect(Object.keys(recipes)).toHaveLength(288);
     expect(Object.keys(recipes).sort()).toEqual([...sourceIds].sort());
-    expect(getExecutableTalentIds().size).toBe(32);
-    expect(getDocumentedTalentIds(units).size).toBe(256);
+    // F7 + aura: the three passive-projection rows (Rook t1, Dervish t1,
+    // Gentleness t1) are continuous aura-membership projections, not fold
+    // triggers or program-emitted variants.
+    expect(getExecutableTalentIds().size).toBe(35);
+    expect(getDocumentedTalentIds(units).size).toBe(253);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();

@@ -252,7 +252,9 @@ describe('Chanter ability automation (p.174–181)', () => {
     const gentle = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:gentleness', targetIds: [] }, scriptedDice()).state;
     expect(gentle.actors[hero.id].stance).toMatchObject({ stanceId: 'gentleness' });
 
-    const attacked = executeCommand(gentle, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(12, 4)).state;
+    // The hero is inside their own Gentleness aura, so the aura's +1 curse on
+    // attacks (p.179) rolls a curse d6 (1) before the damage die (4).
+    const attacked = executeCommand(gentle, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(12, 1, 4)).state;
     expect(attacked.actors[foe.id].hp).toBe(24); // 32 - 8
     expect(attacked.actors[hero.id].hp).toBe(39); // 40 - 1 divine reflection (hero is in their own aura)
   });

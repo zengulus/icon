@@ -224,7 +224,11 @@ const ariaEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.178 Dervish: fly 1, then whisk an ally in range away and place them
- * in a free space adjacent to where you land. Charge chooses a second ally. */
+ * in a free space adjacent to where you land. Charge chooses a second ally.
+ * Talent 1 ("A swirling aura 1 of winds surrounds you after taking this
+ * ability until the start of your next turn, granting you and allies inside
+ * counter") adds the durable aura effect — the aura kernel interprets it
+ * (aura-recipes.ts) and the turn-start duration expires it at the boundary. */
 const dervishEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const sourcePosition = source.position;
@@ -241,6 +245,13 @@ const dervishEffects: RuleResolver = (context) => {
     mutations.push(removeMutation(context, ally.id));
     const adjacentCell = freeCellsInRange(context, flyDest, 1)[0];
     if (adjacentCell) mutations.push(placeMutation(context, ally.id, adjacentCell));
+  }
+  if (source.talents['chanter:dervish'] === 1) {
+    mutations.push({
+      kind: 'persistent', sourceId: context.sourceId, ownerId: source.id, operation: 'add', actorId: source.id,
+      effectId: 'aura', duration: { kind: 'turn-start', actor: { kind: 'self' }, turns: 1 },
+      modifiers: [{ stat: 'aura', operation: 'grant', value: constant(1) }], triggers: ['aura-refresh'], state: {},
+    });
   }
   return mutations;
 };

@@ -52,9 +52,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
     detail: '',
   },
   'bastion:trait:shieldmaster': {
-    sourceId: 'bastion:trait:shieldmaster', name: 'Shieldmaster', status: 'documented',
-    mechanic: '',
-    detail: 'Aura 1 is a spatial-aura mechanic, and \u201csturdy until the start of your turn\u201d needs a condition that clears at the next boundary; both stay table-facing.',
+    sourceId: 'bastion:trait:shieldmaster', name: 'Shieldmaster', status: 'wired',
+    mechanic: 'The trait owns a generic Aura definition (aura 1, allies); the turn-end lifecycle recipe asks the shared aura kernel whether an ally is inside, then grants vigilance +1 and a sturdy condition that clears at the start of the owner\u2019s turn (turn-start duration).',
+    detail: '',
   },
   // -------------------------------------------------------------- demon-slayer
   'demon-slayer:trait:demon-edge': {

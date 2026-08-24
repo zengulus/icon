@@ -68,31 +68,28 @@ describe('rules automation coverage gate', () => {
 
   it('reports every source unit and leaves unresolved mechanics visible', () => {
     const { audit } = auditRuleCompilations(collectRuleSourceUnits());
-    // F6: the 23 wired Job traits (incl. the attack-path modifier group —
-    // Demon Edge, Hissatsu, Pulverize, Bull's Strength — and the F9
-    // once-per-round reactive fold row Dash on the Rocks) + 6 summon suites
-    // are complete programs; F7: the 29 wired talents (the closed
-    // `talent-recipes.ts` tranche: exceed, comeback, finishing-blow with
-    // per-row eligibility extensions, the always trigger for unconditional
-    // charge-scaled augmentations and the single-foe condition-grant family,
-    // and the slay/collide post-application fold) plus the three
-    // program-level talents (Demon Cutter t2's pre-ability rush, Draken
-    // Cross t2's charged medium blasts, and Pyre t1's comeback ally
-    // immunity, implemented in the ability programs and gated on the
-    // equipped choice through the projected `talents` surface) audit as
-    // complete — 288 source talents, 29 wired / 3 program-level / 256
-    // documented. The 42 documented Job traits and every other kind stay
-    // source-visible.
+    // F6: the 24 wired Job traits (incl. the attack-path modifier group —
+    // Demon Edge, Hissatsu, Pulverize, Bull's Strength — the F9
+    // once-per-round reactive fold row Dash on the Rocks, and Shieldmaster's
+    // aura + turn-end membership recipe) + 6 summon suites are complete
+    // programs; F7: the 29 wired talents (the closed `talent-recipes.ts`
+    // tranche) plus the three program-level talents and the three
+    // aura projection talents (Rook t1, Dervish t1, Gentleness t1, which
+    // register as continuous passive-projection rows) audit as complete —
+    // 288 source talents, 29 wired / 3 program-level / 3 passive-projection
+    // / 253 documented. The two reviewed aura foe traits (Commander's Aura,
+    // Aura of Shielding) compile complete through the aura kernel. The 41
+    // documented Job traits and every other kind stay source-visible.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4750,
-      completePrograms: 413,
-      unsupportedPrograms: 2862,
-      completeClauses: 1553,
-      unsupportedClauses: 3197,
+      completePrograms: 419,
+      unsupportedPrograms: 2856,
+      completeClauses: 1559,
+      unsupportedClauses: 3191,
       unsupportedByKind: {
-        core: 70, 'class-trait': 8, 'job-trait': 42, 'limit-break': 16, 'talent': 256, 'mastery': 144,
-        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 606,
+        core: 70, 'class-trait': 8, 'job-trait': 41, 'limit-break': 16, 'talent': 253, 'mastery': 144,
+        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 604,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
     });

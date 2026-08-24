@@ -1,4 +1,5 @@
 import { determineAndApplyEncounterDamage, registerDefeatGuard, registerOnDamageDealtHook, registerStatusSavePolicySource, registerVigorDenialSource } from '../../kernels/encounter-adapter.js';
+import { auraDefinitionFor, auraStateView, isInAura } from '../../kernels/aura.js';
 import type { EncounterActor, EncounterState } from '../../../types.js';
 
 /**
@@ -25,31 +26,23 @@ function hasFoeRotMark(state: EncounterState, actor: EncounterActor): boolean {
   });
 }
 
-function sweetTormentRadius(actor: EncounterActor): number | null {
-  const effect = actor.activeEffects.find(({ effectId }) => effectId === 'sweet-torment');
-  if (!effect) return null;
-  const value = effect.modifiers.find(({ operation, stat }) => operation === 'grant' && stat === 'aura')?.value;
-  if (typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'constant' && 'value' in value && typeof value.value === 'number') return Math.max(0, value.value);
-  return 1;
-}
-
-/** ICON p.144 Sweet Torment: foes in the active aura cannot be cured or save clear statuses. */
+/** ICON p.144 Sweet Torment: foes in the active aura cannot be cured or save
+ * clear statuses. Membership is the generic aura kernel's — the durable aura
+ * effect is the lifetime + radius record, and the kernel derives who is
+ * inside from current positions (no local distance math). */
 function inSweetTormentAura(state: EncounterState, target: EncounterActor): boolean {
   if (target.defeated || !target.onBattlefield) return false;
-  return Object.values(state.actors).some((source) => {
-    if (source.defeated || !source.onBattlefield || source.side === target.side) return false;
-    const radius = sweetTormentRadius(source);
-    return radius !== null && Math.max(Math.abs(source.position.x - target.position.x), Math.abs(source.position.y - target.position.y)) <= radius;
-  });
+  const definition = auraDefinitionFor('knave:bleak-mercy');
+  return definition !== null && isInAura(auraStateView(state), definition, target.id);
 }
 
 /** ICON p.179 Gentleness: true when a gentleness-stance character's aura 1
- * covers `actor` (the aura includes the stance user themselves). */
+ * covers `actor` (the aura includes the stance user themselves). The stance
+ * origin and radius come from the shared aura kernel. */
 function inGentlenessAura(state: EncounterState, actor: EncounterActor): boolean {
   if (!actor.position) return false;
-  return Object.values(state.actors).some((candidate) =>
-    candidate.stance?.stanceId === 'gentleness' && !candidate.defeated && candidate.onBattlefield && candidate.position
-    && Math.max(Math.abs(candidate.position.x - actor.position.x), Math.abs(candidate.position.y - actor.position.y)) <= 1);
+  const definition = auraDefinitionFor('chanter:gentleness');
+  return definition !== null && isInAura(auraStateView(state), definition, actor.id);
 }
 
 /** ICON p.179 Gentleness: any character that deals damage while in the stance's

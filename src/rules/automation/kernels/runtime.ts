@@ -1,5 +1,6 @@
 import { resolveAttackRoll } from '../primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, consumedTraitModifier, effectiveDamageDie, traitAttackModifier } from './attack-modifiers.js';
+import { auraRuntimeView, projectedAuraAttackModifiers } from './aura.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
 import { eligibleTargets, isEligibleTarget } from '../primitives/targeting.js';
@@ -205,15 +206,23 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
     switch (effect.kind) {
       case 'attack': {
         const source = actor(context, context.actorId);
+        // Aura membership feeds the same attack-modifier authority as the
+        // trait fold: the attacker's own aura boons/curses plus any defensive
+        // curse an aura projects against the target (netBoon, p.92). The view
+        // is built once per attack effect; each target contributes its own
+        // defensive curse.
+        const auraView = auraRuntimeView(context.state);
+        const auraAttack = projectedAuraAttackModifiers(auraView, source.id);
         for (const target of targets) {
           const elevationModifier = source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0;
           // F6 attack-path trait fold: armed one-shot modifiers (Hissatsu
           // +1 boon / true strike / d10) plus permanent elevation mechanics
           // (Pulverize flat damage and lowered exceed threshold).
           const traitModifier = traitAttackModifier(source, elevationModifier);
+          const targetAuraCurse = projectedAuraAttackModifiers(auraView, target.id).targetCurses ?? 0;
           const attack = resolveAttackRoll({
             defense: target.defense,
-            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons,
+            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
             elevationModifier,
             sourceDazed: source.conditions.has('dazed'),
             targetEvasion: target.conditions.has('evasion'),

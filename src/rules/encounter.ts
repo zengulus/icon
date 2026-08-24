@@ -22,6 +22,7 @@ import { applyDeterminedDamageToVitals } from './automation/primitives/damage-re
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
+import { auraStateView, projectedAuraAttackModifiers } from './automation/kernels/aura.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
 import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
 import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
@@ -634,7 +635,7 @@ function movementEvents(state: EncounterState, command: Extract<EncounterCommand
       }
     }
   }
-  const defiance = encounterConditionSet(actor).has('defiance');
+  const defiance = encounterConditionSet(actor, state).has('defiance');
   // Movement records source damage, not a locally armor-reduced preview.
   // Derive the same p.93 amount used by replay here only to decide whether an
   // explicit legacy defeat event is needed after the move.
@@ -722,12 +723,18 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   // the VM path, where exceed effects fire).
   const traitOwner = { traitIds: actor.traitIds, state: actor.ruleState };
   const traitModifier = traitAttackModifier(traitOwner, actorElevation - targetElevation);
+  // Aura membership feeds the same attack-modifier authority as the trait
+  // fold: the attacker's own aura boons/curses plus any defensive curse an
+  // aura projects against the target (stacking through netBoon, p.92).
+  const auraView = auraStateView(state);
+  const auraAttack = projectedAuraAttackModifiers(auraView, actor.id);
+  const targetAuraCurse = projectedAuraAttackModifiers(auraView, target.id).targetCurses ?? 0;
   const { d20, boon, total, hit, critical, evasionRoll } = resolveAttackRoll({
     defense: target.defense,
-    sourceBoon: traitModifier.boons,
+    sourceBoon: traitModifier.boons + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
     elevationModifier: actorElevation - targetElevation,
     sourceDazed: actor.statuses.includes('dazed'),
-    targetEvasion: encounterConditionSet(target).has('evasion'),
+    targetEvasion: encounterConditionSet(target, state).has('evasion'),
     trueStrike: traitModifier.trueStrike,
     bonusDamageFlat: traitModifier.bonusDamageFlat,
   }, dice);
@@ -748,7 +755,7 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
     ignoreCover: false,
     covered,
   });
-  const defiance = encounterConditionSet(target).has('defiance');
+  const defiance = encounterConditionSet(target, state).has('defiance');
   const wouldDefeat = determination.amount >= target.vigor + target.hp;
   // Defiance's application-time HP floor is a durable result, not something
   // replay can re-infer: the recorded applied amount is already reduced to the
@@ -843,7 +850,7 @@ function vigilanceEvents(state: EncounterState, command: Extract<EncounterComman
   // TODO(ICON-rules): bind both uses to a real trigger record, enforce range
   // 2/adjacency, and give Punish a full DamageIntent before promoting it.
   const appliedDamage = command.use === 'guard' ? Math.max(0, (command.damage ?? 0) - roll) : roll;
-  const defiance = encounterConditionSet(target).has('defiance');
+  const defiance = encounterConditionSet(target, state).has('defiance');
   const wouldDefeat = appliedDamage >= target.vigor + target.hp;
   // Like ATTACK_RESOLVED, the recorded amount is already floored at 1 HP by
   // Defiance, so replay needs the durable trigger result to re-consume the
@@ -976,8 +983,8 @@ function assertDirectTarget(
 ) {
   const result = queryDirectTarget(source, target, {
     ...query,
-    sourceBlind: encounterConditionSet(source).has('blind'),
-    targetStealth: query.targetStealth ?? encounterConditionSet(target).has('stealth'),
+    sourceBlind: encounterConditionSet(source, state).has('blind'),
+    targetStealth: query.targetStealth ?? encounterConditionSet(target, state).has('stealth'),
     hasLineOfSight: query.requireLineOfSight ? hasLineOfSight(state, source.position, target.position) : true,
   });
   if (result.legal) return;
@@ -1391,7 +1398,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       if (actor.statuses.includes('sealed')) throw new RuleViolation('status.sealed', 'Sealed characters cannot inflict statuses.');
       const target = state.actors[command.targetId];
       if (!target || target.defeated) throw new RuleViolation('status.target', 'That status target is unavailable.');
-      if (encounterConditionSet(target).has('unstoppable')) throw new RuleViolation('status.immune', `${target.name} is immune to statuses while Unstoppable.`);
+      if (encounterConditionSet(target, state).has('unstoppable')) throw new RuleViolation('status.immune', `${target.name} is immune to statuses while Unstoppable.`);
       events = [{ type: 'STATUS_APPLIED', actorId: command.actorId, targetId: target.id, status: command.status }];
       break;
     }
@@ -1933,7 +1940,7 @@ function applyTurnTransition(
   // p.104 regeneration (4 vigor at turn end while bloodied) reads the
   // projected condition set, so a durable regeneration condition and a
   // reviewed source-ID mark projection (Rot REGENERATE, p.186) both count.
-  if (encounterConditionSet(actor).has('regeneration') && isBloodied(actor)) gainVigor(state, actor, 4);
+  if (encounterConditionSet(actor, state).has('regeneration') && isBloodied(actor)) gainVigor(state, actor, 4);
   actor.turnTaken = true;
   resolveTurnEnd(state, actor, intent);
   if (event.round > state.round) {
@@ -2037,7 +2044,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           // ICON p.168 Path of the Aesi: while the owner has Stealth the Dash
           // action is free. Closed source-ID check — a trait name or a bare
           // condition could never accidentally waive the core Dash cost.
-          const freeDash = actor.traitIds.includes('warden:trait:path-of-the-aesi') && encounterConditionSet(actor).has('stealth');
+          const freeDash = actor.traitIds.includes('warden:trait:path-of-the-aesi') && encounterConditionSet(actor, state).has('stealth');
           if (!freeDash) actor.actionsRemaining -= 1;
           actor.usedAbilityIds.push('basic:dash');
         }
@@ -2233,7 +2240,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         }
         // ICON p.95 Chain Reaction (Wright): once per round, damaging at least
         // two foes with one ability grants 1 Aether.
-        if (encounterConditionSet(actor).has('chain-reaction') && actor.ruleState['chain-reaction-used'] !== true) {
+        if (encounterConditionSet(actor, state).has('chain-reaction') && actor.ruleState['chain-reaction-used'] !== true) {
           const damagedFoeIds = new Set<string>();
           for (const mutation of event.mutations) {
             if (mutation.kind !== 'damage' || mutation.amount <= 0) continue;

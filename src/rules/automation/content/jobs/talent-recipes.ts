@@ -29,7 +29,7 @@
 import type { RuleSourceUnit } from '../../../source-units.js';
 import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
 import type { RuleMutation } from '../../primitives/types.js';
-import { affectedFoeIds, registerProgramLevelTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
+import { affectedFoeIds, registerPassiveProjectionTalent, registerProgramLevelTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
 import type { TalentEffect } from '../../kernels/talent-recipes.js';
 
 /** The party-favor mine's position from the ability's recorded terrain
@@ -667,6 +667,38 @@ for (const [sourceId, row] of Object.entries(PROGRAM_LEVEL_TALENT_RECIPES)) {
   registerProgramLevelTalent(sourceId, row.mechanic);
 }
 
+/** Continuous passive-projection talents: the mechanic is a projection the
+ * shared kernel derives from current state (aura membership conditions),
+ * never a fold trigger or a program-emitted variant — a durable condition
+ * grant would go stale the moment membership changes. Each row audits as
+ * complete through `registerPassiveProjectionTalent`, with its source
+ * fixture + replay test in the aura fixtures (__tests__/aura.test.ts). */
+const PASSIVE_PROJECTION_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }>> = {
+  // ICON p.123 Rook talent 1: "You also have counter while Rook's aura is
+  // active." The Rook aura definition (jobs/aura-recipes.ts) projects counter
+  // onto Rook, gated on the equipped talent.
+  'bastion:rook:talent:1': {
+    mechanic: 'While Rook\u2019s aura is active (the durable aura effect), Rook has counter; the projection is derived from aura membership, never a stale durable grant.',
+  },
+  // ICON p.179 Gentleness talent 1: "Yourself and allies inside the aura also
+  // have counter in this stance." Projected through the stance-gated aura
+  // definition while the talent is equipped.
+  'chanter:gentleness:talent:1': {
+    mechanic: 'While the Gentleness stance is held, yourself and allies inside the aura have counter (derived from stance + aura membership).',
+  },
+  // ICON p.178 Dervish talent 1: "A swirling aura 1 of winds surrounds you
+  // after taking this ability until the start of your next turn, granting you
+  // and allies inside counter." The Dervish program emits the durable aura
+  // effect when the talent is equipped; the aura definition projects counter.
+  'chanter:dervish:talent:1': {
+    mechanic: 'Taking Dervish surrounds you with the swirling winds aura 1 until the start of your next turn; you and allies inside have counter (derived from aura membership).',
+  },
+};
+
+for (const [sourceId, row] of Object.entries(PASSIVE_PROJECTION_TALENT_RECIPES)) {
+  registerPassiveProjectionTalent(sourceId, row.mechanic);
+}
+
 /** Classify a documented talent by the kernel it needs. Advisory build-time
  * categorization, never parsed at runtime — the runtime fold only reads the
  * explicit `wired` rows. */
@@ -721,13 +753,14 @@ export function getTalentRecipes(units: readonly RuleSourceUnit[]): Readonly<Rec
       .map((unit) => {
         const wired = WIRED_TALENT_RECIPES[unit.id];
         const programLevel = PROGRAM_LEVEL_TALENT_RECIPES[unit.id];
-        const executable = wired ?? programLevel;
+        const passive = PASSIVE_PROJECTION_TALENT_RECIPES[unit.id];
+        const executable = wired ?? programLevel ?? passive;
         return [unit.id, {
           sourceId: unit.id,
           abilityId: unit.parentId ?? '',
           name: unit.name,
-          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : 'documented' as const,
-          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? '',
+          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : passive ? 'passive-projection' as const : 'documented' as const,
+          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? passive?.mechanic ?? '',
           detail: executable ? '' : documentedTalentDetail(unit),
           ...(wired ? { triggerEffect: wired.triggerEffect } : {}),
         }];

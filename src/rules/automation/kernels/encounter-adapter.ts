@@ -2,6 +2,7 @@ import type { EncounterActor, EncounterEntity, EncounterHeldDamage, EncounterPen
 import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
 import { projectedMarkConditionGrants, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
+import { auraStateView, projectedAuraConditions } from './aura.js';
 import { applySpatialIntent, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { summonCap } from './summon-recipes.js';
@@ -82,7 +83,16 @@ export function registerOnDamageDealtHook(hook: OnDamageDealtHook): void {
   onDamageDealtHooks.push(hook);
 }
 
-export function encounterConditionSet(actor: EncounterActor) {
+/**
+ * The full projected condition set of an actor. When `state` is supplied, it
+ * additionally folds the continuous aura-membership projection
+ * (`projectedAuraConditions`): an actor has an aura's conditions only while
+ * it is currently inside the aura, so every consumer sees the same set and
+ * movement immediately adds/removes the projection. Reducer paths always
+ * pass the encounter state; the actor-only form is kept for tests and for
+ * contexts without a spatial state (no aura is projected there).
+ */
+export function encounterConditionSet(actor: EncounterActor, state?: EncounterState) {
   const conditions = new Set<string>(actor.statuses);
   for (const condition of actor.conditions) conditions.add(condition.id);
   for (const effect of actor.activeEffects) {
@@ -98,6 +108,9 @@ export function encounterConditionSet(actor: EncounterActor) {
   for (const condition of projectedRoleConditions(actor.roleId)) conditions.add(condition);
   for (const condition of projectedMarkConditionGrants(actor.marks)) conditions.add(condition);
   for (const condition of projectedMarkConditionSuppressions(actor.marks)) conditions.delete(condition);
+  if (state) {
+    for (const condition of projectedAuraConditions(auraStateView(state), actor.id)) conditions.add(condition);
+  }
   return conditions;
 }
 
@@ -156,7 +169,8 @@ export function encounterRuleState(state: EncounterState): RuleRuntimeState {
       talents: { ...actor.talents },
       size: actor.size,
       defeated: actor.defeated,
-      conditions: encounterConditionSet(actor),
+      stance: actor.stance ? { stanceId: actor.stance.stanceId } : null,
+      conditions: encounterConditionSet(actor, state),
       statuses: projectedStatuses(actor),
       statusSavePolicy: encounterStatusSavePolicy(state, actor),
       resources: { ...actor.resources, resolve: state.partyResolve + (actor.resources['personal-resolve'] ?? 0) },
@@ -257,7 +271,7 @@ function rampartSourcesAt(state: EncounterState, position: Position): EncounterA
   }
   for (const candidate of Object.values(state.actors)) {
     if (candidate.defeated || !candidate.onBattlefield) continue;
-    const conditions = encounterConditionSet(candidate);
+    const conditions = encounterConditionSet(candidate, state);
     if (!conditions.has('fortify') && !conditions.has('rampart')) continue;
     if (Math.max(Math.abs(candidate.position.x - position.x), Math.abs(candidate.position.y - position.y)) <= 1) sources.push(candidate);
   }
@@ -267,7 +281,7 @@ function rampartSourcesAt(state: EncounterState, position: Position): EncounterA
 /** ICON p.104 Rampart: foes cannot enter or exit affected spaces by dashing,
  * flying, or teleporting. Slip and Unstoppable ignore rampart (p.105). */
 export function rampartObstructs(state: EncounterState, mover: EncounterActor, position: Position): boolean {
-  const conditions = encounterConditionSet(mover);
+  const conditions = encounterConditionSet(mover, state);
   if (conditions.has('slip') || conditions.has('unstoppable')) return false;
   return rampartSourcesAt(state, position).some((source) => source.side !== mover.side);
 }
@@ -296,7 +310,7 @@ export function gainVigor(
   options: { uncapped?: boolean; ignoreDenial?: boolean } = {},
 ): number {
   if (actor.defeated || amount <= 0) return 0;
-  if (!options.ignoreDenial && (vigorDenialSources.some((source) => source.denies(state, actor)) || encounterConditionSet(actor).has('shattered'))) return 0;
+  if (!options.ignoreDenial && (vigorDenialSources.some((source) => source.denies(state, actor)) || encounterConditionSet(actor, state).has('shattered'))) return 0;
   const before = actor.vigor;
   const maximum = options.uncapped ? Number.MAX_SAFE_INTEGER : actor.vitality;
   actor.vigor = Math.min(maximum, actor.vigor + Math.max(0, amount));
@@ -341,8 +355,8 @@ export function determineEncounterDamage(state: EncounterState, intent: Encounte
   const target = state.actors[intent.targetId];
   if (!target) return determineDamage({ amount: 0, damageType: intent.damageType, delivery: intent.delivery });
   const source = intent.sourceActorId ? state.actors[intent.sourceActorId] : undefined;
-  const sourceConditions = source ? encounterConditionSet(source) : new Set<string>();
-  const targetConditions = encounterConditionSet(target);
+  const sourceConditions = source ? encounterConditionSet(source, state) : new Set<string>();
+  const targetConditions = encounterConditionSet(target, state);
   const sourceDistance = source && source.onBattlefield && target.onBattlefield
     ? Math.max(Math.abs(source.position.x - target.position.x), Math.abs(source.position.y - target.position.y))
     : 0;
@@ -434,7 +448,7 @@ export function retaliate(state: EncounterState, attacker: EncounterActor, count
 /** ICON p.104 Hatred of X: half damage to foes other than X. The hated target
  * is stored as ruleState['hatred-of'] when the status is applied. */
 export function hatredDivertsDamage(state: EncounterState, source: EncounterActor | undefined, target: EncounterActor): boolean {
-  if (!source || source.side === target.side || !encounterConditionSet(source).has('hatred')) return false;
+  if (!source || source.side === target.side || !encounterConditionSet(source, state).has('hatred')) return false;
   const hatedId = source.ruleState['hatred-of'];
   if (typeof hatedId !== 'string' || hatedId === target.id) return false;
   const hated = state.actors[hatedId];
@@ -496,11 +510,12 @@ export function prospectiveAppliedDefeat(
   amount: number,
   bypassVigor: boolean,
   options: { ignoreDefiance?: boolean; damageType: Exclude<EncounterHeldDamage['damageType'], 'sacrifice'> },
+  state?: EncounterState,
 ): boolean {
   if (amount <= 0) return false;
   const wouldDefeat = bypassVigor ? amount >= target.hp : amount >= target.vigor + target.hp;
   if (!wouldDefeat || defyDeathActive(target)) return false;
-  return !(!options.ignoreDefiance && options.damageType !== 'divine' && encounterConditionSet(target).has('defiance'));
+  return !(!options.ignoreDefiance && options.damageType !== 'divine' && encounterConditionSet(target, state).has('defiance'));
 }
 
 /** The effect mutations of a deferred ability: costs (actions, resource spends)
@@ -606,7 +621,7 @@ export function deferrableEffectWindow(
       const bypassVigor = foeDamage.bypassVigor ?? foeDamage.damageType === 'divine';
       if (hasAvailableWhenDamagedInterrupt(candidate)) continue;
       if (hasAvailableDefeatedInterrupt(candidate)
-        && prospectiveAppliedDefeat(candidate, determined.amount, bypassVigor, { ignoreDefiance: foeDamage.ignoreDefiance, damageType: foeDamage.damageType })) continue;
+        && prospectiveAppliedDefeat(candidate, determined.amount, bypassVigor, { ignoreDefiance: foeDamage.ignoreDefiance, damageType: foeDamage.damageType }, state)) continue;
     }
     // A willing ally in range 3 is required to swap with.
     const ally = Object.values(state.actors).find((other) => other.side === 'heroes' && other.id !== candidate.id && !other.defeated && other.position
@@ -716,7 +731,7 @@ export function applyDeterminedEncounterDamage(
   const { amount, damageType } = damage;
   const bypassVigor = damage.bypassVigor ?? damageType === 'divine';
   if (amount <= 0 || target.defeated || target.ruleState['damage-immune'] === true) return null;
-  const targetConditions = encounterConditionSet(target);
+  const targetConditions = encounterConditionSet(target, state);
   const wouldDefeatWithoutDefiance = bypassVigor
     ? amount >= target.hp
     : amount >= target.vigor + target.hp;
@@ -870,7 +885,7 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
  * implementation. */
 function shoveResolution(state: EncounterState, mutation: Extract<RuleMutation, { kind: 'move' }>): { position: Position; collided: boolean } | null {
   const actor = state.actors[mutation.actorId];
-  if (!actor || actor.defeated || encounterConditionSet(actor).has('immobile')) return null;
+  if (!actor || actor.defeated || encounterConditionSet(actor, state).has('immobile')) return null;
   let direction = mutation.direction;
   if (!direction && mutation.distance && mutation.sourceActorId !== actor.id) {
     const source = state.actors[mutation.sourceActorId];
@@ -881,7 +896,7 @@ function shoveResolution(state: EncounterState, mutation: Extract<RuleMutation, 
     }
   }
   if (!direction || !mutation.distance) return null;
-  const maximum = encounterConditionSet(actor).has('sturdy') && state.actors[mutation.sourceActorId]?.side !== actor.side ? Math.min(1, mutation.distance) : mutation.distance;
+  const maximum = encounterConditionSet(actor, state).has('sturdy') && state.actors[mutation.sourceActorId]?.side !== actor.side ? Math.min(1, mutation.distance) : mutation.distance;
   let position = { ...actor.position };
   let collided = false;
   for (let step = 0; step < maximum; step += 1) {
@@ -900,7 +915,7 @@ function shoveResolution(state: EncounterState, mutation: Extract<RuleMutation, 
 
 function applyMovement(state: EncounterState, mutation: Extract<RuleMutation, { kind: 'move' }>, coMovedActorIds?: readonly string[]): boolean {
   const actor = state.actors[mutation.actorId];
-  if (!actor || actor.defeated || encounterConditionSet(actor).has('immobile')) return false;
+  if (!actor || actor.defeated || encounterConditionSet(actor, state).has('immobile')) return false;
   const beforePosition = { ...actor.position };
   const beforeBattlefield = actor.onBattlefield;
   const moved = () => beforeBattlefield !== actor.onBattlefield || !samePosition(beforePosition, actor.position);
@@ -960,7 +975,7 @@ function applySlashedAfterAbilityMove(
   // Conditions are the canonical durable representation; `statuses` is a
   // compatibility projection for legacy/core consumers and may be absent on
   // a valid hydrated snapshot.
-  if (!actor || !actor.onBattlefield || actor.defeated || actor.slashedTriggeredThisTurn || !encounterConditionSet(actor).has('slashed')) return;
+  if (!actor || !actor.onBattlefield || actor.defeated || actor.slashedTriggeredThisTurn || !encounterConditionSet(actor, state).has('slashed')) return;
   if (!source || source.side !== actor.side) return;
   determineAndApplyEncounterDamage(state, {
     targetId: actor.id,
@@ -992,8 +1007,8 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
       const actor = state.actors[mutation.actorId];
       if (!actor || actor.defeated) break;
       const source = state.actors[mutation.sourceActorId];
-      if (mutation.operation === 'apply' && source && encounterConditionSet(source).has('sealed') && statusIds.has(mutation.conditionId as StatusId)) break;
-      if (mutation.operation === 'apply' && source && source.side !== actor.side && encounterConditionSet(actor).has('unstoppable') && statusIds.has(mutation.conditionId as StatusId)) break;
+      if (mutation.operation === 'apply' && source && encounterConditionSet(source, state).has('sealed') && statusIds.has(mutation.conditionId as StatusId)) break;
+      if (mutation.operation === 'apply' && source && source.side !== actor.side && encounterConditionSet(actor, state).has('unstoppable') && statusIds.has(mutation.conditionId as StatusId)) break;
       if (mutation.operation === 'remove') {
         actor.statuses = actor.statuses.filter((status) => status !== mutation.conditionId);
         actor.conditions = actor.conditions.filter(({ id }) => id !== mutation.conditionId);

@@ -208,6 +208,10 @@ export interface RuleActorView {
   talents: Readonly<Record<string, 1 | 2>>;
   size: number;
   defeated: boolean;
+  /** The durable stance this actor holds, when any (the stance gate the
+   * aura kernel and stance-gated resolvers read; marks are exposed the same
+   * way). Only the id is projected — stance payload state stays reducer-side. */
+  stance?: { stanceId: string } | null;
   conditions: ReadonlySet<string>;
   /**
    * Statuses with their source potency.  `conditions` remains the broad

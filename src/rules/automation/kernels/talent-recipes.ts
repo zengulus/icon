@@ -36,7 +36,7 @@ function isBloodied(actor: EncounterActor): boolean {
   return actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2;
 }
 
-export type TalentStatus = 'wired' | 'program-level' | 'documented';
+export type TalentStatus = 'wired' | 'program-level' | 'passive-projection' | 'documented';
 
 /** The resolved mutation kinds a wired talent may emit (each without its
  * sourceId — the kernel fills the talent's source id at fold time).
@@ -157,17 +157,39 @@ export function registerProgramLevelTalent(sourceId: string, mechanic: string): 
   programLevelTalentRecipes[sourceId] = mechanic;
 }
 
+/** A continuous passive-projection talent: the mechanic is a projection the
+ * kernel derives from current state (e.g. Rook talent 1's counter while the
+ * Rook aura is active, Dervish talent 1's counter from the swirling winds
+ * aura, Gentleness talent 1's counter in the stance) rather than a fold
+ * trigger or a program-emitted variant. It is executable (audit-complete)
+ * but deliberately not a fold row: there is no ability-use moment to fold
+ * into, and a durable condition grant would go stale when membership
+ * changes. The projection itself lives in the aura/condition registries. */
+const passiveProjectionTalentRecipes: Record<string, string> = {};
+
+/** Register a continuous passive-projection talent (content/jobs/
+ * talent-recipes.ts). */
+export function registerPassiveProjectionTalent(sourceId: string, mechanic: string): void {
+  passiveProjectionTalentRecipes[sourceId] = mechanic;
+}
+
 /** The executable talent ids — the allowlist that makes each talent's
  * compilation complete (audit authority: allowlist + source fixture + replay
- * test). Both the wired fold rows and the program-level implementations are
- * explicit, so this never touches the source manifest. */
+ * test). The wired fold rows, the program-level implementations, and the
+ * continuous passive-projection rows are all explicit, so this never touches
+ * the source manifest. */
 export function getExecutableTalentIds(): ReadonlySet<string> {
-  return new Set([...Object.keys(wiredTalentRecipes), ...Object.keys(programLevelTalentRecipes)]);
+  return new Set([
+    ...Object.keys(wiredTalentRecipes),
+    ...Object.keys(programLevelTalentRecipes),
+    ...Object.keys(passiveProjectionTalentRecipes),
+  ]);
 }
 
 export const isExecutableTalent = (sourceId: string): boolean =>
   Object.prototype.hasOwnProperty.call(wiredTalentRecipes, sourceId)
-  || Object.prototype.hasOwnProperty.call(programLevelTalentRecipes, sourceId);
+  || Object.prototype.hasOwnProperty.call(programLevelTalentRecipes, sourceId)
+  || Object.prototype.hasOwnProperty.call(passiveProjectionTalentRecipes, sourceId);
 
 /** The mechanic text of a program-level talent implementation, or undefined
  * for a fold-wired or documented talent. */

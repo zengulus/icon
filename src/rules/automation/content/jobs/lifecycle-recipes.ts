@@ -1,4 +1,5 @@
 import { applyRuleMutations, determineAndApplyEncounterDamage } from '../../kernels/encounter-adapter.js';
+import { auraDefinitionFor, auraStateView, isInAura } from '../../kernels/aura.js';
 import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, registerTurnDiceWindowPlanner } from '../../kernels/lifecycle.js';
 import { registerMovementEntryTrigger } from '../../kernels/movement-triggers.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-geometry.js';
@@ -662,6 +663,30 @@ registerLifecycleRecipe({
   resolve: (state, actor) => {
     if (!actor.traitIds.includes('colossus:trait:furious-berserk')) return;
     actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
+  },
+});
+
+/** ICON p.121 Bastion Shieldmaster: "You have aura 1. If you end your turn
+ * with an ally in the aura, gain vigilance +1 and become sturdy until the
+ * start of your turn." The membership question is the generic aura kernel's
+ * (`isInAura` on the trait's aura definition) — the same authority every
+ * other consumer uses — and the grants ride the shared mutation boundary. */
+registerLifecycleRecipe({
+  sourceId: 'bastion:trait:shieldmaster',
+  phase: 'turn-end',
+  applies: (actor) => actor.traitIds.includes('bastion:trait:shieldmaster'),
+  resolve: (state, actor) => {
+    if (!actor.traitIds.includes('bastion:trait:shieldmaster')) return;
+    const definition = auraDefinitionFor('bastion:trait:shieldmaster');
+    if (!definition) return;
+    const view = auraStateView(state);
+    const allyInside = Object.values(state.actors).some((candidate) =>
+      candidate.side === actor.side && candidate.id !== actor.id && isInAura(view, definition, candidate.id));
+    if (!allyInside) return;
+    applyRuleMutations(state, [
+      { kind: 'resource', sourceId: 'bastion:trait:shieldmaster', actorId: actor.id, resourceId: 'vigilance', operation: 'gain', amount: 1, minimum: 0, maximum: null },
+      { kind: 'condition', sourceId: 'bastion:trait:shieldmaster', sourceActorId: actor.id, actorId: actor.id, conditionId: 'sturdy', operation: 'apply', potency: 'normal', duration: { kind: 'turn-start', actor: { kind: 'self' }, turns: 1 } },
+    ]);
   },
 });
 
