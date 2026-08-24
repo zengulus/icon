@@ -20,7 +20,8 @@ import { talentReactiveTrigger, talentTriggerMutations, type TalentReactiveTarge
 import { traitReactionMutations, traitReactionNeededTriggers } from './automation/kernels/trait-reactions.js';
 import { applyDeterminedDamageToVitals } from './automation/primitives/damage-resolution.js';
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
-import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
+import { resolveAuthoritativeAttack } from './automation/kernels/attack-resolution.js';
+import { resolveOrdinaryAttackMutations } from './automation/kernels/ordinary-attack.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
 import { areaStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
 import { effectiveAbilityRange } from './automation/kernels/range.js';
@@ -735,42 +736,22 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   assertDirectTarget(state, actor, target, attackTargetQuery, 'attack');
   const actorElevation = elevationAt(state, actor.position);
   const targetElevation = elevationAt(state, target.position);
-  // F6 attack-path trait fold: armed one-shot modifiers (Demon Edge true
-  // strike, Hissatsu +1 boon / true strike / d10) and permanent elevation
-  // mechanics (Pulverize flat damage; the exceed threshold only matters on
-  // the VM path, where exceed effects fire), distance-gated rules
-  // (Trigrammaton's exactly-range-3 boon/unerring) through the canonical
-  // p.92 footprint distance, and unerring (ignores cover + aetherwall).
-  const traitOwner = { traitIds: actor.traitIds, state: actor.ruleState };
-  const traitModifier = traitAttackModifier(traitOwner, actorElevation - targetElevation, {
-    hp: target.hp,
-    maxHp: Math.max(1, target.baseMaxHp - target.wounds * target.vitality),
-    distance: footprintDistance(
-      { position: actor.position, size: actor.size },
-      { position: target.position, size: target.size },
-    ),
-  });
-  // Aura membership feeds the same attack-modifier authority as the trait
-  // fold: the attacker's own aura boons/curses plus any defensive curse an
-  // aura projects against the target (stacking through netBoon, p.92).
-  const auraView = auraStateView(state);
-  const auraAttack = projectedAuraAttackModifiers(auraView, actor.id);
-  const targetAuraCurse = projectedAuraAttackModifiers(auraView, target.id).targetCurses ?? 0;
-  const { d20, boon, total, hit, critical, evasionRoll } = resolveAttackRoll({
-    defense: target.defense,
-    sourceBoon: traitModifier.boons + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
-    elevationModifier: actorElevation - targetElevation,
-    sourceDazed: actor.statuses.includes('dazed'),
-    targetEvasion: encounterConditionSet(target, state).has('evasion'),
-    trueStrike: traitModifier.trueStrike,
-    bonusDamageFlat: traitModifier.bonusDamageFlat,
-    unerring: traitModifier.unerring,
-  }, dice);
-  if (massiveOverheadArmed(actor)) actor.resources['bonus-damage'] = (actor.resources['bonus-damage'] ?? 0) + 1;
-  const bonusDice = (critical ? 1 : 0) + Math.max(0, actor.resources['bonus-damage'] ?? 0);
-  const damageRoll = rollDamage(effectiveDamageDie({ ...traitOwner, damageDie: actor.damageDie }), hit ? (command.weight === 'heavy' ? 2 : 1) : 0, bonusDice, dice);
-  // Pulverize's +2 applies to the attack's damage on a hit (p.142).
-  const rawDamage = (hit ? damageRoll.total + traitModifier.bonusDamageFlat : 0) + actor.fray;
+  const projected = encounterRuleState(state);
+  const sourceView = { ...projected.actors[actor.id], conditions: encounterConditionSet(actor, state), state: actor.ruleState, traitIds: actor.traitIds };
+  const targetView = { ...projected.actors[target.id], conditions: encounterConditionSet(target, state), state: target.ruleState, traitIds: target.traitIds };
+  const overheadBonus = massiveOverheadArmed(actor) ? 1 : 0;
+  const ordinary = resolveOrdinaryAttackMutations(
+    { state: projected, actorId: actor.id, sourceId: command.weight === 'heavy' ? 'core:heavy-attack' : 'core:light-attack', actionId: command.weight, timing: 'use', input: {}, dice },
+    sourceView,
+    targetView,
+    command.weight === 'heavy' ? 2 : 1,
+    {},
+    overheadBonus,
+  );
+  const authoritative = ordinary.attack;
+  const { d20, boon, total, hit, critical, evasionRoll } = authoritative;
+  const directDamage = ordinary.mutations.find((mutation): mutation is Extract<RuleMutation, { kind: 'damage' }> => mutation.kind === 'damage')!;
+  const rawDamage = directDamage.amount;
   const covered = hasCoverFrom(state, target, actor) && actorElevation <= targetElevation;
   const determination = determineEncounterDamage(state, {
     targetId: target.id,
@@ -780,8 +761,8 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
     damageType: 'normal',
     delivery: hit ? 'hit' : 'miss',
     instance: 1,
-    ignoreCover: traitModifier.unerring,
-    ignoreAetherwall: traitModifier.unerring,
+    ignoreCover: authoritative.damageProvenance.ignoreCover,
+    ignoreAetherwall: authoritative.damageProvenance.ignoreAetherwall,
     covered,
   });
   const defiance = encounterConditionSet(target, state).has('defiance');
@@ -1259,13 +1240,16 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     triggers: abilityTriggers,
     ...(abilityUseModifiers ? { abilityUseModifiers } : {}),
   };
-  // Cost-payment transaction gate: the program's mandatory costs are
-  // validated at the beginning-of-action boundary before any effect resolves
-  // or RNG is consumed; an unpayable mandatory cost rejects the whole
-  // ability. The VM runtime pays the same effective costs through the shared
-  // cost-payment kernel (the mutations above already ride this event).
-  assertProgramCostsPayable(state, actor, ability.name, ability.id, programAction, ruleContext);
-  const result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
+  // Cost-payment transaction gate: aggregate mandatory program costs with all
+  // optional F10 spends, then validate once before any effect or RNG.
+  const combinedCosts: RuleAction['costs'] = [
+    ...programAction.costs,
+    ...abilityUseCostMutations
+      .filter((cost): cost is Extract<RuleMutation, { kind: 'resource' }> => cost.kind === 'resource')
+      .map((cost) => ({ kind: 'use' as const, resourceId: cost.resourceId, amount: { kind: 'constant' as const, value: cost.amount } })),
+  ];
+  assertProgramCostsPayable(state, actor, ability.name, ability.id, { costs: combinedCosts }, ruleContext);
+  const result = executeRuleProgramWithReactiveTriggers(compilation.program, { ...ruleContext, abilityUseModifiers }, RULE_RESOLVERS, state);
   // F10 Blessing of Rebirth pierce (p.183): the chosen ability gains pierce.
   // The declarative VM converts its own damage at emission; resolver-emitted
   // damage converts here at the same command boundary, so both execution

@@ -25,10 +25,9 @@ import {
  *
  * Fidelity notes (the full source text is preserved on every event):
  * - "Exceed or Heroic" terrain extras (Valkyrie / Takedown pits, Gigaton Whip
- *   difficult terrain) fire when the caller asserts the trigger through
- *   EXECUTE_RULE, matching the existing Collide/Heroic assertion pattern: the
- *   resolver runs before the attack roll, so the VM's mid-attack Exceed signal
- *   cannot be read back into it.
+ *   difficult terrain) consume the durable trigger set supplied by the
+ *   command boundary. Ordinary attack Exceed is derived before the resolver
+ *   runs, so these branches observe the same recorded trigger as the attack.
  * - Raging Wolf's tiered Comeback effects resolve in listed order from the
  *   current hp; the 25%-and-1hp tiers are deterministic (first adjacent foe /
  *   nearest foe).

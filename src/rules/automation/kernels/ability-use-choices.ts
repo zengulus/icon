@@ -18,10 +18,9 @@
  * fold also emits the recorded resource-spend mutations.
  */
 
-import type { RuleMutation } from '../primitives/types.js';
 import { AbilityUseChoiceViolation } from '../primitives/ability-use-choices.js';
+import type { RuleMutation } from '../primitives/types.js';
 import type { AbilityUseChoiceSource } from '../primitives/ability-use-choices.js';
-import { assertResourceSufficient, CostPaymentViolation, resourceSpendMutation } from '../primitives/cost-payment.js';
 
 /** Registered per-trait ability-use choice recipe (content-owned). */
 export interface AbilityUseChoiceRecipe {
@@ -50,7 +49,7 @@ export function registerAbilityUseChoiceRecipe(recipe: AbilityUseChoiceRecipe): 
 }
 
 export interface ResolvedAbilityUseChoices {
-  /** The recorded resource-spend mutations to ride the ability's event. */
+  /** The evaluated optional costs to aggregate at the command boundary. */
   costs: RuleMutation[];
   /** Ordinary engine modifiers to feed into this one resolution. */
   boons: number;
@@ -102,26 +101,11 @@ export function resolveAbilityUseChoices(
     const option = recipe.options.find(({ spend }) => spend === choice.spend);
     if (!option) throw new AbilityUseChoiceViolation('invalid-spend', `${recipe.traitId} does not allow spending ${choice.spend}.`);
 
-    // The actor using the ability owns and spends the resource. The
-    // availability check and the durable spend mutation ride the shared
-    // cost-payment primitive — the same resource-payment authority the VM
-    // runtime and the command gates use, so F10 never grows a second
-    // resource-payment path.
-    try {
-      assertResourceSufficient(
-        source.self,
-        0,
-        recipe.resourceId,
-        choice.spend,
-        (available) => `${recipe.traitId} needs ${choice.spend} ${recipe.resourceId}, but only ${available} available.`,
-      );
-    } catch (error) {
-      if (error instanceof CostPaymentViolation) {
-        throw new AbilityUseChoiceViolation('insufficient-resource', error.message);
-      }
-      throw error;
-    }
-    costs.push(resourceSpendMutation(recipe.traitId, source.self.id, recipe.resourceId, choice.spend));
+    // Affordability is validated only by the command-level aggregate cost
+    // transaction. This fold is deliberately limited to ownership, option
+    // shape, and modifier derivation; it cannot become a second payment
+    // authority for direct callers.
+    costs.push({ kind: 'resource', sourceId: recipe.traitId, actorId: source.self.id, resourceId: recipe.resourceId, operation: 'spend', amount: choice.spend, minimum: 0, maximum: null });
 
     boons += option.boons ?? 0;
     bonusDamage += option.bonusDamage ?? 0;

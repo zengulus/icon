@@ -189,6 +189,14 @@ describe('ICON encounter reducer', () => {
     expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
   });
 
+  it('uses ordinary attack authority for basic misses: miss damage is fray only', () => {
+    const { state, hero, foe } = activeEncounter();
+    state.actors[foe.id].defense = 20;
+    const result = executeCommand(state, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'heavy' }, scriptedDice(1, 6, 6));
+    expect(result.events.find((event) => event.type === 'ATTACK_RESOLVED')).toMatchObject({ hit: false, rawDamage: hero.fray });
+    expect(result.state.actors[foe.id].hp).toBe(foe.hp - hero.fray);
+  });
+
   it('records Evasion before a basic-attack roll and replays the evaded result', () => {
     const { state, hero, foe } = activeEncounter();
     state.actors[foe.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });

@@ -2,6 +2,7 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { executeRuleProgram } from '../automation/kernels/runtime.js';
 import { resolveAuthoritativeAttack } from '../automation/kernels/attack-resolution.js';
+import { resolveOrdinaryAttackMutations } from '../automation/kernels/ordinary-attack.js';
 import { HISSATSU_TRAIT, HISSATSU_ARMED_KEY } from '../automation/content/jobs/attack-modifier-recipes.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { damageMutation } from '../automation/primitives/job-kit.js';
@@ -102,6 +103,15 @@ describe('ordinary attack authority — VM vs named resolver parity', () => {
     expect(roll.attackMutation).toMatchObject({ d20: 7, boon: 5, total: 12, hit: true, critical: false, trueStrike: true });
     expect(roll.damageDie).toBe(10);
     expect(resolverContext.dice.die(roll.damageDie)).toBe(9);
+  });
+
+  it('shared ordinary attack helper keeps critical and bonus-damage dice highest', () => {
+    const hero = actor('hero', 'heroes', [], 1, { resources: { 'bonus-damage': 1 } });
+    const foe = actor('foe', 'foes', [], 4);
+    const context = contextFor(view(hero, foe), scriptedDice(20, 2, 6, 4));
+    const result = resolveOrdinaryAttackMutations(context, hero, foe, 1, {}, 1);
+    expect(result.attack.critical).toBe(true);
+    expect(result.mutations[1]).toMatchObject({ kind: 'damage', amount: 14 });
   });
 
   it('control: without the armed flag both paths roll the ordinary d6 and no boon', () => {
@@ -325,7 +335,7 @@ describe('failed ability-use spend — the transactional invariant', () => {
       abilityId: 'sealer:god-hand',
       targetIds: [foe.id],
       input: { abilityUseChoices: [{ traitId: 'sealer:trait:blessing-of-war', spend: 3 }] },
-    }, dice)).toThrow(/needs 3/);
+    }, dice)).toThrow(/requires 3/);
     // Nothing resolved: no blessing spent, no attack recorded, no dice
     // consumed (the next roll is still the scripted first value).
     expect(state.actors[hero.id].resources.blessing).toBe(1);
@@ -343,7 +353,7 @@ describe('failed ability-use spend — the transactional invariant', () => {
       abilityId: 'sealer:god-hand',
       targetIds: [foe.id],
       input: { abilityUseChoices: [{ traitId: 'sealer:trait:blessing-of-war', spend: 3 }] },
-    }, scriptedDice(12, 4))).toThrow(/needs 3/);
+    }, scriptedDice(12, 4))).toThrow(/requires 3/);
     expect(state.actors[hero.id].ruleState['hissatsu:armed']).toBe(true); // still armed
   });
 });

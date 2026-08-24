@@ -125,10 +125,11 @@ describe('resolveAbilityUseChoices (kernel)', () => {
     ])).toThrow(/does not allow spending 2/);
   });
 
-  it('rejects when the user lacks the resource', () => {
-    expect(() => resolveAbilityUseChoices(source({ traitIds: ['sealer:trait:blessing-of-war'], resources: { blessing: 1 } }), [
+  it('leaves affordability to the aggregate command transaction', () => {
+    const resolved = resolveAbilityUseChoices(source({ traitIds: ['sealer:trait:blessing-of-war'], resources: { blessing: 1 } }), [
       { traitId: 'sealer:trait:blessing-of-war', spend: 3 },
-    ])).toThrow(/needs 3/);
+    ]);
+    expect(resolved.costs[0]).toMatchObject({ resourceId: 'blessing', amount: 3, operation: 'spend' });
   });
 
   it('a natural exceed plus a forced exceed still yields one exceed (set-like)', () => {

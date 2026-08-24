@@ -1,5 +1,5 @@
 import { CORE_RULES } from '../../core.js';
-import { resolveAttackRoll } from '../primitives/attack-resolution.js';
+import { resolveOrdinaryAttackMutations } from './ordinary-attack.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import type { RuleResolver, RuleResolverRegistry } from '../primitives/types.js';
 
@@ -24,20 +24,9 @@ const basicAttack = (weight: 'light' | 'heavy'): RuleResolver => (context) => {
   const source = context.state.actors[context.actorId];
   const target = actorInput(context, 'target') ?? (context.attackTargetId ? context.state.actors[context.attackTargetId] : undefined);
   if (!source || !target) return [];
-  const attack = resolveAttackRoll({
-    defense: target.defense,
-    sourceBoon: Math.trunc(context.input.numbers?.boons ?? 0),
-    elevationModifier: source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0,
-    sourceDazed: source.conditions.has('dazed'),
-    targetEvasion: target.conditions.has('evasion'),
-  }, context.dice);
-  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover } = attack;
-  const diceCount = hit ? (weight === 'heavy' ? 2 : 1) + (critical ? 1 : 0) : 0;
-  const damage = Array.from({ length: diceCount }, () => context.dice.die(source.damageDie)).reduce((sum, roll) => sum + roll, source.fray);
-  return [{ kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit }, {
-    kind: 'damage', sourceId: context.sourceId, sourceActorId: source.id, actorId: target.id, amount: damage, damageType: 'normal', instance: 1, delivery: hit ? 'hit' : 'miss', ignoreCover,
-    ...(ignoreDodge ? { ignoreDodge: true } : {}),
-  }];
+  return resolveOrdinaryAttackMutations(context, source, target, weight === 'heavy' ? 2 : 1, {
+    boons: Math.trunc(context.input.numbers?.boons ?? 0),
+  }, Math.max(0, source.resources['bonus-damage'] ?? 0)).mutations;
 };
 
 const coreResolvers: Record<string, RuleResolver> = {
