@@ -4,7 +4,7 @@ import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /** Source-derived Mendicant class-trait fixtures (ICON p.172). */
 function mendicantEncounter(
@@ -22,7 +22,7 @@ function mendicantEncounter(
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (defeatedAlly) state = applyEvents(state, [{ type: 'ACTOR_DEFEATED', actorId: ally.id, woundGained: true }]);
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, mendicant.id);
   return { state, mendicant, ally, foe };
 }
 

@@ -4,7 +4,8 @@ import { isAtHpThreshold, isAtOrUnderQuarterHp, isBloodied, maximumHp, projected
 import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
+import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
  * HP-threshold passive projection kernel (docs/rules-foundations.md §7).
@@ -36,7 +37,7 @@ function foeFixture(profileId: string, foeAt: Position, heroAt: Position): { sta
   const foe = createFoeFromProfile(profileId, foeAt);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero: state.actors[hero.id], foe: state.actors[foe.id] };
 }
 
@@ -45,7 +46,14 @@ function foeFixture(profileId: string, foeAt: Position, heroAt: Position): { sta
 function advanceTo(state: EncounterState, actorId: string): EncounterState {
   let current = state;
   while (current.activeActorId !== actorId) {
-    current = executeCommand(current, { type: 'END_TURN', actorId: current.activeActorId! }, scriptedDice()).state;
+    if (current.activeActorId === null) {
+      const eligible = turnEligibleActorIds(current);
+      const pick = eligible.includes(actorId) ? actorId : eligible[0];
+      if (!pick) throw new Error(`advanceTo cannot reach ${actorId}: no eligible actor.`);
+      current = executeCommand(current, { type: 'TAKE_TURN', actorId: pick }, scriptedDice()).state;
+    } else {
+      current = executeCommand(current, { type: 'END_TURN', actorId: current.activeActorId }, scriptedDice()).state;
+    }
   }
   return current;
 }
@@ -151,18 +159,27 @@ describe('Enrage execution (p.298: +1 action while bloodied)', () => {
     let { state, hero, foe } = foeFixture('basic:archon:308', { x: 3, y: 3 }, { x: 1, y: 1 });
     const max = Math.max(1, foe.baseMaxHp - foe.wounds * foe.vitality);
     foe.hp = Math.floor(max / 2); // bloodied
-    // The hero acts first; handing the turn to the Archon derives 2 + 1 actions.
+    // The hero acts first; the GM selects the Archon, whose turn derives
+    // 2 + 1 actions (ICON p.87 — the scheduler never auto-selects).
     const turnEvent = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice());
-    const archonTurn = turnEvent.state;
+    const awaiting = turnEvent.state;
+    expect(awaiting.activeActorId).toBeNull();
+    expect(awaiting.eligibleSide).toBe('foes');
+    const archonTurn = executeCommand(awaiting, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
     expect(archonTurn.activeActorId).toBe(foe.id);
     expect(archonTurn.actors[foe.id].actionsRemaining).toBe(3);
     // The derived action pool replays from the pre-turn state with no extra record.
-    expect(applyEvents(state, turnEvent.events)).toEqual(archonTurn);
-    // Heal above half: the next Archon turn derives 2 actions.
+    expect(applyEvents(state, turnEvent.events)).toEqual(awaiting);
+    // Heal above half: the next Archon turn derives 2 actions. The Archon's
+    // turn ends round 1; round 2 opens with the player side, then the player
+    // passes back to the Archon.
     state = archonTurn;
     state.actors[foe.id].hp = max;
-    const afterFoe = executeCommand(state, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
-    const heroAgain = executeCommand(afterFoe, { type: 'END_TURN', actorId: afterFoe.activeActorId! }, scriptedDice()).state;
+    const afterFoe = endTurnTo(state, hero.id, scriptedDice());
+    const afterHero = endTurnOnly(afterFoe, scriptedDice());
+    expect(afterHero.round).toBe(2);
+    expect(afterHero.eligibleSide).toBe('foes');
+    const heroAgain = executeCommand(afterHero, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
     expect(heroAgain.activeActorId).toBe(foe.id);
     expect(heroAgain.actors[foe.id].actionsRemaining).toBe(2);
   });
@@ -172,7 +189,7 @@ describe('Enrage execution (p.298: +1 action while bloodied)', () => {
     const max = Math.max(1, foe.baseMaxHp - foe.wounds * foe.vitality);
     foe.hp = Math.floor(max / 2);
     expect(encounterConditionSet(foe, state).has('unstoppable')).toBe(true);
-    const archonTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const archonTurn = endTurnTo(state, foe.id, scriptedDice());
     expect(archonTurn.activeActorId).toBe(foe.id);
     expect(archonTurn.actors[foe.id].actionsRemaining).toBe(3);
   });
@@ -199,7 +216,7 @@ describe('Furious Berserk execution (p.192: sturdy while bloodied)', () => {
     const foe = createFoe('Relict', { x: 5, y: 1 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const heroId = hero.id;
     const max = Math.max(1, state.actors[heroId].baseMaxHp - state.actors[heroId].wounds * state.actors[heroId].vitality);
     state.actors[heroId].hp = Math.floor(max / 2);
@@ -248,7 +265,7 @@ describe('Divine Aegis talent 2 (p.193: marked ally at 25% hp or lower gains def
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     state = advanceTo(state, hero.id);
     return { state, hero: state.actors[hero.id], ally: state.actors[ally.id] };
   }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { gambleD6 } from '../automation/primitives/job-kit.js';
 import type { RuleExecutionContext } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 
 /** Build a minimal RuleExecutionContext for the gambleD6 unit tests. */
@@ -100,7 +100,7 @@ describe('gambleD6', () => {
       const foe = createFoe('Foe', { x: 9, y: 9 });
       let s = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
       s = executeCommand(s, { type: 'ADD_ACTOR', actor: foe }).state;
-      s = executeCommand(s, { type: 'START_ENCOUNTER' }).state;
+      s = startEncounterTo(s, hero.id);
       return { state: s, hero, foe };
     };
 
@@ -134,7 +134,7 @@ function heroEncounter(options: { foePosition?: { x: number; y: number } } = {})
   const foe = createFoe('Foe', options.foePosition ?? { x: 3, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 

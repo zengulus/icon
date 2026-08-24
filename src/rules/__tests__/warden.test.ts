@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Warden
@@ -38,7 +38,7 @@ function wardenEncounter(options: { foe?: Position; second?: Position | null; al
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second, ally };
 }
 
@@ -150,8 +150,8 @@ describe('Warden ability automation (p.165–171)', () => {
     const marked = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:stampede', targetIds: [foe.id] }, scriptedDice()).state;
     expect(marked.actors[foe.id].marks.some(({ markId, ownerId }) => markId === 'stampede' && ownerId === hero.id)).toBe(true);
 
-    const heroTurn = executeCommand(marked, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const resolved = executeCommand(heroTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const heroTurn = endTurnTo(marked, foe.id, scriptedDice());
+    const resolved = endTurnTo(heroTurn, hero.id, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(30); // 32 - 2
     expect(resolved.actors[foe.id].position).toEqual({ x: 4, y: 1 }); // shoved 1 away
     expect(beastsOf(resolved, hero.id)).toHaveLength(1);
@@ -161,11 +161,11 @@ describe('Warden ability automation (p.165–171)', () => {
   it('Stampede: triggers once per round, charging again on the next round', () => {
     const { state, hero, foe } = wardenEncounter({ foe: { x: 3, y: 1 }, second: null });
     const marked = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:stampede', targetIds: [foe.id] }, scriptedDice()).state;
-    const heroTurn = executeCommand(marked, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const first = executeCommand(heroTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const heroTurn = endTurnTo(marked, foe.id, scriptedDice());
+    const first = endTurnTo(heroTurn, hero.id, scriptedDice());
     expect(beastsOf(first, hero.id)).toHaveLength(1);
-    const second = executeCommand(first, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const again = executeCommand(second, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const second = endTurnTo(first, foe.id, scriptedDice());
+    const again = endTurnTo(second, hero.id, scriptedDice());
     expect(beastsOf(again, hero.id)).toHaveLength(2); // a fresh charge on the next round
     expect(again.actors[foe.id].hp).toBe(28); // 30 - 2
   });
@@ -184,8 +184,8 @@ describe('Warden ability automation (p.165–171)', () => {
     const { state, hero, foe } = wardenEncounter({ second: null });
     const entered = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:strength-of-the-pack', targetIds: [] }, scriptedDice()).state;
     expect(beastsOf(entered, hero.id)).toHaveLength(1);
-    const heroTurn = executeCommand(entered, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const refreshed = executeCommand(heroTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const heroTurn = endTurnTo(entered, foe.id, scriptedDice());
+    const refreshed = endTurnTo(heroTurn, hero.id, scriptedDice());
     expect(beastsOf(refreshed, hero.id)).toHaveLength(2);
     expect(refreshed.actors[hero.id].stance).toMatchObject({ stanceId: 'strength-of-the-pack' });
   });
@@ -196,7 +196,7 @@ describe('Warden ability automation (p.165–171)', () => {
     const portals = Object.values(placed.entities).filter((entity) => entity.type === 'underway');
     expect(portals).toHaveLength(1);
 
-    const ended = executeCommand(placed, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const ended = endTurnOnly(placed, scriptedDice());
     const after = Object.values(ended.entities).filter((entity) => entity.type === 'underway');
     expect(after).toHaveLength(2);
   });
@@ -205,9 +205,18 @@ describe('Warden ability automation (p.165–171)', () => {
     const { state, hero, foe } = wardenEncounter({ foe: { x: 2, y: 1 }, second: null });
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:morrigan', targetIds: [] }, scriptedDice());
     expect(used.state.actors[hero.id].ruleState['morrigan:pending']).toBe(true);
-    expect(used.state.activeActorId).toBe(foe.id); // the turn ended
+    // The ability ended the hero's turn; the GM selects the foe (TAKE_TURN).
+    expect(used.state.activeActorId).toBeNull();
+    expect(used.state.eligibleSide).toBe('foes');
 
-    const flock = executeCommand(used.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // The foe's turn ends round 1; round 2 opens with the player side, and the
+    // flock lashes out at the start of the hero's next turn.
+    const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const afterFoe = endTurnOnly(foeTurn, scriptedDice());
+    expect(afterFoe.round).toBe(2);
+    expect(afterFoe.eligibleSide).toBe('heroes');
+    const flock = executeCommand(afterFoe, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
+    expect(flock.round).toBe(2);
     expect(flock.actors[hero.id].ruleState['slow-turn']).toBe(true);
     expect(flock.actors[hero.id].conditions.some(({ id }) => id === 'stealth')).toBe(true);
     expect(flock.actors[foe.id].position).toEqual({ x: 4, y: 1 }); // shoved 2 away
@@ -221,8 +230,9 @@ describe('Warden ability automation (p.165–171)', () => {
     expect(injected.actors[foe.id].statuses).toContain('blind');
     expect(injected.actors[foe.id].marks.some(({ markId, ownerId }) => markId === 'sidhe-toxin' && ownerId === hero.id)).toBe(true);
 
-    const heroTurn = executeCommand(injected, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const detonated = executeCommand(heroTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const heroTurn = endTurnTo(injected, foe.id, scriptedDice());
+    // The toxin detonates when the marked foe ends its turn.
+    const detonated = endTurnOnly(heroTurn, scriptedDice());
     expect(detonated.actors[foe.id].hp).toBe(22); // 28 - 6 (no adjacent ally)
     expect(detonated.actors[foe.id].marks.some(({ markId }) => markId === 'sidhe-toxin')).toBe(false);
   });
@@ -230,8 +240,9 @@ describe('Warden ability automation (p.165–171)', () => {
   it('Sidhe: the toxin is halved to 3 when the foe ends its turn adjacent to an ally', () => {
     const fixture = wardenEncounter({ foe: { x: 2, y: 1 }, second: { x: 2, y: 2 } });
     const injected = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'warden:sidhe', targetIds: [fixture.foe.id] }, scriptedDice(15, 4, 4)).state;
-    const heroTurn = executeCommand(injected, { type: 'END_TURN', actorId: fixture.hero.id }, scriptedDice()).state;
-    const detonated = executeCommand(heroTurn, { type: 'END_TURN', actorId: fixture.foe.id }, scriptedDice()).state;
+    const heroTurn = endTurnTo(injected, fixture.foe.id, scriptedDice());
+    // The toxin detonates when the marked foe ends its turn.
+    const detonated = endTurnOnly(heroTurn, scriptedDice());
     expect(detonated.actors[fixture.foe.id].hp).toBe(25); // 28 - 3 (adjacent to Grim)
   });
 });

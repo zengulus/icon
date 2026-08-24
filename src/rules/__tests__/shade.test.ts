@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Shade
@@ -38,7 +38,7 @@ function shadeEncounter(options: { foe?: Position; second?: Position | null; all
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second, ally };
 }
 
@@ -199,17 +199,21 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(entered.actors[hero.id].stance).toMatchObject({ stanceId: 'umbral-echo' });
     expect(entered.actors[hero.id].ruleState['umbral-echo:die']).toBe(2);
 
-    const ended = executeCommand(entered, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const ended = endTurnOnly(entered, scriptedDice());
     expect(ended.actors[hero.id].ruleState['umbral-echo:die']).toBe(3); // no adjacent foe
   });
 
   it('Assassinate: ends the turn, then teleports adjacent, blinds, and deals 2 three times at the foe turn end', () => {
     const { state, hero, foe } = shadeEncounter({ foe: { x: 4, y: 1 }, second: null });
     const marked = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:assassinate', targetIds: [foe.id] }, scriptedDice()).state;
-    expect(marked.activeActorId).toBe(foe.id); // turn ended
+    // The ability ended the hero's turn; the GM selects the foe (TAKE_TURN).
+    expect(marked.activeActorId).toBeNull();
+    expect(marked.eligibleSide).toBe('foes');
     expect(marked.actors[foe.id].marks.some(({ markId }) => markId === 'assassinate')).toBe(true);
 
-    const resolved = executeCommand(marked, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // The delayed effect resolves at the foe's turn end.
+    const foeTurn = executeCommand(marked, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const resolved = endTurnOnly(foeTurn, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(26); // 32 - 6
     expect(resolved.actors[foe.id].statuses).toContain('blind');
     expect(resolved.actors[hero.id].position).toEqual({ x: 7, y: 1 }); // adjacent then fly 2 away
@@ -238,8 +242,9 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(marked.actors[foe.id].hp).toBe(24); // 32 - (4 + 4)
     expect(marked.actors[foe.id].marks.some(({ markId, ownerId }) => markId === 'incubus' && ownerId === hero.id)).toBe(true);
 
-    const heroTurn = executeCommand(marked, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const resolved = executeCommand(heroTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const heroTurn = endTurnTo(marked, foe.id, scriptedDice());
+    // The mark detonates when the marked foe ends its turn.
+    const resolved = endTurnOnly(heroTurn, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(22); // 24 - 2
     expect(resolved.actors[second!.id].hp).toBe(30); // 32 - 2
     expect(resolved.actors[foe.id].statuses).toContain('dazed');

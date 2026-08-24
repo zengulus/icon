@@ -1,7 +1,7 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { resolveAttackRoll } from '../automation/primitives/attack-resolution.js';
-import { scriptedDice } from './fixtures.js';
+import {scriptedDice, endTurnTo, startEncounterTo} from './fixtures.js';
 
 describe('attack-resolution kernel', () => {
   it('combines source boons, elevation, and Dazed into one capped boon roll', () => {

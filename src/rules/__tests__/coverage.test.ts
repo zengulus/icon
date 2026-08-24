@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { auditRuleCompilations, compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { collectRuleSourceUnits, findRuleSourceUnit } from '../source-units.js';
-import { validCharacter } from './fixtures.js';
+import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 describe('rules automation coverage gate', () => {
   it('does not count reducer-only or placeholder manual rules as generic VM programs', () => {
@@ -48,7 +48,7 @@ describe('rules automation coverage gate', () => {
     let state = createEncounter('Coverage fixture');
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
 
     try {
       executeCommand(state, {

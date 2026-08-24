@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Freelancer
@@ -35,7 +35,7 @@ function freelancerEncounter(options: { foe?: Position; second?: Position | null
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second };
 }
 
@@ -87,7 +87,7 @@ describe('Freelancer ability automation (p.153–158)', () => {
     const mark = marked.actors[foe.id].marks.find(({ markId }) => markId === 'exorcism');
     expect(mark).toMatchObject({ ownerId: hero.id, state: { die: 0, charges: 0 } });
 
-    const ended = executeCommand(marked, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const ended = endTurnTo(marked, foe.id, scriptedDice());
     const ticked = ended.actors[foe.id].marks.find(({ markId }) => markId === 'exorcism');
     expect(ticked?.state).toEqual({ die: 1, charges: 1 });
     expect(ended.actors[foe.id].hp).toBe(30); // 32 - 2
@@ -99,7 +99,7 @@ describe('Freelancer ability automation (p.153–158)', () => {
       id: 'mark', sourceId: 'freelancer:exorcism', ownerId: fixture.hero.id, markId: 'exorcism', duration: null,
       state: { die: 3, charges: 3 },
     }];
-    const ended = executeCommand(fixture.state, { type: 'END_TURN', actorId: fixture.hero.id }, scriptedDice()).state;
+    const ended = endTurnTo(fixture.state, fixture.foe.id, scriptedDice());
     expect(ended.actors[fixture.foe.id].hp).toBe(22); // 32 - 2 (4th shot) - 8 (volley)
     expect(ended.actors[fixture.foe.id].marks.some(({ markId }) => markId === 'exorcism')).toBe(false);
   });
@@ -141,16 +141,16 @@ describe('Freelancer ability automation (p.153–158)', () => {
     expect(chained.actors[foe.id].hp).toBe(20); // 32 - (4 + 4 + 4)
     expect(chained.actors[foe.id].marks.some(({ markId, ownerId }) => markId === 'astral-chain' && ownerId === hero.id)).toBe(true);
 
-    const foeTurn = executeCommand(chained, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const backToHero = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(chained, foe.id, scriptedDice());
+    const backToHero = endTurnTo(foeTurn, hero.id, scriptedDice());
     expect(backToHero.actors[foe.id].hp).toBe(18); // 20 - 2 lightning (range 2)
   });
 
   it('Astral Chain: doubles the lightning to 4 at exactly range 3', () => {
     const { state, hero, foe } = freelancerEncounter({ foe: { x: 4, y: 1 }, second: null });
     const chained = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:astral-chain', targetIds: [foe.id] }, scriptedDice(15, 4, 4)).state;
-    const foeTurn = executeCommand(chained, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const backToHero = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(chained, foe.id, scriptedDice());
+    const backToHero = endTurnTo(foeTurn, hero.id, scriptedDice());
     expect(backToHero.actors[foe.id].hp).toBe(16); // 20 - 4 lightning (range 3)
   });
 
@@ -176,7 +176,9 @@ describe('Freelancer ability automation (p.153–158)', () => {
     expect(result.state.actors[hero.id].stance).toMatchObject({ stanceId: 'ace' });
     expect(result.state.actors[hero.id].ruleState['ace:armed']).toBe(true);
     expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 });
-    expect(result.state.activeActorId).toBe(foe.id);
+    // The ability ended the hero's turn; the GM selects the foe (TAKE_TURN).
+    expect(result.state.activeActorId).toBeNull();
+    expect(result.state.eligibleSide).toBe('foes');
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
@@ -197,9 +199,9 @@ describe('Freelancer ability automation (p.153–158)', () => {
     expect(marked.actors[hero.id].conditions.some(({ id }) => id === 'immobile')).toBe(true);
     expect(marked.actors[foe.id].marks.some(({ markId }) => markId === 'showdown')).toBe(true);
 
-    const foeTurn = executeCommand(marked, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(marked, foe.id, scriptedDice());
     foeTurn.actors[foe.id].position = { x: 6, y: 1 };
-    const resolved = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const resolved = endTurnTo(foeTurn, hero.id, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(28); // 32 - 4
     expect(resolved.actors[foe.id].marks.some(({ markId }) => markId === 'showdown')).toBe(false);
     expect(resolved.actors[hero.id].conditions.some(({ id }) => id === 'immobile')).toBe(false);
@@ -211,9 +213,9 @@ describe('Freelancer ability automation (p.153–158)', () => {
     const marked = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'freelancer:showdown', targetIds: [fixture.foe.id] }, scriptedDice()).state;
     expect(marked.actors[fixture.foe.id].marks.find(({ markId }) => markId === 'showdown')?.state).toEqual({ finishing: true });
 
-    const foeTurn = executeCommand(marked, { type: 'END_TURN', actorId: fixture.hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(marked, fixture.foe.id, scriptedDice());
     foeTurn.actors[fixture.foe.id].position = { x: 6, y: 1 };
-    const resolved = executeCommand(foeTurn, { type: 'END_TURN', actorId: fixture.foe.id }, scriptedDice()).state;
+    const resolved = endTurnTo(foeTurn, fixture.hero.id, scriptedDice());
     expect(resolved.actors[fixture.foe.id].hp).toBe(2); // 10 - 8
   });
 
@@ -229,11 +231,11 @@ describe('Freelancer ability automation (p.153–158)', () => {
     }, scriptedDice()).state;
     expect(placed.terrainEffects.some((effect) => effect.terrain === 'warding-bolts')).toBe(true);
 
-    const foeStarts = executeCommand(placed, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeStarts = endTurnTo(placed, foe.id, scriptedDice());
     expect(foeStarts.actors[foe.id].ruleState['warding-bolts:owner']).toBe(hero.id);
 
     foeStarts.actors[foe.id].position = { x: 6, y: 1 };
-    const resolved = executeCommand(foeStarts, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const resolved = endTurnTo(foeStarts, hero.id, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(30); // 32 - 2 unerring
     expect(resolved.actors[foe.id].statuses).toContain('dazed');
     expect(resolved.actors[foe.id].ruleState['warding-bolts:owner']).toBeUndefined();

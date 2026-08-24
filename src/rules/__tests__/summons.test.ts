@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { defeatActor } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
-import { validCharacter } from './fixtures.js';
+import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F6 summon fixtures (docs/rules-foundations.md §7, summon-recipes.ts).
@@ -30,7 +30,7 @@ function summonEncounter(traits: string[]): SummonFixture {
   const foe = createFoeFromProfile('basic:knuckle:301', { x: 5, y: 1 }, 4);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 

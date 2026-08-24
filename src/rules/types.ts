@@ -8,7 +8,7 @@ export const CHARACTER_SCHEMA_VERSION = 3 as const;
 // Schema 6 records ownership for every persisted mechanic produced by
 // automation. Player projections use that provenance to withhold mechanics
 // created by a GM-hidden actor without leaking the source id.
-export const ENCOUNTER_SCHEMA_VERSION = 6 as const;
+export const ENCOUNTER_SCHEMA_VERSION = 7 as const;
 
 export const ACTION_IDS = [
   'sneak',
@@ -437,7 +437,19 @@ export interface EncounterActor {
   interruptUsedThisTurn: boolean;
   slashedTriggeredThisTurn: boolean;
   dangerousTerrainTriggeredThisTurn: boolean;
+  /** True once the actor has taken at least one actual turn this round. The
+   * scheduler derives it from `turnsTakenThisRound`; content once-per-round
+   * ledgers read it as the durable "acted this round" boolean. */
   turnTaken: boolean;
+  /** Turn entitlements still owed this round (default 1). Decremented when an
+   * actual turn completes; reset to the actor's entitlement at round start.
+   * Multi-turn elites/legends have more than one. */
+  turnsRemaining: number;
+  /** Actual turns completed this round. */
+  turnsTakenThisRound: number;
+  /** True when the actor is committed to the Slow mini-round this round
+   * (elected via GO_SLOW or forced by a delay effect). */
+  slow: boolean;
 }
 
 export type TerrainType = 'basic' | 'difficult' | 'dangerous' | 'impassable' | 'pit' | 'slope';
@@ -550,7 +562,18 @@ export interface EncounterState {
   };
   actors: Record<string, EncounterActor>;
   round: number;
+  /** The actor currently taking a turn, or null while the scheduler awaits a
+   * controller selection (or between rounds). */
   activeActorId: string | null;
+  /** The scheduler phase: 'normal' turns, or the Slow mini-round ('slow').
+   * A slow turn is an actual turn taken after all non-slow actors have
+   * acted (ICON p.87). */
+  turnPhase: 'normal' | 'slow';
+  /** The side whose controller may select an actor right now. The engine
+   * determines the side; the controller chooses the actor (ICON p.87). */
+  eligibleSide: EncounterActor['side'] | null;
+  /** The side of the actor whose actual turn most recently ended. The round
+   * after the current one opens with the opposite side. */
   lastSide: EncounterActor['side'] | null;
   partyResolve: number;
   entities: Record<string, EncounterEntity>;
@@ -625,6 +648,13 @@ export type EncounterCommand =
   | { type: 'RECOVER'; actorId: string; input?: StatusSaveCommandInput }
   | { type: 'SPEND_VIGILANCE'; actorId: string; targetId: string; use: 'guard' | 'punish'; damage?: number }
   | { type: 'END_TURN'; actorId: string; input?: StatusSaveCommandInput }
+  /** Controller decision: the eligible side's controller selects an eligible
+   * actor to start a turn (ICON p.87 — players/GM choose the actor; the
+   * engine only determines which side/phase may act). */
+  | { type: 'TAKE_TURN'; actorId: string }
+  /** Controller decision: an eligible player character skips its normal turn
+   * and commits to the Slow mini-round instead (ICON p.87). */
+  | { type: 'GO_SLOW'; actorId: string }
   /** Internal deterministic fixture/admin command; never accepted by the websocket schema. */
   | { type: 'APPLY_STATUS'; actorId: string; targetId: string; status: StatusId }
   | { type: 'END_ENCOUNTER' };
@@ -640,7 +670,7 @@ export type EncounterEvent =
   | { type: 'ACTOR_ADDED'; actor: EncounterActor }
   | { type: 'ACTOR_REMOVED'; actorId: string }
   | { type: 'TERRAIN_SET'; cell: TerrainCell }
-  | { type: 'ENCOUNTER_STARTED'; firstActorId: string }
+  | { type: 'ENCOUNTER_STARTED'; /** Legacy field: the old automatic scheduler named the first actor and started its turn. New events omit it; the player side selects the first PC via TAKE_TURN (ICON p.87). */ firstActorId?: string }
   | { type: 'ACTOR_MOVED'; actorId: string; path: Position[]; mode: 'standard' | 'dash'; dangerousDamage: number; slashedDamage: number; /** Durable damage ledger for the movement's dangerous-terrain damage (p.89, source handoff). New events carry it; historical events replay the legacy numeric field. */
       ledger?: DamageLedgerEntry; /** F2 movement-kind SaveWindow: the recorded save this move passed to leave a
    * Six Hells Trigram (p.129). Provenance only — replay does not re-roll it;
@@ -694,7 +724,9 @@ export type EncounterEvent =
    */
   | { type: 'ACTOR_RECOVERED'; actorId: string; vigorGained: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[] }
   | { type: 'STATUS_APPLIED'; actorId: string; targetId: string; status: StatusId }
-  | { type: 'TURN_ENDED'; actorId: string; nextActorId: string; round: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[]; carnevaleGamble?: number; monogatariGamble?: number; cause?: TurnEndCause; intent?: TurnTransitionIntent }
+  | { type: 'TURN_ENDED'; actorId: string; /** Legacy field: the old automatic scheduler named the next actor. New events omit it; the controller selects via TAKE_TURN. */ nextActorId?: string; round: number; /** Scheduler transition recorded at the command boundary: the side eligible to select next and the phase. */ eligibleSide?: EncounterActor['side']; turnPhase?: 'normal' | 'slow'; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[]; carnevaleGamble?: number; monogatariGamble?: number; cause?: TurnEndCause; intent?: TurnTransitionIntent }
+  | { type: 'TURN_STARTED'; actorId: string; turnPhase: 'normal' | 'slow'; /** The recorded turn-start lifecycle participants for this actor. */ participants: string[]; /** True only for the combat-start first turn, which replays the historical ENCOUNTER_STARTED cadence (round-start effects already ran; no turn-start lifecycle fires). */ combatStart?: boolean }
+  | { type: 'ACTOR_WENT_SLOW'; actorId: string; eligibleSide: EncounterActor['side']; turnPhase: 'normal' | 'slow' }
   | { type: 'ACTOR_DEFEATED'; actorId: string; woundGained: boolean }
   | { type: 'VIGILANCE_SPENT'; actorId: string; targetId: string; use: 'guard' | 'punish'; roll: number; appliedDamage: number; /** Durable Defiance result: the applied amount is already floored at 1 HP and
    * the condition was consumed at command time. Present only when it triggered. */

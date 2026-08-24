@@ -8,7 +8,7 @@ import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-pr
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, migrateEncounter } from '../encounter.js';
 import type { DiceSource } from '../dice.js';
 import type { EncounterActor, EncounterCommand, EncounterEvent, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F8 mastery attachment fixtures (docs/rules-foundations.md §Mastery).
@@ -47,7 +47,7 @@ function masteryEncounter(options: {
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, ally: ally ?? undefined };
 }
 
@@ -175,6 +175,8 @@ describe('Dark Knight mastery — Infectious Hatred (p.143)', () => {
     chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'knave:dark-knight', targetIds: [] });
     expect(chain.state.actors[fixture.hero.id].stance?.stanceId).toBe('dark-knight');
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
+    // The GM selects the foe (the scheduler never auto-selects, ICON p.87).
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
     // The foe ends its turn inside the mastered aura: the command boundary
     // pre-rolls the save (d20 3 → fail vs 10).
     chain.run({ type: 'END_TURN', actorId: fixture.foe.id }, scriptedDice(3));
@@ -188,6 +190,7 @@ describe('Dark Knight mastery — Infectious Hatred (p.143)', () => {
     const chain = new Chain(fixture.state);
     chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'knave:dark-knight', targetIds: [] });
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
     chain.run({ type: 'END_TURN', actorId: fixture.foe.id }, scriptedDice(12)); // d20 12 ≥ 10
     expect(chain.state.actors[fixture.foe.id].statuses).not.toContain('hatred');
     expect(chain.state.actors[fixture.foe.id].ruleState['hatred-of']).toBeUndefined();
@@ -198,6 +201,7 @@ describe('Dark Knight mastery — Infectious Hatred (p.143)', () => {
     const plainChain = new Chain(plain.state);
     plainChain.run({ type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'knave:dark-knight', targetIds: [] });
     plainChain.run({ type: 'END_TURN', actorId: plain.hero.id });
+    plainChain.run({ type: 'TAKE_TURN', actorId: plain.foe.id });
     plainChain.run({ type: 'END_TURN', actorId: plain.foe.id });
     expect(plainChain.state.actors[plain.foe.id].statuses).not.toContain('hatred');
     expect(plainChain.state.actors[plain.foe.id].ruleState['hatred-of']).toBeUndefined();
@@ -211,11 +215,18 @@ describe('Intimidate mastery — Iron Skull (p.143)', () => {
     // until it is adjacent to the hero.
     const fixture = masteryEncounter({ mastered: ['knave:intimidate'], heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 }, allyAt: { x: 7, y: 1 } });
     const chain = new Chain(fixture.state);
+    // Intimidate ends the hero's turn; the GM selects the foe for its move.
     chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'knave:intimidate', targetIds: [fixture.foe.id] });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
     chain.run({ type: 'MOVE', actorId: fixture.foe.id, path: [{ x: 4, y: 1 }, { x: 3, y: 1 }, { x: 2, y: 1 }], mode: 'standard' });
     chain.run({ type: 'END_TURN', actorId: fixture.foe.id });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.ally!.id });
     chain.run({ type: 'END_TURN', actorId: fixture.ally!.id });
-    chain.run({ type: 'END_TURN', actorId: fixture.foe.id }); // back to the hero's turn start, where the stun triggers
+    // Round 2 opens with the foes; after the foe's round-2 turn the stun
+    // triggers at the start of the hero's turn.
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
+    chain.run({ type: 'END_TURN', actorId: fixture.foe.id });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.hero.id });
     const unstoppable = chain.state.actors[fixture.hero.id].conditions.find(({ id }) => id === 'unstoppable');
     expect(unstoppable).toBeDefined();
     expect(unstoppable!.duration).toEqual({ kind: 'turn-end', actor: { kind: 'self' }, turns: 2 });
@@ -226,10 +237,14 @@ describe('Intimidate mastery — Iron Skull (p.143)', () => {
     const fixture = masteryEncounter({ mastered: [], heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 }, allyAt: { x: 7, y: 1 } });
     const chain = new Chain(fixture.state);
     chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'knave:intimidate', targetIds: [fixture.foe.id] });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
     chain.run({ type: 'MOVE', actorId: fixture.foe.id, path: [{ x: 4, y: 1 }, { x: 3, y: 1 }, { x: 2, y: 1 }], mode: 'standard' });
     chain.run({ type: 'END_TURN', actorId: fixture.foe.id });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.ally!.id });
     chain.run({ type: 'END_TURN', actorId: fixture.ally!.id });
-    chain.run({ type: 'END_TURN', actorId: fixture.foe.id }); // back to the hero's turn start, where the stun triggers
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
+    chain.run({ type: 'END_TURN', actorId: fixture.foe.id });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.hero.id }); // the stun triggers at the hero's turn start
     expect(chain.state.actors[fixture.foe.id].statuses).toContain('stunned'); // stun still fires
     expect(chain.state.actors[fixture.hero.id].conditions.some(({ id }) => id === 'unstoppable')).toBe(false);
   });
@@ -291,6 +306,7 @@ describe('Warding Bolts mastery — Phantom Bolts (p.158)', () => {
 
     // A foe that starts its turn inside the aura and ends it outside is struck.
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
     expect(chain.state.actors[fixture.foe.id].ruleState['warding-bolts:owner']).toBe(fixture.hero.id); // recorded at the foe's turn start
     // The first step out of the adjacent space costs 2 (engagement), the rest
     // 1 each: 2 + 1 + 1 = 4, exactly the foe's allowance, ending outside the aura.
@@ -362,6 +378,7 @@ describe('Rampant Nail mastery — Voracious Nail (p.227)', () => {
     const spikeId = Object.keys(chain.state.entities).find((id) => chain.state.entities[id].type === 'lightning-spike')!;
     chain.state.entities[spikeId].positions = [{ x: 2, y: 1 }];
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
     // The foe starts its turn adjacent to the nail at (3,1): durable vulnerable.
     expect(chain.state.actors[fixture.foe.id].statuses).toContain('vulnerable');
     expect(encounterRuleState(chain.state).actors[fixture.foe.id].statuses).toContainEqual({ id: 'vulnerable', potency: 'plus' }); // inside the aura 2
@@ -380,7 +397,9 @@ describe('Rampant Nail mastery — Voracious Nail (p.227)', () => {
     const spikeId = Object.keys(chain.state.entities).find((id) => chain.state.entities[id].type === 'lightning-spike')!;
     chain.state.entities[spikeId].positions = [{ x: 2, y: 1 }];
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
-    chain.run({ type: 'END_TURN', actorId: fixture.foe.id }); // the foe is next; its turn start is not adjacent either
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
+    chain.run({ type: 'END_TURN', actorId: fixture.foe.id }); // the foe's turn start is not adjacent either
+    chain.run({ type: 'TAKE_TURN', actorId: fixture.ally!.id });
     // The ally's turn start: inside the aura but not adjacent — no vulnerable
     // from the turn-start grant, and the aura only upgrades, so none at all.
     const allyView = encounterRuleState(chain.state).actors[fixture.ally!.id];

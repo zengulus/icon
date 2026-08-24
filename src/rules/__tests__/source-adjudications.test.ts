@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LIMIT_BREAK_UNLOCK_LEVEL, abilityPointAllowance, awardXp, spendLevelUp } from '../character.js';
 import { SOURCE_ADJUDICATIONS, findAdjudication } from '../source-adjudications.js';
-import { validCharacter } from './fixtures.js';
+import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 describe('source adjudication registry invariants', () => {
   it('every record carries a unique stable ID', () => {

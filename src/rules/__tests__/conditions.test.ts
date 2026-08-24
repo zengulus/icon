@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { executeRuleProgram, evaluatePredicate } from '../automation/kernels/runtime.js';
 import { planMovementPath } from '../movement.js';
 import type { EncounterActor, EncounterCondition, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived fixtures for the combat conditions wired into the shared
@@ -30,7 +30,7 @@ function conditionEncounter(options: { heroAt?: Position; foeAt?: Position; ally
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero: state.actors[hero.id], foe: state.actors[foe.id], ally: ally ? state.actors[ally.id] : null };
 }
 
@@ -42,7 +42,7 @@ describe('combat condition pipeline (p.104–105)', () => {
     const { state, hero, foe } = conditionEncounter({ heroAt: { x: 3, y: 3 }, foeAt: { x: 6, y: 3 }, allyAt: null });
     // Fortify (p.116): spaces adjacent to the hero have Rampart.
     state.actors[hero.id].traitIds.push('stalwart:trait:fortify');
-    const foeActive = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeActive = endTurnTo(state, foe.id, scriptedDice());
     expect(foeActive.activeActorId).toBe(foe.id);
 
     const dash = planMovementPath(foeActive, foe.id, [{ x: 5, y: 3 }, { x: 4, y: 3 }], 'dash');
@@ -57,13 +57,13 @@ describe('combat condition pipeline (p.104–105)', () => {
     const slipped = conditionEncounter({ heroAt: { x: 3, y: 3 }, foeAt: { x: 6, y: 3 }, allyAt: null });
     slipped.state.actors[slipped.hero.id].traitIds.push('stalwart:trait:fortify');
     slipped.state.actors[slipped.foe.id].traitIds.push('wright:trait:slip');
-    const slippedActive = executeCommand(slipped.state, { type: 'END_TURN', actorId: slipped.hero.id }, scriptedDice()).state;
+    const slippedActive = endTurnTo(slipped.state, slipped.foe.id, scriptedDice());
     expect(planMovementPath(slippedActive, slipped.foe.id, [{ x: 5, y: 3 }, { x: 4, y: 3 }], 'dash').legal).toBe(true);
 
     const unstoppable = conditionEncounter({ heroAt: { x: 3, y: 3 }, foeAt: { x: 6, y: 3 }, allyAt: null });
     unstoppable.state.actors[unstoppable.hero.id].traitIds.push('stalwart:trait:fortify');
     unstoppable.state.actors[unstoppable.foe.id].conditions.push({ id: 'unstoppable', sourceId: 'test', ownerId: null, potency: 'normal', duration: null });
-    const unstoppableActive = executeCommand(unstoppable.state, { type: 'END_TURN', actorId: unstoppable.hero.id }, scriptedDice()).state;
+    const unstoppableActive = endTurnTo(unstoppable.state, unstoppable.foe.id, scriptedDice());
     expect(planMovementPath(unstoppableActive, unstoppable.foe.id, [{ x: 5, y: 3 }, { x: 4, y: 3 }], 'dash').legal).toBe(true);
   });
 
@@ -182,13 +182,13 @@ describe('combat condition pipeline (p.104–105)', () => {
     const full = conditionEncounter({ allyAt: { x: 1, y: 3 } });
     applyRuleMutations(full.state, [{ kind: 'condition', sourceId: 'test', sourceActorId: full.hero.id, actorId: full.foe.id, conditionId: 'hatred', operation: 'apply', potency: 'normal' }]);
     expect(full.state.actors[full.foe.id].ruleState['hatred-of']).toBe(full.hero.id);
-    const foeActive = executeCommand(full.state, { type: 'END_TURN', actorId: full.hero.id }, scriptedDice()).state;
+    const foeActive = endTurnTo(full.state, full.foe.id, scriptedDice());
     const againstX = executeCommand(foeActive, { type: 'BASIC_ATTACK', actorId: full.foe.id, targetId: full.hero.id, weight: 'light' }, scriptedDice(12, 6));
     expect(againstX.state.actors[full.hero.id].hp).toBe(33); // 40 - (9 - armor 2)
 
     const halved = conditionEncounter({ allyAt: { x: 1, y: 3 } });
     applyRuleMutations(halved.state, [{ kind: 'condition', sourceId: 'test', sourceActorId: halved.hero.id, actorId: halved.foe.id, conditionId: 'hatred', operation: 'apply', potency: 'normal' }]);
-    const foeActiveB = executeCommand(halved.state, { type: 'END_TURN', actorId: halved.hero.id }, scriptedDice()).state;
+    const foeActiveB = endTurnTo(halved.state, halved.foe.id, scriptedDice());
     const againstAlly = executeCommand(foeActiveB, { type: 'BASIC_ATTACK', actorId: halved.foe.id, targetId: halved.ally!.id, weight: 'light' }, scriptedDice(12, 6));
     // ICON p.93 applies armor before the single Hatred halving: 9 - 2 = 7,
     // then ceil(7 / 2) = 4. Multiple paths share this kernel now.
@@ -278,16 +278,27 @@ describe('combat condition pipeline (p.104–105)', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const heroId = hero.id;
     state.actors[heroId].abilityIds = ['demon-slayer:demon-cutter'];
     state.actors[heroId].chapter = 3;
     state.actors[heroId].ruleState['six-hells:slow-turn'] = true;
 
-    // Hero ends their turn, both foes pass, and the hero's next turn is slow.
-    const afterHero = executeCommand(state, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
-    const afterFoe = executeCommand(afterHero, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
-    const slowTurn = executeCommand(afterFoe, { type: 'END_TURN', actorId: second.id }, scriptedDice()).state;
+    // ICON p.95 Delay: "your next turn must be a slow turn". The flag is set
+    // during the hero's round-1 turn, so the hero's NEXT turn (round 2) is
+    // slow. Round 1 closes hero → foe → foe; round 2 opens with the foes
+    // (the hero's next turn is slow, so the allied normal slot passes); after
+    // the foes' round-2 normal turns, the Slow mini-round (ICON p.87) runs
+    // with the delayed hero as the only eligible actor.
+    const afterHero = endTurnTo(state, foe.id, scriptedDice());
+    const afterFoe = endTurnTo(afterHero, second.id, scriptedDice());
+    const round2Foe = endTurnTo(afterFoe, foe.id, scriptedDice());
+    const round2Second = endTurnTo(round2Foe, second.id, scriptedDice());
+    expect(round2Second.round).toBe(2);
+    expect(round2Second.turnPhase).toBe('normal');
+    const slowTurn = endTurnTo(round2Second, heroId, scriptedDice());
+    expect(slowTurn.round).toBe(2);
+    expect(slowTurn.turnPhase).toBe('slow');
     expect(slowTurn.activeActorId).toBe(heroId);
     expect(slowTurn.actors[heroId].ruleState['slow-turn']).toBe(true);
     expect(slowTurn.actors[heroId].ruleState['six-hells:slow-turn']).toBeUndefined();
@@ -308,7 +319,7 @@ describe('combat condition pipeline (p.104–105)', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const heroId = hero.id;
     state.actors[heroId].abilityIds = ['bastion:land-waster'];
     state.actors[heroId].chapter = 3;
@@ -455,9 +466,9 @@ describe('cross-character effect ordering (p.107)', () => {
     const allyId = ally!.id;
     for (const id of [heroId, foeId, allyId]) state.actors[id].conditions.push(roundEndCondition(id));
 
-    const afterHero = executeCommand(state, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
-    const afterFoe = executeCommand(afterHero, { type: 'END_TURN', actorId: foeId }, scriptedDice()).state;
-    const afterRound = executeCommand(afterFoe, { type: 'END_TURN', actorId: allyId }, scriptedDice()).state;
+    const afterHero = endTurnTo(state, foeId, scriptedDice());
+    const afterFoe = endTurnTo(afterHero, allyId, scriptedDice());
+    const afterRound = endTurnOnly(afterFoe, scriptedDice());
     expect(afterRound.round).toBe(2);
     for (const id of [heroId, foeId, allyId]) {
       expect(afterRound.actors[id].conditions.some(({ duration }) => duration?.kind === 'round-end')).toBe(false);

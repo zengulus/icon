@@ -7,7 +7,8 @@ import { JOB_TRAIT_RECIPES } from '../automation/content/jobs/job-trait-recipes.
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position, TerrainCell } from '../types.js';
 import type { RuleMutation, RuleProgram } from '../automation/primitives/types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
  * F6 attack-path trait modifier fixtures (docs/rules-foundations.md §7).
@@ -51,14 +52,22 @@ function traitEncounter(options: {
   for (const cell of options.terrainCells ?? []) {
     state = executeCommand(state, { type: 'SET_TERRAIN', cell }).state;
   }
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
-/** End every actor's turn in insertion order, advancing through the round. */
+/** End every actor's turn in insertion order, advancing through the round.
+ * Each boundary leaves the scheduler awaiting a controller choice, so the
+ * fixture explicitly selects the next actor in insertion order (ICON p.87). */
 function endAllTurns(state: EncounterState, dice = scriptedDice()): EncounterState {
   let next = state;
-  for (const id of Object.keys(next.actors)) {
+  for (const id of Object.keys(state.actors)) {
+    if (next.activeActorId !== id) {
+      if (next.activeActorId !== null) next = executeCommand(next, { type: 'END_TURN', actorId: next.activeActorId }, dice).state;
+      const eligible = turnEligibleActorIds(next);
+      if (!eligible.includes(id)) throw new Error('endAllTurns: ' + id + ' is not eligible here.');
+      next = executeCommand(next, { type: 'TAKE_TURN', actorId: id }, dice).state;
+    }
     next = executeCommand(next, { type: 'END_TURN', actorId: id }, dice).state;
   }
   return next;
@@ -134,9 +143,19 @@ describe('Demon Edge (p.140)', () => {
     const armed = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:six-hells-trigram', targetIds: [foe.id],
     }, scriptedDice()).state;
-    // Six Hells ended the hero's turn; the foe's turn passes and the hero's
-    // next turn begins (round 2).
-    const roundTwo = endCurrentActorTurn(armed);
+    // Six Hells ended the hero's turn and delayed its next turn (ICON p.95),
+    // so round 2 opens with the foes; after the foe's round-2 turn the Slow
+    // mini-round runs the hero's next (slow) turn.
+    const foe1 = executeCommand(armed, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const afterFoe1 = endCurrentActorTurn(foe1);
+    expect(afterFoe1.round).toBe(2);
+    expect(afterFoe1.eligibleSide).toBe('foes');
+    const foe2 = executeCommand(afterFoe1, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const afterFoe2 = endCurrentActorTurn(foe2);
+    expect(afterFoe2.turnPhase).toBe('slow');
+    const roundTwo = executeCommand(afterFoe2, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
+    expect(roundTwo.round).toBe(2);
+    expect(roundTwo.turnPhase).toBe('slow');
     // The evasion condition would normally force an evasion roll; Demon Edge's
     // true strike ignores it (p.104), so the recorded roll has no evasionRoll.
     roundTwo.actors[foe.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
@@ -165,8 +184,10 @@ describe('Hissatsu (p.141)', () => {
       traitIds: ['demon-slayer:trait:hissatsu'],
       foeAt: { x: 3, y: 1 },
     });
-    const armed = endAllTurns(state); // the hero's un-attacked turn arms the trait
+    let armed = endAllTurns(state); // the hero's un-attacked turn arms the trait
     expect(armed.actors[hero.id].ruleState['hissatsu:armed']).toBe(true);
+    // Round 2 opens with the player side; the player selects the hero again.
+    armed = executeCommand(armed, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
     // The foe would evade; the armed true strike skips the evasion roll.
     armed.actors[foe.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
     // d20 7, boon d6 5, damage d10 6: total 12 (7 + 5) hits defense 6.
@@ -184,8 +205,9 @@ describe('Hissatsu (p.141)', () => {
 
   it('without the trait the same dice miss (no boon) and roll the normal d6 (control)', () => {
     const { state, hero, foe } = traitEncounter({ traitIds: [], foeAt: { x: 3, y: 1 } });
-    const armed = endAllTurns(state);
+    let armed = endAllTurns(state);
     expect(armed.actors[hero.id].ruleState['hissatsu:armed']).not.toBe(true);
+    armed = executeCommand(armed, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
     // The foe would evade, and without the armed true strike the evasion
     // roll happens (and, at 4+, cancels the attack entirely).
     armed.actors[foe.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });

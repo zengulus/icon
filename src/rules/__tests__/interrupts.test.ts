@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, orderInterrupts } from '../encounter.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterEvent, EncounterPendingInterrupt, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for ICON p.107 Interrupt Order and the
@@ -37,7 +37,7 @@ function interruptEncounter(options: { foe?: Position; second?: Position | null;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, ally };
 }
 
@@ -152,7 +152,7 @@ describe('interrupt order (p.107)', () => {
     const { state, hero, foe } = interruptEncounter({ second: null });
     const damaged = applyEvents(state, [damageEvent(foe.id, hero.id, 4)]);
     expect(damaged.pendingInterrupts.length).toBeGreaterThan(0);
-    const ended = executeCommand(damaged, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const ended = endTurnTo(damaged, foe.id, scriptedDice());
     expect(ended.pendingInterrupts).toHaveLength(0);
     // No interrupt answered the window, so the held 2 resolves at the boundary.
     expect(ended.actors[hero.id].hp).toBe(38);

@@ -106,6 +106,9 @@ const actor = z.object({
   slashedTriggeredThisTurn: z.boolean(),
   dangerousTerrainTriggeredThisTurn: z.boolean(),
   turnTaken: z.boolean(),
+  turnsRemaining: z.number().int().min(0).max(100),
+  turnsTakenThisRound: z.number().int().min(0).max(100),
+  slow: z.boolean(),
 }).strict();
 
 const encounterCommand = z.discriminatedUnion('type', [
@@ -141,6 +144,8 @@ const encounterCommand = z.discriminatedUnion('type', [
   z.object({ type: z.literal('RECOVER'), actorId: identifier, input: statusSaveInput.optional() }).strict(),
   z.object({ type: z.literal('SPEND_VIGILANCE'), actorId: identifier, targetId: identifier, use: z.enum(['guard', 'punish']), damage: z.number().finite().optional() }).strict(),
   z.object({ type: z.literal('END_TURN'), actorId: identifier, input: statusSaveInput.optional() }).strict(),
+  z.object({ type: z.literal('TAKE_TURN'), actorId: identifier }).strict(),
+  z.object({ type: z.literal('GO_SLOW'), actorId: identifier }).strict(),
   z.object({ type: z.literal('END_ENCOUNTER') }).strict(),
 ]);
 

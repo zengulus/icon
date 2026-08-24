@@ -6,7 +6,8 @@ import '../automation/content/registry.js';
 import { arcCells, cellKey, lineCells, squareArea } from '../area-geometry.js';
 import { effectiveAreaFor, type AreaStateView } from '../automation/kernels/area.js';
 import type { RuleMutation } from '../automation/primitives/types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /** The shove mutations inside an ability's recorded mutation stream. */
 const shoveMutations = (mutations: readonly RuleMutation[]) =>
@@ -131,10 +132,18 @@ describe('Area modifier authority (effectiveAreaFor)', () => {
   });
 });
 
-/** End every actor's turn in insertion order, advancing through the round. */
+/** End every actor's turn in insertion order, advancing through the round.
+ * Each boundary leaves the scheduler awaiting a controller choice, so the
+ * fixture explicitly selects the next actor in insertion order (ICON p.87). */
 function endAllTurns(state: EncounterState, dice = scriptedDice()): EncounterState {
   let next = state;
-  for (const id of Object.keys(next.actors)) {
+  for (const id of Object.keys(state.actors)) {
+    if (next.activeActorId !== id) {
+      if (next.activeActorId !== null) next = executeCommand(next, { type: 'END_TURN', actorId: next.activeActorId }, dice).state;
+      const eligible = turnEligibleActorIds(next);
+      if (!eligible.includes(id)) throw new Error('endAllTurns: ' + id + ' is not eligible here.');
+      next = executeCommand(next, { type: 'TAKE_TURN', actorId: id }, dice).state;
+    }
     next = executeCommand(next, { type: 'END_TURN', actorId: id }, dice).state;
   }
   return next;
@@ -156,7 +165,7 @@ function freelancerAreaEncounter(options: { heroAt?: Position; foeAt?: Position;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second };
 }
 
@@ -182,9 +191,10 @@ describe('Soul Shot talent 2 — the effective line feeds target legality (p.158
       foeAt: { x: 5, y: 1 }, talents: { 'freelancer:soul-shot': 2 },
     }).state); // round 2
     state = endAllTurns(state); // round 3
-    state = endAllTurns(state); // round 4
+    state = endAllTurns(state); // round 4 (awaiting the player side's choice)
     const hero = state.actors[Object.keys(state.actors).find((id) => state.actors[id].side === 'heroes')!];
     const foe = state.actors[Object.keys(state.actors).find((id) => state.actors[id].side === 'foes')!];
+    state = executeCommand(state, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:soul-shot', targetIds: [foe.id],
     }, scriptedDice(10, 1, 1));
@@ -197,9 +207,10 @@ describe('Soul Shot talent 2 — the effective line feeds target legality (p.158
       foeAt: { x: 8, y: 1 }, talents: { 'freelancer:soul-shot': 2 },
     }).state);
     state = endAllTurns(state);
-    state = endAllTurns(state); // round 4
+    state = endAllTurns(state); // round 4 (awaiting the player side's choice)
     const hero = state.actors[Object.keys(state.actors).find((id) => state.actors[id].side === 'heroes')!];
     const foe = state.actors[Object.keys(state.actors).find((id) => state.actors[id].side === 'foes')!];
+    state = executeCommand(state, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
     expect(() => executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:soul-shot', targetIds: [foe.id],
     }, scriptedDice(10, 1, 1))).toThrowError(expect.objectContaining({ code: 'ability.range' }));
@@ -215,7 +226,7 @@ function spellbladeAreaEncounter(options: { heroAt?: Position; foeAt?: Position;
   const foe = createFoe('Relict', options.foeAt ?? { x: 2, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second: null };
 }
 
@@ -307,7 +318,7 @@ function enochianAreaEncounter(options: { foeAt?: Position; secondAt?: Position 
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second };
 }
 
@@ -362,7 +373,7 @@ function stormbenderAreaEncounter(options: { heroAt?: Position; centerAt?: Posit
     extraActors.push(extra);
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: extra }).state;
   }
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe: center, second: extraActors[0] ?? null };
 }
 

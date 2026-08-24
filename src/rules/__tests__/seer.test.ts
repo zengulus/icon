@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Seer ability
@@ -38,7 +38,7 @@ function seerEncounter(options: {
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second, ally };
 }
 
@@ -163,7 +163,9 @@ describe('Seer ability automation (p.197–203)', () => {
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:eclipse', targetIds: [foe.id] }, scriptedDice());
     expect(result.state.terrainEffects.some((effect) => effect.terrain === 'star-fire' && effect.positions[0]?.x === foe.position!.x)).toBe(true);
     expect(result.state.actors[hero.id].ruleState['eclipse:pending']).toBeDefined();
-    expect(result.state.activeActorId).toBe(foe.id); // the turn ended
+    // The ability ended the hero's turn; the GM selects the foe (TAKE_TURN).
+    expect(result.state.activeActorId).toBeNull();
+    expect(result.state.eligibleSide).toBe('foes');
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

@@ -4,7 +4,7 @@ import { FOE_ROLE_BASELINE_RECIPES } from '../automation/content/foes/role-basel
 import { projectedRoleConditions } from '../automation/kernels/passive-projection.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F5 role-baseline fixtures (docs/rules-foundations.md §6, ICON p.298).
@@ -43,7 +43,7 @@ function profileFixture(profileId: string, options: { heroAt?: { x: number; y: n
   const foe = createFoeFromProfile(profileId, options.foeAt ?? { x: 3, y: 1 }, options.playerCount ?? 4);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
@@ -90,7 +90,7 @@ describe('F5 role baselines — Artillery Slip + Aetherwall (p.298)', () => {
     const { state, hero, foe } = profileFixture('basic:blaster:305', { heroAt: { x: 3, y: 1 }, foeAt: { x: 1, y: 1 } });
     // Arm the Fortify trait so the hero projects rampart adjacent to itself.
     state.actors[hero.id].traitIds = [...state.actors[hero.id].traitIds, 'stalwart:trait:fortify'];
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(state, foe.id, scriptedDice());
     // Dash into the cell adjacent to the fortify hero — allowed for slip.
     const dashed = executeCommand(foeTurn, { type: 'MOVE', actorId: foe.id, path: [{ x: 2, y: 1 }], mode: 'dash' }, scriptedDice());
     expect(dashed.state.actors[foe.id].position).toEqual({ x: 2, y: 1 });
@@ -102,7 +102,7 @@ describe('F5 role baselines — Heavy Guard Rampart + armor (p.298)', () => {
     const { state, hero, foe } = profileFixture('basic:warrior:300', { heroAt: { x: 5, y: 1 }, foeAt: { x: 2, y: 1 } });
     expect([...projectedRoleConditions(foe.roleId)]).toEqual(['rampart']);
     // Hand the turn back to the hero (hero → heavy → hero) so the hero dashes.
-    const heavyTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const heavyTurn = endTurnTo(state, foe.id, scriptedDice());
     const heroTurn = executeCommand(heavyTurn, { type: 'END_TURN', actorId: heavyTurn.activeActorId! }, scriptedDice()).state;
     // The cell (3,1) is adjacent to the heavy (2,1): dash into it is denied.
     expect(() => executeCommand(heroTurn, { type: 'MOVE', actorId: hero.id, path: [{ x: 4, y: 1 }, { x: 3, y: 1 }], mode: 'dash' }, scriptedDice())).toThrow();
@@ -131,7 +131,7 @@ describe('F5 role baselines — Heavy Guard Rampart + armor (p.298)', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: orthogonal }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: diagonal }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: heavy }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const after = applyEvents(state, [
       vmDamageEvent(hero.id, orthogonal.id, 6),
       vmDamageEvent(hero.id, diagonal.id, 6),
@@ -149,7 +149,7 @@ describe('F5 role baselines — Legend Juggernaut (p.298)', () => {
     state.actors[foe.id].conditions = [{ id: 'weakened', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null }];
     state.actors[foe.id].marks = [{ id: 'mark', sourceId: 'fixture', ownerId: hero.id, markId: 'fixture-mark', duration: null, state: {} }];
     // A full round of END_TURNs: hero → legend → back to hero advances the round.
-    const roundOne = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const roundOne = endTurnTo(state, foe.id, scriptedDice());
     const roundTwo = executeCommand(roundOne, { type: 'END_TURN', actorId: roundOne.activeActorId! }, scriptedDice());
     expect(roundTwo.state.round).toBe(2);
     const legend = roundTwo.state.actors[foe.id];

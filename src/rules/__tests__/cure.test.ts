@@ -5,7 +5,7 @@ import { resolveStatusSaveMutations } from '../automation/primitives/status-save
 import type { RuleExecutionContext, RuleExecutionInput } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /** Source-derived command fixtures for Cure / Diaga (ICON pp.94, 102, 144, 172, 186). */
 function diagaEncounter(targetPosition: Position = { x: 5, y: 1 }) {
@@ -17,7 +17,7 @@ function diagaEncounter(targetPosition: Position = { x: 5, y: 1 }) {
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: caster }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: target }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, caster.id);
   return { state, caster, target, foe };
 }
 
@@ -45,7 +45,7 @@ function coreStatusEncounter() {
   const foe = createFoe('Witness', { x: 4, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
@@ -66,10 +66,10 @@ function sweetTormentCoreEncounter() {
   });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: tormentor }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: target }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
-  // Hand authority to the affected foe; the hero has no statuses, so this
-  // setup turn does not consume fixture dice.
-  state = executeCommand(state, { type: 'END_TURN', actorId: tormentor.id }, scriptedDice()).state;
+  state = startEncounterTo(state, tormentor.id);
+  // Hand authority to the affected foe; the tormentor has no statuses, so
+  // this setup turn does not consume fixture dice.
+  state = endTurnTo(state, target.id, scriptedDice());
   return { state, tormentor, target };
 }
 
@@ -237,7 +237,7 @@ describe('Cure and Diaga (ICON pp.94, 102, 144, 172, 186)', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: caster }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: tormentor }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: target }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, caster.id);
 
     const result = executeCommand(state, diagaCommand(caster, target), scriptedDice());
     const mutations = ruleMutations(result.events);

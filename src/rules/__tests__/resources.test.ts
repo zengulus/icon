@@ -4,7 +4,7 @@ import { initialCharacterResources, perEncounterCharacterResourceIds, resourceMa
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the shared resource registry (ICON p.99
@@ -36,7 +36,7 @@ function resourceEncounter(options: { foe?: Position; second?: Position | null; 
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second, ally };
 }
 
@@ -134,10 +134,10 @@ describe('shared resources (p.99–105, p.204)', () => {
     const { state, hero, foe } = resourceEncounter({ second: null });
     state.actors[hero.id].traitIds.push('wright:trait:aether');
     expect(state.actors[hero.id].resources.aether).toBe(0);
-    const heroEnded = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const heroEnded = endTurnTo(state, foe.id, scriptedDice());
     expect(heroEnded.actors[hero.id].resources.aether).toBe(0); // hero has not started a turn since
     expect(heroEnded.actors[foe.id].resources.aether ?? 0).toBe(0); // foe has no Aether trait
-    const foeEnded = executeCommand(heroEnded, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const foeEnded = endTurnTo(heroEnded, hero.id, scriptedDice());
     expect(foeEnded.actors[hero.id].resources.aether).toBe(1); // hero's next turn start
   });
 
@@ -185,8 +185,8 @@ describe('shared resources (p.99–105, p.204)', () => {
     const { state, hero, foe } = resourceEncounter({ second: null });
     expect(state.partyResolve).toBe(1); // start of round 1
     state.actors[hero.id].resources['personal-resolve'] = 3;
-    const afterHero = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const afterFoe = executeCommand(afterHero, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const afterHero = endTurnTo(state, foe.id, scriptedDice());
+    const afterFoe = endTurnTo(afterHero, hero.id, scriptedDice());
     expect(afterFoe.partyResolve).toBe(2); // start of round 2
     expect(afterFoe.actors[hero.id].resources['personal-resolve']).toBe(3);
     const ended = executeCommand(afterFoe, { type: 'END_ENCOUNTER' }).state;

@@ -26,7 +26,7 @@ function eventSummary(event: EncounterEvent, encounter: EncounterState): { title
   const actorName = (actorId: string) => encounter.actors[actorId]?.name ?? actorId;
   switch (event.type) {
     case 'ENCOUNTER_STARTED':
-      return { title: 'Encounter started', detail: `${actorName(event.firstActorId)} acts first` };
+      return { title: 'Encounter started', detail: event.firstActorId ? `${actorName(event.firstActorId)} acts first` : 'awaiting the player side\u2019s first turn selection' };
     case 'ACTOR_MOVED':
       return { title: `${actorName(event.actorId)} moved`, detail: `${event.mode} · ${event.path.length} space${event.path.length === 1 ? '' : 's'}` };
     case 'ATTACK_RESOLVED':
@@ -42,7 +42,13 @@ function eventSummary(event: EncounterEvent, encounter: EncounterState): { title
     case 'ACTOR_DEFEATED':
       return { title: `${actorName(event.actorId)} defeated`, detail: event.woundGained ? 'wound gained' : 'no wound gained' };
     case 'TURN_ENDED':
-      return { title: `${actorName(event.actorId)} ended their turn`, detail: `round ${event.round} · ${actorName(event.nextActorId)} next` };
+      return { title: `${actorName(event.actorId)} ended their turn`, detail: event.nextActorId
+        ? `round ${event.round} · ${actorName(event.nextActorId)} next`
+        : `round ${event.round} · ${event.eligibleSide ?? ''} ${event.turnPhase === 'slow' ? 'slow turn' : 'turn'} selection open` };
+    case 'TURN_STARTED':
+      return { title: `${actorName(event.actorId)} took a turn`, detail: `${event.turnPhase === 'slow' ? 'slow turn' : 'turn'} started` };
+    case 'ACTOR_WENT_SLOW':
+      return { title: `${actorName(event.actorId)} elected a Slow turn`, detail: 'committed to the Slow pool' };
     case 'ENCOUNTER_ENDED':
       return { title: 'Encounter ended', detail: 'authoritative room complete' };
     case 'STATUS_APPLIED':

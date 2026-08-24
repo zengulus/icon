@@ -2,7 +2,7 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 import { resolveAbilityUseChoices } from '../automation/kernels/ability-use-choices.js';
 import type { AbilityUseChoiceSource } from '../automation/primitives/ability-use-choices.js';
 
@@ -34,7 +34,7 @@ function encounter(options: { foe?: Position; second?: Position | null } = {}): 
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: fee }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, fee, second };
 }
 
@@ -197,7 +197,7 @@ describe('Blessing of War through USE_ABILITY (p.190)', () => {
     const foe = createFoe('Relict', { x: 2, y: 1 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     state.actors[hero.id].traitIds = ['sealer:trait:blessing-of-war'];
     state.actors[hero.id].resources.blessing = 5;
     const blessed = executeCommand(state, {

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import { traitReactionMutations } from '../automation/kernels/trait-reactions.js';
 import type { EncounterState } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
  * F9 once-per-round reactive job-trait fold (docs/rules-foundations.md §10
@@ -32,15 +33,23 @@ function dashEncounter(heroAt = { x: 1, y: 1 }, foeAt = { x: 3, y: 1 }): Fixture
   const foe = createFoeFromProfile('basic:knuckle:301', foeAt, 4);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, heroId: hero.id, foeId: foe.id };
 }
 
 /** End every actor's turn in insertion order, advancing through the round and
- * running the round-start lifecycle (which resets the round ledger). */
+ * running the round-start lifecycle (which resets the round ledger). Each
+ * boundary leaves the scheduler awaiting a controller choice, so the fixture
+ * explicitly selects the next actor in insertion order (ICON p.87). */
 function endAllTurns(state: EncounterState): EncounterState {
   let next = state;
-  for (const id of Object.keys(next.actors)) {
+  for (const id of Object.keys(state.actors)) {
+    if (next.activeActorId !== id) {
+      if (next.activeActorId !== null) next = executeCommand(next, { type: 'END_TURN', actorId: next.activeActorId }, scriptedDice()).state;
+      const eligible = turnEligibleActorIds(next);
+      if (!eligible.includes(id)) throw new Error('endAllTurns: ' + id + ' is not eligible here.');
+      next = executeCommand(next, { type: 'TAKE_TURN', actorId: id }, scriptedDice()).state;
+    }
     next = executeCommand(next, { type: 'END_TURN', actorId: id }, scriptedDice()).state;
   }
   return next;

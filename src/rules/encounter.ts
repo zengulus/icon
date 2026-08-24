@@ -11,7 +11,7 @@ import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, co
 import { applyDamageLedger } from './automation/kernels/damage-ledger.js';
 import { decideDamageWindow } from './automation/kernels/trigger-window.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
-import { applyCombatStartTraitEffects, planTurnTransition, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
+import { applyCombatStartTraitEffects, planTurnStartParticipants, planTurnTransition, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
 import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
@@ -44,6 +44,7 @@ import { findRuleSourceUnit } from './source-units.js';
 import { planMovementPath } from './movement.js';
 import { durableAssetUrlProblem } from './durable-assets.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from './area-geometry.js';
+import { canActorGoSlow, canElectSlow, computeSlowPassTransition, computeTurnEndTransition, isActorSlowCommitted, isActorTurnSelectable, turnEntitlements } from './turn-scheduler.js';
 
 export class RuleViolation extends Error {
   constructor(public readonly code: string, message: string) {
@@ -86,6 +87,9 @@ function canonicalActorForAdd(actor: EncounterActor): EncounterActor {
     ruleState,
     ruleStateOwners,
     stance: actor.stance ? { ...actor.stance, ownerId: actor.stance.ownerId ?? null } : null,
+    turnsRemaining: actor.turnsRemaining ?? 1,
+    turnsTakenThisRound: actor.turnsTakenThisRound ?? 0,
+    slow: actor.slow ?? false,
   };
 }
 
@@ -100,6 +104,8 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
     actors: {},
     round: 0,
     activeActorId: null,
+    turnPhase: 'normal',
+    eligibleSide: null,
     lastSide: null,
     partyResolve: 0,
     entities: {},
@@ -113,7 +119,7 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
 export function migrateEncounter(input: unknown): EncounterState {
   if (!input || typeof input !== 'object') throw new RuleViolation('encounter.invalid', 'Encounter data must be an object.');
   const candidate = input as Omit<Partial<EncounterState>, 'schemaVersion'> & { schemaVersion?: number };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
     throw new RuleViolation('encounter.schema', `Unsupported encounter schema version: ${String(candidate.schemaVersion)}`);
   }
   // There is no cross-rules-version converter in this release. Treat a
@@ -149,6 +155,13 @@ export function migrateEncounter(input: unknown): EncounterState {
       interruptUsedThisTurn: actor.interruptUsedThisTurn ?? false,
       slashedTriggeredThisTurn: actor.slashedTriggeredThisTurn ?? false,
       dangerousTerrainTriggeredThisTurn: actor.dangerousTerrainTriggeredThisTurn ?? false,
+      // Scheduler migration: a pre-scheduler checkpoint cannot reconstruct
+      // turn entitlements. An actor that already acted this round (turnTaken)
+      // is treated as having spent its single entitlement; the rest still owe
+      // their turn. The next round's reset re-derives the true entitlement.
+      turnsRemaining: actor.turnsRemaining ?? (actor.turnTaken === true ? 0 : 1),
+      turnsTakenThisRound: actor.turnsTakenThisRound ?? (actor.turnTaken === true ? 1 : 0),
+      slow: actor.slow ?? false,
     } as EncounterActor];
   }));
   // Pre-provenance checkpoint schemas did not record which actor created a
@@ -192,6 +205,14 @@ export function migrateEncounter(input: unknown): EncounterState {
     rulesVersion: RULES_VERSION,
     grid: { ...base.grid, ...(candidate.grid ?? {}), terrain: [...(candidate.grid?.terrain ?? [])] },
     actors,
+    // Scheduler migration: a pre-scheduler checkpoint has an automatic
+    // nextActor flow, so `activeActorId` is set whenever a turn is in
+    // progress. The new scheduler derives the eligible side from the active
+    // actor; the round's remaining turns keep the migrated turnTaken split.
+    turnPhase: candidate.turnPhase ?? 'normal',
+    eligibleSide: candidate.eligibleSide ?? (candidate.phase === 'active'
+      ? (candidate.activeActorId ? actors[candidate.activeActorId]?.side ?? null : null)
+      : null),
     entities: clone(candidate.entities ?? {}),
     terrainEffects: clone(candidate.terrainEffects ?? []),
     pendingInterrupts: clone(candidate.pendingInterrupts ?? []),
@@ -266,6 +287,9 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     slashedTriggeredThisTurn: false,
     dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
+    turnsRemaining: 1,
+    turnsTakenThisRound: 0,
+    slow: false,
   };
 }
 
@@ -319,6 +343,9 @@ export function createFoe(name: string, position: Position): EncounterActor {
     slashedTriggeredThisTurn: false,
     dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
+    turnsRemaining: 1,
+    turnsTakenThisRound: 0,
+    slow: false,
   };
 }
 
@@ -407,6 +434,9 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     slashedTriggeredThisTurn: false,
     dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
+    turnsRemaining: 1,
+    turnsTakenThisRound: 0,
+    slow: false,
   };
 }
 
@@ -447,16 +477,6 @@ function hasComboVersion(sourceId: string): boolean {
   if (!unit) return false;
   const compilation = compileManualRuleProgram(unit);
   return compilation?.program.actions.some((action) => action.id === 'combo') ?? false;
-}
-
-function nextActor(state: EncounterState, current: EncounterActor) {
-  const living = Object.values(state.actors).filter((actor) => !actor.defeated && actor.onBattlefield && !actor.turnTaken && actor.id !== current.id);
-  const alternate = living.find((actor) => actor.side !== current.side);
-  const same = living.find((actor) => actor.side === current.side);
-  if (alternate || same) return { actor: alternate ?? same!, round: state.round };
-  const nextRoundActors = Object.values(state.actors).filter((actor) => !actor.defeated && actor.onBattlefield && actor.id !== current.id);
-  const preferred = nextRoundActors.find((actor) => actor.side !== current.side) ?? nextRoundActors[0] ?? current;
-  return { actor: preferred, round: state.round + 1 };
 }
 
 interface EncounterStatusSaveResolution {
@@ -598,17 +618,22 @@ function turnEndedEvent(
   sourceId = 'core:end-turn',
   cause: TurnEndCause = 'voluntary',
 ): Extract<EncounterEvent, { type: 'TURN_ENDED' }> {
-  const next = nextActor(state, actor);
+  // The scheduler transition is computed at the command boundary from the
+  // pre-turn state: completing this actual turn determines which SIDE/PHASE
+  // may select next (and whether the round advances). The controller chooses
+  // the actor through TAKE_TURN; the event never names one.
+  const transition = computeTurnEndTransition(state, actor.id);
   // F3: the command boundary plans the whole transition — rolls the dice
   // windows (Carnevale/Monogatari gambles) and precomputes the ordered
   // lifecycle participants — so the event carries a replayable intent.
-  const { intent } = planTurnTransition(state, actor, dice, { cause, nextActorId: next.actor.id, nextRound: next.round });
+  const { intent } = planTurnTransition(state, actor, dice, { cause, nextRound: transition.nextRound });
   const statusSaves = resolveEncounterStatusSaves(state, actor, dice, input, excluded, sourceId);
   return {
     type: 'TURN_ENDED',
     actorId: actor.id,
-    nextActorId: next.actor.id,
-    round: next.round,
+    round: transition.nextRound,
+    eligibleSide: transition.eligibleSide,
+    turnPhase: transition.turnPhase,
     saves: statusSaves.saves,
     statusSaveMutations: statusSaves.mutations,
     cause,
@@ -1386,9 +1411,39 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       break;
     case 'START_ENCOUNTER': {
       if (state.phase !== 'setup') throw new RuleViolation('encounter.started', 'The encounter has already started.');
-      const first = Object.values(state.actors).find((actor) => actor.side === 'heroes');
-      if (!first || !Object.values(state.actors).some((actor) => actor.side === 'foes')) throw new RuleViolation('encounter.sides', 'Setup needs at least one hero and one foe.');
-      events = [{ type: 'ENCOUNTER_STARTED', firstActorId: first.id }];
+      if (!Object.values(state.actors).some((actor) => actor.side === 'heroes')
+        || !Object.values(state.actors).some((actor) => actor.side === 'foes')) throw new RuleViolation('encounter.sides', 'Setup needs at least one hero and one foe.');
+      // ICON p.87: a player character always takes the first turn of combat,
+      // and the players decide WHICH one. Combat starts awaiting the player
+      // side's TAKE_TURN selection; the engine never picks by insertion order.
+      events = [{ type: 'ENCOUNTER_STARTED' }];
+      break;
+    }
+    case 'TAKE_TURN': {
+      if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
+      const actor = state.actors[command.actorId];
+      if (!actor) throw new RuleViolation('actor.unknown', 'That actor is not on the battlefield.');
+      // The controller may only select an actor that the scheduler's recorded
+      // transition makes eligible (side, phase, entitlement, slow pool).
+      if (!isActorTurnSelectable(state, actor)) throw new RuleViolation('turn.select', `${actor.name} cannot take a turn right now.`);
+      // The combat-start first turn replays the historical ENCOUNTER_STARTED
+      // cadence (no turn-start lifecycle for round 1's opening actor); every
+      // later selection records the selected actor's turn-start participants
+      // so replay runs exactly the same hooks.
+      const combatStart = state.round === 1 && state.lastSide === null && state.eligibleSide === 'heroes';
+      const participants = combatStart ? [] : planTurnStartParticipants(state, actor);
+      events = [{ type: 'TURN_STARTED', actorId: actor.id, turnPhase: state.turnPhase ?? 'normal', participants, ...(combatStart ? { combatStart: true } : {}) }];
+      break;
+    }
+    case 'GO_SLOW': {
+      if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
+      const actor = state.actors[command.actorId];
+      if (!actor) throw new RuleViolation('actor.unknown', 'That actor is not on the battlefield.');
+      // A player decision: an eligible PC (or a source-granted foe) skips its
+      // normal turn at a legal allied slot and commits to the Slow pool.
+      if (!canActorGoSlow(state, actor)) throw new RuleViolation('slow.not-eligible', `${actor.name} cannot elect a Slow turn right now.`);
+      const decision = computeSlowPassTransition(state, actor.id);
+      events = [{ type: 'ACTOR_WENT_SLOW', actorId: actor.id, eligibleSide: decision.eligibleSide, turnPhase: decision.turnPhase }];
       break;
     }
     case 'MOVE':
@@ -2059,6 +2114,13 @@ function resolveTurnStart(state: EncounterState, next: EncounterActor, intent: T
     delete next.ruleState['six-hells:slow-turn'];
     delete next.ruleStateOwners['six-hells:slow-turn'];
   }
+  // An elected Slow turn (GO_SLOW) is a slow turn too: keep the flag the
+  // Charge trigger reads during it. Delayed actors get it via the conversion
+  // above; Morrigan/Aria set it themselves during their turn-start phase.
+  if (next.ruleState['slow-turn'] !== true && isActorSlowCommitted(next)) {
+    next.ruleState['slow-turn'] = true;
+    next.ruleStateOwners['slow-turn'] = next.id;
+  }
   if (next.position) pickupThrownWeapon(state, next, [next.position]);
 }
 
@@ -2130,11 +2192,17 @@ function applyTurnTransition(
   // reviewed source-ID mark projection (Rot REGENERATE, p.186) both count.
   if (encounterConditionSet(actor, state).has('regeneration') && isBloodied(actor)) gainVigor(state, actor, 4);
   actor.turnTaken = true;
+  actor.turnsTakenThisRound = (actor.turnsTakenThisRound ?? 0) + 1;
+  actor.turnsRemaining = Math.max(0, (actor.turnsRemaining ?? 1) - 1);
   resolveTurnEnd(state, actor, intent);
   if (event.round > state.round) {
     expireBoundaryEffects(state, actor.id, 'round-end');
     for (const candidate of Object.values(state.actors)) {
       candidate.turnTaken = false;
+      candidate.turnsTakenThisRound = 0;
+      // Re-derive the round's turn entitlements from the registered sources
+      // (multi-turn elites/legends keep their extra turns every round).
+      candidate.turnsRemaining = Math.max(1, turnEntitlements(state, candidate));
       candidate.ruleState['chain-reaction-used'] = false;
       candidate.ruleStateOwners['chain-reaction-used'] ??= null;
       candidate.ruleState['incubus:triggered'] = false;
@@ -2154,12 +2222,6 @@ function applyTurnTransition(
       candidate.marks = [];
     }
   }
-  const next = state.actors[event.nextActorId];
-  next.actionsRemaining = derivedTurnStartActions(next);
-  next.standardMoveUsed = false;
-  next.attackedThisTurn = false;
-  next.interruptUses = {};
-  if (next.traitIds.includes('wright:trait:aether')) next.resources.aether = (next.resources.aether ?? 0) + 1;
   for (const candidate of Object.values(state.actors)) {
     candidate.usedAbilityIds = [];
     candidate.interruptUsedThisTurn = false;
@@ -2179,13 +2241,31 @@ function applyTurnTransition(
   // Horn sturdy, round-5 rages, mantra die tick) with the new round number
   // visible, executing exactly the recorded participants.
   runLifecyclePhaseForAll(state, 'round-start', intent);
-  state.activeActorId = event.nextActorId;
   state.lastSide = actor.side;
   // ICON p.107: interrupt windows close at the end of the turn; held damage
   // and held ability effects resolve now (the window was the opportunity).
   resolveHeldInterruptWindows(state);
-  expireBoundaryEffects(state, next.id, 'round-start');
-  resolveTurnStart(state, next, intent);
+  if (event.nextActorId !== undefined) {
+    // Legacy automatic-scheduler event: complete the recorded transition by
+    // starting the named next actor's turn immediately (historical replays
+    // keep their exact cadence; new events never name a next actor).
+    const next = state.actors[event.nextActorId];
+    next.actionsRemaining = derivedTurnStartActions(next);
+    next.standardMoveUsed = false;
+    next.attackedThisTurn = false;
+    next.interruptUses = {};
+    if (next.traitIds.includes('wright:trait:aether')) next.resources.aether = (next.resources.aether ?? 0) + 1;
+    state.activeActorId = event.nextActorId;
+    expireBoundaryEffects(state, next.id, 'round-start');
+    resolveTurnStart(state, next, intent);
+  } else {
+    // ICON p.87 scheduler flow: completing the turn never chooses the next
+    // actor. The recorded transition determines which SIDE/PHASE may select
+    // next; the controlling player(s)/GM choose the actor via TAKE_TURN.
+    state.activeActorId = null;
+    state.eligibleSide = event.eligibleSide ?? (actor.side === 'heroes' ? 'foes' : 'heroes');
+    state.turnPhase = event.turnPhase ?? 'normal';
+  }
 }
 
 export function applyEvents(input: EncounterState, events: EncounterEvent[]): EncounterState {
@@ -2202,15 +2282,14 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         state.grid.terrain = state.grid.terrain.filter((cell) => !samePosition(cell.position, event.cell.position));
         if (event.cell.type !== 'basic' || event.cell.elevation !== 0) state.grid.terrain.push(event.cell);
         break;
-      case 'ENCOUNTER_STARTED':
+      case 'ENCOUNTER_STARTED': {
         state.phase = 'active';
         state.round = 1;
         state.partyResolve = 1;
-        state.activeActorId = event.firstActorId;
-        // The first actor's turn starts here too: HP-threshold passives
-        // (Enrage +1 action while bloodied) derive the action pool from
-        // current HP exactly like every later turn boundary.
-        state.actors[event.firstActorId].actionsRemaining = derivedTurnStartActions(state.actors[event.firstActorId]);
+        // Legacy events named the first actor and started its turn here; the
+        // ICON p.87 scheduler flow (no firstActorId) leaves the encounter
+        // awaiting the player side's TAKE_TURN selection instead.
+        if (event.firstActorId) state.activeActorId = event.firstActorId;
         for (const actor of Object.values(state.actors)) {
           // Shared per-encounter resources reset to zero when combat begins
           // (aether, combo, blessing, vigilance; personal resolve survives).
@@ -2218,6 +2297,26 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           actor.ruleState['damage-immune'] = false;
           actor.ruleStateOwners['damage-immune'] ??= null;
           if (actor.traitIds.includes('stalwart:trait:armor-2')) actor.armor = Math.max(2, actor.armor);
+          // Round 1 turn entitlements: every actor owes its registered turns.
+          actor.turnsRemaining = Math.max(1, turnEntitlements(state, actor));
+          actor.turnsTakenThisRound = 0;
+          actor.turnTaken = false;
+          actor.slow = false;
+        }
+        if (event.firstActorId) {
+          // The first actor's turn starts here too: HP-threshold passives
+          // (Enrage +1 action while bloodied) derive the action pool from
+          // current HP exactly like every later turn boundary.
+          state.actors[event.firstActorId].actionsRemaining = derivedTurnStartActions(state.actors[event.firstActorId]);
+        } else {
+          // Combat starts awaiting the PLAYER side's choice of which PC acts
+          // first (ICON p.87: "a player character always takes the first
+          // turn of combat; the players decide which"). The engine never
+          // picks the actor by insertion order.
+          state.activeActorId = null;
+          state.eligibleSide = 'heroes';
+          state.turnPhase = 'normal';
+          state.lastSide = null;
         }
         // F6: round 1 is the combat start — durable consumable grants
         // (Defiance), companion summons, and the round-start lifecycle phase
@@ -2226,6 +2325,48 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         applyCombatStartTraitEffects(state);
         runLifecyclePhaseForAll(state, 'round-start', { cause: 'voluntary', participants: [], diceWindows: {}, roundAdvance: true });
         break;
+      }
+      case 'TURN_STARTED': {
+        const actor = state.actors[event.actorId];
+        // The selected actor's fresh turn clock: HP-threshold passives derive
+        // the action pool from current HP exactly like every later boundary.
+        actor.actionsRemaining = derivedTurnStartActions(actor);
+        actor.standardMoveUsed = false;
+        actor.attackedThisTurn = false;
+        actor.interruptUses = {};
+        if (actor.traitIds.includes('wright:trait:aether')) actor.resources.aether = (actor.resources.aether ?? 0) + 1;
+        for (const candidate of Object.values(state.actors)) {
+          candidate.usedAbilityIds = [];
+          candidate.interruptUsedThisTurn = false;
+          candidate.slashedTriggeredThisTurn = false;
+          candidate.dangerousTerrainTriggeredThisTurn = false;
+          candidate.ruleState['damage-immune'] = false;
+          candidate.ruleStateOwners['damage-immune'] ??= null;
+          candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
+          candidate.ruleStateOwners['gates-of-hell:vigilance-rushed'] ??= null;
+        }
+        state.activeActorId = event.actorId;
+        // The combat-start first turn replays the historical ENCOUNTER_STARTED
+        // cadence exactly: round-start effects already ran at the combat-start
+        // boundary, so no round-start expiry or turn-start lifecycle fires for
+        // it. Every later turn runs the recorded turn-start lifecycle.
+        if (!event.combatStart) {
+          expireBoundaryEffects(state, event.actorId, 'round-start');
+          resolveTurnStart(state, actor, { cause: 'voluntary', participants: event.participants, diceWindows: {}, roundAdvance: false });
+        }
+        break;
+      }
+      case 'ACTOR_WENT_SLOW': {
+        // A player decision, not a turn: the actor joins the Slow pool and
+        // the allied normal slot is either retained (another allied actor can
+        // take it) or passed (the scheduler advances priority), per the
+        // recorded GO_SLOW transition. No turn lifecycle fires.
+        state.actors[event.actorId].slow = true;
+        state.activeActorId = null;
+        state.eligibleSide = event.eligibleSide;
+        state.turnPhase = event.turnPhase;
+        break;
+      }
       case 'ACTOR_MOVED': {
         const actor = state.actors[event.actorId];
         const from = { ...actor.position };
@@ -2529,6 +2670,8 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
       case 'ENCOUNTER_ENDED':
         state.phase = 'complete';
         state.activeActorId = null;
+        state.eligibleSide = null;
+        state.turnPhase = 'normal';
         state.partyResolve = 0;
         // ICON p.107: open windows close at the encounter boundary; held damage
         // and held ability effects resolve (see `resolveHeldInterruptWindows`).

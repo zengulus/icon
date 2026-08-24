@@ -4,7 +4,8 @@ import { auraDefinitionFor, auraStateView, isInAura, membersOfAura, projectedAur
 import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
+import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
  * Aura kernel fixtures (docs/rules-foundations.md §Aura).
@@ -24,12 +25,22 @@ const COMMANDER = 'basic:commander:304:trait:commander-s-aura';
 const ABJURER_PROFILE = 'basic:abjurer:304';
 const ABJURER = 'basic:abjurer:304:trait:aura-of-shielding';
 
-/** Advance the active actor until `actorId` is active (END_TURN each current
- * active actor; replayable by construction). */
+/** Advance until `actorId` is active: END_TURN the current actor, and when
+ * the scheduler awaits a selection (activeActorId null) make the explicit
+ * controller choice — TAKE_TURN the target when the eligible side allows it,
+ * otherwise the first eligible actor so the target's side comes back around.
+ * Replayable by construction. */
 function advanceTo(state: EncounterState, actorId: string): EncounterState {
   let current = state;
   while (current.activeActorId !== actorId) {
-    current = executeCommand(current, { type: 'END_TURN', actorId: current.activeActorId! }, scriptedDice()).state;
+    if (current.activeActorId === null) {
+      const eligible = turnEligibleActorIds(current);
+      const pick = eligible.includes(actorId) ? actorId : eligible[0];
+      if (!pick) throw new Error(`advanceTo cannot reach ${actorId}: no eligible actor.`);
+      current = executeCommand(current, { type: 'TAKE_TURN', actorId: pick }, scriptedDice()).state;
+    } else {
+      current = executeCommand(current, { type: 'END_TURN', actorId: current.activeActorId }, scriptedDice()).state;
+    }
   }
   return current;
 }
@@ -61,7 +72,7 @@ function auraEncounter(
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: allyIn }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: allyOut }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   const inRange = (from: Position, to: Position) => Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
   // Sanity: the fixture's inside/outside split matches the aura's radius.
   if (inRange(positions.origin, positions.inside) > radius || inRange(positions.origin, positions.outside) <= radius) {
@@ -188,7 +199,7 @@ describe('Aura projection kernel', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: abjurer }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: target }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const view = () => auraStateView(state);
     const attack = projectedAuraAttackModifiers(view(), target.id);
     expect(attack.boons).toBe(1);
@@ -213,7 +224,7 @@ describe('Aura projection kernel', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: abjurer }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: target }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     // A second reviewed dodge aura (registered by this test) overlaps the
     // Abjurer's; the projected condition set stays a union, not a stack.
     const dodgeSet = projectedAuraConditions(auraStateView(state), target.id);
@@ -231,7 +242,7 @@ describe('Aura projection kernel', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: commander }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const view = auraStateView(state);
     expect(projectedAuraAttackModifiers(view, ally.id)).toEqual({ boons: 1 });
     // A hostile-curse aura (Gentleness shape, here a fixture stance) stacks as
@@ -328,7 +339,7 @@ describe('Aura of Shielding execution (p.304)', () => {
     expect(applyEvents(state, inAura.events)).toEqual(inAura.state);
 
     // The same miss against the outside ally lands the miss fray (4).
-    state = executeCommand(inAura.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    state = endTurnOnly(inAura.state, scriptedDice());
     state = advanceTo(state, hero.id);
     const outAura = executeCommand(state, { type: 'BASIC_ATTACK', actorId: hero.id, targetId: allyOut.id, weight: 'light' }, scriptedDice(1));
     expect(outAura.events[0]).toMatchObject({ type: 'ATTACK_RESOLVED', hit: false });
@@ -357,7 +368,7 @@ describe('Aura harvest rows', () => {
     const foe = createFoe('Relict', { x: 2, y: 1 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const heroId = hero.id;
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'bastion:rook', targetIds: [foe.id] }, scriptedDice(12, 4));
     expect(used.state.actors[heroId].activeEffects.some(({ effectId }) => effectId === 'aura')).toBe(true);
@@ -373,7 +384,7 @@ describe('Aura harvest rows', () => {
     const foe2 = createFoe('Relict', { x: 2, y: 1 });
     other = executeCommand(other, { type: 'ADD_ACTOR', actor: hero2 }).state;
     other = executeCommand(other, { type: 'ADD_ACTOR', actor: foe2 }).state;
-    other = executeCommand(other, { type: 'START_ENCOUNTER' }).state;
+    other = startEncounterTo(other, hero2.id);
     const used2 = executeCommand(other, { type: 'USE_ABILITY', actorId: hero2.id, abilityId: 'bastion:rook', targetIds: [foe2.id] }, scriptedDice(12, 4));
     expect(used2.state.actors[hero2.id].activeEffects.some(({ effectId }) => effectId === 'aura')).toBe(true);
     expect(encounterConditionSet(used2.state.actors[hero2.id], used2.state).has('counter')).toBe(false);
@@ -390,7 +401,7 @@ describe('Aura harvest rows', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const heroId = hero.id;
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'chanter:dervish', targetIds: [ally.id] }, scriptedDice());
     // The hero flew 1 toward the foe and the ally was placed adjacent: both
@@ -425,7 +436,7 @@ describe('Aura harvest rows', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: far }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const heroId = hero.id;
     const gentle = executeCommand(state, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'chanter:gentleness', targetIds: [] }, scriptedDice()).state;
     // Counter (talent 1) projects to the stance user and allies inside.
@@ -449,7 +460,7 @@ describe('Aura harvest rows', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const heroId = hero.id;
     const ended = executeCommand(state, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
     expect(ended.actors[heroId].resources.vigilance ?? 0).toBe(1);
@@ -461,8 +472,8 @@ describe('Aura harvest rows', () => {
     const foe2 = createFoe('Relict', { x: 6, y: 6 });
     alone = executeCommand(alone, { type: 'ADD_ACTOR', actor: hero2 }).state;
     alone = executeCommand(alone, { type: 'ADD_ACTOR', actor: foe2 }).state;
-    alone = executeCommand(alone, { type: 'START_ENCOUNTER' }).state;
-    const endedAlone = executeCommand(alone, { type: 'END_TURN', actorId: hero2.id }, scriptedDice()).state;
+    alone = startEncounterTo(alone, hero2.id);
+    const endedAlone = endTurnTo(alone, foe2.id, scriptedDice());
     expect(endedAlone.actors[hero2.id].resources.vigilance ?? 0).toBe(0);
     expect(encounterConditionSet(endedAlone.actors[hero2.id], endedAlone).has('sturdy')).toBe(false);
   });

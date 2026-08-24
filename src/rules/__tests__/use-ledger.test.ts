@@ -10,7 +10,7 @@ import {
 } from '../automation/kernels/use-ledger.js';
 import { roundLedgerKey } from '../automation/kernels/trait-reactions.js';
 import type { EncounterState } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Use-ledger kernel tests (docs/rules-foundations.md non-glossary foundation
@@ -34,7 +34,7 @@ const ledgerFixture = (): { state: EncounterState; heroId: string; foeId: string
   const foe = createFoe('Relict', { x: 4, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, heroId: hero.id, foeId: foe.id };
 };
 
@@ -88,15 +88,15 @@ describe('use-ledger: once-per-turn resets at the turn boundary', () => {
     const gateCheck = useLedgerAvailable(consumed.actors[heroId], 'ledger:turn:fixture:once-per-turn');
     expect(gateCheck).toBe(false);
 
-    // End the hero's turn; the foe acts; when the turn comes back around to
-    // the hero, the turn-start lifecycle recipe clears the flag.
-    const foeTurn = executeCommand(consumed, { type: 'END_TURN', actorId: heroId }, scriptedDice());
-    expect(foeTurn.state.activeActorId).toBe(foeId);
-    expect(holdsUseLedgerKey(foeTurn.state.actors[heroId], 'turn')).toBe(true); // untouched mid-round
-    const heroTurn = executeCommand(foeTurn.state, { type: 'END_TURN', actorId: foeId }, scriptedDice());
-    expect(heroTurn.state.activeActorId).toBe(heroId);
-    expect(holdsUseLedgerKey(heroTurn.state.actors[heroId], 'turn')).toBe(false); // reset at own turn start
-    expect(useLedgerAvailable(heroTurn.state.actors[heroId], 'ledger:turn:fixture:once-per-turn')).toBe(true);
+    // End the hero's turn; the GM selects the foe; when the turn comes back
+    // around to the hero, the turn-start lifecycle recipe clears the flag.
+    const foeTurn = endTurnTo(consumed, foeId, scriptedDice());
+    expect(foeTurn.activeActorId).toBe(foeId);
+    expect(holdsUseLedgerKey(foeTurn.actors[heroId], 'turn')).toBe(true); // untouched mid-round
+    const heroTurn = endTurnTo(foeTurn, heroId, scriptedDice());
+    expect(heroTurn.activeActorId).toBe(heroId);
+    expect(holdsUseLedgerKey(heroTurn.actors[heroId], 'turn')).toBe(false); // reset at own turn start
+    expect(useLedgerAvailable(heroTurn.actors[heroId], 'ledger:turn:fixture:once-per-turn')).toBe(true);
   });
 });
 
@@ -107,13 +107,13 @@ describe('use-ledger: once-per-round preserves the F9 round boundary', () => {
     expect(useLedgerAvailable(consumed.actors[heroId], 'ledger:round:fixture:once-per-round')).toBe(false);
 
     // The hero's own next turn is still the same round: the gate stays spent.
-    const heroTurnAgain = executeCommand(consumed, { type: 'END_TURN', actorId: heroId }, scriptedDice());
-    expect(heroTurnAgain.state.activeActorId).toBe(foeId);
-    const roundTwo = executeCommand(heroTurnAgain.state, { type: 'END_TURN', actorId: foeId }, scriptedDice());
-    expect(roundTwo.state.round).toBe(2);
+    const heroTurnAgain = endTurnTo(consumed, foeId, scriptedDice());
+    expect(heroTurnAgain.activeActorId).toBe(foeId);
+    const roundTwo = endTurnTo(heroTurnAgain, heroId, scriptedDice());
+    expect(roundTwo.round).toBe(2);
     // The round-start lifecycle recipe reset every actor's round ledger.
-    expect(useLedgerAvailable(roundTwo.state.actors[heroId], 'ledger:round:fixture:once-per-round')).toBe(true);
-    expect(holdsUseLedgerKey(roundTwo.state.actors[heroId], 'round')).toBe(false);
+    expect(useLedgerAvailable(roundTwo.actors[heroId], 'ledger:round:fixture:once-per-round')).toBe(true);
+    expect(holdsUseLedgerKey(roundTwo.actors[heroId], 'round')).toBe(false);
   });
 });
 
@@ -125,9 +125,10 @@ describe('use-ledger: once-per-combat stays spent', () => {
 
     // Two full turn cycles (through the round boundary) leave the combat gate spent.
     let current = consumed;
-    for (const ending of [heroId, foeId, heroId, foeId]) {
-      current = executeCommand(current, { type: 'END_TURN', actorId: ending }, scriptedDice()).state;
-    }
+    current = endTurnTo(current, foeId, scriptedDice());
+    current = endTurnTo(current, heroId, scriptedDice());
+    current = endTurnTo(current, foeId, scriptedDice());
+    current = endTurnTo(current, heroId, scriptedDice());
     expect(current.round).toBe(3);
     expect(useLedgerAvailable(current.actors[heroId], 'ledger:combat:fixture:once-per-combat')).toBe(false);
     expect(holdsUseLedgerKey(current.actors[heroId], 'combat')).toBe(true);

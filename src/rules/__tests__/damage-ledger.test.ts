@@ -4,7 +4,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { planMovement } from '../movement.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterEvent, EncounterState, Position, TerrainCell } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F0 damage-ledger matrix (ICON pp.89, 93–107).
@@ -44,7 +44,7 @@ function ledgerEncounter(options: {
   const foe = createFoe('Relict', options.foe ?? { x: 2, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
@@ -62,7 +62,7 @@ const vmDamageEvent = (sourceActorId: string, actorId: string, amount: number): 
 describe('F0 damage ledger (pp.89, 93–107)', () => {
   it('a basic attack serializes a determined-handoff ledger', () => {
     const { state, hero, foe } = ledgerEncounter();
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(state, foe.id, scriptedDice());
     const result = executeCommand(foeTurn, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: hero.id, weight: 'light' }, scriptedDice(14, 3));
     const attack = result.events.find((event) => event.type === 'ATTACK_RESOLVED');
     expect(attack).toBeDefined();
@@ -99,7 +99,7 @@ describe('F0 damage ledger (pp.89, 93–107)', () => {
 
   it('the same source amount applies identically through a basic attack and VM damage', () => {
     const { state, hero, foe } = ledgerEncounter();
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(state, foe.id, scriptedDice());
     const attacked = executeCommand(foeTurn, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: hero.id, weight: 'light' }, scriptedDice(14, 3));
     const attack = attacked.events.find((event) => event.type === 'ATTACK_RESOLVED');
     expect(attack).toBeDefined();
@@ -171,7 +171,7 @@ describe('F0 damage ledger (pp.89, 93–107)', () => {
     state.actors[hero.id].hp = 3;
     state.actors[hero.id].vigor = 0;
     state.actors[hero.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(state, foe.id, scriptedDice());
     const result = executeCommand(foeTurn, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: hero.id, weight: 'light' }, scriptedDice(14, 8));
     const attack = result.events.find((event) => event.type === 'ATTACK_RESOLVED');
     expect(attack).toBeDefined();
@@ -196,7 +196,7 @@ describe('F0 damage ledger (pp.89, 93–107)', () => {
     state.actors[hero.id].hp = 3;
     state.actors[hero.id].vigor = 0;
     state.actors[hero.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(state, foe.id, scriptedDice());
     // Historical ATTACK_RESOLVED records the post-floor applied amount (2) and
     // the durable defiance flag, with no ledger. Replay must land the same
     // floor, consume Defiance, and grant the immunity the ledger path does.
@@ -226,7 +226,7 @@ describe('F0 damage ledger (pp.89, 93–107)', () => {
     state.actors[hero.id].hp = 3;
     state.actors[hero.id].vigor = 0;
     state.actors[hero.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(state, foe.id, scriptedDice());
     const result = executeCommand(foeTurn, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: hero.id, weight: 'light' }, scriptedDice(14, 8));
     const attack = result.events.find((event) => event.type === 'ATTACK_RESOLVED');
     expect(attack).toBeDefined();
@@ -254,7 +254,7 @@ describe('F0 matrix: delayed and Slashed damage through the shared kernel', () =
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     return { state, hero, foe };
   }
 
@@ -262,21 +262,24 @@ describe('F0 matrix: delayed and Slashed damage through the shared kernel', () =
     const { state, hero, foe } = delayedEncounter();
     state.actors[foe.id].armor = 2;
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
-    const ended = executeCommand(used.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+    // The ability ended the hero's turn; the GM selects the foe (TAKE_TURN).
+    const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
     // The delayed rush travels two spaces (source damage 4); armor 2 reduces
     // it through the common p.93 determination before application.
     expect(ended.state.actors[foe.id].hp).toBe(30);
-    expect(applyEvents(used.state, ended.events)).toEqual(ended.state);
+    expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
   });
 
   it('Slashed ability-move damage determines through the shared kernel (armor applies)', () => {
     const { state, hero, foe } = delayedEncounter();
     state.actors[hero.id].statuses.push('slashed');
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
-    const ended = executeCommand(used.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+    const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
     // The single raw Slashed instance is determined by the shared kernel:
     // 4 normal - armor 2 = exactly 2 applied HP damage.
     expect(ended.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
-    expect(applyEvents(used.state, ended.events)).toEqual(ended.state);
+    expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
   });
 });

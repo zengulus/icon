@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Chanter
@@ -43,7 +43,7 @@ function chanterEncounter(options: {
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
   if (ally2) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally2 }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second, ally, ally2 };
 }
 
@@ -174,9 +174,17 @@ describe('Chanter ability automation (p.174–181)', () => {
     const { state, hero, foe } = chanterEncounter({ second: null });
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:aria', targetIds: [] }, scriptedDice());
     expect(used.state.actors[hero.id].ruleState['aria:pending']).toBe(true);
-    expect(used.state.activeActorId).toBe(foe.id); // the turn ended
+    // Aria ends the turn; the hostile side becomes eligible (ICON p.87).
+    expect(used.state.activeActorId).toBeNull();
+    expect(used.state.eligibleSide).toBe('foes');
 
-    const resolved = executeCommand(used.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const afterFoe = endTurnOnly(foeTurn, scriptedDice());
+    expect(afterFoe.round).toBe(2);
+    expect(afterFoe.eligibleSide).toBe('heroes');
+    // The player selects the hero; Aria resolves at the start of the (slow)
+    // next turn (ICON p.87).
+    const resolved = executeCommand(afterFoe, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
     expect(resolved.actors[hero.id].ruleState['slow-turn']).toBe(true);
     expect(resolved.actors[foe.id].hp).toBe(24); // 32 - fray twice
     expect(resolved.actors[foe.id].statuses).toContain('sealed');
@@ -190,7 +198,9 @@ describe('Chanter ability automation (p.174–181)', () => {
     fixture.state.actors[fixture.hero.id].ruleState['aria:damaged'] = 2;
     fixture.state.actors[fixture.hero.id].ruleStateOwners['aria:damaged'] = fixture.hero.id;
     const used = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'chanter:aria', targetIds: [] }, scriptedDice());
-    const resolved = executeCommand(used.state, { type: 'END_TURN', actorId: fixture.foe.id }, scriptedDice()).state;
+    const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: fixture.foe.id }, scriptedDice()).state;
+    const afterFoe = endTurnOnly(foeTurn, scriptedDice());
+    const resolved = executeCommand(afterFoe, { type: 'TAKE_TURN', actorId: fixture.hero.id }, scriptedDice()).state;
     expect(resolved.actors[fixture.foe.id].hp).toBe(24); // 32 - fray twice (large blast reaches range 3)
     expect(resolved.actors[fixture.foe.id].statuses).toContain('sealed');
   });
@@ -240,7 +250,7 @@ describe('Chanter ability automation (p.174–181)', () => {
     state.actors[hero.id].resources.blessing = 4;
     const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', targetIds: [] }, scriptedDice()).state;
     placed.actors[foe.id].position = { x: 2, y: 0 }; // a mote cell
-    const resolved = executeCommand(placed, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const resolved = endTurnTo(placed, foe.id, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(28); // 32 - fray 4 (the foe is in its own blast)
     expect(resolved.actors[hero.id].vigor).toBe(2); // allies in the blast gain 2 vigor
     expect(resolved.terrainEffects.some((effect) => effect.terrain === 'pit' && effect.positions[0]?.x === 2 && effect.positions[0]?.y === 0)).toBe(true);
@@ -264,11 +274,11 @@ describe('Chanter ability automation (p.174–181)', () => {
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:monogatari', targetIds: [] }, scriptedDice());
     expect(used.state.actors[hero.id].ruleState['monogatari:active']).toBe(true);
 
-    const ended = executeCommand(used.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice(3)).state; // Tale of Green
+    const ended = endTurnTo(used.state, foe.id, scriptedDice(3)); // Tale of Green
     expect(ended.actors[hero.id].ruleState['monogatari:tale']).toBe(3);
 
-    const afterFoe = executeCommand(ended, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
-    const blessed = executeCommand(afterFoe, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const afterFoe = endTurnTo(ended, hero.id, scriptedDice());
+    const blessed = endTurnTo(afterFoe, foe.id, scriptedDice());
     expect(blessed.actors[hero.id].resources.blessing).toBe(1); // did not attack -> tale complete
     expect(blessed.actors[hero.id].ruleState['monogatari:granted']).toBe(true);
   });
@@ -340,11 +350,11 @@ describe('Chanter ability automation (p.174–181)', () => {
     // The held damage resolves at the end of the hero's turn — the foe's
     // damage now counts as applied, so the retribution triggers before the
     // foe's own turn end, where it is dealt.
-    const heroTurn = executeCommand(triggered, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const heroTurn = endTurnTo(triggered, foe.id, scriptedDice());
     expect(heroTurn.actors[hero.id].hp).toBe(38); // 40 - 2
     expect(heroTurn.actors[foe.id].marks.find(({ markId }) => markId === 'chastise-retribution')?.state.triggered).toBe(true);
 
-    const resolved = executeCommand(heroTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const resolved = endTurnTo(heroTurn, hero.id, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(25); // 28 - 3 divine
     expect(resolved.actors[foe.id].marks.some(({ markId }) => markId === 'chastise-retribution')).toBe(false);
   });
@@ -362,8 +372,10 @@ describe('Chanter ability automation (p.174–181)', () => {
     }, scriptedDice()).state;
     expect(marked.actors[foe.id].marks.some(({ markId }) => markId === 'chastise-charism')).toBe(true);
 
-    const heroTurn = executeCommand(marked, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const resolved = executeCommand(heroTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const heroTurn = endTurnTo(marked, foe.id, scriptedDice());
+    // The charism resolves when the foe's own turn ends; the hero's next
+    // normal turn comes after the allies' (they still owe their turns).
+    const resolved = endTurnOnly(heroTurn, scriptedDice());
     expect(resolved.actors[ally!.id].vigor).toBe(4); // cured
     expect(resolved.actors[ally2!.id].vigor).toBe(4); // cured
     expect(resolved.terrainEffects.some((effect) => effect.terrain === 'pit' && effect.positions[0]?.x === 3 && effect.positions[0]?.y === 1)).toBe(true);
@@ -407,14 +419,14 @@ describe('Chanter ability automation (p.174–181)', () => {
       expect(free).toBeDefined();
       // Mutate the foe's position in the live state (executeCommand may copy actors).
       placed.actors[foe.id].position = { ...free! };
-      const foeTurn = executeCommand(placed, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+      const foeTurn = endTurnTo(placed, foe.id, scriptedDice());
       // The foe in the returned state may be a copy; read it back.
       const liveFoe = foeTurn.actors[foe.id];
       return { state: foeTurn, hero, foe: liveFoe, motePos, foeAdjacent: free! };
     }
 
     it('a foe moving into a mote space detonates it: foe takes fray, pit created, mote removed', () => {
-      const { state, foe, motePos, foeAdjacent } = symphonyMoteFixture();
+      const { state, hero, foe, motePos, foeAdjacent } = symphonyMoteFixture();
       const moved = executeCommand(state, {
         type: 'MOVE', actorId: foe.id, path: [motePos], mode: 'standard',
       }, scriptedDice());
@@ -439,7 +451,7 @@ describe('Chanter ability automation (p.174–181)', () => {
       const foe = createFoe('Relict', { x: 8, y: 8 });
       state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
       state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-      state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+      state = startEncounterTo(state, hero.id);
       // Set blessings AFTER start (START_ENCOUNTER resets per-encounter resources).
       state.actors[hero.id].resources.blessing = 4;
       // Place a mote at (2,1) — adjacent to the hero at (1,1).
@@ -461,7 +473,7 @@ describe('Chanter ability automation (p.174–181)', () => {
     });
 
     it('a multi-cell path through a mote detonates it exactly once', () => {
-      const { state, foe, motePos, foeAdjacent } = symphonyMoteFixture();
+      const { state, hero, foe, motePos, foeAdjacent } = symphonyMoteFixture();
       const moved = executeCommand(state, {
         type: 'MOVE', actorId: foe.id,
         path: [motePos, foeAdjacent],
@@ -484,14 +496,14 @@ describe('Chanter ability automation (p.174–181)', () => {
       const foe = createFoe('Relict', { x: 9, y: 9 });
       state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
       state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-      state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+      state = startEncounterTo(state, hero.id);
       // Place a mote far from the foe.
       state.terrainEffects.push({
         id: 'neg-mote:1', sourceId: 'chanter:symphony', ownerId: hero.id,
         terrain: 'symphony-mote', positions: [{ x: 1, y: 2 }], height: null, duration: null,
       });
       // End the hero's turn so the foe becomes active.
-      state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+      state = endTurnTo(state, foe.id, scriptedDice());
       // Foe at (9,9) moves one step — not entering any mote.
       const moved = executeCommand(state, {
         type: 'MOVE', actorId: foe.id, path: [{ x: 9, y: 8 }], mode: 'standard',
@@ -502,12 +514,12 @@ describe('Chanter ability automation (p.174–181)', () => {
     });
 
     it('the turn-start lifecycle hook is a no-op when the mote was consumed by entry', () => {
-      const { state, foe, motePos } = symphonyMoteFixture();
+      const { state, hero, foe, motePos } = symphonyMoteFixture();
       const moved = executeCommand(state, {
         type: 'MOVE', actorId: foe.id, path: [motePos], mode: 'standard',
       }, scriptedDice()).state;
       expect(motesOf(moved)).toHaveLength(3);
-      const afterTurn = executeCommand(moved, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+      const afterTurn = endTurnOnly(moved, scriptedDice());
       expect(afterTurn.actors[foe.id].hp).toBe(28);
     });
   });

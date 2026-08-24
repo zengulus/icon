@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F4 trigger/window-provenance fixtures (docs/rules-foundations.md §5).
@@ -38,8 +38,8 @@ function windowEncounter(options: { interrupts?: Array<'righteous-disdain' | 'bo
   const foe = createFoe('Relict', { x: 2, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
-  const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+  state = startEncounterTo(state, hero.id);
+  const foeTurn = endTurnTo(state, foe.id, scriptedDice());
   return { state: foeTurn, hero: foeTurn.actors[hero.id], foe: foeTurn.actors[foe.id] };
 }
 

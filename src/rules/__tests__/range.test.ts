@@ -6,7 +6,8 @@ import '../automation/content/registry.js';
 import { distanceBetween, effectiveAbilityRange, isExactlyRange, isWithinRange } from '../automation/kernels/range.js';
 import { determineEncounterDamage, rangeStateView } from '../automation/kernels/encounter-adapter.js';
 import { traitAttackModifier } from '../automation/kernels/attack-modifiers.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
  * F9 range semantics fixtures (docs/rules-foundations.md §Range).
@@ -46,14 +47,22 @@ function rangeEncounter(options: {
   if (options.foeTraits) foe.traitIds = [...options.foeTraits];
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
-/** End every actor's turn in insertion order, advancing through the round. */
+/** End every actor's turn in insertion order, advancing through the round.
+ * Each boundary leaves the scheduler awaiting a controller choice, so the
+ * fixture explicitly selects the next actor in insertion order (ICON p.87). */
 function endAllTurns(state: EncounterState, dice = scriptedDice()): EncounterState {
   let next = state;
-  for (const id of Object.keys(next.actors)) {
+  for (const id of Object.keys(state.actors)) {
+    if (next.activeActorId !== id) {
+      if (next.activeActorId !== null) next = executeCommand(next, { type: 'END_TURN', actorId: next.activeActorId }, dice).state;
+      const eligible = turnEligibleActorIds(next);
+      if (!eligible.includes(id)) throw new Error('endAllTurns: ' + id + ' is not eligible here.');
+      next = executeCommand(next, { type: 'TAKE_TURN', actorId: id }, dice).state;
+    }
     next = executeCommand(next, { type: 'END_TURN', actorId: id }, dice).state;
   }
   return next;
@@ -161,6 +170,8 @@ describe('F9.1 target legality — Valkyrie talent 1 (listed-range override)', (
     const chain = new Chain(state);
     chain.run({ type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:valkyrie', targetIds: [foe.id] }, scriptedDice(10, 1, 2));
     chain.run({ type: 'END_TURN', actorId: hero.id });
+    // The scheduler never auto-selects (ICON p.87): the GM selects the foe.
+    chain.run({ type: 'TAKE_TURN', actorId: foe.id });
     chain.run({ type: 'END_TURN', actorId: foe.id });
     chain.replayFrom(state);
   });
@@ -322,14 +333,18 @@ describe('F9.4 Aetherwall (distance-gated defense)', () => {
     // removes the halving immediately (verified on the round-2 attack).
     chain.run({ type: 'MOVE', actorId: hero.id, path: [{ x: 3, y: 1 }], mode: 'standard' });
     chain.run({ type: 'END_TURN', actorId: hero.id });
+    chain.run({ type: 'TAKE_TURN', actorId: foe.id });
     chain.run({ type: 'END_TURN', actorId: foe.id });
-    // Round 2 — distance 2: no aetherwall halving, full 9 lands.
+    // Round 2 opens with the player side; the player selects the hero again.
+    chain.run({ type: 'TAKE_TURN', actorId: hero.id });
     chain.run({ type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(10, 5));
     expect(lastAttackEventOf(chain.events)?.appliedDamage).toBe(9);
     // Back outside range 2: the halving returns.
     chain.run({ type: 'MOVE', actorId: hero.id, path: [{ x: 4, y: 1 }], mode: 'standard' });
     chain.run({ type: 'END_TURN', actorId: hero.id });
+    chain.run({ type: 'TAKE_TURN', actorId: foe.id });
     chain.run({ type: 'END_TURN', actorId: foe.id });
+    chain.run({ type: 'TAKE_TURN', actorId: hero.id });
     chain.run({ type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' }, scriptedDice(10, 5));
     expect(lastAttackEventOf(chain.events)?.appliedDamage).toBe(5);
     chain.replayFrom(state);

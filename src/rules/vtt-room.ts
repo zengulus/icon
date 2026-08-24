@@ -374,7 +374,8 @@ const eventTypes = new Set([
   'ACTOR_ADDED', 'ACTOR_REMOVED', 'TERRAIN_SET', 'ENCOUNTER_STARTED',
   'ACTOR_MOVED', 'ATTACK_RESOLVED', 'ABILITY_RESOLVED', 'ACTOR_INTERACTED',
   'ACTOR_RESCUED', 'STATUS_REMOVED', 'ACTOR_RECOVERED', 'STATUS_APPLIED',
-  'TURN_ENDED', 'ACTOR_DEFEATED', 'VIGILANCE_SPENT', 'ENCOUNTER_ENDED', 'RULE_MUTATIONS_APPLIED',
+  'TURN_ENDED', 'TURN_STARTED', 'ACTOR_WENT_SLOW', 'ACTOR_DEFEATED',
+  'VIGILANCE_SPENT', 'ENCOUNTER_ENDED', 'RULE_MUTATIONS_APPLIED',
 ]);
 
 function invalidSnapshot(path: string, message: string): never {
@@ -561,6 +562,7 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
     'onBattlefield', 'defeated', 'actionsRemaining', 'standardMoveUsed',
     'attackedThisTurn', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn',
     'slashedTriggeredThisTurn', 'dangerousTerrainTriggeredThisTurn', 'turnTaken',
+    'turnsRemaining', 'turnsTakenThisRound', 'slow',
   ]);
   const actorId = strictIdentifier(actor.id, `${path}.id`);
   if (actorId !== expectedId) invalidSnapshot(`${path}.id`, 'must match its actors record key.');
@@ -675,6 +677,9 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
   strictBoolean(actor.slashedTriggeredThisTurn, `${path}.slashedTriggeredThisTurn`);
   strictBoolean(actor.dangerousTerrainTriggeredThisTurn, `${path}.dangerousTerrainTriggeredThisTurn`);
   strictBoolean(actor.turnTaken, `${path}.turnTaken`);
+  strictInteger(actor.turnsRemaining, `${path}.turnsRemaining`, 0);
+  strictInteger(actor.turnsTakenThisRound, `${path}.turnsTakenThisRound`, 0);
+  strictBoolean(actor.slow, `${path}.slow`);
 }
 
 function strictNumberRecord(value: unknown, path: string, maximumEntries: number, minimum: number): Record<string, number> {
@@ -692,7 +697,7 @@ function strictEncounter(value: unknown): EncounterState {
   const encounter = strictRecord(value, 'room.encounter');
   assertExactKeys(encounter, 'room.encounter', [
     'schemaVersion', 'rulesVersion', 'id', 'name', 'phase', 'grid', 'actors',
-    'round', 'activeActorId', 'lastSide', 'partyResolve', 'entities',
+    'round', 'activeActorId', 'turnPhase', 'eligibleSide', 'lastSide', 'partyResolve', 'entities',
     'terrainEffects', 'pendingInterrupts', 'revision', 'eventLog',
   ]);
   if (encounter.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) invalidSnapshot('room.encounter.schemaVersion', `must be ${ENCOUNTER_SCHEMA_VERSION}.`);
@@ -726,6 +731,8 @@ function strictEncounter(value: unknown): EncounterState {
     const activeActorId = strictIdentifier(encounter.activeActorId, 'room.encounter.activeActorId');
     if (!actors[activeActorId]) invalidSnapshot('room.encounter.activeActorId', 'must identify a current actor.');
   }
+  strictEnum(encounter.turnPhase, 'room.encounter.turnPhase', new Set(['normal', 'slow']));
+  if (encounter.eligibleSide !== null) strictEnum(encounter.eligibleSide, 'room.encounter.eligibleSide', new Set(['heroes', 'foes']));
   if (encounter.lastSide !== null) strictEnum(encounter.lastSide, 'room.encounter.lastSide', new Set(['heroes', 'foes']));
   strictInteger(encounter.partyResolve, 'room.encounter.partyResolve', 0);
   const entities = strictRecord(encounter.entities, 'room.encounter.entities');

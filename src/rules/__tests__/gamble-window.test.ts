@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveGamble } from '../automation/primitives/gamble-window.js';
-import { scriptedDice } from './fixtures.js';
+import {scriptedDice, endTurnTo, startEncounterTo} from './fixtures.js';
 import { monogatariGambleForTurnEnd } from '../automation/content/jobs/lifecycle-recipes.js';
 import { actorFromCharacter, createEncounter } from '../encounter.js';
 import { validCharacter } from './fixtures.js';

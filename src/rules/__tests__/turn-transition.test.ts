@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState, TurnEndCause } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F3 turn-transition fixtures (docs/rules-foundations.md §4).
@@ -34,7 +34,7 @@ function transitionEncounter(options: { second?: boolean } = {}): TransitionFixt
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second: second! };
 }
 
@@ -56,25 +56,32 @@ describe('F3 turn-transition intent', () => {
       diceWindows: {},
     });
     // The recorded participants are exactly the registry recipes whose gates
-    // passed for the hero's turn-end and the foe's turn-start at this boundary.
+    // passed for the hero's turn-end at this boundary (the next actor's
+    // turn-start participants are planned when the controller selects it via
+    // TAKE_TURN).
     expect(event.intent!.participants).toEqual(expect.any(Array));
     expect(event.intent!.participants).not.toContain('fool:carnevale');
-    expect(result.state.activeActorId).toBe(foe.id);
+    // The boundary never chooses the next actor: the hostile side becomes
+    // eligible and the GM selects the foe.
+    expect(result.state.activeActorId).toBeNull();
+    expect(result.state.eligibleSide).toBe('foes');
     expect(applyEvents(state, result.events)).toEqual(result.state);
+    const foeTurn = executeCommand(result.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
 
     // The round-closing boundary (the last actor, back to the hero) records
     // roundAdvance: true and replays the round increment.
-    const next = executeCommand(result.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+    const next = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
     const midRound = turnEndedOf(next);
     expect(midRound.round).toBe(1);
     expect(midRound.intent).toMatchObject({ cause: 'voluntary', roundAdvance: false });
-    expect(applyEvents(result.state, next.events)).toEqual(next.state);
+    expect(applyEvents(foeTurn, next.events)).toEqual(next.state);
 
-    const third = executeCommand(next.state, { type: 'END_TURN', actorId: second.id }, scriptedDice());
+    const secondTurn = executeCommand(next.state, { type: 'TAKE_TURN', actorId: second.id }, scriptedDice()).state;
+    const third = executeCommand(secondTurn, { type: 'END_TURN', actorId: second.id }, scriptedDice());
     const roundEvent = turnEndedOf(third);
     expect(roundEvent.round).toBe(2);
     expect(roundEvent.intent).toMatchObject({ cause: 'voluntary', roundAdvance: true });
-    expect(applyEvents(next.state, third.events)).toEqual(third.state);
+    expect(applyEvents(secondTurn, third.events)).toEqual(third.state);
   });
 
   it('pre-rolls the Carnevale detonation gamble at the command boundary and records it on the intent', () => {
@@ -136,27 +143,34 @@ describe('F3 turn-transition intent', () => {
   });
 
   it('records a gallows-humor turn-start participant and replays its die tick from the recorded list', () => {
-    const { state, hero } = transitionEncounter({ second: false });
+    const { state, hero, foe } = transitionEncounter({ second: false });
     // The hero holds the stance (die set out at 1 as when entered); the die
-    // ticks at the start of the hero's next turn (when the foe ends its turn,
-    // the hero is the recorded next actor).
+    // ticks at the start of the hero's next turn. The scheduler never names
+    // the hero at the foe's boundary: the TURN_ENDED event records the
+    // transition, and the controller's TAKE_TURN records the hero's
+    // turn-start participant list.
     state.actors[hero.id].stance = { id: 'stance', sourceId: 'fool:gallows-humor', ownerId: hero.id, stanceId: 'gallows-humor', state: {} };
     state.actors[hero.id].ruleState['gallows-humor:die'] = 1;
     state.actors[hero.id].ruleStateOwners['gallows-humor:die'] = hero.id;
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foeTurn.activeActorId! }, scriptedDice());
-    const event = turnEndedOf(ended);
-    expect(event.intent!.participants).toContain('freelancer:gallows-humor');
-    expect(ended.state.actors[hero.id].ruleState['gallows-humor:die']).toBe(2);
+    const foeTurn = endTurnTo(state, foe.id, scriptedDice());
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+    expect(ended.state.activeActorId).toBeNull();
+    const started = executeCommand(ended.state, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice());
+    const startedEvent = started.events.find((candidate) => candidate.type === 'TURN_STARTED');
+    expect(startedEvent && startedEvent.type === 'TURN_STARTED' ? startedEvent.participants : []).toContain('freelancer:gallows-humor');
+    expect(started.state.actors[hero.id].ruleState['gallows-humor:die']).toBe(2);
 
     // Replay consumes the recorded participant list (identical command state).
     expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
+    expect(applyEvents(ended.state, started.events)).toEqual(started.state);
 
-    // Removing the recipe from the recorded participants suppresses the tick
-    // even though the stance gate still passes.
-    const excluding: EncounterEvent[] = [{ ...event, intent: { ...event.intent!, participants: event.intent!.participants.filter((id) => id !== 'freelancer:gallows-humor') } }];
-    const replayed = applyEvents(foeTurn, excluding);
-    expect(replayed.actors[hero.id].ruleState['gallows-humor:die']).toBe(1);
+    // Removing the recipe from the recorded TURN_STARTED participants
+    // suppresses the tick even though the stance gate still passes.
+    if (startedEvent && startedEvent.type === 'TURN_STARTED') {
+      const excluding: EncounterEvent[] = [{ ...startedEvent, participants: startedEvent.participants.filter((id) => id !== 'freelancer:gallows-humor') }];
+      const replayed = applyEvents(ended.state, excluding);
+      expect(replayed.actors[hero.id].ruleState['gallows-humor:die']).toBe(1);
+    }
   });
 });
 

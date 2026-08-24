@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F2 SaveWindow foundation fixtures (docs/rules-foundations.md §3): every
@@ -27,7 +27,7 @@ function saveEncounter(options: { foe?: Position } = {}): SaveEncounter {
   const foe = createFoe('Relict', options.foe ?? { x: 2, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
@@ -45,7 +45,7 @@ describe('F2 SaveWindow foundation (docs/rules-foundations.md §3)', () => {
     // A Rot foe-mark (p.186) projects the shared save curse onto the foe's saves.
     foeActor.marks.push({ id: 'fixture-rot', sourceId: 'harvester:rot', ownerId: hero.id, markId: 'rot', duration: null, state: { kind: 'foe' } });
 
-    const heroEnded = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const heroEnded = endTurnTo(state, foe.id, scriptedDice());
     expect(heroEnded.activeActorId).toBe(foe.id);
     // d20 12, curse boon die 1 → boon -1 → total 11 → the save succeeds.
     const ended = executeCommand(heroEnded, { type: 'END_TURN', actorId: foe.id }, scriptedDice(12, 1));
@@ -164,7 +164,7 @@ describe('F2 SaveWindow foundation (docs/rules-foundations.md §3)', () => {
     });
     const exitPath = [{ x: 3, y: 1 }, { x: 4, y: 1 }];
     // Only the active actor can move: pass the turn to the trapped foe first.
-    const heroEnded = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const heroEnded = endTurnTo(state, foe.id, scriptedDice());
     expect(heroEnded.activeActorId).toBe(foe.id);
 
     // A successful exit save rides the ACTOR_MOVED event as the recorded window.

@@ -28,6 +28,9 @@ function activeEncounter(): PurityFixture {
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  // The new scheduler leaves the player side eligible without naming an actor
+  // (ICON p.87): the player selects the first PC explicitly.
+  state = executeCommand(state, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
   return { state, heroId: hero.id, foeId: foe.id };
 }
 

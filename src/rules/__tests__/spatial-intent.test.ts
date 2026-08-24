@@ -4,7 +4,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { computeSpatialArea } from '../automation/primitives/spatial-intent.js';
 import { lineCells, squareArea } from '../area-geometry.js';
 import type { EncounterActor, EncounterEvent, EncounterState, Position, TerrainCell } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F1 spatial-gateway matrix (ICON pp.87–92, 94, 107).
@@ -30,7 +30,7 @@ function spatialEncounter(options: { terrain?: TerrainCell[] } = {}): SpatialFix
   const foe = createFoe('Relict', { x: 4, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 

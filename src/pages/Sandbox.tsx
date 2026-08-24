@@ -10,6 +10,7 @@ import {
 import { JOBS, PHASE_TWO_READY, RULES_COVERAGE, findAbility, findJob } from '../rules/catalog.js';
 import { createCharacter, validateCharacter } from '../rules/character.js';
 import { actorFromCharacter, createEncounter, createFoe, createFoeFromProfile } from '../rules/encounter.js';
+import { slowElectableActorIds, turnEligibleActorIds } from '../rules/turn-scheduler.js';
 import { seededDice } from '../rules/dice.js';
 import { FOE_PROFILES } from '../rules/foes.js';
 import { planMovement } from '../rules/movement.js';
@@ -240,6 +241,8 @@ export function VttRoomBoard({ room, role, onEncounter, onTable, onPing }: VttRo
   const viewport = useMemo<ViewportRect>(() => ({ x: 0, y: 0, width: Math.max(1, viewportSize.width), height: Math.max(1, viewportSize.height) }), [viewportSize]);
   const geometry = useMemo<TacticalViewportGeometry>(() => ({ camera, viewport, grid: { cellSize: room.table.map.cellSize }, map: { scale: room.table.map.scale, offset: room.table.map.offset } }), [camera, room.table.map, viewport]);
   const active = room.encounter.activeActorId ? room.encounter.actors[room.encounter.activeActorId] : null;
+  const eligibleActorIds = turnEligibleActorIds(room.encounter);
+  const slowElectableIds = slowElectableActorIds(room.encounter);
   const fitCamera = useCallback(() => {
     if (viewport.width > 1 && viewport.height > 1) setCamera(fitWorldBounds(gridBoundsToWorld(room.encounter.grid, { cellSize: room.table.map.cellSize }), viewport, { padding: 34, minZoom: .2, maxZoom: 3 }));
   }, [room.encounter.grid, room.table.map.cellSize, viewport]);
@@ -404,6 +407,8 @@ export function Sandbox({ forceEnabled = false, labMode = false }: SandboxProps)
 
   const encounter = room.encounter;
   const active = encounter.activeActorId ? encounter.actors[encounter.activeActorId] : null;
+  const eligibleActorIds = turnEligibleActorIds(encounter);
+  const slowElectableIds = slowElectableActorIds(encounter);
   const selectedActor = selectedActorId ? encounter.actors[selectedActorId] ?? null : null;
   const selectedAbility = selectedAbilityId ? findAbility(selectedAbilityId) : undefined;
   const recentEvents = useMemo(() => [...encounter.eventLog].reverse().slice(0, 30), [encounter.eventLog]);
@@ -726,7 +731,13 @@ export function Sandbox({ forceEnabled = false, labMode = false }: SandboxProps)
 
         <aside className="vtt-inspector">
           <section>
-            <p className="eyebrow">Active turn</p><h2>{active?.name ?? (encounter.phase === 'setup' ? 'Setup' : 'Encounter complete')}</h2>
+            <p className="eyebrow">Turn order</p><h2>{active?.name ?? (encounter.phase === 'setup' ? 'Setup' : encounter.phase === 'active' ? 'Awaiting actor selection' : 'Encounter complete')}</h2>
+            {encounter.phase === 'active' && !active && <div className="vtt-turn-selection">
+              <p>{encounter.turnPhase === 'slow' ? 'Slow mini-round' : 'Normal turn'} · {encounter.eligibleSide === 'heroes' ? 'player side' : 'hostile side'} may act</p>
+              {eligibleActorIds.map((actorId) => <button className="button compact full" key={actorId} onClick={() => runEncounterCommand({ type: 'TAKE_TURN', actorId })}>{encounter.actors[actorId]?.name ?? actorId} takes the turn</button>)}
+              {encounter.turnPhase === 'normal' && slowElectableIds.map((actorId) => <button className="button compact full" key={actorId} onClick={() => runEncounterCommand({ type: 'GO_SLOW', actorId })}>{encounter.actors[actorId]?.name ?? actorId} elects Slow</button>)}
+              {eligibleActorIds.length === 0 && slowElectableIds.length === 0 && <p className="notice">No eligible actor is visible from this view.</p>}
+            </div>}
             {active && <>
               <div className="action-pips">{[0, 1].map((index) => <span key={index} className={active.actionsRemaining > index ? 'available' : ''} />)}<small>{active.actionsRemaining} actions</small></div>
               <div className="vtt-mode-grid">

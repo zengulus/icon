@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, RuleViolation } from '../encounter.js';
 import { planMovement, planMovementPath } from '../movement.js';
 import type { EncounterState, Position, TerrainCell } from '../types.js';
-import { validCharacter } from './fixtures.js';
+import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 function activeEncounter(options: {
   heroPosition?: Position;
@@ -20,7 +20,7 @@ function activeEncounter(options: {
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, ally };
 }
 
@@ -144,8 +144,8 @@ describe('shared movement planner', () => {
     const afterDash = executeCommand(afterStandard, { type: 'MOVE', actorId: hero.id, path: dashPlan.path, mode: 'dash' }).state;
     expect(afterDash.actors[hero.id]).toMatchObject({ hp: 38, vigor: 5, dangerousTerrainTriggeredThisTurn: true });
 
-    const foeTurn = executeCommand(afterDash, { type: 'END_TURN', actorId: hero.id }).state;
-    const nextHeroTurn = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }).state;
+    const foeTurn = endTurnTo(afterDash, foe.id);
+    const nextHeroTurn = endTurnTo(foeTurn, hero.id);
     expect(nextHeroTurn.actors[hero.id].dangerousTerrainTriggeredThisTurn).toBe(false);
     const nextPlan = planMovement(nextHeroTurn, hero.id, { x: 2, y: 1 }, 'standard');
     expect(nextPlan).toMatchObject({ legal: true, dangerousDamage: 2 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ENCOUNTER_SCHEMA_VERSION } from '../types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand, hasCoverFrom, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter, replayEncounter, RuleViolation } from '../encounter.js';
 import { ABILITIES, JOBS } from '../catalog.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 function activeEncounter() {
   let state = createEncounter('Golden fixture');
@@ -10,7 +10,7 @@ function activeEncounter() {
   const foe = createFoe('Relict', { x: 3, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
@@ -18,9 +18,14 @@ describe('ICON encounter reducer', () => {
   it('starts with a hero and alternates to a foe', () => {
     const { state, hero, foe } = activeEncounter();
     expect(state.activeActorId).toBe(hero.id);
+    // The boundary never chooses the next actor: the hostile side becomes
+    // eligible and the GM selects the foe via TAKE_TURN (ICON p.87).
     const result = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice());
-    expect(result.state.activeActorId).toBe(foe.id);
-    expect(result.state.round).toBe(1);
+    expect(result.state.activeActorId).toBeNull();
+    expect(result.state.eligibleSide).toBe('foes');
+    const foeTurn = executeCommand(result.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    expect(foeTurn.activeActorId).toBe(foe.id);
+    expect(foeTurn.round).toBe(1);
     expect(result.events).toMatchObject([{ type: 'TURN_ENDED', cause: 'voluntary' }]);
   });
 
@@ -32,7 +37,7 @@ describe('ICON encounter reducer', () => {
       type: 'MOVE', actorId: hero.id, path: [{ x: 1, y: 2 }], mode: 'standard',
     }, scriptedDice());
 
-    expect(result.events.at(-1)).toMatchObject({ type: 'TURN_ENDED', cause: 'forced-status', nextActorId: foe.id });
+    expect(result.events.at(-1)).toMatchObject({ type: 'TURN_ENDED', cause: 'forced-status', eligibleSide: 'foes' });
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
@@ -356,8 +361,8 @@ describe('ICON encounter reducer', () => {
     const impaler = createFoeFromProfile('basic:impaler:300', { x: 2, y: 1 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: impaler }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
-    state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    state = startEncounterTo(state, hero.id);
+    state = endTurnTo(state, impaler.id, scriptedDice());
     try {
       executeCommand(state, {
         type: 'EXECUTE_RULE',
@@ -438,7 +443,7 @@ describe('ICON encounter reducer', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
     state = applyEvents(state, [{ type: 'ACTOR_DEFEATED', actorId: second.id, woundGained: true }]);
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, first.id);
     state = executeCommand(state, { type: 'INTERACT', actorId: first.id, position: first.position, description: 'Pull the lever' }).state;
     expect(state.actors[first.id].actionsRemaining).toBe(1);
     state = executeCommand(state, { type: 'RESCUE', actorId: first.id, targetId: second.id }).state;

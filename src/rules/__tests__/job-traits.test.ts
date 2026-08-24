@@ -4,7 +4,8 @@ import { encounterConditionSet } from '../automation/kernels/encounter-adapter.j
 import { JOB_TRAIT_CONDITION_RECIPES_VIEW } from '../automation/content/jobs/trait-condition-recipes.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
+import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
  * F6 job-trait fixtures (docs/rules-foundations.md §7).
@@ -32,7 +33,7 @@ function traitEncounter(traits: string[], options: { heroAt?: { x: number; y: nu
   const foe = createFoeFromProfile('basic:knuckle:301', options.foeAt ?? { x: 5, y: 1 }, 4);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
@@ -57,10 +58,18 @@ const conditionMutation = (actorId: string, targetId: string, conditionId: strin
   mutations: [{ kind: 'condition', sourceId: 'fixture:condition', sourceActorId: actorId, actorId: targetId, conditionId, operation: 'apply', potency: 'normal' }],
 });
 
-/** End every actor's turn in insertion order, advancing through the round. */
+/** End every actor's turn in insertion order, advancing through the round.
+ * Each boundary leaves the scheduler awaiting a controller choice, so the
+ * fixture explicitly selects the next actor in insertion order (ICON p.87). */
 function endAllTurns(state: EncounterState, dice = scriptedDice()): EncounterState {
   let next = state;
-  for (const id of Object.keys(next.actors)) {
+  for (const id of Object.keys(state.actors)) {
+    if (next.activeActorId !== id) {
+      if (next.activeActorId !== null) next = executeCommand(next, { type: 'END_TURN', actorId: next.activeActorId }, dice).state;
+      const eligible = turnEligibleActorIds(next);
+      if (!eligible.includes(id)) throw new Error('endAllTurns: ' + id + ' is not eligible here.');
+      next = executeCommand(next, { type: 'TAKE_TURN', actorId: id }, dice).state;
+    }
     next = executeCommand(next, { type: 'END_TURN', actorId: id }, dice).state;
   }
   return next;
@@ -91,7 +100,7 @@ describe('F6 condition projections (passive-projection.ts)', () => {
       expect(encounterConditionSet(state.actors[hero.id]).has('regeneration')).toBe(true);
       state.actors[hero.id].hp = 1; // bloodied
       const vigorBefore = state.actors[hero.id].vigor;
-      const after = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+      const after = endTurnTo(state, foe.id, scriptedDice());
       expect(after.actors[hero.id].vigor).toBe(vigorBefore + 4);
     }
   });
@@ -124,11 +133,11 @@ describe('F6 lifecycle recipes (turn-transition.ts)', () => {
     expect(state.actors[hero.id].conditions.some(({ id, sourceId }) => id === 'sturdy' && sourceId === 'demon-slayer:trait:true-horn')).toBe(true);
     // The hero's turn end hands the round to the foe; sturdy stays (the trait
     // protects the owner during other actors' turns).
-    const afterHero = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const afterHero = endTurnTo(state, foe.id, scriptedDice());
     expect(afterHero.actors[hero.id].conditions.some(({ id }) => id === 'sturdy')).toBe(true);
     // The foe's turn end advances the round; the hero's own turn start runs
     // the turn-start half, clearing only the trait's durable grant.
-    const roundTwo = executeCommand(afterHero, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const roundTwo = endTurnTo(afterHero, hero.id, scriptedDice());
     expect(roundTwo.round).toBe(2);
     expect(roundTwo.actors[hero.id].conditions.some(({ id }) => id === 'sturdy')).toBe(false);
   });
@@ -136,11 +145,11 @@ describe('F6 lifecycle recipes (turn-transition.ts)', () => {
   it('Blackheart grants vigilance +1 (and a bonus-damage charge with two statuses) at turn end', () => {
     const { state, hero } = traitEncounter(['knave:trait:blackheart']);
     const oneStatus = applyEvents(state, [conditionMutation(hero.id, hero.id, 'weakened')]);
-    const after = executeCommand(oneStatus, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const after = endTurnOnly(oneStatus, scriptedDice());
     expect(after.actors[hero.id].resources.vigilance).toBe(1);
     expect(after.actors[hero.id].resources['bonus-damage'] ?? 0).toBe(0); // one status: no charge
     const twoStatuses = applyEvents(state, [conditionMutation(hero.id, hero.id, 'weakened'), conditionMutation(hero.id, hero.id, 'vulnerable')]);
-    const charged = executeCommand(twoStatuses, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const charged = endTurnOnly(twoStatuses, scriptedDice());
     expect(charged.actors[hero.id].resources.vigilance).toBe(1);
     expect(charged.actors[hero.id].resources['bonus-damage']).toBe(1);
   });
@@ -149,7 +158,7 @@ describe('F6 lifecycle recipes (turn-transition.ts)', () => {
     const { state, hero, foe } = traitEncounter(['harvester:trait:mark-of-tsumi']);
     state.actors[foe.id].marks.push({ id: 'mark:1', sourceId: 'fixture', ownerId: hero.id, markId: 'tsumi', duration: null, state: {} });
     const hpBefore = state.actors[foe.id].hp;
-    const after = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const after = endTurnTo(state, foe.id, scriptedDice());
     expect(after.actors[foe.id].hp).toBe(hpBefore - 2);
     expect(after.actors[hero.id].resources.blessing ?? 0).toBeGreaterThan(0);
   });
@@ -169,6 +178,9 @@ describe('F6 lifecycle recipes (turn-transition.ts)', () => {
     let current = state;
     while (current.round < 5) current = endAllTurns(current);
     expect(current.round).toBe(5);
+    // The turn-start recipe fires when the player selects the hero (the
+    // scheduler awaits the choice, ICON p.87).
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
     expect(current.actors[hero.id].conditions.some(({ id, sourceId }) => id === 'defiance' && sourceId === 'enochian:trait:phoenix-rage')).toBe(true);
     expect(current.actors[hero.id].ruleState['phoenix-rage:active']).toBe(true);
   });
@@ -195,7 +207,7 @@ describe('F6 lifecycle recipes (turn-transition.ts)', () => {
   it('Furious Berserk grants vigilance +1 at turn end while bloodied', () => {
     const { state, hero } = traitEncounter(['colossus:trait:furious-berserk']);
     state.actors[hero.id].hp = 1; // bloodied
-    const after = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const after = endTurnOnly(state, scriptedDice());
     expect(after.actors[hero.id].resources.vigilance).toBe(1);
   });
 });

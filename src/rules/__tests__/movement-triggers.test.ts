@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position, StatusSaveCommandInput } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Movement-entry trigger fixtures (the F1/F3 seam, ICON p.151 Party Favor:
@@ -33,17 +33,19 @@ function movementFixture(options: { foe?: Position; hero?: Position } = {}): Mov
   const foe = createFoe('Relict', options.foe ?? { x: 2, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
 
-/** Place a Party Favor mine, then hand the turn to the foe so it can move. */
-function mineAndFoeTurn(state: EncounterState, heroId: string, mineAt: Position) {
+/** Place a Party Favor mine, then hand the turn to the foe so it can move.
+ * The scheduler never auto-selects (ICON p.87): the GM chooses the foe via
+ * TAKE_TURN after the hero's END_TURN. */
+function mineAndFoeTurn(state: EncounterState, heroId: string, foeId: string, mineAt: Position) {
   const placed = executeCommand(state, {
     type: 'USE_ABILITY', actorId: heroId, abilityId: 'fool:party-favor', targetIds: [], input: minePlacement(mineAt),
   }, scriptedDice()).state;
   expect(placed.terrainEffects.some((effect) => effect.terrain === 'party-favor')).toBe(true);
-  return executeCommand(placed, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
+  return endTurnTo(placed, foeId, scriptedDice());
 }
 
 const partyFavorEvents = (events: ReturnType<typeof executeCommand>['events']) =>
@@ -55,7 +57,7 @@ const partyFavorMutations = (events: ReturnType<typeof executeCommand>['events']
 describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
   it('a foe moving into the mine cell detonates it automatically and removes it', () => {
     const { state, hero, foe } = movementFixture();
-    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 3, y: 1 });
+    const foeTurn = mineAndFoeTurn(state, hero.id, foe.id, { x: 3, y: 1 });
     const moved = executeCommand(foeTurn, { type: 'MOVE', actorId: foe.id, path: [{ x: 3, y: 1 }], mode: 'standard' }, scriptedDice(3));
 
     // The mine detonated on entry: the foe takes 2 area damage and the
@@ -75,7 +77,7 @@ describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
 
   it('does not detonate when the mover never enters the mine space (closed negative)', () => {
     const { state, hero, foe } = movementFixture();
-    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 3, y: 1 });
+    const foeTurn = mineAndFoeTurn(state, hero.id, foe.id, { x: 3, y: 1 });
     const moved = executeCommand(foeTurn, { type: 'MOVE', actorId: foe.id, path: [{ x: 2, y: 0 }], mode: 'standard' }, scriptedDice(3));
     expect(partyFavorEvents(moved.events)).toHaveLength(0);
     expect(moved.state.actors[foe.id].hp).toBe(32);
@@ -85,7 +87,7 @@ describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
   it('a bloodied foe entering the mine activates the ability\u2019s Finishing Blow clause (2 damage twice)', () => {
     const { state, hero, foe } = movementFixture();
     state.actors[foe.id].hp = 16; // bloodied (baseMaxHp 32)
-    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 3, y: 1 });
+    const foeTurn = mineAndFoeTurn(state, hero.id, foe.id, { x: 3, y: 1 });
     const moved = executeCommand(foeTurn, { type: 'MOVE', actorId: foe.id, path: [{ x: 3, y: 1 }], mode: 'standard' }, scriptedDice(3));
     // Base 2 + the clause's 2 twice = 6 total.
     expect(moved.state.actors[foe.id].hp).toBe(10);
@@ -98,7 +100,7 @@ describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
     const { state, hero, foe } = movementFixture();
     state.actors[hero.id].talents['fool:party-favor'] = 2;
     state.actors[foe.id].conditions = [{ id: 'dazed', sourceId: 'fixture:daze', ownerId: null, potency: 'normal', duration: null }];
-    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 3, y: 1 });
+    const foeTurn = mineAndFoeTurn(state, hero.id, foe.id, { x: 3, y: 1 });
     const moved = executeCommand(foeTurn, { type: 'MOVE', actorId: foe.id, path: [{ x: 3, y: 1 }], mode: 'standard' }, scriptedDice(3));
     expect(moved.state.actors[foe.id].hp).toBe(26); // 32 - 2 - 2 - 2
     expect(applyEvents(foeTurn, moved.events)).toEqual(moved.state);
@@ -106,7 +108,7 @@ describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
 
   it('a multi-space path detonates the mine exactly once, on entry', () => {
     const { state, hero, foe } = movementFixture({ foe: { x: 1, y: 2 } });
-    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 3, y: 2 });
+    const foeTurn = mineAndFoeTurn(state, hero.id, foe.id, { x: 3, y: 2 });
     const moved = executeCommand(foeTurn, { type: 'MOVE', actorId: foe.id, path: [{ x: 2, y: 2 }, { x: 3, y: 2 }], mode: 'standard' }, scriptedDice(4));
     expect(moved.state.actors[foe.id].hp).toBe(30);
     expect(partyFavorEvents(moved.events)).toHaveLength(1);
@@ -119,7 +121,7 @@ describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
     // Regression: the fold evaluates cells against the original state, so a
     // path that revisits the mine cell must not fire the trigger twice.
     const { state, hero, foe } = movementFixture({ foe: { x: 1, y: 3 } });
-    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 3, y: 3 });
+    const foeTurn = mineAndFoeTurn(state, hero.id, foe.id, { x: 3, y: 3 });
     // Step-by-step path: (1,3)→(2,3)→(3,3) [mine] → (2,3) [leave] → (3,3) [re-enter]
     const moved = executeCommand(foeTurn, {
       type: 'MOVE', actorId: foe.id,
@@ -154,7 +156,7 @@ describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
       id: 'second-mine:fixture', sourceId: 'fool:party-favor', ownerId: hero.id,
       terrain: 'party-favor', positions: [{ x: 4, y: 3 }], height: null, duration: null,
     });
-    const foeTurn = executeCommand(placed, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const foeTurn = endTurnTo(placed, foe.id, scriptedDice());
     // Path crosses both mines step-by-step: (1,3)→(2,3)→(3,3)→(4,3)
     const moved = executeCommand(foeTurn, {
       type: 'MOVE', actorId: foe.id,
@@ -179,7 +181,7 @@ describe('movement-entry triggers (ICON p.151 Party Favor exemplar)', () => {
     // Place the foe far from the hero to avoid engagement complications.
     const { state, hero, foe } = movementFixture({ foe: { x: 1, y: 5 }, hero: { x: 1, y: 1 } });
     // Mine must be within range 3 of the hero at (1,1).
-    const foeTurn = mineAndFoeTurn(state, hero.id, { x: 1, y: 4 });
+    const foeTurn = mineAndFoeTurn(state, hero.id, foe.id, { x: 1, y: 4 });
     // DASH from (1,5) into (1,4) [mine].
     const moved = executeCommand(foeTurn, {
       type: 'MOVE', actorId: foe.id,

@@ -1,6 +1,7 @@
 import type { WebSocket } from 'ws';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, createEncounter, createFoe } from '../../src/rules/encounter.js';
+import { ENCOUNTER_SCHEMA_VERSION } from '../../src/rules/types.js';
 import { parseClientMessage, type ServerMessage } from '../../src/rules/protocol.js';
 import { createVttRoom, currentStateForPersistence, type RoomCommand, type VttRoomState } from '../../src/rules/vtt-room.js';
 import type { ServerConfig } from '../config.js';
@@ -214,7 +215,7 @@ describe('RoomManager authoritative VTT integration', () => {
       created_at: checkpoint.createdAt,
     }, checkpoint.roomId);
 
-    expect(loaded.state.encounter.schemaVersion).toBe(6);
+    expect(loaded.state.encounter.schemaVersion).toBe(ENCOUNTER_SCHEMA_VERSION);
     expect(loaded.state.encounter.actors[target.id]?.conditions).toMatchObject([
       { sourceId: 'legacy:source', ownerId: source.id },
     ]);
@@ -707,13 +708,20 @@ describe('RoomManager authoritative VTT integration', () => {
     expect(last(outsider.socket, 'error')).toMatchObject({ code: 'permission.denied' });
     expect(manager.inspect('room-permissions')?.revision).toBe(3);
 
-    await manager.command(owner.client, 3, { domain: 'encounter', command: { type: 'END_TURN', actorId: hero.id } });
-    expect(manager.inspect('room-permissions')).toMatchObject({ revision: 4, encounter: { activeActorId: foe.id } });
+    // Combat starts awaiting the player side's TAKE_TURN choice (ICON p.87):
+    // the controlling player selects the hero, then ends its turn.
+    await manager.command(owner.client, 3, { domain: 'encounter', command: { type: 'TAKE_TURN', actorId: hero.id } });
+    expect(manager.inspect('room-permissions')).toMatchObject({ revision: 4, encounter: { activeActorId: hero.id } });
 
-    await manager.command(owner.client, 4, { domain: 'table', command: { type: 'SET_MAP', map: { showGrid: false } } });
+    await manager.command(owner.client, 4, { domain: 'encounter', command: { type: 'END_TURN', actorId: hero.id } });
+    // END_TURN never selects the next actor (ICON p.87): the room awaits the
+    // GM's TAKE_TURN choice of the eligible foe.
+    expect(manager.inspect('room-permissions')).toMatchObject({ revision: 5, encounter: { activeActorId: null, eligibleSide: 'foes' } });
+
+    await manager.command(owner.client, 5, { domain: 'table', command: { type: 'SET_MAP', map: { showGrid: false } } });
     expect(last(owner.socket, 'error')).toMatchObject({ code: 'permission.denied' });
 
-    await manager.command(owner.client, 4, {
+    await manager.command(owner.client, 5, {
       domain: 'table',
       command: {
         type: 'UPSERT_ANNOTATION',
@@ -721,14 +729,14 @@ describe('RoomManager authoritative VTT integration', () => {
       },
     });
     expect(manager.inspect('room-permissions')).toMatchObject({
-      revision: 5,
+      revision: 6,
       table: { annotations: [{ id: 'player-note', authorId: 'player-one' }] },
     });
 
-    await manager.command(outsider.client, 5, { domain: 'table', command: { type: 'REMOVE_ANNOTATION', annotationId: 'player-note' } });
+    await manager.command(outsider.client, 6, { domain: 'table', command: { type: 'REMOVE_ANNOTATION', annotationId: 'player-note' } });
     expect(last(outsider.socket, 'error')).toMatchObject({ code: 'permission.denied' });
 
-    await manager.command(owner.client, 5, {
+    await manager.command(owner.client, 6, {
       domain: 'table',
       command: {
         type: 'UPSERT_ANNOTATION',
@@ -736,18 +744,18 @@ describe('RoomManager authoritative VTT integration', () => {
       },
     });
     expect(last(owner.socket, 'error')).toMatchObject({ code: 'permission.denied' });
-    expect(manager.inspect('room-permissions')?.revision).toBe(5);
+    expect(manager.inspect('room-permissions')?.revision).toBe(6);
 
     // A GM may hide a previously player-owned artifact. The owner must not be
     // able to discover, unhide, or delete it through a stale known ID.
-    await manager.command(gm, 5, {
+    await manager.command(gm, 6, {
       domain: 'table',
       command: {
         type: 'UPSERT_ANNOTATION',
         annotation: { id: 'player-note', authorId: 'player-one', kind: 'note', points: [{ x: 2, y: 2 }], color: '#000000', text: 'GM-only revision', hidden: true },
       },
     });
-    await manager.command(owner.client, 6, {
+    await manager.command(owner.client, 7, {
       domain: 'table',
       command: {
         type: 'UPSERT_ANNOTATION',
@@ -755,19 +763,19 @@ describe('RoomManager authoritative VTT integration', () => {
       },
     });
     expect(last(owner.socket, 'error')).toMatchObject({ code: 'permission.denied' });
-    await manager.command(owner.client, 6, { domain: 'table', command: { type: 'REMOVE_ANNOTATION', annotationId: 'player-note' } });
+    await manager.command(owner.client, 7, { domain: 'table', command: { type: 'REMOVE_ANNOTATION', annotationId: 'player-note' } });
     expect(last(owner.socket, 'error')).toMatchObject({ code: 'permission.denied' });
 
-    await manager.command(gm, 6, {
+    await manager.command(gm, 7, {
       domain: 'table',
       command: {
         type: 'UPSERT_TEMPLATE',
         template: { id: 'player-template', authorId: 'player-one', kind: 'burst', origin: { x: 2, y: 2 }, rotation: 0, length: 1, width: 1, label: 'GM-only template', color: '#000000', hidden: true },
       },
     });
-    await manager.command(owner.client, 7, { domain: 'table', command: { type: 'REMOVE_TEMPLATE', templateId: 'player-template' } });
+    await manager.command(owner.client, 8, { domain: 'table', command: { type: 'REMOVE_TEMPLATE', templateId: 'player-template' } });
     expect(last(owner.socket, 'error')).toMatchObject({ code: 'permission.denied' });
-    await manager.command(owner.client, 7, {
+    await manager.command(owner.client, 8, {
       domain: 'table',
       command: {
         type: 'UPSERT_TEMPLATE',
@@ -776,7 +784,7 @@ describe('RoomManager authoritative VTT integration', () => {
     });
     expect(last(owner.socket, 'error')).toMatchObject({ code: 'permission.denied' });
 
-    await manager.command(owner.client, 7, {
+    await manager.command(owner.client, 8, {
       domain: 'encounter',
       command: {
         type: 'EXECUTE_RULE',
@@ -788,7 +796,7 @@ describe('RoomManager authoritative VTT integration', () => {
       },
     });
     expect(last(owner.socket, 'error')).toMatchObject({ code: 'permission.denied' });
-    expect(manager.inspect('room-permissions')?.revision).toBe(7);
+    expect(manager.inspect('room-permissions')?.revision).toBe(8);
 
     await settleAndLeave(manager, gm, [gm, owner.client, outsider.client]);
   });
@@ -890,14 +898,18 @@ describe('RoomManager authoritative VTT integration', () => {
     await manager.command(gm, 3, { domain: 'encounter', command: { type: 'START_ENCOUNTER' } });
 
     const player = await join(manager, 'room-hidden-movement', 'dev:player-one:player');
-    await manager.command(player.client, 4, {
+    // Combat starts awaiting the player side's choice (ICON p.87): the
+    // controlling player selects the hero before moving.
+    await manager.command(player.client, 4, { domain: 'encounter', command: { type: 'TAKE_TURN', actorId: hero.id } });
+    expect(manager.inspect('room-hidden-movement')?.revision).toBe(5);
+    await manager.command(player.client, 5, {
       domain: 'encounter',
       command: { type: 'MOVE', actorId: hero.id, path: [{ x: 2, y: 1 }], mode: 'standard' },
     });
     const error = last(player.socket, 'error');
     expect(error).toMatchObject({ code: 'command.unavailable' });
     expect(error.message).not.toMatch(/foe|object|secret blocker/i);
-    expect(manager.inspect('room-hidden-movement')?.revision).toBe(4);
+    expect(manager.inspect('room-hidden-movement')?.revision).toBe(5);
 
     await settleAndLeave(manager, gm, [gm, player.client]);
   });

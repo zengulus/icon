@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter } from '../encounter.js';
 import { readPowerDie, setPowerDie, tickPowerDie } from '../automation/kernels/power-die.js';
-import { validCharacter } from './fixtures.js';
+import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 describe('power-die kernel (persistent dN ticker)', () => {
   it('reads the start value when the die is unset', () => {

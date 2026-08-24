@@ -20,7 +20,7 @@ import { FOE_PROFILES } from '../foes.js';
 import { planMovementPath } from '../movement.js';
 import { collectRuleSourceUnits, findRuleSourceUnit } from '../source-units.js';
 import type { EncounterState, Position, TerrainCell } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Foe special-traits keyword projections (ICON p.298 glossary + p.104
@@ -42,7 +42,7 @@ function traitFixture(profileId: string, foeAt: Position, heroAt: Position): { s
   const foe = createFoeFromProfile(profileId, foeAt);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, heroId: hero.id, foeId: foe.id };
 }
 
@@ -189,9 +189,10 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
     const kinfisher = createFoeFromProfile('ruin-beast:kinfisher:355', { x: 1, y: 1 });
     expect(kinfisher.size).toBe(2); // "Immobile, Size 2"
     const { state, heroId, foeId } = traitFixture('ruin-beast:kinfisher:355', { x: 1, y: 1 }, { x: 8, y: 8 });
-    // The movement planner only lets the active actor move, so the foe must
-    // be on turn for its Immobile denial to be observable.
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
+    // The movement planner only lets the active actor move, so the GM must
+    // select the foe (TAKE_TURN, ICON p.87) for its Immobile denial to be
+    // observable.
+    const foeTurn = endTurnTo(state, foeId, scriptedDice());
     const plan = planMovementPath(foeTurn, foeId, [{ x: 2, y: 1 }], 'standard');
     expect(plan.legal).toBe(false);
     expect(plan.issue?.code).toBe('move.immobile');
@@ -200,11 +201,13 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
 
   it('Regeneration keyword grants 4 vigor at the bloodied end of turn (p.104)', () => {
     const fixture = traitFixture('scavenger:blood-broker:370', { x: 1, y: 1 }, { x: 8, y: 8 });
-    let state = executeCommand(fixture.state, { type: 'END_TURN', actorId: fixture.heroId }, scriptedDice()).state;
+    let state = endTurnTo(fixture.state, fixture.foeId, scriptedDice());
     const foe = state.actors[fixture.foeId]!;
     foe.hp = 1; // bloodied
     foe.vigor = 0;
-    const ended = executeCommand(state, { type: 'END_TURN', actorId: fixture.foeId }, scriptedDice());
+    const activeActorId = state.activeActorId;
+    if (!activeActorId) throw new Error('endTurnOnly requires an active actor.');
+    const ended = executeCommand(state, { type: 'END_TURN', actorId: activeActorId }, scriptedDice());
     expect(ended.state.actors[fixture.foeId]!.vigor).toBe(4);
     expect(applyEvents(state, ended.events)).toEqual(ended.state);
   });
@@ -212,13 +215,13 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
   it('Skirmisher keyword grants diagonal movement and full-speed dash (p.298)', () => {
     const { state, heroId, foeId } = traitFixture('basic:nocturnal:310', { x: 1, y: 1 }, { x: 8, y: 8 });
     expect(encounterConditionSet(state.actors[foeId]!).has('skirmisher')).toBe(true);
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
+    const foeTurn = endTurnTo(state, foeId, scriptedDice());
     const diagonal = planMovementPath(foeTurn, foeId, [{ x: 2, y: 2 }], 'standard');
     expect(diagonal.legal).toBe(true);
 
     // Control: a warrior without the keyword cannot move diagonally.
     const control = traitFixture('basic:warrior:300', { x: 1, y: 1 }, { x: 8, y: 8 });
-    const controlTurn = executeCommand(control.state, { type: 'END_TURN', actorId: control.heroId }, scriptedDice()).state;
+    const controlTurn = endTurnTo(control.state, control.foeId, scriptedDice());
     const blocked = planMovementPath(controlTurn, control.foeId, [{ x: 2, y: 2 }], 'standard');
     expect(blocked.legal).toBe(false);
     expect(blocked.issue?.code).toBe('move.orthogonal');
@@ -227,7 +230,7 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
   it('Speed 2 keyword lowers the standard-move allowance', () => {
     const { state, heroId, foeId } = traitFixture('ruin-beast:baggoth:347', { x: 1, y: 1 }, { x: 8, y: 8 });
     expect(state.actors[foeId]!.speed).toBe(2);
-    const foeTurn = executeCommand(state, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
+    const foeTurn = endTurnTo(state, foeId, scriptedDice());
     const two = planMovementPath(foeTurn, foeId, [{ x: 2, y: 1 }, { x: 3, y: 1 }], 'standard');
     expect(two.legal).toBe(true);
     const three = planMovementPath(foeTurn, foeId, [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }], 'standard');
@@ -273,7 +276,7 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
     foe.traitIds = ['ruin-beast:howler:346:trait:special-traits'];
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     expect(encounterConditionSet(state.actors[foe.id]!).has('counter')).toBe(true);
     // The fixture hero has Armor 2, which absorbs the raw 2 Counter reflect.
     // Strip the armor so the reflect provably lands back on the attacker (the
@@ -376,8 +379,8 @@ function activeProfileFoe(profileId: string, terrain: TerrainCell[]) {
   const foe = createFoeFromProfile(profileId, { x: 1, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
-  state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+  state = startEncounterTo(state, hero.id);
+  state = endTurnTo(state, foe.id, scriptedDice());
   return { state, foe: state.actors[foe.id]! };
 }
 

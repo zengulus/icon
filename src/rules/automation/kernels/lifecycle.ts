@@ -206,19 +206,23 @@ export function planTurnTransition(
   state: EncounterState,
   actor: EncounterActor,
   dice: DiceSource,
-  options: { cause: TurnEndCause; nextActorId: string; nextRound: number },
+  options: { cause: TurnEndCause; nextActorId?: string; nextRound: number },
 ): { intent: TurnTransitionIntent } {
   // The durable intent must stay JSON-clean: the checkpoint boundary rejects
   // explicit undefined values, so omitted dice windows are absent, not null.
   const diceWindows: TurnDiceWindows = Object.assign({}, ...turnDiceWindowPlanners.map((planner) => planner(state, actor, dice)));
-  const next = state.actors[options.nextActorId];
+  const next = options.nextActorId ? state.actors[options.nextActorId] : undefined;
   // The turn-start and round-start phases replay after the round advances, so
   // their recipes' gates must be evaluated against the *next* round here — a
   // round-gated row (Godly Smite's round > 1 mantra tick, the round-5 rages)
   // would otherwise never be recorded as a participant and replay would skip
   // it. The turn-end/delayed phases run before the advance and keep the
   // current round. A shallow round override is safe: recipe applies gates
-  // only read state.round, never mutate.
+  // only read state.round, never mutate. Legacy automatic-scheduler events
+  // name the next actor and record its turn-start participants here; the
+  // explicit TAKE_TURN flow plans the next actor's turn-start participants
+  // separately (planTurnStartParticipants) because the controller has not
+  // chosen the actor yet.
   const nextRoundState: EncounterState = { ...state, round: options.nextRound };
   const participants = [...new Set([
     ...LIFECYCLE_RECIPES.filter((recipe) => recipe.phase === 'turn-end' && recipe.applies(actor, state, diceWindows)).map((recipe) => recipe.sourceId),
@@ -241,6 +245,17 @@ export function planTurnTransition(
       roundAdvance: options.nextRound > state.round,
     },
   };
+}
+
+/** Plan the turn-start lifecycle participants for an actor selected via
+ * TAKE_TURN. Runs against the authoritative state at selection time (the
+ * round has already advanced if the boundary advanced it), so round-gated
+ * recipes evaluate their real gate. Turn-start recipes never consume dice
+ * windows — those belong to the ending actor's turn-end boundary. */
+export function planTurnStartParticipants(state: EncounterState, actor: EncounterActor): string[] {
+  return [...new Set(LIFECYCLE_RECIPES
+    .filter((recipe) => recipe.phase === 'turn-start' && recipe.applies(actor, state, {}))
+    .map((recipe) => recipe.sourceId))];
 }
 
 /** Run one lifecycle phase. New boundaries execute exactly the recorded

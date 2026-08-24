@@ -81,3 +81,46 @@ export function expectRejectedCommandPurity(
   expect(() => executeCommand(state, command, dice)).toThrow();
   expect(state, `a rejected executeCommand must not mutate its input (${command.type})`).toEqual(before);
 }
+
+/**
+ * ICON p.87 scheduler fixture helpers. The engine never chooses the actor:
+ * after START_ENCOUNTER (player side eligible) and after every END_TURN the
+ * room awaits the controller's TAKE_TURN / GO_SLOW decision. These helpers
+ * make that decision explicitly so rules tests keep their readable
+ * hero-then-foe cadence while asserting the new scheduler contract
+ * (awaiting-selection state after every boundary).
+ */
+
+/** START_ENCOUNTER, then have the player side select `firstActorId` via
+ * TAKE_TURN. The combat-start first turn replays the historical cadence: no
+ * turn-start lifecycle fires, but the selected actor is active with a fresh
+ * turn clock. */
+export function startEncounterTo(state: EncounterState, firstActorId: string, dice: DiceSource = scriptedDice()): EncounterState {
+  const started = executeCommand(state, { type: 'START_ENCOUNTER' }, dice).state;
+  expect(started.activeActorId).toBeNull();
+  expect(started.eligibleSide).toBe('heroes');
+  expect(started.turnPhase).toBe('normal');
+  return executeCommand(started, { type: 'TAKE_TURN', actorId: firstActorId }, dice).state;
+}
+
+/** End the currently active actor's turn and select `nextActorId` via
+ * TAKE_TURN. Asserts that END_TURN left the encounter awaiting a selection
+ * (the old automatic nextActor behavior is gone). */
+export function endTurnTo(state: EncounterState, nextActorId: string, dice: DiceSource = scriptedDice()): EncounterState {
+  const activeActorId = state.activeActorId;
+  if (!activeActorId) throw new Error('endTurnTo requires an active actor (the scheduler never auto-selects).');
+  const ended = executeCommand(state, { type: 'END_TURN', actorId: activeActorId }, dice).state;
+  expect(ended.activeActorId).toBeNull();
+  return executeCommand(ended, { type: 'TAKE_TURN', actorId: nextActorId }, dice).state;
+}
+
+/** End the currently active actor's turn and leave the encounter awaiting the
+ * next TAKE_TURN / GO_SLOW decision (for tests that only need the boundary to
+ * resolve, not a specific next actor). */
+export function endTurnOnly(state: EncounterState, dice: DiceSource = scriptedDice()): EncounterState {
+  const activeActorId = state.activeActorId;
+  if (!activeActorId) throw new Error('endTurnOnly requires an active actor (the scheduler never auto-selects).');
+  const ended = executeCommand(state, { type: 'END_TURN', actorId: activeActorId }, dice).state;
+  expect(ended.activeActorId).toBeNull();
+  return ended;
+}

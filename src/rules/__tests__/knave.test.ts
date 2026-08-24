@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Knave
@@ -37,7 +37,7 @@ function knaveEncounter(options: { foe?: Position; second?: Position | null } = 
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second: second! };
 }
 
@@ -188,18 +188,30 @@ describe('Knave ability automation (p.139–144)', () => {
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:intimidate', targetIds: [foe.id] }, scriptedDice());
     expect(result.state.actors[foe.id].marks.some(({ markId, ownerId }) => markId === 'intimidate' && ownerId === hero.id)).toBe(true);
     expect(result.state.actors[hero.id].turnTaken).toBe(true);
-    expect(result.state.activeActorId).toBe(foe.id);
+    // The ability ended the hero's turn; the GM selects the foe via TAKE_TURN
+    // (the scheduler never auto-selects, ICON p.87).
+    expect(result.state.activeActorId).toBeNull();
+    expect(result.state.eligibleSide).toBe('foes');
+    const foeTurn = executeCommand(result.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    expect(foeTurn.activeActorId).toBe(foe.id);
   });
 
   it('Intimidate: starting the turn adjacent to the marked foe deals fray, stuns, and ends the mark', () => {
     const { state, hero, foe, second } = knaveEncounter({ foe: { x: 6, y: 1 }, second: { x: 7, y: 1 } });
     const marked = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:intimidate', targetIds: [foe.id] }, scriptedDice()).state;
     marked.actors[hero.id].position = { x: 5, y: 1 };
-    const afterFoe = executeCommand(marked, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
-    const afterSecond = executeCommand(afterFoe, { type: 'END_TURN', actorId: second.id }, scriptedDice()).state;
-    expect(afterSecond.actors[foe.id].hp).toBe(28); // fray 4
-    expect(afterSecond.actors[foe.id].statuses).toContain('stunned');
-    expect(afterSecond.actors[foe.id].marks).toEqual([]);
+    // Intimidate ended the hero's turn; both foes pass, then round 2 opens
+    // with the player side and the hero's next turn-start resolves the mark.
+    const foe1 = executeCommand(marked, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const afterFoe1 = endTurnOnly(foe1, scriptedDice());
+    const foe2 = executeCommand(afterFoe1, { type: 'TAKE_TURN', actorId: second.id }, scriptedDice()).state;
+    const afterSecond = endTurnOnly(foe2, scriptedDice());
+    expect(afterSecond.round).toBe(2);
+    expect(afterSecond.eligibleSide).toBe('heroes');
+    const heroTurn = executeCommand(afterSecond, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
+    expect(heroTurn.actors[foe.id].hp).toBe(28); // fray 4
+    expect(heroTurn.actors[foe.id].statuses).toContain('stunned');
+    expect(heroTurn.actors[foe.id].marks).toEqual([]);
   });
 
   it('Sucker Punch: an adjacent-foe interrupt that tracks its usage', () => {
@@ -329,7 +341,7 @@ describe('Knave ability automation (p.139–144)', () => {
     const { state, hero, foe } = knaveEncounter({ second: null });
     const deferred = applyEvents(state, [saveAbilityEvent(hero.id, foe.id)]);
     expect(deferred.actors[foe.id].hp).toBe(32);
-    const ended = executeCommand(deferred, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const ended = endTurnTo(deferred, foe.id, scriptedDice());
     expect(ended.actors[foe.id].hp).toBe(30); // 32 - 2, the original success branch resolved
     expect(ended.pendingInterrupts).toHaveLength(0);
   });

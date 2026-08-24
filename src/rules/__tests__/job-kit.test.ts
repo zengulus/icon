@@ -24,7 +24,7 @@ import {
 } from '../automation/primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../automation/kernels/attack-resolution.js';
 import { findRuleSourceUnit } from '../source-units.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Direct unit coverage for the shared job-program building blocks in
@@ -42,7 +42,7 @@ function board() {
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: far }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, far };
 }
 

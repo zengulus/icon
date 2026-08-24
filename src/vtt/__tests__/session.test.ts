@@ -62,6 +62,9 @@ describe('EncounterSession local controller', () => {
       { domain: 'encounter', command: { type: 'ADD_ACTOR', actor: foe } },
       { domain: 'encounter', command: { type: 'SET_TERRAIN', cell: { position: { x: 2, y: 1 }, type: 'difficult', elevation: 0 } } },
       { domain: 'encounter', command: { type: 'START_ENCOUNTER' } },
+      // Combat starts awaiting the player side's choice (ICON p.87): the
+      // controller selects the hero before moving.
+      { domain: 'encounter', command: { type: 'TAKE_TURN', actorId: hero.id } },
       { domain: 'encounter', command: { type: 'MOVE', actorId: hero.id, path: [{ x: 2, y: 1 }, { x: 3, y: 1 }], mode: 'standard' } },
       { domain: 'encounter', command: { type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light' } },
       { domain: 'table', command: { type: 'UPSERT_CLOCK', clock: { id: 'pressure', name: 'Pressure', segments: 6, filled: 2 } } },

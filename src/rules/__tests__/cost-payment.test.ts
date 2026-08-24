@@ -23,7 +23,7 @@ import {
   type ResourcePayer,
 } from '../automation/primitives/cost-payment.js';
 import type { RuleActorView, RuleExecutionContext, RuleMutation, RuleProgram, RuleRuntimeState } from '../automation/primitives/types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 import type { EncounterState } from '../types.js';
 
 /**
@@ -248,7 +248,7 @@ function pyreEncounter(): { state: EncounterState; heroId: string; foeId: string
   const foe = createFoe('Relict', { x: 3, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, heroId: hero.id, foeId: foe.id };
 }
 
@@ -316,7 +316,7 @@ function sacrificeEncounter(over: { armor?: number; vigor?: number; defiance?: b
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   const foe = createFoe('Relict', { x: 4, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   if (over.defiance) {
     state.actors[hero.id].conditions.push({ id: 'defiance', sourceId: 'fixture', ownerId: hero.id, potency: 'normal', duration: null });
   }

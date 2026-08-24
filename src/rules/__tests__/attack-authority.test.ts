@@ -8,7 +8,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { damageMutation } from '../automation/primitives/job-kit.js';
 import type { RuleActorView, RuleExecutionContext, RuleMutation, RuleProgram, RuleRuntimeState } from '../automation/primitives/types.js';
 import type { DiceSource } from '../dice.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /** Narrowed mutation shapes so fixtures can assert on attack/damage fields. */
 type AttackMutation = RuleMutation & { d20: number | null; boon: number; total: number | null; hit: boolean; critical: boolean; trueStrike: boolean; autoHit: boolean };
@@ -247,7 +247,7 @@ describe('F10 Blessing of Rebirth pierce — resolver damage converts like the V
     const foe = createFoe('Relict', { x: 2, y: 1 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     state.actors[hero.id].traitIds = ['harvester:trait:blessing-of-rebirth'];
     state.actors[hero.id].resources.blessing = 5;
     return { state, hero, foe };
@@ -318,7 +318,7 @@ describe('failed ability-use spend — the transactional invariant', () => {
     const foe = createFoe('Relict', { x: 2, y: 1 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     // Per-encounter resources reset at ENCOUNTER_STARTED; set the post-start
     // balance so the fixture proves the transaction gate, not the reset.
     state.actors[hero.id].resources.blessing = 1; // not enough for the spend-3 option
@@ -367,7 +367,7 @@ describe('combined cost + attack replay', () => {
     const foe = createFoe('Relict', { x: 3, y: 1 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
-    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state = startEncounterTo(state, hero.id);
     const result = executeCommand(state, {
       type: 'USE_ABILITY',
       actorId: hero.id,

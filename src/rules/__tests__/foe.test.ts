@@ -6,7 +6,7 @@ import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the recipe-driven foe ability slices
@@ -58,9 +58,9 @@ function foeFixture(profileId: string, layout: FoeLayout): FoeFixture {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: extra }).state;
     extras.push(extra);
   }
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   // The hero starts; END_TURN hands the turn to the first foe.
-  state = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+  state = endTurnTo(state, foe.id, scriptedDice());
   return { state, hero, foe, extras };
 }
 

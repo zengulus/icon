@@ -7,7 +7,7 @@ import { encounterConditionSet } from '../automation/kernels/encounter-adapter.j
 import { ABILITIES, JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Bastion
@@ -40,7 +40,7 @@ function bastionEncounter(options: { foe?: Position; second?: Position; ally?: P
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second, ally: ally! };
 }
 
@@ -256,7 +256,7 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(deferred.actors[ally.id].hp).toBe(40);
     expect(deferred.pendingInterrupts.some((candidate) => candidate.trigger === 'uses-ability')).toBe(true);
 
-    const ended = executeCommand(deferred, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const ended = endTurnTo(deferred, foe.id, scriptedDice());
     expect(ended.actors[ally.id].hp).toBe(36); // the held effects resolved at the boundary
     expect(ended.pendingInterrupts).toHaveLength(0);
   });
@@ -387,11 +387,15 @@ describe('Bastion ability automation (p.122–124)', () => {
     const afterUse = used.state;
     expect(afterUse.actors[foe.id].marks.some(({ markId }) => markId === 'great-giorgios')).toBe(true);
     expect(afterUse.actors[hero.id].actionsRemaining).toBe(1);
-    expect(afterUse.activeActorId).toBe(foe.id);
+    // The ability ended the hero's turn; the scheduler awaits the GM's choice
+    // of the marked foe (ICON p.87) rather than auto-selecting it.
+    expect(afterUse.activeActorId).toBeNull();
+    expect(afterUse.eligibleSide).toBe('foes');
     expect(afterUse.actors[hero.id].turnTaken).toBe(true);
     expect(applyEvents(state, used.events)).toEqual(afterUse);
 
-    const ended = executeCommand(afterUse, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const foeTurn = executeCommand(afterUse, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
     expect(ended.actors[foe.id].marks).toEqual([]);
     expect(ended.actors[hero.id].position).toEqual({ x: 3, y: 1 });
     expect(ended.actors[foe.id].position).toEqual({ x: 6, y: 1 });
@@ -402,13 +406,14 @@ describe('Bastion ability automation (p.122–124)', () => {
     const { state, hero, foe } = bastionEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null });
     state.actors[foe.id].armor = 2;
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
-    const ended = executeCommand(used.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+    const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
 
     // The rush travels two spaces, so the source damage is 4. Its delayed
     // lifecycle hook no longer writes that raw value directly: armor reduces
     // it through the common p.93 determination before application.
     expect(ended.state.actors[foe.id].hp).toBe(30);
-    expect(applyEvents(used.state, ended.events)).toEqual(ended.state);
+    expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
   });
 
   it('Great Giorgios routes its delayed self-rush through the Slashed ability-move gate', () => {
@@ -416,13 +421,14 @@ describe('Bastion ability automation (p.122–124)', () => {
     state.actors[hero.id].statuses.push('slashed');
 
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
-    const ended = executeCommand(used.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+    const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
 
     // Great Giorgios's delayed rush is still a self ability move. The single
     // raw Slashed instance is determined by the shared kernel, so Armor 2
     // turns its 4 normal damage into exactly 2 applied HP damage.
     expect(ended.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
-    expect(applyEvents(used.state, ended.events)).toEqual(ended.state);
+    expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
   });
 
   it('Great Giorgios: Collide adds hatred of the user', () => {

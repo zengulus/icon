@@ -15,7 +15,7 @@ import type { EncounterActor, EncounterEvent, EncounterPendingInterrupt, Encount
  * would once the protocol permits tactical inputs. */
 const minePlacement = (position: { x: number; y: number }): StatusSaveCommandInput =>
   ({ positions: { 'mine-position': [position] } }) as unknown as StatusSaveCommandInput;
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * F7 talent fixtures (docs/rules-foundations.md §8).
@@ -72,7 +72,7 @@ function talentEncounter(abilityId: string, talent: 1 | 2, options: { heroAt?: {
   for (const cell of options.terrainCells ?? []) {
     state = executeCommand(state, { type: 'SET_TERRAIN', cell }).state;
   }
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   const ally = options.allyAt ? Object.values(state.actors).find((actor) => actor.id !== hero.id && actor.side === 'heroes' && actor.id !== foe.id) : undefined;
   return { state, hero, foe, ally };
 }

@@ -846,6 +846,47 @@ The invariant is enforced by `expectCommandPurity` /
 `expectRejectedCommandPurity` in `__tests__/fixtures.ts` (used by
 `__tests__/command-purity.test.ts`); new command tests should use them.
 
+## 13.5 Turn-order scheduler authority (ICON p.87)
+
+The turn-order scheduler (`turn-scheduler.ts`) decides ONLY which SIDE/PHASE
+may act next; the controlling player(s)/GM choose the actor through the
+explicit `TAKE_TURN` / `GO_SLOW` commands. The reducer never picks an actor by
+insertion/iteration order.
+
+- Combat starts awaiting the player side's `TAKE_TURN` choice: a player
+  character always takes the first turn of combat, and the players decide
+  which one.
+- Normal turns alternate sides while both sides have eligible turn
+  entitlements; a side with no eligible normal actors concedes consecutive
+  turns to the other side. `turnsRemaining` is re-derived at each round reset
+  from registered turn-entitlement sources (`registerTurnEntitlementSource`),
+  so multi-turn elites/legends keep their extra turns while the GM still
+  chooses when each eligible hostile turn is taken.
+- A player character may elect a Slow turn (`GO_SLOW`) at a legal allied
+  normal slot. If another allied normal actor remains, the slot is retained;
+  otherwise the slot passes and hostile normal turns continue. Electing Slow
+  fires no turn lifecycle for that character. Most enemies cannot take a Slow
+  turn; a source-backed slow-eligibility row (`registerSlowTurnEligibilitySource`)
+  grants it to a specific foe when a rule says so.
+- Slow characters act only after ALL non-slow characters have acted (the Slow
+  mini-round). The mini-round alternates sides where slow actors exist on both
+  sides; a side with no slow actors remaining concedes the rest. A Slow turn
+  keeps the ordinary turn economy (standard move + two actions).
+- The round ends when every actual turn (normal then slow) is resolved; the
+  next round opens with the side OPPOSITE the side whose character took the
+  final actual turn of the previous round. Round advance runs round-end,
+  per-actor reset, party-Resolve +1, and round-start effects exactly once.
+
+`TURN_ENDED` events carry the recorded `eligibleSide`/`turnPhase` transition;
+`TAKE_TURN` records a `TURN_STARTED` event (with the turn-start participants
+for every turn after the combat-start first turn) and `GO_SLOW` records an
+`ACTOR_WENT_SLOW` event. All three replay deterministically. The fixture
+helpers `startEncounterTo`, `endTurnTo`, and `endTurnOnly` in
+`__tests__/fixtures.ts` make the explicit controller choices that rules tests
+need; `__tests__/turn-scheduler.test.ts` pins the full matrix (combat start,
+alternation, unequal sides, round-side inversion, Slow mini-round, lifecycle,
+replay, multi-turn foes).
+
 ## 14. Documentation authority and reconciliation
 
 - [`kernels-needed.md`](kernels-needed.md) — the kernel build ledger; mirrors

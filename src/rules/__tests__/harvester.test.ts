@@ -7,7 +7,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Harvester
@@ -39,7 +39,7 @@ function harvesterEncounter(options: {
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   if (second) state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second, ally };
 }
 
@@ -245,9 +245,11 @@ describe('Harvester ability automation (p.182–188)', () => {
     // restores 4 vigor through the shared kernel.
     marked.state.actors[ally!.id].hp = 20;
     marked.state.actors[ally!.id].vigor = 0;
-    const afterHero = executeCommand(marked.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const afterFoe = executeCommand(afterHero, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
-    const endedResult = executeCommand(afterFoe, { type: 'END_TURN', actorId: ally!.id }, scriptedDice());
+    const afterHero = endTurnTo(marked.state, foe.id, scriptedDice());
+    const afterFoe = endTurnTo(afterHero, ally!.id, scriptedDice());
+    const activeActorId = afterFoe.activeActorId;
+    if (!activeActorId) throw new Error('endTurnTo requires an active actor.');
+    const endedResult = executeCommand(afterFoe, { type: 'END_TURN', actorId: activeActorId }, scriptedDice());
     expect(endedResult.state.actors[ally!.id].vigor).toBe(4);
     expect(applyEvents(afterFoe, endedResult.events)).toEqual(endedResult.state);
   });
@@ -286,7 +288,9 @@ describe('Harvester ability automation (p.182–188)', () => {
     const { state, hero, foe } = harvesterEncounter({ second: null });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:fairy-ring', targetIds: [] }, scriptedDice());
     expect(result.state.terrainEffects.some((effect) => effect.terrain === 'fairy-ring')).toBe(true);
-    expect(result.state.activeActorId).toBe(foe.id); // the turn ended
+    // The ability ended the hero's turn; the GM selects the foe (TAKE_TURN).
+    expect(result.state.activeActorId).toBeNull();
+    expect(result.state.eligibleSide).toBe('foes');
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

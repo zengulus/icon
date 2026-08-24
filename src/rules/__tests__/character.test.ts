@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { abilityPointAllowance, aspectRelicFromSharedQuest, awardXp, chapterForLevel, completeRelicAspectQuest, createCharacter, infuseRelicDust, jobSlotsForLevel, masteryPointAllowance, migrateCharacter, narrativeBudgets, REFOCUS_DUST_COST, REFOCUS_KEEP_JOBS_DUST_COST, refocusCharacter, refocusDustCost, relicMinimumInfusedDust, relicRankForDust, relicSlotsForLevel, resolveRelicAspect, spendLevelUp, validateCharacter } from '../character.js';
 import { JOBS, RELICS } from '../catalog.js';
-import { validCharacter } from './fixtures.js';
+import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /** A level 1 character that can legally spend its level-0 abilities and AP. */
 function refocusableCharacter(): ReturnType<typeof validCharacter> {

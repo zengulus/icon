@@ -6,7 +6,7 @@ import { findAbility, JOBS } from '../catalog.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import { scriptedDice, validCharacter } from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Demon Slayer
@@ -44,7 +44,7 @@ function demonSlayerEncounter(options: { foe?: Position; second?: Position; ally
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
   if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
-  state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+  state = startEncounterTo(state, hero.id);
   return { state, hero, foe, second, ally: ally! };
 }
 
@@ -439,22 +439,42 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:six-hells-trigram', targetIds: [] }, scriptedDice());
     const afterUse = used.state;
     expect(used.events.some((event) => event.type === 'TURN_ENDED')).toBe(true);
-    expect(afterUse.activeActorId).toBe(foe.id);
+    // The ability ended the hero's turn; the GM selects the foe (TAKE_TURN).
+    expect(afterUse.activeActorId).toBeNull();
+    expect(afterUse.eligibleSide).toBe('foes');
     expect(afterUse.actors[hero.id].ruleState['six-hells:stage']).toBe('pending');
     expect(afterUse.actors[hero.id].ruleState['six-hells:slow-turn']).toBe(true);
     expect(afterUse.terrainEffects.filter((effect) => effect.terrain === 'six-hells-trigram')).toHaveLength(1);
     expect(applyEvents(state, used.events)).toEqual(afterUse);
 
-    // Foe 1 and foe 2 end their turns; round 2 starts with the hero and the trigram activates.
-    const afterFoe1 = executeCommand(afterUse, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
-    const afterFoe2 = executeCommand(afterFoe1, { type: 'END_TURN', actorId: second.id }, scriptedDice()).state;
-    expect(afterFoe2.activeActorId).toBe(hero.id);
+    // Foe 1 and foe 2 end their turns; round 2 opens and the round-start
+    // lifecycle activates the trigram. The hero's next turn is Slow (the
+    // trigram's Delay), so the allied normal slot passes: the foes take their
+    // round-2 normal turns first, then the Slow mini-round runs the hero.
+    const foe1Turn = executeCommand(afterUse, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const afterFoe1 = endTurnOnly(foe1Turn, scriptedDice());
+    const foe2Turn = executeCommand(afterFoe1, { type: 'TAKE_TURN', actorId: second.id }, scriptedDice()).state;
+    const afterFoe2 = endTurnOnly(foe2Turn, scriptedDice());
+    expect(afterFoe2.activeActorId).toBeNull();
+    expect(afterFoe2.eligibleSide).toBe('foes');
     expect(afterFoe2.round).toBe(2);
-    expect(afterFoe2.actors[hero.id].ruleState['six-hells:stage']).toBe('active');
-    expect(afterFoe2.actors[foe.id].statuses).toContain('weakened');
+    expect(afterFoe2.actors[hero.id].ruleState['six-hells:stage']).toBe('pending');
+
+    // Round 2: the foes' normal turns, then the hero's Slow turn, whose
+    // turn-start lifecycle activates the trigram.
+    const r2f1 = executeCommand(afterFoe2, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const r2f1Ended = endTurnOnly(r2f1, scriptedDice());
+    const r2f2 = executeCommand(r2f1Ended, { type: 'TAKE_TURN', actorId: second.id }, scriptedDice()).state;
+    const r2f2Ended = endTurnOnly(r2f2, scriptedDice());
+    expect(r2f2Ended.turnPhase).toBe('slow');
+    const heroTurn = executeCommand(r2f2Ended, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
+    expect(heroTurn.turnPhase).toBe('slow');
+    expect(heroTurn.activeActorId).toBe(hero.id);
+    expect(heroTurn.actors[hero.id].ruleState['six-hells:stage']).toBe('active');
+    expect(heroTurn.actors[foe.id].statuses).toContain('weakened');
 
     // With the trigram active, a foe attempting to exit must pass a save.
-    const heroEnded = executeCommand(afterFoe2, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    const heroEnded = endTurnTo(heroTurn, foe.id, scriptedDice());
     expect(heroEnded.activeActorId).toBe(foe.id);
     expect(() => executeCommand(heroEnded, { type: 'MOVE', actorId: foe.id, path: [{ x: 3, y: 1 }, { x: 4, y: 1 }], mode: 'standard' }, scriptedDice(5))).toThrow(/trapped: the save to leave/);
     const escaped = executeCommand(heroEnded, { type: 'MOVE', actorId: foe.id, path: [{ x: 3, y: 1 }, { x: 4, y: 1 }], mode: 'standard' }, scriptedDice(15)).state;
@@ -488,17 +508,20 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(used.actors[hero.id].ruleState['wicked-sheath:charged']).toBe(true);
 
     // The hero ends the turn, the foes pass, and round 2 charges the die to 1
-    // at the start of the hero's next turn.
-    const heroEnded = executeCommand(used, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    const afterFoe = executeCommand(heroEnded, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
-    const afterSecond = executeCommand(afterFoe, { type: 'END_TURN', actorId: second.id }, scriptedDice()).state;
+    // at the round boundary (the player then selects the hero, ICON p.87).
+    const heroEnded = endTurnTo(used, foe.id, scriptedDice());
+    const afterFoe = endTurnOnly(heroEnded, scriptedDice());
+    const secondTurn = executeCommand(afterFoe, { type: 'TAKE_TURN', actorId: second.id }, scriptedDice()).state;
+    const afterSecond = endTurnOnly(secondTurn, scriptedDice());
     expect(afterSecond.round).toBe(2);
-    expect(afterSecond.activeActorId).toBe(hero.id);
+    expect(afterSecond.activeActorId).toBeNull();
+    expect(afterSecond.eligibleSide).toBe('heroes');
     expect(afterSecond.actors[hero.id].resources['wicked-sheath-die']).toBe(1);
 
-    // The boosted attack: fray + [D]×1, shove 1 + 1, +1 boon from the die.
-    // d20=11 + boon 1 = 12 hits; the [D] roll is 6.
-    const boosted = executeCommand(afterSecond, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:wicked-sheath', targetIds: [foe.id] }, scriptedDice(11, 1, 6));
+    // The player selects the hero; the boosted attack is fray + [D]×1, shove
+    // 1 + 1, +1 boon from the die. d20=11 + boon 1 = 12 hits; the [D] roll is 6.
+    const heroTurn = executeCommand(afterSecond, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
+    const boosted = executeCommand(heroTurn, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:wicked-sheath', targetIds: [foe.id] }, scriptedDice(11, 1, 6));
     const mutations = mutationsOf(boosted.events, 'demon-slayer:wicked-sheath');
     expect(mutations).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
