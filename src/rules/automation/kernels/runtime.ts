@@ -214,6 +214,16 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
   for (const effect of effects) {
     const targets = 'target' in effect ? selectActors(effect.target, context) : [];
     switch (effect.kind) {
+      case 'resolution-targets': {
+        const ids = effect.outcome === 'attack-targets'
+          ? (context.attackTargetId ? [context.attackTargetId] : [])
+          : effect.outcome === 'collided'
+            ? (context.resolutionFacts?.collidedActorIds ?? [])
+            : (context.resolutionFacts?.slainActorIds ?? []);
+        const continuationContext = { ...context, triggerTargetIds: [...ids] };
+        for (const id of ids) effectsToMutations(effect.effects, continuationContext, output);
+        break;
+      }
       case 'attack': {
         const source = actor(context, context.actorId);
         for (const target of targets) {
@@ -235,7 +245,7 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
           const triggers = new Set(context.triggers);
           triggers.add(hit ? 'hit' : 'miss');
           if (critical) triggers.add('critical-hit');
-          if ((total ?? 0) >= attack.exceedThreshold) triggers.add('exceed');
+          if (attack.attackMutation.kind === 'attack' && attack.attackMutation.exceed === true) triggers.add('exceed');
           const branchContext = {
             ...context,
             attackTargetId: target.id,
@@ -290,7 +300,9 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
       case 'resource': for (const target of targets) output.push({ kind: 'resource', sourceId: context.sourceId, actorId: target.id, resourceId: effect.resourceId, operation: effect.operation, amount: integer(effect.amount, context), minimum: effect.minimum ?? null, maximum: effect.maximum ?? null }); break;
       case 'actions': for (const target of targets) output.push({ kind: 'actions', sourceId: context.sourceId, actorId: target.id, operation: effect.operation, amount: integer(effect.amount, context) }); break;
       case 'terrain': {
-        const positions = [...(context.input.positions?.[effect.positionInput] ?? [])];
+        const positions = effect.positionInput === 'target-position' && context.attackTargetId
+          ? [actor(context, context.attackTargetId).position].filter((position): position is NonNullable<typeof position> => position !== null)
+          : [...(context.input.positions?.[effect.positionInput] ?? [])];
         const count = effect.count ? integer(effect.count, context) : positions.length;
         if (positions.length < count) throw new RuleProgramViolation('choice.position-count', `${effect.positionInput} requires ${count} positions.`);
         output.push({ kind: 'terrain', sourceId: context.sourceId, sourceActorId: context.actorId, operation: effect.operation, terrain: effect.terrain, positions: positions.slice(0, count), height: effect.height ? integer(effect.height, context) : null, ...(effect.duration ? { duration: effect.duration } : {}) });

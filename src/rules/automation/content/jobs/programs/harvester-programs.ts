@@ -73,6 +73,7 @@ const reapEffects: RuleResolver = (context) => {
     if (second) mutations.push(entityMutation(context, source.id, second, 'thrall', {}));
     mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'effect'));
   }
+
   return mutations;
 };
 
@@ -298,7 +299,7 @@ export const HARVESTER_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSour
     tags: ['attack', 'arc'],
     range: constant(6),
     resolverId: 'harvester:harvest:effects',
-    steps: [],
+    steps: [{ id: 'slay', timing: 'use', trigger: 'slay', effects: [] }],
   })], ['attack', 'on hit', 'miss', 'area effect', 'slay']),
 
   'harvester:blood-grove': (unit) => compilation(unit, [action({

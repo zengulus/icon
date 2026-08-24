@@ -69,6 +69,24 @@ describe('Sealer ability automation (p.189–196)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('God Hand automatically applies its Exceed continuation without a caller trigger', () => {
+    const { state, hero, foe } = sealerEncounter({ second: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id] }, scriptedDice(20, 4));
+    expect(result.state.actors[hero.id].vigor).toBe(3);
+    const attackMutations = result.events.flatMap((event) => event.type === 'RULE_MUTATIONS_APPLIED' ? event.mutations : [])
+      .filter((mutation) => mutation.kind === 'attack');
+    expect(attackMutations).toHaveLength(1);
+    expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('God Hand does not apply Exceed below the authoritative threshold', () => {
+    const { state, hero, foe } = sealerEncounter({ second: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id] }, scriptedDice(10, 4));
+    expect(result.state.actors[hero.id].vigor).toBe(0);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('God Hand combo (DEVIL HAND): attacks with +1 boon and explodes the foe for 1 divine to other foes', () => {
     const { state, hero, foe, second } = sealerEncounter({ foe: { x: 2, y: 1 }, second: { x: 3, y: 0 } });
     state.actors[hero.id].resources.combo = 1;

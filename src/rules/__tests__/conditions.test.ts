@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { applyRuleMutations, encounterRuleState, isBloodied, retaliate } from '../automation/kernels/encounter-adapter.js';
 import { RULE_PROGRAM_SCHEMA_VERSION, type RuleExecutionContext, type RuleMutation, type RuleProgram } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, executeRuleProgramWithReactiveTriggers, orderCrossCharacterEffects } from '../encounter.js';
+import { executeRuleProgram } from '../automation/kernels/runtime.js';
 import { planMovementPath } from '../movement.js';
 import type { EncounterActor, EncounterCondition, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
@@ -461,6 +462,37 @@ describe('cross-character effect ordering (p.107)', () => {
     for (const id of [heroId, foeId, allyId]) {
       expect(afterRound.actors[id].conditions.some(({ duration }) => duration?.kind === 'round-end')).toBe(false);
     }
+  });
+});
+
+describe('durable resolution facts (p.95, replay)', () => {
+  it('records monotonic trigger and causal target facts for continuation consumers', () => {
+    const { state, hero, foe } = conditionEncounter({ heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 }, allyAt: null });
+    state.grid.terrain.push({ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 });
+    const context: RuleExecutionContext = {
+      state: encounterRuleState(state), actorId: hero.id,
+      sourceId: 'test:trigger-order-fixture', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] } }, dice: scriptedDice(),
+      triggers: new Set(),
+    };
+    const result = executeRuleProgramWithReactiveTriggers(triggerOrderFixtureProgram, context, {}, state);
+    expect(result.resolutionFacts).toMatchObject({ collidedActorIds: [foe.id] });
+    expect(result.continuation?.executedStepIds).toEqual(['base', 'collide', 'slay']);
+    expect(result.continuation?.derivedTriggers).toContain('collide');
+  });
+
+  it('resolution-targets consumes recorded causal IDs rather than current-state scans', () => {
+    const program: RuleProgram = {
+      schemaVersion: RULE_PROGRAM_SCHEMA_VERSION, rulesVersion: '1.5', id: 'test:resolution-targets',
+      sourceId: 'test:resolution-targets', source: { page: 1, sectionId: 'test' }, name: 'targets', dependencies: [], classification: 'encounter',
+      actions: [{ id: 'default', name: 'default', timing: 'use', costs: [], tags: [], range: null, area: null, choices: [], steps: [
+        { id: 'slain', timing: 'use', trigger: 'slay', effects: [{ kind: 'resolution-targets', outcome: 'slain', effects: [{ kind: 'resource', target: { kind: 'trigger-targets' }, resourceId: 'aether', operation: 'gain', amount: { kind: 'constant', value: 1 } }] }] },
+      ] }],
+    };
+    const { state, hero, foe } = conditionEncounter({ allyAt: null });
+    const context: RuleExecutionContext = { state: encounterRuleState(state), actorId: hero.id, sourceId: program.sourceId, actionId: 'default', timing: 'use', input: {}, dice: scriptedDice(), triggers: new Set(['slay']), resolutionFacts: { triggers: ['slay'], attackTargets: [], collidedActorIds: [], slainActorIds: [foe.id] } };
+    const result = executeRuleProgram(program, context);
+    expect(result.mutations).toEqual([{ kind: 'resource', sourceId: program.sourceId, actorId: foe.id, resourceId: 'aether', operation: 'gain', amount: 1, minimum: null, maximum: null }]);
   });
 });
 

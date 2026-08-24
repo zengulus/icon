@@ -21,6 +21,7 @@ import { traitReactionMutations, traitReactionNeededTriggers } from './automatio
 import { applyDeterminedDamageToVitals } from './automation/primitives/damage-resolution.js';
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAuthoritativeAttack } from './automation/kernels/attack-resolution.js';
+import { deriveResolutionTriggers } from './automation/kernels/resolution-triggers.js';
 import { resolveOrdinaryAttackMutations } from './automation/kernels/ordinary-attack.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
 import { areaStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
@@ -955,16 +956,35 @@ export function executeRuleProgramWithReactiveTriggers(
   state: EncounterState,
 ): RuleExecutionResult {
   const first = executeRuleProgram(program, context, resolvers);
-  const missing = [...reactiveRuleTriggers(state, first.mutations)].filter((trigger) => !context.triggers?.has(trigger));
   let mutations = first.mutations;
   let selectedSteps = first.selectedSteps;
-  if (missing.length > 0) {
+  const executedStepIds = new Set(selectedSteps.map(({ id }) => id));
+  const knownTriggers = new Set(context.triggers ?? []);
+  const derived = deriveResolutionTriggers(state, mutations, knownTriggers);
+  const pending = new Set([...derived.triggers].filter((trigger) => !knownTriggers.has(trigger)));
+
+  // Monotonic continuation: each source step executes at most once, while
+  // newly emitted mutations may add further resolution facts. Costs and the
+  // named resolver remain confined to the primary pass by onlyTriggers.
+  while (pending.size > 0) {
+    const batch = new Set(pending);
     const additional = executeRuleProgram(program, {
       ...context,
-      triggers: new Set([...(context.triggers ?? []), ...missing]),
-    }, resolvers, { onlyTriggers: new Set(missing) });
-    mutations = [...first.mutations, ...additional.mutations];
-    selectedSteps = orderedSelectedSteps(first.selectedAction, [...first.selectedSteps, ...additional.selectedSteps]);
+      triggers: new Set(derived.triggers),
+    }, resolvers, { onlyTriggers: batch });
+    const freshSteps = additional.selectedSteps.filter(({ id }) => !executedStepIds.has(id));
+    for (const trigger of batch) pending.delete(trigger);
+    if (freshSteps.length === 0) continue;
+    for (const step of freshSteps) executedStepIds.add(step.id);
+    mutations = [...mutations, ...additional.mutations];
+    selectedSteps = orderedSelectedSteps(first.selectedAction, [...selectedSteps, ...freshSteps]);
+    const next = deriveResolutionTriggers(state, mutations, derived.triggers);
+    for (const trigger of next.triggers) {
+      if (!derived.triggers.has(trigger)) {
+        derived.triggers.add(trigger);
+        pending.add(trigger);
+      }
+    }
   }
   // F6 Bull's Strength (p.149): abilities gain "collide: deal 2 damage" —
   // when one of the ability's shoves collided, the trait fold appends the
@@ -973,7 +993,22 @@ export function executeRuleProgramWithReactiveTriggers(
   // mutations; the guard clears at turn end via the lifecycle recipe).
   const bullStrengthDamage = bullStrengthCollideMutations(state, mutations);
   if (bullStrengthDamage.length > 0) mutations = [...mutations, ...bullStrengthDamage];
-  return { ...first, mutations, selectedSteps };
+  const finalFacts = deriveResolutionTriggers(state, mutations, derived.triggers);
+  return {
+    ...first,
+    mutations,
+    selectedSteps,
+    resolutionFacts: {
+      triggers: [...finalFacts.triggers].sort(),
+      attackTargets: finalFacts.attackTargets,
+      collidedActorIds: finalFacts.collidedActorIds,
+      slainActorIds: finalFacts.slainActorIds,
+    },
+    continuation: {
+      executedStepIds: [...executedStepIds],
+      derivedTriggers: [...finalFacts.triggers].sort(),
+    },
+  };
 }
 
 /** F1: the reducer's line of sight is the shared kernel (primitives/
@@ -1286,6 +1321,8 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     timing,
     tags: [...programAction.tags],
     mutations: [...abilityUseCostMutations, ...result.mutations, ...talentMutations, ...traitReactionMutations_, ...demonEdgeMutations],
+    ...(result.resolutionFacts ? { resolutionFacts: result.resolutionFacts } : {}),
+    ...(result.continuation ? { continuation: result.continuation } : {}),
   })];
   if (endsTurn && !interrupt) {
     const intermediate = applyEvents(state, events);

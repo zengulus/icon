@@ -7,6 +7,21 @@ index for the repository and is the reference the derived ledgers
 ([`kernels-needed.md`](kernels-needed.md), [`primitives-needed.md`](primitives-needed.md),
 [`blocker-census.md`](blocker-census.md)) defer to.
 
+## Same-ability resolution facts
+
+The runtime records source-free `resolutionFacts` alongside each
+`RULE_MUTATIONS_APPLIED` event. These facts contain the already-resolved attack,
+collision, and defeat outcomes plus their causal actor IDs. Trigger continuation
+consumes this record through `onlyTriggers` and `resolution-targets`; it never
+rerolls, rescans later state, repays costs, or reruns the named resolver.
+
+`continuation.executedStepIds` and `continuation.derivedTriggers` are monotonic
+ledgers. Steps execute in source order and at most once per command. The
+`resolution-targets` effect is intentionally generic: content may consume
+recorded attack, collision, or slay targets without embedding caller-supplied
+outcome prediction in a resolver. Cross-command reactive windows remain a
+separate system.
+
 Authority ordering (from `AGENTS.md`):
 
 1. ICON source text — semantic authority.

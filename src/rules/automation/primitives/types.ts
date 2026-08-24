@@ -117,8 +117,24 @@ export type RuleDuration =
   | { kind: 'expedition' }
   | { kind: 'until'; event: string; sourceId?: string };
 
+export interface RuleResolutionFacts {
+  /** Outcome facts recorded by the authority that resolved this command. */
+  triggers: readonly string[];
+  attackTargets: readonly string[];
+  collidedActorIds: readonly string[];
+  slainActorIds: readonly string[];
+}
+
+export interface RuleContinuationState {
+  /** Monotonic source-step execution ledger for same-ability continuation. */
+  executedStepIds: readonly string[];
+  /** Monotonic outcome ledger; replay must consume, never rediscover, these. */
+  derivedTriggers: readonly string[];
+}
+
 export type RuleEffect =
   | { kind: 'attack'; target: RuleSelector; boons?: RuleNumber; autoHit?: boolean; trueStrike?: boolean; onHit: RuleEffect[]; onMiss: RuleEffect[]; onCritical?: RuleEffect[] }
+  | { kind: 'resolution-targets'; outcome: 'attack-targets' | 'collided' | 'slain'; effects: RuleEffect[] }
   | { kind: 'damage'; target: RuleSelector; amount: RuleNumber; damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice'; instances?: RuleNumber; delivery?: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain'; ignoreCover?: boolean }
   | { kind: 'heal'; target: RuleSelector; amount: RuleNumber; maximum?: RuleNumber }
   | { kind: 'vigor'; target: RuleSelector; amount: RuleNumber; uncapped?: boolean }
@@ -315,6 +331,8 @@ export interface RuleExecutionContext {
   triggers?: ReadonlySet<string>;
   actionTags?: ReadonlySet<string>;
   delivery?: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain';
+  /** Durable outcomes supplied to continuation steps; never caller-predicted. */
+  resolutionFacts?: RuleResolutionFacts;
   /** Internal VM branch state. It is derived from a just-resolved attack,
    * never supplied by a command, and applies only to that attack target. */
   attackDamageProvenance?: Readonly<AttackDamageProvenance & { targetId: string }>;
@@ -328,7 +346,7 @@ export interface RuleExecutionContext {
 }
 
 export type RuleMutation =
-  | { kind: 'attack'; sourceId: string; actorId: string; targetId: string; d20: number | null; boon: number; total: number | null; hit: boolean; critical: boolean; evasionRoll: number | null; trueStrike: boolean; autoHit: boolean }
+  | { kind: 'attack'; sourceId: string; actorId: string; targetId: string; d20: number | null; boon: number; total: number | null; hit: boolean; critical: boolean; exceed?: boolean; exceedThreshold?: number; evasionRoll: number | null; trueStrike: boolean; autoHit: boolean }
   | {
       kind: 'damage'; sourceId: string; sourceActorId: string; actorId: string; amount: number;
       damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice'; instance: number;
@@ -364,12 +382,15 @@ export type RuleMutation =
   | { kind: 'defeat'; sourceId: string; actorId: string }
   | { kind: 'phase'; sourceId: string; sourceActorId: string; actorId: string; phaseId: string }
   | { kind: 'end-turn'; sourceId: string; sourceActorId: string; actorId: string }
-  | { kind: 'state'; sourceId: string; sourceActorId: string; actorId: string; key: string; operation: 'set' | 'clear' | 'increment'; value?: string | number | boolean | null };
+  | { kind: 'state'; sourceId: string; sourceActorId: string; actorId: string; key: string; operation: 'set' | 'clear' | 'increment'; value?: string | number | boolean | null }
+  | { kind: 'resolution-facts'; sourceId: string; facts: RuleResolutionFacts };
 
 export interface RuleExecutionResult {
   mutations: RuleMutation[];
   selectedAction: RuleAction;
   selectedSteps: RuleStep[];
+  resolutionFacts?: RuleResolutionFacts;
+  continuation?: RuleContinuationState;
 }
 
 export type RuleResolver = (context: RuleExecutionContext, action: RuleAction) => RuleMutation[];

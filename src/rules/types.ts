@@ -1,4 +1,4 @@
-import type { RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleTiming } from './automation/primitives/types.js';
+import type { RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
 import type { SaveWindowKind, SaveWindowModifiers } from './automation/primitives/save-window.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
 import type { TurnTransitionIntent } from './automation/kernels/lifecycle.js';
@@ -702,7 +702,7 @@ export type EncounterEvent =
    * events replay the legacy appliedDamage + defianceTriggered fields. */
       ledger?: DamageLedgerEntry }
   | { type: 'ENCOUNTER_ENDED' }
-  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[]; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] } };
+  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[]; resolutionFacts?: RuleResolutionFacts; continuation?: RuleContinuationState; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] } };
 
 export interface CommandResult {
   state: EncounterState;

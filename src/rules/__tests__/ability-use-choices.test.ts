@@ -239,9 +239,9 @@ describe('Blessing of War through USE_ABILITY (p.190)', () => {
     }, scriptedDice(12, 4));
     // 5 - 1 (spend) + 1 (God Hand blesses self) = 5.
     expect(result.state.actors[hero.id].resources.blessing).toBe(5);
-    // Without forced exceed, God Hand only blesses and grants no 3-vigor
-    // exceed effect.
-    expect(result.state.actors[hero.id].vigor).toBe(0);
+    // The natural attack result is still authoritative: the +1 boon makes
+    // this scripted roll Exceed, even though the choice did not force it.
+    expect(result.state.actors[hero.id].vigor).toBe(3);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 });

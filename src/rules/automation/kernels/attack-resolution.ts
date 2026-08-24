@@ -117,7 +117,8 @@ export function resolveAuthoritativeAttack(
   const damageProvenance = { ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat };
   rememberAttackDamage(context, target.id, damageProvenance);
   const attackMutation: RuleMutation = {
-    kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
+    kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical,
+    exceed: total !== null && total >= (exceedThreshold ?? 15), exceedThreshold: exceedThreshold ?? 15, evasionRoll, trueStrike, autoHit,
   };
   return {
     attackMutation, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,

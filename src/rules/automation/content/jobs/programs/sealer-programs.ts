@@ -64,9 +64,6 @@ const godHandEffects: RuleResolver = (context) => {
     .filter((candidate) => candidate.side === source.side && candidate.position && sourcePosition && distance(candidate.position, sourcePosition) <= 2)
     .sort((a, b) => (a.id === source.id ? -1 : b.id === source.id ? 1 : a.id.localeCompare(b.id)));
   if (beneficiaries[0]) mutations.push(resourceMutation(context, beneficiaries[0].id, 'blessing', 'gain', 1));
-  if (context.triggers?.has('exceed')) {
-    for (const ally of beneficiaries) mutations.push(vigorMutation(context, ally.id, 3));
-  }
   return mutations;
 };
 
@@ -96,7 +93,6 @@ const devilHandEffects: RuleResolver = (context) => {
     }
   };
   applyBlast();
-  if (context.triggers?.has('exceed')) applyBlast();
   return mutations;
 };
 
@@ -349,7 +345,7 @@ export const SEALER_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourceU
       costs: [{ kind: 'action', amount: constant(1) }],
       tags: ['attack', 'combo'],
       resolverId: 'sealer:god-hand:effects',
-      steps: [],
+      steps: [{ id: 'exceed', timing: 'use', trigger: 'exceed', effects: [{ kind: 'vigor', target: { kind: 'self' }, amount: { kind: 'constant', value: 3 } }] }],
     }),
     action({
       id: 'combo', name: 'DEVIL HAND', timing: 'use',
