@@ -829,8 +829,7 @@
       "sourceId": "fool:trait:stack-dice",
       "kind": "job-trait",
       "blockers": [
-        "gamble-state",
-        "use-ledger"
+        "dice-result-modifier"
       ]
     },
     {
@@ -2356,7 +2355,7 @@
       "sourceId": "seer:trait:bend-fate",
       "kind": "job-trait",
       "blockers": [
-        "gamble-state"
+        "post-roll-reactive-choice"
       ]
     },
     {
@@ -3454,7 +3453,7 @@
     "{pre-ability-movement, range-modifier, shove-modifier}": 1,
     "{pre-ability-movement, range-modifier, rush-modifier}": 1,
     "{entity-create}": 11,
-    "{gamble-state, use-ledger}": 1,
+    "{dice-result-modifier}": 1,
     "{area-define, entity-create}": 1,
     "{damage-modifier, entity-create}": 1,
     "{pre-ability-movement, range-modifier}": 1,
@@ -3539,7 +3538,7 @@
     "{interrupt-modifier, resource-management, vigor-grant}": 2,
     "{interrupt-modifier, teleport}": 4,
     "{blast-template, blessing-spend, cure-on-trigger, pre-ability-movement, teleport}": 1,
-    "{gamble-state}": 1,
+    "{post-roll-reactive-choice}": 1,
     "{blessing-spend}": 1,
     "{charge-state, terrain-create}": 1,
     "{entity-vacate, save-modifier}": 1,
@@ -3846,6 +3845,9 @@
       "harvester:blood-grove:mastery",
       "seer:chaos-tarot:mastery"
     ],
+    "dice-result-modifier": [
+      "fool:trait:stack-dice"
+    ],
     "passive": [
       "fool:spinning-top:talent:1",
       "chanter:pandaemonium:talent:1",
@@ -3915,7 +3917,7 @@
     "attack-trigger-grant": [
       "sealer:trait:mantra-of-sealing"
     ],
-    "gamble-state": [
+    "post-roll-reactive-choice": [
       "seer:trait:bend-fate"
     ],
     "blessing-spend": [
@@ -3968,9 +3970,9 @@
     },
     "use-ledger": {
       "immediate": 6,
-      "oneCloser": 9,
+      "oneCloser": 8,
       "multiCloser": 9,
-      "totalContaining": 24
+      "totalContaining": 23
     },
     "infuse-cost": {
       "immediate": 4,
@@ -4140,11 +4142,11 @@
       "multiCloser": 10,
       "totalContaining": 33
     },
-    "gamble-state": {
+    "dice-result-modifier": {
       "immediate": 1,
-      "oneCloser": 1,
+      "oneCloser": 0,
       "multiCloser": 0,
-      "totalContaining": 2
+      "totalContaining": 1
     },
     "passive": {
       "immediate": 4,
@@ -4219,6 +4221,12 @@
       "totalContaining": 2
     },
     "attack-trigger-grant": {
+      "immediate": 1,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 1
+    },
+    "post-roll-reactive-choice": {
       "immediate": 1,
       "oneCloser": 0,
       "multiCloser": 0,
@@ -4316,12 +4324,6 @@
       "multiCloser": 9,
       "totalContaining": 26
     },
-    "use-ledger": {
-      "immediate": 6,
-      "oneCloser": 9,
-      "multiCloser": 9,
-      "totalContaining": 24
-    },
     "interrupt-modifier": {
       "immediate": 12,
       "oneCloser": 7,
@@ -4333,6 +4335,12 @@
       "oneCloser": 13,
       "multiCloser": 11,
       "totalContaining": 24
+    },
+    "use-ledger": {
+      "immediate": 6,
+      "oneCloser": 8,
+      "multiCloser": 9,
+      "totalContaining": 23
     },
     "blast-template": {
       "immediate": 2,
@@ -4478,12 +4486,6 @@
       "multiCloser": 0,
       "totalContaining": 2
     },
-    "gamble-state": {
-      "immediate": 1,
-      "oneCloser": 1,
-      "multiCloser": 0,
-      "totalContaining": 2
-    },
     "threshold-modifier": {
       "immediate": 1,
       "oneCloser": 1,
@@ -4526,6 +4528,12 @@
       "multiCloser": 0,
       "totalContaining": 1
     },
+    "dice-result-modifier": {
+      "immediate": 1,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 1
+    },
     "entity-consume": {
       "immediate": 0,
       "oneCloser": 1,
@@ -4533,6 +4541,12 @@
       "totalContaining": 1
     },
     "attack-trigger-grant": {
+      "immediate": 1,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 1
+    },
+    "post-roll-reactive-choice": {
       "immediate": 1,
       "oneCloser": 0,
       "multiCloser": 0,
@@ -4812,111 +4826,118 @@
     },
     {
       "step": 36,
-      "implement": "gamble-state",
+      "implement": "threshold-modifier",
       "unlocks": 2,
       "cumulative": 305,
       "remaining": 139
     },
     {
       "step": 37,
-      "implement": "threshold-modifier",
-      "unlocks": 2,
+      "implement": "delivery-immunity",
+      "unlocks": 1,
+      "cumulative": 306,
+      "remaining": 138
+    },
+    {
+      "step": 38,
+      "implement": "aura-to-area-conversion",
+      "unlocks": 1,
       "cumulative": 307,
       "remaining": 137
     },
     {
-      "step": 38,
-      "implement": "delivery-immunity",
+      "step": 39,
+      "implement": "condition-suppression",
       "unlocks": 1,
       "cumulative": 308,
       "remaining": 136
     },
     {
-      "step": 39,
-      "implement": "aura-to-area-conversion",
+      "step": 40,
+      "implement": "dice-result-modifier",
       "unlocks": 1,
       "cumulative": 309,
       "remaining": 135
     },
     {
-      "step": 40,
-      "implement": "condition-suppression",
+      "step": 41,
+      "implement": "attack-trigger-grant",
       "unlocks": 1,
       "cumulative": 310,
       "remaining": 134
     },
     {
-      "step": 41,
-      "implement": "attack-trigger-grant",
+      "step": 42,
+      "implement": "post-roll-reactive-choice",
       "unlocks": 1,
       "cumulative": 311,
       "remaining": 133
     },
     {
-      "step": 42,
+      "step": 43,
       "implement": "pierce",
       "unlocks": 1,
       "cumulative": 312,
       "remaining": 132
     },
     {
-      "step": 43,
+      "step": 44,
       "implement": "effect-redirect",
       "unlocks": 1,
       "cumulative": 313,
       "remaining": 131
     },
     {
-      "step": 44,
+      "step": 45,
       "implement": "terrain-move-lifecycle",
       "unlocks": 1,
       "cumulative": 314,
       "remaining": 130
     },
     {
-      "step": 45,
+      "step": 46,
       "implement": "area-extension",
       "unlocks": 1,
       "cumulative": 315,
       "remaining": 129
     },
     {
-      "step": 46,
+      "step": 47,
       "implement": "area-define",
       "unlocks": 21,
       "cumulative": 336,
       "remaining": 108
     },
     {
-      "step": 47,
+      "step": 48,
       "implement": "vigor-grant",
       "unlocks": 18,
       "cumulative": 354,
       "remaining": 90
     },
     {
-      "step": 48,
+      "step": 49,
       "implement": "combo-spend",
       "unlocks": 6,
       "cumulative": 360,
       "remaining": 84
     },
     {
-      "step": 49,
+      "step": 50,
       "implement": "attack-modifier",
       "unlocks": 2,
       "cumulative": 362,
       "remaining": 82
     },
     {
-      "step": 50,
+      "step": 51,
       "implement": "save-modifier",
       "unlocks": 2,
       "cumulative": 364,
       "remaining": 80
     },
     {
-      "step": 51,
+      "step": 52,
       "implement": "entity-consume",
       "unlocks": 1,
       "cumulative": 365,

@@ -8,6 +8,7 @@ import {
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation, shoveMutation,
+  gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 
@@ -254,7 +255,7 @@ const justiceEffects: RuleResolver = (context) => {
 const judgementEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source.position) return [];
-  const gamble = context.dice.die(6);
+  const { roll: gamble } = gambleD6(context.dice);
   const distanceMoved = Math.max(1, Math.floor(gamble / 2));
   const mutations: RuleMutation[] = [];
   const nearest = nearestFoe(context, source.position, source.id);

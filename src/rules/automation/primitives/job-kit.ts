@@ -3,6 +3,7 @@ import { attackDamageProvenance, resolveAttackRoll, type AttackDamageProvenance 
 import { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../../area-geometry.js';
 import type { Position } from '../../types.js';
 import type { RuleSourceUnit } from '../../source-units.js';
+import type { DiceSource } from '../../dice.js';
 import type {
   RuleAction,
   RuleActorView,
@@ -409,17 +410,19 @@ export interface GambleResult {
   success: boolean;
 }
 
-/** Roll a single d6 Gamble through the deterministic context dice source.\ *
- * Usage in a resolver:
+/** Roll a single d6 Gamble through the deterministic dice source.
+ * Accepts either a DiceSource directly or a RuleExecutionContext (which
+ * has a `.dice` property). Usage in a resolver:
  * ```ts
- * const { roll, success } = gambleD6(context, 4); // threshold 4+
+ * const { roll, success } = gambleD6(context.dice, 4); // threshold 4+
  * if (success) mutations.push(...);
  * ```
  *
- * The die is consumed from the context's dice source so replay uses the
- * same recorded value. There is no parallel RNG. */
-export function gambleD6(context: RuleExecutionContext, threshold = 1): GambleResult {
-  const roll = context.dice.die(6);
+ * The die is consumed from the dice source so replay uses the same
+ * recorded value. There is no parallel RNG. */
+export function gambleD6(diceOrContext: DiceSource | { dice: DiceSource }, threshold = 1): GambleResult {
+  const dice = 'die' in diceOrContext ? diceOrContext : diceOrContext.dice;
+  const roll = dice.die(6);
   return { roll, success: roll >= threshold };
 }
 

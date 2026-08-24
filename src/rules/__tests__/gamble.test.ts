@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { gambleD6 } from '../automation/primitives/job-kit.js';
 import type { RuleExecutionContext } from '../automation/primitives/types.js';
-import { actorFromCharacter, createEncounter, createFoe, executeCommand } from '../encounter.js';
+import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 
@@ -40,19 +40,12 @@ describe('gambleD6', () => {
 
   it('succeeds above threshold', () => {
     const ctx = gambleContext([6]);
-    const { roll, success } = gambleD6(ctx, 4);
+    const { roll, success } = gambleD6(ctx, 6);
     expect(roll).toBe(6);
     expect(success).toBe(true);
   });
 
   it('fails below threshold', () => {
-    const ctx = gambleContext([3]);
-    const { roll, success } = gambleD6(ctx, 4);
-    expect(roll).toBe(3);
-    expect(success).toBe(false);
-  });
-
-  it('fails at one below threshold', () => {
     const ctx = gambleContext([3]);
     const { roll, success } = gambleD6(ctx, 4);
     expect(roll).toBe(3);
@@ -93,23 +86,40 @@ describe('gambleD6', () => {
     expect(g3.success).toBe(false);
   });
 
-  it('replay produces identical results using the same dice source', () => {
-    const run = () => {
-      const ctx = gambleContext([4, 6, 2, 5, 1, 3]);
-      const results: number[] = [];
-      for (let i = 0; i < 6; i++) results.push(gambleD6(ctx, 4).roll);
-      return results;
+  it('replay via applyEvents produces identical mechanical state', () => {
+    // Execute with scripted dice, then replay the recorded events onto
+    // the same starting state — the replay-side DiceSource is never
+    // consulted because the RULE_MUTATIONS_APPLIED events carry the
+    // resolved mutations. This proves the encounter event system records
+    // sufficient state for deterministic replay.
+    const setup = () => {
+      const state = createEncounter('Replay fixture');
+      const hero = actorFromCharacter(validCharacter('Hero'), { x: 1, y: 1 });
+      hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+      hero.chapter = 3;
+      const foe = createFoe('Foe', { x: 9, y: 9 });
+      let s = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+      s = executeCommand(s, { type: 'ADD_ACTOR', actor: foe }).state;
+      s = executeCommand(s, { type: 'START_ENCOUNTER' }).state;
+      return { state: s, hero, foe };
     };
-    expect(run()).toEqual(run());
-  });
 
-  it('one gamble is never resolved twice', () => {
-    const ctx = gambleContext([3]);
-    const g1 = gambleD6(ctx, 4);
-    const g2 = gambleD6(ctx, 4);
-    // First consumed 3, second consumed whatever is next (default 1)
-    expect(g1.roll).toBe(3);
-    expect(g2.roll).toBe(1);
+    const { state: s0, hero } = setup();
+    const executed = executeCommand(s0, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'fool:spinning-top',
+      targetIds: [],
+    }, scriptedDice(4));
+
+    // Replay: apply the recorded events onto the same starting state.
+    // No dice source is provided — if applyEvents tried to re-roll,
+    // it would fail or produce different results.
+    const replayed = applyEvents(s0, executed.events);
+    expect(replayed.actors[hero.id]!.position).toEqual(executed.state.actors[hero.id]!.position);
+    expect(replayed.actors[hero.id]!.hp).toEqual(executed.state.actors[hero.id]!.hp);
+    expect(replayed.actors[hero.id]!.conditions.map((c) => c.id).sort())
+      .toEqual(executed.state.actors[hero.id]!.conditions.map((c) => c.id).sort());
   });
 });
 
@@ -129,9 +139,8 @@ function heroEncounter(options: { foePosition?: { x: number; y: number } } = {})
 }
 
 describe('existing gamble consumers', () => {
-  it('Spinning Top uses gamble for dash distance and grants evasion at full distance', () => {
+  it('Spinning Top: gamble 4 dashes 6 spaces and grants evasion at full distance', () => {
     const { state: s0, hero } = heroEncounter({ foePosition: { x: 3, y: 5 } });
-    // Gamble of 4 → dash 6 spaces right
     const result = executeCommand(s0, {
       type: 'USE_ABILITY',
       actorId: hero.id,
@@ -139,29 +148,13 @@ describe('existing gamble consumers', () => {
       targetIds: [],
     }, scriptedDice(4));
     const h = result.state.actors[hero.id]!;
-    // Moved to x=7 (from x=1, 6 spaces right), and gained evasion at full distance
+    // Gamble 4 → dash 4+2=6 spaces → x=1 to x=7
     expect(h.position).toEqual({ x: 7, y: 1 });
     expect(h.conditions.some(({ id }) => id === 'evasion')).toBe(true);
   });
 
-  it('Spinning Top: replay produces identical state', () => {
-    const run = (rolls: number[]) => {
-      const { state: s0, hero } = heroEncounter({ foePosition: { x: 3, y: 5 } });
-      const result = executeCommand(s0, {
-        type: 'USE_ABILITY',
-        actorId: hero.id,
-        abilityId: 'fool:spinning-top',
-        targetIds: [],
-      }, scriptedDice(...rolls));
-      return result.state.actors[hero.id]!.position;
-    };
-    expect(run([4])).toEqual(run([4]));
-    expect(run([1])).toEqual(run([1]));
-  });
-
-  it('Spinning Top: lower gamble produces shorter dash', () => {
+  it('Spinning Top: gamble 1 dashes only 3 spaces (shorter result = shorter dash)', () => {
     const { state: s0, hero } = heroEncounter({ foePosition: { x: 3, y: 5 } });
-    // Gamble of 1 → dash 3 spaces right → no evasion (not full distance)
     const result = executeCommand(s0, {
       type: 'USE_ABILITY',
       actorId: hero.id,
@@ -169,26 +162,57 @@ describe('existing gamble consumers', () => {
       targetIds: [],
     }, scriptedDice(1));
     const h = result.state.actors[hero.id]!;
+    // Gamble 1 → dash 1+2=3 spaces → x=1 to x=4
     expect(h.position).toEqual({ x: 4, y: 1 });
-    expect(h.conditions.some(({ id }) => id === 'evasion')).toBe(true); // moved full distance
+    expect(h.conditions.some(({ id }) => id === 'evasion')).toBe(true);
   });
 
-  it('Chaos Tarot gambles the tarot effect', () => {
+  it('Spinning Top: replay via applyEvents matches direct execution', () => {
     const { state: s0, hero } = heroEncounter({ foePosition: { x: 3, y: 5 } });
+    const executed = executeCommand(s0, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'fool:spinning-top',
+      targetIds: [],
+    }, scriptedDice(4));
+    const replayed = applyEvents(s0, executed.events);
+    expect(replayed.actors[hero.id]!.position).toEqual(executed.state.actors[hero.id]!.position);
+    expect(replayed.actors[hero.id]!.conditions.map((c) => c.id).sort())
+      .toEqual(executed.state.actors[hero.id]!.conditions.map((c) => c.id).sort());
+  });
+
+  it('Chaos Tarot: gamble result determines tarot effect (roll 1 = explode card)', () => {
+    const { state: s0, hero, foe } = heroEncounter({ foePosition: { x: 3, y: 5 } });
+    // Gamble 1 → "explode the card for fray damage"
     const result = executeCommand(s0, {
       type: 'USE_ABILITY',
       actorId: hero.id,
       abilityId: 'seer:chaos-tarot',
       targetIds: [],
       input: {},
-    }, scriptedDice(3)); // gamble 3
-    const h = result.state.actors[hero.id]!;
-    expect(h.position).toBeDefined();
+    }, scriptedDice(1));
+    // Gamble 1 deals fray damage to the hero (card explosion)
+    const heroHp = result.state.actors[hero.id]!.hp;
+    expect(heroHp).toBeLessThan(40); // took fray damage from the card explosion
   });
 
-  it('Dire Parry gambles the damage amount (Knave)', () => {
+  it('Chaos Tarot: replay via applyEvents matches direct execution', () => {
     const { state: s0, hero } = heroEncounter({ foePosition: { x: 3, y: 5 } });
-    // Enter Riposte stance first
+    const executed = executeCommand(s0, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'seer:chaos-tarot',
+      targetIds: [],
+      input: {},
+    }, scriptedDice(3));
+    const replayed = applyEvents(s0, executed.events);
+    expect(replayed.actors[hero.id]!.hp).toEqual(executed.state.actors[hero.id]!.hp);
+    expect(replayed.actors[hero.id]!.conditions.map((c) => c.id).sort())
+      .toEqual(executed.state.actors[hero.id]!.conditions.map((c) => c.id).sort());
+  });
+
+  it('Dire Parry: Riposte stance enters and arms the interrupt', () => {
+    const { state: s0, hero } = heroEncounter({ foePosition: { x: 3, y: 5 } });
     const s1 = executeCommand(s0, {
       type: 'USE_ABILITY',
       actorId: hero.id,
@@ -197,5 +221,28 @@ describe('existing gamble consumers', () => {
       input: {},
     }, scriptedDice()).state;
     expect(s1.actors[hero.id]!.ruleState['riposte:armed']).toBe(true);
+  });
+
+  it('Party Favor detonation: gamble determines explosion effects', () => {
+    const { state: s0, hero, foe } = heroEncounter({ foePosition: { x: 1, y: 2 } });
+    // Place the mine
+    const placed = executeCommand(s0, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'fool:party-favor',
+      targetIds: [],
+    }, scriptedDice()).state;
+    expect(placed.terrainEffects.some((effect) => effect.terrain === 'party-favor')).toBe(true);
+    // Detonate with gamble 4 → "4+: blinded"
+    const detonated = executeCommand(placed, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'fool:party-favor',
+      actionId: 'detonate',
+      timing: 'movement-end',
+      input: {},
+    }, scriptedDice(4));
+    expect(detonated.state.actors[foe.id].hp).toBeLessThan(32); // took damage
+    expect(detonated.state.terrainEffects.some((effect) => effect.terrain === 'party-favor')).toBe(false);
   });
 });

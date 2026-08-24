@@ -341,6 +341,22 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'fool:limit-break': ['area-define', 'entity-create'],
   // "gamble" is mentioned but the real blockers are area-define and
   // entity-create; the gamble itself is not the missing primitive
+
+  // ── Trait-level Gamble reclassification ──
+  // The two remaining `gamble-state` trait entries need reclassification:
+  // the Gamble foundation (gambleD6) handles the generic d6 roll, but
+  // these traits require additional non-Gamble foundations.
+  'fool:trait:stack-dice': ['dice-result-modifier'],
+  // "You can use this die when you gamble to make the gamble result 6"
+  // — a spend-to-override-result modifier; the dice-result override seam
+  // is a small generic extension belonging to the Gamble family: a typed
+  // "set the result to N" that intercepts the roll. Not yet implemented.
+  'seer:trait:bend-fate': ['post-roll-reactive-choice'],
+  // "discard any number of cards after you gamble to roll an extra die
+  // per card discarded, choosing any result" — a reactive spend choice
+  // AFTER seeing the roll, with card resources and result-selection.
+  // The Gamble foundation rolls the die; the post-roll reactive-choice
+  // window and card resource system are separate missing foundations.
 };
 
 /** Classify a source unit's rules text into a blocker set.

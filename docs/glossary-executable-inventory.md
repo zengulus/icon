@@ -101,7 +101,7 @@ Status legend:
 | End turn | ability ends your turn; one chosen (103) | reducer path | EXECUTABLE | — |
 | Triggered effects (charge/collide/comeback/exceed/slay/finishing-blow/heroic/infuse/chain-reaction) | pp.95, 102–103 | VM triggers + F7 talent fold + program resolve | EXECUTABLE | heroic/infuse/chain-reaction are ability-level and only fire where a source unit wires them |
 | Summon | intangible; not foe/ally; removed on defeat (95, 104) | `summon-recipes` + `entity` mutation | PARTIAL | entity **action suites** (lash-out/dash-bite/fly/detonate) need the entity-action seam |
-| Aura X | continuous ongoing effect in range X of an origin (102) | persistent `aura` effect | **NOT** | the spatial **aura membership kernel** (distance-based grants/penalties, activation/size/entry) does not exist |
+| Aura X | continuous ongoing effect in range X of an origin (102) | `kernels/aura.ts` — membership kernel, projection, attack modifiers | **EXECUTABLE** | some compound aura consumers (entry/exit triggers, complex foe-aura interactions) remain unresolved |
 | Rebound | bounce off a character in range; redirects (103) | Trick Shot armed variant only | **NOT** | a general rebound/redirection seam (origin re-placement + LoS/cover from the new origin); used by Trick Shot and Heracule mastery |
 
 ## F. Special states (p.104)
@@ -138,10 +138,9 @@ B. **Engine mechanisms genuinely missing (subsystems):**
    1. **Power-die primitive** — one recipe shape for the hand-rolled stance dies.
    2. **Ability-use spend-augment seam** — durable spent-choice input on USE_ABILITY.
    3. **Cost-override seam** — sacrifice/Infuse cost reduction (non-mitigable/floor-1).
-   4. **Aura membership kernel** — distance-based grants/penalties/entry.
-   5. **Rebound seam** — origin re-placement + LoS/cover from the new origin.
-   6. **Entity action seams + object-destroy model** — companions' suites; destructible objects.
-   7. **Mark-trigger windows** — turn-start/adjacency mark gates.
+   4. **Rebound seam** — origin re-placement + LoS/cover from the new origin.
+   5. **Entity action seams + object-destroy model** — companions' suites; destructible objects.
+   6. **Mark-trigger windows** — turn-start/adjacency mark gates.
 
 None of the B items is safely completable mid-stream; each is a focused
 foundation-sized pass (the ontology build order already sequences them).

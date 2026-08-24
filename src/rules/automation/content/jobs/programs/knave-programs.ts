@@ -149,7 +149,7 @@ const riposteEnter: RuleResolver = (context) => {
     stateMutation(context, source.id, 'riposte:armed', true),
   ];
   if (context.triggers?.has('heroic')) {
-    const { roll: gamble } = gambleD6(context);
+    const { roll: gamble } = gambleD6(context.dice);
     mutations.push(vigorMutation(context, source.id, gamble));
     mutations.push(stateMutation(context, source.id, 'riposte:last-gamble', gamble));
   }
@@ -165,8 +165,8 @@ const direParry: RuleResolver = (context) => {
   if (!foe || foe.side === source.side) throw new RuleProgramViolation('choice.actor-range', 'Dire Parry requires a foe.');
   const extraDice = Math.max(0, Math.floor(context.input.numbers?.vigilance ?? 0));
   const spendVigilance = extraDice > 0;
-  const firstRoll = gambleD6(context);
-  const rolls = [firstRoll.roll, ...Array.from({ length: extraDice }, () => gambleD6(context).roll)];
+  const firstRoll = gambleD6(context.dice);
+  const rolls = [firstRoll.roll, ...Array.from({ length: extraDice }, () => gambleD6(context.dice).roll)];
   const gamble = Math.max(...rolls);
   const mutations: RuleMutation[] = [];
   if (spendVigilance) mutations.push(resourceMutation(context, source.id, 'vigilance', 'spend', extraDice));
