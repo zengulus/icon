@@ -439,6 +439,12 @@ Current intended deployment responsibilities:
 - Supabase: persistent/versioned character and checkpoint data;
 - Render: live tabletop/server authority and save breakpoints.
 
+Persistence rule: VTT/Supabase checkpoints store only the current authoritative
+room state. They must not include the encounter replay/event log or duplicate
+replay archive; replay remains a runtime/transport concern and is never part of
+the durable checkpoint payload. Any future persistence adapter must apply the
+same current-state projection before serialization.
+
 Do not casually collapse these responsibilities into a different architecture.
 
 ---

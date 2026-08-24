@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, createEncounter, createFoe } from '../../src/rules/encounter.js';
 import { parseClientMessage, type ServerMessage } from '../../src/rules/protocol.js';
-import { createVttRoom, type RoomCommand, type VttRoomState } from '../../src/rules/vtt-room.js';
+import { createVttRoom, currentStateForPersistence, type RoomCommand, type VttRoomState } from '../../src/rules/vtt-room.js';
 import type { ServerConfig } from '../config.js';
 import type { VttCheckpoint } from '../checkpoints.js';
 import {
@@ -129,6 +129,16 @@ async function settleAndLeave(manager: RoomManager, gm: AuthenticatedClient, cli
   await Promise.resolve();
   await Promise.resolve();
 }
+
+describe('VTT persistence projection', () => {
+  it('persists current state without replay history', () => {
+    const room = createVttRoom();
+    room.encounter.eventLog = [{ type: 'ENCOUNTER_STARTED', firstActorId: 'actor:test' }];
+    const persisted = currentStateForPersistence(room);
+    expect(persisted.encounter.eventLog).toEqual([]);
+    expect(room.encounter.eventLog).toHaveLength(1);
+  });
+});
 
 describe('RoomManager authoritative VTT integration', () => {
   it('validates the checkpoint envelope before hydrating a room', () => {

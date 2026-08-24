@@ -93,7 +93,8 @@ export type RulePredicate =
   | { kind: 'defeated'; target: RuleSelector }
   | { kind: 'in-terrain'; target: RuleSelector; terrain: string }
   | { kind: 'trigger'; trigger: string }
-  | { kind: 'state'; target: RuleSelector; key: string; equals?: string | number | boolean | null };
+  | { kind: 'state'; target: RuleSelector; key: string; equals?: string | number | boolean | null }
+  | { kind: 'target-state'; target: RuleSelector; key: string; equals?: string | number | boolean | null };
 
 export interface RuleChoice {
   key: string;

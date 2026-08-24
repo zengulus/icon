@@ -184,6 +184,21 @@ export function createDefaultTableState(backgroundUrl = ''): TableState {
   };
 }
 
+/**
+ * Persistence projection for Supabase checkpoints.
+ *
+ * Checkpoints are current-state snapshots, not replay archives. The encounter
+ * event log remains available in the live room for fan-out/audit behavior, but
+ * must never be serialized into a durable VTT save because it grows without
+ * bound and duplicates the authoritative state already represented by the
+ * snapshot.
+ */
+export function currentStateForPersistence(room: VttRoomState): VttRoomState {
+  const snapshot = clone(room);
+  snapshot.encounter.eventLog = [];
+  return snapshot;
+}
+
 export function createVttRoom(encounter = createEncounter()): VttRoomState {
   return {
     schemaVersion: VTT_ROOM_SCHEMA_VERSION,

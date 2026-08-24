@@ -19,8 +19,10 @@ rerolls, rescans later state, repays costs, or reruns the named resolver.
 ledgers. Steps execute in source order and at most once per command. The
 `resolution-targets` effect is intentionally generic: content may consume
 recorded attack, collision, or slay targets without embedding caller-supplied
-outcome prediction in a resolver. Cross-command reactive windows remain a
-separate system.
+outcome prediction in a resolver. The `target-state` predicate provides an
+explicit state lookup for selected causal targets, avoiding ad hoc resolver
+checks while remaining pure. Cross-command reactive windows remain a separate
+system.
 
 Authority ordering (from `AGENTS.md`):
 

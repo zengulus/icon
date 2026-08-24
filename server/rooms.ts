@@ -16,6 +16,7 @@ import {
   executeRoomCommand,
   assertValidVttRoomState,
   assertValidEncounterState,
+  currentStateForPersistence,
   migrateVttRoom,
   roomVisibleToRole,
   VTT_ROOM_SCHEMA_VERSION,
@@ -229,9 +230,10 @@ class MemoryCheckpointPersistence implements RoomCheckpointPersistence {
   }
 
   async write(checkpoint: VttCheckpoint<VttRoomState>): Promise<void> {
+    const persisted = { ...checkpoint, state: currentStateForPersistence(checkpoint.state) };
     const existing = this.records.get(checkpoint.roomId);
-    if (existing && existing.roomRevision > checkpoint.roomRevision) return;
-    this.records.set(checkpoint.roomId, structuredClone(checkpoint));
+    if (existing && existing.roomRevision > persisted.roomRevision) return;
+    this.records.set(checkpoint.roomId, structuredClone(persisted));
   }
 }
 
@@ -273,13 +275,17 @@ export class SupabaseCheckpointPersistence implements RoomCheckpointPersistence 
   }
 
   async write(checkpoint: VttCheckpoint<VttRoomState>): Promise<void> {
+    // Supabase stores compact current-state checkpoints only. Replay history
+    // belongs to the live/event transport and is deliberately excluded from
+    // durable saves to prevent unbounded checkpoint growth.
+    const state = currentStateForPersistence(checkpoint.state);
     const { error } = await this.admin.rpc('append_encounter_checkpoint', {
       p_encounter_id: checkpoint.roomId,
       p_room_revision: checkpoint.roomRevision,
       p_encounter_revision: checkpoint.encounterRevision,
       p_schema_version: checkpoint.schemaVersion,
       p_reason: checkpoint.reason,
-      p_state: checkpoint.state,
+      p_state: state,
     });
     if (error) throw new Error(`Could not persist encounter checkpoint: ${error.message}`);
   }

@@ -203,6 +203,7 @@ export function evaluatePredicate(predicate: RulePredicate, context: RuleExecuti
     case 'in-terrain': return selectActors(predicate.target, context).every((target) => target.position && context.state.terrainAt(target.position).has(predicate.terrain));
     case 'trigger': return context.triggers?.has(predicate.trigger) ?? false;
     case 'state': return selectActors(predicate.target, context).every((target) => predicate.equals === undefined ? target.state[predicate.key] !== undefined : target.state[predicate.key] === predicate.equals);
+    case 'target-state': return selectActors(predicate.target, context).every((target) => predicate.equals === undefined ? target.state[predicate.key] !== undefined : target.state[predicate.key] === predicate.equals);
   }
 }
 

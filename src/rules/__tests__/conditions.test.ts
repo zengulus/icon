@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { applyRuleMutations, encounterRuleState, isBloodied, retaliate } from '../automation/kernels/encounter-adapter.js';
 import { RULE_PROGRAM_SCHEMA_VERSION, type RuleExecutionContext, type RuleMutation, type RuleProgram } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, executeRuleProgramWithReactiveTriggers, orderCrossCharacterEffects } from '../encounter.js';
-import { executeRuleProgram } from '../automation/kernels/runtime.js';
+import { executeRuleProgram, evaluatePredicate } from '../automation/kernels/runtime.js';
 import { planMovementPath } from '../movement.js';
 import type { EncounterActor, EncounterCondition, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
@@ -465,6 +465,10 @@ describe('cross-character effect ordering (p.107)', () => {
   });
 });
 
+function awaitablePredicate(context: RuleExecutionContext, foeId: string) {
+  return evaluatePredicate({ kind: 'target-state', target: { kind: 'trigger-targets' }, key: 'causal-hit', equals: true }, { ...context, triggerTargetIds: [foeId] });
+}
+
 describe('durable resolution facts (p.95, replay)', () => {
   it('records monotonic trigger and causal target facts for continuation consumers', () => {
     const { state, hero, foe } = conditionEncounter({ heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 }, allyAt: null });
@@ -479,6 +483,13 @@ describe('durable resolution facts (p.95, replay)', () => {
     expect(result.resolutionFacts).toMatchObject({ collidedActorIds: [foe.id] });
     expect(result.continuation?.executedStepIds).toEqual(['base', 'collide', 'slay']);
     expect(result.continuation?.derivedTriggers).toContain('collide');
+  });
+
+  it('target-state predicates evaluate selected causal targets explicitly', () => {
+    const { state, hero, foe } = conditionEncounter({ allyAt: null });
+    foe.ruleState['causal-hit'] = true;
+    const context: RuleExecutionContext = { state: encounterRuleState(state), actorId: hero.id, sourceId: 'test:predicate', actionId: 'default', timing: 'use', input: {}, dice: scriptedDice(), triggers: new Set(), resolutionFacts: { triggers: [], attackTargets: [], collidedActorIds: [], slainActorIds: [foe.id] } };
+    expect((awaitablePredicate(context, foe.id))).toBe(true);
   });
 
   it('resolution-targets consumes recorded causal IDs rather than current-state scans', () => {
