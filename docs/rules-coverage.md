@@ -25,12 +25,12 @@ For the checked-in ICON 1.5 artifact, the report is deliberately conservative:
 | Measure | Count |
 | --- | ---: |
 | Traceable source programs | 3,275 |
-| Traceable source clauses | 4,750 |
-| Generic RulePrograms with no unsupported clause | 387 |
-| Generic RuleProgram clauses with no unsupported text | 1,527 |
-| Explicitly unsupported clauses | 3,223 |
+| Traceable source clauses | 4,700 |
+| Generic RulePrograms with no unsupported clause | 457 |
+| Generic RuleProgram clauses with no unsupported text | 1,597 |
+| Explicitly unsupported clauses | 3,103 |
 
-Reducer-backed core mechanics are tested separately, but are not counted as generic VM coverage until their full typed `RuleProgram` semantics exist; any core rule without a documented reducer path remains explicitly unresolved. A compiler result with no unresolved clause is also **not** an authority permit: live `EXECUTE_RULE` accepts only the explicit independently reviewed active allowlist in `automation/content/glue/manual-programs.ts` (currently Skirmisher, Prowl, Diaga, Bless, all 144 Job ability programs across the 16 Jobs, and the 22 reviewed foe ability recipes in `automation/content/foes/ability-recipes.ts`). Succor and the 79 fully-executable source-ID foe-trait rows are typed passive projections from durable `traitIds`, not active command authority. This prevents a heuristic parser result from silently becoming a GM-executable foe or ability rule. The audit has no unresolved `job-ability` entries; its 3,203 unsupported clauses are supporting/core, foe, Relic, reward, and other source units. `npm run audit:automation -- --strict` intentionally fails while any unresolved clause remains; it is a release-completeness gate, not a passing CI threshold for this incomplete rules engine.
+Reducer-backed core mechanics are tested separately, but are not counted as generic VM coverage until their full typed `RuleProgram` semantics exist; any core rule without a documented reducer path remains explicitly unresolved. A compiler result with no unresolved clause is also **not** an authority permit: live `EXECUTE_RULE` accepts only the explicit independently reviewed active allowlist in `automation/content/glue/manual-programs.ts` (currently Skirmisher, Prowl, Diaga, Bless, all 144 Job ability programs across the 16 Jobs, and the 22 reviewed foe ability recipes in `automation/content/foes/ability-recipes.ts`). Succor and the 79 fully-executable source-ID foe-trait rows are typed passive projections from durable `traitIds`, not active command authority. This prevents a heuristic parser result from silently becoming a GM-executable foe or ability rule. The audit has no unresolved `job-ability` entries; its 3,103 unsupported clauses are supporting/core, foe, Relic, reward, and other source units. `npm run audit:automation -- --strict` intentionally fails while any unresolved clause remains; it is a release-completeness gate, not a passing CI threshold for this incomplete rules engine.
 
 ## Mendicant class traits (ICON p.172)
 
