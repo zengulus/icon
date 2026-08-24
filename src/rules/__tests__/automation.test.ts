@@ -1,6 +1,7 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { executeRuleProgram, RuleProgramViolation } from '../automation/kernels/runtime.js';
+import { occupied, walk } from '../automation/primitives/job-kit.js';
 import type { RuleActorView, RuleExecutionContext, RuleProgram, RuleRuntimeState } from '../automation/primitives/types.js';
 import { scriptedDice } from './fixtures.js';
 
@@ -215,5 +216,36 @@ describe('declarative ICON rule runtime', () => {
     };
     const cursed = executeRuleProgram(saveProgram, context({ sourceId: 'save', state: cursedState, dice: scriptedDice(10, 1) }));
     expect(cursed.mutations[0]).toMatchObject({ kind: 'save', windowId: 'save:use:effect-save:1:foe', roll: 10, boon: -1, total: 9, success: false });
+  });
+});
+
+describe('VM footprint geometry (ICON p.92)', () => {
+  it('walk stops a large mover before its footprint enters a large blocker', () => {
+    // Mover footprint (0,0)-(1,1); blocker footprint (3,0)-(4,1). The step to
+    // anchor (2,0) would put the mover's (3,0) cell inside the blocker, so
+    // the walk stops at (1,0) — an anchor-only walk would step to (2,0).
+    const mover = actor('mover', 'heroes', 0, { size: 2 });
+    const blocker = actor('blocker', 'foes', 3, { size: 2 });
+    const wide = context({ state: { ...state, actors: { mover, blocker } }, actorId: 'mover' });
+    expect(walk(wide, { x: 0, y: 0 }, { x: 1, y: 0 }, 4, false, 'mover')).toEqual({ x: 1, y: 0 });
+    // Size-1 control: the same walk against the same large blocker stops at
+    // the blocker's anchor-adjacent cell.
+    const scout = actor('scout', 'heroes', 0);
+    const narrow = context({ state: { ...state, actors: { scout, blocker } }, actorId: 'scout' });
+    expect(walk(narrow, { x: 0, y: 0 }, { x: 1, y: 0 }, 4, false, 'scout')).toEqual({ x: 2, y: 0 });
+  });
+
+  it('occupied reports every large-actor footprint cell as taken', () => {
+    const big = actor('big', 'heroes', 2, { size: 2 }); // footprint (2,0)-(3,1)
+    const wide = context({ state: { ...state, actors: { big } }, actorId: 'big' });
+    expect(occupied({ x: 2, y: 0 }, wide)).toBe(true); // anchor cell
+    expect(occupied({ x: 3, y: 1 }, wide)).toBe(true); // non-anchor footprint cell
+    expect(occupied({ x: 3, y: 0 }, wide)).toBe(true); // anchor row, second column
+    expect(occupied({ x: 4, y: 0 }, wide)).toBe(false); // outside the footprint
+    // Size-1 control: only the anchor cell is taken.
+    const small = actor('small', 'heroes', 2);
+    const narrow = context({ state: { ...state, actors: { small } }, actorId: 'small' });
+    expect(occupied({ x: 2, y: 0 }, narrow)).toBe(true);
+    expect(occupied({ x: 3, y: 1 }, narrow)).toBe(false);
   });
 });

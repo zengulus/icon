@@ -68,6 +68,66 @@ describe('ICON encounter reducer', () => {
     }
   });
 
+  it('keeps the whole Size-N footprint inside the grid during setup (p.92)', () => {
+    const state = createEncounter('Size bounds');
+    // Anchor at (9,9) is in bounds on a 10×10 grid, but a Size-2 footprint
+    // spills to (10,9)/(9,10)/(10,10) — the anchor-only check used to accept it.
+    const giant = createFoe('Corner giant', { x: state.grid.width - 1, y: state.grid.height - 1 });
+    giant.size = 2;
+    try {
+      executeCommand(state, { type: 'ADD_ACTOR', actor: giant });
+      throw new Error('Expected off-grid Size-2 actor to be rejected.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'actor.position' });
+    }
+    // Size-1 control at the same anchor cell is still legal.
+    const small = createFoe('Corner scout', { x: state.grid.width - 1, y: state.grid.height - 1 });
+    expect(executeCommand(state, { type: 'ADD_ACTOR', actor: small }).state.actors[small.id]).toBeDefined();
+  });
+
+  it('rejects a Size-N actor whose footprint overlaps an existing actor', () => {
+    let state = createEncounter('Size occupancy');
+    const first = createFoe('First', { x: 2, y: 1 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: first }).state;
+    // Anchor (1,1) is free but the Size-2 footprint (1,1)-(2,2) covers the
+    // Size-1 actor's (2,1) cell — the anchor-only check used to accept it.
+    const giant = createFoe('Stepper', { x: 1, y: 1 });
+    giant.size = 2;
+    try {
+      executeCommand(state, { type: 'ADD_ACTOR', actor: giant });
+      throw new Error('Expected overlapping Size-2 actor to be rejected.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'actor.position' });
+    }
+  });
+
+  it('rejects a Size-1 actor placed inside an existing Size-N footprint', () => {
+    let state = createEncounter('Size occupancy reverse');
+    const giant = createFoe('Resident giant', { x: 1, y: 1 });
+    giant.size = 2;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: giant }).state;
+    // Anchor (2,1) is not a giant anchor cell, but it lies inside the giant's
+    // footprint — the samePosition check used to accept it.
+    const small = createFoe('Squatter', { x: 2, y: 1 });
+    try {
+      executeCommand(state, { type: 'ADD_ACTOR', actor: small });
+      throw new Error('Expected Size-1 actor inside a Size-2 footprint to be rejected.');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'actor.position' });
+    }
+  });
+
+  it('accepts two non-overlapping large actors', () => {
+    let state = createEncounter('Size room');
+    const left = createFoe('Left giant', { x: 0, y: 0 });
+    left.size = 2;
+    const right = createFoe('Right giant', { x: 3, y: 0 });
+    right.size = 2;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: left }).state;
+    // (3,0)-(4,1) does not intersect (0,0)-(1,1); the gap column (2,*) is free.
+    expect(executeCommand(state, { type: 'ADD_ACTOR', actor: right }).state.actors[right.id]).toBeDefined();
+  });
+
   it('canonicalizes legacy actor ownership fields at the reducer boundary', () => {
     const state = createEncounter('Legacy actor command');
     const actor = createFoe('Legacy actor', { x: 1, y: 1 }) as unknown as Record<string, unknown>;

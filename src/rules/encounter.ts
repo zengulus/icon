@@ -25,7 +25,7 @@ import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } 
 import { areaStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
 import { effectiveAbilityRange } from './automation/kernels/range.js';
 import { effectiveAreaFor } from './automation/kernels/area.js';
-import { footprintDistance } from './automation/primitives/spatial-intent.js';
+import { footprintCells, footprintDistance, footprintsOverlap } from './automation/primitives/spatial-intent.js';
 import { auraStateView, projectedAuraAttackModifiers } from './automation/kernels/aura.js';
 import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
@@ -1277,9 +1277,16 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         const actor = canonicalActorForAdd(command.actor);
         const tokenUrlProblem = durableAssetUrlProblem(actor.tokenUrl);
         if (tokenUrlProblem) throw new RuleViolation('actor.token-url', `Actor token URL ${tokenUrlProblem}`);
-        if (!positionWithinGrid(actor.position, state)) throw new RuleViolation('actor.position', 'Actor position must be inside the battlefield grid.');
+        // ICON p.92: a Size-N actor occupies an N×N footprint. The entire
+        // footprint — not just the anchor cell — must be inside the
+        // battlefield and free of every other actor's footprint (the same
+        // footprint authority the movement planner and SpatialIntent use).
+        if (!footprintCells(actor.position, actor.size).every((cell) => positionWithinGrid(cell, state))) throw new RuleViolation('actor.position', 'Actor position must be inside the battlefield grid.');
         if (state.actors[actor.id]) throw new RuleViolation('actor.duplicate', 'That actor is already on the battlefield.');
-        if (Object.values(state.actors).some((existing) => samePosition(existing.position, actor.position))) throw new RuleViolation('actor.position', 'That space is occupied.');
+        if (Object.values(state.actors).some((existing) => footprintsOverlap(
+          { position: actor.position, size: actor.size },
+          { position: existing.position, size: existing.size },
+        ))) throw new RuleViolation('actor.position', 'That space is occupied.');
         events = [{ type: 'ACTOR_ADDED', actor }];
       }
       break;

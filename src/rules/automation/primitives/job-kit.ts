@@ -1,6 +1,7 @@
 import { resolveCureMutations } from './status-saves.js';
 import { attackDamageProvenance, resolveAttackRoll, type AttackDamageProvenance } from './attack-resolution.js';
 import { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../../area-geometry.js';
+import { footprintCells, footprintIntersectsCells, footprintsOverlap } from './spatial-intent.js';
 import type { Position } from '../../types.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import type { DiceSource } from '../../dice.js';
@@ -104,9 +105,11 @@ export const withinGrid = (position: Position, context: RuleExecutionContext) =>
 export const sourceActor = (context: RuleExecutionContext, id: string): RuleActorView =>
   context.state.actors[id];
 
-/** True when a character (other than `excludeId`) or an entity occupies the cell. */
+/** True when a character (other than `excludeId`) or an entity occupies the cell.
+ * ICON p.92: a Size-N actor occupies its whole N×N footprint, so any cell
+ * inside a large actor's footprint is occupied — not only its anchor cell. */
 export const occupied = (position: Position, context: RuleExecutionContext, excludeId = '') =>
-  Object.values(context.state.actors).some((actor) => actor.id !== excludeId && actor.position && sameCell(actor.position, position))
+  Object.values(context.state.actors).some((actor) => actor.id !== excludeId && actor.position && footprintIntersectsCells({ position: actor.position, size: actor.size ?? 1 }, [position]))
   || Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, position));
 
 export const impassable = (position: Position, context: RuleExecutionContext) =>
@@ -129,13 +132,19 @@ export function walk(
   options: { excludeIds?: ReadonlySet<string> } = {},
 ): Position {
   const excludeIds = options.excludeIds ?? new Set<string>();
+  // ICON p.92: a Size-N mover occupies an N×N footprint, so every transit
+  // step must keep the whole footprint in bounds and off impassable terrain,
+  // and a blocker's footprint (not just its anchor cell) stops the walk.
+  // This keeps walk consistent with the SpatialIntent gateway the landing
+  // routes through. Size 1 degenerates to the anchor-cell checks.
+  const moverSize = Math.max(1, context.state.actors[moverId]?.size ?? 1);
   let position = { ...start };
   for (let step = 0; step < steps; step += 1) {
     const next = { x: position.x + Math.sign(direction.x), y: position.y + Math.sign(direction.y) };
-    if (impassable(next, context)) break;
+    if (footprintCells(next, moverSize).some((cell) => !withinGrid(cell, context) || context.state.terrainAt(cell).has('impassable'))) break;
     if (!phasing) {
       const blockedByActor = Object.values(context.state.actors).some(
-        (actor) => actor.id !== moverId && !excludeIds.has(actor.id) && actor.position && sameCell(actor.position, next),
+        (actor) => actor.id !== moverId && !excludeIds.has(actor.id) && actor.position && footprintsOverlap({ position: next, size: moverSize }, { position: actor.position, size: actor.size ?? 1 }),
       );
       const blockedByEntity = Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, next));
       if (blockedByActor || blockedByEntity) break;

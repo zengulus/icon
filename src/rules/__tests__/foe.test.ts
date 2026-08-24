@@ -228,14 +228,39 @@ describe('foe ability automation (p.300–306 recipes)', () => {
   });
 
   it('Brute Backhand: true-strike [D]+fray attack', () => {
-    const fixture = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    // The hero stands one space past the Size-2 Brute's footprint edge (the
+    // footprint spans x∈[1,2]), which is range 1 in footprint terms.
+    const fixture = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 } });
     const result = foeAbility(fixture.state, fixture, 'basic:brute:300:backhand', { targetId: fixture.hero.id, dice: [12, 3] });
     expect(result.state.actors[fixture.hero.id].hp).toBe(35); // 40 - (3 + fray 4 - armor 2)
     expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
   });
 
-  it('Brute Backbreaker: rushes 2 before the 2[D]+fray attack and stuns', () => {
+  it('Brute Backbreaker: rush stops at the first footprint-blocked cell and the attack lands', () => {
     const fixture = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 } });
+    const result = foeAbility(fixture.state, fixture, 'basic:brute:300:backbreaker', { targetId: fixture.hero.id, dice: [12, 3, 4] });
+    expect(mutationsOf(result.events, 'basic:brute:300:backbreaker')).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'attack', hit: true },
+      { kind: 'damage', actorId: fixture.hero.id, amount: 11, delivery: 'hit' },
+      { kind: 'condition', actorId: fixture.hero.id, conditionId: 'stunned' },
+    ]);
+    // The Brute is Size 2: its footprint at (1,1) already spans x∈[1,2], so
+    // its edge touches the hero at (3,1) — the first rush step to anchor
+    // (2,1) would put the footprint (2,1)-(3,2) over the hero, so the walk
+    // stops without moving and no rush mutation is emitted. The brute
+    // attacks from where it stands.
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 1, y: 1 });
+    expect(result.state.actors[fixture.hero.id].hp).toBe(31); // 40 - (11 - armor 2)
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('stunned');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Brute Backbreaker: rushes as far as the footprint allows when a legal rush cell exists', () => {
+    // Hero at (4,1) is within range 2 of the Brute's original footprint edge
+    // (x=2), but the full 2-space rush to anchor (3,1) would overlap the
+    // hero, so the walk stops at anchor (2,1) after one step.
+    const fixture = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 4, y: 1 } });
     const result = foeAbility(fixture.state, fixture, 'basic:brute:300:backbreaker', { targetId: fixture.hero.id, dice: [12, 3, 4] });
     expect(mutationsOf(result.events, 'basic:brute:300:backbreaker')).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 2 },
@@ -244,11 +269,7 @@ describe('foe ability automation (p.300–306 recipes)', () => {
       { kind: 'damage', actorId: fixture.hero.id, amount: 11, delivery: 'hit' },
       { kind: 'condition', actorId: fixture.hero.id, conditionId: 'stunned' },
     ]);
-    // The Brute is Size 2: its footprint at (1,1) already spans x∈[1,2], so
-    // its edge touches the hero at (3,1) — no rush cell exists whose whole
-    // footprint avoids overlapping the hero, and the footprint-aware gateway
-    // denies the planned rush. The brute attacks from where it stands.
-    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 1, y: 1 });
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 2, y: 1 });
     expect(result.state.actors[fixture.hero.id].hp).toBe(31); // 40 - (11 - armor 2)
     expect(result.state.actors[fixture.hero.id].statuses).toContain('stunned');
     expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
@@ -267,19 +288,36 @@ describe('foe ability automation (p.300–306 recipes)', () => {
   });
 
   it('Brute Hurl: shoves 2, and a Collide weakens the shoved character', () => {
-    const clear = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 } });
+    const clear = foeFixture('basic:brute:300', { foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 } });
     const shoved = foeAbility(clear.state, clear, 'basic:brute:300:hurl', { targetId: clear.hero.id });
-    expect(shoved.state.actors[clear.hero.id].position).toEqual({ x: 4, y: 1 });
+    expect(shoved.state.actors[clear.hero.id].position).toEqual({ x: 5, y: 1 });
     expect(shoved.state.actors[clear.hero.id].statuses).not.toContain('weakened');
 
     const colliding = foeFixture('basic:brute:300', {
-      foe: { x: 1, y: 1 }, hero: { x: 2, y: 1 },
-      extras: [{ kind: 'hero', at: { x: 4, y: 1 } }],
+      foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 },
+      extras: [{ kind: 'hero', at: { x: 5, y: 1 } }],
     });
     const result = foeAbility(colliding.state, colliding, 'basic:brute:300:hurl', { targetId: colliding.hero.id });
-    expect(result.state.actors[colliding.hero.id].position).toEqual({ x: 3, y: 1 }); // stopped by the ally at 4
+    expect(result.state.actors[colliding.hero.id].position).toEqual({ x: 4, y: 1 }); // stopped by the ally at 5
     expect(result.state.actors[colliding.hero.id].statuses).toContain('weakened');
     expect(applyEvents(colliding.state, result.events)).toEqual(result.state);
+  });
+
+  it('Brute Hurl: a shove stops at a large actor footprint edge, not its anchor cell', () => {
+    // A second Size-2 Brute at (4,0) occupies (4,0)-(5,1). The shoved hero's
+    // path (4,1), (5,1) enters that footprint at its non-anchor cell (4,1) —
+    // an anchor-only collision check would let the hero walk through to
+    // (5,1) inside the footprint without colliding.
+    const fixture = foeFixture('basic:brute:300', {
+      foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 },
+      extras: [{ kind: 'foe', at: { x: 4, y: 0 } }],
+    });
+    const result = foeAbility(fixture.state, fixture, 'basic:brute:300:hurl', { targetId: fixture.hero.id });
+    // The very first shove step enters the second Brute's footprint, so the
+    // hero does not move at all and the shove collides immediately.
+    expect(result.state.actors[fixture.hero.id].position).toEqual({ x: 3, y: 1 });
+    expect(result.state.actors[fixture.hero.id].statuses).toContain('weakened');
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
   });
 
   it('Pepperbox Riddle: 3 damage three times, dazed and unerring at exactly range 3', () => {

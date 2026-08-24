@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createEncounter, createFoe, executeCommand, hasLineOfSight } from '../encounter.js';
 import { hasLineOfEffect, hasLineOfSight as kernelLineOfSight, lineOfSightCells, type SpatialLineView } from '../automation/primitives/line-of-sight.js';
 import { computeSpatialArea, footprintCells, footprintsAdjacent, footprintDistance, footprintIntersectsCells } from '../automation/primitives/spatial-intent.js';
+import { applyRuleMutations } from '../automation/kernels/encounter-adapter.js';
 import { queryDirectTarget } from '../automation/primitives/targeting.js';
 import type { Position } from '../types.js';
 
@@ -254,6 +255,113 @@ describe('computeSpatialArea — inclusion and center authority', () => {
     // The giant's footprint spans x∈[0,1]; the center at x=2 is one space from
     // its edge, so range 1 is legal — a point metric from the anchor would reject it.
     expect(area.legal).toBe(true);
+  });
+
+  it('requireFreeCenter: the center is occupied on a Size-2 anchor cell (p.92)', () => {
+    const big = { id: 'big', position: { x: 1, y: 1 }, size: 2, onBattlefield: true, defeated: false };
+    const area = computeSpatialArea({
+      grid: { width: 10, height: 10, terrain: [] },
+      actors: { caster: source, big },
+    }, {
+      kind: 'area', sourceActorId: 'caster', sourceRuleId: 'fixture', shape: 'burst',
+      center: { x: 1, y: 1 }, radius: 1, requireCenterInBounds: true, requireFreeCenter: true,
+    });
+    expect(area).toMatchObject({ legal: false, problem: 'occupied' });
+  });
+
+  it('requireFreeCenter: the center is occupied on a non-anchor Size-2 footprint cell', () => {
+    // Big occupies (1,1)-(2,2); the center (2,2) is a footprint cell but not
+    // the anchor — the sameCell(candidate.position, center) check used to
+    // declare it free.
+    const big = { id: 'big', position: { x: 1, y: 1 }, size: 2, onBattlefield: true, defeated: false };
+    const area = computeSpatialArea({
+      grid: { width: 10, height: 10, terrain: [] },
+      actors: { caster: source, big },
+    }, {
+      kind: 'area', sourceActorId: 'caster', sourceRuleId: 'fixture', shape: 'burst',
+      center: { x: 2, y: 2 }, radius: 1, requireCenterInBounds: true, requireFreeCenter: true,
+    });
+    expect(area).toMatchObject({ legal: false, problem: 'occupied' });
+  });
+
+  it('requireFreeCenter: a center immediately outside a Size-2 footprint is free', () => {
+    // Big occupies (1,1)-(2,2); (3,1) is one space past the footprint edge.
+    // The center is legal even though the radius-1 burst still overlaps the
+    // footprint's (2,1)/(2,2) cells — inclusion and center legality are
+    // distinct gates.
+    const big = { id: 'big', position: { x: 1, y: 1 }, size: 2, onBattlefield: true, defeated: false };
+    const area = computeSpatialArea({
+      grid: { width: 10, height: 10, terrain: [] },
+      actors: { caster: source, big },
+    }, {
+      kind: 'area', sourceActorId: 'caster', sourceRuleId: 'fixture', shape: 'burst',
+      center: { x: 3, y: 1 }, radius: 1, requireCenterInBounds: true, requireFreeCenter: true,
+    });
+    expect(area).toMatchObject({ legal: true, problem: null });
+  });
+
+  it('requireFreeCenter: Size-1 behavior is unchanged', () => {
+    const small = { id: 'small', position: { x: 1, y: 1 }, size: 1, onBattlefield: true, defeated: false };
+    const blocked = computeSpatialArea({
+      grid: { width: 10, height: 10, terrain: [] },
+      actors: { caster: source, small },
+    }, {
+      kind: 'area', sourceActorId: 'caster', sourceRuleId: 'fixture', shape: 'burst',
+      center: { x: 1, y: 1 }, radius: 1, requireCenterInBounds: true, requireFreeCenter: true,
+    });
+    expect(blocked).toMatchObject({ legal: false, problem: 'occupied' });
+    const free = computeSpatialArea({
+      grid: { width: 10, height: 10, terrain: [] },
+      actors: { caster: source, small },
+    }, {
+      kind: 'area', sourceActorId: 'caster', sourceRuleId: 'fixture', shape: 'burst',
+      center: { x: 2, y: 1 }, radius: 1, requireCenterInBounds: true, requireFreeCenter: true,
+    });
+    expect(free.legal).toBe(true);
+  });
+});
+
+describe('shoveResolution — footprint-aware shove authority (p.92)', () => {
+  it('a Size-2 mover stops before its footprint leaves the grid', () => {
+    let state = createEncounter('Shove bounds');
+    const giant = createFoe('Giant', { x: 0, y: 1 });
+    giant.size = 2;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: giant }).state;
+    applyRuleMutations(state, [{
+      kind: 'move', sourceId: 'fixture:shove', sourceActorId: giant.id, actorId: giant.id,
+      movement: 'shove', distance: 10, positions: [], direction: { x: 1, y: 0 }, phasing: false,
+    }]);
+    // Anchor-only bounds would shove the anchor to x=9 with the footprint
+    // (9,1)-(10,2) hanging off the 10-wide grid; footprint authority stops at
+    // x=8 where the whole 2×2 footprint is still on the battlefield.
+    expect(state.actors[giant.id].position).toEqual({ x: 8, y: 1 });
+    // Size-1 control at the same anchor row reaches the edge exactly.
+    const small = createFoe('Scout', { x: 0, y: 3 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: small }).state;
+    applyRuleMutations(state, [{
+      kind: 'move', sourceId: 'fixture:shove', sourceActorId: small.id, actorId: small.id,
+      movement: 'shove', distance: 10, positions: [], direction: { x: 1, y: 0 }, phasing: false,
+    }]);
+    expect(state.actors[small.id].position).toEqual({ x: 9, y: 3 });
+  });
+
+  it('a Size-2 mover stops before its footprint enters another large footprint', () => {
+    let state = createEncounter('Shove occupancy');
+    const mover = createFoe('Mover', { x: 0, y: 0 });
+    mover.size = 2;
+    const blocker = createFoe('Blocker', { x: 4, y: 0 });
+    blocker.size = 2;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: mover }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: blocker }).state;
+    applyRuleMutations(state, [{
+      kind: 'move', sourceId: 'fixture:shove', sourceActorId: mover.id, actorId: mover.id,
+      movement: 'shove', distance: 10, positions: [], direction: { x: 1, y: 0 }, phasing: false,
+    }]);
+    // The blocker's footprint spans x∈[4,5]; the mover's next footprint at
+    // anchor (3,0) would overlap it, so it stops at (2,0). An anchor-only
+    // check would let it stop at (3,0) with its own (4,0) cell inside the
+    // blocker.
+    expect(state.actors[mover.id].position).toEqual({ x: 2, y: 0 });
   });
 });
 

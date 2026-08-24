@@ -6,7 +6,7 @@ import { auraEffectRadius, auraStateView, projectedAuraArmorBonus, projectedAura
 import { projectedHpThresholdConditions } from './hp-threshold.js';
 import type { RangeStateView } from './range.js';
 import type { AreaStateView } from './area.js';
-import { applySpatialIntent, footprintDistance, type SpatialIntent } from '../primitives/spatial-intent.js';
+import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { summonCap } from './summon-recipes.js';
 import type { RuleActorView, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
@@ -987,13 +987,21 @@ function shoveResolution(state: EncounterState, mutation: Extract<RuleMutation, 
   }
   if (!direction || !mutation.distance) return null;
   const maximum = encounterConditionSet(actor, state).has('sturdy') && state.actors[mutation.sourceActorId]?.side !== actor.side ? Math.min(1, mutation.distance) : mutation.distance;
+  // ICON p.92: a Size-N actor occupies an N×N footprint, so each shove step
+  // must keep the WHOLE footprint in bounds, off impassable terrain, and free
+  // of every other actor's footprint — the same authority the movement
+  // planner and SpatialIntent gateway use (anchor-only checks would shove a
+  // large actor off the grid or through another large actor's non-anchor
+  // cells). Size 1 degenerates to the anchor-cell checks.
+  const size = Math.max(1, actor.size ?? 1);
   let position = { ...actor.position };
   let collided = false;
   for (let step = 0; step < maximum; step += 1) {
     const next = { x: position.x + Math.sign(direction.x), y: position.y + Math.sign(direction.y) };
-    const obstructed = next.x < 0 || next.y < 0 || next.x >= state.grid.width || next.y >= state.grid.height
-      || Object.values(state.actors).some((candidate) => candidate.id !== actor.id && candidate.onBattlefield && !candidate.defeated && samePosition(candidate.position, next))
-      || state.grid.terrain.some((cell) => samePosition(cell.position, next) && cell.type === 'impassable');
+    const cells = footprintCells(next, size);
+    const obstructed = cells.some((cell) => cell.x < 0 || cell.y < 0 || cell.x >= state.grid.width || cell.y >= state.grid.height)
+      || Object.values(state.actors).some((candidate) => candidate.id !== actor.id && candidate.onBattlefield && !candidate.defeated && footprintsOverlap({ position: next, size }, { position: candidate.position, size: candidate.size }))
+      || cells.some((cell) => state.grid.terrain.some((gridCell) => samePosition(gridCell.position, cell) && gridCell.type === 'impassable'));
     if (obstructed) {
       collided = true;
       break;

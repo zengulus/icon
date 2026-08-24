@@ -252,7 +252,11 @@ export function computeSpatialArea(state: SpatialAreaStateView, intent: SpatialA
       ? gridTerrain.some((cell) => sameCell(cell.position, center) && cell.type === 'impassable')
       : (state.terrainAt?.(center).has('impassable') ?? false);
     if (impassable) return { legal: false, problem: 'impassable-terrain', cells: [], includedActorIds: [] };
-    const occupied = Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position !== null && sameCell(candidate.position, center));
+    // The center cell is occupied when it intersects ANY cell of a living
+    // on-battlefield actor's footprint (p.92: a Size-N actor occupies its
+    // whole N×N area, so a Size-2+ actor's non-anchor cells are occupied
+    // too). Size 1 degenerates to the anchor-cell check.
+    const occupied = Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position !== null && footprintIntersectsCells({ position: candidate.position, size: candidate.size }, [center]));
     if (occupied) return { legal: false, problem: 'occupied', cells: [], includedActorIds: [] };
   }
   const cells = intent.shape === 'line'

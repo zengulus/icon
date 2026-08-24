@@ -18,7 +18,7 @@ import {
   conditionMutation, markMutation, rushMutation, shoveMutation, terrainMutation, vigorMutation,
   action, compilation,
 } from '../primitives/foe-kit.js';
-import { footprintDistance } from '../primitives/spatial-intent.js';
+import { footprintCells, footprintDistance, footprintsOverlap } from '../primitives/spatial-intent.js';
 import { adjacentActors } from '../primitives/foe-kit.js';
 
 /**
@@ -263,12 +263,18 @@ function bonusDamageActive(recipe: FoeAttackRecipe, context: RuleExecutionContex
  * grid edge, another living character, or an impassable grid terrain cell —
  * the reducer's `shoveResolution` collision rules (ICON p.95 Collide). */
 function shoveCollides(context: RuleExecutionContext, actorId: string, start: Position, direction: Position, distanceToTravel: number): boolean {
+  // Mirrors the reducer's shoveResolution collision authority (ICON p.92,
+  // p.95): a Size-N mover's WHOLE footprint — not just its anchor cell — must
+  // stay in bounds, off impassable terrain, and free of other footprints at
+  // each step.
+  const size = Math.max(1, context.state.actors[actorId]?.size ?? 1);
   let position = { ...start };
   for (let step = 0; step < distanceToTravel; step += 1) {
     const next = { x: position.x + Math.sign(direction.x), y: position.y + Math.sign(direction.y) };
-    const obstructed = next.x < 0 || next.y < 0 || next.x >= context.state.grid.width || next.y >= context.state.grid.height
-      || Object.values(context.state.actors).some((candidate) => candidate.id !== actorId && candidate.position && !candidate.defeated && sameCell(candidate.position, next))
-      || context.state.terrainAt(next).has('impassable');
+    const cells = footprintCells(next, size);
+    const obstructed = cells.some((cell) => cell.x < 0 || cell.y < 0 || cell.x >= context.state.grid.width || cell.y >= context.state.grid.height)
+      || Object.values(context.state.actors).some((candidate) => candidate.id !== actorId && candidate.position && !candidate.defeated && footprintsOverlap({ position: next, size }, { position: candidate.position, size: candidate.size ?? 1 }))
+      || cells.some((cell) => context.state.terrainAt(cell).has('impassable'));
     if (obstructed) return true;
     position = next;
   }
@@ -301,10 +307,15 @@ function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
         attackOrigin = landing;
       }
     }
-    if (distance(attackOrigin, target.position) > (recipe.range ?? 1)) {
+    // F1: p.92 range is footprint-aware ("at least 1 space of its area within
+    // the listed range") — the same metric requireFoeInRange used before the
+    // pre-rush, so a Size-2 source standing edge-to-edge with the target is
+    // in range 1 and a point metric would falsely reject it.
+    const attackRange = footprintDistance({ position: attackOrigin, size: source.size ?? 1 }, { position: target.position, size: target.size ?? 1 });
+    if (attackRange > (recipe.range ?? 1)) {
       throw new RuleProgramViolation('choice.actor-range', `${context.sourceId} targets a foe within ${recipe.range ?? 1}.`);
     }
-    const atRange = recipe.atRange && distance(attackOrigin, target.position) === recipe.atRange.range;
+    const atRange = recipe.atRange && attackRange === recipe.atRange.range;
     const ignoreCover = Boolean(recipe.unerring
       || (atRange && recipe.atRange?.unerring)
       || (recipe.unerringWhenMarked && target.marks.some((mark) => mark.markId === recipe.unerringWhenMarked && mark.ownerId === context.actorId)));
