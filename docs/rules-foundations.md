@@ -316,6 +316,7 @@ registry, or reducer seam) that content rows plug into. Found at
 | **Foe trait recipes** (`foe-trait-recipes.ts`) | closed foe keyword rows | condition | existing |
 | **Summon recipes** (`summon-recipes.ts`) | placement ranges, per-owner caps, companion survival | entity | existing |
 | **Aura membership kernel** (`aura.ts`) | generic Aura authority: origin resolution (trait/state/stance/aura-effect/entity), continuous membership from current positions through the canonical p.92 footprint range (`footprintDistance`), and ephemeral condition/modifier projection onto current members; lifecycle recipes query it with `isInAura` | spatial-intent, condition, attack | existing (Commander's Aura, Aura of Shielding, Rook t1, Dervish t1, Gentleness base+t1, Shieldmaster, Bleak Mercy) |
+| **HP-threshold projection kernel** (`hp-threshold.ts`) | generic conditional-passive authority for the two canonical HP states — bloodied (at or under 50% of the wounds-adjusted maximum, p.94/p.104) and at-or-under-25% (the exact quarter mark) — answering "is this passive active" (`isAtHpThreshold`) and projecting conditions / the turn-start +actions bonus onto the owner, with an inverted gate for "loses X when bloodied"; the shared predicates also feed the VM (`quarter` predicate) and the attack-modifier fold (target-threshold bonus damage) | condition, attack, state | existing (Rogue Slippery, the Enrage family ×9, True Enrage, Arkentech Hover Chair, Furious Berserk sturdy, Strigoi Blood Hunger, Divine Aegis t2) |
 
 ### Missing kernels named by the ontology
 
@@ -605,6 +606,24 @@ only authority for "done."
   attacks), Aura of Shielding (p.304, dodge), Rook t1 counter, Dervish t1
   counter, Gentleness base (+1 curse) + t1 counter, Shieldmaster turn-end
   vigilance/sturdy, Bleak Mercy combo. Fixtures: `__tests__/aura.test.ts`.
+- **F11 HP-threshold passive projection kernel** — `kernels/hp-threshold.ts`:
+  the source-ID-free authority for the canonical conditional passives
+  ("while bloodied, X" / "while at or under 25% HP, X"). Bloodied is at or
+  under 50% of the wounds-adjusted maximum (`maximumHp` = base − wounds×VIT),
+  matching the engine's long-standing `isBloodied`; "at 25% hp or lower" is
+  the exact quarter mark of the same maximum (the p.107 "% HEALTH" rule —
+  percentage COSTS/DAMAGE use the base maximum — does not apply to state
+  thresholds). A content row registers a reviewed `HpThresholdProjection`
+  (threshold, optional inverted gate for "loses X when bloodied", projected
+  conditions, +actions); activation derives continuously from authoritative
+  HP, so crossing back over the threshold removes the projection immediately
+  and replay persists no "bloodied active" boolean. The same predicates feed
+  the VM (`quarter` predicate), the attack-modifier fold (target-threshold
+  flat damage vs bloodied foes), and the turn-start action pool (Enrage).
+  Rows: Rogue Slippery (evasion), Enrage ×9 (+1 action), True Enrage (+1
+  action + unstoppable), Arkentech Hover Chair (inverted flying + sturdy),
+  Furious Berserk (sturdy), Strigoi Blood Hunger (+2 vs bloodied), Divine
+  Aegis t2 (quarter-HP defiance). Fixtures: `__tests__/hp-threshold.test.ts`.
 
 ### Explicit incomplete semantic boundaries
 
@@ -628,6 +647,15 @@ only authority for "done."
   member-side footprint rule and stays covered by `footprintDistance` for
   members — origin-footprint-edge aura measurement is the one geometric
   detail left to the footprint matrix.
+- HP-threshold passives are NOT globally complete: only the bloodied and
+  at-or-under-25% predicates are generic authority. The remaining conditional
+  gates (terrain, stealth, status, round) and the deferred threshold-shaped
+  units stay unresolved by design — timed intangibles on bloodied (Bicorn /
+  Floatfish Aetherskin), bloodied aura-radius growth (Dungeon Jelly, Harpy),
+  bloodied bonus-damage (Pariah Mutate, which needs a general bonus-damage
+  projection), on-hit slashes vs bloodied foes (Fixer Iron Blade), and the
+  compound Mule/Steam-Wright rows. The threshold kernel only answers "is this
+  passive active"; it never absorbs its payload's semantics.
 
 ---
 

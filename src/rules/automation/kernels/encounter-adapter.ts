@@ -3,6 +3,7 @@ import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
 import { projectedMarkConditionGrants, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
 import { auraStateView, projectedAuraConditions } from './aura.js';
+import { projectedHpThresholdConditions } from './hp-threshold.js';
 import { applySpatialIntent, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { summonCap } from './summon-recipes.js';
@@ -108,6 +109,9 @@ export function encounterConditionSet(actor: EncounterActor, state?: EncounterSt
   for (const condition of projectedRoleConditions(actor.roleId)) conditions.add(condition);
   for (const condition of projectedMarkConditionGrants(actor.marks)) conditions.add(condition);
   for (const condition of projectedMarkConditionSuppressions(actor.marks)) conditions.delete(condition);
+  // HP-threshold passives derive from the actor's own authoritative HP, so
+  // they fold without a spatial state (unlike aura membership).
+  for (const condition of projectedHpThresholdConditions(actor)) conditions.add(condition);
   if (state) {
     for (const condition of projectedAuraConditions(auraStateView(state), actor.id)) conditions.add(condition);
   }
@@ -293,10 +297,12 @@ function guardArmorBonus(state: EncounterState, target: EncounterActor): number 
   return armorBonusSources.reduce((total, source) => total + source.bonus(state, target), 0);
 }
 
-/** ICON p.94 Bloodied: at or below 50% of maximum HP (after wounds). */
-export function isBloodied(actor: EncounterActor): boolean {
-  return actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2;
-}
+/** ICON p.94 Bloodied: at or below 50% of the wounds-adjusted maximum. The
+ * canonical predicate lives in the HP-threshold kernel (`kernels/
+ * hp-threshold.ts`), the single reusable authority for bloodied and 25%
+ * threshold questions; re-exported here so every existing caller keeps the
+ * same name and the engine never defines the boundary twice. */
+export { isBloodied } from './hp-threshold.js';
 
 /**
  * ICON p.105: Vigor is capped at the actor's Vitality.  Rot and Shattered are

@@ -80,8 +80,8 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
   // ---------------------------------------------------------------- colossus
   'colossus:trait:furious-berserk': {
     sourceId: 'colossus:trait:furious-berserk', name: 'Furious Berserk', status: 'wired',
-    mechanic: 'Starts combat with a durable Defiance condition; regeneration is a whole-combat condition projection (and is regained after Rescue by the trait). While bloodied, the owner gains vigilance +1 at the end of their turn (turn-end recipe).',
-    detail: 'The bloodied-gated sturdy half needs a condition that only projects while bloodied; it stays table-facing.',
+    mechanic: 'Starts combat with a durable Defiance condition; regeneration is a whole-combat condition projection (and is regained after Rescue by the trait). While bloodied, the owner is sturdy (the HP-threshold projection, content/jobs/hp-threshold-recipes.ts) and gains vigilance +1 at the end of their turn (turn-end recipe).',
+    detail: '',
   },
   'colossus:trait:wolfheart': {
     sourceId: 'colossus:trait:wolfheart', name: 'Wolfheart', status: 'documented',

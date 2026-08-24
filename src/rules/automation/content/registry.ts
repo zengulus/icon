@@ -22,11 +22,13 @@ import './jobs/trait-reactions.js';
 import './jobs/summon-recipes.js';
 import './jobs/encounter-hooks.js';
 import './jobs/aura-recipes.js';
+import './jobs/hp-threshold-recipes.js';
 import './foes/role-baseline-recipes.js';
 import './foes/mark-recipes.js';
 import './foes/ability-recipes.js';
 import './foes/trait-recipes.js';
 import './foes/aura-recipes.js';
+import './foes/hp-threshold-recipes.js';
 
 // F6 combat-start rows: registered here (not inside job-trait-recipes.ts, so
 // the lifecycle kernel never participates in the encounter-adapter/manual-

@@ -1,9 +1,9 @@
 {
-  "baseline": 462,
+  "baseline": 461,
   "byKind": {
     "class-trait": 8,
     "job-trait": 41,
-    "talent": 253,
+    "talent": 252,
     "mastery": 144,
     "limit-break": 16
   },
@@ -2454,13 +2454,6 @@
       ]
     },
     {
-      "sourceId": "sealer:divine-aegis:talent:2",
-      "kind": "talent",
-      "blockers": [
-        "mark-modifier"
-      ]
-    },
-    {
       "sourceId": "sealer:divine-aegis:mastery",
       "kind": "mastery",
       "blockers": [
@@ -3745,7 +3738,7 @@
     "{movement-modifier}": 1,
     "{action-type-change, mark-modifier, teleport}": 1,
     "{action-type-change, charge-state, entity-create, teleport}": 1,
-    "{mark-modifier}": 7,
+    "{mark-modifier}": 6,
     "{area-define, charge-state, mark-modifier}": 1,
     "{gamble-state, mark-modifier, mastery-attachment, range-modifier}": 1,
     "{entity-create, teleport}": 2,
@@ -4100,7 +4093,6 @@
       "harvester:rot:talent:2",
       "sealer:grand-seal:talent:1",
       "sealer:grand-seal:talent:2",
-      "sealer:divine-aegis:talent:2",
       "seer:polaris:talent:1"
     ],
     "entity-vacate": [
@@ -4327,10 +4319,10 @@
       "totalContaining": 2
     },
     "mark-modifier": {
-      "immediate": 7,
+      "immediate": 6,
       "oneCloser": 15,
       "multiCloser": 11,
-      "totalContaining": 33
+      "totalContaining": 32
     },
     "movement-modifier": {
       "immediate": 1,
@@ -4431,10 +4423,10 @@
       "totalContaining": 33
     },
     "mark-modifier": {
-      "immediate": 7,
+      "immediate": 6,
       "oneCloser": 15,
       "multiCloser": 11,
-      "totalContaining": 33
+      "totalContaining": 32
     },
     "fly-grant": {
       "immediate": 6,
@@ -4642,265 +4634,265 @@
       "implement": "range-modifier",
       "unlocks": 13,
       "cumulative": 13,
-      "remaining": 449
+      "remaining": 448
     },
     {
       "step": 2,
       "implement": "area-define",
       "unlocks": 12,
       "cumulative": 25,
-      "remaining": 437
+      "remaining": 436
     },
     {
       "step": 3,
       "implement": "terrain-create",
       "unlocks": 13,
       "cumulative": 38,
-      "remaining": 424
+      "remaining": 423
     },
     {
       "step": 4,
       "implement": "teleport",
       "unlocks": 15,
       "cumulative": 53,
-      "remaining": 409
+      "remaining": 408
     },
     {
       "step": 5,
       "implement": "damage-modifier",
       "unlocks": 11,
       "cumulative": 64,
-      "remaining": 398
+      "remaining": 397
     },
     {
       "step": 6,
       "implement": "mastery-attachment",
       "unlocks": 31,
       "cumulative": 95,
-      "remaining": 367
+      "remaining": 366
     },
     {
       "step": 7,
       "implement": "entity-create",
       "unlocks": 16,
       "cumulative": 111,
-      "remaining": 351
+      "remaining": 350
     },
     {
       "step": 8,
       "implement": "mark-modifier",
-      "unlocks": 24,
-      "cumulative": 135,
+      "unlocks": 23,
+      "cumulative": 134,
       "remaining": 327
     },
     {
       "step": 9,
       "implement": "fly-grant",
       "unlocks": 13,
-      "cumulative": 148,
+      "cumulative": 147,
       "remaining": 314
     },
     {
       "step": 10,
       "implement": "shove-modifier",
       "unlocks": 11,
-      "cumulative": 159,
+      "cumulative": 158,
       "remaining": 303
     },
     {
       "step": 11,
       "implement": "interrupt-modifier",
       "unlocks": 18,
-      "cumulative": 177,
+      "cumulative": 176,
       "remaining": 285
     },
     {
       "step": 12,
       "implement": "gamble-state",
       "unlocks": 12,
-      "cumulative": 189,
+      "cumulative": 188,
       "remaining": 273
     },
     {
       "step": 13,
       "implement": "sacrifice-cost",
       "unlocks": 11,
-      "cumulative": 200,
+      "cumulative": 199,
       "remaining": 262
     },
     {
       "step": 14,
       "implement": "resource-management",
       "unlocks": 6,
-      "cumulative": 206,
+      "cumulative": 205,
       "remaining": 256
     },
     {
       "step": 15,
       "implement": "use-ledger",
       "unlocks": 14,
-      "cumulative": 220,
+      "cumulative": 219,
       "remaining": 242
     },
     {
       "step": 16,
       "implement": "charge-state",
       "unlocks": 19,
-      "cumulative": 239,
+      "cumulative": 238,
       "remaining": 223
     },
     {
       "step": 17,
       "implement": "cover-mechanic",
       "unlocks": 11,
-      "cumulative": 250,
+      "cumulative": 249,
       "remaining": 212
     },
     {
       "step": 18,
       "implement": "cure-on-trigger",
       "unlocks": 5,
-      "cumulative": 255,
+      "cumulative": 254,
       "remaining": 207
     },
     {
       "step": 19,
       "implement": "effect-count",
       "unlocks": 4,
-      "cumulative": 259,
+      "cumulative": 258,
       "remaining": 203
     },
     {
       "step": 20,
       "implement": "heroics-economy",
       "unlocks": 5,
-      "cumulative": 264,
+      "cumulative": 263,
       "remaining": 198
     },
     {
       "step": 21,
       "implement": "action-type-change",
       "unlocks": 24,
-      "cumulative": 288,
+      "cumulative": 287,
       "remaining": 174
     },
     {
       "step": 22,
       "implement": "infuse-cost",
       "unlocks": 14,
-      "cumulative": 302,
+      "cumulative": 301,
       "remaining": 160
     },
     {
       "step": 23,
       "implement": "stance-gate",
       "unlocks": 9,
-      "cumulative": 311,
+      "cumulative": 310,
       "remaining": 151
     },
     {
       "step": 24,
       "implement": "entity-vacate",
       "unlocks": 2,
-      "cumulative": 313,
+      "cumulative": 312,
       "remaining": 149
     },
     {
       "step": 25,
       "implement": "aura-user-gate",
       "unlocks": 2,
-      "cumulative": 315,
+      "cumulative": 314,
       "remaining": 147
     },
     {
       "step": 26,
       "implement": "pre-ability-movement",
       "unlocks": 6,
-      "cumulative": 321,
+      "cumulative": 320,
       "remaining": 141
     },
     {
       "step": 27,
       "implement": "rush-modifier",
       "unlocks": 10,
-      "cumulative": 331,
+      "cumulative": 330,
       "remaining": 131
     },
     {
       "step": 28,
       "implement": "blessing-spend",
       "unlocks": 11,
-      "cumulative": 342,
+      "cumulative": 341,
       "remaining": 120
     },
     {
       "step": 29,
       "implement": "threshold-modifier",
       "unlocks": 2,
-      "cumulative": 344,
+      "cumulative": 343,
       "remaining": 118
     },
     {
       "step": 30,
       "implement": "movement-modifier",
       "unlocks": 2,
-      "cumulative": 346,
+      "cumulative": 345,
       "remaining": 116
     },
     {
       "step": 31,
       "implement": "choice-input",
       "unlocks": 2,
-      "cumulative": 348,
+      "cumulative": 347,
       "remaining": 114
     },
     {
       "step": 32,
       "implement": "damage-preview",
       "unlocks": 2,
-      "cumulative": 350,
+      "cumulative": 349,
       "remaining": 112
     },
     {
       "step": 33,
       "implement": "attack-trigger-grant",
       "unlocks": 1,
-      "cumulative": 351,
+      "cumulative": 350,
       "remaining": 111
     },
     {
       "step": 34,
       "implement": "pierce",
       "unlocks": 1,
-      "cumulative": 352,
+      "cumulative": 351,
       "remaining": 110
     },
     {
       "step": 35,
       "implement": "vigor-grant",
       "unlocks": 18,
-      "cumulative": 370,
+      "cumulative": 369,
       "remaining": 92
     },
     {
       "step": 36,
       "implement": "combo-spend",
       "unlocks": 6,
-      "cumulative": 376,
+      "cumulative": 375,
       "remaining": 86
     },
     {
       "step": 37,
       "implement": "attack-modifier",
       "unlocks": 2,
-      "cumulative": 378,
+      "cumulative": 377,
       "remaining": 84
     },
     {
       "step": 38,
       "implement": "save-modifier",
       "unlocks": 2,
-      "cumulative": 380,
+      "cumulative": 379,
       "remaining": 82
     }
   ],
@@ -4908,7 +4900,7 @@
     "✓ All source IDs are unique",
     "✓ Every unresolved unit appears exactly once",
     "✓ No executable unit appears in the unresolved census",
-    "✓ Per-kind totals sum to unresolved total (462)",
+    "✓ Per-kind totals sum to unresolved total (461)",
     "✓ All blocker-set frequencies derive from per-unit records",
     "✓ All marginal values derive from per-unit records",
     "✓ Marginal assertion: immediate + oneCloser + multiCloser === totalContaining for every blocker",

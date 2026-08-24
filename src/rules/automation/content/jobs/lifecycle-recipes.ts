@@ -1,5 +1,6 @@
 import { applyRuleMutations, determineAndApplyEncounterDamage } from '../../kernels/encounter-adapter.js';
 import { auraDefinitionFor, auraStateView, isInAura } from '../../kernels/aura.js';
+import { isAtHpThreshold } from '../../kernels/hp-threshold.js';
 import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, registerTurnDiceWindowPlanner } from '../../kernels/lifecycle.js';
 import { registerMovementEntryTrigger } from '../../kernels/movement-triggers.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-geometry.js';
@@ -655,11 +656,13 @@ registerLifecycleRecipe({
 
 /** ICON p.192 Colossus Furious Berserk: while bloodied, the owner gains
  * vigilance +1 at the end of their turn (the Defiance/regeneration halves are
- * combat-start; the bloodied Sturdy half is documented). */
+ * combat-start; the bloodied Sturdy half is the HP-threshold projection,
+ * `content/jobs/hp-threshold-recipes.ts`). The bloodied gate is the shared
+ * kernel predicate — never a second distance/HP formula. */
 registerLifecycleRecipe({
   sourceId: 'colossus:trait:furious-berserk',
   phase: 'turn-end',
-  applies: (actor) => actor.traitIds.includes('colossus:trait:furious-berserk') && actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2,
+  applies: (actor) => actor.traitIds.includes('colossus:trait:furious-berserk') && isAtHpThreshold(actor, 'bloodied'),
   resolve: (state, actor) => {
     if (!actor.traitIds.includes('colossus:trait:furious-berserk')) return;
     actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;

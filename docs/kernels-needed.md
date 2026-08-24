@@ -313,6 +313,14 @@ each once; it converts its consumers into data + fixtures:
 > blocker census.
 | 2 | **Attack-path modifier gates** — distance/round/terrain/stealth/threshold reads on the existing fold | 7 job traits + ~30 talents | F6 kernel exists |
 | 3 | **Conditional passive projection** — bloodied/25%/terrain/stealth/status/round gates | ~150 foe traits + relic ranks | F5 exists |
+
+> **Status (partial):** the bloodied and at-or-under-25% gates are now generic
+> authority (`kernels/hp-threshold.ts`, F11 in rules-foundations.md) with
+> continuous condition/action projection and target-threshold attack
+> modifiers. Rows wired: Rogue Slippery, Enrage ×9, True Enrage, Arkentech
+> Hover Chair (inverted), Furious Berserk sturdy, Strigoi Blood Hunger,
+> Divine Aegis t2. The terrain / stealth / status / round gates and the
+> timed/aura-growth/bloodied-bonus-damage shapes remain.
 | 4 | **Reactive trigger windows** — attack-miss, attack-completion, summon, targeted-by-ability (generalize), save-rolled, plus the **once-per-round job-trait reactive fold** (collide/shove/slay — F9 done, `kernels/trait-reactions.ts`, wired Dash on the Rocks) | 7 job traits + dozens of talents/abilities | F4 exists; **movement-entry on voluntary MOVE is done** (`kernels/movement-triggers.ts`, Party Favor p.151); F9 reactive-trait fold exists |
 | 5 | **Spend / economy hooks** — blessing, combo, sacrifice, Infuse-cost, gamble, use-ledgers | 6 job traits + 4 talents + 3 relic ranks | resource registry exists |
 | 6 | **Movement kernels** — vacate, occupancy-cost, elevation-fly, pre/post movement, position-swap, teleport-all | 5 job traits + movement talents | F1 |

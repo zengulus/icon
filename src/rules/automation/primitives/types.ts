@@ -89,6 +89,7 @@ export type RulePredicate =
   | { kind: 'compare'; left: RuleNumber; operator: '<' | '<=' | '=' | '>=' | '>'; right: RuleNumber }
   | { kind: 'has-condition'; target: RuleSelector; conditionId: string }
   | { kind: 'bloodied'; target: RuleSelector }
+  | { kind: 'quarter'; target: RuleSelector }
   | { kind: 'defeated'; target: RuleSelector }
   | { kind: 'in-terrain'; target: RuleSelector; terrain: string }
   | { kind: 'trigger'; trigger: string }

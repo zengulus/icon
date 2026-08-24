@@ -188,7 +188,12 @@ export function evaluatePredicate(predicate: RulePredicate, context: RuleExecuti
       return left > right;
     }
     case 'has-condition': return selectActors(predicate.target, context).every((target) => target.conditions.has(predicate.conditionId));
+    // p.94/p.104: bloodied is at or under 50% of the wounds-adjusted maximum
+    // (RuleActorView.maxHp is already wounds-adjusted); "at 25% hp or lower"
+    // is the exact quarter mark. Both are the canonical HP-threshold
+    // predicates (`kernels/hp-threshold.ts`).
     case 'bloodied': return selectActors(predicate.target, context).every((target) => target.hp <= target.maxHp / 2);
+    case 'quarter': return selectActors(predicate.target, context).every((target) => target.hp <= target.maxHp / 4);
     case 'defeated': return selectActors(predicate.target, context).every((target) => target.defeated);
     case 'in-terrain': return selectActors(predicate.target, context).every((target) => target.position && context.state.terrainAt(target.position).has(predicate.terrain));
     case 'trigger': return context.triggers?.has(predicate.trigger) ?? false;
@@ -218,7 +223,7 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
           // F6 attack-path trait fold: armed one-shot modifiers (Hissatsu
           // +1 boon / true strike / d10) plus permanent elevation mechanics
           // (Pulverize flat damage and lowered exceed threshold).
-          const traitModifier = traitAttackModifier(source, elevationModifier);
+          const traitModifier = traitAttackModifier(source, elevationModifier, { hp: target.hp, maxHp: target.maxHp });
           const targetAuraCurse = projectedAuraAttackModifiers(auraView, target.id).targetCurses ?? 0;
           const attack = resolveAttackRoll({
             defense: target.defense,

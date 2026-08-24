@@ -661,6 +661,13 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   'enochian:pyre:talent:1': {
     mechanic: 'Comeback (user bloodied): allies are immune to this ability\u2019s area damage (the blast fray and the comeback/exceed re-explosion); the pyrotic infuse path stays a separate resolver.',
   },
+  // ICON p.193 Sealer Divine Aegis talent 2: "If your ally is at 25% hp or
+  // lower when marked, they also gain defiance." The mark resolver reads the
+  // equipped choice and the shared quarter-HP predicate (`kernels/
+  // hp-threshold.ts`) at mark time — the exact at-or-under-25% boundary.
+  'sealer:divine-aegis:talent:2': {
+    mechanic: 'Marking an ally at 25% hp or lower with Divine Aegis also grants them defiance (the threshold read is the shared quarter predicate).',
+  },
 };
 
 for (const [sourceId, row] of Object.entries(PROGRAM_LEVEL_TALENT_RECIPES)) {

@@ -23,6 +23,7 @@ import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.j
 import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
 import { auraStateView, projectedAuraAttackModifiers } from './automation/kernels/aura.js';
+import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
 import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
 import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
@@ -722,7 +723,10 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   // mechanics (Pulverize flat damage; the exceed threshold only matters on
   // the VM path, where exceed effects fire).
   const traitOwner = { traitIds: actor.traitIds, state: actor.ruleState };
-  const traitModifier = traitAttackModifier(traitOwner, actorElevation - targetElevation);
+  const traitModifier = traitAttackModifier(traitOwner, actorElevation - targetElevation, {
+    hp: target.hp,
+    maxHp: Math.max(1, target.baseMaxHp - target.wounds * target.vitality),
+  });
   // Aura membership feeds the same attack-modifier authority as the trait
   // fold: the attacker's own aura boons/curses plus any defensive curse an
   // aura projects against the target (stacking through netBoon, p.92).
@@ -1902,6 +1906,13 @@ function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor
   return dice.die(6);
 }
 
+/** The action pool an actor starts a turn with: 2 base actions plus any
+ * HP-threshold passive bonus (Enrage: "+1 action while bloodied"), derived
+ * from current authoritative HP — never a persisted boolean. */
+function derivedTurnStartActions(actor: EncounterActor): number {
+  return 2 + projectedHpThresholdActionBonus(actor);
+}
+
 /**
  * Apply one already-planned turn boundary.  Command paths may differ in why
  * they end a turn, but every replayed boundary consumes the same ordered
@@ -1967,7 +1978,7 @@ function applyTurnTransition(
     }
   }
   const next = state.actors[event.nextActorId];
-  next.actionsRemaining = 2;
+  next.actionsRemaining = derivedTurnStartActions(next);
   next.standardMoveUsed = false;
   next.attackedThisTurn = false;
   next.interruptUses = {};
@@ -2019,6 +2030,10 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         state.round = 1;
         state.partyResolve = 1;
         state.activeActorId = event.firstActorId;
+        // The first actor's turn starts here too: HP-threshold passives
+        // (Enrage +1 action while bloodied) derive the action pool from
+        // current HP exactly like every later turn boundary.
+        state.actors[event.firstActorId].actionsRemaining = derivedTurnStartActions(state.actors[event.firstActorId]);
         for (const actor of Object.values(state.actors)) {
           // Shared per-encounter resources reset to zero when combat begins
           // (aether, combo, blessing, vigilance; personal resolve survives).

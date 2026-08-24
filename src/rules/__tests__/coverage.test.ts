@@ -73,23 +73,25 @@ describe('rules automation coverage gate', () => {
     // once-per-round reactive fold row Dash on the Rocks, and Shieldmaster's
     // aura + turn-end membership recipe) + 6 summon suites are complete
     // programs; F7: the 29 wired talents (the closed `talent-recipes.ts`
-    // tranche) plus the three program-level talents and the three
+    // tranche) plus the four program-level talents and the three
     // aura projection talents (Rook t1, Dervish t1, Gentleness t1, which
     // register as continuous passive-projection rows) audit as complete —
-    // 288 source talents, 29 wired / 3 program-level / 3 passive-projection
-    // / 253 documented. The two reviewed aura foe traits (Commander's Aura,
-    // Aura of Shielding) compile complete through the aura kernel. The 41
-    // documented Job traits and every other kind stay source-visible.
+    // 288 source talents, 29 wired / 4 program-level / 3 passive-projection
+    // / 252 documented. The reviewed aura (Commander's Aura, Aura of
+    // Shielding), HP-threshold (Slippery, the Enrage family, the hover
+    // chair), and attack-modifier (Blood Hunger) foe traits compile complete
+    // through their kernels. The 41 documented Job traits and every other
+    // kind stay source-visible.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4750,
-      completePrograms: 419,
-      unsupportedPrograms: 2856,
-      completeClauses: 1559,
-      unsupportedClauses: 3191,
+      completePrograms: 432,
+      unsupportedPrograms: 2843,
+      completeClauses: 1572,
+      unsupportedClauses: 3178,
       unsupportedByKind: {
-        core: 70, 'class-trait': 8, 'job-trait': 41, 'limit-break': 16, 'talent': 253, 'mastery': 144,
-        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 604,
+        core: 70, 'class-trait': 8, 'job-trait': 41, 'limit-break': 16, 'talent': 252, 'mastery': 144,
+        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 592,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
     });
