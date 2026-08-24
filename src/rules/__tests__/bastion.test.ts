@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
+import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
 import { ABILITIES, JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
@@ -358,6 +359,24 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(heroAfter.activeEffects.some(({ effectId, duration }) => effectId === 'aura' && duration.kind === 'turn-end')).toBe(true);
     expect(result.state.actors[foe.id].hp).toBe(22);
     expect(result.state.actors[foe.id].position).toEqual({ x: 3, y: 1 });
+  });
+
+  it('Rook talent 1: the bearer has counter while Rook\'s aura is active (and loses it when it clears)', () => {
+    const { state, hero, foe } = bastionEncounter({ foe: { x: 2, y: 1 }, ally: null });
+    state.actors[hero.id].talents = { ...state.actors[hero.id].talents, 'bastion:rook': 1 };
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:rook', targetIds: [foe.id] }, scriptedDice(10, 6));
+    const heroAfter = result.state.actors[hero.id];
+    // The bearer is always a member of its own aura: while Rook's aura is
+    // active the aura self-grant projects counter (replay-safe, derived from
+    // the durable activeEffects record).
+    expect(heroAfter.activeEffects.some(({ effectId }) => effectId === 'aura')).toBe(true);
+    expect(encounterConditionSet(heroAfter).has('counter')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+
+    // Control: without Rook talent 1, the active aura grants no counter.
+    const plain = bastionEncounter({ foe: { x: 2, y: 1 }, ally: null });
+    const plainResult = executeCommand(plain.state, { type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'bastion:rook', targetIds: [plain.foe.id] }, scriptedDice(10, 6));
+    expect(encounterConditionSet(plainResult.state.actors[plain.hero.id]).has('counter')).toBe(false);
   });
 
   it('Great Giorgios: marks the foe, ends the turn, and resolves the delayed rush on the foe’s turn end', () => {

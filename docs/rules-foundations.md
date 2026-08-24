@@ -277,13 +277,13 @@ hand-rolled shape that should become a recipe row; "missing" means no seam.
 | **Stance mutation** | all | existing | enter/refresh/exit, exclusivity |
 | **Mark mutation** | all | existing | single-mark-per-ability-owner model |
 | **Resource mutations** (resolve/vigor/blessing/combo/vigilance/aether/bonus-damage) | all | existing | shared resource registry |
-| Power-die stance | jobs/classes | partial | soul-blade, wicked-sheath, gallows-humor, etc. |
+| Power-die stance | jobs/classes | partial → **kernel landed** | `kernels/power-die.ts` (`readPowerDie`/`tickPowerDie`/`setPowerDie`); soul-blade/gallows-humor/umbral-echo/mantra ticks consolidated; Gran Reversa t1 (start d6@6) wired |
 | Armed one-shot attack window | jobs/classes | partial | F6 kernel arm/consume |
-| Gamble (recorded d6 + result branch) | jobs/traits/relics/trophies | partial | TurnDiceWindows pre-rolls exist; no shared effect |
+| Gamble (recorded d6 + result branch) | jobs/traits/relics/trophies | **large-existing** | `context.dice.die()` resolves every gamble replay-safe (spinning-top, death, party-favor, carnevale, riposte, chaos-tarot all use it); `TurnDiceWindows` pre-rolls boundary gambles. The 3 genuine `gamble-state` singletons each also need a distinct capability (choice-input / direction-choice / 13-card deck) — no clean gamble-only primitive required |
 | Sacrifice + cost override (HP payment, floor 1) | jobs/traits/relics | partial | sacrifice damage type exists; no HP-payment seam |
-| Blessing/combo ability-use spend | jobs/traits | missing | registry exists; spend seam doesn't |
+| Blessing/combo ability-use spend | jobs/traits | **landed (F10)** — `kernels/ability-use-choices.ts` + `content/jobs/ability-use-choice-recipes.ts`; Rebirth/War wired, Faith/Songweave remain | choice→cost→modifier fold |
 | Use ledger (once-per-turn/round/combat gates) | jobs | partial → **existing (once-per-round)** | the F9 reactive job-trait fold + durable round ledger (`kernels/trait-reactions.ts`); once-per-turn/combat variants still per-site |
-| Aura mechanic (spatial membership projection) | jobs/foes/traits | missing | persistent `aura` effect exists; no membership kernel |
+| Aura mechanic (spatial membership projection) | jobs/foes/traits | **partial** | `kernels/aura.ts` now reads the durable `grant`/`aura` modifier and answers `inAura`/`charactersInAura` (Chebyshev, replay-safe); a self-grant seam (`projectedAuraSelfGrants` in passive-projection, e.g. Rook talent 1 counter) is folded into `encounterConditionSet`; Sweet Torment scans consolidated on it. Remaining: cross-actor membership grants, entry/size/activation per-row wiring (42+ foe traits) |
 | Heroics economy | classes/traits | missing | |
 | Infuse / Aether cost | classes/traits/relics | missing | `aether` resource exists |
 | Entity / summon action suite | jobs/foes | partial | entity model exists; actions hand-authored |
@@ -362,9 +362,9 @@ authority for "complete"; here **existing** = a kernel/primitive seam exists
 | Gamble | (recorded dice) | TurnDiceWindows | partial | gambles |
 | Sacrifice | sacrifice damage | (cost seam) | partial | sacrifices |
 | Combo / Blessing / Vigilance / Resolve | resource mutations | resource registry | partial (spend seams) | economies |
-| Power Die | (die mutations) | lifecycle | partial | stance dies |
+| Power Die | die mutations | `kernels/power-die.ts` + lifecycle | **partial → kernel landed** | stance dies; Gran Reversa t1 wired |
 | Rebound | (attack direction) | (attack modifier) | missing | trick shot, heracule mastery |
-| Aura | persistent effect | (aura kernel) | missing | auras |
+| Aura | persistent `grant`/`aura` modifier | `kernels/aura.ts` + self-grant projection | **partial** | Rook t1, Sweet Torment, 42 foe traits |
 
 ---
 
@@ -383,7 +383,7 @@ derive from the canonical blocker census (regenerate before trusting a number).
 | Passive projection F5 | condition/role baselines | 79 foe keyword rows, job traits | — | existing |
 | Attack-modifier fold F6 | attack-path reads | Demon Edge/Hissatsu/Pulverize/Bull's Strength | — | existing |
 | Talent fold F7 | trigger effects | 29 wired + condition-grant tranche | — | existing |
-| Aura kernel (missing) | Aura X | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | needed |
+| Aura kernel (partial) | Aura X | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | **partial** — `kernels/aura.ts` membership + Rook t1 self-grant landed; bulk membership/entry rows remain |
 | Spend/economy hooks (missing) | Blessing/Combo/Sacrifice/Infuse/Gamble/use-ledger | ~6 job traits + talents + 3 relic ranks | strive, demon-strength, crimson-king | needed |
 | Movement-phase kernels (missing) | vacate/occupancy/elevation/pre-post/swap/teleport-all | 5 job traits + movement talents/foes | darkside, stone-double, tumbling, great-leap | needed |
 | Conditional passive gates (missing) | bloodied/25%/terrain/stealth/status/round | ~150 foe traits + relic ranks | berserker-enrage, earth-bond, wayfinding | needed |

@@ -228,9 +228,18 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('shove-modifier');
   }
 
-  // Gamble state: gamble, die roll, d6, power die
-  if (/\b(?:gamble|power die|d\d+ result|die result)\b/.test(text)) {
+  // Gamble: the recorded d6 + result-branch vocabulary. A power die is a
+  // distinct persistent-ticker mechanic, not a gamble: it ticks up/down
+  // across turns/steps (Power Dice, p.118), so it is tracked separately.
+  if (/\b(?:gamble|die result|d\d+ result|dice(or|s)?'?\s*result)\b/.test(text)) {
     blockers.push('gamble-state');
+  }
+
+  // Power die: the persistent dN ticker (p.118). Set apart from gamble — its
+  // start-value, per-turn tick, and consume/discard rules are a distinct
+  // reusable mechanic (not a one-shot result branch).
+  if (/\bpower\s+die\b/.test(text)) {
+    blockers.push('power-die');
   }
 
   // Use ledger: once per turn, once per round, first time, once a round

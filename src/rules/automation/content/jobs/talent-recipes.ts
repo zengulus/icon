@@ -31,6 +31,7 @@ import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
 import type { RuleMutation } from '../../primitives/types.js';
 import { affectedFoeIds, registerProgramLevelTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
 import type { TalentEffect } from '../../kernels/talent-recipes.js';
+import { registerAuraSelfGrantRecipes } from '../../kernels/passive-projection.js';
 
 /** The party-favor mine's position from the ability's recorded terrain
  * mutations (the create on placement, the remove on detonation). */
@@ -661,11 +662,28 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   'enochian:pyre:talent:1': {
     mechanic: 'Comeback (user bloodied): allies are immune to this ability\u2019s area damage (the blast fray and the comeback/exceed re-explosion); the pyrotic infuse path stays a separate resolver.',
   },
+  // ICON p.202 Gran Reversa talent 1: "Your power die from this ability
+  // starts at d6, with 6 charges." A program-level start-value override: the
+  // Gran Reversa stance resolver reads the equipped choice and starts its d4
+  // power die at 6 instead of 4 (the durable die value is the recorded state).
+  'seer:gran-reversa:talent:1': {
+    mechanic: 'Power die starts at d6 (6 charges) instead of d4 (4) when Gran Reversa is entered with this talent.',
+  },
 };
 
 for (const [sourceId, row] of Object.entries(PROGRAM_LEVEL_TALENT_RECIPES)) {
   registerProgramLevelTalent(sourceId, row.mechanic);
 }
+
+// ICON p.122 Rook talent 1: "You also have counter while Rook's aura is
+// active." The aura self-grant is projected while the bearer's own Rook aura
+// effect is active (the bearer is always a member of its own aura) and the
+// bearer still has Rook talent 1. Registered as an aura-conditional
+// self-grant through the passive-projection kernel (derived from the durable
+// activeEffects record — replay-safe).
+registerAuraSelfGrantRecipes({
+  'bastion:rook:talent:1': [{ auraSourceId: 'bastion:rook', requiredAbilityId: 'bastion:rook', conditions: ['counter'] }],
+});
 
 /** Classify a documented talent by the kernel it needs. Advisory build-time
  * categorization, never parsed at runtime — the runtime fold only reads the

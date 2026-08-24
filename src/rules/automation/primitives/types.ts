@@ -266,6 +266,12 @@ export interface RuleExecutionInput {
    * The actor being saved owns and spends the token (ICON p.102/p.172).
    */
   statusSaveChoices?: Readonly<Record<string, Readonly<Record<string, { spendBlessing?: boolean }>>>>;
+  /**
+   * Optional source-backed choices made before an ability resolves (ICON
+   * p.183/p.190 Blessing of Rebirth / Blessing of War). Carry as opaque
+   * input into the fold; kernels never interpret a trait id directly.
+   */
+  abilityUseChoices?: ReadonlyArray<{ traitId: string; spend: number }>;
 }
 
 export interface RuleExecutionContext {
@@ -285,6 +291,13 @@ export interface RuleExecutionContext {
   /** Internal VM branch state. It is derived from a just-resolved attack,
    * never supplied by a command, and applies only to that attack target. */
   attackDamageProvenance?: Readonly<AttackDamageProvenance & { targetId: string }>;
+  /**
+   * F10 per-resolution ability-use modifiers (Blessing of War / Rebirth).
+   * Threaded for this one resolution only — never persisted as an actor
+   * flag. The VM folds these into its ordinary attack/damage handling, so a
+   * newly executable ability works with the traits automatically.
+   */
+  abilityUseModifiers?: { boons?: number; bonusDamage?: number; pierce?: boolean };
 }
 
 export type RuleMutation =

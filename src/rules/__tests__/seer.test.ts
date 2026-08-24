@@ -134,6 +134,14 @@ describe('Seer ability automation (p.197–203)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Gran Reversa talent 1: the power die starts at d6 (6 charges) instead of d4 (4)', () => {
+    const { state, hero } = seerEncounter({ second: null });
+    state.actors[hero.id].talents = { ...state.actors[hero.id].talents, 'seer:gran-reversa': 1 };
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:gran-reversa', targetIds: [] }, scriptedDice());
+    expect(result.state.actors[hero.id].ruleState['gran-reversa:die']).toBe(6);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Reverse Fate: ticks the die down and grants the ally double the gamble as vigor', () => {
     const { state, hero, ally } = seerEncounter({ second: null, ally: { x: 2, y: 1 } });
     const stanced = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:gran-reversa', targetIds: [] }, scriptedDice());

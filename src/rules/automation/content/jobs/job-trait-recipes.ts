@@ -226,9 +226,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
   },
   // ---------------------------------------------------------------- harvester
   'harvester:trait:blessing-of-rebirth': {
-    sourceId: 'harvester:trait:blessing-of-rebirth', name: 'Blessing of Rebirth', status: 'documented',
-    mechanic: '',
-    detail: 'Spending a blessing token while using any ability for pierce + bonus damage (or three for slay) needs an ability-use blessing-spend hook.',
+    sourceId: 'harvester:trait:blessing-of-rebirth', name: 'Blessing of Rebirth', status: 'wired',
+    mechanic: 'For self and allies using any ability: spend 1 blessing for pierce + bonus damage, or 3 to also force slay effects (ability-use choice fold).',
+    detail: '',
   },
   'harvester:trait:mark-of-tsumi': {
     sourceId: 'harvester:trait:mark-of-tsumi', name: 'Mark of Tsumi', status: 'wired',
@@ -247,9 +247,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
   },
   // ------------------------------------------------------------------ sealer
   'sealer:trait:blessing-of-war': {
-    sourceId: 'sealer:trait:blessing-of-war', name: 'Blessing of War', status: 'documented',
-    mechanic: '',
-    detail: 'Spending a blessing token while using any ability for +1 boon and bonus damage (or three for exceed) needs an ability-use blessing-spend hook.',
+    sourceId: 'sealer:trait:blessing-of-war', name: 'Blessing of War', status: 'wired',
+    mechanic: 'For self and allies using any ability: spend 1 blessing for +1 attack boon + bonus damage, or 3 to also force exceed effects (ability-use choice fold).',
+    detail: '',
   },
   'sealer:trait:mantra-of-sealing': {
     sourceId: 'sealer:trait:mantra-of-sealing', name: 'Mantra of Sealing', status: 'documented',

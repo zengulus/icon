@@ -209,17 +209,20 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
           const elevationModifier = source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0;
           // F6 attack-path trait fold: armed one-shot modifiers (Hissatsu
           // +1 boon / true strike / d10) plus permanent elevation mechanics
-          // (Pulverize flat damage and lowered exceed threshold).
+          // (Pulverize flat damage and lowered exceed threshold). F10
+          // ability-use modifiers (Blessing of War / Rebirth) ride the
+          // resolution context for this ability only.
           const traitModifier = traitAttackModifier(source, elevationModifier);
+          const abilityUse = context.abilityUseModifiers;
           const attack = resolveAttackRoll({
             defense: target.defense,
-            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons,
+            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons + (abilityUse?.boons ?? 0),
             elevationModifier,
             sourceDazed: source.conditions.has('dazed'),
             targetEvasion: target.conditions.has('evasion'),
             trueStrike: (effect.trueStrike ?? false) || traitModifier.trueStrike,
             autoHit: effect.autoHit ?? false,
-            bonusDamageFlat: traitModifier.bonusDamageFlat,
+            bonusDamageFlat: traitModifier.bonusDamageFlat + (abilityUse?.bonusDamage ?? 0),
             exceedThreshold: traitModifier.exceedThreshold ?? undefined,
           }, context.dice);
           const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, bonusFlat } = attack;
@@ -251,11 +254,15 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
         for (const target of targets) for (let instance = 1; instance <= instances; instance += 1) {
           const attackDamage = context.attackDamageProvenance?.targetId === target.id ? context.attackDamageProvenance : undefined;
           const ignoreCover = Boolean(effect.ignoreCover || context.actionTags?.has('unerring') || attackDamage?.ignoreCover);
+          // F10 ability-use pierce (Blessing of Rebirth): route the damage
+          // through the existing piercing damage path instead of re-deriving
+          // armor/vigor handling locally.
+          const damageType = context.abilityUseModifiers?.pierce && effect.damageType === 'normal' ? 'piercing' : effect.damageType;
           output.push({
             kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id,
             // The attack's direct-target damage instance also carries trait flat
             // bonus damage (Pulverize +2), scoped by the recorded provenance.
-            amount: integer(effect.amount, context) + (attackDamage?.bonusFlat ?? 0), damageType: effect.damageType, instance,
+            amount: integer(effect.amount, context) + (attackDamage?.bonusFlat ?? 0), damageType, instance,
             delivery: effect.delivery ?? context.delivery ?? 'effect', ignoreCover,
             ...(attackDamage?.ignoreDodge ? { ignoreDodge: true } : {}),
           });

@@ -111,3 +111,54 @@ export function projectedPassiveConditions(traitIds: readonly string[]): Readonl
   }
   return conditions;
 }
+
+/**
+ * Aura-conditional self-grant (docs/rules-foundations.md §6, ICON Aura X). A
+ * bearer projects a condition onto itself while it carries an active aura
+ * effect whose `sourceId` matches a registered row AND whose owning talent
+ * the bearer still ranks in (e.g. Rook — "you also have counter while Rook's
+ * aura is active", p.122: only while the Rook talent is taken). The
+ * projection is ephemeral and derives from the durable `activeEffects` and
+ * `traitIds`/`abilityIds` records (never written back), so it is
+ * replay-safe. Content registers rows keyed on the exact aura `sourceId`.
+ */
+export interface AuraSelfGrantRecipe {
+  /** The aura effect's source ID whose activation grants the condition. */
+  auraSourceId: string;
+  /** The base ability id whose talent grant the source names (e.g. Rook
+   * talent 1 grants counter while Rook's aura is active). */
+  requiredAbilityId: string;
+  /** Conditions granted to the bearer while the aura is active. */
+  conditions: readonly string[];
+}
+
+const auraSelfGrantRecipes: AuraSelfGrantRecipe[] = [];
+
+/** Register aura-conditional self-grant rows (content/jobs/talent-recipes). */
+export function registerAuraSelfGrantRecipes(rows: Readonly<Record<string, AuraSelfGrantRecipe[]>>): void {
+  for (const recipeList of Object.values(rows)) auraSelfGrantRecipes.push(...recipeList);
+}
+
+/** True when the bearer still ranks in the granting ability. A row like
+ * "a talent 1 grants X" is scoped to the ability's talent tier. */
+function hasTalentFor(abilityId: string, talents: Readonly<Record<string, 1 | 2>>, abilityIds: readonly string[]): boolean {
+  return (talents[abilityId] ?? 0) >= 1 && abilityIds.includes(abilityId);
+}
+
+/** Conditions a bearer projects onto itself while it has an active aura effect
+ * from a registered source and still owns the granting ability/talent. The
+ * blanket bearer is always a member of its own aura, so "while the aura is
+ * active" reduces to "has an active aura effect from that source". */
+export function projectedAuraSelfGrants(
+  activeAuraSourceIds: readonly string[],
+  abilityIds: readonly string[],
+  talents: Readonly<Record<string, 1 | 2>>,
+): Set<string> {
+  const granted = new Set<string>();
+  for (const recipe of auraSelfGrantRecipes) {
+    if (!activeAuraSourceIds.includes(recipe.auraSourceId)) continue;
+    if (!hasTalentFor(recipe.requiredAbilityId, talents, abilityIds)) continue;
+    for (const condition of recipe.conditions) granted.add(condition);
+  }
+  return granted;
+}

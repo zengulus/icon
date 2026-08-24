@@ -291,6 +291,21 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
     expect(state.actors[hero.id]!.hp).toBe(40 - 2); // and reflected 2 back (armor stripped)
   });
 
+  it('war-balloon (Flying, Sturdy) and temple-monk (Defiance) rows project their keywords', () => {
+    const balloon = createFoe('War balloon projection fixture', { x: 1, y: 1 });
+    balloon.traitIds = ['imperial:war-balloon:394:trait:specia-l-traits'];
+    const balloonConditions = encounterConditionSet(balloon);
+    expect(balloonConditions.has('flying')).toBe(true);
+    expect(balloonConditions.has('sturdy')).toBe(true);
+
+    // Defiance is durable: granted at combat start, never projected (a
+    // projection would resurrect it after the damage kernel consumes it).
+    const monk = createFoe('Temple-monk projection fixture', { x: 1, y: 1 });
+    monk.traitIds = ['folk:temple-monk:315:trait:unique-traits'];
+    expect(encounterConditionSet(monk).has('defiance')).toBe(false);
+    expect(durableFoeTraitGrantConditions('folk:temple-monk:315:trait:unique-traits')).toEqual(['defiance']);
+  });
+
   it('keeps every unregistered keyword-list trait unprojected (closed negative)', () => {
     const sourceTraits = collectRuleSourceUnits().filter((unit) => unit.kind === 'foe-trait');
     for (const source of sourceTraits) {

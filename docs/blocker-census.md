@@ -1,6 +1,6 @@
 # Class/Job Blocker Census (Canonical, Machine-Checked)
 
-> Generated from 467 unresolved source units: 8 class-trait, 43 job-trait, 256 talent, 144 mastery, 16 limit-break.
+> Generated from 463 unresolved source units: 8 class-trait, 40 job-trait, 255 talent, 144 mastery, 16 limit-break.
 >
 > All counts are derived from the canonical census tool with machine-checked
 > assertions. Singleton blocker sets must be audit-verified separately.
@@ -196,14 +196,6 @@
 - `harvester:crimson-bloom:talent:2`
 - `enochian:pyroclast:talent:2`
 
-### `gamble-state` (5 units)
-
-- `fool:spinning-top:talent:1`
-- `chanter:pandaemonium:talent:1`
-- `seer:trait:bend-fate`
-- `seer:gran-reversa:talent:1`
-- `spellblade:rampant-nail:talent:2`
-
 ### `resource-management` (4 units)
 
 - `stalwart:trait:fortify`
@@ -229,6 +221,12 @@
 - `demon-slayer:wicked-sheath:talent:1`
 - `fool:spinning-top:talent:2`
 - `geomancer:terraforming:talent:1`
+
+### `gamble-state` (3 units)
+
+- `fool:spinning-top:talent:1`
+- `chanter:pandaemonium:talent:1`
+- `seer:trait:bend-fate`
 
 ### `cover-mechanic` (3 units)
 
@@ -299,6 +297,10 @@
 
 - `enochian:trait:soulfire`
 
+### `power-die` (1 units)
+
+- `spellblade:rampant-nail:talent:2`
+
 ## Blocker-set frequencies
 
 | Blocker set | Count |
@@ -321,7 +323,6 @@
 | {action-type-change, mastery-attachment} | 5 |
 | {interrupt-modifier} | 5 |
 | {sacrifice-cost} | 5 |
-| {gamble-state} | 5 |
 | {range-modifier, teleport} | 5 |
 | {resource-management} | 4 |
 | {use-ledger} | 4 |
@@ -334,6 +335,7 @@
 | {charge-state} | 3 |
 | {charge-state, fly-grant} | 3 |
 | {area-define, mastery-attachment} | 3 |
+| {gamble-state} | 3 |
 | {entity-create, mastery-attachment} | 3 |
 | {cover-mechanic} | 3 |
 | {effect-count} | 3 |
@@ -412,7 +414,7 @@
 | {action-type-change, mark-modifier, teleport} | 1 |
 | {action-type-change, aura, charge-state, entity-create, teleport} | 1 |
 | {area-define, charge-state, mark-modifier} | 1 |
-| {gamble-state, mark-modifier, mastery-attachment, range-modifier} | 1 |
+| {mark-modifier, mastery-attachment, power-die, range-modifier} | 1 |
 | {damage-modifier, mark-modifier} | 1 |
 | {area-define, cover-mechanic, mastery-attachment, terrain-create, use-ledger} | 1 |
 | {action-type-change, range-modifier} | 1 |
@@ -453,7 +455,6 @@
 | {aura, damage-modifier} | 1 |
 | {blessing-spend, range-modifier} | 1 |
 | {cure-on-trigger, mastery-attachment} | 1 |
-| {blessing-spend, damage-modifier, resource-management} | 1 |
 | {action-type-change, area-define, entity-create} | 1 |
 | {area-define, mastery-attachment, resource-management, vigor-grant} | 1 |
 | {entity-create, sacrifice-cost} | 1 |
@@ -461,10 +462,9 @@
 | {area-define, blessing-spend, mastery-attachment, range-modifier} | 1 |
 | {entity-create, mark-modifier, mastery-attachment, range-modifier} | 1 |
 | {damage-preview} | 1 |
-| {action-type-change, gamble-state, mastery-attachment} | 1 |
+| {action-type-change, mastery-attachment, power-die} | 1 |
 | {blessing-spend, interrupt-modifier, mastery-attachment, terrain-create} | 1 |
 | {blessing-spend, entity-create, mastery-attachment} | 1 |
-| {blessing-spend, damage-modifier} | 1 |
 | {combo-spend, teleport} | 1 |
 | {area-define, mastery-attachment, range-modifier, teleport} | 1 |
 | {damage-modifier, mastery-attachment, teleport, use-ledger} | 1 |
@@ -477,7 +477,7 @@
 | {area-define, blessing-spend, cure-on-trigger, pre-ability-movement, teleport} | 1 |
 | {area-define, resource-management, vigor-grant} | 1 |
 | {action-type-change, aura} | 1 |
-| {gamble-state, mastery-attachment, range-modifier} | 1 |
+| {gamble-state, mastery-attachment, power-die, range-modifier} | 1 |
 | {blessing-spend} | 1 |
 | {entity-create, gamble-state, mastery-attachment} | 1 |
 | {charge-state, terrain-create} | 1 |
@@ -509,8 +509,8 @@
 | {effect-count, use-ledger} | 1 |
 | {cover-mechanic, mastery-attachment, range-modifier, stance-gate} | 1 |
 | {cover-mechanic, damage-modifier, mark-modifier, mastery-attachment, range-modifier} | 1 |
+| {power-die} | 1 |
 | {damage-modifier, interrupt-modifier} | 1 |
-| {area-define, resource-management} | 1 |
 | {damage-modifier, fly-grant, terrain-create} | 1 |
 | {aura, cover-mechanic, fly-grant, terrain-create} | 1 |
 | {action-type-change, aura, cover-mechanic, fly-grant, teleport, terrain-create, use-ledger} | 1 |
@@ -529,33 +529,34 @@
 |---|---|---|---|---|
 | mastery-attachment | 1 | 80 | 63 | 144 |
 | range-modifier | 13 | 23 | 35 | 71 |
-| area-define | 9 | 17 | 32 | 58 |
+| area-define | 9 | 16 | 32 | 57 |
 | terrain-create | 9 | 14 | 29 | 52 |
 | teleport | 7 | 22 | 12 | 41 |
 | entity-create | 6 | 13 | 14 | 33 |
 | mark-modifier | 7 | 15 | 11 | 33 |
 | aura | 7 | 15 | 8 | 30 |
-| resource-management | 4 | 10 | 15 | 29 |
 | fly-grant | 6 | 12 | 11 | 29 |
-| damage-modifier | 7 | 11 | 10 | 28 |
 | action-type-change | 1 | 12 | 15 | 28 |
+| resource-management | 4 | 9 | 14 | 27 |
+| damage-modifier | 7 | 10 | 9 | 26 |
 | charge-state | 3 | 12 | 11 | 26 |
 | use-ledger | 4 | 9 | 11 | 24 |
 | interrupt-modifier | 5 | 13 | 6 | 24 |
 | vigor-grant | 0 | 6 | 12 | 18 |
 | shove-modifier | 6 | 3 | 7 | 16 |
-| gamble-state | 5 | 4 | 7 | 16 |
 | cover-mechanic | 3 | 3 | 9 | 15 |
 | infuse-cost | 2 | 3 | 9 | 14 |
 | sacrifice-cost | 5 | 6 | 3 | 14 |
 | pre-ability-movement | 1 | 5 | 7 | 13 |
 | stance-gate | 2 | 5 | 5 | 12 |
+| gamble-state | 3 | 4 | 5 | 12 |
 | rush-modifier | 1 | 4 | 6 | 11 |
-| blessing-spend | 1 | 2 | 8 | 11 |
+| blessing-spend | 1 | 1 | 7 | 9 |
 | cure-on-trigger | 3 | 2 | 3 | 8 |
 | effect-count | 3 | 2 | 1 | 6 |
 | combo-spend | 0 | 3 | 3 | 6 |
 | heroics-economy | 3 | 1 | 1 | 5 |
+| power-die | 1 | 0 | 3 | 4 |
 | entity-vacate | 2 | 1 | 0 | 3 |
 | attack-modifier | 0 | 1 | 1 | 2 |
 | save-modifier | 0 | 2 | 0 | 2 |
@@ -569,45 +570,46 @@
 
 | Step | Implement | Unlocks | Cumulative | Remaining |
 |---|---|---|---|---|
-| 1 | range-modifier | 13 | 13 | 454 |
-| 2 | area-define | 11 | 24 | 443 |
-| 3 | terrain-create | 13 | 37 | 430 |
-| 4 | teleport | 13 | 50 | 417 |
-| 5 | mark-modifier | 13 | 63 | 404 |
-| 6 | aura | 10 | 73 | 394 |
-| 7 | damage-modifier | 13 | 86 | 381 |
-| 8 | entity-create | 14 | 100 | 367 |
-| 9 | fly-grant | 9 | 109 | 358 |
-| 10 | shove-modifier | 7 | 116 | 351 |
-| 11 | interrupt-modifier | 10 | 126 | 341 |
-| 12 | gamble-state | 8 | 134 | 333 |
-| 13 | sacrifice-cost | 11 | 145 | 322 |
-| 14 | resource-management | 8 | 153 | 314 |
-| 15 | use-ledger | 9 | 162 | 305 |
-| 16 | charge-state | 16 | 178 | 289 |
-| 17 | cover-mechanic | 6 | 184 | 283 |
-| 18 | cure-on-trigger | 4 | 188 | 279 |
-| 19 | effect-count | 4 | 192 | 275 |
-| 20 | heroics-economy | 4 | 196 | 271 |
-| 21 | infuse-cost | 5 | 201 | 266 |
-| 22 | stance-gate | 5 | 206 | 261 |
-| 23 | entity-vacate | 2 | 208 | 259 |
-| 24 | mastery-attachment | 89 | 297 | 170 |
-| 25 | action-type-change | 26 | 323 | 144 |
-| 26 | pre-ability-movement | 6 | 329 | 138 |
-| 27 | rush-modifier | 10 | 339 | 128 |
-| 28 | blessing-spend | 11 | 350 | 117 |
-| 29 | threshold-modifier | 2 | 352 | 115 |
-| 30 | movement-modifier | 2 | 354 | 113 |
-| 31 | damage-preview | 2 | 356 | 111 |
-| 32 | choice-input | 1 | 357 | 110 |
-| 33 | vigor-grant | 18 | 375 | 92 |
-| 34 | combo-spend | 6 | 381 | 86 |
-| 35 | attack-modifier | 2 | 383 | 84 |
-| 36 | save-modifier | 2 | 385 | 82 |
-| 37 | pierce | 1 | 386 | 81 |
+| 1 | range-modifier | 13 | 13 | 450 |
+| 2 | area-define | 11 | 24 | 439 |
+| 3 | terrain-create | 13 | 37 | 426 |
+| 4 | teleport | 13 | 50 | 413 |
+| 5 | mark-modifier | 13 | 63 | 400 |
+| 6 | aura | 10 | 73 | 390 |
+| 7 | damage-modifier | 13 | 86 | 377 |
+| 8 | entity-create | 14 | 100 | 363 |
+| 9 | fly-grant | 9 | 109 | 354 |
+| 10 | shove-modifier | 7 | 116 | 347 |
+| 11 | interrupt-modifier | 10 | 126 | 337 |
+| 12 | sacrifice-cost | 11 | 137 | 326 |
+| 13 | resource-management | 7 | 144 | 319 |
+| 14 | use-ledger | 8 | 152 | 311 |
+| 15 | charge-state | 14 | 166 | 297 |
+| 16 | cover-mechanic | 6 | 172 | 291 |
+| 17 | gamble-state | 9 | 181 | 282 |
+| 18 | cure-on-trigger | 4 | 185 | 278 |
+| 19 | effect-count | 4 | 189 | 274 |
+| 20 | heroics-economy | 4 | 193 | 270 |
+| 21 | infuse-cost | 5 | 198 | 265 |
+| 22 | stance-gate | 5 | 203 | 260 |
+| 23 | entity-vacate | 2 | 205 | 258 |
+| 24 | mastery-attachment | 87 | 292 | 171 |
+| 25 | action-type-change | 25 | 317 | 146 |
+| 26 | pre-ability-movement | 6 | 323 | 140 |
+| 27 | rush-modifier | 10 | 333 | 130 |
+| 28 | blessing-spend | 9 | 342 | 121 |
+| 29 | power-die | 4 | 346 | 117 |
+| 30 | threshold-modifier | 2 | 348 | 115 |
+| 31 | movement-modifier | 2 | 350 | 113 |
+| 32 | damage-preview | 2 | 352 | 111 |
+| 33 | choice-input | 1 | 353 | 110 |
+| 34 | vigor-grant | 18 | 371 | 92 |
+| 35 | combo-spend | 6 | 377 | 86 |
+| 36 | attack-modifier | 2 | 379 | 84 |
+| 37 | save-modifier | 2 | 381 | 82 |
+| 38 | pierce | 1 | 382 | 81 |
 
-After all implementable primitives: **386 unlocked, 81 remain** (58 residual units need non-implementable capabilities).
+After all implementable primitives: **382 unlocked, 81 remain** (58 residual units need non-implementable capabilities).
 
 ## Machine-checked invariants
 
@@ -615,7 +617,7 @@ After all implementable primitives: **386 unlocked, 81 remain** (58 residual uni
 ✓ All source IDs are unique
 ✓ Every unresolved unit appears exactly once
 ✓ No executable unit appears in the unresolved census
-✓ Per-kind totals sum to unresolved total (467)
+✓ Per-kind totals sum to unresolved total (463)
 ✓ All blocker-set frequencies derive from per-unit records
 ✓ All marginal values derive from per-unit records
 ✓ Marginal assertion: immediate + oneCloser + multiCloser === totalContaining for every blocker

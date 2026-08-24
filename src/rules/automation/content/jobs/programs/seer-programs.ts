@@ -224,9 +224,13 @@ const sisyphusEffects: RuleResolver = (context) => {
  * documented stance windows. */
 const granReversaEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
+  // ICON p.202 Gran Reversa talent 1: "Your power die from this ability
+  // starts at d6, with 6 charges." Grants a d6 at 6 instead of the base d4
+  // at 4 (the durable die is still the recorded ruling below).
+  const talent = (source.talents?.['seer:gran-reversa'] ?? 0) >= 1;
   return [
     stanceMutation(context, source.id, 'enter', 'gran-reversa', {}),
-    stateMutation(context, source.id, 'gran-reversa:die', 4),
+    stateMutation(context, source.id, 'gran-reversa:die', talent ? 6 : 4),
   ];
 };
 

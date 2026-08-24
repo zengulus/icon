@@ -576,11 +576,31 @@ export interface EncounterTerrainEffect {
 }
 
 /**
- * The only player-declared input accepted by the core command save windows.
- * It keeps p.102 Blessing decisions explicit without exposing the generic
+ * A source-backed optional choice the player may make before an ability
+ * resolves (e.g. ICON p.183/p.190 Blessing of Rebirth / Blessing of War
+ * "spend N blessings"). The client names the narrow decision (which trait's
+ * option and how much to spend); the rules engine derives every consequence
+ * (resource spends, boons, bonus damage, pierce, forced triggers) from the
+ * registered ICON source rule. This deliberately does not expose the generic
  * RuleProgram input surface on ordinary encounter commands.
  */
-export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices'>;
+export interface AbilityUseChoice {
+  /** The source trait id whose option is being used (e.g.
+   * `sealer:trait:blessing-of-war`). */
+  traitId: string;
+  /** How much of the trait's resource to spend (e.g. 1 or 3 blessings). */
+  spend: number;
+}
+
+/**
+ * The player-declared input accepted by the core command save windows and the
+ * pre-resolution ability-use choice fold. It keeps p.102 Blessing decisions
+ * and p.183/p.190 ability-use choices explicit without exposing the generic
+ * RuleProgram input surface on ordinary encounter commands.
+ */
+export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices'> & {
+  abilityUseChoices?: readonly AbilityUseChoice[];
+};
 
 export type EncounterCommand =
   | { type: 'ADD_ACTOR'; actor: EncounterActor }

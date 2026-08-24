@@ -60,7 +60,7 @@ baselines. The audit backlog that the kernels below unblock:
   the Advantage needs the ally-choice-input seam), finishing-blow/slay→
   stacked die (Stack Dice needs the gamble/die-state seam), combo
   gain/spend→fly+Bless (Divine Grace needs the ally-choice seam) | `bastion:trait:press-the-advantage`, `fool:trait:stack-dice`, `chanter:trait:divine-grace` | F9 fold exists; per-row choice-input / gamble seams
-| **Ability-use blessing-spend hook** — spend 1 token for a package, 3 for the bigger effect | `chanter:trait:blessing-of-faith`, `harvester:trait:blessing-of-rebirth`, `sealer:trait:blessing-of-war` | resource registry exists; ability-use spend seam |
+| **Ability-use choice fold (F10)** — pre-resolution optional source-backed choices: find eligible allied owner, validate spend, emit resource-spend mutations, feed boons/bonus damage/pierce/forced-triggers into the one resolution | `harvester:trait:blessing-of-rebirth` ✅ wired, `sealer:trait:blessing-of-war` ✅ wired | `kernels/ability-use-choices.ts` + `content/jobs/ability-use-choice-recipes.ts`; permanent seam, still reusable for combo/faith |
 | **Ability-use combo-spend hook** — spend a combo token to activate charge effects | `chanter:trait:songweave` | resource registry exists; ability-use spend seam |
 | **Infuse-cost kernel hook** — cost reduction with a foe in range 2, infuse-as-slay | `spellblade:trait:conqueror-s-edge` | F0, Infuse cost seam |
 | **Use ledger** — once-per-combat use + spend-2-Aether regain | `spellblade:trait:aether-deflection` (also needs the `targeted-by-ability` window, F4) | F3/F4 |
@@ -300,7 +300,7 @@ each once; it converts its consumers into data + fixtures:
 
 | # | Shared kernel | Consumers (count) | Prerequisite |
 | --- | --- | --- | --- |
-| 1 | **Aura mechanic** — spatial distance-based grants/penalties, activation, size changes | 2 job traits + 42 foe traits + trophies + Perseus/Rook/Dervish abilities | F1 |
+| 1 | **Aura mechanic** — spatial distance-based grants/penalties, activation, size changes | 2 job traits + 42 foe traits + trophies + Perseus/Rook/Dervish abilities | F1; **foundation landed** — `kernels/aura.ts` membership (`inAura`/`charactersInAura` from the durable `grant`/`aura` modifier) + a `projectedAuraSelfGrants` self-grant seam (Rook talent 1 counter) folded into `encounterConditionSet`; Sweet Torment consolidated on it. Bulk cross-actor membership/entry/size rows remain as the content harvest tranche |
 | 2 | **Attack-path modifier gates** — distance/round/terrain/stealth/threshold reads on the existing fold | 7 job traits + ~30 talents | F6 kernel exists |
 | 3 | **Conditional passive projection** — bloodied/25%/terrain/stealth/status/round gates | ~150 foe traits + relic ranks | F5 exists |
 | 4 | **Reactive trigger windows** — attack-miss, attack-completion, summon, targeted-by-ability (generalize), save-rolled, plus the **once-per-round job-trait reactive fold** (collide/shove/slay — F9 done, `kernels/trait-reactions.ts`, wired Dash on the Rocks) | 7 job traits + dozens of talents/abilities | F4 exists; **movement-entry on voluntary MOVE is done** (`kernels/movement-triggers.ts`, Party Favor p.151); F9 reactive-trait fold exists |
@@ -327,8 +327,10 @@ families in §5:
    vocabulary (sacrifice, blessing, combo, infuse, gamble, use-ledger,
    heroics); unlocks six job traits, four talents, and the Crimson King relic
    ranks.
-2. **Aura kernel (family 1)** — unlocks Shieldmaster, Pelagic Rage, 42 foe
-   traits, the Black Book trophy, and tightens Rook/Perseus/Dervish.
+2. **Aura kernel (family 1)** — **partial**. The membership kernel + Rook
+   talent 1 self-grant landed in `kernels/aura.ts` and the self-grant seam;
+   the remaining work is the cross-actor content harvest (Shieldmaster,
+   Pelagic Rage, 42 foe traits, Black Book trophy) over that seam.
 3. **Movement kernels (family 6)** — vacate/occupancy/elevation hooks unlock
    Darkside, Stone Double, Tumbling, Great Leap, Uplift, and the
    movement talents; also the forced-movement-entry fold.

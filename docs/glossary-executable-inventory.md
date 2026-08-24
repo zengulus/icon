@@ -89,11 +89,11 @@ Status legend:
 | --- | --- | --- | --- | --- |
 | Cure | +4 vigor, surge if bloodied, save statuses (102) | `status-saves`/Recover | EXECUTABLE | — |
 | Boon / Curse | ±highest d6, cancel 1:1 (82) | `rollBoonOrCurse` | EXECUTABLE | — |
-| Blessing | token; default +1 boon on a save (102) | blessing resource + `save-window.modifiers` | EXECUTABLE | — |
+| Blessing | token; default +1 boon on a save (102) | blessing resource + `save-window.modifiers` + F10 ability-use choice fold | EXECUTABLE | — (except Faith) |
 | Combo | base→token→combo version (103) | `combo` resource + combo actions | PARTIAL | the **spend-augment** seam (spend tokens to augment/charge any ability — Songweave, blessing traits, Infuse) needs a durable spent-choice input on USE_ABILITY |
-| Gamble | d6, effect on result-or-higher (103) | program-level recorded gambles | PARTIAL | a shared, source-ID-free `gamble` primitive (recorded die + threshold branch + replay persistence) so non-ability content (Stack Dice, Bend Fate, Golden Mask) can consume it |
+| Gamble | d6, effect on result-or-higher (103) | program-level recorded gambles + `primitives/gamble-window.ts` (recorded die + pick) | PARTIAL | the shared recorded-die primitive landed (single/highest/lowest, replay-safe); threshold-branch + consume across non-ability content (Stack Dice, Bend Fate, Golden Mask) remain |
 | Sacrifice X | cost at start, non-mitigable, floor 1, may overpay (102) | VM `sacrifice` cost | PARTIAL | a reusable **cost-override** seam (reduce/ignore a sacrifice cost — Crimson King, Conqueror's Edge Infuse) with the exact non-mitigable/floor-1 contract as a typed modifier |
-| Power Die | point-contact die, tick/discard-at-0 (103) | per-stance `ruleState` dies | PARTIAL | a shared power-die primitive (size/start/tick/consume/discard-at-0) replacing the hand-rolled stance dies |
+| Power Die | point-contact die, tick/discard-at-0 (103) | `kernels/power-die.ts` (`readPowerDie`/`tickPowerDie`/`setPowerDie`) | **PARTIAL → kernel landed** | soul-blade/gallows-humor/umbral-echo/mantra ticks consolidated; Gran Reversa t1 (start d6@6) audit-complete; consume/discard per-row + rampant-nail bloodied tick + mastery dice remain |
 | Mark | ongoing; one per ability per char; replace choice (103) | `mark` mutation + ownership | EXECUTABLE | mark **trigger** windows (turn-start/adjacency/etc.) remain reactive-window work |
 | Stance | ongoing positive; one at a time; drop/refresh (103) | `stance` mutation | EXECUTABLE | multi-stance entry gate (Martial Master) |
 | Interrupt | off-turn, ranked, one per turn, refresh at turn start (91) | F4 trigger windows + `interruptUses` | EXECUTABLE | — |
@@ -101,7 +101,7 @@ Status legend:
 | End turn | ability ends your turn; one chosen (103) | reducer path | EXECUTABLE | — |
 | Triggered effects (charge/collide/comeback/exceed/slay/finishing-blow/heroic/infuse/chain-reaction) | pp.95, 102–103 | VM triggers + F7 talent fold + program resolve | EXECUTABLE | heroic/infuse/chain-reaction are ability-level and only fire where a source unit wires them |
 | Summon | intangible; not foe/ally; removed on defeat (95, 104) | `summon-recipes` + `entity` mutation | PARTIAL | entity **action suites** (lash-out/dash-bite/fly/detonate) need the entity-action seam |
-| Aura X | continuous ongoing effect in range X of an origin (102) | persistent `aura` effect | **NOT** | the spatial **aura membership kernel** (distance-based grants/penalties, activation/size/entry) does not exist |
+| Aura X | continuous ongoing effect in range X of an origin (102) | `kernels/aura.ts` reads the durable `grant`/`aura` modifier and answers `inAura`/`charactersInAura` (Chebyshev, replay-safe); self-grant seam (`projectedAuraSelfGrants`, e.g. Rook talent 1 counter) folds into `encounterConditionSet`; Sweet Torment scans consolidated on it | **PARTIAL** | membership + self-grant landed; cross-actor grants/entry/size per-row wiring (Shieldmaster, Pelagic Rage, 42 foe traits) still to be harvested |
 | Rebound | bounce off a character in range; redirects (103) | Trick Shot armed variant only | **NOT** | a general rebound/redirection seam (origin re-placement + LoS/cover from the new origin); used by Trick Shot and Heracule mastery |
 
 ## F. Special states (p.104)
@@ -125,21 +125,33 @@ an engine mechanism but **source-consumer wiring** (audit-completeness) — the
 genre of work that is indeed simple but numerous. The true engine-mechanism
 gaps that remain are actual subsystems, each needing a focused pass:
 
-A. **Source-consumer wiring (simple but numerous)** — make the already-executable
-glossary mechanics audit-complete by wiring granting source rows: the 6 pure
-**Counter-granting foe traits** are now wired (howler, war-beast,
-crystalline-demon, blade-of-agony, fanged-hob + Doomcloak); the remaining
-tranche is the **Regeneration / Dodge / Stealth / Unstoppable / Flying /
-Phasing / Skirmisher / Rampart** projection rows that lack a closed source-ID
-recipe, and the **Vigilance-granting** trait rows. Each = a closed-id recipe
-row + fixture + positive/negative/replay test.
+A. **Source-consumer wiring (simple but numerous)** — all pure-keyword rows in
+the target families are now wired: the 6 pure **Counter-granting** rows
+(howler, war-beast, crystalline-demon, blade-of-agony, fanged-hob + Doomcloak)
+and the last two unwired keyword rows left in the **Regeneration / Dodge /
+Stealth / Unstoppable / Flying / Phasing / Skirmisher / Rampart / Sturdy /
+Defiance** families — `folk:temple-monk:315:trait:unique-traits` (Defiance,
+durable) and `imperial:war-balloon:394:trait:specia-l-traits` (Flying,
+Sturdy). Every remaining foe-trait row in these families is either already
+wired or is a **prose ability** (Elite/Legend suffixes, Enrage, Mob, Shelter,
+conditional auras, etc.) that is not a pure keyword list and is out of scope
+for the keyword projection manifest. **Vigilance** is likewise already
+complete: every Vigilance-granting job/class trait is wired with replay
+fixtures — `demon-slayer:trait:demon-edge`, `colossus:trait:furious-berserk`,
+`knave:trait:blackheart` (audit-complete), and `stalwart:trait:fortify`'s
+vigilance+1 (its only unresolved clause is the unrelated summon suite)
+through the turn-end lifecycle recipes (`encounter.ts:1932`, `lifecycle-recipes.ts`)
+into `resources.vigilance`. The only remaining Vigilance source is
+`folk:guard:318:trait:hold-the-line`, a conditional prose foe trait ("if the
+Guard ends any turn without attacking") that is out of scope for the keyword
+projection manifest and needs a typed foe-trait lifecycle resolver.
 
 B. **Engine mechanisms genuinely missing (subsystems):**
-   1. **Gamble primitive** — shared recorded-die + threshold-branch effect.
-   2. **Power-die primitive** — one recipe shape for the hand-rolled stance dies.
-   3. **Ability-use spend-augment seam** — durable spent-choice input on USE_ABILITY.
+   1. **Gamble primitive** — shared recorded-die + threshold-branch effect (recorded-die seam landed in `primitives/gamble-window.ts`; threshold-branch across non-ability content remains).
+   2. **Power-die primitive** — **kernel landed** (`kernels/power-die.ts`); the remaining per-row work (consume/discard, wicked-sheath shove-per-charge, gallows-humor ally-defeat max, rampant-nail bloodied tick, mastery dice) is content wiring over it.
+   3. **Ability-use spend-augment seam** — durable spent-choice input on USE_ABILITY (landed as **F10**: `kernels/ability-use-choices.ts` + `content/jobs/ability-use-choice-recipes.ts`; Blessing of Rebirth/War wired, others remain).
    4. **Cost-override seam** — sacrifice/Infuse cost reduction (non-mitigable/floor-1).
-   5. **Aura membership kernel** — distance-based grants/penalties/entry.
+   5. **Aura membership kernel** — distance-based grants/penalties/entry. **Partial**: `kernels/aura.ts` membership + Rook talent 1 self-grant landed; the wider content harvest (Shieldmaster, Pelagic Rage, 42 foe traits) remains over that seam.
    6. **Rebound seam** — origin re-placement + LoS/cover from the new origin.
    7. **Entity action seams + object-destroy model** — companions' suites; destructible objects.
    8. **Mark-trigger windows** — turn-start/adjacency mark gates.

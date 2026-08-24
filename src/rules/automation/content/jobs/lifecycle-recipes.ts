@@ -1,5 +1,7 @@
 import { applyRuleMutations, determineAndApplyEncounterDamage } from '../../kernels/encounter-adapter.js';
 import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, registerTurnDiceWindowPlanner } from '../../kernels/lifecycle.js';
+import { tickPowerDie } from '../../kernels/power-die.js';
+import { resolveGamble } from '../../primitives/gamble-window.js';
 import { registerMovementEntryTrigger } from '../../kernels/movement-triggers.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-geometry.js';
 import type { DiceSource } from '../../../dice.js';
@@ -28,8 +30,7 @@ const distance = (first: Position, second: Position) => Math.max(Math.abs(first.
  * whenever you or an ally misses or is missed by an attack anywhere. */
 export function tickGallowsHumorDie(actor: EncounterActor) {
   if (actor.stance?.stanceId !== 'gallows-humor') return;
-  actor.ruleState['gallows-humor:die'] = Math.min(6, Number(actor.ruleState['gallows-humor:die'] ?? 1) + 1);
-  actor.ruleStateOwners['gallows-humor:die'] = actor.id;
+  tickPowerDie(actor, 'gallows-humor:die', 1, 6);
 }
 
 /** Pure helper: compute the deterministic mutations for a Symphony mote
@@ -184,8 +185,11 @@ export function carnevaleGambleForTurnEnd(state: EncounterState, actor: Encounte
 export function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
   const tale = actor.ruleState['monogatari:tale'];
   if (actor.ruleState['monogatari:active'] !== true || tale !== null && tale !== undefined) return undefined;
-  if (actor.ruleState['monogatari:charge'] === true) return Math.max(dice.die(6), dice.die(6));
-  return dice.die(6);
+  // F10: route through the shared recorded Gamble seam — charge rolls two d6
+  // and keeps the higher, otherwise a single d6. Dice come from the command
+  // boundary, so replay never re-rolls.
+  if (actor.ruleState['monogatari:charge'] === true) return resolveGamble(dice, 2, 'highest').result;
+  return resolveGamble(dice, 1, 'single').result;
 }
 
 /** The deterministic tale conditions the single-pass VM can evaluate: Travels
@@ -241,9 +245,7 @@ registerLifecycleRecipe({
   applies: (actor) => actor.stance?.stanceId === 'soul-blade' && !actor.attackedThisTurn,
   resolve: (_state, actor) => {
     if (actor.stance?.stanceId !== 'soul-blade' || actor.attackedThisTurn) return;
-    const die = Number(actor.ruleState['soul-blade:die'] ?? 0);
-    actor.ruleState['soul-blade:die'] = Math.min(6, die + 1);
-    actor.ruleStateOwners['soul-blade:die'] = actor.id;
+    tickPowerDie(actor, 'soul-blade:die', 0, 6);
   },
 });
 
@@ -442,8 +444,7 @@ registerLifecycleRecipe({
     if (actor.stance?.stanceId !== 'umbral-echo' || !actor.position) return;
     const adjacentFoe = Object.values(state.actors).some((candidate) => candidate.side !== actor.side && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, actor.position) <= 1);
     if (adjacentFoe) return;
-    actor.ruleState['umbral-echo:die'] = Math.min(4, Number(actor.ruleState['umbral-echo:die'] ?? 2) + 1);
-    actor.ruleStateOwners['umbral-echo:die'] = actor.id;
+    tickPowerDie(actor, 'umbral-echo:die', 2, 4);
   },
 });
 
@@ -1113,8 +1114,7 @@ registerLifecycleRecipe({
   applies: (actor, state) => actor.traitIds.includes('sealer:trait:godly-smite') && state.round > 1,
   resolve: (state, actor) => {
     if (!actor.traitIds.includes('sealer:trait:godly-smite') || state.round < 2) return;
-    actor.ruleState['mantra:die'] = Math.min(6, Number(actor.ruleState['mantra:die'] ?? 1) + 1);
-    actor.ruleStateOwners['mantra:die'] = actor.id;
+    tickPowerDie(actor, 'mantra:die', 1, 6);
   },
 });
 

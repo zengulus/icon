@@ -1,7 +1,7 @@
 import type { EncounterActor, EncounterEntity, EncounterHeldDamage, EncounterPendingInterrupt, EncounterState, EncounterTerrainEffect, Position, StatusId } from '../../types.js';
 import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
-import { projectedMarkConditionGrants, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
+import { projectedAuraSelfGrants, projectedMarkConditionGrants, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
 import { applySpatialIntent, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { summonCap } from './summon-recipes.js';
@@ -95,6 +95,12 @@ export function encounterConditionSet(actor: EncounterActor) {
   // (e.g. Rot's noDefiance) the same way, so every consumer sees the same
   // projected condition set.
   for (const condition of projectedPassiveConditions(actor.traitIds)) conditions.add(condition);
+  // Aura-conditional self-grants (ICON Aura X): a bearer projects a condition
+  // onto itself while it has an active aura persistent effect from a
+  // registered source (e.g. Rook's "you also have counter while the aura is
+  // active"). Derives from the durable activeEffects record — replay-safe.
+  const activeAuraSourceIds = actor.activeEffects.filter((effect) => effect.effectId === 'aura').map((effect) => effect.sourceId);
+  for (const condition of projectedAuraSelfGrants(activeAuraSourceIds, actor.abilityIds, actor.talents)) conditions.add(condition);
   for (const condition of projectedRoleConditions(actor.roleId)) conditions.add(condition);
   for (const condition of projectedMarkConditionGrants(actor.marks)) conditions.add(condition);
   for (const condition of projectedMarkConditionSuppressions(actor.marks)) conditions.delete(condition);

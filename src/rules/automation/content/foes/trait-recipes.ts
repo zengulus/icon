@@ -211,6 +211,11 @@ export const FOE_TRAIT_KEYWORD_RECIPES: Readonly<Record<string, FoeTraitKeywordR
   'imperial:i-crimson-weapon:398:trait:traits': row('imperial:i-crimson-weapon:398:trait:traits', [
     stat('Size 2', 'size', 2, SIZE_FOOTPRINT_PENDING),
   ]),
+  // Source artifact: the row is keyed `specia-l-traits` (trait id and the
+  // comma-separated keyword list are transcribed exactly).
+  'imperial:war-balloon:394:trait:specia-l-traits': row('imperial:war-balloon:394:trait:specia-l-traits', [cond('Flying'), cond('Sturdy')]),
+  // ── Folk (p.315–323) ──────────────────────────────────────────────────────
+  'folk:temple-monk:315:trait:unique-traits': row('folk:temple-monk:315:trait:unique-traits', [durable('Defiance', 'defiance')]),
   // ── Demon (p.406–427) ─────────────────────────────────────────────────────
   'demon:armor-demon:408:trait:special-traits': row('demon:armor-demon:408:trait:special-traits', [cond('Sturdy')]),
   'demon:horn-demon:408:trait:traits': row('demon:horn-demon:408:trait:traits', [cond('Regeneration')]),

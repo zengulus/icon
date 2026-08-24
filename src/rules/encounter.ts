@@ -22,6 +22,8 @@ import { applyDeterminedDamageToVitals } from './automation/primitives/damage-re
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
+import { resolveAbilityUseChoices } from './automation/kernels/ability-use-choices.js';
+import { AbilityUseChoiceViolation } from './automation/primitives/ability-use-choices.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
 import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
 import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
@@ -1129,6 +1131,34 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   if (attackAbility && !noAttackSpace && targets[0] && actor.ruleState['ace:armed'] === true) {
     abilityTriggers.add('exceed');
   }
+  // F10 ability-use choice fold (Blessing of War / Rebirth, p.190/p.183):
+  // optional source-backed choices the player made before this ability
+  // resolves. The fold validates an eligible allied owner, the spend, and the
+  // user's resource, emits the recorded resource-spend mutations, and feeds
+  // ordinary modifiers (boons, bonus damage, pierce, forced triggers) into
+  // this single resolution. Rejections surface as RuleViolations before any
+  // meaningful resolution or RNG.
+  const abilityUseSource = {
+    self: { id: actor.id, side: actor.side, defeated: actor.defeated, onBattlefield: actor.onBattlefield, traitIds: actor.traitIds, resources: actor.resources },
+    allies: Object.values(state.actors)
+      .filter((candidate) => candidate.id !== actor.id && candidate.side === actor.side && !candidate.defeated && candidate.onBattlefield)
+      .map((candidate) => ({ id: candidate.id, side: candidate.side, defeated: candidate.defeated, onBattlefield: candidate.onBattlefield, traitIds: candidate.traitIds, resources: candidate.resources })),
+  };
+  let abilityUseCostMutations: RuleMutation[] = [];
+  let abilityUseModifiers: { boons?: number; bonusDamage?: number; pierce?: boolean } | undefined;
+  try {
+    const resolved = resolveAbilityUseChoices(abilityUseSource, command.input?.abilityUseChoices);
+    // Cost spends ride this ability's recorded event first (so replay applies
+    // exactly what the command decided), before the program's own mutations.
+    abilityUseCostMutations = resolved.costs;
+    abilityUseModifiers = { boons: resolved.boons, bonusDamage: resolved.bonusDamage, pierce: resolved.pierce };
+    for (const trigger of resolved.triggers) abilityTriggers.add(trigger);
+  } catch (error) {
+    if (error instanceof AbilityUseChoiceViolation) {
+      throw new RuleViolation('ability-use-choice.' + error.code, error.message);
+    }
+    throw error;
+  }
   const ruleContext: RuleExecutionContext = {
     state: encounterRuleState(state),
     actorId: actor.id,
@@ -1139,6 +1169,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     dice,
     ...(attackAbility && !noAttackSpace && targets[0] ? { attackTargetId: targets[0].id } : {}),
     triggers: abilityTriggers,
+    ...(abilityUseModifiers ? { abilityUseModifiers } : {}),
   };
   const result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
   // F7 talent fold: the equipped wired talent's trigger-effect mutations ride
@@ -1164,7 +1195,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     actionId: programAction.id,
     timing,
     tags: [...programAction.tags],
-    mutations: [...result.mutations, ...talentMutations, ...traitReactionMutations_, ...demonEdgeMutations],
+    mutations: [...abilityUseCostMutations, ...result.mutations, ...talentMutations, ...traitReactionMutations_, ...demonEdgeMutations],
   })];
   if (endsTurn && !interrupt) {
     const intermediate = applyEvents(state, events);

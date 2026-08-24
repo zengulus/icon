@@ -1,4 +1,5 @@
 import { determineAndApplyEncounterDamage, registerDefeatGuard, registerOnDamageDealtHook, registerStatusSavePolicySource, registerVigorDenialSource } from '../../kernels/encounter-adapter.js';
+import { inAura } from '../../kernels/aura.js';
 import type { EncounterActor, EncounterState } from '../../../types.js';
 
 /**
@@ -25,22 +26,14 @@ function hasFoeRotMark(state: EncounterState, actor: EncounterActor): boolean {
   });
 }
 
-function sweetTormentRadius(actor: EncounterActor): number | null {
-  const effect = actor.activeEffects.find(({ effectId }) => effectId === 'sweet-torment');
-  if (!effect) return null;
-  const value = effect.modifiers.find(({ operation, stat }) => operation === 'grant' && stat === 'aura')?.value;
-  if (typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'constant' && 'value' in value && typeof value.value === 'number') return Math.max(0, value.value);
-  return 1;
-}
-
 /** ICON p.144 Sweet Torment: foes in the active aura cannot be cured or save clear statuses. */
 function inSweetTormentAura(state: EncounterState, target: EncounterActor): boolean {
   if (target.defeated || !target.onBattlefield) return false;
-  return Object.values(state.actors).some((source) => {
-    if (source.defeated || !source.onBattlefield || source.side === target.side) return false;
-    const radius = sweetTormentRadius(source);
-    return radius !== null && Math.max(Math.abs(source.position.x - target.position.x), Math.abs(source.position.y - target.position.y)) <= radius;
-  });
+  // Membership through the shared aura kernel: Sweet Torment's active effect
+  // carries a `grant`/`aura` modifier (radius 1), so `inAura` reads it from
+  // the durable activeEffects record. Only opposing sources cover foes.
+  return Object.values(state.actors).some((source) =>
+    !source.defeated && source.onBattlefield && source.side !== target.side && inAura(state, source, target));
 }
 
 /** ICON p.179 Gentleness: true when a gentleness-stance character's aura 1
