@@ -171,6 +171,17 @@ describe('Size footprints (ICON p.92, p.290)', () => {
     expect(footprintsAdjacent({ position: { x: 0, y: 0 }, size: 2 }, { position: { x: 5, y: 5 }, size: 2 })).toBe(false);
   });
 
+  it('footprintsAdjacent: overlap (the space underneath a character) counts as adjacent', () => {
+    // Same Size-1 cell: the space under a character is adjacent to itself.
+    expect(footprintsAdjacent({ position: { x: 2, y: 2 } }, { position: { x: 2, y: 2 } })).toBe(true);
+    // Overlapping large footprints: two Size-2 actors sharing cells are
+    // adjacent even though no edge-to-edge gap exists.
+    // A at (1,1) occupies (1,1)-(2,2); B at (2,2) occupies (2,2)-(3,3).
+    expect(footprintsAdjacent({ position: { x: 1, y: 1 }, size: 2 }, { position: { x: 2, y: 2 }, size: 2 })).toBe(true);
+    // Touching large footprints (edges meet, no gap) are adjacent too.
+    expect(footprintsAdjacent({ position: { x: 1, y: 1 }, size: 2 }, { position: { x: 3, y: 1 }, size: 2 })).toBe(true);
+  });
+
   it('a large foe counts as inside an area when any footprint space is hit (p.290)', () => {
     const area = [{ x: 3, y: 1 }, { x: 3, y: 2 }];
     // Anchor at (2,1) is outside the area, but the (3,1) footprint space is hit.

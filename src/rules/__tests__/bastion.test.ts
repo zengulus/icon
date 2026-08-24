@@ -367,16 +367,18 @@ describe('Bastion ability automation (p.122–124)', () => {
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:rook', targetIds: [foe.id] }, scriptedDice(10, 6));
     const heroAfter = result.state.actors[hero.id];
     // The bearer is always a member of its own aura: while Rook's aura is
-    // active the aura self-grant projects counter (replay-safe, derived from
-    // the durable activeEffects record).
+    // active the reviewed aura definition (jobs/aura-recipes.ts) projects
+    // counter onto Rook, gated on the equipped talent (replay-safe, derived
+    // from the durable activeEffects record). The condition read needs the
+    // spatial state so the aura-membership projection is included.
     expect(heroAfter.activeEffects.some(({ effectId }) => effectId === 'aura')).toBe(true);
-    expect(encounterConditionSet(heroAfter).has('counter')).toBe(true);
+    expect(encounterConditionSet(heroAfter, result.state).has('counter')).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
 
     // Control: without Rook talent 1, the active aura grants no counter.
     const plain = bastionEncounter({ foe: { x: 2, y: 1 }, ally: null });
     const plainResult = executeCommand(plain.state, { type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'bastion:rook', targetIds: [plain.foe.id] }, scriptedDice(10, 6));
-    expect(encounterConditionSet(plainResult.state.actors[plain.hero.id]).has('counter')).toBe(false);
+    expect(encounterConditionSet(plainResult.state.actors[plain.hero.id], plainResult.state).has('counter')).toBe(false);
   });
 
   it('Great Giorgios: marks the foe, ends the turn, and resolves the delayed rush on the foe’s turn end', () => {

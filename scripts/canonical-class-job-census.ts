@@ -1018,7 +1018,10 @@ const report = generateReport(census);
 
 console.log(report);
 
-// Also output JSON for programmatic consumption
+// Also output JSON for programmatic consumption. The default run writes BOTH
+// representations (Markdown report + JSON) from the same census, so the
+// canonical regeneration workflow cannot silently leave one artifact stale
+// while the other is current.
 const jsonPath = outputPath ? (outputPath.endsWith('.md') ? outputPath.replace(/\.md$/, '.json') : outputPath + '.json') : join(process.cwd(), 'docs', 'blocker-census.json');
 writeFileSync(jsonPath, JSON.stringify(census, null, 2));
 console.error(`\nCensus JSON written to ${jsonPath}`);
@@ -1026,6 +1029,10 @@ console.error(`\nCensus JSON written to ${jsonPath}`);
 if (outputPath && outputPath.endsWith('.md')) {
   writeFileSync(outputPath, report);
   console.error(`Report written to ${outputPath}`);
+} else if (!outputPath) {
+  const mdPath = join(process.cwd(), 'docs', 'blocker-census.md');
+  writeFileSync(mdPath, report);
+  console.error(`Report written to ${mdPath}`);
 }
 
 // Check for invariant failures

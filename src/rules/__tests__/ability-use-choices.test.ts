@@ -186,6 +186,45 @@ describe('Blessing of War through USE_ABILITY (p.190)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('spend 1: the +1 attack boon reaches the VM attack roll and replays (Blessing of War)', () => {
+    // Valkyrie (colossus:valkyrie) is a VM-step attack ability, so the F10
+    // boon rides the generic attack effect — the merge dropped this term.
+    let state = createEncounter('Blessing of War boon fixture');
+    const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
+    hero.abilityIds = ['colossus:valkyrie'];
+    hero.chapter = 1;
+    const foe = createFoe('Relict', { x: 2, y: 1 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+    state = executeCommand(state, { type: 'START_ENCOUNTER' }).state;
+    state.actors[hero.id].traitIds = ['sealer:trait:blessing-of-war'];
+    state.actors[hero.id].resources.blessing = 5;
+    const blessed = executeCommand(state, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'colossus:valkyrie',
+      targetIds: [foe.id],
+      input: { abilityUseChoices: [{ traitId: 'sealer:trait:blessing-of-war', spend: 1 }] },
+    }, scriptedDice(8, 4)); // d20 8, boon die 4
+    // The +1 boon adds one boon die to the VM attack roll (the attack rides
+    // the ability's RULE_MUTATIONS_APPLIED event as a recorded mutation).
+    const blessedAttack = mutationsOf(blessed.events).find((mutation) => mutation.kind === 'attack');
+    expect(blessedAttack).toMatchObject({ kind: 'attack', boon: 4 });
+    // The user spent exactly one blessing: 5 - 1 = 4.
+    expect(blessed.state.actors[hero.id].resources.blessing).toBe(4);
+    expect(applyEvents(state, blessed.events)).toEqual(blessed.state);
+    // Control: the same attack without the choice rolls no boon die.
+    const plain = executeCommand(state, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'colossus:valkyrie',
+      targetIds: [foe.id],
+    }, scriptedDice(8));
+    const plainAttack = mutationsOf(plain.events).find((mutation) => mutation.kind === 'attack');
+    expect(plainAttack).toMatchObject({ kind: 'attack', boon: 0 });
+    expect(applyEvents(state, plain.events)).toEqual(plain.state);
+  });
+
   it('spend 1: no exceed, only one blessing spent', () => {
     const { state, hero, fee } = encounter();
     state.actors[hero.id].traitIds = ['sealer:trait:blessing-of-war'];

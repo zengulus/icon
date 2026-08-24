@@ -387,7 +387,7 @@ derive from the canonical blocker census (regenerate before trusting a number).
 | Trigger windows F4 | reactive windows | when-damaged/defeated/uses-ability | — | existing |
 | Passive projection F5 | condition/role baselines | 79 foe keyword rows, job traits | — | existing |
 | Attack-modifier fold F6 | attack-path reads | Demon Edge/Hissatsu/Pulverize/Bull's Strength | — | existing |
-| Talent fold F7 | trigger effects | 29 wired + condition-grant tranche | — | existing |
+| Talent fold F7 | trigger effects | 30 wired + condition-grant tranche | — | existing |
 | **Aura kernel** (`aura.ts`) | Aura X membership + projection + attack modifiers | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | existing |
 | Spend/economy hooks (missing) | Blessing/Combo/Sacrifice/Infuse/use-ledger | ~6 job traits + talents + 3 relic ranks | strive, demon-strength, crimson-king | needed (Gamble now existing) |
 | Movement-phase kernels (missing) | vacate/occupancy/elevation/pre-post/swap/teleport-all | 5 job traits + movement talents/foes | darkside, stone-double, tumbling, great-leap | needed |
@@ -579,7 +579,7 @@ only authority for "done."
   + job-trait condition recipes; feature/mark projection.
 - **F6 Job traits / attack-path kernel** — closed `JOB_TRAIT_RECIPES`; five
   wiring homes; `attack-modifiers.ts` fold; plus the F9 reactive fold rows
-  and Trigrammaton's exactly-range-3 row (F12). 25/65 traits wired.
+  and Trigrammaton's exactly-range-3 row (F12). 27/65 traits wired.
 - **F7 Talents fold** — closed `TALENT_RECIPES` (288); `talentTriggerMutations`
   (exceed/comeback/finishing-blow/slay/collide/always) + `affectedFoeIds`
   condition-grant; 30 wired + 5 program-level + 3 passive-projection + 4

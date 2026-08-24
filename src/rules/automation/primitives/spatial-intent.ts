@@ -37,26 +37,17 @@ export function footprintsOverlap(
 }
 
 /** ICON p.92: two footprints are adjacent when any cell of one is within
- * Chebyshev distance ≤ 1 of any cell of the other — includes diagonals.
- * Two adjacent Size-1 actors at distance 1 (including diagonal) are
- * adjacent; two large actors whose edges touch diagonally are adjacent. */
+ * Chebyshev distance ≤ 1 of any cell of the other — includes diagonals AND
+ * overlap (the space underneath a character counts as adjacent). Two
+ * adjacent Size-1 actors at distance 1 (including diagonal) are adjacent;
+ * two large actors whose edges touch diagonally are adjacent; two actors
+ * sharing a cell are adjacent. Equivalent to
+ * `footprintDistance(first, second) <= 1` (distance 0 = overlap/touching). */
 export function footprintsAdjacent(
   first: { position: Position; size?: number },
   second: { position: Position; size?: number },
 ): boolean {
-  const firstCells = footprintCells(first.position, Math.max(1, first.size ?? 1));
-  const secondCells = footprintCells(second.position, Math.max(1, second.size ?? 1));
-  const secondSet = new Set(secondCells.map((c) => `${c.x},${c.y}`));
-  for (const cell of firstCells) {
-    // Chebyshev neighbors: all 8 surrounding cells (orthogonal + diagonal)
-    for (let dx = -1; dx <= 1; dx += 1) {
-      for (let dy = -1; dy <= 1; dy += 1) {
-        if (dx === 0 && dy === 0) continue;
-        if (secondSet.has(`${cell.x + dx},${cell.y + dy}`)) return true;
-      }
-    }
-  }
-  return false;
+  return footprintDistance(first, second) <= 1;
 }
 
 /** ICON p.92: "To be in range, a target must have at least 1 space of its
@@ -141,18 +132,27 @@ export interface SpatialValidation {
 }
 
 /** Validate one destination request — the single authority for bounds,
- * occupancy, impassable terrain, and rampart. Pure: no state is mutated. */
+ * occupancy, impassable terrain, and rampart. Pure: no state is mutated.
+ *
+ * Size-aware (ICON p.92): a Size-N actor occupies an N×N footprint, so the
+ * whole footprint — not the anchor cell — must stay in bounds, clear of
+ * impassable terrain, and free of other actors' footprints. Size 1
+ * degenerates to the anchor cell, and the checks use the same primitives as
+ * the ordinary movement planner (movement.ts), so every destination-writing
+ * path shares one definition of legal placement. */
 export function validateSpatialIntent(state: EncounterState, intent: SpatialIntent): SpatialValidation {
   const actor = state.actors[intent.actorId];
   if (!actor || actor.defeated) return { legal: false, problem: 'unavailable' };
   const { width, height, terrain } = state.grid;
   const { to } = intent;
-  if (to.x < 0 || to.y < 0 || to.x >= width || to.y >= height) return { legal: false, problem: 'out-of-bounds' };
-  if (terrain.some((cell) => sameCell(cell.position, to) && cell.type === 'impassable')) return { legal: false, problem: 'impassable-terrain' };
+  const size = Math.max(1, actor.size);
+  const cells = footprintCells(to, size);
+  if (cells.some((cell) => cell.x < 0 || cell.y < 0 || cell.x >= width || cell.y >= height)) return { legal: false, problem: 'out-of-bounds' };
+  if (cells.some((cell) => terrain.some((t) => sameCell(t.position, cell) && t.type === 'impassable'))) return { legal: false, problem: 'impassable-terrain' };
   const occupied = Object.values(state.actors).some((candidate) =>
     candidate.id !== intent.actorId
     && candidate.onBattlefield && !candidate.defeated && candidate.position !== null
-    && sameCell(candidate.position, to)
+    && footprintsOverlap({ position: to, size }, { position: candidate.position, size: candidate.size })
     && !(intent.coMovedActorIds?.includes(candidate.id)));
   if (occupied) return { legal: false, problem: 'occupied' };
   if (intent.rampartObstructed) return { legal: false, problem: 'rampart' };

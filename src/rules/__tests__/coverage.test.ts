@@ -68,25 +68,25 @@ describe('rules automation coverage gate', () => {
 
   it('reports every source unit and leaves unresolved mechanics visible', () => {
     const { audit } = auditRuleCompilations(collectRuleSourceUnits());
-    // F6: the 25 wired Job traits (incl. the attack-path modifier group —
-    // Demon Edge, Hissatsu, Pulverize, Bull's Strength — Trigrammaton's
+    // F6: the 27 wired Job traits (incl. the attack-path modifier group —
+    // Demon Edge, Hissatsu, Pulverize, Bull's Strength, Trigrammaton's
     // exactly-range-3 row, the F9 once-per-round reactive fold row Dash on
     // the Rocks, and Shieldmaster's aura + turn-end membership recipe)
-    // + 6 summon suites are complete programs; F7: the 29 wired talents
-    // (the closed `talent-recipes.ts` tranche) plus the four program-level
+    // + 6 summon suites are complete programs; F7: the 30 wired talents
+    // (the closed `talent-recipes.ts` tranche) plus the five program-level
     // talents, the three aura projection talents (Rook t1, Dervish t1,
     // Gentleness t1, which register as continuous passive-projection rows),
-    // and the four range-modifier talents (Valkyrie t1, Incubus t1,
-    // Harvest t2, Open the Gates t2, executed by the shared range kernel)
-    // audit as complete — 288 source talents, 29 wired / 4 program-level
-    // / 3 passive-projection / 4 range-modifier / 248 documented. F8: the
-    // seven singleton mastery rows are complete
+    // the four range-modifier talents (Valkyrie t1, Incubus t1,
+    // Harvest t2, Open the Gates t2, executed by the shared range kernel),
+    // and the one area-modifier talent (Soul Shot t2) audit as complete —
+    // 288 source talents, 43 complete / 245 documented. F8: the eight
+    // complete mastery rows are complete
     // through the typed mastery attachment (each audits as one reviewed
     // passive clause — the parent resolver/lifecycle/aura path, not parsed
     // text — instead of the generic parser's split clauses). The reviewed
     // aura (Commander's Aura, Aura of Shielding), HP-threshold (Slippery,
     // the Enrage family, the hover chair), and attack-modifier (Blood
-    // Hunger) foe traits compile complete through their kernels. The 40
+    // Hunger) foe traits compile complete through their kernels. The 38
     // documented Job traits and every other kind stay source-visible.
     // F9 range: the four range-modifier talents, Trigrammaton, and the
     // Aetherwall trait compile complete through the shared range kernel.

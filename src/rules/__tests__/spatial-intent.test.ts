@@ -122,6 +122,42 @@ describe('F1 spatial gateway (pp.87–92, 94, 107)', () => {
     const result = applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 3, y: 1 })]);
     expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 });
   });
+
+  it('Size-2 destinations validate the whole footprint, not just the anchor (p.92)', () => {
+    const { state, hero, foe } = spatialEncounter({
+      terrain: [{ position: { x: 5, y: 1 }, type: 'impassable', elevation: 0 }],
+    });
+    // The foe becomes a Size-2 actor occupying an N×N footprint.
+    state.actors[foe.id].size = 2;
+    // Legal: the whole 2×2 footprint at (3,1) — (3,1),(4,1),(3,2),(4,2) — is
+    // in bounds, unoccupied, and clear of the impassable cell at (5,1).
+    const legal = applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 3, y: 1 })]);
+    expect(legal.actors[foe.id].position).toEqual({ x: 3, y: 1 });
+    expect(applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 3, y: 1 })])).toEqual(legal);
+    // Anchor in bounds but the footprint spills out of the grid: the anchor
+    // cell (8,1) is inside a 10-wide grid, but a Size-2 anchor at x=8 would
+    // occupy x∈[8,9] which is still in bounds; use x=9 → x∈[9,10] exceeds.
+    const bounds = applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 9, y: 0 })]);
+    expect(bounds.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    // Anchor clear but a footprint cell on impassable terrain: (4,1) is free
+    // and passable, but the Size-2 footprint at (4,1) covers (5,1) — impassable.
+    const impassable = applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 4, y: 1 })]);
+    expect(impassable.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+  });
+
+  it('Size-2 destinations cannot overlap another actor\'s footprint (anchor free)', () => {
+    const { state, hero, foe } = spatialEncounter();
+    state.actors[foe.id].size = 2;
+    // The Size-2 footprint anchored at (0,1) covers (0,1),(1,1),(0,2),(1,2) —
+    // overlapping the hero at (1,1) even though the anchor cell is free.
+    const overlapping = applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 0, y: 1 })]);
+    expect(overlapping.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    // The same anchor is legal once the hero leaves (1,1): the footprint is
+    // then entirely free and in bounds.
+    const heroMoved = applyEvents(state, [{ ...moveEvent(hero.id, hero.id, 'place', { x: 7, y: 1 }) }]);
+    const nowFree = applyEvents(heroMoved, [moveEvent(heroMoved.actors[hero.id].id, foe.id, 'place', { x: 0, y: 1 })]);
+    expect(nowFree.actors[foe.id].position).toEqual({ x: 0, y: 1 });
+  });
 });
 
 describe('F1 area gateway (p.95 AoE patterns)', () => {

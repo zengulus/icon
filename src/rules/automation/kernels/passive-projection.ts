@@ -128,9 +128,6 @@ export interface AuraSelfGrantRecipe {
   /** The base ability id whose talent grant the source names (e.g. Rook
    * talent 1 grants counter while Rook's aura is active). */
   requiredAbilityId: string;
-  /** The exact talent tier required (1 or 2). If omitted, any equipped
-   * talent tier satisfies the grant (the bearer has at least this ability). */
-  requiredTalent?: 1 | 2;
   /** Conditions granted to the bearer while the aura is active. */
   conditions: readonly string[];
 }
@@ -142,14 +139,10 @@ export function registerAuraSelfGrantRecipes(rows: Readonly<Record<string, AuraS
   for (const recipeList of Object.values(rows)) auraSelfGrantRecipes.push(...recipeList);
 }
 
-/** True when the bearer still ranks in the granting ability. When a
- * recipe specifies an exact requiredTalent, the bearer must own that tier
- * (talent 1 grants X is not satisfied by talent 2). Without a tier, any
- * equipped talent satisfies the requirement. */
-function hasTalentFor(abilityId: string, talents: Readonly<Record<string, 1 | 2>>, abilityIds: readonly string[], requiredTalent?: 1 | 2): boolean {
-  if (!abilityIds.includes(abilityId)) return false;
-  const owned = talents[abilityId] ?? 0;
-  return requiredTalent !== undefined ? owned === requiredTalent : owned >= 1;
+/** True when the bearer still ranks in the granting ability. A row like
+ * "a talent 1 grants X" is scoped to the ability's talent tier. */
+function hasTalentFor(abilityId: string, talents: Readonly<Record<string, 1 | 2>>, abilityIds: readonly string[]): boolean {
+  return (talents[abilityId] ?? 0) >= 1 && abilityIds.includes(abilityId);
 }
 
 /** Conditions a bearer projects onto itself while it has an active aura effect
@@ -164,7 +157,7 @@ export function projectedAuraSelfGrants(
   const granted = new Set<string>();
   for (const recipe of auraSelfGrantRecipes) {
     if (!activeAuraSourceIds.includes(recipe.auraSourceId)) continue;
-    if (!hasTalentFor(recipe.requiredAbilityId, talents, abilityIds, recipe.requiredTalent)) continue;
+    if (!hasTalentFor(recipe.requiredAbilityId, talents, abilityIds)) continue;
     for (const condition of recipe.conditions) granted.add(condition);
   }
   return granted;

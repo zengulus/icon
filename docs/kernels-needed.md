@@ -21,22 +21,27 @@ job-trait and F7 talent slices already ship.
 
 **Status recap.** Foundations F0–F5 are executed (damage ledger, spatial
 gateway, save window, turn lifecycle, trigger windows, passive projection +
-role baselines). Wired slices: 23/65 Job traits (incl. the F9 once-per-round
-reactive fold row Dash on the Rocks), 32/288 talents executable
-(29 fold-wired + 3 program-level — Demon Cutter t2's pre-ability rush,
-Draken Cross t2's charged medium blasts, and Pyre t1's comeback ally
-immunity; the single-foe condition-grant family via `affectedFoeIds` — see
-docs/condition-grant-handoff.md for the re-audit and the MiMo harvest
-boundary), 22 foe ability recipes, 36 foe movement-trait IDs, the p.298 role
-baselines. The audit backlog that the kernels below unblock:
+role baselines). Wired slices: 27/65 Job traits (incl. the F9 once-per-round
+reactive fold row Dash on the Rocks, Shieldmaster's aura + turn-end
+membership recipe, and Trigrammaton's exactly-range-3 attack-path row),
+43/288 talents executable (30 fold-wired + 5 program-level — Demon Cutter
+t2's pre-ability rush, Draken Cross t2's charged medium blasts, Pyre t1's
+comeback ally immunity, Divine Aegis t2's quarter-HP defiance, and Eye of
+the Storm t2's area-count damage; 3 aura passive-projection rows — Rook t1,
+Dervish t1, Gentleness t1; 4 range-modifier rows — Valkyrie t1, Incubus t1,
+Harvest t2, Open the Gates t2; and 1 area-modifier row — Soul Shot t2 —
+see docs/condition-grant-handoff.md for the re-audit and the MiMo harvest
+boundary), 22 foe ability recipes,
+36 foe movement-trait IDs, the p.298 role baselines. The audit backlog that
+the kernels below unblock:
 
 | Kind | Units | Kind | Units |
 | --- | ---: | --- | ---: |
 | core | 70 | relic-rank | 120 |
-| class-trait | 8 | relic-aspect | 40 |
-| job-trait | 42 | foe-ability | 1,247 |
-| talent | 256 | foe-trait | 612 |
-| mastery | 137 | foe-phase | 19 |
+| class-trait | 7 | relic-aspect | 40 |
+| job-trait | 38 | foe-ability | 1,247 |
+| talent | 245 | foe-trait | 590 |
+| mastery | 136 | foe-phase | 19 |
 | limit-break | 16 | foe-chapter-rule | 116 |
 | trophy | 68 | camp-fixture | 16 |
 | camp-feature | 85 | reward-rule | 9 |
@@ -44,7 +49,7 @@ baselines. The audit backlog that the kernels below unblock:
 
 ## 1. Job kernels
 
-### 1.1 Job traits — 42 documented rows in `JOB_TRAIT_RECIPES`
+### 1.1 Job traits — 38 documented rows in `JOB_TRAIT_RECIPES`
 
 | Kernel | Consumers (exact trait ids) | Prerequisite |
 | --- | --- | --- |
@@ -76,7 +81,7 @@ baselines. The audit backlog that the kernels below unblock:
 | **Area-inclusion ally hook** — allies immune to your area effects, gain 2 vigor + a Blessing | `seer:trait:karma` | F4 (area-inclusion exists for Perseus; generalize) |
 | **13-card deck bookkeeping** — draw/discard/shuffle across combats (narrative) | `seer:trait:the-wheel-of-fate`, `seer:trait:skein`, `seer:trait:foretell`, `seer:trait:bend-fate` (bend-fate also needs the gamble hook) | may stay table-facing by design |
 
-### 1.2 Talents — 256 documented rows in `TALENT_RECIPES`
+### 1.2 Talents — 245 documented rows in `TALENT_RECIPES`
 
 The closed classifier in `content/jobs/talent-recipes.ts` (`documentedTalentDetail`)
 enumerates the exact kernel families; a talent promotes when its family's
@@ -169,14 +174,14 @@ owner's defeat are wired (`content/jobs/summon-recipes.ts`, `state.companion`). 
 
 ## 2. Foe kernels
 
-### 2.1 Foe traits — 612 remaining units (`content/foes/trait-recipes.ts` / `kernels/passive-projection.ts`)
+### 2.1 Foe traits — 590 remaining units (`content/foes/trait-recipes.ts` / `kernels/passive-projection.ts`)
 
 The 79 fully-executable keyword rows (F5: the closed `content/foes/trait-recipes.ts`
 manifest — conditions, durable Defiance, Size/Armor/Speed stats, role baselines)
 plus the p.298 role baselines are wired; 36 partial rows project their wired
 keywords while their Counter/Diaga/Size-footprint clause stays pending.
 Everything else projects nothing. Keyword census of the full corpus (691
-source units = 612 unresolved + 79 wired): immune 22, aura 42, bloodied 35,
+source units = 590 unresolved + 101 wired): immune 22, aura 42, bloodied 35,
 end-of-turn 28, start-of-turn 24, start-of-round 18, resistant 18, round-gated
 12, counter 10, 25%-hp 10, sacrifice 9, when-damaged 1. Kernel families:
 

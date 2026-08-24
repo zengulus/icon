@@ -226,6 +226,8 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
           // (Pulverize flat damage and lowered exceed threshold), distance-
           // gated rules (Trigrammaton's exactly-range-3 boon/unerring)
           // through the canonical p.92 footprint distance, and unerring.
+          // F10 ability-use modifiers (Blessing of War / Rebirth) ride the
+          // resolution context for this ability only.
           const distance = source.position && target.position
             ? footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size })
             : undefined;
@@ -233,7 +235,7 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
           const targetAuraCurse = projectedAuraAttackModifiers(auraView, target.id).targetCurses ?? 0;
           const attack = resolveAttackRoll({
             defense: target.defense,
-            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
+            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons + (context.abilityUseModifiers?.boons ?? 0) + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
             elevationModifier,
             sourceDazed: source.conditions.has('dazed'),
             targetEvasion: target.conditions.has('evasion'),

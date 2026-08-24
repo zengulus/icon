@@ -244,7 +244,11 @@ describe('foe ability automation (p.300–306 recipes)', () => {
       { kind: 'damage', actorId: fixture.hero.id, amount: 11, delivery: 'hit' },
       { kind: 'condition', actorId: fixture.hero.id, conditionId: 'stunned' },
     ]);
-    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 2, y: 1 });
+    // The Brute is Size 2: its footprint at (1,1) already spans x∈[1,2], so
+    // its edge touches the hero at (3,1) — no rush cell exists whose whole
+    // footprint avoids overlapping the hero, and the footprint-aware gateway
+    // denies the planned rush. The brute attacks from where it stands.
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 1, y: 1 });
     expect(result.state.actors[fixture.hero.id].hp).toBe(31); // 40 - (11 - armor 2)
     expect(result.state.actors[fixture.hero.id].statuses).toContain('stunned');
     expect(applyEvents(fixture.state, result.events)).toEqual(result.state);

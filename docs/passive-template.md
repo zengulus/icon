@@ -11,8 +11,8 @@ source-page replay fixture **and** a negative fixture proving non-recipe text
 stays inert.
 
 This is the "one shared contract, replayed per instance" pattern from
-`docs/foe-template.md`, applied to passives: the 8 class traits, 65 job
-traits, 612 foe traits, 19 foe phases, and 6 foe role baselines are all
+`docs/foe-template.md`, applied to passives: the 13 class traits, 65 job
+traits, 691 foe traits, 19 foe phases, and 6 foe role baselines are all
 instances of a few dozen source behaviors, so **no per-passive resolver code
 exists**.
 

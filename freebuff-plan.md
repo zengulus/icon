@@ -30,7 +30,7 @@ says it plainly:
 
 The interesting fact: the remaining 3,223 unsupported clauses are **not** 3,223
 unique mechanics. They are 3,223 instances of a few dozen source behaviors,
-repeated across ~1,365 foe abilities, 612 foe traits, 288 talents, 144
+repeated across ~1,365 foe abilities, 691 foe traits, 288 talents, 144
 masteries, 120 relic ranks, and the supporting/core rules. Everything that is
 already complete was completed **once** by building a shared contract, then
 replayed for every instance:
@@ -259,7 +259,7 @@ not the content.
   conditions have no reviewed passive source yet — they stay fixture-only
   until a source unit is promoted with its damage/trigger/lifecycle matrix
   (never inferred from trait/role prose).
-- **Unblocks:** 8 class traits, 65 job traits, 612 foe traits, 19 foe phases,
+- **Unblocks:** 13 class traits, 65 job traits, 691 foe traits, 19 foe phases,
   and the role baselines that make 1,365 foe abilities behave correctly.
 
 ### F6 — Job traits: closed inventory, five wiring homes
@@ -310,11 +310,11 @@ not the content.
   the three projection tests, disabling the round-start phase fails the
   mantra/rage tests, and dropping the companion exempt fails the
   survival test.
-- **Remaining:** 42 documented traits need their home kernels first
+- **Remaining:** 38 documented traits need their home kernels first
   (Heroics-economy choices, spatial-aura mechanics, reactive windows, and
   the gated attack-path modifier hooks — distance/terrain/round/stealth-gated
   reads, threshold hooks, and the collide-trigger kernel).
-- **Unblocks:** the job-trait row of the coverage table; the 42 documented
+- **Unblocks:** the job-trait row of the coverage table; the 38 documented
   rows promote through `docs/job-trait-template.md` as their kernels land.
   The attack-path modifier group (Demon Edge, Hissatsu, Pulverize, Bull's
   Strength) promoted with the shared `kernels/attack-modifiers.ts` kernel and the
@@ -331,16 +331,16 @@ missing stays source-visible (never approximated).
 | Coverage area | Units remaining | Prerequisite foundation | Template + shared kit | Fixture home |
 | --- | ---: | --- | --- | --- |
 | Core combat units | 70 | F0, F2, F3, F4 | `damage-ledger.ts`, save/turn templates | `__tests__/core*.test.ts` |
-| Class traits | 8 | F5 | `kernels/passive-projection.ts` recipes | `__tests__/traits.test.ts` |
+| Class traits | 7 | F5 | `kernels/passive-projection.ts` recipes | `__tests__/traits.test.ts` |
 | Job traits | 65 | F5, F6 | passive + lifecycle + resolver recipes (`content/jobs/job-trait-recipes.ts`) | `__tests__/job-traits.test.ts`, `__tests__/summons.test.ts` |
-| Talents | 288 | F0, F2, F5, F7 | `content/jobs/talent-recipes.ts` inventory + `kernels/talent-recipes.ts` trigger-effect fold (29 wired + 3 program-level) | `__tests__/talents.test.ts`, `__tests__/demon-slayer.test.ts`, `__tests__/enochian.test.ts` |
+| Talents | 288 | F0, F2, F5, F7 | `content/jobs/talent-recipes.ts` inventory + `kernels/talent-recipes.ts` trigger-effect fold (30 wired + 5 program-level + 3 passive-projection + 4 range-modifier + 1 area-modifier) | `__tests__/talents.test.ts`, `__tests__/demon-slayer.test.ts`, `__tests__/enochian.test.ts` |
 | Masteries | 144 | F0, F2, F3 | mastery recipes (often a flag on the ability recipe) | `__tests__/masteries.test.ts` |
 | Limit Breaks | 16 | F3, F0 | `limit-break-recipes.ts` (resolve spend, action timing) | `__tests__/limit-breaks.test.ts` |
 | Job summon rules | 6 | F1, F3 | `content/jobs/summon-recipes.ts` (entities + ownership + lifecycle) | `__tests__/summons.test.ts` |
 | Relic ranks | 120 | F0, F1, F2, F3 | `relic-recipes.ts` (invoke = cost + effects) | `__tests__/relics.test.ts` |
 | Relic aspects | 40 | F5 (+ character engine already covers transitions) | aspect passive recipes | `__tests__/relics.test.ts` |
 | Foe abilities | 1,247 | F0, F1, F2, F3 | `FOE_ABILITY_RECIPES` rows (data only) | `__tests__/foe.test.ts` |
-| Foe traits | 612 | F5 | `content/foes/trait-recipes.ts` rows | `__tests__/foe-traits.test.ts` |
+| Foe traits | 590 | F5 | `content/foes/trait-recipes.ts` rows | `__tests__/foe-traits.test.ts` |
 | Foe roles (baselines) | 6 roles | F5 + F0 | `FoeRoleBaselineRecipe` | `__tests__/foe-traits.test.ts` |
 | Foe phases | 19 | F3 | phase recipe (round/turn lifecycle) | `__tests__/foe.test.ts` |
 | Foe chapter rules | 116 | F0–F5 as needed | chapter-rule recipes | `__tests__/foe.test.ts` |
@@ -349,7 +349,7 @@ missing stays source-visible (never approximated).
 | Reward rules | 9 | F2, F3 | reward recipes | `__tests__/rewards.test.ts` |
 | Bond powers (narrative) | 120 | stays table-facing | none — keep non-authoritative | existing narrative tests |
 
-**Executed slice — Talents (F7, 32/288 executable: 29 wired + 3 program-level):**
+**Executed slice — Talents (F7, 43/288 executable: 30 wired + 5 program-level + 3 passive-projection + 4 range-modifier + 1 area-modifier):**
 `content/jobs/talent-recipes.ts` — the closed 288-row inventory (two talents
 per ability, exact source ids) with a wired tranche that executes through one
 shared kernel, `talentTriggerMutations`
@@ -384,7 +384,7 @@ medium blasts instead."): on a slow turn both blasts become medium (radius
 immune to damage from this ability."): the first program-level comeback
 clause — while bloodied, the Pyre resolver skips allies in the blast fray
 and the comeback/exceed re-explosion, fixtures in `__tests__/enochian.test.ts`.
-Remaining 256 rows stay source-visible with their kernel need
+Remaining 245 rows stay source-visible with their kernel need
 (movement/sacrifice/aura/blessing-combo hooks; the documented finishing-blow
 rows — Death Blossom's teleport choices and Stampede's may-choice mark
 transfer — and the `charge` family's remaining ability-behavior variants,
