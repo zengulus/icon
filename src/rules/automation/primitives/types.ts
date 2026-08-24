@@ -291,6 +291,14 @@ export interface RuleExecutionInput {
    * input into the fold; kernels never interpret a trait id directly.
    */
   abilityUseChoices?: ReadonlyArray<{ traitId: string; spend: number }>;
+  /**
+   * Optional post-resolution talent effects the player explicitly opted into
+   * (source unit ids, e.g. `knave:provoke:talent:2`'s may-sacrifice). The
+   * engine never chooses "yes" on the player's behalf — an optional wired
+   * talent fires only when its source id is named here, and replay carries
+   * the recorded choice.
+   */
+  talentChoices?: ReadonlyArray<string>;
 }
 
 export interface RuleExecutionContext {

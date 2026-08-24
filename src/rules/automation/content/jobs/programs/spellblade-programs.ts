@@ -5,12 +5,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, arcCells, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe, rushTowardFoes,
+  distance, sourceActor, walk, freeCellsInRange, nearestFoe, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, shoveMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Spellblade ability implementations (ICON p.222–229),
@@ -52,10 +53,10 @@ const blitzEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie), 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie), 'hit')
     : damageMutation(context, target.id, 1, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'vulnerable'));
   const repeats = context.triggers?.has('slay') || context.actionTags?.has('infuse') ? 2 : 1;
@@ -106,10 +107,10 @@ const nothungEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   const first = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
   if (!sameCell(first, source.position)) mutations.push(teleportMutation(context, source.id, first));
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const arc = squareArea(target.position, 1);
   for (const character of Object.values(context.state.actors)) {
@@ -281,10 +282,10 @@ const driftingLeafEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'shattered'));
   const direction = axisDirection(source.position, target.position);

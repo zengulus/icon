@@ -4,12 +4,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid, occupied,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack, rushTowardFoes,
+  distance, sourceActor, walk, freeCellsInRange, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Harvester ability implementations (ICON p.182–188),
@@ -60,10 +61,10 @@ const reapEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const thrallCell = freeCellsInRange(context, target.position, 1)[0];
   if (thrallCell) mutations.push(entityMutation(context, source.id, thrallCell, 'thrall', {}));
@@ -108,10 +109,10 @@ const harvestEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const area = squareArea(target.position, 1);
   const foesInArea = Object.values(context.state.actors).filter((character) => {
@@ -222,10 +223,10 @@ const darkSliverEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (context.triggers?.has('slay')) {
     const plantCell = freeCellsInRange(context, target.position, 3)[0];

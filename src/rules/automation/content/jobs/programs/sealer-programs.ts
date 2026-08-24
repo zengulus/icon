@@ -4,13 +4,14 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe,
+  distance, sourceActor, walk, freeCellsInRange, nearestFoe,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation, shoveMutation,
   gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Sealer ability implementations (ICON p.189–196),
@@ -52,10 +53,10 @@ const godHandEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   const landing = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
   if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'sealed'));
   const sourcePosition = source.position;
@@ -79,10 +80,10 @@ const devilHandEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   const landing = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
   if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
-  const roll = resolveAttack(context, source, target, { boons: 1 });
+  const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const blast = squareArea(target.position, 2);
   const applyBlast = () => {
@@ -125,10 +126,10 @@ const matsuriEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   const landing = walk(context, source.position, axisDirection(source.position, target.position), 2, false, source.id);
   if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (context.triggers?.has('exceed')) {
     const blast = squareArea(target.position, 3);
@@ -287,10 +288,10 @@ const openTheGatesEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   const landing = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
   if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
-  const roll = resolveAttack(context, source, target, { boons: 1 });
+  const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   const rolled = roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>;
   mutations.push({ ...rolled, hit: true, total: Math.max(rolled.total ?? 0, target.defense) });
-  mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit'));
+  mutations.push(damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit'));
   mutations.push(conditionMutation(context, target.id, 'pacified'));
   if (context.triggers?.has('exceed')) {
     const toward = axisDirection(source.position, target.position);
@@ -315,10 +316,10 @@ const centerTheTempleEffects: RuleResolver = (context) => {
   const steps = Math.min(context.state.round, Math.max(context.state.grid.width, context.state.grid.height));
   const landing = walk(context, source.position, axisDirection(source.position, target.position), steps, false, source.id);
   if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (context.triggers?.has('exceed')) {
     mutations.push(damageMutation(context, target.id, context.state.round >= 4 ? 6 : 1, 'effect'));

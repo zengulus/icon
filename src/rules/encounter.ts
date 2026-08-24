@@ -4,7 +4,7 @@ import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
 import { randomDice, rollBoonOrCurse, rollDamage, type DiceSource } from './dice.js';
 import { compileRuleSourceUnit } from './automation/content/glue/compiler.js';
-import type { RuleExecutionContext, RuleExecutionResult, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
+import type { RuleAction, RuleExecutionContext, RuleExecutionResult, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
@@ -30,7 +30,8 @@ import { auraStateView, projectedAuraAttackModifiers } from './automation/kernel
 import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
 import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
-import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
+import { executeRuleProgram, integer, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
+import { assertRuleCostsPayable, costContextFromEncounter, effectiveRuleCosts, evaluateCosts, CostPaymentViolation } from './automation/kernels/cost-payment.js';
 import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
 import { hasLineOfSight as lineOfSightKernel } from './automation/primitives/line-of-sight.js';
 import { movementEntryTriggerMutations } from './automation/kernels/movement-triggers.js';
@@ -1092,6 +1093,40 @@ function talentReactiveTargets(state: EncounterState, actor: EncounterActor, abi
   return out;
 }
 
+/**
+ * The cost-payment transaction gate (beginning-of-action boundary): validate
+ * an action's mandatory costs BEFORE any effect resolves or RNG is consumed,
+ * through the shared cost-payment kernel. An unpayable mandatory cost
+ * rejects the whole command; the runtime then pays the same effective costs
+ * (cost modifiers fold identically at both sites), so the amount validated
+ * and the amount paid never drift.
+ */
+function assertProgramCostsPayable(
+  state: EncounterState,
+  actor: EncounterActor,
+  label: string,
+  sourceId: string,
+  action: Pick<RuleAction, 'costs'>,
+  context: RuleExecutionContext,
+): void {
+  try {
+    const costContext = costContextFromEncounter(state, actor.id, sourceId, label);
+    const effective = effectiveRuleCosts(action.costs, costContext);
+    const evaluated = evaluateCosts(effective, (amount) => integer(amount, context));
+    assertRuleCostsPayable(costContext, evaluated);
+  } catch (error) {
+    if (error instanceof CostPaymentViolation) {
+      throw new RuleViolation(
+        error.code === 'insufficient-resource' ? 'resource.insufficient'
+          : error.code === 'action-insufficient' ? 'action.insufficient'
+          : 'actor.unavailable',
+        error.message,
+      );
+    }
+    throw error;
+  }
+}
+
 function abilityEvents(state: EncounterState, command: Extract<EncounterCommand, { type: 'USE_ABILITY' }>, dice: DiceSource): EncounterEvent[] {
   if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
   const actor = state.actors[command.actorId];
@@ -1224,13 +1259,31 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     triggers: abilityTriggers,
     ...(abilityUseModifiers ? { abilityUseModifiers } : {}),
   };
+  // Cost-payment transaction gate: the program's mandatory costs are
+  // validated at the beginning-of-action boundary before any effect resolves
+  // or RNG is consumed; an unpayable mandatory cost rejects the whole
+  // ability. The VM runtime pays the same effective costs through the shared
+  // cost-payment kernel (the mutations above already ride this event).
+  assertProgramCostsPayable(state, actor, ability.name, ability.id, programAction, ruleContext);
   const result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
+  // F10 Blessing of Rebirth pierce (p.183): the chosen ability gains pierce.
+  // The declarative VM converts its own damage at emission; resolver-emitted
+  // damage converts here at the same command boundary, so both execution
+  // styles pierce identically and the recorded event carries the converted
+  // mutations (replay never re-decides the choice). Talent/trait-fold damage
+  // is a different source and is intentionally untouched.
+  if (abilityUseModifiers?.pierce) {
+    for (const mutation of result.mutations) {
+      if (mutation.kind === 'damage' && mutation.damageType === 'normal') mutation.damageType = 'piercing';
+    }
+  }
   // F7 talent fold: the equipped wired talent's trigger-effect mutations ride
   // the same event, so replay applies exactly what the command decided. The
   // slay/collide triggers receive the post-application reactive targets
-  // computed from the recorded mutations.
+  // computed from the recorded mutations. Optional talents fire only when the
+  // player named them in the command's `talentChoices` input.
   const reactive = talentReactiveTargets(state, actor, ability.id, result.mutations);
-  const talentMutations = talentTriggerMutations(state, actor, ability.id, result.mutations, targetIds, reactive);
+  const talentMutations = talentTriggerMutations(state, actor, ability.id, result.mutations, targetIds, reactive, new Set(command.input?.talentChoices ?? []));
   // F9 reactive job-trait fold: equipped wired job-trait reactions (e.g. a
   // once-per-round collide reaction) ride the same event, so replay applies
   // exactly what the command decided.
@@ -1393,6 +1446,12 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         ...(command.triggerTargetIds ? { triggerTargetIds: command.triggerTargetIds } : {}),
         triggers,
       };
+      // Cost-payment transaction gate: the action's mandatory costs are
+      // validated at the beginning-of-action boundary before any effect
+      // resolves or RNG is consumed (the same gate USE_ABILITY runs). The
+      // post-execution spend loop below remains as a safety net for spends
+      // emitted by effect mutations rather than declared costs.
+      assertProgramCostsPayable(state, actor, unit.name, unit.id, action, ruleContext);
       let result: RuleExecutionResult;
       try {
         result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
@@ -1430,7 +1489,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         timing: command.timing,
         tags: [...action.tags],
         // F7 talent fold + F9 reactive job-trait fold: symmetric with USE_ABILITY.
-        mutations: [...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations],
+        mutations: [...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations],
       })];
       break;
     }

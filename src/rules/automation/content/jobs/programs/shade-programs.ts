@@ -5,11 +5,12 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, comboCost,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack,
+  distance, sourceActor, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
   placeMutation, teleportMutation, entityMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Shade ability implementations (ICON p.159–164), the
@@ -55,10 +56,10 @@ const umbraEffects: RuleResolver = (context) => {
     if (!sameCell(destination, sourcePosition)) mutations.push(teleportMutation(context, source.id, destination));
   }
   if (target) {
-    const roll = resolveAttack(context, source, target, { boons: 1 });
+    const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
     mutations.push(roll.attackMutation);
     mutations.push(roll.hit
-      ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+      ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
       : damageMutation(context, target.id, source.fray, 'miss'));
     mutations.push(conditionMutation(context, target.id, 'blind'));
   }
@@ -92,10 +93,10 @@ const umbraComboEffects: RuleResolver = (context) => {
     const destination = walk(context, targetPosition, axisDirection(targetPosition, sourcePosition), 3, false, target.id);
     if (!sameCell(destination, targetPosition)) mutations.push(teleportMutation(context, target.id, destination));
   }
-  const attack = resolveAttack(context, source, target, { boons: 1 });
+  const attack = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   mutations.push(attack.attackMutation);
   mutations.push(attack.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(attack.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'blind'));
   return mutations;
@@ -129,10 +130,10 @@ const deathBlossomEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   const targetPosition = target?.position;
   if (!target || !targetPosition) return [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   const mutations: RuleMutation[] = [roll.attackMutation];
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   for (const foe of Object.values(context.state.actors)) {
     const foePosition = foe.position;
@@ -248,10 +249,10 @@ const incubusEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   const targetPosition = target?.position;
   if (!target) return [];
-  const roll = resolveAttack(context, source, target, { boons: 1 });
+  const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   const mutations: RuleMutation[] = [roll.attackMutation];
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(markMutation(context, target.id, 'incubus', {}));
   if (context.triggers?.has('finishing-blow') && targetPosition) {

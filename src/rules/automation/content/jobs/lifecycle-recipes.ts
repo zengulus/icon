@@ -1290,6 +1290,26 @@ registerLifecycleRecipe({
   },
 });
 
+/** Once-per-turn gates hold a durable `ledger:turn:<sourceId>` ruleState flag
+ * (the shared use-ledger kernel, `kernels/use-ledger.ts`). The actor's own
+ * turn-start boundary resets them, so a once-per-turn gate is fresh at the
+ * start of each of the actor's turns (ICON "once per turn"). Registered
+ * per-actor; it participates only when the starting actor's turn ledger is
+ * set, clearing nothing otherwise. */
+registerLifecycleRecipe({
+  sourceId: 'core:turn-ledger-reset',
+  phase: 'turn-start',
+  applies: (actor) => Object.keys(actor.ruleState).some((key) => key.startsWith('ledger:turn:')),
+  resolve: (state, actor) => {
+    for (const key of Object.keys(actor.ruleState)) {
+      if (key.startsWith('ledger:turn:')) {
+        delete actor.ruleState[key];
+        delete actor.ruleStateOwners[key];
+      }
+    }
+  },
+});
+
 /** Once-per-round reactive gates (e.g. Dash on the Rocks, p.230) hold a durable
  * `ledger:round:<sourceId>` ruleState flag written when the reaction fires. A
  * round boundary resets every actor's round ledger so the gate is fresh each

@@ -4,12 +4,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe, rushTowardFoes,
+  distance, sourceActor, walk, freeCellsInRange, nearestFoe, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
   shoveMutation, teleportMutation, entityMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Stormbender ability implementations (ICON p.230–236),
@@ -49,10 +50,10 @@ const rimeEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const direction = axisDirection(source.position, target.position);
   const cells: { x: number; y: number }[] = [];

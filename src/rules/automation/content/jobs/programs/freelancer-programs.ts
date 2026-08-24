@@ -7,11 +7,12 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, lineCells, sameCell, squareArea,
   constant, damageDie, fray, self,
-  distance, sourceActor, walk, resolveAttack,
+  distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
   rushMutation, flyMutation, placeMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Freelancer ability implementations (ICON p.153–158),
@@ -64,10 +65,10 @@ const strafeShot: RuleResolver = (context) => {
     if (!sameCell(before, source.position)) mutations.push(rushMutation(context, source.id, before));
   }
   if (target) {
-    const roll = resolveAttack(context, source, target, { boons: 1 + armedBoon(context, source) });
+    const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 + armedBoon(context, source) });
     mutations.push(roll.attackMutation);
     mutations.push(roll.hit
-      ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+      ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
       : damageMutation(context, target.id, source.fray, 'miss'));
     mutations.push(conditionMutation(context, target.id, 'blind'));
   }
@@ -114,10 +115,10 @@ const astralChain: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
-  const roll = resolveAttack(context, source, target, { boons: armedBoon(context, source) });
+  const roll = resolveAuthoritativeAttack(context, source, target, { boons: armedBoon(context, source) });
   const mutations: RuleMutation[] = [roll.attackMutation];
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(markMutation(context, target.id, 'astral-chain', {}));
   if (context.triggers?.has('finishing-blow') || context.triggers?.has('exceed')) {
@@ -264,10 +265,10 @@ const soulShot: RuleResolver = (context) => {
   if (!line.some((cell) => sameCell(cell, targetPosition))) {
     throw new RuleProgramViolation('choice.position-range', `Soul Shot Line ${length} must include the attack target.`);
   }
-  const roll = resolveAttack(context, source, target, { boons: 1 + armedBoon(context, source) });
+  const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 + armedBoon(context, source) });
   const mutations: RuleMutation[] = [roll.attackMutation];
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'blind'));
   let passedAllies = 0;

@@ -4,11 +4,12 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, ringAround, sameCell, squareArea,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack,
+  distance, sourceActor, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
   shoveMutation, rushMutation, entityMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Warden ability implementations (ICON p.165–171), the
@@ -51,10 +52,10 @@ const apexEffects: RuleResolver = (context) => {
   const targetPosition = target?.position;
   const mutations: RuleMutation[] = [];
   if (!target || !targetPosition) return mutations;
-  const roll = resolveAttack(context, source, target, { boons: 1 });
+  const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'dazed'));
   const beast = summonBeastNear(context, source.id, targetPosition);
@@ -107,10 +108,10 @@ const circleTheOakEffects: RuleResolver = (context) => {
   const initial = context.triggers?.has('finishing-blow') || context.triggers?.has('charge') ? 5 : 2;
   const dash = walk(context, sourcePosition, axisDirection(sourcePosition, targetPosition), initial, false, source.id);
   if (!sameCell(dash, sourcePosition)) mutations.push(rushMutation(context, source.id, dash));
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie), 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie), 'hit')
     : damageMutation(context, target.id, 1, 'miss'));
   if (distance(dash, targetPosition) <= 1) {
     const ring = ringAround(targetPosition);
@@ -224,10 +225,10 @@ const sidheEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   const mutations: RuleMutation[] = [];
   if (!target) return mutations;
-  const roll = resolveAttack(context, source, target, { boons: 1 });
+  const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie), 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie), 'hit')
     : damageMutation(context, target.id, 1, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'blind'));
   mutations.push(markMutation(context, target.id, 'sidhe-toxin', {}));

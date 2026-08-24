@@ -4,12 +4,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe,
+  distance, sourceActor, walk, freeCellsInRange, nearestFoe,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   stanceMutation, markMutation,
   shoveMutation, flyMutation, placeMutation, removeMutation, entityMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Geomancer ability implementations (ICON p.215–221),
@@ -47,10 +48,10 @@ const bioEffects: RuleResolver = (context) => {
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [autohitAttack(context)];
   mutations.push(conditionMutation(context, target.id, 'shattered'));
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const area = squareArea(target.position, 1);
   for (const character of Object.values(context.state.actors)) {
@@ -77,10 +78,10 @@ const bioticEffects: RuleResolver = (context) => {
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [autohitAttack(context)];
   mutations.push(conditionMutation(context, target.id, 'shattered'));
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const area = squareArea(target.position, 2);
   for (const character of Object.values(context.state.actors)) {
@@ -120,10 +121,10 @@ const geoEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const area = squareArea(target.position, 1);
   for (const character of Object.values(context.state.actors)) {
@@ -328,10 +329,10 @@ const quakingPalmEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + 1, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + 1, 'hit')
     : damageMutation(context, target.id, 1, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'vulnerable'));
   mutations.push(markMutation(context, target.id, 'quaking-palm', {}));

@@ -16,13 +16,13 @@ import {
   freeCellsInRange,
   nearestFoe,
   occupied,
-  resolveAttack,
   ringAround,
   sourceActor,
   stateMutation,
   untilNextTurnEnd,
   walk,
 } from '../automation/primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../automation/kernels/attack-resolution.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import { scriptedDice, validCharacter } from './fixtures.js';
 
@@ -110,12 +110,12 @@ describe('job-kit building blocks', () => {
     state.actors[foe.id].defense = 10;
 
     const hitCtx = kitContext(state, hero.id, scriptedDice(12));
-    const hit = resolveAttack(hitCtx, sourceActor(hitCtx, hero.id)!, sourceActor(hitCtx, foe.id)!);
+    const hit = resolveAuthoritativeAttack(hitCtx, sourceActor(hitCtx, hero.id)!, sourceActor(hitCtx, foe.id)!);
     expect(hit.hit).toBe(true);
     expect(hit.attackMutation).toMatchObject({ d20: 12, boon: 0, total: 12, hit: true, critical: false, trueStrike: false, autoHit: false });
 
     const missCtx = kitContext(state, hero.id, scriptedDice(5));
-    const miss = resolveAttack(missCtx, sourceActor(missCtx, hero.id)!, sourceActor(missCtx, foe.id)!);
+    const miss = resolveAuthoritativeAttack(missCtx, sourceActor(missCtx, hero.id)!, sourceActor(missCtx, foe.id)!);
     expect(miss.hit).toBe(false);
     expect(miss.attackMutation).toMatchObject({ d20: 5, total: 5, hit: false, critical: false });
   });
@@ -125,17 +125,17 @@ describe('job-kit building blocks', () => {
     state.actors[foe.id].defense = 10;
 
     const boonCtx = kitContext(state, hero.id, scriptedDice(12, 4));
-    const booned = resolveAttack(boonCtx, sourceActor(boonCtx, hero.id)!, sourceActor(boonCtx, foe.id)!, { boons: 1 });
+    const booned = resolveAuthoritativeAttack(boonCtx, sourceActor(boonCtx, hero.id)!, sourceActor(boonCtx, foe.id)!, { boons: 1 });
     expect(booned.attackMutation).toMatchObject({ d20: 12, boon: 4, total: 16, hit: true });
 
     const strikeCtx = kitContext(state, hero.id, scriptedDice(12));
-    const struck = resolveAttack(strikeCtx, sourceActor(strikeCtx, hero.id)!, sourceActor(strikeCtx, foe.id)!, { trueStrike: true });
+    const struck = resolveAuthoritativeAttack(strikeCtx, sourceActor(strikeCtx, hero.id)!, sourceActor(strikeCtx, foe.id)!, { trueStrike: true });
     expect(struck.attackMutation).toMatchObject({ trueStrike: true, boon: 0, d20: 12 });
     expect(struck.damageProvenance).toEqual({ ignoreDodge: true, ignoreCover: false, ignoreAetherwall: false, bonusFlat: 0 });
     expect(damageMutation(strikeCtx, foe.id, 3, 'miss')).toMatchObject({ ignoreDodge: true });
 
     const autoCtx = kitContext(state, hero.id, scriptedDice());
-    const auto = resolveAttack(autoCtx, sourceActor(autoCtx, hero.id)!, sourceActor(autoCtx, foe.id)!, { autoHit: true });
+    const auto = resolveAuthoritativeAttack(autoCtx, sourceActor(autoCtx, hero.id)!, sourceActor(autoCtx, foe.id)!, { autoHit: true });
     expect(auto.attackMutation).toMatchObject({ autoHit: true, d20: null, boon: 0, total: null, hit: true, critical: false });
   });
 
@@ -144,7 +144,7 @@ describe('job-kit building blocks', () => {
     state.grid.terrain.push({ position: { ...hero.position }, type: 'basic', elevation: 1 });
 
     const kitCtx = kitContext(state, hero.id, scriptedDice(12, 1));
-    const roll = resolveAttack(kitCtx, sourceActor(kitCtx, hero.id)!, sourceActor(kitCtx, foe.id)!);
+    const roll = resolveAuthoritativeAttack(kitCtx, sourceActor(kitCtx, hero.id)!, sourceActor(kitCtx, foe.id)!);
     expect(roll.damageProvenance).toMatchObject({ ignoreCover: true });
     expect(damageMutation(kitCtx, foe.id, 3, 'miss')).toMatchObject({ ignoreCover: true });
 

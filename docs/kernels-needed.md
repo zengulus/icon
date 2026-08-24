@@ -335,7 +335,7 @@ each once; it converts its consumers into data + fixtures:
 > Divine Aegis t2. The terrain / stealth / status / round gates and the
 > timed/aura-growth/bloodied-bonus-damage shapes remain.
 | 4 | **Reactive trigger windows** — attack-miss, attack-completion, summon, targeted-by-ability (generalize), save-rolled, plus the **once-per-round job-trait reactive fold** (collide/shove/slay — F9 done, `kernels/trait-reactions.ts`, wired Dash on the Rocks) | 7 job traits + dozens of talents/abilities | F4 exists; **movement-entry on voluntary MOVE is done** (`kernels/movement-triggers.ts`, Party Favor p.151); F9 reactive-trait fold exists |
-| 5 | **Spend / economy hooks** — blessing, combo, sacrifice, Infuse-cost, gamble, use-ledgers | 6 job traits + 4 talents + 3 relic ranks | resource registry exists |
+| 5 | ~~Spend / economy hooks~~ — **landed (F14)** — blessing, combo, sacrifice, Infuse-cost, and use-ledgers now ride `kernels/cost-payment.ts` + `kernels/use-ledger.ts` (validate → pay → durable mutation; lifecycle-reset use gates); remaining economy gaps are percentage-of-max sacrifice, per-ability spend limits, and the Heroics economy | 6 job traits + 4 talents + 3 relic ranks | resource registry + F14 kernels |
 | 6 | **Movement kernels** — vacate, occupancy-cost, elevation-fly, pre/post movement, position-swap, teleport-all | 5 job traits + movement talents | F1 |
 | 7 | **Lifecycle phase rows** — bloodied/round-gated phases, chapter-rule overrides | 19 foe phases + 116 chapter rules + masteries | F3 exists |
 | 8 | **Stance / mark kernels** — multi-stance gate, mark-stack gate, mark-trigger effects | 3 job traits + talents | stance/mark models exist |
@@ -354,10 +354,11 @@ completeness × shared leverage × correctness/replay risk — not by census
 immediate completions alone). For continuity, the mapping to the shared
 families in §5:
 
-1. **Resource-economy / spend kernel (family 5)** — the glossary's own economy
-   vocabulary (sacrifice, blessing, combo, infuse, gamble, use-ledger,
-   heroics); unlocks six job traits, four talents, and the Crimson King relic
-   ranks.
+1. ~~Resource-economy / spend kernel (family 5)~~ — **landed (F14)**: the
+   cost-payment transaction kernel and generalized use-ledger kernel now own
+   the economy vocabulary (sacrifice, blessing, combo, infuse, use-ledger);
+   the remaining economy gaps are percentage-of-max sacrifice, per-ability
+   spend limits, and the Heroics economy.
 2. **Aura kernel (family 1)** — **partial**. The membership kernel + Rook
    talent 1 self-grant landed in `kernels/aura.ts` and the self-grant seam;
    the remaining work is the cross-actor content harvest (Shieldmaster,

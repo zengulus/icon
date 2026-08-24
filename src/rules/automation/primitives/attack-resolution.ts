@@ -1,4 +1,5 @@
 import { rollBoonOrCurse, type DiceSource } from '../../dice.js';
+import type { RuleExecutionContext } from './types.js';
 
 /**
  * Framework-free attack-roll kernel shared by basic attacks, declarative VM
@@ -82,6 +83,45 @@ export function attackDamageProvenance(intent: Pick<AttackIntent, 'elevationModi
     ignoreAetherwall: Boolean(intent.unerring),
     bonusFlat: Math.max(0, Math.trunc(intent.bonusDamageFlat ?? 0)),
   };
+}
+
+/**
+ * Resolver-driven attacks record their roll's durable rules facts through
+ * this WeakMap (keyed on the execution context object, which is per-command),
+ * so the shared damage builder can consume the immediately preceding attack's
+ * provenance without mutating command input or leaking it into VM branches.
+ * It is restricted to the matching target and hit/miss delivery. Replay never
+ * consults it — the recorded mutations already carry the resolved facts.
+ */
+const resolvedAttackDamage = new WeakMap<RuleExecutionContext, Map<string, AttackDamageProvenance>>();
+
+/** Record the provenance of a resolved attack for the matching target. */
+export function rememberAttackDamage(context: RuleExecutionContext, targetId: string, provenance: AttackDamageProvenance): void {
+  const byTarget = resolvedAttackDamage.get(context) ?? new Map<string, AttackDamageProvenance>();
+  byTarget.set(targetId, provenance);
+  resolvedAttackDamage.set(context, byTarget);
+}
+
+/** The provenance a direct hit/miss damage mutation should inherit for this
+ * target, or undefined for non-direct deliveries (collateral area damage,
+ * later delayed damage, unrelated effects). Falls back to the universal p.89
+ * high-ground cover exception for auto-hit resolvers that emit a direct
+ * attack mutation without calling the shared attack authority; auto-hits
+ * never need a miss-Dodge exception. */
+export function directAttackDamageProvenance(
+  context: RuleExecutionContext,
+  targetId: string,
+  delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain',
+): AttackDamageProvenance | undefined {
+  if (delivery !== 'hit' && delivery !== 'miss') return undefined;
+  const remembered = resolvedAttackDamage.get(context)?.get(targetId);
+  if (remembered) return remembered;
+  const source = context.state.actors[context.actorId];
+  const target = context.state.actors[targetId];
+  if (!source?.position || !target?.position) return undefined;
+  return attackDamageProvenance({
+    elevationModifier: context.state.elevationAt(source.position) - context.state.elevationAt(target.position),
+  });
 }
 
 export function resolveAttackRoll(intent: AttackIntent, dice: DiceSource): AttackRoll {

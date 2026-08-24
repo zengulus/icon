@@ -1,5 +1,5 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
-import { resolveAttackRoll } from '../../../primitives/attack-resolution.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { auraDefinitionFor, auraRuntimeView, isInAura } from '../../../kernels/aura.js';
 import { hasMastery } from '../../../kernels/mastery.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
@@ -298,17 +298,13 @@ const bleakMercyEffects: RuleResolver = (context) => {
   // and defense-bypass package without any actual statuses. The status-only
   // projection is the authoritative count.
   const empowered = target.statuses.length >= 3;
-  const attack = resolveAttackRoll({
-    defense: target.defense,
-    elevationModifier: source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0,
-    sourceDazed: source.conditions.has('dazed'),
-    targetEvasion: target.conditions.has('evasion'),
-    trueStrike: empowered,
-  }, context.dice);
-  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover } = attack;
+  // Ordinary attack through the shared authority (it still receives the
+  // universal F6/aura/F10 fold); Bleak Mercy's own damage exceptions ride the
+  // explicit provenance package below, exactly as p.144 names them.
+  const attack = resolveAuthoritativeAttack(context, source, target, { trueStrike: empowered });
+  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit } = attack;
   const damageProvenance = {
-    ignoreDodge,
-    ignoreCover,
+    ...attack.damageProvenance,
     // p.144 names only these three exceptions. In particular this must not
     // use Divine as a shortcut: Divine also ignores Resistance, Cover,
     // Aetherwall, Pacified, and Hatred, none of which Bleak Mercy names.
@@ -318,12 +314,12 @@ const bleakMercyEffects: RuleResolver = (context) => {
     kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
   }];
   if (hit) {
-    const dice = context.dice.die(source.damageDie) + context.dice.die(source.damageDie);
+    const dice = context.dice.die(attack.damageDie) + context.dice.die(attack.damageDie);
     mutations.push(damageMutation(context, target.id, dice + source.fray, 'hit', 'normal', damageProvenance));
   } else {
     mutations.push(damageMutation(context, target.id, source.fray, 'miss', 'normal', damageProvenance));
   }
-  if (critical) mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'hit', 'normal', damageProvenance));
+  if (critical) mutations.push(damageMutation(context, target.id, context.dice.die(attack.damageDie), 'hit', 'normal', damageProvenance));
   if (context.triggers?.has('slay') || context.triggers?.has('heroic')) {
     mutations.push(...cureMutations(context, source.id));
     if (source.position) {

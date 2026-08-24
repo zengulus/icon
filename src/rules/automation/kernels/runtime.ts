@@ -1,7 +1,7 @@
-import { resolveAttackRoll } from '../primitives/attack-resolution.js';
-import { consumeTraitAttackModifiers, consumedTraitModifier, effectiveDamageDie, traitAttackModifier } from './attack-modifiers.js';
+import { costContextFromRuntime, effectiveRuleCosts, evaluateCosts, ruleCostMutations } from './cost-payment.js';
+import { consumeTraitAttackModifiers, consumedTraitModifier, effectiveDamageDie } from './attack-modifiers.js';
+import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
-import { auraRuntimeView, projectedAuraAttackModifiers } from './aura.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
 import { eligibleTargets, isEligibleTarget } from '../primitives/targeting.js';
@@ -29,7 +29,11 @@ export class RuleProgramViolation extends Error {
 
 const distance = (a: RuleActorView, b: RuleActorView) => {
   if (!a.position || !b.position) return Number.POSITIVE_INFINITY;
-  return Math.max(Math.abs(a.position.x - b.position.x), Math.abs(a.position.y - b.position.y));
+  // The canonical p.92 footprint metric (L∞ between occupied footprints) —
+  // the same distance the targeting gates, auras, and the attack modifiers
+  // use, so a Size-2 edge that is within range is never measured by its
+  // anchor cells.
+  return footprintDistance({ position: a.position, size: a.size }, { position: b.position, size: b.size });
 };
 
 function actor(context: RuleExecutionContext, id: string) {
@@ -202,7 +206,7 @@ export function evaluatePredicate(predicate: RulePredicate, context: RuleExecuti
   }
 }
 
-function integer(expression: RuleNumber, context: RuleExecutionContext) {
+export function integer(expression: RuleNumber, context: RuleExecutionContext) {
   return Math.max(0, Math.floor(evaluateNumber(expression, context)));
 }
 
@@ -212,45 +216,26 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
     switch (effect.kind) {
       case 'attack': {
         const source = actor(context, context.actorId);
-        // Aura membership feeds the same attack-modifier authority as the
-        // trait fold: the attacker's own aura boons/curses plus any defensive
-        // curse an aura projects against the target (netBoon, p.92). The view
-        // is built once per attack effect; each target contributes its own
-        // defensive curse.
-        const auraView = auraRuntimeView(context.state);
-        const auraAttack = projectedAuraAttackModifiers(auraView, source.id);
         for (const target of targets) {
-          const elevationModifier = source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0;
-          // F6 attack-path trait fold: armed one-shot modifiers (Hissatsu
-          // +1 boon / true strike / d10) plus permanent elevation mechanics
-          // (Pulverize flat damage and lowered exceed threshold), distance-
-          // gated rules (Trigrammaton's exactly-range-3 boon/unerring)
-          // through the canonical p.92 footprint distance, and unerring.
-          // F10 ability-use modifiers (Blessing of War / Rebirth) ride the
-          // resolution context for this ability only.
-          const distance = source.position && target.position
-            ? footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size })
-            : undefined;
-          const traitModifier = traitAttackModifier(source, elevationModifier, { hp: target.hp, maxHp: target.maxHp, distance });
-          const targetAuraCurse = projectedAuraAttackModifiers(auraView, target.id).targetCurses ?? 0;
-          const attack = resolveAttackRoll({
-            defense: target.defense,
-            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons + (context.abilityUseModifiers?.boons ?? 0) + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
-            elevationModifier,
-            sourceDazed: source.conditions.has('dazed'),
-            targetEvasion: target.conditions.has('evasion'),
-            trueStrike: (effect.trueStrike ?? false) || traitModifier.trueStrike,
+          // The unified ordinary-attack authority folds the F6 trait
+          // modifiers (armed one-shot Hissatsu/Demon Edge, elevation
+          // Pulverize, target-threshold Blood Hunger, exact-range
+          // Trigrammaton through the canonical p.92 footprint distance),
+          // the aura attacker boons/curses plus the target's defensive aura
+          // curse, the F10 ability-use modifiers (Blessing of War / Rebirth)
+          // for this ability only, and unerring — the same seam every named
+          // resolver and foe recipe attack uses.
+          const attack = resolveAuthoritativeAttack(context, source, target, {
+            boons: effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0,
+            trueStrike: effect.trueStrike ?? false,
             autoHit: effect.autoHit ?? false,
-            bonusDamageFlat: traitModifier.bonusDamageFlat + (context.abilityUseModifiers?.bonusDamage ?? 0),
-            exceedThreshold: traitModifier.exceedThreshold ?? undefined,
-            unerring: traitModifier.unerring,
-          }, context.dice);
-          const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat } = attack;
-          output.push({ kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit });
+          });
+          const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit } = attack;
+          output.push(attack.attackMutation);
           const triggers = new Set(context.triggers);
           triggers.add(hit ? 'hit' : 'miss');
           if (critical) triggers.add('critical-hit');
-          if ((total ?? 0) >= (attack.exceedThreshold ?? 15)) triggers.add('exceed');
+          if ((total ?? 0) >= attack.exceedThreshold) triggers.add('exceed');
           const branchContext = {
             ...context,
             attackTargetId: target.id,
@@ -260,13 +245,13 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
             // p.89/p.104/p.105 exceptions belong only to this resolved
             // attack's direct target, not collateral area or later effect
             // damage.
-            attackDamageProvenance: { targetId: target.id, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat },
+            attackDamageProvenance: { targetId: target.id, ...attack.damageProvenance },
           };
           effectsToMutations(hit ? effect.onHit : effect.onMiss, branchContext, output);
           if (critical) effectsToMutations(effect.onCritical ?? [], branchContext, output);
           // One-shot armed modifiers belong to the first attack roll only: a
           // multi-target ability's later rolls read the (consumed) view.
-          if (consumedTraitModifier(traitModifier)) consumeTraitAttackModifiers(source.state);
+          if (consumedTraitModifier(attack.traitModifier)) consumeTraitAttackModifiers(source.state);
         }
         break;
       }
@@ -436,13 +421,15 @@ export function executeRuleProgram(
   const mutations: RuleMutation[] = [];
   // Costs and the named resolver are paid once, on the primary execution pass;
   // an append-only pass re-resolves only the newly-qualifying trigger steps.
+  // Payments ride the shared cost-payment transaction kernel: the effective
+  // costs (after any registered cost modifiers) are validated at the command
+  // boundary and emitted here through the same mutation builders, so the
+  // amount validated and the amount paid never drift.
   if (!appendOnly && (context.timing === 'use' || context.timing === 'interrupt')) {
-    for (const cost of action.costs) {
-      const amount = integer(cost.amount, context);
-      if (cost.kind === 'action') mutations.push({ kind: 'actions', sourceId: context.sourceId, actorId: context.actorId, operation: 'spend', amount });
-      else if (cost.kind === 'aether' || cost.kind === 'resolve' || cost.kind === 'use' || cost.kind === 'combo') mutations.push({ kind: 'resource', sourceId: context.sourceId, actorId: context.actorId, resourceId: cost.resourceId ?? cost.kind, operation: 'spend', amount, minimum: 0, maximum: null });
-      else if (cost.kind === 'sacrifice') mutations.push({ kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: context.actorId, amount, damageType: 'sacrifice', instance: 1, delivery: 'effect', ignoreCover: true });
-    }
+    const costContext = costContextFromRuntime(context.state, context.actorId, context.sourceId, program.name);
+    const effective = effectiveRuleCosts(action.costs, costContext);
+    const evaluated = evaluateCosts(effective, (amount) => integer(amount, context));
+    mutations.push(...ruleCostMutations(costContext, evaluated));
   }
   if (!appendOnly && action.resolverId) {
     const resolver = resolvers[action.resolverId];

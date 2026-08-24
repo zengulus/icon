@@ -26,6 +26,7 @@
  * `EXECUTABLE_TALENT_IDS` derives from the wired rows — the audit authority
  * (allowlist + source fixture + replay test).
  */
+import type { EncounterActor, EncounterState } from '../../../types.js';
 import type { RuleSourceUnit } from '../../../source-units.js';
 import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
 import type { RuleMutation } from '../../primitives/types.js';
@@ -36,6 +37,20 @@ import type { TalentEffect } from '../../kernels/talent-recipes.js';
  * mutations (the create on placement, the remove on detonation). */
 const partyFavorMinePosition = (mutations: readonly RuleMutation[]): { x: number; y: number } | undefined =>
   (mutations.find((mutation) => mutation.kind === 'terrain' && mutation.terrain === 'party-favor') as Extract<RuleMutation, { kind: 'terrain' }> | undefined)?.positions[0];
+
+/** The living, on-battlefield foes within Chebyshev adjacency (the 8
+ * surrounding cells — the engine's shared ICON adjacency) of the actor.
+ * Deterministic order by id. */
+const adjacentFoes = (state: EncounterState, actorId: string): EncounterActor[] => {
+  const actor = state.actors[actorId];
+  if (!actor?.position) return [];
+  const { x, y } = actor.position;
+  return Object.values(state.actors)
+    .filter((candidate) => candidate.id !== actorId && !candidate.defeated && candidate.position
+      && candidate.side !== actor.side
+      && Math.max(Math.abs(candidate.position.x - x), Math.abs(candidate.position.y - y)) <= 1)
+    .sort((a, b) => a.id.localeCompare(b.id));
+};
 
 /** The wired tranche (F7): talents whose trigger-effect folds cleanly into
  * the existing F0–F6 kernels with a shared consumption point. Each row is
@@ -646,6 +661,92 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
           { kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'dangerous', positions: [{ ...target.position }], height: null },
         ];
       },
+    },
+  },
+
+  // ── Cost-payment foundation proofs (F14, docs/rules-foundations.md §10) ──
+
+  // ICON p.142 Knave Provoke talent 2: "You can sacrifice 2 after this
+  // ability resolves to deal 2 damage again to all adjacent foes." A
+  // player-chosen (optional) post-resolution sacrifice: the shared
+  // sacrifice-payment mutation reduces HP as an unmitigable cost (floor 1,
+  // no mitigation, no when-damaged window — the application path returns
+  // before damage windows open), then every adjacent foe takes 2 normal
+  // damage. The player's explicit choice is recorded in the command's
+  // `talentChoices` input; the engine never assumes "yes".
+  'knave:provoke:talent:2': {
+    mechanic: 'Optional (player-chosen): sacrifice 2 after the ability resolves to deal 2 damage to all adjacent foes.',
+    triggerEffect: {
+      trigger: 'always',
+      optional: true,
+      build: (actorId, _targetIds, _triggerTargetIds, context) => {
+        if (!context) return [];
+        const effects: TalentEffect[] = [{ kind: 'damage', sourceActorId: actorId, actorId, amount: 2, damageType: 'sacrifice', instance: 1, delivery: 'effect', ignoreCover: true }];
+        for (const foe of adjacentFoes(context.state, actorId)) {
+          effects.push({ kind: 'damage', sourceActorId: actorId, actorId: foe.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false });
+        }
+        return effects;
+      },
+    },
+  },
+
+  // ICON p.211 Enochian Pyroclast talent 2: "You may sacrifice 2 to
+  // immediately shatter your target as part of this ability." Optional:
+  // sacrifice 2 HP and the ability's chosen character (Pyroclast targets
+  // yourself or a character in range 6) becomes shattered as part of the
+  // resolution.
+  'enochian:pyroclast:talent:2': {
+    mechanic: 'Optional (player-chosen): sacrifice 2 to shatter the ability target as part of this ability.',
+    triggerEffect: {
+      trigger: 'always',
+      optional: true,
+      build: (actorId, targetIds) => {
+        const effects: TalentEffect[] = [{ kind: 'damage', sourceActorId: actorId, actorId, amount: 2, damageType: 'sacrifice', instance: 1, delivery: 'effect', ignoreCover: true }];
+        // Pyroclast's chosen character defaults to the user when none is
+        // named (the resolver's own fallback).
+        const targetId = targetIds[0] ?? actorId;
+        effects.push({ kind: 'condition', sourceActorId: actorId, actorId: targetId, conditionId: 'shattered', operation: 'apply', potency: 'normal' });
+        return effects;
+      },
+    },
+  },
+
+  // ICON p.211 Enochian Blackstar talent 1: "If Blackstar's special effect
+  // triggers, capture your fleeing soul aether and gain 1 aether after this
+  // ability resolves." Blackstar's special effect — sacrifice 50% max HP —
+  // is paid by the program only before round 6; the talent mirrors that
+  // exact gate and grants 1 aether after the ability resolves.
+  'enochian:blackstar:talent:1': {
+    mechanic: 'When Blackstar\u2019s special effect (the pre-round-6 sacrifice) triggers, gain 1 aether after the ability resolves.',
+    triggerEffect: {
+      trigger: 'always',
+      condition: ({ state }) => state.round < 6,
+      build: (actorId) => [{ kind: 'resource', actorId, resourceId: 'aether', operation: 'gain', amount: 1, minimum: 0, maximum: null }],
+    },
+  },
+
+  // ICON p.180 Fool Masquerade talent 1: "If you haven't acted yet this
+  // round, gain evasion after swapping until the end of your next turn."
+  // The gate reads the durable once-per-round turn ledger (`turnTaken`,
+  // reset at the round boundary in the same lifecycle pass that resets the
+  // round ledger), so an interrupt use before the hero's own turn grants
+  // evasion through the shared condition fold with an owner-scoped duration
+  // — it expires at the end of the hero's next turn and no state is
+  // re-decided under replay.
+  'fool:masquerade:talent:1': {
+    mechanic: 'If you haven\u2019t acted yet this round, gain evasion after swapping until the end of your next turn.',
+    triggerEffect: {
+      trigger: 'always',
+      condition: ({ state, actorId }) => !state.actors[actorId].turnTaken,
+      build: (actorId) => [{
+        kind: 'condition',
+        sourceActorId: actorId,
+        actorId,
+        conditionId: 'evasion',
+        operation: 'apply',
+        potency: 'normal',
+        duration: { kind: 'turn-end', actor: { kind: 'self' }, turns: 1 },
+      }],
     },
   },
 };

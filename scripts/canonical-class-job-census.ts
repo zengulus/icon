@@ -72,8 +72,21 @@ const NON_IMPLEMENTABLE = new Set(['irreducible']);
  *  harvest): it no longer blocks anything, and any unit left with an empty
  *  set would be executable — so it must never appear in the census. The
  *  claim is grounded in the executable allowlists (the compiler's
- *  `unsupportedClauses` check) rather than this set alone. */
-const IMPLEMENTED_PRIMITIVES = new Set(['condition-grant', 'aura']);
+ *  `unsupportedClauses` check) rather than this set alone.
+ *
+ *  Cost-payment foundation (F14): `sacrifice-cost`, `combo-spend`,
+ *  `blessing-spend`, `infuse-cost`, and `use-ledger` are now implemented as
+ *  reusable capabilities — ordinary fixed sacrifice payments, token spends,
+ *  aether/Infuse payments, and durable once-per-turn/round/combat gates all
+ *  ride the shared cost-payment kernel and use-ledger kernel with lifecycle
+ *  resets. They no longer block anything by themselves; a unit that still
+ *  lists only these labels must be re-audited (its complete text exposes a
+ *  different missing capability) rather than silently treated as
+ *  executable. `resource-management` stays a live blocker: the generic gain/
+ *  spend mutation is implemented, but the label also covered economy
+ *  mechanics (turn-start aether gain, per-ability spend limits) that are not
+ *  yet reusable capabilities, so it is deliberately NOT stripped. */
+const IMPLEMENTED_PRIMITIVES = new Set(['condition-grant', 'aura', 'sacrifice-cost', 'combo-spend', 'blessing-spend', 'infuse-cost', 'use-ledger']);
 
 /** Audit-verified reclassifications: source units whose syntactic first-pass
  *  blocker set is WRONG (the regex keyword pass matched "gain/grant/become"
@@ -140,8 +153,10 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "attacks against adjacent allies gain +1 curse" (save-curse on adjacency)
   'fool:gallows-humor:talent:2': ['effect-count', 'threshold-modifier'],
   // "deal 4 damage again to any target at 25% hp or lower" (repeat + hp-threshold gate)
-  'fool:masquerade:talent:1': ['use-ledger'],
-  // "gain evasion after swapping" (condition-grant — implemented) gated by "haven't acted yet this round" (use-ledger)
+  // fool:masquerade:talent:1 ("gain evasion after swapping" gated by
+  // "haven't acted yet this round") was reclassified to {use-ledger} here;
+  // with the use-ledger kernel landed (F14) it is now executable through
+  // the talent fold and dropped out of the census entirely.
   'fool:chronotemper:talent:1': ['movement-modifier'],
   // "dash gains phasing and ignores movement penalties from terrain"
   'shade:shadow-play:talent:2': ['choice-input'],
@@ -228,9 +243,79 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'enochian:lance:talent:1': ['object-distance'],
   // "a character in range 3 of that object" — distance measured from an
   // OBJECT footprint, which the range kernel (actor-to-actor) does not cover
-  'enochian:blackstar:mastery': ['sacrifice-cost'],
+  'enochian:blackstar:mastery': ['sacrifice-percent'],
   // "split sacrifice into 25% max hp to yourself, and 25% to an ally in
-  // range 4" — the split-sacrifice cost; the range-4 check is expressible
+  // range 4" — the sacrifice foundation pays fixed amounts only;
+  // percentage-of-max sacrifice (split across two payers here) is the
+  // missing variant; the range-4 check is expressible
+  //
+  // ── Spend/cost-payment re-audit (F14: the cost-payment and use-ledger
+  //    kernels landed; the spend-family labels no longer block by
+  //    themselves, so every unit that still listed only implemented labels
+  //    was re-read in full and corrected below) ──
+  'wright:trait:aether': ['resource-management'],
+  // the Aether economy — start combat at 0, gain 1 at the start of each
+  // turn, lose it after combat, spend it on one Infuse effect per ability:
+  // the resource is registered (core.ts) but the turn-start gain /
+  // combat-end loss / per-ability spend-limit lifecycle is not a reusable
+  // capability yet
+  'bastion:trait:press-the-advantage': ['shove-trigger', 'rush-modifier'],
+  // "once a round, when you shove a character, you and an ally of your
+  // choice anywhere can each rush 1" — needs a reactive shove trigger (the
+  // reactive folds cover damage/defy-death, never shove) and the rush-1
+  // grant to self + a chosen ally; the once-per-round gate is implemented
+  'bastion:rook:talent:2': ['aura-trigger-grant'],
+  // "you can also inflict hatred on a foe that triggers Rook's effect, but
+  // no more than once a round" — the aura kernel projects conditions and
+  // membership but has no hook to ADD an effect onto an aura's turn-end
+  // reaction; hatred and the once-per-round gate are implemented
+  'colossus:boiling-blood:mastery': ['effect-expiry-trigger', 'wound-cost'],
+  // "when Defy Death would expire, you can take a wound to extend the
+  // duration by 1 turn" — needs an effect-expiry trigger, a wound-taking
+  // mutation (wounds exist only at character-management today), and the
+  // duration extension; the once-per-combat gate is implemented
+  'knave:revenge:talent:2': ['choice-input'],
+  // "you may sacrifice 4 to gain or lose a combo token after using any
+  // version of this ability" — the sacrifice and combo mutations are
+  // implemented, but the player's gain-OR-lose choice needs a valued choice
+  // input (the optional fold only carries a yes/no source id)
+  'warden:mist-strider:talent:1': ['movement-trigger'],
+  // "once a round, when you enter or exit the area, you can gain stealth" —
+  // the movement-trigger kernel folds per-cell entry during voluntary
+  // movement and is content-registered, not talent-hookable; an
+  // enter/exit-area talent trigger is still missing
+  'chanter:chastise:mastery': ['delivery-immunity'],
+  // "any character chosen is immune to all damage from the chosen foe until
+  // the start of your next turn" — foe-keyed damage immunity, not the
+  // blanket damage-immune state; the first-use-in-combat gate is implemented
+  'harvester:blood-grove:talent:2': ['area-extension'],
+  // "you can sacrifice 2 to extend the area by 2 spaces, adding to its
+  // total area on any edge" — area growth on an arbitrary edge; the
+  // sacrifice and once-per-turn gate are implemented
+  'harvester:crimson-bloom:talent:2': ['threshold-modifier'],
+  // "foes at 25% hp or lower sacrifice 10 instead" — a sacrifice-amount
+  // override conditioned on the payer's quarter-HP threshold
+  'seer:chaos-tarot:talent:1': ['gamble-dice-pool-modifier'],
+  // "consume any number of blessings … to roll 1 extra d6 per blessing
+  // consumed" — a pre-gamble dice-pool modifier; the blessing spend is
+  // implemented
+  'enochian:trait:inner-furnace': ['sacrifice-percent'],
+  // "you can sacrifice 25% of your max hp to reduce the Aether cost of that
+  // ability by 2" — the cost-modifier registry is implemented, but the
+  // sacrifice foundation pays fixed amounts only; percentage-of-max is the
+  // missing variant
+  'enochian:elden-rune:talent:2': ['attack-modifier'],
+  // GREAT RUNE: "your attacks also shatter their main target while standing
+  // in this rune" — an attack-path condition on hit; the standing-in-rune
+  // infuse cost reduction is expressible (cost-modifier registry + terrain
+  // gate), the shatter-on-attack is not
+  'spellblade:drifting-leaf:mastery': ['infuse-permanence'],
+  // "at round 4 or later, Drifting Leaf's infuse is always active" — a
+  // round-gated always-active infuse effect is not a reusable capability
+  'stormbender:heave-ho:mastery': ['shove-modifier', 'variable-cost'],
+  // "Infuse X: TIDAL SMASH — the shove spaces become shove X. Collide: foes
+  // are shattered" — a variable infuse cost X (and shove amount X), plus
+  // the collide-result change
   'geomancer:quaking-palm:mastery': ['object-distance'],
   // "triggers for each object in range 2 instead of adjacent" — object
   // footprints in range, not characters

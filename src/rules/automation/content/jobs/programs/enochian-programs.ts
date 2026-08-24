@@ -4,12 +4,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe,
+  distance, sourceActor, walk, freeCellsInRange, nearestFoe,
   damageMutation, conditionMutation, stateMutation,
   resourceMutation, stanceMutation, markMutation,
   shoveMutation, entityMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Enochian ability implementations (ICON p.206–214),
@@ -68,10 +69,10 @@ const pyreEffects: RuleResolver = (context) => {
   // area damage — the blast fray and the comeback/exceed re-explosion —
   // skips allies; the attack target itself is always a foe.
   const alliesImmune = source.talents?.['enochian:pyre'] === 1 && context.triggers?.has('comeback');
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const blast = squareArea(target.position, 2);
   for (const character of charactersIn(context, blast, source.id)) {
@@ -95,10 +96,10 @@ const pyroticEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const blast = squareArea(target.position, 3);
   for (const character of charactersIn(context, blast, source.id)) {
@@ -125,10 +126,10 @@ const lanceEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'vulnerable'));
   const direction = axisDirection(source.position, target.position);
@@ -160,10 +161,10 @@ const volvagaEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'vulnerable'));
   const direction = axisDirection(source.position, target.position);
@@ -302,13 +303,15 @@ const blackstarEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + context.dice.die(source.damageDie) + source.fray, 'hit')
-    : damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'miss'));
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
+    : damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'miss'));
   const blast = squareArea(target.position, 3);
   for (const character of charactersIn(context, blast, source.id)) {
+    // Collateral area damage keeps the ordinary die (the armed override is
+    // consumed by the attack roll; provenance never leaks either).
     if (character.id !== target.id) mutations.push(damageMutation(context, character.id, context.dice.die(source.damageDie) + source.fray, 'area'));
   }
   mutations.push(conditionMutation(context, target.id, 'shattered'));

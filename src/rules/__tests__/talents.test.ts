@@ -6,7 +6,7 @@ import '../automation/content/registry.js';
 import { collidingShoveTargets } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { RuleMutation } from '../automation/primitives/types.js';
-import type { EncounterActor, EncounterEvent, EncounterState, StatusSaveCommandInput, TerrainCell } from '../types.js';
+import type { EncounterActor, EncounterEvent, EncounterPendingInterrupt, EncounterState, StatusSaveCommandInput, TerrainCell } from '../types.js';
 
 /** The USE_ABILITY command surface deliberately exposes only Blessing choices
  * on its `input` (the protocol keeps tactical selector input authoritative
@@ -85,7 +85,7 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 30 wired / 5 program-level / 3 passive-projection / 4 range-modifier / 1 area-modifier / 245 documented', () => {
+  it('covers exactly the 288 source talents with 33 wired / 5 program-level / 3 passive-projection / 4 range-modifier / 1 area-modifier / 241 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
@@ -96,11 +96,13 @@ describe('F7 closed talent inventory', () => {
     // projections; the four range-modifier rows (Valkyrie t1, Incubus t1,
     // Harvest t2, Open the Gates t2) are executable through the shared range
     // kernel; Soul Shot t2 is an area-modifier row (Line 6 through the shared
-    // area kernel), Pyre t2 is a wired exceed row, and Eye of the Storm t2 is
-    // program-level. None are fold triggers or program-emitted variants in
-    // the wrong home.
-    expect(getExecutableTalentIds().size).toBe(43);
-    expect(getDocumentedTalentIds(units).size).toBe(245);
+    // area kernel), Pyre t2 is a wired exceed row, Eye of the Storm t2 is
+    // program-level, and the four cost-payment proofs (Provoke t2 + Pyroclast
+    // t2 optional sacrifices, Blackstar t1 aether gain, Masquerade t1's
+    // turn-ledger evasion) are wired optional / conditional always rows.
+    // None are fold triggers or program-emitted variants in the wrong home.
+    expect(getExecutableTalentIds().size).toBe(47);
+    expect(getDocumentedTalentIds(units).size).toBe(241);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -578,5 +580,153 @@ describe('F7 terrain-create always trigger', () => {
     expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
     expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+});
+
+describe('F14 cost-payment foundation proofs (optional sacrifice + resource-gain talents)', () => {
+  it('Provoke talent 2: choosing the sacrifice pays exactly 2 HP (floor 1) and deals 2 to every adjacent foe', () => {
+    // Provoke's base effect already deals 1 piercing back to the hero, so 3
+    // HP leaves exactly 2 after it — the sacrifice cost with the floor-1 rule.
+    const { state, hero, foe } = talentEncounter('knave:provoke', 2, {
+      heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 }, plainFoe: true,
+      extraFoes: [{ at: { x: 1, y: 2 } }],
+    });
+    state.actors[hero.id].hp = 3;
+    const foe2 = Object.values(state.actors).find((actor) => actor.side === 'foes' && actor.id !== foe.id)!;
+    const foeHpBefore = state.actors[foe.id].hp;
+    const foe2HpBefore = state.actors[foe2.id].hp;
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'knave:provoke',
+      targetIds: [],
+      input: { talentChoices: ['knave:provoke:talent:2'] },
+    }, scriptedDice());
+    const sacrifices = talentMutationsOf(result, 'knave:provoke').filter((m) => m.kind === 'damage' && m.damageType === 'sacrifice' && m.actorId === hero.id);
+    expect(sacrifices).toHaveLength(1);
+    // 3 - 1 (piercing back) - 2 (sacrifice) = 0, floored at 1 HP; the
+    // payment stays legal even though the nominal cost exceeds the remaining HP.
+    expect(result.state.actors[hero.id].hp).toBe(1);
+    expect(result.state.actors[hero.id].defeated).toBe(false);
+    // Each adjacent foe takes the base 2 twice (hits = 2 with two foes) plus
+    // the talent's extra 2 = 6 total.
+    expect(result.state.actors[foe.id].hp).toBe(foeHpBefore - 6);
+    expect(result.state.actors[foe2.id].hp).toBe(foe2HpBefore - 6);
+    // The sacrifice never opened a when-damaged window on the hero: the hero
+    // has exactly the same interrupt count as the same ability without the
+    // talent (the base provoke's two 1-piercing windows only).
+    const base = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:provoke', targetIds: [] }, scriptedDice());
+    const heroWindows = (stateAfter: { pendingInterrupts?: EncounterPendingInterrupt[] }) => (stateAfter.pendingInterrupts ?? []).filter(({ actorId: id }) => id === hero.id).length;
+    expect(heroWindows(result.state)).toBe(heroWindows(base.state));
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Provoke talent 2: without the explicit player choice the optional sacrifice never fires', () => {
+    const { state, hero, foe } = talentEncounter('knave:provoke', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 }, plainFoe: true });
+    const hpBefore = state.actors[hero.id].hp;
+    const foeHpBefore = state.actors[foe.id].hp;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:provoke', targetIds: [] }, scriptedDice());
+    expect(talentMutationsOf(result, 'knave:provoke')).toHaveLength(0);
+    // Only the base ability's 1 piercing back — no sacrifice was paid.
+    expect(result.state.actors[hero.id].hp).toBe(hpBefore - 1);
+    // Only the base 2 damage — no extra talent damage.
+    expect(result.state.actors[foe.id].hp).toBe(foeHpBefore - 2);
+  });
+
+  it('Pyroclast talent 2: choosing the sacrifice shatters the ability target as part of this ability', () => {
+    const { state, hero, foe } = talentEncounter('enochian:pyroclast', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    const hpBefore = state.actors[hero.id].hp;
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'enochian:pyroclast',
+      targetIds: [foe.id],
+      input: { talentChoices: ['enochian:pyroclast:talent:2'] },
+    }, scriptedDice());
+    expect(result.state.actors[hero.id].hp).toBe(hpBefore - 2); // exact sacrifice
+    expect(result.state.actors[foe.id].marks.some(({ markId }) => markId === 'pyroclast')).toBe(true); // the mark still lands
+    expect(result.state.actors[foe.id].statuses).toContain('shattered'); // shattered as part of this ability
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Pyroclast talent 2: without the choice the target is marked but never shattered by the talent', () => {
+    const { state, hero, foe } = talentEncounter('enochian:pyroclast', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'enochian:pyroclast', targetIds: [foe.id] }, scriptedDice());
+    expect(talentMutationsOf(result, 'enochian:pyroclast')).toHaveLength(0);
+    expect(result.state.actors[foe.id].marks.some(({ markId }) => markId === 'pyroclast')).toBe(true);
+    expect(result.state.actors[foe.id].statuses).not.toContain('shattered');
+  });
+
+  it('Blackstar talent 1: when the special effect (pre-round-6 sacrifice) triggers, the hero gains 1 aether', () => {
+    const { state, hero, foe } = talentEncounter('enochian:blackstar', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'enochian:blackstar', targetIds: [foe.id] }, scriptedDice(12, 4, 5, 2));
+    expect(result.state.actors[hero.id].resources.aether).toBe(1); // the captured soul aether
+    expect(result.state.actors[hero.id].hp).toBe(20); // 40 - 50% (the special effect still paid)
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Blackstar talent 1: from round 6 the special effect no longer triggers, so no aether is gained (control)', () => {
+    const { state, hero, foe } = talentEncounter('enochian:blackstar', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    state.round = 6;
+    state.actors[hero.id].resources.aether = 0;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'enochian:blackstar', targetIds: [foe.id] }, scriptedDice(12, 4, 5, 2));
+    expect(result.state.actors[hero.id].resources.aether ?? 0).toBe(0);
+    expect(result.state.actors[hero.id].hp).toBe(40); // no special-effect sacrifice at round 6+
+  });
+});
+
+describe('F14 use-ledger proof — Masquerade talent 1 (haven\u2019t-acted gate + evasion)', () => {
+  it('before the hero acts this round, the interrupt grants evasion until the end of the hero\u2019s next turn', () => {
+    const { state, hero, ally } = talentEncounter('fool:masquerade', 1, {
+      heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 }, allyAt: { x: 3, y: 1 },
+    });
+    expect(state.actors[hero.id].turnTaken).toBe(false); // hasn\u2019t acted yet this round
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'fool:masquerade',
+      targetIds: [ally!.id],
+    }, scriptedDice());
+    const condition = result.state.actors[hero.id].conditions.find((candidate) => candidate.id === 'evasion');
+    expect(condition).toBeDefined();
+    // Owner-scoped: expires at the end of the hero\u2019s next turn.
+    expect(condition!.duration).toMatchObject({ kind: 'turn-end', turns: 1 });
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('once the hero has acted this round, the gate blocks the evasion', () => {
+    const { state, hero, ally } = talentEncounter('fool:masquerade', 1, {
+      heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 }, allyAt: { x: 3, y: 1 },
+    });
+    state.actors[hero.id].turnTaken = true; // acted earlier this round
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'fool:masquerade',
+      targetIds: [ally!.id],
+    }, scriptedDice());
+    expect(result.state.actors[hero.id].conditions.some((candidate) => candidate.id === 'evasion')).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('the round boundary resets the gate: after the reset the evasion can fire again', () => {
+    const { state, hero, ally } = talentEncounter('fool:masquerade', 1, {
+      heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 }, allyAt: { x: 3, y: 1 },
+    });
+    // Simulate the round-end lifecycle pass that resets the turn ledger:
+    // the hero acts (turnTaken true), then the round turns over and the
+    // ledger resets for every candidate — the same boundary the F14
+    // turn-ledger reset recipe drives.
+    state.actors[hero.id].turnTaken = true;
+    state.actors[hero.id].usedAbilityIds = [];
+    state.round += 1;
+    state.actors[hero.id].turnTaken = false;
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY',
+      actorId: hero.id,
+      abilityId: 'fool:masquerade',
+      targetIds: [ally!.id],
+    }, scriptedDice());
+    expect(result.state.actors[hero.id].conditions.some((candidate) => candidate.id === 'evasion')).toBe(true);
   });
 });

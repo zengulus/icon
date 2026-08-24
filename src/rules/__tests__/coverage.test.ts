@@ -92,16 +92,19 @@ describe('rules automation coverage gate', () => {
     // Aetherwall trait compile complete through the shared range kernel.
     // F10 area: Soul Shot t2 (Line 6), Pyre t2 (exceed shove), Eye of the
     // Storm t2 (count damage), and the Sturmreiten MJÖLLNIR mastery (arc 5)
-    // compile complete through the shared area authority.
+    // compile complete through the shared area authority. F14 cost-payment:
+    // the four wired proofs (Provoke t2, Pyroclast t2, Blackstar t1,
+    // Masquerade t1's turn-ledger evasion) audit complete through the talent
+    // fold — 47 complete / 241 documented.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 453,
-      unsupportedPrograms: 2822,
-      completeClauses: 1593,
-      unsupportedClauses: 3107,
+      completePrograms: 457,
+      unsupportedPrograms: 2818,
+      completeClauses: 1597,
+      unsupportedClauses: 3103,
       unsupportedByKind: {
-        core: 70, 'class-trait': 7, 'job-trait': 38, 'limit-break': 16, 'talent': 245, 'mastery': 136,
+        core: 70, 'class-trait': 7, 'job-trait': 38, 'limit-break': 16, 'talent': 241, 'mastery': 136,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

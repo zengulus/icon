@@ -281,12 +281,12 @@ hand-rolled shape that should become a recipe row; "missing" means no seam.
 | Armed one-shot attack window | jobs/classes | partial | F6 kernel arm/consume |
 | **Gamble** (d6 + threshold/result) | jobs/traits/relics/trophies | **existing** | `gambleD6` in `job-kit.ts`; `recordedDice` in `TurnDiceWindows` |
 | Gamble extended families (dice-pool, result-override, post-roll-choice) | jobs/traits | partial | `gamble-dice-pool-modifier`, `gamble-result-override`, `post-roll-reactive-choice` |
-| Sacrifice + cost override (HP payment, floor 1) | jobs/traits/relics | partial | sacrifice damage type exists; no HP-payment seam |
+| Sacrifice + cost override (HP payment, floor 1) | jobs/traits/relics | **existing (F14)** | `primitives/cost-payment.ts` — fixed HP payment (unmitigable, floor 1, no when-damaged window); percentage-of-max variant still missing |
 | Blessing/combo ability-use spend | jobs/traits | **landed (F10)** — `kernels/ability-use-choices.ts` + `content/jobs/ability-use-choice-recipes.ts`; Rebirth/War wired, Faith/Songweave remain | choice→cost→modifier fold |
-| Use ledger (once-per-turn/round/combat gates) | jobs | partial → **existing (once-per-round)** | the F9 reactive job-trait fold + durable round ledger (`kernels/trait-reactions.ts`); once-per-turn/combat variants still per-site |
+| Use ledger (once-per-turn/round/combat gates) | jobs | **existing (F14)** | `kernels/use-ledger.ts` — one source-ID-free durable gate for once-per-turn/round/combat with authoritative lifecycle resets (turn/round boundaries); the F9 round ledger rides the same key format |
 | **Aura mechanic** (spatial membership projection) | jobs/foes/traits | **existing** | `kernels/aura.ts` — membership kernel + projection + attack modifiers + lifecycle recipes |
 | Heroics economy | classes/traits | missing | |
-| Infuse / Aether cost | classes/traits/relics | missing | `aether` resource exists |
+| Infuse / Aether cost | classes/traits/relics | **existing (F14)** | `kernels/cost-payment.ts` cost-modifier registry + `effectiveRuleCosts` (reduce an Aether/Infuse cost, replace a payment, alter a fixed sacrifice); per-ability spend limits and percentage sacrifices remain |
 | Entity / summon action suite | jobs/foes | partial | entity model exists; actions hand-authored |
 | Ally-buff grant selector | jobs | partial | condition/vigor mutations exist |
 | Mob member model | foes | missing | |
@@ -320,12 +320,15 @@ registry, or reducer seam) that content rows plug into. Found at
 | **HP-threshold projection kernel** (`hp-threshold.ts`) | generic conditional-passive authority for the two canonical HP states — bloodied (at or under 50% of the wounds-adjusted maximum, p.94/p.104) and at-or-under-25% (the exact quarter mark) — answering "is this passive active" (`isAtHpThreshold`) and projecting conditions / the turn-start +actions bonus onto the owner, with an inverted gate for "loses X when bloodied"; the shared predicates also feed the VM (`quarter` predicate) and the attack-modifier fold (target-threshold bonus damage) | condition, attack, state | existing (Rogue Slippery, the Enrage family ×9, True Enrage, Arkentech Hover Chair, Furious Berserk sturdy, Strigoi Blood Hunger, Divine Aegis t2) |
 | **Range / distance kernel** (`range.ts`, F12) | the single reusable authority for ICON's range family: canonical distance (`distanceBetween`/`isWithinRange`/`isExactlyRange` over the shared p.92 footprint metric), authoritative listed-range modification (`effectiveAbilityRange` folding registered `RangeModifierRule`s — fixed override, conditional override under stealth/comeback/mastery gates, dynamic round-number — at both command gates, so a range change genuinely widens target legality), and distance-gated effects (exact-range attack modifiers via the attack-modifier fold's `exactRange`/unerring, Aetherwall's outside-range-2 damage halving through the same footprint distance). Distance predicates never change targeting range, and listed-range changes never affect damage | spatial-intent, attack, damage | existing (Valkyrie t1, Incubus t1, Harvest t2, Open the Gates t2, Trigrammaton, Aetherwall) |
 | **Area kernel** (`area.ts`, F13) | the reusable authority for ICON's p.97 AoE patterns. The geometry module (`area-geometry.ts`) owns the deterministic pattern math — orthogonal `lineCells`, validated orthogonal `arcCells` (a chosen path: contiguous, one-step, no self-overlap, never the user's space; never auto-shaped), and `squareArea` for burst/blast-center squares. The kernel folds registered `AreaModifierRule`s (shape and/or length override under round/talent/mastery gates) into an EFFECTIVE area descriptor (`effectiveAreaFor`) that the parent resolver reads at command time — the same discipline as the range kernel — and the reducer's target-legality gate consumes it for line-shaped abilities, so a shape/size change genuinely alters legal execution, never just metadata. Small/medium/large blast templates are visual-only in the source and deliberately NOT approximated; units needing an exact template carry the `blast-template` blocker | spatial-intent, area-geometry | existing (Soul Shot t2 line 6, Sturmreiten mastery arc 5) |
+| **Cost-payment transaction kernel** (`cost-payment.ts`, F14) | one transactional boundary for paying mechanical costs before an effect resolves: a closed registry of source-ID-free `CostModifierRule`s folds the effective costs (reduce an Infuse/Aether cost, replace one resource payment, alter a fixed sacrifice amount), `assertRuleCostsPayable` rejects an unpayable mandatory cost BEFORE any effect or RNG, and `ruleCostMutations` emits the durable resource-spend / action-spend / sacrifice HP-cost mutations that ride the recorded event. The VM runtime and both command gates (USE_ABILITY / EXECUTE_RULE) validate AND pay through this kernel, so the amount validated and the amount paid can never drift | cost-payment primitives (availability, assertions, spend/sacrifice builders) | existing (wired proofs: Provoke t2, Pyroclast t2; reusable for Infuse/cost-modifier consumers) |
+| **Use-ledger kernel** (`use-ledger.ts`, F14) | one source-ID-free durable gate for the "once per turn / once per round / once per combat" family with automatic reset at the authoritative lifecycle boundary (turn-end / round-start); the F9 round-ledger key format is preserved so the reactive job-trait fold and the generalized gate share one authority | state | existing (lifecycle reset rows; Masquerade t1 wired proof) |
+| **Unified attack-resolution kernel** (`attack-resolution.ts`, F15) | ONE authoritative ordinary-attack seam consumed by the declarative VM `attack` effect, every named Job resolver attack, and the generic foe recipe attack. `resolveAuthoritativeAttack` composes the existing authorities rather than re-implementing them: `resolveAttackRoll` (defense, boon/curse, elevation, Dazed, Evasion, True Strike, auto-hit, critical, Exceed-threshold override, unerring, flat bonus damage), the F6 `traitAttackModifier` fold (armed one-shot Hissatsu/Demon Edge, Pulverize, Blood Hunger, exact-range Trigrammaton through the canonical p.92 footprint distance), the aura projection (attacker boons/curses + the target's defensive curse), and the F10 ability-use modifiers (Blessing of War boons/bonus damage, Rebirth pierce). The resolved cover/dodge/aetherwall provenance and flat bonus damage are recorded per context (`rememberAttackDamage`) so the shared damage builder hands them to the attack's direct hit/miss damage ONLY — never collateral area damage, later delayed damage, or unrelated effects. The result also carries the effective `damageDie` (an armed d10 override, else the character's ordinary die) so resolver attack [D] rolls honor the same override as VM damage expressions. A future generic attack modifier has exactly one place to integrate | primitives/attack-resolution, attack-modifiers, aura, spatial-intent (footprintDistance) | existing (all 12 resolver-program files + foe recipes migrated off job-kit's bare resolveAttackRoll; parity fixtures in `__tests__/attack-authority.test.ts`) |
 
 ### Missing kernels named by the ontology
 
 | Kernel | Source responsibility | Consumers |
 | --- | --- | --- |
-| **Resource-economy spend kernel** | blessing/combo/Infuse/sacrifice spend, use ledgers | glossary *Blessing/Combo/Sacrifice/Mark* + relic/trait rows (Gamble now existing) |
+| ~~Resource-economy spend kernel~~ — **landed (F14)** | blessing/combo/Infuse/sacrifice spend + use ledgers now ride `kernels/cost-payment.ts` + `kernels/use-ledger.ts`; the remaining economy gaps are percentage-of-max sacrifice, per-ability spend limits, and the Heroics economy | relic/trait rows still listing `sacrifice-percent` / `resource-management` / `heroics-economy` |
 | **Heroics economy** | make-Heroic choice, lockout, half-damage penalty | glossary *Heroic* + Stalwart traits |
 | **Movement-phase kernels** | vacate, occupancy-cost, elevation-fly, pre/post ability movement, position swap, teleport-all | glossary *Dash/Rush/Fly/Teleport/Place/Remove* + movement talents/foes |
 | **Stance / mark trigger kernels** | multi-stance gate, mark-stack gate, mark-trigger gates | glossary *Stance/Mark* + Reactive windows |
@@ -349,7 +352,7 @@ authority for "complete"; here **existing** = a kernel/primitive seam exists
 | Bonus damage / Critical / Exceed | attack-resolution | attack-modifiers, talent fold | existing | attacks, talents |
 | Weakened / Vulnerable | damage-resolution | damage ledger | existing | core |
 | Divine | damage-resolution (`ignoreDefiance`,`bypassVigor`) | damage ledger | existing(partial) | justice, nothung mastery |
-| Attack roll / hit/miss | attack-resolution | F4 | existing | attacks |
+| Attack roll / hit/miss | attack-resolution | **F15 unified attack kernel** (`kernels/attack-resolution.ts`) — VM attacks, named resolver attacks, and foe recipes all resolve through `resolveAuthoritativeAttack` | existing | attacks |
 | Save / Cure / Blessing | save-window, status-saves | F3 | existing (save), partial (blessing input) | core + lives |
 | Statuses (10) | status mutation | object-position sort | existing | core + traits |
 | Positive effects (18+) | condition mutation | passive-projection | existing (kept) | traits/roles |
@@ -364,8 +367,8 @@ authority for "complete"; here **existing** = a kernel/primitive seam exists
 | Summon | entity mutation | summon-recipes | partial | summons |
 | Triggered effects (charge/comeback/collide/exceed/finishing-blow/slay/heroic/infuse/chain-reaction) | VM triggers | talent fold, trigger-window | existing (charge/collide/etc.) | talents |
 | **Gamble** | `gambleD6` + `TurnDiceWindows.recordedDice` | `job-kit.ts`, lifecycle | **existing** | all content gamble rolls migrated |
-| Sacrifice | sacrifice damage | (cost seam) | partial | sacrifices |
-| Combo / Blessing / Vigilance / Resolve | resource mutations | resource registry | partial (spend seams) | economies |
+| Sacrifice | cost-payment primitives | F14 cost-payment kernel | existing (fixed amounts; percentage-of-max pending) | sacrifices |
+| Combo / Blessing / Vigilance / Resolve | resource mutations | resource registry + F14 cost-payment | existing (per-ability spend limits pending) | economies |
 | Power Die | die mutations | `kernels/power-die.ts` + lifecycle | **partial → kernel landed** | stance dies; Gran Reversa t1 wired |
 | Rebound | (attack direction) | (attack modifier) | missing | trick shot, heracule mastery |
 | Aura | persistent effect | (aura kernel) | existing | auras |
@@ -389,7 +392,7 @@ derive from the canonical blocker census (regenerate before trusting a number).
 | Attack-modifier fold F6 | attack-path reads | Demon Edge/Hissatsu/Pulverize/Bull's Strength | — | existing |
 | Talent fold F7 | trigger effects | 30 wired + condition-grant tranche | — | existing |
 | **Aura kernel** (`aura.ts`) | Aura X membership + projection + attack modifiers | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | existing |
-| Spend/economy hooks (missing) | Blessing/Combo/Sacrifice/Infuse/use-ledger | ~6 job traits + talents + 3 relic ranks | strive, demon-strength, crimson-king | needed (Gamble now existing) |
+| Spend/economy hooks (F14) | Blessing/Combo/Sacrifice/Infuse/use-ledger | cost-payment + use-ledger kernels landed; wired proofs Provoke t2, Pyroclast t2, Blackstar t1, Masquerade t1 | strive, demon-strength, crimson-king | existing (percentage sacrifice + heroics remain) |
 | Movement-phase kernels (missing) | vacate/occupancy/elevation/pre-post/swap/teleport-all | 5 job traits + movement talents/foes | darkside, stone-double, tumbling, great-leap | needed |
 | Conditional passive gates (missing) | bloodied/25%/terrain/stealth/status/round | ~150 foe traits + relic ranks | berserker-enrage, earth-bond, wayfinding | needed |
 | Reactive windows (missing triggers) | attack-miss/completion, summon, generalized targeted | 7 job traits + dozens of talents | cheap-trick, mantra-of-sealing, balance | needed |
@@ -451,8 +454,10 @@ not name:
    threshold) and trophy use commands.
 7. **Camp / reward execution** — deterministic camp-boundary and reward
    application (mostly narrative/bookkeeping, needs a deterministic kernel).
-8. **Once-per-round/combat use ledgers** — the repeated "once per round"
-   gate the corpus uses heavily; the glossary has no keyword for it.
+8. ~~Once-per-round/combat use ledgers~~ — **landed (F14)**: the repeated
+   "once per turn / round / combat" gate now rides one reusable
+   `kernels/use-ledger.ts` with automatic reset at the authoritative
+   lifecycle boundary.
 
 ---
 
@@ -487,7 +492,9 @@ damage resolution + attack resolution + save window
 
 costs + resources (resolve/vigor/blessing/combo/aether)
         ↓
-             spend/economy kernel → Sacrifice / Infuse / Heroics / Combo / use-ledger
+  cost-payment kernel (F14: validate → pay, cost modifiers) + use-ledger (F14)
+        ↓
+      Sacrifice / Infuse / Combo / use-ledger  (Heroics economy remains)
 ```
 
 **Collapsing blockers:** several census blocker labels collapse into one
@@ -495,8 +502,9 @@ reusable abstraction:
 - `charge-state` → **recorded-state / triggered-effect** kernel. (`gamble-state` resolved: `gambleD6` + `dice-result-modifier` + `post-roll-reactive-choice`.)
 - `aura`, `cover-mechanic`, `range-modifier` → **spatial / modifier** layer.
 - `sacrifice-cost`, `infuse-cost`, `blessing-spend`, `combo-spend`,
-  `use-ledger`, `heroics-economy`, `resource-management` → **resource-economy /
-  spend** kernel.
+  `use-ledger` → **landed (F14 cost-payment + use-ledger kernels)**;
+  `heroics-economy` and `resource-management` (turn-start gains, per-ability
+  spend limits) remain open economy gaps.
 - `fly-grant`, `pre-ability-movement`, `movement-modifier` → **movement-phase**
   kernel.
 - `mark-modifier`, `stance-gate` → **status/mark/stance** kernel.
@@ -509,13 +517,16 @@ Prioritized by dependencies, glossary completeness, shared leverage,
 elimination of duplicated content-local rules, correctness/replay risk, and
 content unlock counts — **not** by census immediate completions alone.
 
-1. **Resource-economy / spend kernel** (sacrifice, blessing, combo, infuse,
-   use-ledger, heroics) — the glossary's own economy vocabulary (Gamble is now existing); the
-   biggest shared leverage across job traits, talents, and relic ranks.
-   **Landing:** the once-per-round reactive job-trait fold + durable round
-   ledger (F9) is done — see `__tests__/trait-reactions.test.ts`; the
-   spend-augment (blessing/combo/infuse) side and Press The Advantage's
-   ally-choice still need the tighten-input seam.
+1. ~~Resource-economy / spend kernel~~ — **landed (F14)**: the cost-payment
+   transaction kernel (`kernels/cost-payment.ts` — cost-modifier registry,
+   beginning-of-action validation, durable payment mutations) and the
+   generalized use-ledger kernel (`kernels/use-ledger.ts`) now answer "what
+   must be validated and paid before an effect resolves, and how is that
+   payment recorded for replay." Wired proofs: Provoke t2 + Pyroclast t2
+   (optional fixed sacrifices), Blackstar t1 (aether gain), Masquerade t1
+   (turn-ledger evasion). Remaining economy gaps: percentage-of-max
+   sacrifice (`sacrifice-percent`), per-ability spend limits / turn-start
+   gains (`resource-management`), and the Heroics economy.
 2. ~~Aura membership kernel~~ — **existing** (`kernels/aura.ts`).
 3. **Movement-phase kernels** — vacate/occupancy/elevation/pre-post movement;
    unlocks movement traits + talents + the movement-entry forced fold.
@@ -585,7 +596,8 @@ only authority for "done."
   condition-grant; 30 wired + 5 program-level + 3 passive-projection + 4
   range-modifier (F12) + 1 area-modifier (F13; the area-carried rows — Pyre
   t2 exceed blast shove, Eye of the Storm t2 center piercing — ride the
-  wired/program-level homes). 43/288 executable.
+  wired/program-level homes). 47/288 executable (incl. the four F14
+  cost-payment proofs).
 - **F8 Mastery attachment** — `kernels/mastery.ts`: the typed mastery
   attachment mechanism. `EncounterActor.masteredAbilityIds` (projected from
   `CharacterAbility.mastered`, migrated deterministically for old snapshots)
@@ -609,9 +621,10 @@ only authority for "done."
   in `abilityEvents`/the rule path. Wired row: `stormbender:trait:
   dash-on-the-rocks` (p.230) — 1/round on collide, gain 1 aether + burst-1
   piercing centered on the collided character (never the ability user).
-  Fixtures: `__tests__/trait-reactions.test.ts`. This is the first home of
-  the once-per-round economy/reactive-trait family (`use-ledger`);
-  once-per-combat and the spend-augment (blessing/combo/infuse) halves remain.
+  Fixtures: `__tests__/trait-reactions.test.ts`. This was the first home of
+  the once-per-round economy/reactive-trait family (`use-ledger`); the
+  generalized gate now lives in `kernels/use-ledger.ts` (F14) with the same
+  round-ledger key format.
 - **F10 Aura membership kernel** — `kernels/aura.ts`: the single reusable,
   source-ID-free mechanism answering which characters are inside an aura and
   what membership projects onto them. A content row registers a reviewed
@@ -661,6 +674,57 @@ only authority for "done."
   Shot t2 (Line 6 from round 4), Sturmreiten mastery (Arc 5), plus the
   area-carried triggers on Pyre t2 (exceed blast shove) and Eye of the Storm
   t2 (center piercing per area character). Fixtures: `__tests__/area.test.ts`.
+- **F15 Unified attack-resolution kernel** — `kernels/attack-resolution.ts`:
+  the single source-ID-free authority for ordinary ICON attack resolution
+  across every execution path. Previously the declarative VM `attack` effect
+  folded substantially more shared authority (F6 trait modifiers, armed
+  one-shot state, aura boons/curses, F10 ability-use modifiers, footprint
+  exact-range predicates, damage-die overrides, cover/dodge/aetherwall
+  provenance) than job-kit's `resolveAttack`/`resolveAttackRoll`, which many
+  already-executable resolver abilities and the foe recipe kernel consumed
+  directly — so newly-added passive mechanics could silently apply to
+  declarative attacks but not resolver attacks. The kernel now composes the
+  existing authorities (roll primitive + F6 fold + aura projection + F10
+  modifiers + p.92 footprint distance) and returns the durable attack
+  mutation, hit/miss/critical/Exceed facts, the remembered damage provenance
+  for the direct hit/miss damage only, and the effective damage die (armed
+  d10 overrides now reach resolver attack [D] rolls exactly as they reach VM
+  damage). All 12 resolver-program files (chanter, enochian, fool,
+  freelancer, geomancer, harvester, knave, sealer, seer, shade, spellblade,
+  stormbender, warden) and the generic foe attack recipe were migrated off
+  job-kit's bare roll; job-kit keeps only the mutation builders. The stale
+  generic VM actor distance was replaced with the canonical footprint metric.
+  Cross-path parity fixtures (VM vs named resolver vs foe recipe: armed
+  d10/boon/true strike, exact-range footprint gates, aura curse, F10 War
+  boons + flat damage, Rebirth pierce, provenance isolation, failed-payment
+  no-dice/no-armed-consumption, combined sacrifice+attack replay) live in
+  `__tests__/attack-authority.test.ts`.
+- **F14 Cost-payment transaction foundation** — `primitives/cost-payment.ts`
+  + `kernels/cost-payment.ts` + `kernels/use-ledger.ts`. One source-ID-free
+  answer to "what must be validated and paid at the beginning of an
+  ability/action before its effects resolve, and how is that payment recorded
+  durably for replay": the cost-payment primitive owns the vocabulary
+  (availability — resolve combines the party pool with personal resolve
+  (p.99) — typed `CostPaymentViolation`s, and the durable resource-spend /
+  action-spend / sacrifice HP-cost mutation builders); the kernel owns a
+  closed cost-modifier registry (`CostModifierRule` — gate + fold, the same
+  discipline as the range/area kernels) folding `effectiveRuleCosts`, the
+  beginning-of-action validation gate (`assertRuleCostsPayable` — an
+  unpayable mandatory cost rejects BEFORE any effect or RNG), and the
+  payment emission (`ruleCostMutations`). Sacrifice is the p.107 glossary
+  contract encoded once: a `damage` mutation with the `sacrifice` type the
+  shared application path resolves as an unmitigable HP cost (bypasses
+  vigor, floors at 1 HP, opens no when-damaged/defeated window — a cost the
+  character pays itself never triggers foe-damage windows), and the amount
+  is never clamped so replay records the nominal value verbatim. The
+  use-ledger kernel generalizes the F9 round ledger to once-per-turn /
+  once-per-round / once-per-combat with automatic reset at the authoritative
+  lifecycle boundary. The VM runtime and both command gates validate AND
+  pay through the same kernel, and the F10 ability-use-choice fold was
+  refactored onto the shared payment primitives. Wired proofs: Provoke t2 +
+  Pyroclast t2 (optional fixed sacrifices), Blackstar t1 (aether gain),
+  Masquerade t1 (turn-ledger evasion). Fixtures:
+  `__tests__/cost-payment.test.ts`, `__tests__/use-ledger.test.ts`.
 - **F11 HP-threshold passive projection kernel** — `kernels/hp-threshold.ts`:
   the source-ID-free authority for the canonical conditional passives
   ("while bloodied, X" / "while at or under 25% HP, X"). Bloodied is at or

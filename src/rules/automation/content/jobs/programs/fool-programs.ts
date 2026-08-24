@@ -7,12 +7,13 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, attackStep,
-  distance, sourceActor, occupied, impassable, walk, freeCellsInRange, resolveAttack,
+  distance, sourceActor, occupied, impassable, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, resourceMutation, stanceMutation, markMutation,
   rushMutation, flyMutation, placeMutation, entityMutation, terrainMutation,
   gambleD6,
   untilNextTurnStart, action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Fool ability implementations (ICON p.150–152), the
@@ -111,12 +112,12 @@ const deathEffects: RuleResolver = (context) => {
   const { roll: gamble } = gambleD6(context.dice);
   const direction = axisDirection(source.position, target.position);
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target, { autoHit: true });
+  const roll = resolveAuthoritativeAttack(context, source, target, { autoHit: true });
   mutations.push(roll.attackMutation);
   if (target.hp <= 8) {
     mutations.push(damageMutation(context, target.id, 999, 'hit', 'divine'));
   } else {
-    const dice = context.dice.die(source.damageDie) + context.dice.die(source.damageDie);
+    const dice = context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie);
     mutations.push(damageMutation(context, target.id, dice + source.fray, 'hit'));
   }
   const line = Array.from({ length: gamble }, (_, index) => ({
@@ -293,9 +294,9 @@ const diabloEffects: RuleResolver = (context) => {
   const center = { x: targetPosition.x + direction.x, y: targetPosition.y + direction.y };
   const arms = orthogonalNeighbors(center);
   const cross = [center, ...arms];
-  const roll = resolveAttack(context, source, target, { boons: 1 });
+  const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   const mutations: RuleMutation[] = [roll.attackMutation];
-  mutations.push(roll.hit ? damageMutation(context, target.id, context.dice.die(source.damageDie), 'hit') : damageMutation(context, target.id, 1, 'miss'));
+  mutations.push(roll.hit ? damageMutation(context, target.id, context.dice.die(roll.damageDie), 'hit') : damageMutation(context, target.id, 1, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'blind'));
   let endSpaceOccupants = 0;
   for (const character of Object.values(context.state.actors)) {

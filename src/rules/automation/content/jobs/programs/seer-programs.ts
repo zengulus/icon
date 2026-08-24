@@ -4,13 +4,14 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack, nearestFoe,
+  distance, sourceActor, walk, freeCellsInRange, nearestFoe,
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation,
   gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Seer ability implementations (ICON p.197–203),
@@ -122,10 +123,10 @@ const astraEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const roll = resolveAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   const direction = axisDirection(source.position, target.position);
   for (const character of Object.values(context.state.actors)) {
@@ -175,8 +176,12 @@ const fortunaEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'FORTUNA requires a target in range 5.');
   if (distance(source.position, target.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'FORTUNA requires a target in range 5.');
-  const mutations: RuleMutation[] = [autohitAttack(context)];
-  mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit'));
+  const mutations: RuleMutation[] = [];
+  // Auto-hit through the shared authority so an armed damage-die override
+  // upgrades the attack's [D]; the recorded mutation keeps the same shape.
+  const roll = resolveAuthoritativeAttack(context, source, target, { autoHit: true, trueStrike: true });
+  mutations.push(roll.attackMutation);
+  mutations.push(damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit'));
   const blast = squareArea(target.position, 2);
   for (const character of Object.values(context.state.actors)) {
     const position = character.position;

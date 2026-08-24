@@ -7,12 +7,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, lineCells, sameCell, squareArea, withinGrid, occupied,
   constant, untilNextTurnEnd,
-  distance, sourceActor, walk, freeCellsInRange, resolveAttack, rushTowardFoes,
+  distance, sourceActor, walk, freeCellsInRange, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   flyMutation, removeMutation, placeMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
  * Independently reviewed Chanter ability implementations (ICON p.174–181), the
@@ -159,8 +160,12 @@ const pandaemoniumEffects: RuleResolver = (context) => {
   const radius = context.triggers?.has('charge') ? 3 : 2;
   const area = squareArea(targetPosition, radius);
   const mutations: RuleMutation[] = [];
-  mutations.push(autohitAttack(context));
-  mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit'));
+  // Auto-hit through the shared authority so an armed damage-die override
+  // (Hissatsu d10) upgrades the attack's [D] exactly as it does for a VM
+  // auto-hit; the recorded mutation keeps the same shape.
+  const roll = resolveAuthoritativeAttack(context, source, target, { autoHit: true, trueStrike: true });
+  mutations.push(roll.attackMutation);
+  mutations.push(damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit'));
   const inArea = Object.values(context.state.actors)
     .filter((character) => {
       const position = character.position;
@@ -193,8 +198,9 @@ const pandaemoniumComboEffects: RuleResolver = (context) => {
   if (!target?.position || !source.position) return [];
   const targetPosition = target.position;
   const mutations: RuleMutation[] = [];
-  mutations.push(autohitAttack(context));
-  mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'hit'));
+  const roll = resolveAuthoritativeAttack(context, source, target, { autoHit: true, trueStrike: true });
+  mutations.push(roll.attackMutation);
+  mutations.push(damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit'));
   const area = squareArea(targetPosition, 2);
   for (const character of Object.values(context.state.actors)) {
     const position = character.position;

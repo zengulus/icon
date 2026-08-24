@@ -606,6 +606,9 @@ export interface AbilityUseChoice {
  */
 export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices'> & {
   abilityUseChoices?: readonly AbilityUseChoice[];
+  /** Optional post-resolution talent effects the player explicitly opted into
+   * (source unit ids — see `RuleExecutionInput.talentChoices`). */
+  talentChoices?: readonly string[];
 };
 
 export type EncounterCommand =

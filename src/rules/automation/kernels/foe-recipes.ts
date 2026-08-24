@@ -14,10 +14,11 @@ import type {
 } from '../primitives/types.js';
 import {
   axisDirection, sameCell, squareArea,
-  constant, distance, sourceActor, walk, freeCellsInRange, rushTowardFoes, resolveAttack,
+  constant, distance, sourceActor, walk, freeCellsInRange, rushTowardFoes,
   conditionMutation, markMutation, rushMutation, shoveMutation, terrainMutation, vigorMutation,
   action, compilation,
 } from '../primitives/foe-kit.js';
+import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { footprintCells, footprintDistance, footprintsOverlap } from '../primitives/spatial-intent.js';
 import { adjacentActors } from '../primitives/foe-kit.js';
 
@@ -227,22 +228,22 @@ function foeDamage(
   return { kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId, amount, damageType, instance, delivery, ignoreCover, ...(ignoreDodge ? { ignoreDodge: true } : {}) };
 }
 
-function rollAmount(context: RuleExecutionContext, source: RuleActorView, amount: FoeAmount | number): number {
+function rollAmount(context: RuleExecutionContext, source: RuleActorView, amount: FoeAmount | number, damageDie: number = source.damageDie): number {
   if (typeof amount === 'number') return amount;
   switch (amount.kind) {
     case 'die': {
       let total = 0;
-      for (let index = 0; index < (amount.count ?? 1); index += 1) total += context.dice.die(source.damageDie);
+      for (let index = 0; index < (amount.count ?? 1); index += 1) total += context.dice.die(damageDie);
       return total;
     }
     case 'die-fray': {
       let total = source.fray;
-      for (let index = 0; index < (amount.count ?? 1); index += 1) total += context.dice.die(source.damageDie);
+      for (let index = 0; index < (amount.count ?? 1); index += 1) total += context.dice.die(damageDie);
       return total;
     }
     case 'die-fixed': {
       let total = amount.fixed;
-      for (let index = 0; index < amount.count; index += 1) total += context.dice.die(source.damageDie);
+      for (let index = 0; index < amount.count; index += 1) total += context.dice.die(damageDie);
       return total;
     }
     case 'fray': return source.fray;
@@ -319,7 +320,7 @@ function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
     const ignoreCover = Boolean(recipe.unerring
       || (atRange && recipe.atRange?.unerring)
       || (recipe.unerringWhenMarked && target.marks.some((mark) => mark.markId === recipe.unerringWhenMarked && mark.ownerId === context.actorId)));
-    const roll = resolveAttack(context, source, target, {
+    const roll = resolveAuthoritativeAttack(context, source, target, {
       boons: recipe.boons,
       trueStrike: recipe.trueStrike,
       autoHit: recipe.autoHit,
@@ -329,20 +330,22 @@ function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
     mutations.push(roll.attackMutation);
     const damageType = recipe.damageType ?? 'normal';
     if (roll.hit) {
-      const base = rollAmount(context, source, recipe.hit);
+      // The attack's [D] rolls the effective die (an armed d10-style override
+      // applies to the attack's direct damage, exactly as the VM path).
+      const base = rollAmount(context, source, recipe.hit, roll.damageDie);
       const bonus = bonusDamageActive(recipe, context, target)
-        ? Math.max(context.dice.die(source.damageDie), context.dice.die(source.damageDie))
+        ? Math.max(context.dice.die(roll.damageDie), context.dice.die(roll.damageDie))
         : 0;
       const instances = recipe.hitInstances ?? 1;
       for (let instance = 1; instance <= instances; instance += 1) {
         mutations.push(foeDamage(context, target.id, base + bonus, 'hit', damageType, attackIgnoreCover, instance, attackIgnoreDodge));
       }
-      if (roll.critical) mutations.push(foeDamage(context, target.id, context.dice.die(source.damageDie), 'hit', damageType, attackIgnoreCover, instances + 1, attackIgnoreDodge));
+      if (roll.critical) mutations.push(foeDamage(context, target.id, context.dice.die(roll.damageDie), 'hit', damageType, attackIgnoreCover, instances + 1, attackIgnoreDodge));
       for (const conditionId of recipe.hitConditions ?? []) mutations.push(conditionMutation(context, target.id, conditionId));
       if (recipe.hitShove) mutations.push(shoveMutation(context, target.id, recipe.hitShove, axisDirection(attackOrigin, target.position)));
       if (recipe.hitMark) mutations.push(markMutation(context, target.id, recipe.hitMark, {}));
     } else {
-      const missAmount = recipe.miss ? rollAmount(context, source, recipe.miss) : source.fray;
+      const missAmount = recipe.miss ? rollAmount(context, source, recipe.miss, roll.damageDie) : source.fray;
       mutations.push(foeDamage(context, target.id, missAmount, 'miss', damageType, attackIgnoreCover, 1, attackIgnoreDodge));
     }
     for (const conditionId of recipe.effectConditions ?? []) mutations.push(conditionMutation(context, target.id, conditionId));

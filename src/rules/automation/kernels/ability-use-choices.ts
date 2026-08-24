@@ -21,6 +21,7 @@
 import type { RuleMutation } from '../primitives/types.js';
 import { AbilityUseChoiceViolation } from '../primitives/ability-use-choices.js';
 import type { AbilityUseChoiceSource } from '../primitives/ability-use-choices.js';
+import { assertResourceSufficient, CostPaymentViolation, resourceSpendMutation } from '../primitives/cost-payment.js';
 
 /** Registered per-trait ability-use choice recipe (content-owned). */
 export interface AbilityUseChoiceRecipe {
@@ -101,22 +102,26 @@ export function resolveAbilityUseChoices(
     const option = recipe.options.find(({ spend }) => spend === choice.spend);
     if (!option) throw new AbilityUseChoiceViolation('invalid-spend', `${recipe.traitId} does not allow spending ${choice.spend}.`);
 
-    // The actor using the ability owns and spends the resource.
-    const available = source.self.resources[recipe.resourceId] ?? 0;
-    if (available < choice.spend) {
-      throw new AbilityUseChoiceViolation('insufficient-resource', `${recipe.traitId} needs ${choice.spend} ${recipe.resourceId}, but only ${available} available.`);
+    // The actor using the ability owns and spends the resource. The
+    // availability check and the durable spend mutation ride the shared
+    // cost-payment primitive — the same resource-payment authority the VM
+    // runtime and the command gates use, so F10 never grows a second
+    // resource-payment path.
+    try {
+      assertResourceSufficient(
+        source.self,
+        0,
+        recipe.resourceId,
+        choice.spend,
+        (available) => `${recipe.traitId} needs ${choice.spend} ${recipe.resourceId}, but only ${available} available.`,
+      );
+    } catch (error) {
+      if (error instanceof CostPaymentViolation) {
+        throw new AbilityUseChoiceViolation('insufficient-resource', error.message);
+      }
+      throw error;
     }
-
-    costs.push({
-      kind: 'resource',
-      sourceId: recipe.traitId,
-      actorId: source.self.id,
-      resourceId: recipe.resourceId,
-      operation: 'spend',
-      amount: choice.spend,
-      minimum: 0,
-      maximum: null,
-    });
+    costs.push(resourceSpendMutation(recipe.traitId, source.self.id, recipe.resourceId, choice.spend));
 
     boons += option.boons ?? 0;
     bonusDamage += option.bonusDamage ?? 0;

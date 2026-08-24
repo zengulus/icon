@@ -104,6 +104,11 @@ export interface TalentTriggerEffect {
    * decided by the shared reactive dry run on the ability's recorded
    * mutations. */
   trigger: 'exceed' | 'comeback' | 'slay' | 'collide' | 'finishing-blow' | 'always';
+  /** True when the source says the player MAY do this ("you can …", "you may
+   * …") — the row then fires only when the player explicitly named this
+   * talent's source id in the command's `talentChoices` input. The engine
+   * never assumes "yes" merely because the effect is beneficial. */
+  optional?: boolean;
   /** Optional per-row override of the trigger's fired check (e.g. a
    * finishing-blow row whose eligibility extends to dazed or blinded foes).
    * When present it replaces the trigger kind's default condition. */
@@ -299,11 +304,13 @@ export function talentTriggerMutations(
   mutations: readonly RuleMutation[],
   targetIds: readonly string[] = [],
   reactive: TalentReactiveTargets = {},
+  choices: ReadonlySet<string> = new Set(),
 ): RuleMutation[] {
   const chosen = actor.talents?.[abilityId];
   if (!chosen) return [];
+  const sourceId = `${abilityId}:talent:${chosen}`;
   // The runtime fold reads the explicit wired table — never the manifest.
-  const recipe = wiredTalentRecipes[`${abilityId}:talent:${chosen}`];
+  const recipe = wiredTalentRecipes[sourceId];
   const triggerEffect = recipe?.triggerEffect;
   if (!triggerEffect) return [];
   const context: TalentFoldContext = { state, mutations, targetIds, actorId: actor.id };
@@ -311,7 +318,7 @@ export function talentTriggerMutations(
     const target = state.actors[id];
     return Boolean(target && target.side !== actor.side && isBloodied(target));
   });
-  const fired = triggerEffect.condition
+  const conditionFired = triggerEffect.condition
     ? triggerEffect.condition(context)
     : triggerEffect.trigger === 'comeback'
       ? isBloodied(actor)
@@ -326,8 +333,8 @@ export function talentTriggerMutations(
               : triggerEffect.trigger === 'always'
                 ? true
                 : false;
+  const fired = triggerEffect.optional ? conditionFired && choices.has(sourceId) : conditionFired;
   if (!fired) return [];
-  const sourceId = `${abilityId}:talent:${chosen}`;
   const triggerTargetIds = triggerEffect.trigger === 'collide' ? (reactive.collidedActorIds ?? [])
     : triggerEffect.trigger === 'slay' ? (reactive.slainActorIds ?? [])
     : triggerEffect.trigger === 'finishing-blow' ? finishedBlowTargets
