@@ -40,7 +40,7 @@ describe('gambleD6', () => {
 
   it('succeeds above threshold', () => {
     const ctx = gambleContext([6]);
-    const { roll, success } = gambleD6(ctx, 6);
+    const { roll, success } = gambleD6(ctx, 4);
     expect(roll).toBe(6);
     expect(success).toBe(true);
   });
@@ -211,19 +211,31 @@ describe('existing gamble consumers', () => {
       .toEqual(executed.state.actors[hero.id]!.conditions.map((c) => c.id).sort());
   });
 
-  it('Dire Parry: Riposte stance enters and arms the interrupt', () => {
-    const { state: s0, hero } = heroEncounter({ foePosition: { x: 3, y: 5 } });
+  it('Dire Parry: gamble of 6 deals 6 damage, slashes, and shoves', () => {
+    const { state: s0, hero, foe } = heroEncounter({ foePosition: { x: 2, y: 1 } });
+    // Enter Riposte stance
     const s1 = executeCommand(s0, {
       type: 'USE_ABILITY',
       actorId: hero.id,
       abilityId: 'knave:riposte',
       targetIds: [],
-      input: {},
     }, scriptedDice()).state;
     expect(s1.actors[hero.id]!.ruleState['riposte:armed']).toBe(true);
+    // Trigger Dire Parry against the foe — gamble 6
+    const parry = executeCommand(s1, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'knave:riposte',
+      actionId: 'dire-parry',
+      timing: 'interrupt',
+      input: {},
+      triggerSourceId: foe.id,
+    }, scriptedDice(6));
+    expect(parry.state.actors[foe.id].hp).toBe(26); // 32 - 6 gamble damage
+    expect(parry.state.actors[foe.id].statuses).toContain('slashed'); // 6 triggers slash
   });
 
-  it('Party Favor detonation: gamble determines explosion effects', () => {
+  it('Party Favor detonation: gamble 3 deals 2 damage and flies allies away', () => {
     const { state: s0, hero, foe } = heroEncounter({ foePosition: { x: 1, y: 2 } });
     // Place the mine
     const placed = executeCommand(s0, {
@@ -233,7 +245,7 @@ describe('existing gamble consumers', () => {
       targetIds: [],
     }, scriptedDice()).state;
     expect(placed.terrainEffects.some((effect) => effect.terrain === 'party-favor')).toBe(true);
-    // Detonate with gamble 4 → "4+: blinded"
+    // Detonate with gamble 3
     const detonated = executeCommand(placed, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -241,8 +253,9 @@ describe('existing gamble consumers', () => {
       actionId: 'detonate',
       timing: 'movement-end',
       input: {},
-    }, scriptedDice(4));
-    expect(detonated.state.actors[foe.id].hp).toBeLessThan(32); // took damage
+    }, scriptedDice(3));
+    expect(detonated.state.actors[foe.id].hp).toBe(30); // 32 - 2 damage
+    expect(detonated.state.actors[hero.id].position).toEqual({ x: 2, y: 1 }); // flew away
     expect(detonated.state.terrainEffects.some((effect) => effect.terrain === 'party-favor')).toBe(false);
   });
 });

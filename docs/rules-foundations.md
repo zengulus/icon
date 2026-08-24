@@ -279,11 +279,11 @@ hand-rolled shape that should become a recipe row; "missing" means no seam.
 | **Resource mutations** (resolve/vigor/blessing/combo/vigilance/aether/bonus-damage) | all | existing | shared resource registry |
 | Power-die stance | jobs/classes | partial | soul-blade, wicked-sheath, gallows-humor, etc. |
 | Armed one-shot attack window | jobs/classes | partial | F6 kernel arm/consume |
-| Gamble (recorded d6 + result branch) | jobs/traits/relics/trophies | partial | TurnDiceWindows pre-rolls exist; no shared effect |
+| **Gamble** (d6 + threshold/result) | jobs/traits/relics/trophies | **existing** | `gambleD6` in `job-kit.ts`; `recordedDice` in `TurnDiceWindows`; all content consumers migrated |
 | Sacrifice + cost override (HP payment, floor 1) | jobs/traits/relics | partial | sacrifice damage type exists; no HP-payment seam |
 | Blessing/combo ability-use spend | jobs/traits | missing | registry exists; spend seam doesn't |
 | Use ledger (once-per-turn/round/combat gates) | jobs | partial → **existing (once-per-round)** | the F9 reactive job-trait fold + durable round ledger (`kernels/trait-reactions.ts`); once-per-turn/combat variants still per-site |
-| Aura mechanic (spatial membership projection) | jobs/foes/traits | missing | persistent `aura` effect exists; no membership kernel |
+| **Aura mechanic** (spatial membership projection) | jobs/foes/traits | **existing** | `kernels/aura.ts` — membership kernel + projection + attack modifiers + lifecycle recipes |
 | Heroics economy | classes/traits | missing | |
 | Infuse / Aether cost | classes/traits/relics | missing | `aether` resource exists |
 | Entity / summon action suite | jobs/foes | partial | entity model exists; actions hand-authored |
@@ -324,7 +324,7 @@ registry, or reducer seam) that content rows plug into. Found at
 
 | Kernel | Source responsibility | Consumers |
 | --- | --- | --- |
-| **Resource-economy spend kernel** | blessing/combo/Infuse/sacrifice spend, use ledgers, gamble | glossary *Blessing/Combo/Sacrifice/Gamble/Mark* + relic/trait rows |
+| **Resource-economy spend kernel** | blessing/combo/Infuse/sacrifice spend, use ledgers | glossary *Blessing/Combo/Sacrifice/Mark* + relic/trait rows (Gamble now existing) |
 | **Heroics economy** | make-Heroic choice, lockout, half-damage penalty | glossary *Heroic* + Stalwart traits |
 | **Movement-phase kernels** | vacate, occupancy-cost, elevation-fly, pre/post ability movement, position swap, teleport-all | glossary *Dash/Rush/Fly/Teleport/Place/Remove* + movement talents/foes |
 | **Stance / mark trigger kernels** | multi-stance gate, mark-stack gate, mark-trigger gates | glossary *Stance/Mark* + Reactive windows |
@@ -362,7 +362,7 @@ authority for "complete"; here **existing** = a kernel/primitive seam exists
 | Stance | stance mutation | F3 | existing | stances |
 | Summon | entity mutation | summon-recipes | partial | summons |
 | Triggered effects (charge/comeback/collide/exceed/finishing-blow/slay/heroic/infuse/chain-reaction) | VM triggers | talent fold, trigger-window | existing (charge/collide/etc.) | talents |
-| Gamble | (recorded dice) | TurnDiceWindows | partial | gambles |
+| **Gamble** | `gambleD6` + `TurnDiceWindows.recordedDice` | `job-kit.ts`, lifecycle | **existing** | all content gamble rolls migrated |
 | Sacrifice | sacrifice damage | (cost seam) | partial | sacrifices |
 | Combo / Blessing / Vigilance / Resolve | resource mutations | resource registry | partial (spend seams) | economies |
 | Power Die | (die mutations) | lifecycle | partial | stance dies |
@@ -387,8 +387,8 @@ derive from the canonical blocker census (regenerate before trusting a number).
 | Passive projection F5 | condition/role baselines | 79 foe keyword rows, job traits | — | existing |
 | Attack-modifier fold F6 | attack-path reads | Demon Edge/Hissatsu/Pulverize/Bull's Strength | — | existing |
 | Talent fold F7 | trigger effects | 29 wired + condition-grant tranche | — | existing |
-| Aura kernel (missing) | Aura X | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | needed |
-| Spend/economy hooks (missing) | Blessing/Combo/Sacrifice/Infuse/Gamble/use-ledger | ~6 job traits + talents + 3 relic ranks | strive, demon-strength, crimson-king | needed |
+| **Aura kernel** (`aura.ts`) | Aura X membership + projection + attack modifiers | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | existing |
+| Spend/economy hooks (missing) | Blessing/Combo/Sacrifice/Infuse/use-ledger | ~6 job traits + talents + 3 relic ranks | strive, demon-strength, crimson-king | needed (Gamble now existing) |
 | Movement-phase kernels (missing) | vacate/occupancy/elevation/pre-post/swap/teleport-all | 5 job traits + movement talents/foes | darkside, stone-double, tumbling, great-leap | needed |
 | Conditional passive gates (missing) | bloodied/25%/terrain/stealth/status/round | ~150 foe traits + relic ranks | berserker-enrage, earth-bond, wayfinding | needed |
 | Reactive windows (missing triggers) | attack-miss/completion, summon, generalized targeted | 7 job traits + dozens of talents | cheap-trick, mantra-of-sealing, balance | needed |
@@ -435,9 +435,10 @@ not name:
    trigger threshold, duration, cost, save. The glossary has no single term
    for "modify another ability," yet masteries and many talents are exactly
    that.
-2. **Aura membership projection** — distance-based grants with activation,
-   size change, and entry effects; the glossary defines *Aura X* as an effect
-   but provides no engine shape for continuous membership.
+2. ~~Aura membership projection~~ — **existing** (`kernels/aura.ts`): continuous
+   membership from current positions through the canonical p.92 footprint
+   range, ephemeral condition/modifier projection onto current members, and
+   lifecycle recipe integration.
 3. **Delayed anchors** — record a target/effect at command time, resolve at a
    marked actor's boundary; the glossary's *Delay* is a special case, but the
    corpus (Great Giorgios, Assassinate, Showdown, etc.) needs a general anchor.
@@ -490,7 +491,7 @@ costs + resources (resolve/vigor/blessing/combo/aether)
 
 **Collapsing blockers:** several census blocker labels collapse into one
 reusable abstraction:
-- `gamble-state`, `charge-state` → **recorded-state / triggered-effect** kernel.
+- `charge-state` → **recorded-state / triggered-effect** kernel. (`gamble-state` resolved: `gambleD6` + `dice-result-modifier` + `post-roll-reactive-choice`.)
 - `aura`, `cover-mechanic`, `range-modifier` → **spatial / modifier** layer.
 - `sacrifice-cost`, `infuse-cost`, `blessing-spend`, `combo-spend`,
   `use-ledger`, `heroics-economy`, `resource-management` → **resource-economy /
@@ -508,14 +509,13 @@ elimination of duplicated content-local rules, correctness/replay risk, and
 content unlock counts — **not** by census immediate completions alone.
 
 1. **Resource-economy / spend kernel** (sacrifice, blessing, combo, infuse,
-   gamble, use-ledger, heroics) — the glossary's own economy vocabulary; the
+   use-ledger, heroics) — the glossary's own economy vocabulary (Gamble is now existing); the
    biggest shared leverage across job traits, talents, and relic ranks.
    **Landing:** the once-per-round reactive job-trait fold + durable round
    ledger (F9) is done — see `__tests__/trait-reactions.test.ts`; the
    spend-augment (blessing/combo/infuse) side and Press The Advantage's
    ally-choice still need the tighten-input seam.
-2. **Aura membership kernel** — unlocks the largest browse-level family (2 job
-   traits + 42 foe traits + trophies).
+2. ~~Aura membership kernel~~ — **existing** (`kernels/aura.ts`).
 3. **Movement-phase kernels** — vacate/occupancy/elevation/pre-post movement;
    unlocks movement traits + talents + the movement-entry forced fold.
 4. **Conditional passive gates** — bloodied/25%/terrain/stealth/status/round

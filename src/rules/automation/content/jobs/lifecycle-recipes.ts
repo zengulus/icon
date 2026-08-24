@@ -1,4 +1,5 @@
 import { applyRuleMutations, determineAndApplyEncounterDamage, encounterRuleState } from '../../kernels/encounter-adapter.js';
+import { gambleD6 } from '../../primitives/job-kit.js';
 import { auraDefinitionFor, auraOriginRefs, auraStateView, isAuraMember, isInAura } from '../../kernels/aura.js';
 import { hasMastery } from '../../kernels/mastery.js';
 import { resolveSaveWindow } from '../../primitives/save-window.js';
@@ -179,7 +180,7 @@ function detonateBombs(state: EncounterState, owner: EncounterActor, gamble: num
  * the TURN_ENDED event carries a deterministic value for replay. */
 export function carnevaleGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
   if (actor.ruleState['carnevale:armed'] !== true || actor.attackedThisTurn) return undefined;
-  return Object.values(state.entities).some((entity) => entity.type === 'bomb' && entity.ownerId === actor.id) ? dice.die(6) : undefined;
+  return Object.values(state.entities).some((entity) => entity.type === 'bomb' && entity.ownerId === actor.id) ? gambleD6(dice).roll : undefined;
 }
 
 /** Roll the Monogatari song gamble when the user has an active song with no
@@ -188,8 +189,8 @@ export function carnevaleGambleForTurnEnd(state: EncounterState, actor: Encounte
 export function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
   const tale = actor.ruleState['monogatari:tale'];
   if (actor.ruleState['monogatari:active'] !== true || tale !== null && tale !== undefined) return undefined;
-  if (actor.ruleState['monogatari:charge'] === true) return Math.max(dice.die(6), dice.die(6));
-  return dice.die(6);
+  if (actor.ruleState['monogatari:charge'] === true) return Math.max(gambleD6(dice).roll, gambleD6(dice).roll);
+  return gambleD6(dice).roll;
 }
 
 /** The deterministic tale conditions the single-pass VM can evaluate: Travels

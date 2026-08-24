@@ -310,9 +310,11 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "The power die" is the Gran Reversa stance die, initialized on
   // enter; the reverseFate resolver uses gambleD6 for the d6 tick-down;
   // the talent's passive component is the remaining blocker
-  'seer:sleight-of-hand:talent:2': ['charge-state'],
-  // Sleight of Hand's resolver is wired (autohit + pacified + area);
-  // "charge" is the Seer's card charge resource, still missing
+  'seer:sleight-of-hand:talent:2': ['dice-result-modifier'],
+  // "roll 1 more d6 the next time you gamble" — a Gamble dice modifier
+  // (gambleD6 always rolls exactly 1 die; extra-dice needs the dice-modifier
+  // extension). "Charge: 2 more d6s" adds more dice via the same seam.
+  // The charge resource itself is secondary to the dice modifier.
   'seer:chaos-tarot:talent:2': ['charge-state'],
   // chaosTarotEffects uses gambleD6 for the tarot roll; charge-state
   // is the remaining blocker (card charge resource)
@@ -331,8 +333,10 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'harvester:crimson-bloom:mastery': ['action-type-change'],
   // Crimson Bloom's mark + dice are wired; the mastery's action-type
   // change is the remaining blocker
-  'seer:sleight-of-hand:mastery': ['range-modifier'],
-  // The mastery's range-change effect is the remaining blocker
+  'seer:sleight-of-hand:mastery': ['power-die'],
+  // "gain six spectral blades … using a d6 power die starting at 6 to
+  // track them. At the end of your turn, gamble" — a power-die resource
+  // system plus an end-of-turn gamble trigger; no range modification
   'seer:chaos-tarot:mastery': ['entity-create'],
   // The mastery's entity-creation effect is the remaining blocker
   'spellblade:rampant-nail:talent:2': ['passive'],
@@ -341,6 +345,14 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'fool:limit-break': ['area-define', 'entity-create'],
   // "gamble" is mentioned but the real blockers are area-define and
   // entity-create; the gamble itself is not the missing primitive
+  'seer:limit-break': ['dice-result-modifier', 'condition-grant', 'attack-modifier'],
+  // High Prophecy: "Every d6...is either a 6 or a 1 (you choose)" →
+  // global dice-result-modifier (aura-scoped); "auto-miss by attacks,
+  // turn misses into hits, succeed all saves" → condition-grant
+  // (auto-miss/immunity) + attack-modifier (miss-to-hit). The
+  // action-type-change (free action) and aura are both implemented;
+  // the remaining gaps are dice modification, condition granting,
+  // and attack modification.
 
   // ── Trait-level Gamble reclassification ──
   // The two remaining `gamble-state` trait entries need reclassification:
