@@ -818,7 +818,35 @@ only authority for "done."
 
 ---
 
-## 13. Documentation authority and reconciliation
+## 13. Command purity contract
+
+The encounter command layer is a pure planner:
+
+    immutable input state + command + dice
+        -> planned durable events
+        -> applyEvents(input, events)
+        -> new state
+
+`executeCommand(state, ...)` must NEVER write to the `state` it is given — for
+accepted commands and rejected commands alike — and `applyEvents(originalState,
+result.events)` must deeply equal `result.state` (replay always starts from the
+PRE-COMMAND snapshot, never from a state the planner touched). The planner
+emits durable events; the reducer (`applyEvents`, which clones its input)
+overs the only authoritative mutation.
+
+Where source-visible working state is genuinely needed during sequential
+resolution (e.g. Massive Overhead's next-attack bonus damage die, p.134), the
+planner applies it to its own fresh `encounterRuleState` snapshot — never to
+the caller's actors — and bakes the effect into the recorded roll. The
+`bonus-damage` resource itself is never written by the arm/consume cycle, so a
+pre-existing charge from another source (Demon Edge, p.127) survives the
+overhead attack replay-exactly.
+
+The invariant is enforced by `expectCommandPurity` /
+`expectRejectedCommandPurity` in `__tests__/fixtures.ts` (used by
+`__tests__/command-purity.test.ts`); new command tests should use them.
+
+## 14. Documentation authority and reconciliation
 
 - [`kernels-needed.md`](kernels-needed.md) — the kernel build ledger; mirrors
   §3/§4 here. It is the "which content promotes when kernel X lands" detail.

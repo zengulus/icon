@@ -1224,10 +1224,21 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // turn" even though the extraction tags it as a delay/terrain effect).
   const endsTurn = ability.tags.includes('end turn') || programAction.tags.includes('end turn') || actor.statuses.includes('stunned');
   const abilityTriggers = deriveTriggers(state, actor, targets[0]?.id);
+  // The resolution snapshot for this command. The command planner never
+  // writes to the authoritative state; source-visible working changes that
+  // must influence the resolution (Massive Overhead's extra bonus die) are
+  // applied to this fresh view only, so the caller's state is untouched.
+  const ruleStateView = encounterRuleState(state);
   // ICON p.134 Massive Overhead: the next attack gains a bonus damage die;
   // if its target is already in a pit, every exceed effect also activates.
+  // The extra die is folded into the resolution snapshot (never the caller's
+  // state); the recorded damage roll bakes it in and the reducer consumes
+  // the durable arm, so replay needs no plan-time resource write.
   if (attackAbility && !noAttackSpace && targets[0] && massiveOverheadArmed(actor)) {
-    actor.resources['bonus-damage'] = (actor.resources['bonus-damage'] ?? 0) + 1;
+    const actorView = ruleStateView.actors[actor.id];
+    if (actorView) {
+      actorView.resources = { ...actorView.resources, 'bonus-damage': (actorView.resources['bonus-damage'] ?? 0) + 1 };
+    }
     if (targetInPit(state, targets[0])) abilityTriggers.add('exceed');
   }
   // ICON p.157 Ace: the next attack triggers every exceed effect (the daze and
@@ -1264,7 +1275,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     throw error;
   }
   const ruleContext: RuleExecutionContext = {
-    state: encounterRuleState(state),
+    state: ruleStateView,
     actorId: actor.id,
     sourceId: ability.id,
     actionId: programAction.id,
@@ -1443,10 +1454,18 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       }
       const triggers = deriveTriggers(state, actor, command.attackTargetId);
       for (const trigger of command.triggers ?? []) triggers.add(trigger);
+      // The resolution snapshot for this command (same purity contract as
+      // USE_ABILITY: the planner never writes to the authoritative state).
+      const ruleStateView = encounterRuleState(state);
       // ICON p.134 Massive Overhead arms the next attack resolved through the
-      // generic VM as well as through USE_ABILITY.
+      // generic VM as well as through USE_ABILITY. The extra bonus die is
+      // folded into the resolution snapshot only — the caller's state is
+      // never written during planning.
       if (command.attackTargetId && action.tags.includes('attack') && massiveOverheadArmed(actor)) {
-        actor.resources['bonus-damage'] = (actor.resources['bonus-damage'] ?? 0) + 1;
+        const actorView = ruleStateView.actors[actor.id];
+        if (actorView) {
+          actorView.resources = { ...actorView.resources, 'bonus-damage': (actorView.resources['bonus-damage'] ?? 0) + 1 };
+        }
         const overheadTarget = state.actors[command.attackTargetId];
         if (overheadTarget && targetInPit(state, overheadTarget)) triggers.add('exceed');
       }
@@ -1455,7 +1474,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         triggers.add('exceed');
       }
       const ruleContext: RuleExecutionContext = {
-        state: encounterRuleState(state),
+        state: ruleStateView,
         actorId: actor.id,
         sourceId: unit.id,
         actionId: command.actionId,
@@ -1992,8 +2011,11 @@ function targetInPit(state: EncounterState, target: EncounterActor): boolean {
 
 /** Consume Massive Overhead's armed state after the next attack resolves: drop
  * a pit under the target and, on the heroic arm, a small blast (blast 1) that
- * deals 2 damage to every character inside. The bonus damage itself is added
- * at the attack site as an extra keep-highest die, so nothing is spent here. */
+ * deals 2 damage to every character inside. The bonus damage die is added at
+ * the attack site as an extra keep-highest die that is baked into the
+ * recorded roll — the durable `bonus-damage` resource is never written by
+ * the arm/consume cycle (a pre-existing charge from another source, e.g.
+ * Demon Edge, survives this attack exactly). */
 function consumeMassiveOverhead(state: EncounterState, actor: EncounterActor, target: EncounterActor) {
   if (!massiveOverheadArmed(actor)) return;
   const heroic = actor.ruleState['massive-overhead:heroic'] === true;
@@ -2001,7 +2023,6 @@ function consumeMassiveOverhead(state: EncounterState, actor: EncounterActor, ta
   delete actor.ruleStateOwners['massive-overhead'];
   delete actor.ruleState['massive-overhead:heroic'];
   delete actor.ruleStateOwners['massive-overhead:heroic'];
-  actor.resources['bonus-damage'] = Math.max(0, (actor.resources['bonus-damage'] ?? 0) - 1);
   state.terrainEffects.push({
     id: `massive-overhead-pit:${actor.id}:${state.revision}`,
     sourceId: 'colossus:massive-overhead',
