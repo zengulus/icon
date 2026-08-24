@@ -47,6 +47,15 @@ export function createCharacter(now = new Date().toISOString()): IconCharacter {
 
 export const chapterForLevel = (level: number) => Math.min(3, Math.floor(Math.max(0, level - 1) / 4) + 1);
 
+/** The executable boundary of source adjudication
+ * `icon-1.5:advancement:limit-break-level` (see
+ * src/rules/source-adjudications.ts): the advancement tables (pp.15, 115,
+ * 241) and the p.112 prose grant the Limit Break at level 1, conflicting with
+ * the Resolve section's single "level 2" sentence (p.99). The engine adopts
+ * level 1; no Limit Break availability gate exists yet, so this constant is
+ * the durable boundary a future gate must agree with. */
+export const LIMIT_BREAK_UNLOCK_LEVEL = 1;
+
 const BASE_ABILITY_POINTS = [2, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18] as const;
 
 export function jobSlotsForLevel(level: number) {

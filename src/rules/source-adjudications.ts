@@ -1,0 +1,134 @@
+/**
+ * source-adjudications.ts — the authoritative record of ICON 1.5 source
+ * contradictions and the interpretation the engine adopts.
+ *
+ * Authority hierarchy (AGENTS.md, "Rules Authority"):
+ *
+ *     ordinary source text
+ *         ↓
+ *     source adjudication ONLY when source passages conflict
+ *         ↓
+ *     executable implementation
+ *         ↓
+ *     tests/audits proving implementation matches adopted semantics
+ *
+ * This registry exists for ONE purpose: when two explicit ICON 1.5 passages
+ * make mutually incompatible claims about the same mechanic, record the
+ * conflict and the interpretation the engine commits to, so the contradiction
+ * is never resolved by whichever passage an agent happens to read, a buried
+ * code comment, or silently choosing the reading that makes a test pass.
+ *
+ * It is NOT a rules engine and it must never override an unambiguous source
+ * rule. An adjudication may only exist where the source itself conflicts.
+ * Records are pure data: deterministic, human-readable, machine-queryable,
+ * with stable IDs and page references. No prose is parsed at runtime and no
+ * gameplay callbacks live in a record.
+ *
+ * The typed records below are the authority; docs/source-adjudications.md is
+ * conceptual and must not drift into a second copy of these fields.
+ */
+
+export interface SourceConflictPassage {
+  /** ICON 1.5 PDF page the statement appears on. */
+  page: number;
+  /** The conflicting statement, quoted from the source. */
+  statement: string;
+}
+
+/** An optional machine-readable boundary the adopted reading pins, so engine
+ * constants and tests can be checked against the adjudication without
+ * parsing prose. `level` pins an unlock/benefit level; `xp` pins an XP
+ * breakpoint. */
+export interface SourceAdjudicationBoundary {
+  kind: 'level' | 'xp';
+  value: number;
+}
+
+export interface SourceAdjudication {
+  /** Stable conflict ID (never rename; tests and docs reference it). */
+  id: string;
+  rulesVersion: '1.5';
+  /** Short topic label, e.g. "Character advancement — mid-level Ability Point". */
+  topic: string;
+  /** The mutually incompatible source passages (two or more). */
+  sources: readonly SourceConflictPassage[];
+  /** Concise statement of the incompatibility. */
+  conflict: string;
+  /** The interpretation the engine adopts. */
+  adopted: string;
+  /** Why this reading wins (specificity, corroboration, cross-references). */
+  rationale: string;
+  /** Implementation locations governed by the adopted reading. */
+  affectedCode: readonly string[];
+  status: 'adopted' | 'unresolved';
+  /** Machine-readable boundary (see SourceAdjudicationBoundary). */
+  boundary?: SourceAdjudicationBoundary;
+}
+
+export const SOURCE_ADJUDICATIONS: readonly SourceAdjudication[] = [
+  {
+    id: 'icon-1.5:advancement:mid-level-ap',
+    rulesVersion: '1.5',
+    topic: 'Character advancement — mid-level Ability Point (XP breakpoints)',
+    sources: [
+      {
+        page: 44,
+        statement: 'Each time the characters fill the xp bar to 5 or 10 xp, they can unlock an ability or talent at the end of that session or during a camp or interlude. If a character’s xp bar is full (15 xp), they can clear the bar and gain a level up.',
+      },
+      {
+        page: 240,
+        statement: 'The xp bar is 15 ticks long. At 7 xp gained, during an interlude, at the end of a session or at camp characters can gain +1 ap, and spend it to unlock a new combat ability in any job they have, or gain a new talent for an ability they already have. This only triggers once per level. Once the bar is full (15 xp), a character can clear all xp and mark a level up.',
+      },
+      {
+        page: 241,
+        statement: 'At level 1 and every level afterwards, characters gain +1 ap when they hit 7 xp and go into a camp, enter an interlude, or at the end of a session. When a character hits 15 xp, they clear their xp bar and accumulate a level up.',
+      },
+    ],
+    conflict: 'The Expeditions section (p.44) grants the mid-level ability/talent unlock at 5 and 10 XP; the Book of Adventure advancement procedure (p.240 and p.241) grants a single mid-level +1 AP at 7 XP, once per level, with a 15-tick bar and a level-up banked at 15 XP. Both sides agree the bar is 15 ticks and full means 15 XP; they disagree on the mid-level breakpoint (5/10 vs 7).',
+    adopted: 'The Book of Adventure procedure: the XP bar is 15 ticks; a character gains +1 AP at 7 XP (once per level), and clears the bar to bank a level at 15 XP. There are no ability/talent unlocks at 5 or 10 XP.',
+    rationale: 'The Book of Adventure is the book’s dedicated advancement chapter (p.3 update notes: "Character advancement has been reorganized — less narrative action dots, more ability points"), and its procedure is restated consistently four times: p.112 ("At level 1 and higher, once you hit 7 xp, you gain an ability point"), p.240, p.241, and the Getting Started Character Advancement block on p.15. The 5/10-XP passage on p.44 appears in the older Expeditions section and contradicts all four restatements. The engine implements the Book of Adventure reading (see affectedCode), so the adjudication records existing behavior rather than changing it.',
+    affectedCode: [
+      'src/rules/character.ts — awardXp (7 XP sets xpAbilityPointClaimed; 15 XP banks a level and resets XP)',
+      'src/rules/character.ts — abilityPointAllowance (the claimed mid-level AP is included in the allowance)',
+      'src/rules/character.ts — validateCharacter (XP range 0–14; 15 banks and resets)',
+      'src/pages/CharacterEditor.tsx — XP progression controls ("Gain 7 XP to claim +1 AP")',
+    ],
+    status: 'adopted',
+    boundary: { kind: 'xp', value: 7 },
+  },
+  {
+    id: 'icon-1.5:advancement:limit-break-level',
+    rulesVersion: '1.5',
+    topic: 'Character advancement — Limit Break unlock level',
+    sources: [
+      {
+        page: 115,
+        statement: 'Tactical Combat Advancement table, Level 1 row: "Gain +2 ap and unlock Limit Break".',
+      },
+      {
+        page: 99,
+        statement: 'Every character unlocks limit break at level 2.',
+      },
+      {
+        page: 112,
+        statement: 'After you play your first session, you’ll level up to level 1, unlock your limit break, and gain +2 ap to choose new abilities, or unlock the talents of your existing ones.',
+      },
+    ],
+    conflict: 'The advancement tables (p.15, p.115, p.241) and the "Improving" prose (p.112) grant the Limit Break at level 1 (the level-1 row is "Gain +2 ap and unlock Limit Break"); the Resolve and Limit Break section (p.99) states "Every character unlocks limit break at level 2".',
+    adopted: 'The Limit Break unlocks at level 1, with the +2 AP of the level-1 advancement row. Level 0 has no Limit Break.',
+    rationale: 'Three independent advancement tables (pp.15, 115, 241) agree the level-1 row grants "+2 ap and unlock Limit Break", p.112’s prose explicitly says leveling up to level 1 unlocks the limit break, and p.240’s level-0 description ("no limit break, no relics, only 2 combat abilities and 1 narrative power") corroborates that level 0 lacks it. The single p.99 sentence ("level 2") contradicts the tables and prose and reads as a leftover from an earlier draft. The engine currently has no Limit Break availability gate at all (the character model has no limit-break ownership field), so adopting level 1 requires no behavioral change today; the executable boundary is recorded as LIMIT_BREAK_UNLOCK_LEVEL so a future availability gate cannot silently choose level 2.',
+    affectedCode: [
+      'src/rules/character.ts — LIMIT_BREAK_UNLOCK_LEVEL (the adopted boundary constant)',
+      'src/rules/catalog.ts — limitBreak definitions (ownership/execution surface once availability lands)',
+      'src/rules/source-units.ts — limit-break source units',
+      'src/rules/encounter.ts — EXECUTE_RULE ownership gate (actor.abilityIds.includes); no level gate exists yet',
+    ],
+    status: 'adopted',
+    boundary: { kind: 'level', value: 1 },
+  },
+];
+
+/** Stable-ID lookup used by tests and documentation generation. */
+export function findAdjudication(id: string): SourceAdjudication | undefined {
+  return SOURCE_ADJUDICATIONS.find((adjudication) => adjudication.id === id);
+}
