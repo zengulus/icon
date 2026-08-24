@@ -81,7 +81,7 @@ export function registerLifecycleRecipe(recipe: LifecycleRecipe): void {
 /** The closed lifecycle registry (registration order = boundary order). */
 export const LIFECYCLE_RECIPES: readonly LifecycleRecipe[] = lifecycleRecipes;
 
-export type TurnDiceWindowPlanner = (state: EncounterState, actor: EncounterActor, dice: DiceSource) => TurnDiceWindows;
+export type TurnDiceWindowPlanner = (state: EncounterState, actor: EncounterActor, dice: DiceSource, input?: Record<string, unknown>) => TurnDiceWindows;
 
 const turnDiceWindowPlanners: TurnDiceWindowPlanner[] = [];
 
@@ -206,11 +206,11 @@ export function planTurnTransition(
   state: EncounterState,
   actor: EncounterActor,
   dice: DiceSource,
-  options: { cause: TurnEndCause; nextActorId: string; nextRound: number },
+  options: { cause: TurnEndCause; nextActorId: string; nextRound: number; input?: Record<string, unknown> },
 ): { intent: TurnTransitionIntent } {
   // The durable intent must stay JSON-clean: the checkpoint boundary rejects
   // explicit undefined values, so omitted dice windows are absent, not null.
-  const diceWindows: TurnDiceWindows = Object.assign({}, ...turnDiceWindowPlanners.map((planner) => planner(state, actor, dice)));
+  const diceWindows: TurnDiceWindows = Object.assign({}, ...turnDiceWindowPlanners.map((planner) => planner(state, actor, dice, options.input)));
   const next = state.actors[options.nextActorId];
   // The turn-start and round-start phases replay after the round advances, so
   // their recipes' gates must be evaluated against the *next* round here — a

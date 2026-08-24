@@ -310,11 +310,12 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "The power die" is the Gran Reversa stance die, initialized on
   // enter; the reverseFate resolver uses gambleD6 for the d6 tick-down;
   // the talent's passive component is the remaining blocker
-  'seer:sleight-of-hand:talent:2': ['dice-result-modifier'],
-  // "roll 1 more d6 the next time you gamble" — a Gamble dice modifier
-  // (gambleD6 always rolls exactly 1 die; extra-dice needs the dice-modifier
-  // extension). "Charge: 2 more d6s" adds more dice via the same seam.
-  // The charge resource itself is secondary to the dice modifier.
+  'seer:sleight-of-hand:talent:2': ['gamble-dice-pool-modifier'],
+  // "roll 1 more d6 the next time you gamble" — adds extra dice to the
+  // Gamble pool (gambleD6 always rolls exactly 1 die; extra-dice needs
+  // the dice-pool extension). "Charge: 2 more d6s" adds more dice via
+  // the same seam. Distinct from result-override (Stack Dice) and
+  // post-roll-reactive-choice (Bend Fate).
   'seer:chaos-tarot:talent:2': ['charge-state'],
   // chaosTarotEffects uses gambleD6 for the tarot roll; charge-state
   // is the remaining blocker (card charge resource)
@@ -333,10 +334,14 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'harvester:crimson-bloom:mastery': ['action-type-change'],
   // Crimson Bloom's mark + dice are wired; the mastery's action-type
   // change is the remaining blocker
-  'seer:sleight-of-hand:mastery': ['power-die'],
+  'seer:sleight-of-hand:mastery': ['power-die', 'lifecycle-target-selection'],
   // "gain six spectral blades … using a d6 power die starting at 6 to
-  // track them. At the end of your turn, gamble" — a power-die resource
-  // system plus an end-of-turn gamble trigger; no range modification
+  // track them. At the end of your turn, gamble. If you roll under the
+  // number of blades remaining, a blade flies out and deals 2 divine
+  // damage to a foe in range 6" — power-die resource system + lifecycle
+  // boundary target selection (the lifecycle recipe resolve() has no
+  // player choice or foe-selection seam; it can only mutate state, not
+  // present a target choice)
   'seer:chaos-tarot:mastery': ['entity-create'],
   // The mastery's entity-creation effect is the remaining blocker
   'spellblade:rampant-nail:talent:2': ['passive'],
@@ -345,24 +350,27 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'fool:limit-break': ['area-define', 'entity-create'],
   // "gamble" is mentioned but the real blockers are area-define and
   // entity-create; the gamble itself is not the missing primitive
-  'seer:limit-break': ['dice-result-modifier', 'condition-grant', 'attack-modifier'],
+  'seer:limit-break': ['dice-result-modifier', 'attack-result-modifier', 'save-result-modifier'],
   // High Prophecy: "Every d6...is either a 6 or a 1 (you choose)" →
-  // global dice-result-modifier (aura-scoped); "auto-miss by attacks,
-  // turn misses into hits, succeed all saves" → condition-grant
-  // (auto-miss/immunity) + attack-modifier (miss-to-hit). The
-  // action-type-change (free action) and aura are both implemented;
-  // the remaining gaps are dice modification, condition granting,
-  // and attack modification.
+  // aura-scoped dice-result-modifier (no generic dice-override seam exists);
+  // "automatically missed by attacks" → attack-result-modifier (the
+  // attack kernel has autoHit but no autoMiss/forceMiss); "turn any of
+  // your attack misses into hits" → attack-result-modifier (no miss-to-hit
+  // conversion exists); "succeed all saves" → save-result-modifier (the
+  // save kernel has forceFailure but no forceSuccess). The free action
+  // (action-type-change) and aura are both implemented; condition-grant
+  // is implemented but does not cover attack/save result overrides.
 
   // ── Trait-level Gamble reclassification ──
   // The two remaining `gamble-state` trait entries need reclassification:
   // the Gamble foundation (gambleD6) handles the generic d6 roll, but
   // these traits require additional non-Gamble foundations.
-  'fool:trait:stack-dice': ['dice-result-modifier'],
+  'fool:trait:stack-dice': ['gamble-result-override'],
   // "You can use this die when you gamble to make the gamble result 6"
-  // — a spend-to-override-result modifier; the dice-result override seam
-  // is a small generic extension belonging to the Gamble family: a typed
-  // "set the result to N" that intercepts the roll. Not yet implemented.
+  // — a spend-to-override-result modifier; the gamble-result-override
+  // seam is a small generic extension: a typed "set the result to N"
+  // that intercepts the Gamble roll. Distinct from dice-pool modifiers
+  // (extra dice) and post-roll reactive choices (Bend Fate).
   'seer:trait:bend-fate': ['post-roll-reactive-choice'],
   // "discard any number of cards after you gamble to roll an extra die
   // per card discarded, choosing any result" — a reactive spend choice

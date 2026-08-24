@@ -586,7 +586,11 @@ export interface EncounterTerrainEffect {
  * It keeps p.102 Blessing decisions explicit without exposing the generic
  * RuleProgram input surface on ordinary encounter commands.
  */
-export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices'>;
+export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices'> & {
+  /** Monogatari Charge: the player's chosen result index (0 or 1) from the
+   * two rolled dice. Absent when Monogatari Charge is not active. */
+  monogatariChoice?: number;
+};
 
 export type EncounterCommand =
   | { type: 'ADD_ACTOR'; actor: EncounterActor }

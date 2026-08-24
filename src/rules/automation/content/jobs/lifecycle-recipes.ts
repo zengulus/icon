@@ -184,12 +184,19 @@ export function carnevaleGambleForTurnEnd(state: EncounterState, actor: Encounte
 }
 
 /** Roll the Monogatari song gamble when the user has an active song with no
- * tale yet. Charge rolls an extra d6 and takes the higher result. Rolled at
- * the command boundary so the TURN_ENDED event carries a deterministic value. */
-export function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
+ * tale yet. Charge rolls two d6 and the player chooses one result.
+ * Rolled at the command boundary so the TURN_ENDED event carries a
+ * deterministic value. The player's choice index (0 or 1) is read from
+ * the END_TURN input; absent choices fall back to the first roll. */
+export function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource, input?: Record<string, unknown>): number | undefined {
   const tale = actor.ruleState['monogatari:tale'];
   if (actor.ruleState['monogatari:active'] !== true || tale !== null && tale !== undefined) return undefined;
-  if (actor.ruleState['monogatari:charge'] === true) return Math.max(gambleD6(dice).roll, gambleD6(dice).roll);
+  if (actor.ruleState['monogatari:charge'] === true) {
+    const roll0 = gambleD6(dice).roll;
+    const roll1 = gambleD6(dice).roll;
+    const choice = typeof input?.monogatariChoice === 'number' ? input.monogatariChoice : 0;
+    return choice === 1 ? roll1 : roll0;
+  }
   return gambleD6(dice).roll;
 }
 
@@ -221,8 +228,8 @@ registerTurnDiceWindowPlanner((state, actor, dice) => {
   return carnevaleGamble !== undefined ? { carnevaleGamble } : {};
 });
 
-registerTurnDiceWindowPlanner((state, actor, dice) => {
-  const monogatariGamble = monogatariGambleForTurnEnd(state, actor, dice);
+registerTurnDiceWindowPlanner((state, actor, dice, input) => {
+  const monogatariGamble = monogatariGambleForTurnEnd(state, actor, dice, input);
   return monogatariGamble !== undefined ? { monogatariGamble } : {};
 });
 

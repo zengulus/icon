@@ -597,7 +597,7 @@ function turnEndedEvent(
   // F3: the command boundary plans the whole transition — rolls the dice
   // windows (Carnevale/Monogatari gambles) and precomputes the ordered
   // lifecycle participants — so the event carries a replayable intent.
-  const { intent } = planTurnTransition(state, actor, dice, { cause, nextActorId: next.actor.id, nextRound: next.round });
+  const { intent } = planTurnTransition(state, actor, dice, { cause, nextActorId: next.actor.id, nextRound: next.round, input: input as Record<string, unknown> | undefined });
   const statusSaves = resolveEncounterStatusSaves(state, actor, dice, input, excluded, sourceId);
   return {
     type: 'TURN_ENDED',
@@ -1942,16 +1942,6 @@ function resolveTurnEnd(state: EncounterState, actor: EncounterActor, intent: Tu
 function carnevaleGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
   if (actor.ruleState['carnevale:armed'] !== true || actor.attackedThisTurn) return undefined;
   return Object.values(state.entities).some((entity) => entity.type === 'bomb' && entity.ownerId === actor.id) ? dice.die(6) : undefined;
-}
-
-/** Roll the Monogatari song gamble when the user has an active song with no
- * tale yet. Charge rolls an extra d6 and takes the higher result. Rolled here
- * (not in the reducer) so the TURN_ENDED event carries a deterministic value. */
-function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
-  const tale = actor.ruleState['monogatari:tale'];
-  if (actor.ruleState['monogatari:active'] !== true || tale !== null && tale !== undefined) return undefined;
-  if (actor.ruleState['monogatari:charge'] === true) return Math.max(dice.die(6), dice.die(6));
-  return dice.die(6);
 }
 
 /** The action pool an actor starts a turn with: 2 base actions plus any

@@ -279,7 +279,8 @@ hand-rolled shape that should become a recipe row; "missing" means no seam.
 | **Resource mutations** (resolve/vigor/blessing/combo/vigilance/aether/bonus-damage) | all | existing | shared resource registry |
 | Power-die stance | jobs/classes | partial | soul-blade, wicked-sheath, gallows-humor, etc. |
 | Armed one-shot attack window | jobs/classes | partial | F6 kernel arm/consume |
-| **Gamble** (d6 + threshold/result) | jobs/traits/relics/trophies | **existing** | `gambleD6` in `job-kit.ts`; `recordedDice` in `TurnDiceWindows`; all content consumers migrated |
+| **Gamble** (d6 + threshold/result) | jobs/traits/relics/trophies | **existing** | `gambleD6` in `job-kit.ts`; `recordedDice` in `TurnDiceWindows` |
+| Gamble extended families (dice-pool, result-override, post-roll-choice) | jobs/traits | partial | `gamble-dice-pool-modifier`, `gamble-result-override`, `post-roll-reactive-choice` |
 | Sacrifice + cost override (HP payment, floor 1) | jobs/traits/relics | partial | sacrifice damage type exists; no HP-payment seam |
 | Blessing/combo ability-use spend | jobs/traits | missing | registry exists; spend seam doesn't |
 | Use ledger (once-per-turn/round/combat gates) | jobs | partial → **existing (once-per-round)** | the F9 reactive job-trait fold + durable round ledger (`kernels/trait-reactions.ts`); once-per-turn/combat variants still per-site |

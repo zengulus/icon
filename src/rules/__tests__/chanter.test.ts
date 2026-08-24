@@ -273,6 +273,38 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(blessed.actors[hero.id].ruleState['monogatari:granted']).toBe(true);
   });
 
+  it('Monogatari Charge: rolls two dice and the player chooses which result becomes the tale', () => {
+    const { state, hero, foe } = chanterEncounter({ second: null });
+    // Use Monogatari with the charge trigger via EXECUTE_RULE
+    const used = executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'chanter:monogatari',
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+      triggers: ['charge'],
+    }, scriptedDice());
+    expect(used.state.actors[hero.id].ruleState['monogatari:active']).toBe(true);
+    expect(used.state.actors[hero.id].ruleState['monogatari:charge']).toBe(true);
+
+    // End turn with scripted dice [2, 5] and player chooses index 1 (the 5)
+    const ended = executeCommand(used.state, {
+      type: 'END_TURN',
+      actorId: hero.id,
+      input: { monogatariChoice: 1 },
+    }, scriptedDice(2, 5));
+    expect(ended.state.actors[hero.id].ruleState['monogatari:tale']).toBe(5);
+
+    // Verify: with choice 0, the other result would have been selected
+    const ended2 = executeCommand(used.state, {
+      type: 'END_TURN',
+      actorId: hero.id,
+      input: { monogatariChoice: 0 },
+    }, scriptedDice(2, 5));
+    expect(ended2.state.actors[hero.id].ruleState['monogatari:tale']).toBe(2);
+  });
+
   it('Chastise: autohits fray, seals the foe, and marks the retribution', () => {
     const { state, hero, foe } = chanterEncounter({ foe: { x: 3, y: 1 }, second: null });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:chastise', targetIds: [foe.id] }, scriptedDice());
