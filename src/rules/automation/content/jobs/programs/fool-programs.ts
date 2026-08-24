@@ -10,6 +10,7 @@ import {
   distance, sourceActor, occupied, impassable, walk, freeCellsInRange, resolveAttack,
   damageMutation, conditionMutation, stateMutation, resourceMutation, stanceMutation, markMutation,
   rushMutation, flyMutation, placeMutation, entityMutation, terrainMutation,
+  gambleD6,
   untilNextTurnStart, action, compilation,
 } from '../../../primitives/job-kit.js';
 
@@ -89,7 +90,7 @@ const carnevaleEffects: RuleResolver = (context) => {
 const spinningTopEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source?.position) return [];
-  const gamble = context.dice.die(6);
+  const { roll: gamble } = gambleD6(context.dice);
   const spaces = gamble + 2;
   const direction = context.input.directions?.['direction'] ?? { x: 1, y: 0 };
   const landed = walk(context, source.position, direction, spaces, false, source.id);
@@ -107,7 +108,7 @@ const deathEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source?.position || !target?.position) return [];
-  const gamble = context.dice.die(6);
+  const { roll: gamble } = gambleD6(context.dice);
   const direction = axisDirection(source.position, target.position);
   const mutations: RuleMutation[] = [];
   const roll = resolveAttack(context, source, target, { autoHit: true });
@@ -191,12 +192,10 @@ function partyFavorDetonationMutations(
     const characterPosition = character.position;
     if (!characterPosition || !area.some((cell) => sameCell(cell, characterPosition))) continue;
     if (character.side === ownerSide) {
-      const direction = axisDirection(mineCell, characterPosition);
-      const target = { x: characterPosition.x + Math.sign(direction.x), y: characterPosition.y + Math.sign(direction.y) };
-      mutations.push({
-        kind: 'move', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id,
-        movement: 'fly', distance: null, positions: [target], direction, phasing: false,
-      });
+      // UNRESOLVED: source says "fly 1" but does not specify direction.
+      // The engine has no player-choice seam for movement direction at
+      // detonation time. The fly mutation is omitted rather than forcing
+      // an arbitrary direction. A movement-choice primitive would resolve this.
     } else {
       mutations.push({
         kind: 'damage', sourceId: 'fool:party-favor', sourceActorId: ownerId, actorId: character.id,
@@ -231,7 +230,7 @@ const partyFavorDetonate: RuleResolver = (context) => {
     source.id,
     source.side,
     positions[0],
-    context.dice.die(6),
+    gambleD6(context.dice).roll,
     Boolean(context.triggers?.has('finishing-blow')),
     context.state.actors,
   );
@@ -263,7 +262,7 @@ registerMovementEntryTrigger({
     const talentTwo = owner?.talents?.['fool:party-favor'] === 2;
     const extendedFoe = talentTwo && areaFoes.some((foe) =>
       foe.conditions.some((condition) => condition.id === 'dazed' || condition.id === 'blind'));
-    const gamble = context.dice.die(6);
+    const { roll: gamble } = gambleD6(context.dice);
     return partyFavorDetonationMutations(owner?.id ?? mover.id, ownerSide, cell, gamble, bloodiedFoe || extendedFoe, state.actors);
   },
 });
@@ -335,7 +334,7 @@ const chronotemperEffects: RuleResolver = (context) => {
 const cheatTimeEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source?.position) return [];
-  const gamble = context.dice.die(6);
+  const { roll: gamble } = gambleD6(context.dice);
   const direction = context.input.directions?.['direction'] ?? { x: 1, y: 0 };
   const mutations: RuleMutation[] = [];
   const damaged = new Set<string>();

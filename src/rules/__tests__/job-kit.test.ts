@@ -131,7 +131,7 @@ describe('job-kit building blocks', () => {
     const strikeCtx = kitContext(state, hero.id, scriptedDice(12));
     const struck = resolveAttack(strikeCtx, sourceActor(strikeCtx, hero.id)!, sourceActor(strikeCtx, foe.id)!, { trueStrike: true });
     expect(struck.attackMutation).toMatchObject({ trueStrike: true, boon: 0, d20: 12 });
-    expect(struck.damageProvenance).toEqual({ ignoreDodge: true, ignoreCover: false, bonusFlat: 0 });
+    expect(struck.damageProvenance).toEqual({ ignoreDodge: true, ignoreCover: false, ignoreAetherwall: false, bonusFlat: 0 });
     expect(damageMutation(strikeCtx, foe.id, 3, 'miss')).toMatchObject({ ignoreDodge: true });
 
     const autoCtx = kitContext(state, hero.id, scriptedDice());

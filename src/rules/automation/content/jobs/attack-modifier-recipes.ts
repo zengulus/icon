@@ -43,6 +43,16 @@ export const HISSATSU_ARMED_KEY = 'hissatsu:armed';
 registerAttackModifierRule({ traitId: DEMON_EDGE_TRAIT, armedKey: DEMON_EDGE_TRUESTRIKE_KEY, trueStrike: true });
 registerAttackModifierRule({ traitId: HISSATSU_TRAIT, armedKey: HISSATSU_ARMED_KEY, boons: 1, trueStrike: true, damageDieOverride: 10 });
 registerAttackModifierRule({ traitId: PULVERIZE_TRAIT, elevationBonusDamage: 2, elevationExceedThreshold: 13 });
+// ICON p.155 Freelancer Trigrammaton: "Your abilities used against foes at
+// exactly range 3 gain +1 boon on attack rolls and unerring." An exact-
+// distance attack modifier — it inspects the canonical p.92 distance and
+// never widens targeting range. Unerring (p.105) ignores cover + aetherwall.
+registerAttackModifierRule({ traitId: 'freelancer:trait:trigrammaton', exactRange: 3, boons: 1, unerring: true });
+// ICON p.330 Strigoi Blood Hunger: "Deals +2 damage with all abilities
+// against bloodied foes." Attack-path flat damage against a bloodied target
+// (the same home as Pulverize), folded at both attack sites through the
+// shared bloodied predicate.
+registerAttackModifierRule({ traitId: 'relict:strigoi:330:trait:blood-hunger', targetBloodiedBonusDamage: 2 });
 
 /**
  * Demon Edge arming fold (p.140): when the ability the actor just used

@@ -8,6 +8,7 @@ import {
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation, shoveMutation,
+  gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 
@@ -210,14 +211,20 @@ const grandBanishmentEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.193 Divine Aegis: mark an ally in range 4. The save-gate on any foe
- * ability targeting the ally is a documented save-window reducer hook. */
+ * ability targeting the ally is a documented save-window reducer hook. Talent
+ * 2 ("If your ally is at 25% hp or lower when marked, they also gain
+ * defiance") reads the shared quarter predicate at mark time. */
 const divineAegisEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const allyId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const ally = allyId ? sourceActor(context, allyId) : undefined;
   if (!source.position || !ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Divine Aegis requires an ally in range 4.');
   if (ally.side !== source.side || distance(source.position, ally.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Divine Aegis requires an ally in range 4.');
-  return [markMutation(context, ally.id, 'divine-aegis', {})];
+  const mutations: RuleMutation[] = [markMutation(context, ally.id, 'divine-aegis', {})];
+  if (source.talents?.['sealer:divine-aegis'] === 2 && ally.hp <= ally.maxHp / 4) {
+    mutations.push(conditionMutation(context, ally.id, 'defiance'));
+  }
+  return mutations;
 };
 
 /** ICON p.194 Justice (interrupt): burst 2 (self) — foes take 1 divine and
@@ -248,7 +255,7 @@ const justiceEffects: RuleResolver = (context) => {
 const judgementEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source.position) return [];
-  const gamble = context.dice.die(6);
+  const { roll: gamble } = gambleD6(context.dice);
   const distanceMoved = Math.max(1, Math.floor(gamble / 2));
   const mutations: RuleMutation[] = [];
   const nearest = nearestFoe(context, source.position, source.id);

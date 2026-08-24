@@ -2,6 +2,9 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
+import { auraDefinitionFor } from '../automation/kernels/aura.js';
+import { compileAttackModifierFoeTraitRecipe } from '../automation/kernels/attack-modifiers.js';
+import { hpThresholdProjectionFor } from '../automation/kernels/hp-threshold.js';
 import { FOE_TRAIT_KEYWORD_RECIPES } from '../automation/content/foes/trait-recipes.js';
 import {
   durableFoeTraitGrantConditions,
@@ -310,16 +313,43 @@ describe('audited foe-trait keyword manifest (p.298/p.104)', () => {
     const sourceTraits = collectRuleSourceUnits().filter((unit) => unit.kind === 'foe-trait');
     for (const source of sourceTraits) {
       if (foeTraitKeywordRecipe(source.id)) continue;
+      // Reviewed rows in the generic Aura, HP-threshold, and attack-modifier
+      // kernels register outside the keyword manifest; they audit complete
+      // below.
+      if (auraDefinitionFor(source.id)) continue;
+      if (hpThresholdProjectionFor(source.id)) continue;
+      if (compileAttackModifierFoeTraitRecipe(source)) continue;
       expect(projectedFoeTraitConditions(source.id), source.id).toEqual([]);
       expect(projectedFoeTraitStats([source.id]), source.id).toEqual({});
       expect(durableFoeTraitGrantConditions(source.id), source.id).toEqual([]);
       expect(compileRuleSourceUnit(source).unsupportedClauses.length, source.id).toBeGreaterThan(0);
     }
-    // The specific keyword-list rows without a projection: Mob, Enrage, and
-    // the Leader Diaga rows stay source-visible.
+    // The reviewed aura / HP-threshold / attack-modifier foe traits compile
+    // complete through their kernels.
+    const kernelRows = [
+      'basic:commander:304:trait:commander-s-aura',
+      'basic:abjurer:304:trait:aura-of-shielding',
+      'basic:rogue:308:trait:slippery',
+      'basic:berserker:301:trait:enrage',
+      'basic:archon:308:trait:enrage',
+      'ruin-beast:brawler-beast:346:trait:special-traits',
+      'scavenger:mondo:373:trait:enrage',
+      'imperial:war-beast:393:trait:enrage',
+      'lowlander:battle-beetle:437:trait:enrage',
+      'jotunn:aetnir:456:trait:enrage',
+      'hob:beast-spirit:475:trait:enrage',
+      'jotunn:bloody-companion:450:trait:true-enrage',
+      'scavenger:churn-baron:375:trait:arkentech-hover-chair',
+      'relict:strigoi:330:trait:blood-hunger',
+    ];
+    for (const id of kernelRows) {
+      expect(foeTraitKeywordRecipe(id), id).toBeNull();
+      expect(compileRuleSourceUnit(findRuleSourceUnit(id)!).unsupportedClauses, id).toEqual([]);
+    }
+    // The specific keyword-list rows without a projection: Mob and the
+    // Leader Diaga rows stay source-visible.
     for (const id of [
       'basic:minions:311:trait:traits', // Mob
-      'ruin-beast:brawler-beast:346:trait:special-traits', // Enrage
       'scavenger:sharkie:381:trait:traits', // Diaga
       'scavenger:monger:381:trait:traits', // Diaga
       'ruin-beast:symbiote:348:trait:traits', // Shelter, Diaga

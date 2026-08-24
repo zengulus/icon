@@ -1,4 +1,7 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { resolveSaveWindow } from '../../../primitives/save-window.js';
+import { auraDefinitionFor, auraRuntimeView, isAuraMember } from '../../../kernels/aura.js';
+import { hasMastery } from '../../../kernels/mastery.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
@@ -224,7 +227,11 @@ const ariaEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.178 Dervish: fly 1, then whisk an ally in range away and place them
- * in a free space adjacent to where you land. Charge chooses a second ally. */
+ * in a free space adjacent to where you land. Charge chooses a second ally.
+ * Talent 1 ("A swirling aura 1 of winds surrounds you after taking this
+ * ability until the start of your next turn, granting you and allies inside
+ * counter") adds the durable aura effect — the aura kernel interprets it
+ * (aura-recipes.ts) and the turn-start duration expires it at the boundary. */
 const dervishEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const sourcePosition = source.position;
@@ -241,6 +248,13 @@ const dervishEffects: RuleResolver = (context) => {
     mutations.push(removeMutation(context, ally.id));
     const adjacentCell = freeCellsInRange(context, flyDest, 1)[0];
     if (adjacentCell) mutations.push(placeMutation(context, ally.id, adjacentCell));
+  }
+  if (source.talents['chanter:dervish'] === 1) {
+    mutations.push({
+      kind: 'persistent', sourceId: context.sourceId, ownerId: source.id, operation: 'add', actorId: source.id,
+      effectId: 'aura', duration: { kind: 'turn-start', actor: { kind: 'self' }, turns: 1 },
+      modifiers: [{ stat: 'aura', operation: 'grant', value: constant(1) }], triggers: ['aura-refresh'], state: {},
+    });
   }
   return mutations;
 };
@@ -300,10 +314,55 @@ const symphonyEffects: RuleResolver = (context) => {
 
 /** ICON p.179 Gentleness: enter the stance with aura 1. The reflection of 1
  * divine damage on characters that deal damage in the aura resolves in the
- * damage pipeline; the +1 curse on attacks in the aura is documented. */
+ * damage pipeline; the +1 curse on attacks in the aura folds through the
+ * shared attack-modifier kernel.
+ *
+ * Mastery (Gentle Prayer): "When the aura refreshes, you may increase or
+ * decrease the aura size by +1, to a maximum of 3 or a minimum of 1. When you
+ * do, foes inside must save or be pacified." The resize is a deterministic
+ * player choice (`input.options['aura-resize']` = increase | decrease; the
+ * default of none leaves the size unchanged), recorded into the aura's
+ * radiusStateKey so every aura consumer (the +1 curse projection, the talent-1
+ * counter, the reflection hook) reads the same current radius. Membership for
+ * the pacify save is the shared aura kernel's, evaluated against the resized
+ * radius. */
 const gentlenessEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
-  return [stanceMutation(context, source.id, 'enter', 'gentleness')];
+  const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'gentleness')];
+  if (hasMastery(source, 'chanter:gentleness')) {
+    const choice = context.input.options?.['aura-resize'];
+    if (choice === 'increase' || choice === 'decrease') {
+      const current = Math.min(3, Math.max(1, Number(source.state?.['gentleness:aura-radius'] ?? 1)));
+      const next = choice === 'increase' ? Math.min(3, current + 1) : Math.max(1, current - 1);
+      mutations.push(stateMutation(context, source.id, 'gentleness:aura-radius', next));
+      // Foes inside the resized aura must save or be pacified (p.179). The
+      // save is a recorded effect-kind SaveWindow; the failure branch applies
+      // the pacified condition through the shared mutation boundary. The
+      // stance/radius mutations have not applied yet (resolvers compute their
+      // whole stream up-front), so the origin ref is built from the source
+      // actor with the resized radius — the aura kernel still answers the
+      // geometry and relation membership.
+      const definition = auraDefinitionFor('chanter:gentleness');
+      if (definition && source.position) {
+        const view = auraRuntimeView(context.state);
+        const origin = {
+          actorId: source.id, entityId: null, position: source.position, size: source.size ?? 1, radius: next, side: source.side,
+        };
+        for (const foe of Object.values(context.state.actors)) {
+          if (foe.side === source.side || foe.defeated) continue;
+          if (!isAuraMember(view, definition, origin, foe.id)) continue;
+          const save = resolveSaveWindow(
+            { state: context.state, actorId: foe.id, sourceId: 'chanter:gentleness', actionId: 'stance-refresh', timing: 'stance-refresh', input: {}, dice: context.dice },
+            foe,
+            { id: `chanter:gentleness:pacify:${foe.id}`, kind: 'effect', sourceId: 'chanter:gentleness', actorId: foe.id },
+          ).mutation;
+          mutations.push(save);
+          if (!save.success) mutations.push(conditionMutation(context, foe.id, 'pacified'));
+        }
+      }
+    }
+  }
+  return mutations;
 };
 
 /** ICON p.179 Monogatari: the song resonates until this ability is used again.

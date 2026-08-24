@@ -279,11 +279,12 @@ hand-rolled shape that should become a recipe row; "missing" means no seam.
 | **Resource mutations** (resolve/vigor/blessing/combo/vigilance/aether/bonus-damage) | all | existing | shared resource registry |
 | Power-die stance | jobs/classes | partial → **kernel landed** | `kernels/power-die.ts` (`readPowerDie`/`tickPowerDie`/`setPowerDie`); soul-blade/gallows-humor/umbral-echo/mantra ticks consolidated; Gran Reversa t1 (start d6@6) wired |
 | Armed one-shot attack window | jobs/classes | partial | F6 kernel arm/consume |
-| Gamble (recorded d6 + result branch) | jobs/traits/relics/trophies | **large-existing** | `context.dice.die()` resolves every gamble replay-safe (spinning-top, death, party-favor, carnevale, riposte, chaos-tarot all use it); `TurnDiceWindows` pre-rolls boundary gambles. The 3 genuine `gamble-state` singletons each also need a distinct capability (choice-input / direction-choice / 13-card deck) — no clean gamble-only primitive required |
+| **Gamble** (d6 + threshold/result) | jobs/traits/relics/trophies | **existing** | `gambleD6` in `job-kit.ts`; `recordedDice` in `TurnDiceWindows` |
+| Gamble extended families (dice-pool, result-override, post-roll-choice) | jobs/traits | partial | `gamble-dice-pool-modifier`, `gamble-result-override`, `post-roll-reactive-choice` |
 | Sacrifice + cost override (HP payment, floor 1) | jobs/traits/relics | partial | sacrifice damage type exists; no HP-payment seam |
 | Blessing/combo ability-use spend | jobs/traits | **landed (F10)** — `kernels/ability-use-choices.ts` + `content/jobs/ability-use-choice-recipes.ts`; Rebirth/War wired, Faith/Songweave remain | choice→cost→modifier fold |
 | Use ledger (once-per-turn/round/combat gates) | jobs | partial → **existing (once-per-round)** | the F9 reactive job-trait fold + durable round ledger (`kernels/trait-reactions.ts`); once-per-turn/combat variants still per-site |
-| Aura mechanic (spatial membership projection) | jobs/foes/traits | **partial** | `kernels/aura.ts` now reads the durable `grant`/`aura` modifier and answers `inAura`/`charactersInAura` (Chebyshev, replay-safe); a self-grant seam (`projectedAuraSelfGrants` in passive-projection, e.g. Rook talent 1 counter) is folded into `encounterConditionSet`; Sweet Torment scans consolidated on it. Remaining: cross-actor membership grants, entry/size/activation per-row wiring (42+ foe traits) |
+| **Aura mechanic** (spatial membership projection) | jobs/foes/traits | **existing** | `kernels/aura.ts` — membership kernel + projection + attack modifiers + lifecycle recipes |
 | Heroics economy | classes/traits | missing | |
 | Infuse / Aether cost | classes/traits/relics | missing | `aether` resource exists |
 | Entity / summon action suite | jobs/foes | partial | entity model exists; actions hand-authored |
@@ -315,13 +316,16 @@ registry, or reducer seam) that content rows plug into. Found at
 | **Foe ability recipes** (`foe-recipes.ts`) | generic resolver factories; 22 recipe kinds | all | existing (22 kinds) |
 | **Foe trait recipes** (`foe-trait-recipes.ts`) | closed foe keyword rows | condition | existing |
 | **Summon recipes** (`summon-recipes.ts`) | placement ranges, per-owner caps, companion survival | entity | existing |
+| **Aura membership kernel** (`aura.ts`) | generic Aura authority: origin resolution (trait/state/stance/aura-effect/entity), continuous membership from current positions through the canonical p.92 footprint range (`footprintDistance`), and ephemeral condition/modifier projection onto current members; lifecycle recipes query it with `isInAura` | spatial-intent, condition, attack | existing (Commander's Aura, Aura of Shielding, Rook t1, Dervish t1, Gentleness base+t1, Shieldmaster, Bleak Mercy) |
+| **HP-threshold projection kernel** (`hp-threshold.ts`) | generic conditional-passive authority for the two canonical HP states — bloodied (at or under 50% of the wounds-adjusted maximum, p.94/p.104) and at-or-under-25% (the exact quarter mark) — answering "is this passive active" (`isAtHpThreshold`) and projecting conditions / the turn-start +actions bonus onto the owner, with an inverted gate for "loses X when bloodied"; the shared predicates also feed the VM (`quarter` predicate) and the attack-modifier fold (target-threshold bonus damage) | condition, attack, state | existing (Rogue Slippery, the Enrage family ×9, True Enrage, Arkentech Hover Chair, Furious Berserk sturdy, Strigoi Blood Hunger, Divine Aegis t2) |
+| **Range / distance kernel** (`range.ts`, F12) | the single reusable authority for ICON's range family: canonical distance (`distanceBetween`/`isWithinRange`/`isExactlyRange` over the shared p.92 footprint metric), authoritative listed-range modification (`effectiveAbilityRange` folding registered `RangeModifierRule`s — fixed override, conditional override under stealth/comeback/mastery gates, dynamic round-number — at both command gates, so a range change genuinely widens target legality), and distance-gated effects (exact-range attack modifiers via the attack-modifier fold's `exactRange`/unerring, Aetherwall's outside-range-2 damage halving through the same footprint distance). Distance predicates never change targeting range, and listed-range changes never affect damage | spatial-intent, attack, damage | existing (Valkyrie t1, Incubus t1, Harvest t2, Open the Gates t2, Trigrammaton, Aetherwall) |
+| **Area kernel** (`area.ts`, F13) | the reusable authority for ICON's p.97 AoE patterns. The geometry module (`area-geometry.ts`) owns the deterministic pattern math — orthogonal `lineCells`, validated orthogonal `arcCells` (a chosen path: contiguous, one-step, no self-overlap, never the user's space; never auto-shaped), and `squareArea` for burst/blast-center squares. The kernel folds registered `AreaModifierRule`s (shape and/or length override under round/talent/mastery gates) into an EFFECTIVE area descriptor (`effectiveAreaFor`) that the parent resolver reads at command time — the same discipline as the range kernel — and the reducer's target-legality gate consumes it for line-shaped abilities, so a shape/size change genuinely alters legal execution, never just metadata. Small/medium/large blast templates are visual-only in the source and deliberately NOT approximated; units needing an exact template carry the `blast-template` blocker | spatial-intent, area-geometry | existing (Soul Shot t2 line 6, Sturmreiten mastery arc 5) |
 
 ### Missing kernels named by the ontology
 
 | Kernel | Source responsibility | Consumers |
 | --- | --- | --- |
-| **Aura membership kernel** | spatial distance-based grants/penalties, activation/size/entry | Shieldmaster, Pelagic Rage, 42 foe traits, Black Book; glossary *Aura X* |
-| **Resource-economy spend kernel** | blessing/combo/Infuse/sacrifice spend, use ledgers, gamble | glossary *Blessing/Combo/Sacrifice/Gamble/Mark* + relic/trait rows |
+| **Resource-economy spend kernel** | blessing/combo/Infuse/sacrifice spend, use ledgers | glossary *Blessing/Combo/Sacrifice/Mark* + relic/trait rows (Gamble now existing) |
 | **Heroics economy** | make-Heroic choice, lockout, half-damage penalty | glossary *Heroic* + Stalwart traits |
 | **Movement-phase kernels** | vacate, occupancy-cost, elevation-fly, pre/post ability movement, position swap, teleport-all | glossary *Dash/Rush/Fly/Teleport/Place/Remove* + movement talents/foes |
 | **Stance / mark trigger kernels** | multi-stance gate, mark-stack gate, mark-trigger gates | glossary *Stance/Mark* + Reactive windows |
@@ -353,18 +357,19 @@ authority for "complete"; here **existing** = a kernel/primitive seam exists
 | Move / Dash / Rush / Fly / Teleport / Shove / Place/Remove | move mutation, spatial-intent | F1, movement-triggers | existing (motion entry partial) | movement |
 | Terrain (difficult/dangerous/impassable/pit/object) | terrain mutation | F1 | existing partial | classes/jobs/foes |
 | Cover / LoS / LoE / Range / Height | targeting, line-of-sight, spatial | F1 | existing | targeting |
-| Area patterns (line/arc/blast/burst) | spatial (`computeSpatialArea`) | F1 | existing (burst/line; arc pending) | areas |
+| Area patterns (line/arc/blast/burst) | area-geometry (`lineCells`/`arcCells`/`squareArea`) + area kernel | F13 | existing (line/arc/burst; blast template pending) | areas |
 | Attack tag / auto-hit | VM attack | runtime | existing | attacks |
 | Mark | mark mutation | F4 passive | existing | marks |
 | Stance | stance mutation | F3 | existing | stances |
 | Summon | entity mutation | summon-recipes | partial | summons |
 | Triggered effects (charge/comeback/collide/exceed/finishing-blow/slay/heroic/infuse/chain-reaction) | VM triggers | talent fold, trigger-window | existing (charge/collide/etc.) | talents |
-| Gamble | (recorded dice) | TurnDiceWindows | partial | gambles |
+| **Gamble** | `gambleD6` + `TurnDiceWindows.recordedDice` | `job-kit.ts`, lifecycle | **existing** | all content gamble rolls migrated |
 | Sacrifice | sacrifice damage | (cost seam) | partial | sacrifices |
 | Combo / Blessing / Vigilance / Resolve | resource mutations | resource registry | partial (spend seams) | economies |
 | Power Die | die mutations | `kernels/power-die.ts` + lifecycle | **partial → kernel landed** | stance dies; Gran Reversa t1 wired |
 | Rebound | (attack direction) | (attack modifier) | missing | trick shot, heracule mastery |
-| Aura | persistent `grant`/`aura` modifier | `kernels/aura.ts` + self-grant projection | **partial** | Rook t1, Sweet Torment, 42 foe traits |
+| Aura | persistent effect | (aura kernel) | existing | auras |
+| Area patterns (line/arc/burst; blast pending) | area-geometry + area kernel | F13 | existing (line/arc/burst) | areas |
 
 ---
 
@@ -383,8 +388,8 @@ derive from the canonical blocker census (regenerate before trusting a number).
 | Passive projection F5 | condition/role baselines | 79 foe keyword rows, job traits | — | existing |
 | Attack-modifier fold F6 | attack-path reads | Demon Edge/Hissatsu/Pulverize/Bull's Strength | — | existing |
 | Talent fold F7 | trigger effects | 29 wired + condition-grant tranche | — | existing |
-| Aura kernel (partial) | Aura X | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | **partial** — `kernels/aura.ts` membership + Rook t1 self-grant landed; bulk membership/entry rows remain |
-| Spend/economy hooks (missing) | Blessing/Combo/Sacrifice/Infuse/Gamble/use-ledger | ~6 job traits + talents + 3 relic ranks | strive, demon-strength, crimson-king | needed |
+| **Aura kernel** (`aura.ts`) | Aura X membership + projection + attack modifiers | 2 job traits + 42 foe traits + trophies + Rook/Perseus/Dervish | shieldmaster, pelagic-rage, commander-s-aura | existing |
+| Spend/economy hooks (missing) | Blessing/Combo/Sacrifice/Infuse/use-ledger | ~6 job traits + talents + 3 relic ranks | strive, demon-strength, crimson-king | needed (Gamble now existing) |
 | Movement-phase kernels (missing) | vacate/occupancy/elevation/pre-post/swap/teleport-all | 5 job traits + movement talents/foes | darkside, stone-double, tumbling, great-leap | needed |
 | Conditional passive gates (missing) | bloodied/25%/terrain/stealth/status/round | ~150 foe traits + relic ranks | berserker-enrage, earth-bond, wayfinding | needed |
 | Reactive windows (missing triggers) | attack-miss/completion, summon, generalized targeted | 7 job traits + dozens of talents | cheap-trick, mantra-of-sealing, balance | needed |
@@ -431,9 +436,10 @@ not name:
    trigger threshold, duration, cost, save. The glossary has no single term
    for "modify another ability," yet masteries and many talents are exactly
    that.
-2. **Aura membership projection** — distance-based grants with activation,
-   size change, and entry effects; the glossary defines *Aura X* as an effect
-   but provides no engine shape for continuous membership.
+2. ~~Aura membership projection~~ — **existing** (`kernels/aura.ts`): continuous
+   membership from current positions through the canonical p.92 footprint
+   range, ephemeral condition/modifier projection onto current members, and
+   lifecycle recipe integration.
 3. **Delayed anchors** — record a target/effect at command time, resolve at a
    marked actor's boundary; the glossary's *Delay* is a special case, but the
    corpus (Great Giorgios, Assassinate, Showdown, etc.) needs a general anchor.
@@ -486,7 +492,7 @@ costs + resources (resolve/vigor/blessing/combo/aether)
 
 **Collapsing blockers:** several census blocker labels collapse into one
 reusable abstraction:
-- `gamble-state`, `charge-state` → **recorded-state / triggered-effect** kernel.
+- `charge-state` → **recorded-state / triggered-effect** kernel. (`gamble-state` resolved: `gambleD6` + `dice-result-modifier` + `post-roll-reactive-choice`.)
 - `aura`, `cover-mechanic`, `range-modifier` → **spatial / modifier** layer.
 - `sacrifice-cost`, `infuse-cost`, `blessing-spend`, `combo-spend`,
   `use-ledger`, `heroics-economy`, `resource-management` → **resource-economy /
@@ -504,14 +510,13 @@ elimination of duplicated content-local rules, correctness/replay risk, and
 content unlock counts — **not** by census immediate completions alone.
 
 1. **Resource-economy / spend kernel** (sacrifice, blessing, combo, infuse,
-   gamble, use-ledger, heroics) — the glossary's own economy vocabulary; the
+   use-ledger, heroics) — the glossary's own economy vocabulary (Gamble is now existing); the
    biggest shared leverage across job traits, talents, and relic ranks.
    **Landing:** the once-per-round reactive job-trait fold + durable round
    ledger (F9) is done — see `__tests__/trait-reactions.test.ts`; the
    spend-augment (blessing/combo/infuse) side and Press The Advantage's
    ally-choice still need the tighten-input seam.
-2. **Aura membership kernel** — unlocks the largest browse-level family (2 job
-   traits + 42 foe traits + trophies).
+2. ~~Aura membership kernel~~ — **existing** (`kernels/aura.ts`).
 3. **Movement-phase kernels** — vacate/occupancy/elevation/pre-post movement;
    unlocks movement traits + talents + the movement-entry forced fold.
 4. **Conditional passive gates** — bloodied/25%/terrain/stealth/status/round
@@ -573,14 +578,31 @@ only authority for "done."
 - **F5 Passive projection + role baselines** — closed `FOE_ROLE_BASELINE_RECIPES`
   + job-trait condition recipes; feature/mark projection.
 - **F6 Job traits / attack-path kernel** — closed `JOB_TRAIT_RECIPES`; five
-  wiring homes; `attack-modifiers.ts` fold; plus the F9 reactive fold rows.
-  23/65 traits wired.
+  wiring homes; `attack-modifiers.ts` fold; plus the F9 reactive fold rows
+  and Trigrammaton's exactly-range-3 row (F12). 25/65 traits wired.
 - **F7 Talents fold** — closed `TALENT_RECIPES` (288); `talentTriggerMutations`
   (exceed/comeback/finishing-blow/slay/collide/always) + `affectedFoeIds`
-  condition-grant; 3 program-level. 32/288 executable.
-- **F8 Mastery attachment** — every mastery needs a typed ability-recipe
-  modifier hook + mastery attachment; uniformly reflected in the census
-  (`mastery-attachment` on all 144).
+  condition-grant; 30 wired + 5 program-level + 3 passive-projection + 4
+  range-modifier (F12) + 1 area-modifier (F13; the area-carried rows — Pyre
+  t2 exceed blast shove, Eye of the Storm t2 center piercing — ride the
+  wired/program-level homes). 43/288 executable.
+- **F8 Mastery attachment** — `kernels/mastery.ts`: the typed mastery
+  attachment mechanism. `EncounterActor.masteredAbilityIds` (projected from
+  `CharacterAbility.mastered`, migrated deterministically for old snapshots)
+  is the durable ownership record; a reviewed `MasteryRecipe` declares one of
+  four attachment kinds (fold / program-level / continuous projection /
+  lifecycle) gated on the shared `hasMastery(actor, abilityId)` — the parent
+  must be equipped AND mastered, so an unmastered actor behaves exactly as
+  before. The compiler audits an implemented mastery as a complete program
+  and an unimplemented one for its actual effect blockers; `mastery-attachment`
+  is no longer a missing primitive. Wired: Rook Implacable Fortress (aura
+  armor projection), Dark Knight Infectious Hatred (stance aura + turn-end
+  save-or-hatred), Intimidate Iron Skull (stun-triggered unstoppable),
+  Bleak Mercy Painkiller (indefinite aura + status-counted re-use), Warding
+  Bolts Phantom Bolts (aura-2 hover + start-in/end-out strike), Gentleness
+  Gentle Prayer (aura resize + pacify), Rampant Nail Voracious Nail
+  (adjacent vulnerable + upgrade-only aura). Fixtures:
+  `__tests__/mastery.test.ts`.
 - **F9 Once-per-round reactive job-trait fold** — `kernels/trait-reactions.ts`
   (a `collide`/`shove`/`slay` reaction with an optional durable round ledger
   reset at the round-start boundary), folded into the ability mutation stream
@@ -590,6 +612,73 @@ only authority for "done."
   Fixtures: `__tests__/trait-reactions.test.ts`. This is the first home of
   the once-per-round economy/reactive-trait family (`use-ledger`);
   once-per-combat and the spend-augment (blessing/combo/infuse) halves remain.
+- **F10 Aura membership kernel** — `kernels/aura.ts`: the single reusable,
+  source-ID-free mechanism answering which characters are inside an aura and
+  what membership projects onto them. A content row registers a reviewed
+  `AuraDefinition` (origin resolution, radius, relations, includes-origin,
+  optional talent gate, projected conditions and attack modifiers); the kernel
+  derives membership continuously from current positions through the
+  canonical p.92 footprint range, so entering/leaving and origin movement
+  update immediately and replay needs no membership snapshots. Projection
+  feeds the existing condition fold (`encounterConditionSet`) and the shared
+  attack-modifier netBoon fold — Aura never resolves attacks/saves/damage
+  itself. Lifecycle recipes (Shieldmaster turn-end, Dervish expiry) ask the
+  same kernel with `isInAura`. Rows: Commander's Aura (p.304, +1 boon on
+  attacks), Aura of Shielding (p.304, dodge), Rook t1 counter, Dervish t1
+  counter, Gentleness base (+1 curse) + t1 counter, Shieldmaster turn-end
+  vigilance/sturdy, Bleak Mercy combo. Fixtures: `__tests__/aura.test.ts`.
+- **F12 Range / distance kernel** — `kernels/range.ts`: one canonical
+  distance (the p.92 footprint metric, shared by targeting, areas, auras, and
+  the distance predicates — never a competing implementation) plus
+  authoritative listed-range modification: a content row registers a
+  reviewed `RangeModifierRule` (fixed override, conditional override under
+  stealth/comeback/mastery gates, or the dynamic round-number value);
+  `effectiveAbilityRange` folds them against current encounter state at both
+  command gates (USE_ABILITY and EXECUTE_RULE) BEFORE a target is accepted,
+  so "Valkyrie gains range 4" widens target legality and a lost stealth
+  condition shrinks Incubus back to range 3 immediately. The exact-distance
+  family (Trigrammaton's "at exactly range 3: +1 boon and unerring") and the
+  distance-gated defense family (Aetherwall's "resistance against abilities
+  from characters outside range 2") are NOT range-modifier rows: they ride
+  the attack-modifier fold's `exactRange`/unerring seam and the damage
+  halving's `targetAetherwall`/`ignoreAetherwall` intent, both reading the
+  same footprint distance. Wired: Valkyrie t1 (range 4), Incubus t1 (3/5
+  from stealth), Harvest t2 (2/5 Comeback), Open the Gates t2 (range = round
+  number), Trigrammaton (exactly-range-3 boon + unerring), Aetherwall
+  (outside-range-2 halving). Fixtures: `__tests__/range.test.ts`.
+- **F13 Area kernel** — `kernels/area.ts` + `area-geometry.ts`: the reusable
+  authority for ICON's p.97 AoE patterns. `arcCells` validates a player-chosen
+  orthogonal arc path (contiguous, one step at a time, no self-overlap, never
+  the ability user's space) and returns the exact cells — an Arc is a chosen
+  path, never an auto-shaped approximation; `lineCells`/`squareArea` cover the
+  orthogonal line and the burst/center squares. A content row registers a
+  reviewed `AreaModifierRule` (shape and/or length override with round /
+  talent / mastery gates); `effectiveAreaFor` derives the parent ability's
+  EFFECTIVE area at command time and the reducer's target-legality gate for
+  line-shaped abilities reads it, so a change genuinely alters legal
+  execution. Blast templates are visual-only in the source and deliberately
+  NOT approximated (units needing one carry `blast-template`). Rows: Soul
+  Shot t2 (Line 6 from round 4), Sturmreiten mastery (Arc 5), plus the
+  area-carried triggers on Pyre t2 (exceed blast shove) and Eye of the Storm
+  t2 (center piercing per area character). Fixtures: `__tests__/area.test.ts`.
+- **F11 HP-threshold passive projection kernel** — `kernels/hp-threshold.ts`:
+  the source-ID-free authority for the canonical conditional passives
+  ("while bloodied, X" / "while at or under 25% HP, X"). Bloodied is at or
+  under 50% of the wounds-adjusted maximum (`maximumHp` = base − wounds×VIT),
+  matching the engine's long-standing `isBloodied`; "at 25% hp or lower" is
+  the exact quarter mark of the same maximum (the p.107 "% HEALTH" rule —
+  percentage COSTS/DAMAGE use the base maximum — does not apply to state
+  thresholds). A content row registers a reviewed `HpThresholdProjection`
+  (threshold, optional inverted gate for "loses X when bloodied", projected
+  conditions, +actions); activation derives continuously from authoritative
+  HP, so crossing back over the threshold removes the projection immediately
+  and replay persists no "bloodied active" boolean. The same predicates feed
+  the VM (`quarter` predicate), the attack-modifier fold (target-threshold
+  flat damage vs bloodied foes), and the turn-start action pool (Enrage).
+  Rows: Rogue Slippery (evasion), Enrage ×9 (+1 action), True Enrage (+1
+  action + unstoppable), Arkentech Hover Chair (inverted flying + sturdy),
+  Furious Berserk (sturdy), Strigoi Blood Hunger (+2 vs bloodied), Divine
+  Aegis t2 (quarter-HP defiance). Fixtures: `__tests__/hp-threshold.test.ts`.
 
 ### Explicit incomplete semantic boundaries
 
@@ -598,11 +687,53 @@ only authority for "done."
 - Forced-movement entry remains an incomplete semantic boundary; one-shot
   movement-entry triggers must not double-fire, and distinct triggers must stay
   independent (AGENTS.md §8).
-- Mastery and limit-break machinery is structurally present only through the
-  blocker census; no mastery or limit break is wired.
+- Masteries are wired through the typed mastery attachment (F8) for the
+  seven singleton candidates; limit-break actions remain unwired and stay
+  census-visible (their blockers name the missing effect machinery, not
+  `mastery-attachment`).
 - Rebound (attack bounce) is not a modeled mechanic beyond Trick Shot's armed
   variant.
+- Range is NOT globally complete: the listed-range family (fixed/conditional/
+  dynamic override) is generic authority, but unlimited/no-maximum-range
+  grants (`unlimited-range`), exact-distance predicates whose payload is not
+  an existing attack modifier (damage/teleport/explosion at exactly range N),
+  object-anchored distance ("in range N of that object"), per-ability
+  attack-modifier attachment for talent/mastery-owned unerring, and the
+  effect-redirect family all remain unresolved by design — the census exposes
+  each as its own blocker family (`distance-predicate`, `unlimited-range`,
+  `object-distance`, `ability-attack-modifier`, `effect-redirect`).
+- Areas are NOT globally complete: the deterministic line/arc/burst geometry
+  and the registered shape/length modifier seam are generic authority, but
+  source-defined area semantics still unresolved include the exact
+  small/medium/large blast templates (visual-only in the PDF — units naming
+  a blast size carry the precise `blast-template` blocker and are never
+  approximated), delivery-type conversions (Perseus t2's aura → line-5
+  area, `aura-to-area-conversion`), an additional secondary area (Sturmreiten
+  t2's comeback line-3 extension, `area-extension`), moving an existing
+  terrain area at a turn boundary (Atherwand t2, `terrain-move-lifecycle`),
+  and player-target choice inside an area (Eclipse t2, `choice-input`). The
+  area kernel answers "what is this ability's effective area right now" and
+  never absorbs the payload semantics of an area-carried effect.
 - The seer 13-card deck mechanics may stay table-facing by design.
+- Aura is NOT globally complete: source-defined aura semantics still
+  unresolved include the ability-user-presence gate over an ally-carried aura
+  (Endless Battlement t1/t2), entity members/consumption inside an aura
+  (Nightmare t2 shadows), and attack-triggered token/resource grants to
+  adjacent characters (Mantra of Sealing). Aura membership and projection
+  themselves are the implemented boundary; the large-footprint origin edge
+  (an origin's occupied footprint as the measured edge) follows the p.290
+  member-side footprint rule and stays covered by `footprintDistance` for
+  members — origin-footprint-edge aura measurement is the one geometric
+  detail left to the footprint matrix.
+- HP-threshold passives are NOT globally complete: only the bloodied and
+  at-or-under-25% predicates are generic authority. The remaining conditional
+  gates (terrain, stealth, status, round) and the deferred threshold-shaped
+  units stay unresolved by design — timed intangibles on bloodied (Bicorn /
+  Floatfish Aetherskin), bloodied aura-radius growth (Dungeon Jelly, Harpy),
+  bloodied bonus-damage (Pariah Mutate, which needs a general bonus-damage
+  projection), on-hit slashes vs bloodied foes (Fixer Iron Blade), and the
+  compound Mule/Steam-Wright rows. The threshold kernel only answers "is this
+  passive active"; it never absorbs its payload's semantics.
 
 ---
 

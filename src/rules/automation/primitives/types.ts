@@ -89,6 +89,7 @@ export type RulePredicate =
   | { kind: 'compare'; left: RuleNumber; operator: '<' | '<=' | '=' | '>=' | '>'; right: RuleNumber }
   | { kind: 'has-condition'; target: RuleSelector; conditionId: string }
   | { kind: 'bloodied'; target: RuleSelector }
+  | { kind: 'quarter'; target: RuleSelector }
   | { kind: 'defeated'; target: RuleSelector }
   | { kind: 'in-terrain'; target: RuleSelector; terrain: string }
   | { kind: 'trigger'; trigger: string }
@@ -206,8 +207,26 @@ export interface RuleActorView {
    * talent (e.g. Demon Cutter t2's pre-ability rush) exactly as the fold
    * reads the durable selection on command and replay. */
   talents: Readonly<Record<string, 1 | 2>>;
+  /** The equipped ability ids (the mastery gate's ownership read). */
+  abilityIds: readonly string[];
+  /** The mastered ability ids projected into encounter authority — a mastery
+   * attachment executes only when its parent ability is equipped (abilityIds)
+   * and present here, never by querying the character sheet. */
+  masteredAbilityIds: readonly string[];
+  /** Durable active-effect records (the `aura`-grant effects the aura kernel
+   * reads). Exposed on the runtime view so ability resolvers can gate on an
+   * active aura's presence — e.g. Painkiller's Sweet Torment re-use and
+   * Phantom Bolts' retrigger (p.144/p.158) — and so the runtime aura view
+   * resolves `aura-effect` origins identically to the reducer view. Only the
+   * effectId/sourceId and the resolved aura radius are projected; the modifier
+   * payload stays reducer-side. */
+  activeEffects?: ReadonlyArray<{ sourceId: string; effectId: string; radius?: number }>;
   size: number;
   defeated: boolean;
+  /** The durable stance this actor holds, when any (the stance gate the
+   * aura kernel and stance-gated resolvers read; marks are exposed the same
+   * way). Only the id is projected — stance payload state stays reducer-side. */
+  stance?: { stanceId: string } | null;
   conditions: ReadonlySet<string>;
   /**
    * Statuses with their source potency.  `conditions` remains the broad
@@ -307,6 +326,8 @@ export type RuleMutation =
       damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice'; instance: number;
       delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain'; ignoreCover: boolean;
       /** Present only when an attack's True Strike provenance applies. */ ignoreDodge?: boolean;
+      /** Present when an attack's Unerring provenance applies (p.105). */
+      ignoreAetherwall?: boolean;
       /** Explicit source exceptions. They are not aliases for Divine. */
       bypassVigor?: boolean;
       ignoreArmor?: boolean;

@@ -68,31 +68,41 @@ describe('rules automation coverage gate', () => {
 
   it('reports every source unit and leaves unresolved mechanics visible', () => {
     const { audit } = auditRuleCompilations(collectRuleSourceUnits());
-    // F6: the 23 wired Job traits (incl. the attack-path modifier group —
-    // Demon Edge, Hissatsu, Pulverize, Bull's Strength — and the F9
-    // once-per-round reactive fold row Dash on the Rocks) + 6 summon suites
-    // are complete programs; F7: the 29 wired talents (the closed
-    // `talent-recipes.ts` tranche: exceed, comeback, finishing-blow with
-    // per-row eligibility extensions, the always trigger for unconditional
-    // charge-scaled augmentations and the single-foe condition-grant family,
-    // and the slay/collide post-application fold) plus the three
-    // program-level talents (Demon Cutter t2's pre-ability rush, Draken
-    // Cross t2's charged medium blasts, and Pyre t1's comeback ally
-    // immunity, implemented in the ability programs and gated on the
-    // equipped choice through the projected `talents` surface) audit as
-    // complete — 288 source talents, 29 wired / 3 program-level / 256
-    // documented. The 42 documented Job traits and every other kind stay
-    // source-visible.
+    // F6: the 25 wired Job traits (incl. the attack-path modifier group —
+    // Demon Edge, Hissatsu, Pulverize, Bull's Strength — Trigrammaton's
+    // exactly-range-3 row, the F9 once-per-round reactive fold row Dash on
+    // the Rocks, and Shieldmaster's aura + turn-end membership recipe)
+    // + 6 summon suites are complete programs; F7: the 29 wired talents
+    // (the closed `talent-recipes.ts` tranche) plus the four program-level
+    // talents, the three aura projection talents (Rook t1, Dervish t1,
+    // Gentleness t1, which register as continuous passive-projection rows),
+    // and the four range-modifier talents (Valkyrie t1, Incubus t1,
+    // Harvest t2, Open the Gates t2, executed by the shared range kernel)
+    // audit as complete — 288 source talents, 29 wired / 4 program-level
+    // / 3 passive-projection / 4 range-modifier / 248 documented. F8: the
+    // seven singleton mastery rows are complete
+    // through the typed mastery attachment (each audits as one reviewed
+    // passive clause — the parent resolver/lifecycle/aura path, not parsed
+    // text — instead of the generic parser's split clauses). The reviewed
+    // aura (Commander's Aura, Aura of Shielding), HP-threshold (Slippery,
+    // the Enrage family, the hover chair), and attack-modifier (Blood
+    // Hunger) foe traits compile complete through their kernels. The 40
+    // documented Job traits and every other kind stay source-visible.
+    // F9 range: the four range-modifier talents, Trigrammaton, and the
+    // Aetherwall trait compile complete through the shared range kernel.
+    // F10 area: Soul Shot t2 (Line 6), Pyre t2 (exceed shove), Eye of the
+    // Storm t2 (count damage), and the Sturmreiten MJÖLLNIR mastery (arc 5)
+    // compile complete through the shared area authority.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
-      totalClauses: 4750,
-      completePrograms: 418,
-      unsupportedPrograms: 2857,
-      completeClauses: 1558,
-      unsupportedClauses: 3192,
+      totalClauses: 4700,
+      completePrograms: 449,
+      unsupportedPrograms: 2826,
+      completeClauses: 1589,
+      unsupportedClauses: 3111,
       unsupportedByKind: {
-        core: 70, 'class-trait': 8, 'job-trait': 40, 'limit-break': 16, 'talent': 255, 'mastery': 144,
-        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 604,
+        core: 70, 'class-trait': 7, 'job-trait': 40, 'limit-break': 16, 'talent': 245, 'mastery': 136,
+        'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 592,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
     });

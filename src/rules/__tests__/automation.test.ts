@@ -27,6 +27,8 @@ const actor = (id: string, side: RuleActorView['side'], x: number, overrides: Pa
   state: {},
   traitIds: [],
   talents: {},
+  abilityIds: [],
+  masteredAbilityIds: [],
   marks: [],
   ...overrides,
   statuses: overrides.statuses ?? [],

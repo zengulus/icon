@@ -29,6 +29,9 @@ export interface AttackIntent {
    * (Pulverize: +2 against a lower target). Rides the damage provenance so
    * the attack's direct-target damage (and only it) receives the flat. */
   bonusDamageFlat?: number;
+  /** Unerring (p.105): the attack ignores cover and aetherwall. Distinct from
+   * True Strike, which ignores Dodge — unerring does not. */
+  unerring?: boolean;
 }
 
 export interface AttackRoll {
@@ -47,6 +50,8 @@ export interface AttackRoll {
    * the shared damage kernel after an attack chooses its hit/miss branch. */
   ignoreDodge: boolean;
   ignoreCover: boolean;
+  /** Unerring (p.105) ignores the Aetherwall halving. */
+  ignoreAetherwall: boolean;
   /** Kept for diagnostics/event builders; the rolled boon is already final. */
   netBoon: number;
   /** Flat trait bonus damage applied to this attack's direct damage. */
@@ -56,6 +61,8 @@ export interface AttackRoll {
 export interface AttackDamageProvenance {
   ignoreDodge: boolean;
   ignoreCover: boolean;
+  /** Unerring (p.105) ignores the Aetherwall halving in addition to cover. */
+  ignoreAetherwall: boolean;
   /** Flat trait bonus damage (Pulverize +2) that follows the attack into its
    * direct-target damage instance only. */
   bonusFlat: number;
@@ -68,10 +75,11 @@ export interface AttackDamageProvenance {
  * p.104 gives True Strike an explicit Dodge exception.  Keep these as named
  * facts instead of asking later damage code to reconstruct an earlier roll.
  */
-export function attackDamageProvenance(intent: Pick<AttackIntent, 'elevationModifier' | 'trueStrike' | 'bonusDamageFlat'>): AttackDamageProvenance {
+export function attackDamageProvenance(intent: Pick<AttackIntent, 'elevationModifier' | 'trueStrike' | 'bonusDamageFlat' | 'unerring'>): AttackDamageProvenance {
   return {
     ignoreDodge: intent.trueStrike ?? false,
-    ignoreCover: Math.trunc(intent.elevationModifier ?? 0) > 0,
+    ignoreCover: Math.trunc(intent.elevationModifier ?? 0) > 0 || Boolean(intent.unerring),
+    ignoreAetherwall: Boolean(intent.unerring),
     bonusFlat: Math.max(0, Math.trunc(intent.bonusDamageFlat ?? 0)),
   };
 }

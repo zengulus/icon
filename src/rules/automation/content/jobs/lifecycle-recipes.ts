@@ -1,4 +1,9 @@
-import { applyRuleMutations, determineAndApplyEncounterDamage } from '../../kernels/encounter-adapter.js';
+import { applyRuleMutations, determineAndApplyEncounterDamage, encounterRuleState } from '../../kernels/encounter-adapter.js';
+import { gambleD6 } from '../../primitives/job-kit.js';
+import { auraDefinitionFor, auraOriginRefs, auraStateView, isAuraMember, isInAura } from '../../kernels/aura.js';
+import { hasMastery } from '../../kernels/mastery.js';
+import { resolveSaveWindow } from '../../primitives/save-window.js';
+import { isAtHpThreshold } from '../../kernels/hp-threshold.js';
 import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, registerTurnDiceWindowPlanner } from '../../kernels/lifecycle.js';
 import { tickPowerDie } from '../../kernels/power-die.js';
 import { resolveGamble } from '../../primitives/gamble-window.js';
@@ -176,20 +181,30 @@ function detonateBombs(state: EncounterState, owner: EncounterActor, gamble: num
  * the TURN_ENDED event carries a deterministic value for replay. */
 export function carnevaleGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
   if (actor.ruleState['carnevale:armed'] !== true || actor.attackedThisTurn) return undefined;
-  return Object.values(state.entities).some((entity) => entity.type === 'bomb' && entity.ownerId === actor.id) ? dice.die(6) : undefined;
+  return Object.values(state.entities).some((entity) => entity.type === 'bomb' && entity.ownerId === actor.id) ? gambleD6(dice).roll : undefined;
 }
 
 /** Roll the Monogatari song gamble when the user has an active song with no
- * tale yet. Charge rolls an extra d6 and takes the higher result. Rolled at
- * the command boundary so the TURN_ENDED event carries a deterministic value. */
-export function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
+ * tale yet. Charge rolls two d6; the player should choose one result.
+ * Rolled at the command boundary so the TURN_ENDED event carries a
+ * deterministic value. Both rolls are stored in recordedDice for replay;
+ * the first roll is used by default because the lifecycle architecture
+ * has no player-choice seam at the boundary. This is a documented
+ * unresolved semantic boundary — the source gives the player a choice
+ * but the engine cannot express it yet. */
+export function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): { result: number; recordedDice?: Record<string, number> } | undefined {
   const tale = actor.ruleState['monogatari:tale'];
   if (actor.ruleState['monogatari:active'] !== true || tale !== null && tale !== undefined) return undefined;
-  // F10: route through the shared recorded Gamble seam — charge rolls two d6
-  // and keeps the higher, otherwise a single d6. Dice come from the command
-  // boundary, so replay never re-rolls.
-  if (actor.ruleState['monogatari:charge'] === true) return resolveGamble(dice, 2, 'highest').result;
-  return resolveGamble(dice, 1, 'single').result;
+  if (actor.ruleState['monogatari:charge'] === true) {
+    const roll0 = gambleD6(dice).roll;
+    const roll1 = gambleD6(dice).roll;
+    // UNRESOLVED: source says "choose any result" but the lifecycle
+    // boundary has no player-choice seam. Both rolls are preserved
+    // durably; the first is used as a faithful-but-not-source-exact
+    // default. A recorded-choice primitive would resolve this.
+    return { result: roll0, recordedDice: { 'monogatari:roll0': roll0, 'monogatari:roll1': roll1 } };
+  }
+  return { result: gambleD6(dice).roll };
 }
 
 /** The deterministic tale conditions the single-pass VM can evaluate: Travels
@@ -221,8 +236,11 @@ registerTurnDiceWindowPlanner((state, actor, dice) => {
 });
 
 registerTurnDiceWindowPlanner((state, actor, dice) => {
-  const monogatariGamble = monogatariGambleForTurnEnd(state, actor, dice);
-  return monogatariGamble !== undefined ? { monogatariGamble } : {};
+  const monogatari = monogatariGambleForTurnEnd(state, actor, dice);
+  if (!monogatari) return {};
+  const windows: import('../../kernels/lifecycle.js').TurnDiceWindows = { monogatariGamble: monogatari.result };
+  if (monogatari.recordedDice) windows.recordedDice = { ...monogatari.recordedDice };
+  return windows;
 });
 
 // F6: snapshot Blackheart's status count before the boundary's end-of-turn
@@ -257,6 +275,63 @@ registerLifecycleRecipe({
   resolve: (state, actor) => {
     if (actor.stance?.stanceId !== 'dark-knight') return;
     actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
+  },
+});
+
+/** ICON p.143 Infectious Hatred (Dark Knight mastery): the mastered dark
+ * knight whose stance aura covers `foe` — the aura kernel answers both
+ * membership and which origin (deterministic: origins iterate in actor
+ * order, and the stance-origin definition only ever emanates from mastered
+ * dark knights). */
+function coveringDarkKnight(state: EncounterState, foe: EncounterActor): EncounterActor | null {
+  const definition = auraDefinitionFor('knave:dark-knight:mastery');
+  if (!definition || foe.side !== 'foes' || !foe.position) return null;
+  const view = auraStateView(state);
+  for (const origin of auraOriginRefs(view, definition)) {
+    if (origin.actorId === null) continue;
+    if (isAuraMember(view, definition, origin, foe.id)) return state.actors[origin.actorId] ?? null;
+  }
+  return null;
+}
+
+// ICON p.143 Infectious Hatred: a foe that ends its turn in a mastered dark
+// knight's aura must save or gain hatred of the knight. The save is pre-rolled
+// at the command boundary (the established dice-window pattern, like the
+// Carnevale gamble) so the TURN_ENDED intent carries the outcome for replay.
+registerTurnDiceWindowPlanner((state, actor, dice) => {
+  if (actor.side !== 'foes' || !actor.position) return {};
+  const knight = coveringDarkKnight(state, actor);
+  if (!knight) return {};
+  const projected = encounterRuleState(state);
+  const view = projected.actors[actor.id];
+  if (!view) return {};
+  const save = resolveSaveWindow(
+    { state: projected, actorId: actor.id, sourceId: 'knave:dark-knight', actionId: 'turn-end', timing: 'turn-end', input: {}, dice },
+    view,
+    { id: `knave:dark-knight:hatred:${actor.id}`, kind: 'effect', sourceId: 'knave:dark-knight', actorId: actor.id },
+  ).mutation;
+  return { darkKnightHatredSave: { roll: save.roll, total: save.total, success: save.success } };
+});
+
+/** ICON p.143 Infectious Hatred (Dark Knight mastery): foes that end their
+ * turn in the mastered user's aura must save or gain hatred of them. The save
+ * was resolved at the command boundary; the failure branch applies the hatred
+ * condition (with the hated target, so the shared damage authority's
+ * hatred-of-X routing works) through the same mutation boundary. */
+registerLifecycleRecipe({
+  sourceId: 'knave:dark-knight:mastery',
+  phase: 'turn-end',
+  applies: (_actor, _state, diceWindows) => diceWindows.darkKnightHatredSave !== undefined,
+  resolve: (state, actor, diceWindows) => {
+    const result = diceWindows.darkKnightHatredSave;
+    if (!result || actor.side !== 'foes' || !actor.position || result.success) return;
+    const knight = coveringDarkKnight(state, actor);
+    if (!knight) return;
+    applyRuleMutations(state, [{
+      kind: 'condition', sourceId: 'knave:dark-knight:mastery', sourceActorId: knight.id, actorId: actor.id, conditionId: 'hatred', operation: 'apply', potency: 'normal',
+    }]);
+    actor.ruleState['hatred-of'] = knight.id;
+    actor.ruleStateOwners['hatred-of'] = knight.id;
   },
 });
 
@@ -344,7 +419,11 @@ registerLifecycleRecipe({
 });
 
 /** ICON p.158 Warding Bolts: a foe that starts its turn inside the hover zone
- * and ends it outside is struck for 2 unerring damage and dazed. */
+ * and ends it outside is struck for 2 unerring damage and dazed. Mastery
+ * (Phantom Bolts): the aura hover form strikes the same way — a foe that
+ * started inside the mastered user's aura and ends it outside takes the same
+ * strike. Both forms must still exist (the aura ends with its owner, p.94
+ * owned effects), mirroring the durable terrain. */
 registerLifecycleRecipe({
   sourceId: 'freelancer:warding-bolts',
   phase: 'turn-end',
@@ -354,9 +433,24 @@ registerLifecycleRecipe({
     if (typeof ownerId !== 'string' || !ownerId) return;
     delete actor.ruleState['warding-bolts:owner'];
     delete actor.ruleStateOwners['warding-bolts:owner'];
+    if (!actor.position) return;
     const effect = state.terrainEffects.find((candidate) => candidate.terrain === 'warding-bolts' && candidate.ownerId === ownerId);
-    if (!effect || !actor.position) return;
-    if (effect.positions.some((cell) => samePosition(cell, actor.position))) return;
+    const owner = state.actors[ownerId];
+    // The hover form exists while the terrain zone stands OR the mastered
+    // owner still carries the phantom-bolts aura (an owned effect ends with
+    // its incapacitated owner, p.94). No form → nothing to leave → no strike.
+    const auraPresent = owner !== undefined && owner.activeEffects.some(({ effectId }) => effectId === 'phantom-bolts');
+    if (!effect && !auraPresent) return;
+    if (effect && effect.positions.some((cell) => samePosition(cell, actor.position))) return;
+    if (auraPresent) {
+      const definition = auraDefinitionFor('freelancer:warding-bolts:mastery');
+      if (definition) {
+        const view = auraStateView(state);
+        for (const origin of auraOriginRefs(view, definition)) {
+          if (origin.actorId === ownerId && isAuraMember(view, definition, origin, actor.id)) return; // still inside the aura
+        }
+      }
+    }
     applyRuleMutations(state, [
       { kind: 'damage', sourceId: 'freelancer:warding-bolts', sourceActorId: ownerId, actorId: actor.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: true },
       { kind: 'condition', sourceId: 'freelancer:warding-bolts', sourceActorId: ownerId, actorId: actor.id, conditionId: 'dazed', operation: 'apply', potency: 'normal' },
@@ -655,14 +749,40 @@ registerLifecycleRecipe({
 
 /** ICON p.192 Colossus Furious Berserk: while bloodied, the owner gains
  * vigilance +1 at the end of their turn (the Defiance/regeneration halves are
- * combat-start; the bloodied Sturdy half is documented). */
+ * combat-start; the bloodied Sturdy half is the HP-threshold projection,
+ * `content/jobs/hp-threshold-recipes.ts`). The bloodied gate is the shared
+ * kernel predicate — never a second distance/HP formula. */
 registerLifecycleRecipe({
   sourceId: 'colossus:trait:furious-berserk',
   phase: 'turn-end',
-  applies: (actor) => actor.traitIds.includes('colossus:trait:furious-berserk') && actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2,
+  applies: (actor) => actor.traitIds.includes('colossus:trait:furious-berserk') && isAtHpThreshold(actor, 'bloodied'),
   resolve: (state, actor) => {
     if (!actor.traitIds.includes('colossus:trait:furious-berserk')) return;
     actor.resources.vigilance = (actor.resources.vigilance ?? 0) + 1;
+  },
+});
+
+/** ICON p.121 Bastion Shieldmaster: "You have aura 1. If you end your turn
+ * with an ally in the aura, gain vigilance +1 and become sturdy until the
+ * start of your turn." The membership question is the generic aura kernel's
+ * (`isInAura` on the trait's aura definition) — the same authority every
+ * other consumer uses — and the grants ride the shared mutation boundary. */
+registerLifecycleRecipe({
+  sourceId: 'bastion:trait:shieldmaster',
+  phase: 'turn-end',
+  applies: (actor) => actor.traitIds.includes('bastion:trait:shieldmaster'),
+  resolve: (state, actor) => {
+    if (!actor.traitIds.includes('bastion:trait:shieldmaster')) return;
+    const definition = auraDefinitionFor('bastion:trait:shieldmaster');
+    if (!definition) return;
+    const view = auraStateView(state);
+    const allyInside = Object.values(state.actors).some((candidate) =>
+      candidate.side === actor.side && candidate.id !== actor.id && isInAura(view, definition, candidate.id));
+    if (!allyInside) return;
+    applyRuleMutations(state, [
+      { kind: 'resource', sourceId: 'bastion:trait:shieldmaster', actorId: actor.id, resourceId: 'vigilance', operation: 'gain', amount: 1, minimum: 0, maximum: null },
+      { kind: 'condition', sourceId: 'bastion:trait:shieldmaster', sourceActorId: actor.id, actorId: actor.id, conditionId: 'sturdy', operation: 'apply', potency: 'normal', duration: { kind: 'turn-start', actor: { kind: 'self' }, turns: 1 } },
+    ]);
   },
 });
 
@@ -834,7 +954,10 @@ registerLifecycleRecipe({
 });
 
 /** ICON p.142 Intimidate: starting your turn adjacent to the marked foe deals
- * fray damage, stuns them, and ends the mark. */
+ * fray damage, stuns them, and ends the mark. Mastery (Iron Skull, p.143):
+ * "After Intimidate's stun triggers, also become unstoppable until the end of
+ * your next turn" — attached to the actual stun trigger (the shared mastery
+ * gate), never approximated from position alone. */
 registerLifecycleRecipe({
   sourceId: 'knave:intimidate',
   phase: 'turn-start',
@@ -849,6 +972,11 @@ registerLifecycleRecipe({
         { kind: 'damage', sourceId: 'knave:intimidate', sourceActorId: actor.id, actorId: foe.id, amount: actor.fray, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false },
         { kind: 'condition', sourceId: 'knave:intimidate', sourceActorId: actor.id, actorId: foe.id, conditionId: 'stunned', operation: 'apply', potency: 'normal' },
       ]);
+      if (hasMastery(actor, 'knave:intimidate')) {
+        applyRuleMutations(state, [{
+          kind: 'condition', sourceId: 'knave:intimidate:mastery', sourceActorId: actor.id, actorId: actor.id, conditionId: 'unstoppable', operation: 'apply', potency: 'normal', duration: { kind: 'turn-end', actor: { kind: 'self' }, turns: 2 },
+        }]);
+      }
       foe.marks = foe.marks.filter((candidate) => candidate !== mark);
     }
   },
@@ -861,6 +989,36 @@ registerLifecycleRecipe({
   phase: 'turn-start',
   applies: (actor) => actor.stance?.stanceId === 'gallows-humor',
   resolve: (_state, actor) => tickGallowsHumorDie(actor),
+});
+
+/** ICON p.227 Voracious Nail (Rampant Nail mastery): "Characters that start
+ * their turn adjacent to the nail become vulnerable." The grant is durable
+ * (it persists until cured/saved); the vulnerable+ upgrade while inside the
+ * nail's aura is the aura kernel's upgrade-only projection (aura-recipes.ts),
+ * which never grants the condition itself and drops the moment membership
+ * ends. The gate checks a mastered nail exists on the field so the recipe
+ * only participates in meaningful boundaries. */
+registerLifecycleRecipe({
+  sourceId: 'spellblade:rampant-nail:mastery',
+  phase: 'turn-start',
+  applies: (actor, state) => Boolean(actor.position) && Object.values(state.entities).some((entity) =>
+    entity.type === 'lightning-spike' && entity.ownerId !== null
+    && hasMastery(state.actors[entity.ownerId]!, 'spellblade:rampant-nail')),
+  resolve: (state, actor) => {
+    if (!actor.position) return;
+    for (const entity of Object.values(state.entities)) {
+      if (entity.type !== 'lightning-spike') continue;
+      const owner = entity.ownerId ? state.actors[entity.ownerId] : undefined;
+      if (!owner || !hasMastery(owner, 'spellblade:rampant-nail')) continue;
+      const spike = entity.positions[0];
+      if (!spike) continue;
+      if (distance(actor.position, spike) <= 1) {
+        applyRuleMutations(state, [{
+          kind: 'condition', sourceId: 'spellblade:rampant-nail:mastery', sourceActorId: owner.id, actorId: actor.id, conditionId: 'vulnerable', operation: 'apply', potency: 'normal',
+        }]);
+      }
+    }
+  },
 });
 
 /** ICON p.156 Astral Chain: at the start of the user's turn a marked foe in
@@ -884,7 +1042,9 @@ registerLifecycleRecipe({
 });
 
 /** ICON p.158 Warding Bolts: a foe that starts its turn inside the hover zone
- * records the owner so the turn-end hook can strike it if it leaves. */
+ * records the owner so the turn-end hook can strike it if it leaves. Mastery
+ * (Phantom Bolts): the aura hover form records the same way, through the
+ * shared aura kernel's membership authority (never a local distance check). */
 registerLifecycleRecipe({
   sourceId: 'freelancer:warding-bolts',
   phase: 'turn-start',
@@ -899,6 +1059,18 @@ registerLifecycleRecipe({
     if (effect) {
       actor.ruleState['warding-bolts:owner'] = effect.ownerId;
       actor.ruleStateOwners['warding-bolts:owner'] = actor.id;
+      return;
+    }
+    const definition = auraDefinitionFor('freelancer:warding-bolts:mastery');
+    if (!definition) return;
+    const view = auraStateView(state);
+    for (const origin of auraOriginRefs(view, definition)) {
+      if (origin.actorId === null) continue;
+      if (isAuraMember(view, definition, origin, actor.id)) {
+        actor.ruleState['warding-bolts:owner'] = origin.actorId;
+        actor.ruleStateOwners['warding-bolts:owner'] = actor.id;
+        break;
+      }
     }
   },
 });

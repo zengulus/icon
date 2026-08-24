@@ -49,4 +49,36 @@ export function orthogonalNeighbors(center: Position): Position[] {
   ];
 }
 
+/**
+ * Validate and return the cells of an orthogonal arc path (ICON p.97:
+ * "Arc X: X contiguous spaces, with its first space drawn in range. Spaces
+ * must be drawn sequentially, in orthogonal directions (no diagonals), and
+ * cannot overlap themselves or the ability user, but otherwise can twist and
+ * turn and be placed in any pattern"). `start` is the ability user's origin
+ * (never an arc cell); each `path` cell must be exactly one orthogonal step
+ * from the previous cell (or from `start` for the first), and no cell may
+ * repeat. Returns null when the path is not a legal arc — a chosen path is
+ * never approximated or auto-shaped.
+ */
+export function arcCells(start: Position, path: readonly Position[]): Position[] | null {
+  if (path.length === 0) return null;
+  const cells: Position[] = [];
+  const seen = new Set<string>([cellKey(start)]);
+  let previous = start;
+  for (const cell of path) {
+    const dx = Math.abs(cell.x - previous.x);
+    const dy = Math.abs(cell.y - previous.y);
+    // Exactly one orthogonal step (no diagonals, no standing still, no jump).
+    if (dx + dy !== 1) return null;
+    const key = cellKey(cell);
+    if (seen.has(key)) return null; // cannot overlap itself (or the origin)
+    seen.add(key);
+    cells.push(cell);
+    previous = cell;
+  }
+  return cells;
+}
+
+export const cellKey = (cell: Position) => `${cell.x},${cell.y}`;
+
 export const sameCell = (first: Position, second: Position) => first.x === second.x && first.y === second.y;

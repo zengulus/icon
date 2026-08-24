@@ -1,5 +1,7 @@
 import { resolveAttackRoll } from '../primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, consumedTraitModifier, effectiveDamageDie, traitAttackModifier } from './attack-modifiers.js';
+import { footprintDistance } from '../primitives/spatial-intent.js';
+import { auraRuntimeView, projectedAuraAttackModifiers } from './aura.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
 import { eligibleTargets, isEligibleTarget } from '../primitives/targeting.js';
@@ -187,7 +189,12 @@ export function evaluatePredicate(predicate: RulePredicate, context: RuleExecuti
       return left > right;
     }
     case 'has-condition': return selectActors(predicate.target, context).every((target) => target.conditions.has(predicate.conditionId));
+    // p.94/p.104: bloodied is at or under 50% of the wounds-adjusted maximum
+    // (RuleActorView.maxHp is already wounds-adjusted); "at 25% hp or lower"
+    // is the exact quarter mark. Both are the canonical HP-threshold
+    // predicates (`kernels/hp-threshold.ts`).
     case 'bloodied': return selectActors(predicate.target, context).every((target) => target.hp <= target.maxHp / 2);
+    case 'quarter': return selectActors(predicate.target, context).every((target) => target.hp <= target.maxHp / 4);
     case 'defeated': return selectActors(predicate.target, context).every((target) => target.defeated);
     case 'in-terrain': return selectActors(predicate.target, context).every((target) => target.position && context.state.terrainAt(target.position).has(predicate.terrain));
     case 'trigger': return context.triggers?.has(predicate.trigger) ?? false;
@@ -205,18 +212,28 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
     switch (effect.kind) {
       case 'attack': {
         const source = actor(context, context.actorId);
+        // Aura membership feeds the same attack-modifier authority as the
+        // trait fold: the attacker's own aura boons/curses plus any defensive
+        // curse an aura projects against the target (netBoon, p.92). The view
+        // is built once per attack effect; each target contributes its own
+        // defensive curse.
+        const auraView = auraRuntimeView(context.state);
+        const auraAttack = projectedAuraAttackModifiers(auraView, source.id);
         for (const target of targets) {
           const elevationModifier = source.position && target.position ? context.state.elevationAt(source.position) - context.state.elevationAt(target.position) : 0;
           // F6 attack-path trait fold: armed one-shot modifiers (Hissatsu
           // +1 boon / true strike / d10) plus permanent elevation mechanics
-          // (Pulverize flat damage and lowered exceed threshold). F10
-          // ability-use modifiers (Blessing of War / Rebirth) ride the
-          // resolution context for this ability only.
-          const traitModifier = traitAttackModifier(source, elevationModifier);
-          const abilityUse = context.abilityUseModifiers;
+          // (Pulverize flat damage and lowered exceed threshold), distance-
+          // gated rules (Trigrammaton's exactly-range-3 boon/unerring)
+          // through the canonical p.92 footprint distance, and unerring.
+          const distance = source.position && target.position
+            ? footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size })
+            : undefined;
+          const traitModifier = traitAttackModifier(source, elevationModifier, { hp: target.hp, maxHp: target.maxHp, distance });
+          const targetAuraCurse = projectedAuraAttackModifiers(auraView, target.id).targetCurses ?? 0;
           const attack = resolveAttackRoll({
             defense: target.defense,
-            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons + (abilityUse?.boons ?? 0),
+            sourceBoon: (effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0) + traitModifier.boons + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
             elevationModifier,
             sourceDazed: source.conditions.has('dazed'),
             targetEvasion: target.conditions.has('evasion'),
@@ -224,8 +241,9 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
             autoHit: effect.autoHit ?? false,
             bonusDamageFlat: traitModifier.bonusDamageFlat + (abilityUse?.bonusDamage ?? 0),
             exceedThreshold: traitModifier.exceedThreshold ?? undefined,
+            unerring: traitModifier.unerring,
           }, context.dice);
-          const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, bonusFlat } = attack;
+          const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat } = attack;
           output.push({ kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit });
           const triggers = new Set(context.triggers);
           triggers.add(hit ? 'hit' : 'miss');
@@ -237,9 +255,10 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
             triggerTargetIds: [target.id],
             triggers,
             delivery: hit ? 'hit' as const : 'miss' as const,
-            // p.89/p.104 exceptions belong only to this resolved attack's
-            // direct target, not collateral area or later effect damage.
-            attackDamageProvenance: { targetId: target.id, ignoreDodge, ignoreCover, bonusFlat },
+            // p.89/p.104/p.105 exceptions belong only to this resolved
+            // attack's direct target, not collateral area or later effect
+            // damage.
+            attackDamageProvenance: { targetId: target.id, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat },
           };
           effectsToMutations(hit ? effect.onHit : effect.onMiss, branchContext, output);
           if (critical) effectsToMutations(effect.onCritical ?? [], branchContext, output);
@@ -253,6 +272,7 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
         const instances = effect.instances ? integer(effect.instances, context) : 1;
         for (const target of targets) for (let instance = 1; instance <= instances; instance += 1) {
           const attackDamage = context.attackDamageProvenance?.targetId === target.id ? context.attackDamageProvenance : undefined;
+          const unerring = Boolean(context.actionTags?.has('unerring') || attackDamage?.ignoreAetherwall || attackDamage?.ignoreCover);
           const ignoreCover = Boolean(effect.ignoreCover || context.actionTags?.has('unerring') || attackDamage?.ignoreCover);
           // F10 ability-use pierce (Blessing of Rebirth): route the damage
           // through the existing piercing damage path instead of re-deriving
@@ -265,6 +285,7 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
             amount: integer(effect.amount, context) + (attackDamage?.bonusFlat ?? 0), damageType, instance,
             delivery: effect.delivery ?? context.delivery ?? 'effect', ignoreCover,
             ...(attackDamage?.ignoreDodge ? { ignoreDodge: true } : {}),
+            ...(unerring ? { ignoreAetherwall: true } : {}),
           });
         }
         break;

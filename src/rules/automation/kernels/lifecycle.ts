@@ -45,6 +45,15 @@ export interface TurnDiceWindows {
    * before the end-of-turn saves consume it. The turn-end phase replays after
    * those saves, so the recorded count is the only faithful input. */
   blackheartStatusCount?: number;
+  /** ICON p.143 Infectious Hatred (Dark Knight mastery): the pre-rolled save
+   * for a foe ending its turn inside a mastered dark knight's aura — save or
+   * gain hatred of the knight. Resolved at the command boundary so replay
+   * never re-rolls or re-decides the outcome. */
+  darkKnightHatredSave?: { roll: number; total: number; success: boolean };
+  /** Generic pre-rolled dice keyed by content-owned name. Lifecycle recipes
+   * can register arbitrary gamble windows here without modifying this
+   * interface — the fold merges every planner's partial windows. */
+  recordedDice?: Record<string, number>;
 }
 
 export interface TurnTransitionIntent {

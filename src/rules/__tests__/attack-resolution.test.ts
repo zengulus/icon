@@ -33,6 +33,7 @@ describe('attack-resolution kernel', () => {
       exceedThreshold: null,
       ignoreDodge: false,
       ignoreCover: false,
+      ignoreAetherwall: false,
       netBoon: 0,
       bonusFlat: 0,
     });

@@ -91,7 +91,7 @@ Status legend:
 | Boon / Curse | ±highest d6, cancel 1:1 (82) | `rollBoonOrCurse` | EXECUTABLE | — |
 | Blessing | token; default +1 boon on a save (102) | blessing resource + `save-window.modifiers` + F10 ability-use choice fold | EXECUTABLE | — (except Faith) |
 | Combo | base→token→combo version (103) | `combo` resource + combo actions | PARTIAL | the **spend-augment** seam (spend tokens to augment/charge any ability — Songweave, blessing traits, Infuse) needs a durable spent-choice input on USE_ABILITY |
-| Gamble | d6, effect on result-or-higher (103) | program-level recorded gambles + `primitives/gamble-window.ts` (recorded die + pick) | PARTIAL | the shared recorded-die primitive landed (single/highest/lowest, replay-safe); threshold-branch + consume across non-ability content (Stack Dice, Bend Fate, Golden Mask) remain |
+| Gamble | d6, effect on result-or-higher (103) | `gambleD6` in `job-kit` + `recordedDice` in `TurnDiceWindows` | **EXECUTABLE** | the trait-level dice-window consumers (Stack Dice, Bend Fate, Golden Mask) need a non-ability gamble hook |
 | Sacrifice X | cost at start, non-mitigable, floor 1, may overpay (102) | VM `sacrifice` cost | PARTIAL | a reusable **cost-override** seam (reduce/ignore a sacrifice cost — Crimson King, Conqueror's Edge Infuse) with the exact non-mitigable/floor-1 contract as a typed modifier |
 | Power Die | point-contact die, tick/discard-at-0 (103) | `kernels/power-die.ts` (`readPowerDie`/`tickPowerDie`/`setPowerDie`) | **PARTIAL → kernel landed** | soul-blade/gallows-humor/umbral-echo/mantra ticks consolidated; Gran Reversa t1 (start d6@6) audit-complete; consume/discard per-row + rampant-nail bloodied tick + mastery dice remain |
 | Mark | ongoing; one per ability per char; replace choice (103) | `mark` mutation + ownership | EXECUTABLE | mark **trigger** windows (turn-start/adjacency/etc.) remain reactive-window work |
@@ -101,7 +101,7 @@ Status legend:
 | End turn | ability ends your turn; one chosen (103) | reducer path | EXECUTABLE | — |
 | Triggered effects (charge/collide/comeback/exceed/slay/finishing-blow/heroic/infuse/chain-reaction) | pp.95, 102–103 | VM triggers + F7 talent fold + program resolve | EXECUTABLE | heroic/infuse/chain-reaction are ability-level and only fire where a source unit wires them |
 | Summon | intangible; not foe/ally; removed on defeat (95, 104) | `summon-recipes` + `entity` mutation | PARTIAL | entity **action suites** (lash-out/dash-bite/fly/detonate) need the entity-action seam |
-| Aura X | continuous ongoing effect in range X of an origin (102) | `kernels/aura.ts` reads the durable `grant`/`aura` modifier and answers `inAura`/`charactersInAura` (Chebyshev, replay-safe); self-grant seam (`projectedAuraSelfGrants`, e.g. Rook talent 1 counter) folds into `encounterConditionSet`; Sweet Torment scans consolidated on it | **PARTIAL** | membership + self-grant landed; cross-actor grants/entry/size per-row wiring (Shieldmaster, Pelagic Rage, 42 foe traits) still to be harvested |
+| Aura X | continuous ongoing effect in range X of an origin (102) | `kernels/aura.ts` — membership kernel, projection, attack modifiers | **EXECUTABLE** | some compound aura consumers (entry/exit triggers, complex foe-aura interactions) remain unresolved |
 | Rebound | bounce off a character in range; redirects (103) | Trick Shot armed variant only | **NOT** | a general rebound/redirection seam (origin re-placement + LoS/cover from the new origin); used by Trick Shot and Heracule mastery |
 
 ## F. Special states (p.104)
@@ -147,14 +147,12 @@ Guard ends any turn without attacking") that is out of scope for the keyword
 projection manifest and needs a typed foe-trait lifecycle resolver.
 
 B. **Engine mechanisms genuinely missing (subsystems):**
-   1. **Gamble primitive** — shared recorded-die + threshold-branch effect (recorded-die seam landed in `primitives/gamble-window.ts`; threshold-branch across non-ability content remains).
-   2. **Power-die primitive** — **kernel landed** (`kernels/power-die.ts`); the remaining per-row work (consume/discard, wicked-sheath shove-per-charge, gallows-humor ally-defeat max, rampant-nail bloodied tick, mastery dice) is content wiring over it.
-   3. **Ability-use spend-augment seam** — durable spent-choice input on USE_ABILITY (landed as **F10**: `kernels/ability-use-choices.ts` + `content/jobs/ability-use-choice-recipes.ts`; Blessing of Rebirth/War wired, others remain).
-   4. **Cost-override seam** — sacrifice/Infuse cost reduction (non-mitigable/floor-1).
-   5. **Aura membership kernel** — distance-based grants/penalties/entry. **Partial**: `kernels/aura.ts` membership + Rook talent 1 self-grant landed; the wider content harvest (Shieldmaster, Pelagic Rage, 42 foe traits) remains over that seam.
-   6. **Rebound seam** — origin re-placement + LoS/cover from the new origin.
-   7. **Entity action seams + object-destroy model** — companions' suites; destructible objects.
-   8. **Mark-trigger windows** — turn-start/adjacency mark gates.
+   1. **Power-die primitive** — one recipe shape for the hand-rolled stance dies.
+   2. **Ability-use spend-augment seam** — durable spent-choice input on USE_ABILITY.
+   3. **Cost-override seam** — sacrifice/Infuse cost reduction (non-mitigable/floor-1).
+   4. **Rebound seam** — origin re-placement + LoS/cover from the new origin.
+   5. **Entity action seams + object-destroy model** — companions' suites; destructible objects.
+   6. **Mark-trigger windows** — turn-start/adjacency mark gates.
 
 None of the B items is safely completable mid-stream; each is a focused
 foundation-sized pass (the ontology build order already sequences them).

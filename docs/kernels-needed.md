@@ -36,7 +36,7 @@ baselines. The audit backlog that the kernels below unblock:
 | class-trait | 8 | relic-aspect | 40 |
 | job-trait | 42 | foe-ability | 1,247 |
 | talent | 256 | foe-trait | 612 |
-| mastery | 144 | foe-phase | 19 |
+| mastery | 137 | foe-phase | 19 |
 | limit-break | 16 | foe-chapter-rule | 116 |
 | trophy | 68 | camp-fixture | 16 |
 | camp-feature | 85 | reward-rule | 9 |
@@ -122,10 +122,18 @@ kernel lands (exactly as the wired slay/collide tranche did):
   existing kernels.
 - **ability-specific modifier hooks** — a typed resolver for that ability.
 
-### 1.3 Masteries — 144 units
+### 1.3 Masteries — 137 units
 
-Masteries are mostly **ability-recipe modifier hooks**: a flag plus a typed
-override on the ability's recipe row. Families:
+The typed mastery-attachment mechanism is **DONE** (F8,
+`kernels/mastery.ts`): `EncounterActor.masteredAbilityIds` is the durable
+ownership record, a reviewed `MasteryRecipe` declares one of four attachment
+kinds (fold / program-level / continuous projection / lifecycle) gated on the
+shared `hasMastery(actor, abilityId)`, and the compiler audits an implemented
+mastery complete. 7 of the former 144 units are now executable (Rook
+Implacable Fortress, Dark Knight Infectious Hatred, Intimidate Iron Skull,
+Bleak Mercy Painkiller, Warding Bolts Phantom Bolts, Gentleness Gentle
+Prayer, Rampant Nail Voracious Nail). The 137 remaining units need their
+**effect** overrides, not the attachment: families:
 
 - **Round-gated timing** — ability becomes a free action / upgrades at round 4+
   (`bastion:valiant:mastery`, `bastion:endless-battlement:mastery`). F3.
@@ -300,9 +308,27 @@ each once; it converts its consumers into data + fixtures:
 
 | # | Shared kernel | Consumers (count) | Prerequisite |
 | --- | --- | --- | --- |
-| 1 | **Aura mechanic** — spatial distance-based grants/penalties, activation, size changes | 2 job traits + 42 foe traits + trophies + Perseus/Rook/Dervish abilities | F1; **foundation landed** — `kernels/aura.ts` membership (`inAura`/`charactersInAura` from the durable `grant`/`aura` modifier) + a `projectedAuraSelfGrants` self-grant seam (Rook talent 1 counter) folded into `encounterConditionSet`; Sweet Torment consolidated on it. Bulk cross-actor membership/entry/size rows remain as the content harvest tranche |
+| 1 | **Aura mechanic** — spatial distance-based grants/penalties, activation, size changes | 2 job traits + 42 foe traits + trophies + Perseus/Rook/Dervish abilities | F1 |
+
+> **Status (landed):** the generic Aura kernel (`kernels/aura.ts`, F10 in
+> rules-foundations.md) now answers membership and ephemeral projection for
+> any source aura through a reviewed `AuraDefinition` row. Rows wired:
+> Commander's Aura (p.304), Aura of Shielding (p.304), Rook t1, Dervish t1,
+> Gentleness base + t1, Shieldmaster turn-end, Bleak Mercy combo. Still
+> unresolved by design: the ability-user-presence gate over an ally-carried
+> aura (Endless Battlement t1/t2), entity members/consumption (Nightmare t2),
+> and attack-triggered token/resource grants (Mantra of Sealing) — see the
+> blocker census.
 | 2 | **Attack-path modifier gates** — distance/round/terrain/stealth/threshold reads on the existing fold | 7 job traits + ~30 talents | F6 kernel exists |
 | 3 | **Conditional passive projection** — bloodied/25%/terrain/stealth/status/round gates | ~150 foe traits + relic ranks | F5 exists |
+
+> **Status (partial):** the bloodied and at-or-under-25% gates are now generic
+> authority (`kernels/hp-threshold.ts`, F11 in rules-foundations.md) with
+> continuous condition/action projection and target-threshold attack
+> modifiers. Rows wired: Rogue Slippery, Enrage ×9, True Enrage, Arkentech
+> Hover Chair (inverted), Furious Berserk sturdy, Strigoi Blood Hunger,
+> Divine Aegis t2. The terrain / stealth / status / round gates and the
+> timed/aura-growth/bloodied-bonus-damage shapes remain.
 | 4 | **Reactive trigger windows** — attack-miss, attack-completion, summon, targeted-by-ability (generalize), save-rolled, plus the **once-per-round job-trait reactive fold** (collide/shove/slay — F9 done, `kernels/trait-reactions.ts`, wired Dash on the Rocks) | 7 job traits + dozens of talents/abilities | F4 exists; **movement-entry on voluntary MOVE is done** (`kernels/movement-triggers.ts`, Party Favor p.151); F9 reactive-trait fold exists |
 | 5 | **Spend / economy hooks** — blessing, combo, sacrifice, Infuse-cost, gamble, use-ledgers | 6 job traits + 4 talents + 3 relic ranks | resource registry exists |
 | 6 | **Movement kernels** — vacate, occupancy-cost, elevation-fly, pre/post movement, position-swap, teleport-all | 5 job traits + movement talents | F1 |

@@ -542,7 +542,7 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
     'actorKind', 'size', 'tokenUrl', 'classId', 'chapter', 'abilityIds', 'position',
     'vitality', 'baseMaxHp', 'hp', 'vigor', 'wounds', 'defense', 'armor', 'speed',
     'dash', 'fray', 'damageDie', 'basicAttackRange', 'statuses', 'conditions',
-    'resources', 'ruleState', 'ruleStateOwners', 'activeEffects', 'marks', 'stance', 'traitIds', 'talents',
+    'resources', 'ruleState', 'ruleStateOwners', 'activeEffects', 'marks', 'stance', 'traitIds', 'talents', 'masteredAbilityIds',
     'onBattlefield', 'defeated', 'actionsRemaining', 'standardMoveUsed',
     'attackedThisTurn', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn',
     'slashedTriggeredThisTurn', 'dangerousTerrainTriggeredThisTurn', 'turnTaken',
@@ -561,7 +561,7 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
   assertDurableUrl(tokenUrl, `${path}.tokenUrl`);
   strictEnum(actor.classId, `${path}.classId`, new Set(['stalwart', 'vagabond', 'mendicant', 'wright', 'foe']));
   strictInteger(actor.chapter, `${path}.chapter`, 1, 3);
-  strictIdentifierArray(actor.abilityIds, `${path}.abilityIds`, 200);
+  const abilityIds = strictIdentifierArray(actor.abilityIds, `${path}.abilityIds`, 200);
   strictGridPosition(actor.position, `${path}.position`, gridWidth, gridHeight);
   strictInteger(actor.vitality, `${path}.vitality`, 0);
   strictInteger(actor.baseMaxHp, `${path}.baseMaxHp`, 1);
@@ -642,6 +642,12 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
   for (const [abilityId, talent] of Object.entries(talents)) {
     strictIdentifier(abilityId, `${path}.talents key`);
     strictInteger(talent, `${path}.talents.${abilityId}`, 1, 2);
+  }
+  // Mastery ownership: a bounded identifier list, validated exactly like the
+  // equipped ability list it is restricted to.
+  const masteredAbilityIds = strictIdentifierArray(actor.masteredAbilityIds, `${path}.masteredAbilityIds`, 200);
+  for (const abilityId of masteredAbilityIds) {
+    if (!abilityIds.includes(abilityId)) invalidSnapshot(`${path}.masteredAbilityIds`, `lists ${abilityId}, which is not an equipped ability.`);
   }
   strictBoolean(actor.onBattlefield, `${path}.onBattlefield`);
   strictBoolean(actor.defeated, `${path}.defeated`);

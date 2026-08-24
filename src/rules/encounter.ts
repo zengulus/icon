@@ -22,8 +22,12 @@ import { applyDeterminedDamageToVitals } from './automation/primitives/damage-re
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
-import { resolveAbilityUseChoices } from './automation/kernels/ability-use-choices.js';
-import { AbilityUseChoiceViolation } from './automation/primitives/ability-use-choices.js';
+import { areaStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
+import { effectiveAbilityRange } from './automation/kernels/range.js';
+import { effectiveAreaFor } from './automation/kernels/area.js';
+import { footprintDistance } from './automation/primitives/spatial-intent.js';
+import { auraStateView, projectedAuraAttackModifiers } from './automation/kernels/aura.js';
+import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
 import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
 import { executeRuleProgram, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
@@ -71,6 +75,7 @@ function canonicalActorForAdd(actor: EncounterActor): EncounterActor {
   for (const key of Object.keys(ruleStateOwners)) if (!(key in ruleState)) delete ruleStateOwners[key];
   return {
     ...actor,
+    masteredAbilityIds: [...(actor.masteredAbilityIds ?? [])],
     foeProfileId: actor.foeProfileId ?? null,
     conditions: (actor.conditions ?? []).map((condition) => ({ ...condition, ownerId: condition.ownerId ?? null })),
     ruleState,
@@ -124,6 +129,7 @@ export function migrateEncounter(input: unknown): EncounterState {
       size: actor.size ?? 1,
       chapter: actor.chapter ?? 1,
       abilityIds: [...(actor.abilityIds ?? [])],
+      masteredAbilityIds: [...(actor.masteredAbilityIds ?? [])],
       conditions: (actor.conditions ?? []).map((condition) => ({ ...condition, ownerId: condition.ownerId ?? null })),
       resources: { ...(actor.resources ?? {}) },
       ruleState: { ...(actor.ruleState ?? {}) },
@@ -238,6 +244,12 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     talents: Object.fromEntries(
       character.abilities.filter(({ talent }) => talent !== null).map(({ abilityId, talent }) => [abilityId, talent as 1 | 2]),
     ),
+    // Mastery ownership is projected from the character sheet the same way:
+    // only abilities that are both equipped and legitimately mastered appear,
+    // so a mastery gate never fires for an unmastered or unequipped parent.
+    masteredAbilityIds: character.abilities
+      .filter(({ abilityId, mastered }) => mastered && character.equippedAbilityIds.includes(abilityId))
+      .map(({ abilityId }) => abilityId),
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -290,6 +302,7 @@ export function createFoe(name: string, position: Position): EncounterActor {
     stance: null,
     traitIds: [],
     talents: {},
+    masteredAbilityIds: [],
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -377,6 +390,7 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     stance: null,
     traitIds: foeTraitIds(profile.id),
     talents: {},
+    masteredAbilityIds: [],
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -636,7 +650,7 @@ function movementEvents(state: EncounterState, command: Extract<EncounterCommand
       }
     }
   }
-  const defiance = encounterConditionSet(actor).has('defiance');
+  const defiance = encounterConditionSet(actor, state).has('defiance');
   // Movement records source damage, not a locally armor-reduced preview.
   // Derive the same p.93 amount used by replay here only to decide whether an
   // explicit legacy defeat event is needed after the move.
@@ -721,17 +735,33 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   // F6 attack-path trait fold: armed one-shot modifiers (Demon Edge true
   // strike, Hissatsu +1 boon / true strike / d10) and permanent elevation
   // mechanics (Pulverize flat damage; the exceed threshold only matters on
-  // the VM path, where exceed effects fire).
+  // the VM path, where exceed effects fire), distance-gated rules
+  // (Trigrammaton's exactly-range-3 boon/unerring) through the canonical
+  // p.92 footprint distance, and unerring (ignores cover + aetherwall).
   const traitOwner = { traitIds: actor.traitIds, state: actor.ruleState };
-  const traitModifier = traitAttackModifier(traitOwner, actorElevation - targetElevation);
+  const traitModifier = traitAttackModifier(traitOwner, actorElevation - targetElevation, {
+    hp: target.hp,
+    maxHp: Math.max(1, target.baseMaxHp - target.wounds * target.vitality),
+    distance: footprintDistance(
+      { position: actor.position, size: actor.size },
+      { position: target.position, size: target.size },
+    ),
+  });
+  // Aura membership feeds the same attack-modifier authority as the trait
+  // fold: the attacker's own aura boons/curses plus any defensive curse an
+  // aura projects against the target (stacking through netBoon, p.92).
+  const auraView = auraStateView(state);
+  const auraAttack = projectedAuraAttackModifiers(auraView, actor.id);
+  const targetAuraCurse = projectedAuraAttackModifiers(auraView, target.id).targetCurses ?? 0;
   const { d20, boon, total, hit, critical, evasionRoll } = resolveAttackRoll({
     defense: target.defense,
-    sourceBoon: traitModifier.boons,
+    sourceBoon: traitModifier.boons + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
     elevationModifier: actorElevation - targetElevation,
     sourceDazed: actor.statuses.includes('dazed'),
-    targetEvasion: encounterConditionSet(target).has('evasion'),
+    targetEvasion: encounterConditionSet(target, state).has('evasion'),
     trueStrike: traitModifier.trueStrike,
     bonusDamageFlat: traitModifier.bonusDamageFlat,
+    unerring: traitModifier.unerring,
   }, dice);
   if (massiveOverheadArmed(actor)) actor.resources['bonus-damage'] = (actor.resources['bonus-damage'] ?? 0) + 1;
   const bonusDice = (critical ? 1 : 0) + Math.max(0, actor.resources['bonus-damage'] ?? 0);
@@ -747,10 +777,11 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
     damageType: 'normal',
     delivery: hit ? 'hit' : 'miss',
     instance: 1,
-    ignoreCover: false,
+    ignoreCover: traitModifier.unerring,
+    ignoreAetherwall: traitModifier.unerring,
     covered,
   });
-  const defiance = encounterConditionSet(target).has('defiance');
+  const defiance = encounterConditionSet(target, state).has('defiance');
   const wouldDefeat = determination.amount >= target.vigor + target.hp;
   // Defiance's application-time HP floor is a durable result, not something
   // replay can re-infer: the recorded applied amount is already reduced to the
@@ -845,7 +876,7 @@ function vigilanceEvents(state: EncounterState, command: Extract<EncounterComman
   // TODO(ICON-rules): bind both uses to a real trigger record, enforce range
   // 2/adjacency, and give Punish a full DamageIntent before promoting it.
   const appliedDamage = command.use === 'guard' ? Math.max(0, (command.damage ?? 0) - roll) : roll;
-  const defiance = encounterConditionSet(target).has('defiance');
+  const defiance = encounterConditionSet(target, state).has('defiance');
   const wouldDefeat = appliedDamage >= target.vigor + target.hp;
   // Like ATTACK_RESOLVED, the recorded amount is already floored at 1 HP by
   // Defiance, so replay needs the durable trigger result to re-consume the
@@ -888,6 +919,15 @@ function abilityRange(header: string, listedRange: number | null) {
   if (listedRange !== null) return listedRange;
   const area = header.match(/\b(?:line|arc)\s+(\d+)/i);
   return area ? Number(area[1]) : 1;
+}
+
+/** ICON p.97: for a Line X ability, the attack space is any character in the
+ * area, and the line extends `length` from the user — so the target's legal
+ * range IS the effective line length (a Line 6 talent extends target
+ * legality with the pattern). Arc abilities keep the range rules (where the
+ * pattern starts) as their range authority. */
+function isLineShaped(header: string): boolean {
+  return /\bline\s+\d+/i.test(header);
 }
 
 /**
@@ -978,8 +1018,8 @@ function assertDirectTarget(
 ) {
   const result = queryDirectTarget(source, target, {
     ...query,
-    sourceBlind: encounterConditionSet(source).has('blind'),
-    targetStealth: query.targetStealth ?? encounterConditionSet(target).has('stealth'),
+    sourceBlind: encounterConditionSet(source, state).has('blind'),
+    targetStealth: query.targetStealth ?? encounterConditionSet(target, state).has('stealth'),
     hasLineOfSight: query.requireLineOfSight ? hasLineOfSight(state, source.position, target.position) : true,
   });
   if (result.legal) return;
@@ -1097,9 +1137,20 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // attack-range and line-of-sight gate for the single attack target.
   if (attackAbility && !noAttackSpace) {
     const attackTargetActor = targets[0]!;
+    // The effective listed range folds every registered range-modifier rule
+    // (listed/conditional/dynamic) for this ability against the current
+    // encounter state, so a talent like "Valkyrie gains range 4" genuinely
+    // widens target legality — it is never UI-only. A Line X ability's
+    // target legality is its effective line length (p.97: the attack space
+    // is any character in the area), so the area kernel's shape/size
+    // overrides feed the same gate.
+    const baseRange = abilityRange(ability.header, ability.range);
+    const maximumRange = isLineShaped(ability.header)
+      ? effectiveAreaFor(areaStateView(state, actor.id), actor.id, ability.id, 'line', baseRange).length
+      : effectiveAbilityRange(rangeStateView(state), actor.id, ability.id, baseRange);
     assertDirectTarget(state, actor, attackTargetActor, {
       relation: 'foe',
-      maximumRange: abilityRange(ability.header, ability.range),
+      maximumRange,
       trueStrike: ability.tags.includes('true strike'),
       requireLineOfSight: true,
     }, 'ability');
@@ -1292,7 +1343,13 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         if (!target || target.defeated || !target.onBattlefield) throw new RuleViolation('attack.invalid-target', 'That rule target is unavailable.');
         assertDirectTarget(state, actor, target, {
           relation: action.tags.includes('attack') ? 'foe' : 'any',
-          maximumRange: action.range?.kind === 'constant' ? action.range.value : 1,
+          maximumRange: effectiveAbilityRange(
+            rangeStateView(state),
+            actor.id,
+            unit.id,
+            action.range?.kind === 'constant' ? action.range.value : 1,
+            action.id,
+          ),
           trueStrike: action.tags.includes('true strike'),
           // Preserve the current explicitly reviewed Stealth gate for attacks;
           // non-attack direct-target semantics move with TargetQuery's broader
@@ -1422,7 +1479,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       if (actor.statuses.includes('sealed')) throw new RuleViolation('status.sealed', 'Sealed characters cannot inflict statuses.');
       const target = state.actors[command.targetId];
       if (!target || target.defeated) throw new RuleViolation('status.target', 'That status target is unavailable.');
-      if (encounterConditionSet(target).has('unstoppable')) throw new RuleViolation('status.immune', `${target.name} is immune to statuses while Unstoppable.`);
+      if (encounterConditionSet(target, state).has('unstoppable')) throw new RuleViolation('status.immune', `${target.name} is immune to statuses while Unstoppable.`);
       events = [{ type: 'STATUS_APPLIED', actorId: command.actorId, targetId: target.id, status: command.status }];
       break;
     }
@@ -1916,14 +1973,11 @@ function carnevaleGambleForTurnEnd(state: EncounterState, actor: EncounterActor,
   return Object.values(state.entities).some((entity) => entity.type === 'bomb' && entity.ownerId === actor.id) ? dice.die(6) : undefined;
 }
 
-/** Roll the Monogatari song gamble when the user has an active song with no
- * tale yet. Charge rolls an extra d6 and takes the higher result. Rolled here
- * (not in the reducer) so the TURN_ENDED event carries a deterministic value. */
-function monogatariGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
-  const tale = actor.ruleState['monogatari:tale'];
-  if (actor.ruleState['monogatari:active'] !== true || tale !== null && tale !== undefined) return undefined;
-  if (actor.ruleState['monogatari:charge'] === true) return Math.max(dice.die(6), dice.die(6));
-  return dice.die(6);
+/** The action pool an actor starts a turn with: 2 base actions plus any
+ * HP-threshold passive bonus (Enrage: "+1 action while bloodied"), derived
+ * from current authoritative HP — never a persisted boolean. */
+function derivedTurnStartActions(actor: EncounterActor): number {
+  return 2 + projectedHpThresholdActionBonus(actor);
 }
 
 /**
@@ -1964,7 +2018,7 @@ function applyTurnTransition(
   // p.104 regeneration (4 vigor at turn end while bloodied) reads the
   // projected condition set, so a durable regeneration condition and a
   // reviewed source-ID mark projection (Rot REGENERATE, p.186) both count.
-  if (encounterConditionSet(actor).has('regeneration') && isBloodied(actor)) gainVigor(state, actor, 4);
+  if (encounterConditionSet(actor, state).has('regeneration') && isBloodied(actor)) gainVigor(state, actor, 4);
   actor.turnTaken = true;
   resolveTurnEnd(state, actor, intent);
   if (event.round > state.round) {
@@ -1991,7 +2045,7 @@ function applyTurnTransition(
     }
   }
   const next = state.actors[event.nextActorId];
-  next.actionsRemaining = 2;
+  next.actionsRemaining = derivedTurnStartActions(next);
   next.standardMoveUsed = false;
   next.attackedThisTurn = false;
   next.interruptUses = {};
@@ -2043,6 +2097,10 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         state.round = 1;
         state.partyResolve = 1;
         state.activeActorId = event.firstActorId;
+        // The first actor's turn starts here too: HP-threshold passives
+        // (Enrage +1 action while bloodied) derive the action pool from
+        // current HP exactly like every later turn boundary.
+        state.actors[event.firstActorId].actionsRemaining = derivedTurnStartActions(state.actors[event.firstActorId]);
         for (const actor of Object.values(state.actors)) {
           // Shared per-encounter resources reset to zero when combat begins
           // (aether, combo, blessing, vigilance; personal resolve survives).
@@ -2068,7 +2126,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           // ICON p.168 Path of the Aesi: while the owner has Stealth the Dash
           // action is free. Closed source-ID check — a trait name or a bare
           // condition could never accidentally waive the core Dash cost.
-          const freeDash = actor.traitIds.includes('warden:trait:path-of-the-aesi') && encounterConditionSet(actor).has('stealth');
+          const freeDash = actor.traitIds.includes('warden:trait:path-of-the-aesi') && encounterConditionSet(actor, state).has('stealth');
           if (!freeDash) actor.actionsRemaining -= 1;
           actor.usedAbilityIds.push('basic:dash');
         }
@@ -2264,7 +2322,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         }
         // ICON p.95 Chain Reaction (Wright): once per round, damaging at least
         // two foes with one ability grants 1 Aether.
-        if (encounterConditionSet(actor).has('chain-reaction') && actor.ruleState['chain-reaction-used'] !== true) {
+        if (encounterConditionSet(actor, state).has('chain-reaction') && actor.ruleState['chain-reaction-used'] !== true) {
           const damagedFoeIds = new Set<string>();
           for (const mutation of event.mutations) {
             if (mutation.kind !== 'damage' || mutation.amount <= 0) continue;

@@ -63,7 +63,7 @@ export const TRIGGER_WINDOW_RECIPES: readonly DamageWindowRecipe[] = [
         && prospectiveAppliedDefeat(target, provenance.determinedAmount, provenance.bypassVigor, {
           ignoreDefiance: provenance.ignoreDefiance,
           damageType: provenance.damageType,
-        });
+        }, state);
     },
   },
 ];

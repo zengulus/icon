@@ -52,9 +52,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
     detail: '',
   },
   'bastion:trait:shieldmaster': {
-    sourceId: 'bastion:trait:shieldmaster', name: 'Shieldmaster', status: 'documented',
-    mechanic: '',
-    detail: 'Aura 1 is a spatial-aura mechanic, and \u201csturdy until the start of your turn\u201d needs a condition that clears at the next boundary; both stay table-facing.',
+    sourceId: 'bastion:trait:shieldmaster', name: 'Shieldmaster', status: 'wired',
+    mechanic: 'The trait owns a generic Aura definition (aura 1, allies); the turn-end lifecycle recipe asks the shared aura kernel whether an ally is inside, then grants vigilance +1 and a sturdy condition that clears at the start of the owner\u2019s turn (turn-start duration).',
+    detail: '',
   },
   // -------------------------------------------------------------- demon-slayer
   'demon-slayer:trait:demon-edge': {
@@ -80,8 +80,8 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
   // ---------------------------------------------------------------- colossus
   'colossus:trait:furious-berserk': {
     sourceId: 'colossus:trait:furious-berserk', name: 'Furious Berserk', status: 'wired',
-    mechanic: 'Starts combat with a durable Defiance condition; regeneration is a whole-combat condition projection (and is regained after Rescue by the trait). While bloodied, the owner gains vigilance +1 at the end of their turn (turn-end recipe).',
-    detail: 'The bloodied-gated sturdy half needs a condition that only projects while bloodied; it stays table-facing.',
+    mechanic: 'Starts combat with a durable Defiance condition; regeneration is a whole-combat condition projection (and is regained after Rescue by the trait). While bloodied, the owner is sturdy (the HP-threshold projection, content/jobs/hp-threshold-recipes.ts) and gains vigilance +1 at the end of their turn (turn-end recipe).',
+    detail: '',
   },
   'colossus:trait:wolfheart': {
     sourceId: 'colossus:trait:wolfheart', name: 'Wolfheart', status: 'documented',
@@ -152,9 +152,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
     detail: 'Attacks on rounds 3 and 6 gaining bonus damage and triggering exceed needs a round-gated attack-path modifier hook.',
   },
   'freelancer:trait:trigrammaton': {
-    sourceId: 'freelancer:trait:trigrammaton', name: 'Trigrammaton', status: 'documented',
-    mechanic: '',
-    detail: 'The exactly-range-3 +1 boon and unerring needs a distance-gated attack-path modifier hook.',
+    sourceId: 'freelancer:trait:trigrammaton', name: 'Trigrammaton', status: 'wired',
+    mechanic: 'The exactly-range-3 attack-path rule is wired through the shared attack-modifier fold: abilities used against a foe at exactly range 3 (the canonical p.92 footprint distance) gain +1 boon on attack rolls and unerring (ignore cover + aetherwall). The distance read never widens targeting range.',
+    detail: '',
   },
   'freelancer:trait:astral-binding': {
     sourceId: 'freelancer:trait:astral-binding', name: 'Astral Binding', status: 'documented',

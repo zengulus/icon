@@ -85,26 +85,35 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 29 wired / 4 program-level / 255 documented', () => {
+  it('covers exactly the 288 source talents with 30 wired / 5 program-level / 3 passive-projection / 4 range-modifier / 1 area-modifier / 245 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
     expect(Object.keys(recipes)).toHaveLength(288);
     expect(Object.keys(recipes).sort()).toEqual([...sourceIds].sort());
-    expect(getExecutableTalentIds().size).toBe(33);
-    expect(getDocumentedTalentIds(units).size).toBe(255);
+    // F7 + aura + HP-threshold + range + area: the three passive-projection
+    // rows (Rook t1, Dervish t1, Gentleness t1) are continuous aura-membership
+    // projections; the four range-modifier rows (Valkyrie t1, Incubus t1,
+    // Harvest t2, Open the Gates t2) are executable through the shared range
+    // kernel; Soul Shot t2 is an area-modifier row (Line 6 through the shared
+    // area kernel), Pyre t2 is a wired exceed row, and Eye of the Storm t2 is
+    // program-level. None are fold triggers or program-emitted variants in
+    // the wrong home.
+    expect(getExecutableTalentIds().size).toBe(43);
+    expect(getDocumentedTalentIds(units).size).toBe(245);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
       else expect(recipe.triggerEffect).toBeUndefined();
     }
     // The program-level rows (Demon Cutter t2's pre-ability rush, Draken
-    // Cross t2's charged medium blasts, Pyre t1's comeback ally immunity)
-    // are executable through their ability programs but carry no fold
-    // trigger-effect of their own.
+    // Cross t2's charged medium blasts, Pyre t1's comeback ally immunity,
+    // Divine Aegis t2's quarter-HP defiance) are executable through their
+    // ability programs but carry no fold trigger-effect of their own.
     expect(recipes['demon-slayer:demon-cutter:talent:2']?.status).toBe('program-level');
     expect(recipes['demon-slayer:draken-cross:talent:2']?.status).toBe('program-level');
     expect(recipes['enochian:pyre:talent:1']?.status).toBe('program-level');
+    expect(recipes['sealer:divine-aegis:talent:2']?.status).toBe('program-level');
   });
 
   it('a documented talent is never executable (closed negative)', () => {

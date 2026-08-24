@@ -237,4 +237,96 @@ describe('shared movement planner', () => {
     expect(planMovement(immobile.state, immobile.hero.id, { x: 2, y: 1 }, 'standard')).toMatchObject({ legal: false, issue: { code: 'move.immobile' } });
     expect(moveAccepted(immobile.state, immobile.hero.id, [{ x: 2, y: 1 }], 'standard').accepted).toBe(false);
   });
+
+  it('Size 2: anchor in bounds but footprint off-map is rejected', () => {
+    // 6×6 grid; hero at (4,4) size 2 → footprint occupies (4,4),(5,4),(4,5),(5,5)
+    // Move to (5,5) → footprint extends to x=6 which is off the 6-wide grid
+    const { state, hero } = activeEncounter({ heroPosition: { x: 4, y: 4 }, foePosition: { x: 0, y: 0 }, gridSize: 6 });
+    state.actors[hero.id].size = 2;
+    expect(planMovement(state, hero.id, { x: 5, y: 5 }, 'standard')).toMatchObject({
+      legal: false,
+      issue: { code: 'move.out-of-bounds' },
+    });
+  });
+
+  it('Size 2: cannot finish overlapping another actor', () => {
+    // Hero size 2 at (1,1) → footprint (1,1)(2,1)(1,2)(2,2)
+    // Foe size 1 at (3,2)
+    // Move hero to (2,2) → footprint (2,2)(3,2)(2,3)(3,3) overlaps foe at (3,2)
+    const { state, hero, foe } = activeEncounter({ heroPosition: { x: 1, y: 1 }, foePosition: { x: 3, y: 2 } });
+    state.actors[hero.id].size = 2;
+    expect(planMovement(state, hero.id, { x: 2, y: 2 }, 'standard')).toMatchObject({
+      legal: false,
+      issue: { code: 'move.obstructed' },
+    });
+  });
+
+  it('Size 2: cannot finish overlapping impassable terrain', () => {
+    // Hero size 2 at (1,1), impassable at (3,2)
+    // Move to (2,2) → footprint (2,2)(3,2)(2,3)(3,3) overlaps impassable
+    const { state, hero } = activeEncounter({
+      heroPosition: { x: 1, y: 1 },
+      foePosition: { x: 5, y: 5 },
+      terrain: [{ position: { x: 3, y: 2 }, type: 'impassable', elevation: 0 }],
+    });
+    state.actors[hero.id].size = 2;
+    expect(planMovement(state, hero.id, { x: 2, y: 2 }, 'standard')).toMatchObject({
+      legal: false,
+      issue: { code: 'move.impassable' },
+    });
+  });
+
+  it('Size 2: engaged when any footprint edge is adjacent to a hostile footprint', () => {
+    // Hero size 2 at (1,1) → footprint (1,1)(2,1)(1,2)(2,2)
+    // Foe size 2 at (3,2) → footprint (3,2)(4,2)(3,3)(4,3)
+    // Footprint adjacency: hero's (2,2) is orthogonally adjacent to foe's (3,2)
+    // → hero is engaged at (1,1) even though anchors are distance 2 apart
+    const { state, hero, foe } = activeEncounter({ heroPosition: { x: 1, y: 1 }, foePosition: { x: 3, y: 2 } });
+    state.actors[hero.id].size = 2;
+    state.actors[foe.id].size = 2;
+    // Engagement is checked at the step's `from` position. The first step
+    // starts from (1,1) where footprints ARE adjacent → engagement penalty.
+    const plan = planMovement(state, hero.id, { x: 2, y: 0 }, 'standard');
+    expect(plan.steps[0]?.engagementPenalty).toBe(1);
+  });
+
+  it('Size 2: two large actors whose anchors are not adjacent can be engaged via footprints', () => {
+    // Hero size 2 at (1,1) → (1,1)(2,1)(1,2)(2,2)
+    // Foe size 2 at (3,2) → (3,2)(4,2)(3,3)(4,3)
+    // Anchor distance: max(|3-1|,|2-1|) = 2 — not adjacent by anchor alone
+    // But footprints: (2,2) adjacent to (3,2) → engaged by footprint adjacency
+    const { state, hero, foe } = activeEncounter({ heroPosition: { x: 1, y: 1 }, foePosition: { x: 3, y: 2 } });
+    state.actors[hero.id].size = 2;
+    state.actors[foe.id].size = 2;
+    // Size 1 hero at same position would NOT be engaged (anchor distance 2)
+    const { state: s1, hero: h1 } = activeEncounter({ heroPosition: { x: 1, y: 1 }, foePosition: { x: 3, y: 2 } });
+    const size1Plan = planMovement(s1, h1.id, { x: 2, y: 0 }, 'standard');
+    expect(size1Plan.steps[0]?.engagementPenalty).toBe(0);
+    // Size 2 hero IS engaged because footprints are adjacent
+    const size2Plan = planMovement(state, hero.id, { x: 2, y: 0 }, 'standard');
+    expect(size2Plan.steps[0]?.engagementPenalty).toBe(1);
+  });
+
+  it('Size 2: passing through an ally footprint is legal but ending overlapped is not', () => {
+    // Hero size 2 at (0,0), ally size 1 at (2,1)
+    // Move hero to (1,1) → footprint (1,1)(2,1)(1,2)(2,2) overlaps ally at (2,1)
+    const { state, hero, ally } = activeEncounter({
+      heroPosition: { x: 0, y: 0 },
+      allyPosition: { x: 2, y: 1 },
+      foePosition: { x: 5, y: 5 },
+    });
+    state.actors[hero.id].size = 2;
+    expect(planMovement(state, hero.id, { x: 1, y: 1 }, 'standard')).toMatchObject({
+      legal: false,
+      issue: { code: 'move.obstructed' },
+    });
+    // But moving through (1,0) → (2,0) → (2,1) should work as waypoints
+    // (ally at (2,1) is passable during movement, just not at destination)
+    const throughPath = planMovementPath(state, hero.id, [
+      { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 1 },
+    ], 'standard');
+    // The intermediate waypoints (1,0) and (2,0) should be legal
+    expect(throughPath.steps[0]).not.toBeNull();
+    expect(throughPath.steps[1]).not.toBeNull();
+  });
 });

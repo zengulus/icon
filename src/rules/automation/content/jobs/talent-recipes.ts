@@ -29,7 +29,7 @@
 import type { RuleSourceUnit } from '../../../source-units.js';
 import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
 import type { RuleMutation } from '../../primitives/types.js';
-import { affectedFoeIds, registerProgramLevelTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
+import { affectedFoeIds, registerAreaModifierTalent, registerPassiveProjectionTalent, registerProgramLevelTalent, registerRangeModifierTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
 import type { TalentEffect } from '../../kernels/talent-recipes.js';
 import { registerAuraSelfGrantRecipes } from '../../kernels/passive-projection.js';
 
@@ -600,6 +600,36 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
     },
   },
 
+  // ICON p.210 Enochian Pyre talent 2: "Exceed: You may shove all characters
+  // in the area 2 spaces." The exceed trigger rides the ability's attack
+  // roll (the same rule the VM uses); the characters in the area are the
+  // attack target (the blast center) plus every character the ability's
+  // area-delivery damage affected — exactly the blast membership, since the
+  // alternative talent 1 (comeback ally immunity) cannot be equipped
+  // simultaneously. Each is shoved 2 away from the Pyre user.
+  'enochian:pyre:talent:2': {
+    mechanic: 'Exceed (attack roll 15+): shove the attack target and every character in the blast area 2 spaces away from you.',
+    triggerEffect: {
+      trigger: 'exceed',
+      build: (actorId, targetIds, _triggerTargetIds, context): TalentEffect[] => {
+        if (!context) return [];
+        const source = context.state.actors[actorId];
+        if (!source?.position) return [];
+        const areaIds = new Set<string>(targetIds);
+        for (const mutation of context.mutations) {
+          if (mutation.kind === 'damage' && mutation.delivery === 'area') areaIds.add(mutation.actorId);
+        }
+        const results: TalentEffect[] = [];
+        for (const id of areaIds) {
+          const character = context.state.actors[id];
+          if (!character?.position) continue;
+          results.push({ kind: 'move', sourceActorId: actorId, actorId: id, movement: 'shove', distance: 2, positions: [], direction: axisDirection(source.position, character.position), phasing: false });
+        }
+        return results;
+      },
+    },
+  },
+
   // ICON p.236 Eye of the Storm talent 1: "If there is no character in the
   // center space, create a pit there. The pit is also dangerous terrain."
   // The fold fires only when the center is unoccupied. The ability's own
@@ -662,12 +692,20 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   'enochian:pyre:talent:1': {
     mechanic: 'Comeback (user bloodied): allies are immune to this ability\u2019s area damage (the blast fray and the comeback/exceed re-explosion); the pyrotic infuse path stays a separate resolver.',
   },
-  // ICON p.202 Gran Reversa talent 1: "Your power die from this ability
-  // starts at d6, with 6 charges." A program-level start-value override: the
-  // Gran Reversa stance resolver reads the equipped choice and starts its d4
-  // power die at 6 instead of 4 (the durable die value is the recorded state).
-  'seer:gran-reversa:talent:1': {
-    mechanic: 'Power die starts at d6 (6 charges) instead of d4 (4) when Gran Reversa is entered with this talent.',
+  // ICON p.193 Sealer Divine Aegis talent 2: "If your ally is at 25% hp or
+  // lower when marked, they also gain defiance." The mark resolver reads the
+  // equipped choice and the shared quarter-HP predicate (`kernels/
+  // hp-threshold.ts`) at mark time — the exact at-or-under-25% boundary.
+  'sealer:divine-aegis:talent:2': {
+    mechanic: 'Marking an ally at 25% hp or lower with Divine Aegis also grants them defiance (the threshold read is the shared quarter predicate).',
+  },
+  // ICON p.236 Eye of the Storm talent 2: "The center character may also
+  // take 1 piercing damage, once, for every foe or ally in the area effect,
+  // up to three times." The resolver counts the characters in the storm's
+  // blast (other than the center), capped at three, and deals that many
+  // piercing to the center character when the talent is equipped.
+  'stormbender:eye-of-the-storm:talent:2': {
+    mechanic: 'The center character takes 1 piercing damage for every other character in the area effect (foe or ally), up to three times.',
   },
 };
 
@@ -675,15 +713,88 @@ for (const [sourceId, row] of Object.entries(PROGRAM_LEVEL_TALENT_RECIPES)) {
   registerProgramLevelTalent(sourceId, row.mechanic);
 }
 
-// ICON p.122 Rook talent 1: "You also have counter while Rook's aura is
-// active." The aura self-grant is projected while the bearer's own Rook aura
-// effect is active (the bearer is always a member of its own aura) and the
-// bearer still has Rook talent 1. Registered as an aura-conditional
-// self-grant through the passive-projection kernel (derived from the durable
-// activeEffects record — replay-safe).
-registerAuraSelfGrantRecipes({
-  'bastion:rook:talent:1': [{ auraSourceId: 'bastion:rook', requiredAbilityId: 'bastion:rook', conditions: ['counter'] }],
-});
+/** Continuous passive-projection talents: the mechanic is a projection the
+ * shared kernel derives from current state (aura membership conditions),
+ * never a fold trigger or a program-emitted variant — a durable condition
+ * grant would go stale the moment membership changes. Each row audits as
+ * complete through `registerPassiveProjectionTalent`, with its source
+ * fixture + replay test in the aura fixtures (__tests__/aura.test.ts). */
+const PASSIVE_PROJECTION_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }>> = {
+  // ICON p.123 Rook talent 1: "You also have counter while Rook's aura is
+  // active." The Rook aura definition (jobs/aura-recipes.ts) projects counter
+  // onto Rook, gated on the equipped talent.
+  'bastion:rook:talent:1': {
+    mechanic: 'While Rook\u2019s aura is active (the durable aura effect), Rook has counter; the projection is derived from aura membership, never a stale durable grant.',
+  },
+  // ICON p.179 Gentleness talent 1: "Yourself and allies inside the aura also
+  // have counter in this stance." Projected through the stance-gated aura
+  // definition while the talent is equipped.
+  'chanter:gentleness:talent:1': {
+    mechanic: 'While the Gentleness stance is held, yourself and allies inside the aura have counter (derived from stance + aura membership).',
+  },
+  // ICON p.178 Dervish talent 1: "A swirling aura 1 of winds surrounds you
+  // after taking this ability until the start of your next turn, granting you
+  // and allies inside counter." The Dervish program emits the durable aura
+  // effect when the talent is equipped; the aura definition projects counter.
+  'chanter:dervish:talent:1': {
+    mechanic: 'Taking Dervish surrounds you with the swirling winds aura 1 until the start of your next turn; you and allies inside have counter (derived from aura membership).',
+  },
+};
+
+for (const [sourceId, row] of Object.entries(PASSIVE_PROJECTION_TALENT_RECIPES)) {
+  registerPassiveProjectionTalent(sourceId, row.mechanic);
+}
+
+/** Range-modifier talents: the talent's COMPLETE semantics are a listed-range
+ * change on its parent ability, executed by the shared range kernel
+ * (`kernels/range.ts`) at both command gates (the reviewed rules live in
+ * `content/jobs/range-recipes.ts`). Each row audits as complete through
+ * `registerRangeModifierTalent` with its source fixture + replay test in
+ * __tests__/range.test.ts. */
+const RANGE_MODIFIER_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }>> = {
+  // ICON p.136 Valkyrie talent 1: "Valkyrie gains range 4."
+  'colossus:valkyrie:talent:1': {
+    mechanic: 'Valkyrie\u2019s listed range becomes 4 through the shared effective-range authority; the attack target may be chosen at range 4.',
+  },
+  // ICON p.164 Incubus talent 1: "Incubus gains range 3. If you make it from
+  // stealth, gains range 5."
+  'shade:incubus:talent:1': {
+    mechanic: 'Incubus\u2019s listed range becomes 3 (5 from stealth) through the shared effective-range authority, evaluated against the user\u2019s current stealth condition.',
+  },
+  // ICON p.185 Harvest talent 2: "Gains Range 2. Comeback: Range 5."
+  'harvester:harvest:talent:2': {
+    mechanic: 'Harvest\u2019s listed range becomes 2 (5 while the user is bloodied) through the shared effective-range authority, evaluated from current HP.',
+  },
+  // ICON p.194 Open the Gates talent 2: "Both versions of this ability gains
+  // a range equal to the round number."
+  'sealer:open-the-gates:talent:2': {
+    mechanic: 'Open the Gates\u2019s listed range equals the round number through the shared effective-range authority (both the base and CENTER THE TEMPLE versions).',
+  },
+};
+
+for (const [sourceId, row] of Object.entries(RANGE_MODIFIER_TALENT_RECIPES)) {
+  registerRangeModifierTalent(sourceId, row.mechanic);
+}
+
+/** Area-modifier talents: the talent's COMPLETE semantics are a shape/size
+ * change on its parent ability's area, executed by the shared area kernel
+ * (`kernels/area.ts`) inside the parent resolver (the reviewed rules live in
+ * `content/jobs/area-recipes.ts`). Each row audits as complete through
+ * `registerAreaModifierTalent` with its source fixture + replay test in
+ * __tests__/area.test.ts. */
+const AREA_MODIFIER_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }>> = {
+  // ICON p.158 Soul Shot talent 2: "At round 4 or greater, Soul Shot becomes
+  // Line 6." The line length derives from the shared effective-area
+  // authority (round gate + equipped choice) inside the Soul Shot resolver;
+  // the attack target must still lie in the effective line.
+  'freelancer:soul-shot:talent:2': {
+    mechanic: 'Soul Shot\u2019s line extends to Line 6 from round 4 onward through the shared effective-area authority; the attack target must still lie in the effective line.',
+  },
+};
+
+for (const [sourceId, row] of Object.entries(AREA_MODIFIER_TALENT_RECIPES)) {
+  registerAreaModifierTalent(sourceId, row.mechanic);
+}
 
 /** Classify a documented talent by the kernel it needs. Advisory build-time
  * categorization, never parsed at runtime — the runtime fold only reads the
@@ -739,13 +850,16 @@ export function getTalentRecipes(units: readonly RuleSourceUnit[]): Readonly<Rec
       .map((unit) => {
         const wired = WIRED_TALENT_RECIPES[unit.id];
         const programLevel = PROGRAM_LEVEL_TALENT_RECIPES[unit.id];
-        const executable = wired ?? programLevel;
+        const passive = PASSIVE_PROJECTION_TALENT_RECIPES[unit.id];
+        const rangeModifier = RANGE_MODIFIER_TALENT_RECIPES[unit.id];
+        const areaModifier = AREA_MODIFIER_TALENT_RECIPES[unit.id];
+        const executable = wired ?? programLevel ?? passive ?? rangeModifier ?? areaModifier;
         return [unit.id, {
           sourceId: unit.id,
           abilityId: unit.parentId ?? '',
           name: unit.name,
-          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : 'documented' as const,
-          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? '',
+          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : passive ? 'passive-projection' as const : rangeModifier ? 'range-modifier' as const : areaModifier ? 'area-modifier' as const : 'documented' as const,
+          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? passive?.mechanic ?? rangeModifier?.mechanic ?? areaModifier?.mechanic ?? '',
           detail: executable ? '' : documentedTalentDetail(unit),
           ...(wired ? { triggerEffect: wired.triggerEffect } : {}),
         }];

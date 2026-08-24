@@ -421,6 +421,12 @@ export interface EncounterActor {
   /** The equipped talent choice per ability (1 or 2) — the F7 talent fold
    * reads this to fold a wired talent's trigger-effect into ability use. */
   talents: Record<string, 1 | 2>;
+  /** The abilities this actor has mastered (projected from the character
+   * sheet's `CharacterAbility.mastered`), restricted to equipped abilities.
+   * A mastery attachment executes only when the parent ability is both
+   * equipped and present here — the durable encounter authority every
+   * mastery kernel/content gate reads, so replay never queries the sheet. */
+  masteredAbilityIds: string[];
   onBattlefield: boolean;
   defeated: boolean;
   actionsRemaining: number;

@@ -13,12 +13,17 @@
  * faithful. This module deliberately contains no source IDs of its own.
  */
 
+import type { RuleSourceUnit } from '../../source-units.js';
+import type { RuleAction, RuleClauseCompilation, RuleProgramCompilation, RuleSelector } from '../primitives/types.js';
+
 export interface TraitAttackModifier {
   boons: number;
   trueStrike: boolean;
   damageDieOverride: number | null;
   bonusDamageFlat: number;
   exceedThreshold: number | null;
+  /** Unerring (p.105): the attack ignores cover and aetherwall. */
+  unerring: boolean;
 }
 
 /** The minimal read surface both the declarative actor view and the direct
@@ -26,6 +31,17 @@ export interface TraitAttackModifier {
 export interface TraitModifierOwner {
   traitIds: readonly string[];
   state: Record<string, unknown>;
+}
+
+/** The minimal target read surface for target-threshold and distance-gated
+ * modifiers: the target's HP vs its wounds-adjusted maximum, plus the
+ * canonical source→target distance (computed by the caller through the
+ * shared range kernel, so the fold and the targeting gates agree on the same
+ * metric). */
+export interface AttackModifierTarget {
+  hp: number;
+  maxHp: number;
+  distance?: number;
 }
 
 /**
@@ -50,6 +66,18 @@ export interface AttackModifierRule {
   elevationBonusDamage?: number;
   /** Exceed-threshold override at elevation diff >= 2. */
   elevationExceedThreshold?: number;
+  /** Flat bonus damage on attacks against a bloodied target (Blood Hunger:
+   * "+2 damage with all abilities against bloodied foes"). The gate is the
+   * shared bloodied predicate (at or under 50% of the target's maximum). */
+  targetBloodiedBonusDamage?: number;
+  /** Exact-distance gate: the rule applies only when the target is at exactly
+   * this range from the source (Trigrammaton: "against foes at exactly range
+   * 3"). The distance is the shared p.92 footprint metric; the rule never
+   * changes targeting legality. */
+  exactRange?: number;
+  /** Unerring grant (Trigrammaton: "gain +1 boon on attack rolls and
+   * unerring"): the attack ignores cover and aetherwall (p.105). */
+  unerring?: boolean;
 }
 
 const attackModifierRules: AttackModifierRule[] = [];
@@ -60,24 +88,29 @@ export function registerAttackModifierRule(rule: AttackModifierRule): void {
 }
 
 /** The combined attack-path modifier for an attack at `elevationDiff`
- * (source elevation − target elevation). Pure reads: armed one-shot state
- * plus the permanent elevation mechanics. */
-export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: number): TraitAttackModifier {
+ * (source elevation − target elevation) against `target` (for target-
+ * threshold rules). Pure reads: armed one-shot state plus the permanent
+ * elevation and target-threshold mechanics. */
+export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: number, target?: AttackModifierTarget): TraitAttackModifier {
   const modifier: TraitAttackModifier = {
     boons: 0,
     trueStrike: false,
     damageDieOverride: null,
     bonusDamageFlat: 0,
     exceedThreshold: null,
+    unerring: false,
   };
   for (const rule of attackModifierRules) {
     if (!owner.traitIds.includes(rule.traitId)) continue;
     if (rule.armedKey && owner.state[rule.armedKey] !== true) continue;
+    if (rule.exactRange !== undefined && target?.distance !== rule.exactRange) continue;
     if (rule.boons) modifier.boons += rule.boons;
     if (rule.trueStrike) modifier.trueStrike = true;
     if (rule.damageDieOverride) modifier.damageDieOverride = rule.damageDieOverride;
     if (rule.elevationBonusDamage && elevationDiff >= 1) modifier.bonusDamageFlat += rule.elevationBonusDamage;
     if (rule.elevationExceedThreshold && elevationDiff >= 2) modifier.exceedThreshold = rule.elevationExceedThreshold;
+    if (rule.targetBloodiedBonusDamage && target && target.hp <= target.maxHp / 2) modifier.bonusDamageFlat += rule.targetBloodiedBonusDamage;
+    if (rule.unerring) modifier.unerring = true;
   }
   return modifier;
 }
@@ -101,5 +134,53 @@ export function effectiveDamageDie(owner: TraitModifierOwner & { damageDie: numb
     if (rule.damageDieOverride && owner.traitIds.includes(rule.traitId) && rule.armedKey && owner.state[rule.armedKey] === true) return rule.damageDieOverride;
   }
   return owner.damageDie;
+}
+
+// ── Foe-trait audit compilation ──────────────────────────────────────────────
+
+const self: RuleSelector = { kind: 'self' };
+
+/** Compile a reviewed attack-modifier foe trait (Blood Hunger) into the same
+ * typed passive vocabulary the other foe-trait manifests use. The modifier
+ * is already folded at both attack sites whenever the foe owns the source
+ * trait, so the program is audit-complete without adding EXECUTE_RULE
+ * authority. */
+export function compileAttackModifierFoeTraitRecipe(unit: RuleSourceUnit): RuleProgramCompilation | null {
+  const rule = attackModifierRules.find((candidate) => candidate.traitId === unit.id);
+  if (!rule) return null;
+  const clause: RuleClauseCompilation = {
+    id: `${unit.id}:clause:1`,
+    label: 'passive',
+    text: unit.rulesText,
+    effects: [],
+    complete: true,
+    unsupportedText: '',
+  };
+  const action: RuleAction = {
+    id: 'default',
+    name: unit.name,
+    timing: 'passive',
+    costs: [],
+    tags: [],
+    range: null,
+    area: null,
+    choices: [],
+    steps: [{ id: `${unit.id}:projection`, timing: 'passive', effects: [] }],
+  };
+  return {
+    program: {
+      schemaVersion: 1,
+      rulesVersion: '1.5',
+      id: `program:${unit.id}`,
+      sourceId: unit.id,
+      source: unit.source,
+      name: unit.name,
+      actions: [action],
+      dependencies: unit.parentId ? [unit.parentId] : [],
+      classification: 'encounter',
+    },
+    clauses: [clause],
+    unsupportedClauses: [],
+  };
 }
 

@@ -1,8 +1,9 @@
 import { resolveCureMutations } from './status-saves.js';
 import { attackDamageProvenance, resolveAttackRoll, type AttackDamageProvenance } from './attack-resolution.js';
-import { axisDirection, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../../area-geometry.js';
+import { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../../area-geometry.js';
 import type { Position } from '../../types.js';
 import type { RuleSourceUnit } from '../../source-units.js';
+import type { DiceSource } from '../../dice.js';
 import type {
   RuleAction,
   RuleActorView,
@@ -48,7 +49,7 @@ import type {
  */
 
 // Re-export area geometry so a job file has a single import point.
-export { axisDirection, lineCells, orthogonalNeighbors, sameCell, squareArea };
+export { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, sameCell, squareArea };
 
 // ── Selectors ────────────────────────────────────────────────────────────────
 export const self: RuleSelector = { kind: 'self' };
@@ -250,8 +251,8 @@ export function resolveAttack(
     trueStrike: options.trueStrike ?? false,
     autoHit: options.autoHit ?? false,
   }, context.dice);
-  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, bonusFlat } = attack;
-  const damageProvenance = { ignoreDodge, ignoreCover, bonusFlat };
+  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat } = attack;
+  const damageProvenance = { ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat };
   rememberAttackDamage(context, target.id, damageProvenance);
   const attackMutation: RuleMutation = {
     kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
@@ -288,9 +289,11 @@ export const damageMutation = (
   const inherited = directAttackDamageProvenance(context, actorId, delivery);
   const ignoreCover = Boolean(provenance.ignoreCover || inherited?.ignoreCover);
   const ignoreDodge = Boolean(provenance.ignoreDodge || inherited?.ignoreDodge);
+  const ignoreAetherwall = Boolean(provenance.ignoreAetherwall || inherited?.ignoreAetherwall);
   return {
     kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId, amount, damageType, instance: 1, delivery, ignoreCover,
     ...(ignoreDodge ? { ignoreDodge: true } : {}),
+    ...(ignoreAetherwall ? { ignoreAetherwall: true } : {}),
     ...(provenance.bypassVigor ? { bypassVigor: true } : {}),
     ...(provenance.ignoreArmor ? { ignoreArmor: true } : {}),
     ...(provenance.ignoreDefiance ? { ignoreDefiance: true } : {}),
@@ -393,6 +396,35 @@ export const terrainMutation = (
 ): RuleMutation => ({
   kind: 'terrain', sourceId: context.sourceId, sourceActorId: context.actorId, operation, terrain, positions, height: null,
 });
+
+// ── Gamble ──────────────────────────────────────────────────────────────────
+
+/** The result of a Gamble roll (ICON Combat Glossary). The caller owns
+ * the source-defined threshold — the kernel provides the die value and the
+ * pass/fail test. Consumers that need only the roll can ignore `success`;
+ * consumers that branch on the exact result read `roll`. */
+export interface GambleResult {
+  /** The d6 result, 1–6. */
+  roll: number;
+  /** True when `roll >= threshold`. */
+  success: boolean;
+}
+
+/** Roll a single d6 Gamble through the deterministic dice source.
+ * Accepts either a DiceSource directly or a RuleExecutionContext (which
+ * has a `.dice` property). Usage in a resolver:
+ * ```ts
+ * const { roll, success } = gambleD6(context.dice, 4); // threshold 4+
+ * if (success) mutations.push(...);
+ * ```
+ *
+ * The die is consumed from the dice source so replay uses the same
+ * recorded value. There is no parallel RNG. */
+export function gambleD6(diceOrContext: DiceSource | { dice: DiceSource }, threshold = 1): GambleResult {
+  const dice = 'die' in diceOrContext ? diceOrContext : diceOrContext.dice;
+  const roll = dice.die(6);
+  return { roll, success: roll >= threshold };
+}
 
 // ── Compilation ──────────────────────────────────────────────────────────────
 export function clause(unit: RuleSourceUnit, label: string, complete = true): RuleClauseCompilation {
