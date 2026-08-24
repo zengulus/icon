@@ -1,10 +1,10 @@
 {
-  "baseline": 461,
+  "baseline": 448,
   "byKind": {
-    "class-trait": 8,
-    "job-trait": 41,
-    "talent": 252,
-    "mastery": 144,
+    "class-trait": 7,
+    "job-trait": 40,
+    "talent": 248,
+    "mastery": 137,
     "limit-break": 16
   },
   "records": [
@@ -41,13 +41,6 @@
       "kind": "class-trait",
       "blockers": [
         "irreducible"
-      ]
-    },
-    {
-      "sourceId": "wright:trait:aetherwall",
-      "kind": "class-trait",
-      "blockers": [
-        "range-modifier"
       ]
     },
     {
@@ -105,8 +98,7 @@
       "kind": "mastery",
       "blockers": [
         "attack-modifier",
-        "effect-count",
-        "mastery-attachment"
+        "effect-count"
       ]
     },
     {
@@ -129,7 +121,6 @@
       "kind": "mastery",
       "blockers": [
         "heroics-economy",
-        "mastery-attachment",
         "use-ledger"
       ]
     },
@@ -152,7 +143,6 @@
       "sourceId": "bastion:land-waster:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "range-modifier",
         "terrain-create"
       ]
@@ -161,8 +151,7 @@
       "sourceId": "bastion:valiant:mastery",
       "kind": "mastery",
       "blockers": [
-        "action-type-change",
-        "mastery-attachment"
+        "action-type-change"
       ]
     },
     {
@@ -184,7 +173,7 @@
       "kind": "mastery",
       "blockers": [
         "interrupt-modifier",
-        "mastery-attachment"
+        "unlimited-range"
       ]
     },
     {
@@ -205,8 +194,7 @@
       "sourceId": "bastion:catapult:mastery",
       "kind": "mastery",
       "blockers": [
-        "interrupt-modifier",
-        "mastery-attachment"
+        "interrupt-modifier"
       ]
     },
     {
@@ -229,8 +217,7 @@
       "sourceId": "bastion:perseus:mastery",
       "kind": "mastery",
       "blockers": [
-        "interrupt-modifier",
-        "mastery-attachment"
+        "interrupt-modifier"
       ]
     },
     {
@@ -238,13 +225,6 @@
       "kind": "talent",
       "blockers": [
         "use-ledger"
-      ]
-    },
-    {
-      "sourceId": "bastion:rook:mastery",
-      "kind": "mastery",
-      "blockers": [
-        "mastery-attachment"
       ]
     },
     {
@@ -265,8 +245,7 @@
       "sourceId": "bastion:great-giorgios:mastery",
       "kind": "mastery",
       "blockers": [
-        "charge-state",
-        "mastery-attachment"
+        "charge-state"
       ]
     },
     {
@@ -289,7 +268,6 @@
       "sourceId": "demon-slayer:demon-cutter:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "resource-management",
         "vigor-grant"
       ]
@@ -313,7 +291,6 @@
       "sourceId": "demon-slayer:comet:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "teleport"
       ]
     },
@@ -328,7 +305,6 @@
       "sourceId": "demon-slayer:draken-cross:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "teleport"
       ]
     },
@@ -351,8 +327,7 @@
       "sourceId": "demon-slayer:righteous-disdain:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -374,8 +349,7 @@
       "sourceId": "demon-slayer:demon-claw:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -390,7 +364,7 @@
       "sourceId": "demon-slayer:gates-of-hell:talent:2",
       "kind": "talent",
       "blockers": [
-        "irreducible"
+        "range-modifier"
       ]
     },
     {
@@ -398,7 +372,6 @@
       "kind": "mastery",
       "blockers": [
         "action-type-change",
-        "mastery-attachment",
         "terrain-create"
       ]
     },
@@ -422,8 +395,7 @@
       "sourceId": "demon-slayer:soul-blade:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -444,7 +416,6 @@
       "sourceId": "demon-slayer:six-hells-trigram:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "range-modifier",
         "shove-modifier"
       ]
@@ -468,8 +439,7 @@
       "sourceId": "demon-slayer:wicked-sheath:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -496,13 +466,6 @@
       ]
     },
     {
-      "sourceId": "colossus:valkyrie:talent:1",
-      "kind": "talent",
-      "blockers": [
-        "range-modifier"
-      ]
-    },
-    {
       "sourceId": "colossus:valkyrie:talent:2",
       "kind": "talent",
       "blockers": [
@@ -514,8 +477,7 @@
       "sourceId": "colossus:valkyrie:mastery",
       "kind": "mastery",
       "blockers": [
-        "fly-grant",
-        "mastery-attachment"
+        "fly-grant"
       ]
     },
     {
@@ -531,7 +493,6 @@
       "sourceId": "colossus:upheaval:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "range-modifier",
         "terrain-create"
       ]
@@ -540,8 +501,7 @@
       "sourceId": "colossus:dropkick:mastery",
       "kind": "mastery",
       "blockers": [
-        "area-define",
-        "mastery-attachment"
+        "area-define"
       ]
     },
     {
@@ -555,8 +515,7 @@
       "sourceId": "colossus:massive-overhead:mastery",
       "kind": "mastery",
       "blockers": [
-        "action-type-change",
-        "mastery-attachment"
+        "action-type-change"
       ]
     },
     {
@@ -579,8 +538,7 @@
       "sourceId": "colossus:takedown:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -602,8 +560,7 @@
       "sourceId": "colossus:great-suplex:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -627,7 +584,6 @@
       "kind": "mastery",
       "blockers": [
         "charge-state",
-        "mastery-attachment",
         "range-modifier",
         "rush-modifier"
       ]
@@ -650,8 +606,7 @@
       "sourceId": "colossus:raging-wolf:mastery",
       "kind": "mastery",
       "blockers": [
-        "interrupt-modifier",
-        "mastery-attachment"
+        "interrupt-modifier"
       ]
     },
     {
@@ -673,7 +628,6 @@
       "sourceId": "colossus:boiling-blood:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "use-ledger"
       ]
     },
@@ -695,7 +649,7 @@
       "sourceId": "knave:limit-break",
       "kind": "limit-break",
       "blockers": [
-        "range-modifier"
+        "condition-suppression"
       ]
     },
     {
@@ -709,7 +663,6 @@
       "sourceId": "knave:low-blow:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "resource-management",
         "rush-modifier",
         "vigor-grant"
@@ -726,7 +679,6 @@
       "sourceId": "knave:provoke:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "rush-modifier"
       ]
     },
@@ -751,8 +703,7 @@
       "kind": "mastery",
       "blockers": [
         "area-define",
-        "damage-modifier",
-        "mastery-attachment"
+        "damage-modifier"
       ]
     },
     {
@@ -766,8 +717,7 @@
       "sourceId": "knave:riposte:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -786,17 +736,10 @@
       ]
     },
     {
-      "sourceId": "knave:dark-knight:mastery",
-      "kind": "mastery",
-      "blockers": [
-        "mastery-attachment"
-      ]
-    },
-    {
       "sourceId": "knave:strongarm:talent:1",
       "kind": "talent",
       "blockers": [
-        "range-modifier"
+        "teleport"
       ]
     },
     {
@@ -810,7 +753,6 @@
       "sourceId": "knave:strongarm:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "pre-ability-movement",
         "rush-modifier"
       ]
@@ -820,13 +762,6 @@
       "kind": "talent",
       "blockers": [
         "irreducible"
-      ]
-    },
-    {
-      "sourceId": "knave:intimidate:mastery",
-      "kind": "mastery",
-      "blockers": [
-        "mastery-attachment"
       ]
     },
     {
@@ -848,7 +783,6 @@
       "sourceId": "knave:sucker-punch:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "pre-ability-movement",
         "range-modifier",
         "shove-modifier"
@@ -868,13 +802,6 @@
         "pre-ability-movement",
         "range-modifier",
         "rush-modifier"
-      ]
-    },
-    {
-      "sourceId": "knave:bleak-mercy:mastery",
-      "kind": "mastery",
-      "blockers": [
-        "mastery-attachment"
       ]
     },
     {
@@ -934,8 +861,7 @@
       "sourceId": "fool:cavaliere:mastery",
       "kind": "mastery",
       "blockers": [
-        "fly-grant",
-        "mastery-attachment"
+        "fly-grant"
       ]
     },
     {
@@ -959,7 +885,6 @@
       "kind": "mastery",
       "blockers": [
         "entity-create",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -982,7 +907,6 @@
       "kind": "mastery",
       "blockers": [
         "action-type-change",
-        "mastery-attachment",
         "pre-ability-movement"
       ]
     },
@@ -1005,8 +929,7 @@
       "sourceId": "fool:death:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -1028,7 +951,6 @@
       "sourceId": "fool:gallows-humor:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "stance-gate"
       ]
     },
@@ -1044,8 +966,7 @@
       "kind": "mastery",
       "blockers": [
         "gamble-state",
-        "mark-modifier",
-        "mastery-attachment"
+        "mark-modifier"
       ]
     },
     {
@@ -1067,8 +988,7 @@
       "sourceId": "fool:masquerade:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "unlimited-range"
       ]
     },
     {
@@ -1092,8 +1012,7 @@
       "blockers": [
         "area-define",
         "charge-state",
-        "mark-modifier",
-        "mastery-attachment"
+        "mark-modifier"
       ]
     },
     {
@@ -1114,8 +1033,7 @@
       "sourceId": "fool:chronotemper:mastery",
       "kind": "mastery",
       "blockers": [
-        "interrupt-modifier",
-        "mastery-attachment"
+        "interrupt-modifier"
       ]
     },
     {
@@ -1123,13 +1041,6 @@
       "kind": "job-trait",
       "blockers": [
         "damage-modifier"
-      ]
-    },
-    {
-      "sourceId": "freelancer:trait:trigrammaton",
-      "kind": "job-trait",
-      "blockers": [
-        "range-modifier"
       ]
     },
     {
@@ -1162,8 +1073,7 @@
       "sourceId": "freelancer:strafe-shot:mastery",
       "kind": "mastery",
       "blockers": [
-        "interrupt-modifier",
-        "mastery-attachment"
+        "interrupt-modifier"
       ]
     },
     {
@@ -1188,7 +1098,6 @@
       "blockers": [
         "gamble-state",
         "mark-modifier",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -1204,15 +1113,15 @@
       "sourceId": "freelancer:trick-shot:talent:2",
       "kind": "talent",
       "blockers": [
-        "range-modifier"
+        "distance-predicate",
+        "rebound"
       ]
     },
     {
       "sourceId": "freelancer:trick-shot:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
-        "range-modifier"
+        "rebound"
       ]
     },
     {
@@ -1236,7 +1145,6 @@
       "kind": "mastery",
       "blockers": [
         "mark-modifier",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -1259,8 +1167,7 @@
       "sourceId": "freelancer:deus-ex-machina:mastery",
       "kind": "mastery",
       "blockers": [
-        "interrupt-modifier",
-        "mastery-attachment"
+        "interrupt-modifier"
       ]
     },
     {
@@ -1268,6 +1175,7 @@
       "kind": "talent",
       "blockers": [
         "area-define",
+        "distance-predicate",
         "range-modifier"
       ]
     },
@@ -1275,6 +1183,7 @@
       "sourceId": "freelancer:ace:talent:2",
       "kind": "talent",
       "blockers": [
+        "distance-predicate",
         "range-modifier",
         "teleport"
       ]
@@ -1283,8 +1192,7 @@
       "sourceId": "freelancer:ace:mastery",
       "kind": "mastery",
       "blockers": [
-        "action-type-change",
-        "mastery-attachment"
+        "action-type-change"
       ]
     },
     {
@@ -1300,7 +1208,6 @@
       "blockers": [
         "area-define",
         "cover-mechanic",
-        "mastery-attachment",
         "terrain-create",
         "use-ledger"
       ]
@@ -1310,6 +1217,7 @@
       "kind": "talent",
       "blockers": [
         "action-type-change",
+        "distance-predicate",
         "range-modifier"
       ]
     },
@@ -1321,17 +1229,10 @@
       ]
     },
     {
-      "sourceId": "freelancer:warding-bolts:mastery",
-      "kind": "mastery",
-      "blockers": [
-        "mastery-attachment"
-      ]
-    },
-    {
       "sourceId": "freelancer:soul-shot:talent:1",
       "kind": "talent",
       "blockers": [
-        "range-modifier"
+        "distance-predicate"
       ]
     },
     {
@@ -1346,7 +1247,6 @@
       "kind": "mastery",
       "blockers": [
         "fly-grant",
-        "mastery-attachment",
         "resource-management",
         "vigor-grant"
       ]
@@ -1395,8 +1295,7 @@
       "sourceId": "shade:umbra:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
-        "range-modifier"
+        "ability-attack-modifier"
       ]
     },
     {
@@ -1420,8 +1319,7 @@
       "sourceId": "shade:harrow:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -1444,7 +1342,6 @@
       "sourceId": "shade:death-blossom:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "teleport"
       ]
     },
@@ -1469,7 +1366,6 @@
       "sourceId": "shade:nightmare:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "terrain-create"
       ]
     },
@@ -1491,8 +1387,7 @@
       "sourceId": "shade:shadow-play:mastery",
       "kind": "mastery",
       "blockers": [
-        "action-type-change",
-        "mastery-attachment"
+        "action-type-change"
       ]
     },
     {
@@ -1516,7 +1411,6 @@
       "kind": "mastery",
       "blockers": [
         "interrupt-modifier",
-        "mastery-attachment",
         "range-modifier",
         "stance-gate"
       ]
@@ -1539,8 +1433,7 @@
       "sourceId": "shade:assassinate:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -1563,16 +1456,8 @@
       "sourceId": "shade:nocturne:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "range-modifier",
         "teleport"
-      ]
-    },
-    {
-      "sourceId": "shade:incubus:talent:1",
-      "kind": "talent",
-      "blockers": [
-        "range-modifier"
       ]
     },
     {
@@ -1586,8 +1471,7 @@
       "sourceId": "shade:incubus:mastery",
       "kind": "mastery",
       "blockers": [
-        "mark-modifier",
-        "mastery-attachment"
+        "mark-modifier"
       ]
     },
     {
@@ -1617,15 +1501,14 @@
       "sourceId": "warden:apex:talent:2",
       "kind": "talent",
       "blockers": [
-        "range-modifier"
+        "ability-attack-modifier"
       ]
     },
     {
       "sourceId": "warden:apex:mastery",
       "kind": "mastery",
       "blockers": [
-        "entity-create",
-        "mastery-attachment"
+        "entity-create"
       ]
     },
     {
@@ -1646,8 +1529,7 @@
       "sourceId": "warden:gwynt:mastery",
       "kind": "mastery",
       "blockers": [
-        "entity-create",
-        "mastery-attachment"
+        "entity-create"
       ]
     },
     {
@@ -1668,7 +1550,6 @@
       "sourceId": "warden:circle-the-oak:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "shove-modifier"
       ]
     },
@@ -1690,8 +1571,7 @@
       "sourceId": "warden:mist-strider:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -1713,8 +1593,7 @@
       "sourceId": "warden:stampede:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -1735,8 +1614,7 @@
       "sourceId": "warden:strength-of-the-pack:mastery",
       "kind": "mastery",
       "blockers": [
-        "action-type-change",
-        "mastery-attachment"
+        "action-type-change"
       ]
     },
     {
@@ -1750,7 +1628,6 @@
       "sourceId": "warden:underway:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "teleport",
         "use-ledger"
       ]
@@ -1768,7 +1645,6 @@
       "blockers": [
         "area-define",
         "cover-mechanic",
-        "mastery-attachment",
         "range-modifier",
         "terrain-create"
       ]
@@ -1784,8 +1660,7 @@
       "sourceId": "warden:sidhe:mastery",
       "kind": "mastery",
       "blockers": [
-        "cover-mechanic",
-        "mastery-attachment"
+        "cover-mechanic"
       ]
     },
     {
@@ -1860,7 +1735,6 @@
       "blockers": [
         "area-define",
         "fly-grant",
-        "mastery-attachment",
         "resource-management",
         "terrain-create",
         "vigor-grant"
@@ -1887,7 +1761,6 @@
         "action-type-change",
         "blessing-spend",
         "fly-grant",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -1911,7 +1784,6 @@
       "blockers": [
         "area-define",
         "damage-modifier",
-        "mastery-attachment",
         "terrain-create"
       ]
     },
@@ -1934,8 +1806,7 @@
       "kind": "mastery",
       "blockers": [
         "action-type-change",
-        "charge-state",
-        "mastery-attachment"
+        "charge-state"
       ]
     },
     {
@@ -1950,8 +1821,7 @@
       "kind": "mastery",
       "blockers": [
         "charge-state",
-        "combo-spend",
-        "mastery-attachment"
+        "combo-spend"
       ]
     },
     {
@@ -1973,7 +1843,6 @@
       "kind": "mastery",
       "blockers": [
         "action-type-change",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -1982,13 +1851,6 @@
       "kind": "talent",
       "blockers": [
         "damage-modifier"
-      ]
-    },
-    {
-      "sourceId": "chanter:gentleness:mastery",
-      "kind": "mastery",
-      "blockers": [
-        "mastery-attachment"
       ]
     },
     {
@@ -2010,8 +1872,7 @@
       "sourceId": "chanter:monogatari:mastery",
       "kind": "mastery",
       "blockers": [
-        "cure-on-trigger",
-        "mastery-attachment"
+        "cure-on-trigger"
       ]
     },
     {
@@ -2032,7 +1893,6 @@
       "sourceId": "chanter:chastise:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "use-ledger"
       ]
     },
@@ -2089,7 +1949,6 @@
       "kind": "mastery",
       "blockers": [
         "area-define",
-        "mastery-attachment",
         "resource-management",
         "vigor-grant"
       ]
@@ -2114,8 +1973,7 @@
       "sourceId": "harvester:growing-season:mastery",
       "kind": "mastery",
       "blockers": [
-        "mark-modifier",
-        "mastery-attachment"
+        "mark-modifier"
       ]
     },
     {
@@ -2140,7 +1998,6 @@
       "blockers": [
         "action-type-change",
         "cure-on-trigger",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -2153,19 +2010,11 @@
       ]
     },
     {
-      "sourceId": "harvester:harvest:talent:2",
-      "kind": "talent",
-      "blockers": [
-        "range-modifier"
-      ]
-    },
-    {
       "sourceId": "harvester:harvest:mastery",
       "kind": "mastery",
       "blockers": [
         "area-define",
         "blessing-spend",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -2187,8 +2036,7 @@
       "sourceId": "harvester:blood-grove:mastery",
       "kind": "mastery",
       "blockers": [
-        "entity-create",
-        "mastery-attachment"
+        "entity-create"
       ]
     },
     {
@@ -2212,7 +2060,6 @@
       "blockers": [
         "entity-create",
         "mark-modifier",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -2235,8 +2082,7 @@
       "kind": "mastery",
       "blockers": [
         "action-type-change",
-        "gamble-state",
-        "mastery-attachment"
+        "gamble-state"
       ]
     },
     {
@@ -2259,7 +2105,6 @@
       "blockers": [
         "blessing-spend",
         "interrupt-modifier",
-        "mastery-attachment",
         "terrain-create"
       ]
     },
@@ -2283,8 +2128,7 @@
       "kind": "mastery",
       "blockers": [
         "blessing-spend",
-        "entity-create",
-        "mastery-attachment"
+        "entity-create"
       ]
     },
     {
@@ -2323,7 +2167,6 @@
       "kind": "mastery",
       "blockers": [
         "area-define",
-        "mastery-attachment",
         "range-modifier",
         "teleport"
       ]
@@ -2347,7 +2190,6 @@
       "kind": "mastery",
       "blockers": [
         "mark-modifier",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -2370,7 +2212,6 @@
       "kind": "mastery",
       "blockers": [
         "damage-modifier",
-        "mastery-attachment",
         "teleport",
         "use-ledger"
       ]
@@ -2394,8 +2235,7 @@
       "sourceId": "sealer:spirit-shrine:mastery",
       "kind": "mastery",
       "blockers": [
-        "interrupt-modifier",
-        "mastery-attachment"
+        "interrupt-modifier"
       ]
     },
     {
@@ -2418,8 +2258,7 @@
       "kind": "mastery",
       "blockers": [
         "action-type-change",
-        "area-define",
-        "mastery-attachment"
+        "area-define"
       ]
     },
     {
@@ -2441,8 +2280,7 @@
       "sourceId": "sealer:grand-banishment:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -2457,8 +2295,7 @@
       "sourceId": "sealer:divine-aegis:mastery",
       "kind": "mastery",
       "blockers": [
-        "mark-modifier",
-        "mastery-attachment"
+        "mark-modifier"
       ]
     },
     {
@@ -2483,7 +2320,6 @@
       "kind": "mastery",
       "blockers": [
         "interrupt-modifier",
-        "mastery-attachment",
         "resource-management",
         "vigor-grant"
       ]
@@ -2497,18 +2333,10 @@
       ]
     },
     {
-      "sourceId": "sealer:open-the-gates:talent:2",
-      "kind": "talent",
-      "blockers": [
-        "range-modifier"
-      ]
-    },
-    {
       "sourceId": "sealer:open-the-gates:mastery",
       "kind": "mastery",
       "blockers": [
-        "damage-modifier",
-        "mastery-attachment"
+        "damage-modifier"
       ]
     },
     {
@@ -2579,7 +2407,6 @@
       "kind": "mastery",
       "blockers": [
         "gamble-state",
-        "mastery-attachment",
         "range-modifier"
       ]
     },
@@ -2603,8 +2430,7 @@
       "kind": "mastery",
       "blockers": [
         "entity-create",
-        "gamble-state",
-        "mastery-attachment"
+        "gamble-state"
       ]
     },
     {
@@ -2627,8 +2453,7 @@
       "sourceId": "seer:astra:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -2650,8 +2475,7 @@
       "sourceId": "seer:polaris:mastery",
       "kind": "mastery",
       "blockers": [
-        "action-type-change",
-        "mastery-attachment"
+        "action-type-change"
       ]
     },
     {
@@ -2675,8 +2499,7 @@
       "sourceId": "seer:sisyphus:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -2697,8 +2520,7 @@
       "sourceId": "seer:gran-reversa:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -2719,8 +2541,7 @@
       "sourceId": "seer:eclipse:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -2741,8 +2562,7 @@
       "sourceId": "seer:wish:mastery",
       "kind": "mastery",
       "blockers": [
-        "damage-preview",
-        "mastery-attachment"
+        "damage-preview"
       ]
     },
     {
@@ -2757,8 +2577,7 @@
       "sourceId": "seer:the-tower:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -2800,7 +2619,6 @@
       "blockers": [
         "area-define",
         "infuse-cost",
-        "mastery-attachment",
         "range-modifier",
         "terrain-create"
       ]
@@ -2824,15 +2642,14 @@
       "sourceId": "enochian:elden-rune:mastery",
       "kind": "mastery",
       "blockers": [
-        "area-define",
-        "mastery-attachment"
+        "area-define"
       ]
     },
     {
       "sourceId": "enochian:lance:talent:1",
       "kind": "talent",
       "blockers": [
-        "range-modifier"
+        "object-distance"
       ]
     },
     {
@@ -2848,8 +2665,7 @@
       "blockers": [
         "area-define",
         "cover-mechanic",
-        "infuse-cost",
-        "mastery-attachment"
+        "infuse-cost"
       ]
     },
     {
@@ -2872,7 +2688,6 @@
       "blockers": [
         "action-type-change",
         "damage-modifier",
-        "mastery-attachment",
         "stance-gate"
       ]
     },
@@ -2888,8 +2703,7 @@
       "sourceId": "enochian:blazing-bond:mastery",
       "kind": "mastery",
       "blockers": [
-        "mark-modifier",
-        "mastery-attachment"
+        "mark-modifier"
       ]
     },
     {
@@ -2911,7 +2725,6 @@
       "sourceId": "enochian:aethershard:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "movement-modifier"
       ]
     },
@@ -2933,8 +2746,7 @@
       "sourceId": "enochian:implode:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -2949,7 +2761,6 @@
       "kind": "mastery",
       "blockers": [
         "area-define",
-        "mastery-attachment",
         "terrain-create"
       ]
     },
@@ -2972,8 +2783,7 @@
       "sourceId": "enochian:blackstar:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
-        "range-modifier"
+        "sacrifice-cost"
       ]
     },
     {
@@ -2989,6 +2799,7 @@
       "kind": "job-trait",
       "blockers": [
         "damage-modifier",
+        "distance-predicate",
         "range-modifier",
         "resource-management",
         "vigor-grant"
@@ -3032,7 +2843,6 @@
       "blockers": [
         "area-define",
         "infuse-cost",
-        "mastery-attachment",
         "range-modifier",
         "terrain-create"
       ]
@@ -3048,8 +2858,7 @@
       "sourceId": "geomancer:dragon-dive:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -3072,7 +2881,6 @@
       "blockers": [
         "area-define",
         "infuse-cost",
-        "mastery-attachment",
         "terrain-create"
       ]
     },
@@ -3095,7 +2903,6 @@
       "sourceId": "geomancer:helix-heel:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "shove-modifier",
         "terrain-create"
       ]
@@ -3111,8 +2918,7 @@
       "sourceId": "geomancer:terraforming:mastery",
       "kind": "mastery",
       "blockers": [
-        "charge-state",
-        "mastery-attachment"
+        "charge-state"
       ]
     },
     {
@@ -3134,7 +2940,6 @@
       "sourceId": "geomancer:obsidian-flesh:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "stance-gate"
       ]
     },
@@ -3156,8 +2961,7 @@
       "sourceId": "geomancer:realignment:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -3179,8 +2983,7 @@
       "kind": "mastery",
       "blockers": [
         "area-define",
-        "cover-mechanic",
-        "mastery-attachment"
+        "cover-mechanic"
       ]
     },
     {
@@ -3201,8 +3004,7 @@
       "sourceId": "geomancer:quaking-palm:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
-        "range-modifier"
+        "object-distance"
       ]
     },
     {
@@ -3238,7 +3040,7 @@
       "sourceId": "spellblade:blitz:talent:2",
       "kind": "talent",
       "blockers": [
-        "range-modifier"
+        "effect-redirect"
       ]
     },
     {
@@ -3246,7 +3048,6 @@
       "kind": "mastery",
       "blockers": [
         "area-define",
-        "mastery-attachment",
         "teleport",
         "terrain-create"
       ]
@@ -3271,7 +3072,6 @@
       "kind": "mastery",
       "blockers": [
         "cover-mechanic",
-        "mastery-attachment",
         "range-modifier",
         "stance-gate"
       ]
@@ -3294,8 +3094,7 @@
       "sourceId": "spellblade:nothung:mastery",
       "kind": "mastery",
       "blockers": [
-        "damage-modifier",
-        "mastery-attachment"
+        "damage-modifier"
       ]
     },
     {
@@ -3316,7 +3115,6 @@
       "sourceId": "spellblade:atherwand:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "terrain-create"
       ]
     },
@@ -3341,8 +3139,8 @@
         "cover-mechanic",
         "damage-modifier",
         "mark-modifier",
-        "mastery-attachment",
-        "range-modifier"
+        "range-modifier",
+        "unlimited-range"
       ]
     },
     {
@@ -3365,7 +3163,6 @@
       "kind": "mastery",
       "blockers": [
         "area-define",
-        "mastery-attachment",
         "terrain-create"
       ]
     },
@@ -3382,13 +3179,6 @@
       "kind": "talent",
       "blockers": [
         "gamble-state"
-      ]
-    },
-    {
-      "sourceId": "spellblade:rampant-nail:mastery",
-      "kind": "mastery",
-      "blockers": [
-        "mastery-attachment"
       ]
     },
     {
@@ -3410,8 +3200,7 @@
       "sourceId": "spellblade:sturmreiten:mastery",
       "kind": "mastery",
       "blockers": [
-        "area-define",
-        "mastery-attachment"
+        "area-define"
       ]
     },
     {
@@ -3434,8 +3223,7 @@
       "sourceId": "spellblade:drifting-leaf:mastery",
       "kind": "mastery",
       "blockers": [
-        "infuse-cost",
-        "mastery-attachment"
+        "infuse-cost"
       ]
     },
     {
@@ -3492,7 +3280,6 @@
         "area-define",
         "entity-create",
         "infuse-cost",
-        "mastery-attachment",
         "range-modifier",
         "terrain-create"
       ]
@@ -3508,8 +3295,7 @@
       "sourceId": "stormbender:tsunami:mastery",
       "kind": "mastery",
       "blockers": [
-        "fly-grant",
-        "mastery-attachment"
+        "fly-grant"
       ]
     },
     {
@@ -3532,8 +3318,7 @@
       "blockers": [
         "area-define",
         "damage-modifier",
-        "infuse-cost",
-        "mastery-attachment"
+        "infuse-cost"
       ]
     },
     {
@@ -3556,8 +3341,7 @@
       "sourceId": "stormbender:geyser:mastery",
       "kind": "mastery",
       "blockers": [
-        "fly-grant",
-        "mastery-attachment"
+        "fly-grant"
       ]
     },
     {
@@ -3578,8 +3362,7 @@
       "sourceId": "stormbender:gust:mastery",
       "kind": "mastery",
       "blockers": [
-        "irreducible",
-        "mastery-attachment"
+        "irreducible"
       ]
     },
     {
@@ -3593,8 +3376,7 @@
       "sourceId": "stormbender:heave-ho:mastery",
       "kind": "mastery",
       "blockers": [
-        "infuse-cost",
-        "mastery-attachment"
+        "infuse-cost"
       ]
     },
     {
@@ -3619,7 +3401,6 @@
       "kind": "mastery",
       "blockers": [
         "mark-modifier",
-        "mastery-attachment",
         "terrain-create",
         "use-ledger"
       ]
@@ -3637,7 +3418,6 @@
       "kind": "mastery",
       "blockers": [
         "area-define",
-        "mastery-attachment",
         "shove-modifier",
         "terrain-create"
       ]
@@ -3653,221 +3433,197 @@
       "sourceId": "stormbender:eye-of-the-storm:mastery",
       "kind": "mastery",
       "blockers": [
-        "mastery-attachment",
         "terrain-create"
       ]
     }
   ],
   "blockerFrequencies": {
-    "{irreducible}": 58,
+    "{irreducible}": 79,
     "{resource-management}": 4,
-    "{area-define}": 10,
-    "{damage-modifier}": 8,
-    "{range-modifier}": 13,
+    "{area-define}": 13,
+    "{damage-modifier}": 10,
     "{resource-management, use-ledger}": 1,
-    "{infuse-cost}": 2,
+    "{infuse-cost}": 4,
     "{heroics-economy}": 3,
-    "{use-ledger}": 4,
-    "{shove-modifier}": 6,
-    "{attack-modifier, effect-count, mastery-attachment}": 1,
-    "{pre-ability-movement, rush-modifier}": 2,
-    "{heroics-economy, mastery-attachment, use-ledger}": 1,
+    "{use-ledger}": 6,
+    "{shove-modifier}": 7,
+    "{attack-modifier, effect-count}": 1,
+    "{pre-ability-movement, rush-modifier}": 3,
+    "{heroics-economy, use-ledger}": 2,
     "{cure-on-trigger, shove-modifier}": 1,
-    "{mastery-attachment, range-modifier, terrain-create}": 2,
-    "{action-type-change, mastery-attachment}": 6,
+    "{range-modifier, terrain-create}": 2,
+    "{action-type-change}": 8,
     "{aura-user-gate}": 2,
-    "{interrupt-modifier, mastery-attachment}": 8,
-    "{interrupt-modifier}": 5,
+    "{interrupt-modifier, unlimited-range}": 1,
+    "{interrupt-modifier}": 12,
     "{resource-management, use-ledger, vigor-grant}": 1,
-    "{mastery-attachment}": 7,
-    "{charge-state, mastery-attachment}": 2,
+    "{charge-state}": 5,
     "{area-define, charge-state, rush-modifier}": 1,
-    "{mastery-attachment, resource-management, vigor-grant}": 1,
-    "{resource-management, vigor-grant}": 7,
-    "{mastery-attachment, teleport}": 3,
-    "{irreducible, mastery-attachment}": 23,
-    "{action-type-change, mastery-attachment, terrain-create}": 1,
+    "{resource-management, vigor-grant}": 8,
+    "{teleport}": 13,
+    "{range-modifier}": 1,
+    "{action-type-change, terrain-create}": 1,
     "{area-define, stance-gate}": 1,
     "{attack-modifier, stance-gate}": 1,
-    "{mastery-attachment, range-modifier, shove-modifier}": 1,
-    "{charge-state}": 3,
+    "{range-modifier, shove-modifier}": 1,
     "{area-define, charge-state}": 2,
-    "{heroics-economy, use-ledger}": 1,
-    "{fly-grant}": 6,
+    "{fly-grant}": 10,
     "{range-modifier, sacrifice-cost}": 2,
     "{charge-state, fly-grant}": 3,
-    "{fly-grant, mastery-attachment}": 4,
     "{area-define, charge-state, terrain-create}": 1,
-    "{area-define, mastery-attachment}": 3,
-    "{terrain-create}": 9,
+    "{terrain-create}": 12,
     "{fly-grant, pre-ability-movement, rush-modifier}": 1,
     "{damage-modifier, terrain-create}": 2,
-    "{rush-modifier}": 1,
+    "{rush-modifier}": 2,
     "{charge-state, fly-grant, shove-modifier}": 1,
-    "{charge-state, mastery-attachment, range-modifier, rush-modifier}": 1,
+    "{charge-state, range-modifier, rush-modifier}": 1,
     "{pre-ability-movement}": 1,
     "{fly-grant, pre-ability-movement}": 2,
-    "{mastery-attachment, use-ledger}": 2,
-    "{mastery-attachment, resource-management, rush-modifier, vigor-grant}": 1,
-    "{sacrifice-cost}": 5,
-    "{mastery-attachment, rush-modifier}": 1,
+    "{condition-suppression}": 1,
+    "{resource-management, rush-modifier, vigor-grant}": 1,
+    "{sacrifice-cost}": 6,
     "{area-define, save-modifier}": 1,
     "{combo-spend, sacrifice-cost}": 1,
-    "{area-define, damage-modifier, mastery-attachment}": 1,
+    "{area-define, damage-modifier}": 2,
     "{rush-modifier, use-ledger}": 1,
-    "{stance-gate}": 2,
-    "{mastery-attachment, pre-ability-movement, rush-modifier}": 1,
+    "{stance-gate}": 4,
     "{interrupt-modifier, sacrifice-cost}": 1,
-    "{mastery-attachment, pre-ability-movement, range-modifier, shove-modifier}": 1,
+    "{pre-ability-movement, range-modifier, shove-modifier}": 1,
     "{pre-ability-movement, range-modifier, rush-modifier}": 1,
-    "{entity-create}": 7,
-    "{teleport}": 9,
+    "{entity-create}": 10,
     "{gamble-state, use-ledger}": 1,
     "{area-define, entity-create, gamble-state}": 1,
     "{damage-modifier, entity-create}": 1,
     "{pre-ability-movement, range-modifier}": 1,
-    "{entity-create, mastery-attachment, range-modifier}": 1,
+    "{entity-create, range-modifier}": 1,
     "{gamble-state}": 5,
-    "{action-type-change, mastery-attachment, pre-ability-movement}": 1,
+    "{action-type-change, pre-ability-movement}": 1,
     "{entity-create, terrain-create}": 1,
     "{effect-count, threshold-modifier}": 1,
-    "{mastery-attachment, stance-gate}": 2,
-    "{gamble-state, mark-modifier, mastery-attachment}": 1,
+    "{gamble-state, mark-modifier}": 1,
     "{entity-create, fly-grant}": 1,
-    "{area-define, charge-state, mark-modifier, mastery-attachment}": 1,
-    "{movement-modifier}": 1,
+    "{unlimited-range}": 1,
+    "{area-define, charge-state, mark-modifier}": 2,
+    "{movement-modifier}": 2,
     "{action-type-change, mark-modifier, teleport}": 1,
     "{action-type-change, charge-state, entity-create, teleport}": 1,
-    "{mark-modifier}": 6,
-    "{area-define, charge-state, mark-modifier}": 1,
-    "{gamble-state, mark-modifier, mastery-attachment, range-modifier}": 1,
+    "{mark-modifier}": 10,
+    "{gamble-state, mark-modifier, range-modifier}": 1,
     "{entity-create, teleport}": 2,
-    "{mastery-attachment, range-modifier}": 4,
-    "{mark-modifier, range-modifier}": 2,
+    "{distance-predicate, rebound}": 1,
+    "{rebound}": 1,
+    "{mark-modifier, range-modifier}": 4,
     "{damage-modifier, mark-modifier}": 1,
-    "{mark-modifier, mastery-attachment, range-modifier}": 2,
-    "{area-define, range-modifier}": 2,
-    "{range-modifier, teleport}": 5,
-    "{area-define, cover-mechanic, mastery-attachment, terrain-create, use-ledger}": 1,
-    "{action-type-change, range-modifier}": 1,
-    "{fly-grant, mastery-attachment, resource-management, vigor-grant}": 1,
+    "{area-define, distance-predicate, range-modifier}": 1,
+    "{distance-predicate, range-modifier, teleport}": 1,
+    "{area-define, cover-mechanic, terrain-create, use-ledger}": 1,
+    "{action-type-change, distance-predicate, range-modifier}": 1,
+    "{distance-predicate}": 1,
+    "{fly-grant, resource-management, vigor-grant}": 1,
     "{entity-vacate}": 2,
     "{range-modifier, use-ledger}": 1,
     "{combo-spend, range-modifier, sacrifice-cost, teleport}": 1,
+    "{ability-attack-modifier}": 2,
+    "{range-modifier, teleport}": 5,
     "{range-modifier, sacrifice-cost, terrain-create}": 1,
     "{area-define, teleport}": 1,
     "{entity-create, range-modifier, teleport}": 1,
     "{entity-consume, rebound}": 1,
-    "{mastery-attachment, terrain-create}": 3,
     "{choice-input}": 1,
     "{entity-create, stance-gate, use-ledger}": 1,
-    "{interrupt-modifier, mastery-attachment, range-modifier, stance-gate}": 1,
+    "{interrupt-modifier, range-modifier, stance-gate}": 1,
     "{action-type-change, teleport}": 2,
     "{area-define, sacrifice-cost}": 1,
-    "{mastery-attachment, range-modifier, teleport}": 1,
-    "{mark-modifier, mastery-attachment}": 4,
     "{cover-mechanic, damage-modifier}": 1,
     "{action-type-change, entity-create}": 1,
-    "{entity-create, mastery-attachment}": 3,
-    "{mastery-attachment, shove-modifier}": 1,
     "{action-type-change, mark-modifier}": 2,
-    "{action-type-change}": 2,
-    "{mastery-attachment, teleport, use-ledger}": 1,
-    "{cover-mechanic}": 3,
-    "{area-define, cover-mechanic, mastery-attachment, range-modifier, terrain-create}": 1,
-    "{cover-mechanic, mastery-attachment}": 1,
+    "{teleport, use-ledger}": 1,
+    "{cover-mechanic}": 4,
+    "{area-define, cover-mechanic, range-modifier, terrain-create}": 1,
     "{blessing-spend, charge-state, fly-grant, pre-ability-movement}": 1,
-    "{charge-state, combo-spend}": 1,
+    "{charge-state, combo-spend}": 2,
     "{combo-spend, fly-grant, range-modifier, use-ledger}": 1,
     "{fly-grant, use-ledger}": 1,
     "{blessing-spend, cover-mechanic, fly-grant, range-modifier, resource-management, shove-modifier, stance-gate}": 1,
     "{area-define, gamble-state, terrain-create}": 1,
-    "{area-define, fly-grant, mastery-attachment, resource-management, terrain-create, vigor-grant}": 1,
-    "{action-type-change, blessing-spend, fly-grant, mastery-attachment, range-modifier}": 1,
-    "{area-define, damage-modifier, mastery-attachment, terrain-create}": 1,
+    "{area-define, fly-grant, resource-management, terrain-create, vigor-grant}": 1,
+    "{action-type-change, blessing-spend, fly-grant, range-modifier}": 1,
+    "{area-define, damage-modifier, terrain-create}": 1,
     "{effect-count}": 3,
-    "{action-type-change, charge-state, mastery-attachment}": 1,
-    "{charge-state, combo-spend, mastery-attachment}": 1,
-    "{cure-on-trigger}": 3,
-    "{action-type-change, mastery-attachment, range-modifier}": 1,
+    "{action-type-change, charge-state}": 1,
+    "{cure-on-trigger}": 4,
+    "{action-type-change, range-modifier}": 1,
     "{blessing-spend, range-modifier}": 1,
-    "{cure-on-trigger, mastery-attachment}": 1,
     "{blessing-spend, damage-modifier, resource-management}": 1,
     "{entity-create, mark-modifier}": 2,
     "{action-type-change, area-define, entity-create}": 1,
-    "{area-define, mastery-attachment, resource-management, vigor-grant}": 1,
+    "{area-define, resource-management, vigor-grant}": 2,
     "{mark-modifier, terrain-create}": 3,
     "{choice-input, entity-vacate}": 1,
     "{entity-create, sacrifice-cost}": 1,
-    "{action-type-change, cure-on-trigger, mastery-attachment, range-modifier}": 1,
-    "{area-define, blessing-spend, mastery-attachment, range-modifier}": 1,
-    "{entity-create, mark-modifier, mastery-attachment, range-modifier}": 1,
-    "{damage-preview}": 1,
-    "{action-type-change, gamble-state, mastery-attachment}": 1,
-    "{blessing-spend, interrupt-modifier, mastery-attachment, terrain-create}": 1,
-    "{blessing-spend, entity-create, mastery-attachment}": 1,
+    "{action-type-change, cure-on-trigger, range-modifier}": 1,
+    "{area-define, blessing-spend, range-modifier}": 1,
+    "{entity-create, mark-modifier, range-modifier}": 1,
+    "{damage-preview}": 2,
+    "{action-type-change, gamble-state}": 1,
+    "{blessing-spend, interrupt-modifier, terrain-create}": 1,
+    "{blessing-spend, entity-create}": 1,
     "{blessing-spend, damage-modifier}": 1,
     "{attack-trigger-grant}": 1,
     "{combo-spend, teleport}": 1,
-    "{area-define, mastery-attachment, range-modifier, teleport}": 1,
-    "{damage-modifier, mastery-attachment, teleport, use-ledger}": 1,
-    "{action-type-change, area-define, mastery-attachment}": 1,
+    "{area-define, range-modifier, teleport}": 1,
+    "{damage-modifier, teleport, use-ledger}": 1,
+    "{action-type-change, area-define}": 1,
     "{cover-mechanic, range-modifier}": 1,
-    "{interrupt-modifier, resource-management, vigor-grant}": 1,
+    "{interrupt-modifier, resource-management, vigor-grant}": 2,
     "{interrupt-modifier, teleport}": 4,
-    "{interrupt-modifier, mastery-attachment, resource-management, vigor-grant}": 1,
-    "{damage-modifier, mastery-attachment}": 2,
     "{area-define, blessing-spend, cure-on-trigger, pre-ability-movement, teleport}": 1,
-    "{area-define, resource-management, vigor-grant}": 1,
     "{charge-state, gamble-state}": 2,
-    "{gamble-state, mastery-attachment, range-modifier}": 1,
+    "{gamble-state, range-modifier}": 1,
     "{blessing-spend}": 1,
-    "{entity-create, gamble-state, mastery-attachment}": 1,
+    "{entity-create, gamble-state}": 1,
     "{charge-state, terrain-create}": 1,
-    "{area-define, damage-modifier}": 1,
     "{gamble-state, terrain-create}": 1,
     "{entity-vacate, save-modifier}": 1,
     "{cure-on-trigger, resource-management, vigor-grant}": 1,
-    "{damage-preview, mastery-attachment}": 1,
     "{charge-state, range-modifier}": 1,
     "{infuse-cost, sacrifice-cost, use-ledger}": 1,
     "{threshold-modifier}": 1,
     "{entity-create, infuse-cost, range-modifier, terrain-create}": 1,
-    "{area-define, infuse-cost, mastery-attachment, range-modifier, terrain-create}": 2,
-    "{area-define, cover-mechanic, infuse-cost, mastery-attachment}": 1,
-    "{action-type-change, damage-modifier, mastery-attachment, stance-gate}": 1,
+    "{area-define, infuse-cost, range-modifier, terrain-create}": 2,
+    "{object-distance}": 2,
+    "{area-define, cover-mechanic, infuse-cost}": 1,
+    "{action-type-change, damage-modifier, stance-gate}": 1,
     "{mark-modifier, teleport}": 1,
     "{range-modifier, resource-management}": 1,
     "{pierce}": 1,
-    "{mastery-attachment, movement-modifier}": 1,
-    "{area-define, mastery-attachment, terrain-create}": 2,
-    "{damage-modifier, range-modifier, resource-management, vigor-grant}": 1,
+    "{area-define, terrain-create}": 5,
+    "{damage-modifier, distance-predicate, range-modifier, resource-management, vigor-grant}": 1,
     "{area-define, charge-state, entity-create, shove-modifier}": 1,
-    "{area-define, terrain-create}": 3,
-    "{area-define, infuse-cost, mastery-attachment, terrain-create}": 1,
+    "{area-define, infuse-cost, terrain-create}": 1,
     "{fly-grant, teleport}": 1,
-    "{mastery-attachment, shove-modifier, terrain-create}": 1,
-    "{area-define, cover-mechanic, mastery-attachment}": 1,
+    "{shove-modifier, terrain-create}": 2,
+    "{area-define, range-modifier}": 1,
+    "{area-define, cover-mechanic}": 1,
     "{interrupt-modifier, range-modifier, resource-management}": 1,
     "{infuse-cost, range-modifier}": 1,
     "{action-type-change, area-define, entity-create, infuse-cost, teleport, terrain-create}": 1,
-    "{area-define, mastery-attachment, teleport, terrain-create}": 1,
+    "{effect-redirect}": 1,
+    "{area-define, teleport, terrain-create}": 1,
     "{effect-count, use-ledger}": 1,
-    "{cover-mechanic, mastery-attachment, range-modifier, stance-gate}": 1,
-    "{cover-mechanic, damage-modifier, mark-modifier, mastery-attachment, range-modifier}": 1,
+    "{cover-mechanic, range-modifier, stance-gate}": 1,
+    "{cover-mechanic, damage-modifier, mark-modifier, range-modifier, unlimited-range}": 1,
     "{damage-modifier, interrupt-modifier}": 1,
-    "{infuse-cost, mastery-attachment}": 2,
     "{damage-modifier, fly-grant, terrain-create}": 1,
     "{cover-mechanic, fly-grant, terrain-create}": 1,
     "{action-type-change, cover-mechanic, fly-grant, teleport, terrain-create, use-ledger}": 1,
     "{area-define, range-modifier, terrain-create}": 1,
-    "{area-define, entity-create, infuse-cost, mastery-attachment, range-modifier, terrain-create}": 1,
-    "{area-define, damage-modifier, infuse-cost, mastery-attachment}": 1,
+    "{area-define, entity-create, infuse-cost, range-modifier, terrain-create}": 1,
+    "{area-define, damage-modifier, infuse-cost}": 1,
     "{entity-create, range-modifier, use-ledger}": 1,
     "{damage-modifier, mark-modifier, terrain-create}": 1,
-    "{mark-modifier, mastery-attachment, terrain-create, use-ledger}": 1,
-    "{shove-modifier, terrain-create}": 1,
-    "{area-define, mastery-attachment, shove-modifier, terrain-create}": 1
+    "{mark-modifier, terrain-create, use-ledger}": 1,
+    "{area-define, shove-modifier, terrain-create}": 1
   },
   "singletonFamilies": {
     "irreducible": [
@@ -3878,31 +3634,42 @@
       "bastion:battering-ram:talent:2",
       "demon-slayer:draken-cross:talent:1",
       "demon-slayer:righteous-disdain:talent:2",
+      "demon-slayer:righteous-disdain:mastery",
       "demon-slayer:demon-claw:talent:2",
-      "demon-slayer:gates-of-hell:talent:2",
+      "demon-slayer:demon-claw:mastery",
+      "demon-slayer:soul-blade:mastery",
       "demon-slayer:six-hells-trigram:talent:1",
       "demon-slayer:six-hells-trigram:talent:2",
+      "demon-slayer:wicked-sheath:mastery",
       "colossus:takedown:talent:2",
+      "colossus:takedown:mastery",
+      "colossus:great-suplex:mastery",
       "colossus:gigaton-whip:talent:1",
       "colossus:raging-wolf:talent:2",
       "colossus:boiling-blood:talent:1",
       "knave:trait:martial-master",
+      "knave:riposte:mastery",
       "knave:strongarm:talent:2",
       "knave:intimidate:talent:2",
       "knave:bleak-mercy:talent:1",
       "fool:trait:curse-of-chaos",
       "fool:cavaliere:talent:2",
       "fool:death:talent:1",
+      "fool:death:mastery",
       "fool:gallows-humor:talent:1",
       "fool:party-favor:talent:1",
       "freelancer:strafe-shot:talent:2",
+      "shade:harrow:mastery",
       "shade:umbral-echo:talent:2",
       "shade:assassinate:talent:1",
       "shade:assassinate:talent:2",
+      "shade:assassinate:mastery",
       "warden:gwynt:talent:1",
       "warden:circle-the-oak:talent:1",
       "warden:mist-strider:talent:2",
+      "warden:mist-strider:mastery",
       "warden:stampede:talent:2",
+      "warden:stampede:mastery",
       "chanter:felicity:talent:1",
       "chanter:dervish:talent:2",
       "chanter:symphony:talent:1",
@@ -3913,22 +3680,32 @@
       "harvester:blood-grove:talent:1",
       "harvester:fairy-ring:talent:2",
       "sealer:sanctify:talent:1",
+      "sealer:grand-banishment:mastery",
       "seer:trait:the-wheel-of-fate",
       "seer:trait:skein",
       "seer:sleight-of-hand:talent:1",
+      "seer:astra:mastery",
+      "seer:sisyphus:mastery",
       "seer:gran-reversa:talent:2",
+      "seer:gran-reversa:mastery",
+      "seer:eclipse:mastery",
+      "seer:the-tower:mastery",
       "enochian:lance:talent:2",
       "enochian:implode:talent:1",
+      "enochian:implode:mastery",
+      "geomancer:dragon-dive:mastery",
       "geomancer:helix-heel:talent:1",
       "geomancer:obsidian-flesh:talent:1",
       "geomancer:realignment:talent:1",
+      "geomancer:realignment:mastery",
       "geomancer:midas:talent:1",
       "geomancer:quaking-palm:talent:2",
       "spellblade:atherwand:talent:1",
       "spellblade:bifrost:talent:2",
       "stormbender:tsunami:talent:2",
       "stormbender:cryo:talent:1",
-      "stormbender:cryo:talent:2"
+      "stormbender:cryo:talent:2",
+      "stormbender:gust:mastery"
     ],
     "resource-management": [
       "stalwart:trait:fortify",
@@ -3939,13 +3716,16 @@
     "area-define": [
       "vagabond:trait:dodge",
       "bastion:perseus:talent:2",
+      "colossus:dropkick:mastery",
       "freelancer:soul-shot:talent:2",
       "warden:sidhe:talent:2",
       "seer:eclipse:talent:2",
       "enochian:pyre:talent:2",
+      "enochian:elden-rune:mastery",
       "geomancer:midas:talent:2",
       "spellblade:atherwand:talent:2",
       "spellblade:sturmreiten:talent:2",
+      "spellblade:sturmreiten:mastery",
       "stormbender:eye-of-the-storm:talent:2"
     ],
     "damage-modifier": [
@@ -3956,26 +3736,15 @@
       "chanter:gentleness:talent:2",
       "harvester:dark-sliver:talent:1",
       "sealer:matsuri:talent:2",
-      "spellblade:nothung:talent:1"
-    ],
-    "range-modifier": [
-      "wright:trait:aetherwall",
-      "colossus:valkyrie:talent:1",
-      "knave:limit-break",
-      "knave:strongarm:talent:1",
-      "freelancer:trait:trigrammaton",
-      "freelancer:trick-shot:talent:2",
-      "freelancer:soul-shot:talent:1",
-      "shade:incubus:talent:1",
-      "warden:apex:talent:2",
-      "harvester:harvest:talent:2",
-      "sealer:open-the-gates:talent:2",
-      "enochian:lance:talent:1",
-      "spellblade:blitz:talent:2"
+      "sealer:open-the-gates:mastery",
+      "spellblade:nothung:talent:1",
+      "spellblade:nothung:mastery"
     ],
     "infuse-cost": [
       "wright:trait:aether",
-      "enochian:elden-rune:talent:2"
+      "enochian:elden-rune:talent:2",
+      "spellblade:drifting-leaf:mastery",
+      "stormbender:heave-ho:mastery"
     ],
     "heroics-economy": [
       "bastion:trait:strive",
@@ -3985,8 +3754,10 @@
     "use-ledger": [
       "bastion:trait:press-the-advantage",
       "bastion:rook:talent:2",
+      "colossus:boiling-blood:mastery",
       "fool:masquerade:talent:1",
-      "warden:mist-strider:talent:1"
+      "warden:mist-strider:talent:1",
+      "chanter:chastise:mastery"
     ],
     "shove-modifier": [
       "bastion:limit-break",
@@ -3994,7 +3765,18 @@
       "bastion:catapult:talent:2",
       "bastion:great-giorgios:talent:1",
       "bastion:great-giorgios:talent:2",
+      "warden:circle-the-oak:mastery",
       "enochian:soul-burn:talent:2"
+    ],
+    "action-type-change": [
+      "bastion:valiant:mastery",
+      "colossus:massive-overhead:mastery",
+      "freelancer:ace:mastery",
+      "shade:shadow-play:mastery",
+      "warden:strength-of-the-pack:mastery",
+      "warden:underway:talent:1",
+      "seer:limit-break",
+      "seer:polaris:mastery"
     ],
     "aura-user-gate": [
       "bastion:endless-battlement:talent:1",
@@ -4002,73 +3784,32 @@
     ],
     "interrupt-modifier": [
       "bastion:catapult:talent:1",
+      "bastion:catapult:mastery",
+      "bastion:perseus:mastery",
+      "colossus:raging-wolf:mastery",
       "knave:sucker-punch:talent:2",
+      "fool:chronotemper:mastery",
+      "freelancer:strafe-shot:mastery",
       "freelancer:deus-ex-machina:talent:2",
+      "freelancer:deus-ex-machina:mastery",
+      "sealer:spirit-shrine:mastery",
       "seer:wish:talent:1",
       "stormbender:heave-ho:talent:2"
     ],
-    "mastery-attachment": [
-      "bastion:rook:mastery",
-      "knave:dark-knight:mastery",
-      "knave:intimidate:mastery",
-      "knave:bleak-mercy:mastery",
-      "freelancer:warding-bolts:mastery",
-      "chanter:gentleness:mastery",
-      "spellblade:rampant-nail:mastery"
-    ],
     "charge-state": [
+      "bastion:great-giorgios:mastery",
       "demon-slayer:wicked-sheath:talent:1",
       "fool:spinning-top:talent:2",
-      "geomancer:terraforming:talent:1"
-    ],
-    "fly-grant": [
-      "colossus:trait:great-leap",
-      "fool:chronotemper:talent:2",
-      "chanter:felicity:talent:2",
-      "chanter:aria:talent:1",
-      "geomancer:dragon-dive:talent:2",
-      "stormbender:gust:talent:2"
-    ],
-    "terrain-create": [
-      "colossus:massive-overhead:talent:2",
-      "chanter:pandaemonium:talent:2",
-      "seer:eclipse:talent:1",
-      "enochian:implode:talent:2",
-      "geomancer:bio:talent:1",
-      "geomancer:geo:talent:1",
-      "geomancer:geo:talent:2",
-      "geomancer:realignment:talent:2",
-      "geomancer:quaking-palm:talent:1"
-    ],
-    "rush-modifier": [
-      "colossus:great-suplex:talent:2"
-    ],
-    "pre-ability-movement": [
-      "colossus:raging-wolf:talent:1"
-    ],
-    "sacrifice-cost": [
-      "knave:provoke:talent:2",
-      "knave:riposte:talent:1",
-      "harvester:blood-grove:talent:2",
-      "harvester:crimson-bloom:talent:2",
-      "enochian:pyroclast:talent:2"
-    ],
-    "stance-gate": [
-      "knave:dark-knight:talent:2",
-      "warden:strength-of-the-pack:talent:1"
-    ],
-    "entity-create": [
-      "fool:trait:tumbling",
-      "fool:diablo:talent:1",
-      "shade:limit-break",
-      "warden:apex:talent:1",
-      "warden:gwynt:talent:2",
-      "warden:circle-the-oak:talent:2",
-      "warden:strength-of-the-pack:talent:2"
+      "geomancer:terraforming:talent:1",
+      "geomancer:terraforming:mastery"
     ],
     "teleport": [
+      "demon-slayer:comet:mastery",
+      "demon-slayer:draken-cross:mastery",
+      "knave:strongarm:talent:1",
       "fool:trait:cheap-trick",
       "freelancer:showdown:talent:1",
+      "shade:death-blossom:mastery",
       "shade:shadow-play:talent:1",
       "sealer:matsuri:talent:1",
       "sealer:spirit-shrine:talent:2",
@@ -4077,6 +3818,71 @@
       "spellblade:fulminate:talent:1",
       "spellblade:fulminate:talent:2"
     ],
+    "range-modifier": [
+      "demon-slayer:gates-of-hell:talent:2"
+    ],
+    "fly-grant": [
+      "colossus:trait:great-leap",
+      "colossus:valkyrie:mastery",
+      "fool:cavaliere:mastery",
+      "fool:chronotemper:talent:2",
+      "chanter:felicity:talent:2",
+      "chanter:aria:talent:1",
+      "geomancer:dragon-dive:talent:2",
+      "stormbender:tsunami:mastery",
+      "stormbender:geyser:mastery",
+      "stormbender:gust:talent:2"
+    ],
+    "terrain-create": [
+      "colossus:massive-overhead:talent:2",
+      "shade:nightmare:mastery",
+      "chanter:pandaemonium:talent:2",
+      "seer:eclipse:talent:1",
+      "enochian:implode:talent:2",
+      "geomancer:bio:talent:1",
+      "geomancer:geo:talent:1",
+      "geomancer:geo:talent:2",
+      "geomancer:realignment:talent:2",
+      "geomancer:quaking-palm:talent:1",
+      "spellblade:atherwand:mastery",
+      "stormbender:eye-of-the-storm:mastery"
+    ],
+    "rush-modifier": [
+      "colossus:great-suplex:talent:2",
+      "knave:provoke:mastery"
+    ],
+    "pre-ability-movement": [
+      "colossus:raging-wolf:talent:1"
+    ],
+    "condition-suppression": [
+      "knave:limit-break"
+    ],
+    "sacrifice-cost": [
+      "knave:provoke:talent:2",
+      "knave:riposte:talent:1",
+      "harvester:blood-grove:talent:2",
+      "harvester:crimson-bloom:talent:2",
+      "enochian:pyroclast:talent:2",
+      "enochian:blackstar:mastery"
+    ],
+    "stance-gate": [
+      "knave:dark-knight:talent:2",
+      "fool:gallows-humor:mastery",
+      "warden:strength-of-the-pack:talent:1",
+      "geomancer:obsidian-flesh:mastery"
+    ],
+    "entity-create": [
+      "fool:trait:tumbling",
+      "fool:diablo:talent:1",
+      "shade:limit-break",
+      "warden:apex:talent:1",
+      "warden:apex:mastery",
+      "warden:gwynt:talent:2",
+      "warden:gwynt:mastery",
+      "warden:circle-the-oak:talent:2",
+      "warden:strength-of-the-pack:talent:2",
+      "harvester:blood-grove:mastery"
+    ],
     "gamble-state": [
       "fool:spinning-top:talent:1",
       "chanter:pandaemonium:talent:1",
@@ -4084,30 +3890,45 @@
       "seer:gran-reversa:talent:1",
       "spellblade:rampant-nail:talent:2"
     ],
+    "unlimited-range": [
+      "fool:masquerade:mastery"
+    ],
     "movement-modifier": [
-      "fool:chronotemper:talent:1"
+      "fool:chronotemper:talent:1",
+      "enochian:aethershard:mastery"
     ],
     "mark-modifier": [
       "freelancer:exorcism:talent:1",
       "freelancer:warding-bolts:talent:2",
+      "shade:incubus:mastery",
+      "harvester:growing-season:mastery",
       "harvester:rot:talent:2",
       "sealer:grand-seal:talent:1",
       "sealer:grand-seal:talent:2",
-      "seer:polaris:talent:1"
+      "sealer:divine-aegis:mastery",
+      "seer:polaris:talent:1",
+      "enochian:blazing-bond:mastery"
+    ],
+    "rebound": [
+      "freelancer:trick-shot:mastery"
+    ],
+    "distance-predicate": [
+      "freelancer:soul-shot:talent:1"
     ],
     "entity-vacate": [
       "shade:trait:darkside",
       "geomancer:trait:stone-double"
     ],
+    "ability-attack-modifier": [
+      "shade:umbra:mastery",
+      "warden:apex:talent:2"
+    ],
     "choice-input": [
       "shade:shadow-play:talent:2"
     ],
-    "action-type-change": [
-      "warden:underway:talent:1",
-      "seer:limit-break"
-    ],
     "cover-mechanic": [
       "warden:morrigan:talent:1",
+      "warden:sidhe:mastery",
       "stormbender:geyser:talent:1",
       "stormbender:gust:talent:1"
     ],
@@ -4118,11 +3939,13 @@
     ],
     "cure-on-trigger": [
       "chanter:symphony:talent:2",
+      "chanter:monogatari:mastery",
       "harvester:trait:balance",
       "seer:wish:talent:2"
     ],
     "damage-preview": [
-      "harvester:crimson-bloom:talent:1"
+      "harvester:crimson-bloom:talent:1",
+      "seer:wish:mastery"
     ],
     "attack-trigger-grant": [
       "sealer:trait:mantra-of-sealing"
@@ -4133,111 +3956,112 @@
     "threshold-modifier": [
       "enochian:trait:soulfire"
     ],
+    "object-distance": [
+      "enochian:lance:talent:1",
+      "geomancer:quaking-palm:mastery"
+    ],
     "pierce": [
       "enochian:aethershard:talent:2"
+    ],
+    "effect-redirect": [
+      "spellblade:blitz:talent:2"
     ]
   },
   "marginalTableAll": {
     "irreducible": {
-      "immediate": 58,
-      "oneCloser": 23,
+      "immediate": 79,
+      "oneCloser": 0,
       "multiCloser": 0,
-      "totalContaining": 81
+      "totalContaining": 79
     },
     "resource-management": {
       "immediate": 4,
-      "oneCloser": 9,
-      "multiCloser": 14,
+      "oneCloser": 10,
+      "multiCloser": 13,
       "totalContaining": 27
     },
     "area-define": {
-      "immediate": 10,
-      "oneCloser": 15,
-      "multiCloser": 32,
+      "immediate": 13,
+      "oneCloser": 16,
+      "multiCloser": 28,
       "totalContaining": 57
     },
     "damage-modifier": {
-      "immediate": 8,
-      "oneCloser": 10,
-      "multiCloser": 10,
+      "immediate": 10,
+      "oneCloser": 9,
+      "multiCloser": 9,
       "totalContaining": 28
     },
-    "range-modifier": {
-      "immediate": 13,
-      "oneCloser": 23,
-      "multiCloser": 35,
-      "totalContaining": 71
-    },
     "use-ledger": {
-      "immediate": 4,
+      "immediate": 6,
       "oneCloser": 9,
-      "multiCloser": 11,
+      "multiCloser": 9,
       "totalContaining": 24
     },
     "infuse-cost": {
-      "immediate": 2,
-      "oneCloser": 3,
+      "immediate": 4,
+      "oneCloser": 1,
       "multiCloser": 9,
       "totalContaining": 14
     },
     "heroics-economy": {
       "immediate": 3,
-      "oneCloser": 1,
-      "multiCloser": 1,
+      "oneCloser": 2,
+      "multiCloser": 0,
       "totalContaining": 5
     },
     "shove-modifier": {
-      "immediate": 6,
-      "oneCloser": 3,
-      "multiCloser": 7,
+      "immediate": 7,
+      "oneCloser": 4,
+      "multiCloser": 5,
       "totalContaining": 16
     },
     "attack-modifier": {
       "immediate": 0,
-      "oneCloser": 1,
-      "multiCloser": 1,
+      "oneCloser": 2,
+      "multiCloser": 0,
       "totalContaining": 2
     },
     "effect-count": {
       "immediate": 3,
-      "oneCloser": 2,
-      "multiCloser": 1,
+      "oneCloser": 3,
+      "multiCloser": 0,
       "totalContaining": 6
-    },
-    "mastery-attachment": {
-      "immediate": 7,
-      "oneCloser": 77,
-      "multiCloser": 60,
-      "totalContaining": 144
     },
     "pre-ability-movement": {
       "immediate": 1,
-      "oneCloser": 5,
-      "multiCloser": 7,
+      "oneCloser": 7,
+      "multiCloser": 5,
       "totalContaining": 13
     },
     "rush-modifier": {
-      "immediate": 1,
+      "immediate": 2,
       "oneCloser": 4,
-      "multiCloser": 6,
+      "multiCloser": 5,
       "totalContaining": 11
     },
     "cure-on-trigger": {
-      "immediate": 3,
-      "oneCloser": 2,
+      "immediate": 4,
+      "oneCloser": 1,
       "multiCloser": 3,
       "totalContaining": 8
     },
+    "range-modifier": {
+      "immediate": 1,
+      "oneCloser": 25,
+      "multiCloser": 29,
+      "totalContaining": 55
+    },
     "terrain-create": {
-      "immediate": 9,
-      "oneCloser": 15,
-      "multiCloser": 28,
+      "immediate": 12,
+      "oneCloser": 18,
+      "multiCloser": 22,
       "totalContaining": 52
     },
     "action-type-change": {
-      "immediate": 2,
-      "oneCloser": 12,
-      "multiCloser": 14,
+      "immediate": 8,
+      "oneCloser": 11,
+      "multiCloser": 9,
       "totalContaining": 28
     },
     "aura-user-gate": {
@@ -4247,46 +4071,58 @@
       "totalContaining": 2
     },
     "interrupt-modifier": {
-      "immediate": 5,
-      "oneCloser": 14,
+      "immediate": 12,
+      "oneCloser": 7,
       "multiCloser": 5,
       "totalContaining": 24
     },
+    "unlimited-range": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 1,
+      "totalContaining": 3
+    },
     "vigor-grant": {
       "immediate": 0,
-      "oneCloser": 7,
-      "multiCloser": 11,
+      "oneCloser": 8,
+      "multiCloser": 10,
       "totalContaining": 18
     },
     "charge-state": {
-      "immediate": 3,
+      "immediate": 5,
       "oneCloser": 12,
-      "multiCloser": 11,
+      "multiCloser": 9,
       "totalContaining": 26
     },
     "teleport": {
-      "immediate": 9,
-      "oneCloser": 20,
-      "multiCloser": 12,
-      "totalContaining": 41
+      "immediate": 13,
+      "oneCloser": 18,
+      "multiCloser": 11,
+      "totalContaining": 42
     },
     "stance-gate": {
-      "immediate": 2,
-      "oneCloser": 4,
+      "immediate": 4,
+      "oneCloser": 2,
       "multiCloser": 5,
       "totalContaining": 11
     },
     "fly-grant": {
-      "immediate": 6,
-      "oneCloser": 12,
+      "immediate": 10,
+      "oneCloser": 8,
       "multiCloser": 11,
       "totalContaining": 29
     },
     "sacrifice-cost": {
-      "immediate": 5,
+      "immediate": 6,
       "oneCloser": 6,
       "multiCloser": 3,
-      "totalContaining": 14
+      "totalContaining": 15
+    },
+    "condition-suppression": {
+      "immediate": 1,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 1
     },
     "save-modifier": {
       "immediate": 0,
@@ -4296,20 +4132,20 @@
     },
     "combo-spend": {
       "immediate": 0,
-      "oneCloser": 3,
-      "multiCloser": 3,
+      "oneCloser": 4,
+      "multiCloser": 2,
       "totalContaining": 6
     },
     "entity-create": {
-      "immediate": 7,
+      "immediate": 10,
       "oneCloser": 12,
-      "multiCloser": 14,
+      "multiCloser": 11,
       "totalContaining": 33
     },
     "gamble-state": {
       "immediate": 5,
-      "oneCloser": 4,
-      "multiCloser": 7,
+      "oneCloser": 8,
+      "multiCloser": 3,
       "totalContaining": 16
     },
     "threshold-modifier": {
@@ -4319,21 +4155,33 @@
       "totalContaining": 2
     },
     "mark-modifier": {
-      "immediate": 6,
-      "oneCloser": 15,
-      "multiCloser": 11,
+      "immediate": 10,
+      "oneCloser": 14,
+      "multiCloser": 8,
       "totalContaining": 32
     },
     "movement-modifier": {
-      "immediate": 1,
-      "oneCloser": 1,
+      "immediate": 2,
+      "oneCloser": 0,
       "multiCloser": 0,
       "totalContaining": 2
     },
+    "distance-predicate": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 4,
+      "totalContaining": 6
+    },
+    "rebound": {
+      "immediate": 1,
+      "oneCloser": 2,
+      "multiCloser": 0,
+      "totalContaining": 3
+    },
     "cover-mechanic": {
-      "immediate": 3,
+      "immediate": 4,
       "oneCloser": 3,
-      "multiCloser": 9,
+      "multiCloser": 8,
       "totalContaining": 15
     },
     "entity-vacate": {
@@ -4342,13 +4190,13 @@
       "multiCloser": 0,
       "totalContaining": 4
     },
-    "entity-consume": {
-      "immediate": 0,
-      "oneCloser": 1,
+    "ability-attack-modifier": {
+      "immediate": 2,
+      "oneCloser": 0,
       "multiCloser": 0,
-      "totalContaining": 1
+      "totalContaining": 2
     },
-    "rebound": {
+    "entity-consume": {
       "immediate": 0,
       "oneCloser": 1,
       "multiCloser": 0,
@@ -4362,13 +4210,13 @@
     },
     "blessing-spend": {
       "immediate": 1,
-      "oneCloser": 2,
-      "multiCloser": 8,
+      "oneCloser": 3,
+      "multiCloser": 7,
       "totalContaining": 11
     },
     "damage-preview": {
-      "immediate": 1,
-      "oneCloser": 1,
+      "immediate": 2,
+      "oneCloser": 0,
       "multiCloser": 0,
       "totalContaining": 2
     },
@@ -4378,7 +4226,19 @@
       "multiCloser": 0,
       "totalContaining": 1
     },
+    "object-distance": {
+      "immediate": 2,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
     "pierce": {
+      "immediate": 1,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 1
+    },
+    "effect-redirect": {
       "immediate": 1,
       "oneCloser": 0,
       "multiCloser": 0,
@@ -4386,172 +4246,172 @@
     }
   },
   "marginalTableImplementable": {
-    "mastery-attachment": {
-      "immediate": 7,
-      "oneCloser": 77,
-      "multiCloser": 60,
-      "totalContaining": 144
-    },
-    "range-modifier": {
-      "immediate": 13,
-      "oneCloser": 23,
-      "multiCloser": 35,
-      "totalContaining": 71
-    },
     "area-define": {
-      "immediate": 10,
-      "oneCloser": 15,
-      "multiCloser": 32,
+      "immediate": 13,
+      "oneCloser": 16,
+      "multiCloser": 28,
       "totalContaining": 57
     },
+    "range-modifier": {
+      "immediate": 1,
+      "oneCloser": 25,
+      "multiCloser": 29,
+      "totalContaining": 55
+    },
     "terrain-create": {
-      "immediate": 9,
-      "oneCloser": 15,
-      "multiCloser": 28,
+      "immediate": 12,
+      "oneCloser": 18,
+      "multiCloser": 22,
       "totalContaining": 52
     },
     "teleport": {
-      "immediate": 9,
-      "oneCloser": 20,
-      "multiCloser": 12,
-      "totalContaining": 41
+      "immediate": 13,
+      "oneCloser": 18,
+      "multiCloser": 11,
+      "totalContaining": 42
     },
     "entity-create": {
-      "immediate": 7,
+      "immediate": 10,
       "oneCloser": 12,
-      "multiCloser": 14,
+      "multiCloser": 11,
       "totalContaining": 33
     },
     "mark-modifier": {
-      "immediate": 6,
-      "oneCloser": 15,
-      "multiCloser": 11,
+      "immediate": 10,
+      "oneCloser": 14,
+      "multiCloser": 8,
       "totalContaining": 32
     },
     "fly-grant": {
-      "immediate": 6,
-      "oneCloser": 12,
+      "immediate": 10,
+      "oneCloser": 8,
       "multiCloser": 11,
       "totalContaining": 29
     },
     "damage-modifier": {
-      "immediate": 8,
-      "oneCloser": 10,
-      "multiCloser": 10,
+      "immediate": 10,
+      "oneCloser": 9,
+      "multiCloser": 9,
       "totalContaining": 28
     },
     "action-type-change": {
-      "immediate": 2,
-      "oneCloser": 12,
-      "multiCloser": 14,
+      "immediate": 8,
+      "oneCloser": 11,
+      "multiCloser": 9,
       "totalContaining": 28
     },
     "resource-management": {
       "immediate": 4,
-      "oneCloser": 9,
-      "multiCloser": 14,
+      "oneCloser": 10,
+      "multiCloser": 13,
       "totalContaining": 27
     },
     "charge-state": {
-      "immediate": 3,
+      "immediate": 5,
       "oneCloser": 12,
-      "multiCloser": 11,
+      "multiCloser": 9,
       "totalContaining": 26
     },
     "use-ledger": {
-      "immediate": 4,
+      "immediate": 6,
       "oneCloser": 9,
-      "multiCloser": 11,
+      "multiCloser": 9,
       "totalContaining": 24
     },
     "interrupt-modifier": {
-      "immediate": 5,
-      "oneCloser": 14,
+      "immediate": 12,
+      "oneCloser": 7,
       "multiCloser": 5,
       "totalContaining": 24
     },
     "vigor-grant": {
       "immediate": 0,
-      "oneCloser": 7,
-      "multiCloser": 11,
+      "oneCloser": 8,
+      "multiCloser": 10,
       "totalContaining": 18
     },
     "shove-modifier": {
-      "immediate": 6,
-      "oneCloser": 3,
-      "multiCloser": 7,
+      "immediate": 7,
+      "oneCloser": 4,
+      "multiCloser": 5,
       "totalContaining": 16
     },
     "gamble-state": {
       "immediate": 5,
-      "oneCloser": 4,
-      "multiCloser": 7,
+      "oneCloser": 8,
+      "multiCloser": 3,
       "totalContaining": 16
     },
+    "sacrifice-cost": {
+      "immediate": 6,
+      "oneCloser": 6,
+      "multiCloser": 3,
+      "totalContaining": 15
+    },
     "cover-mechanic": {
-      "immediate": 3,
+      "immediate": 4,
       "oneCloser": 3,
-      "multiCloser": 9,
+      "multiCloser": 8,
       "totalContaining": 15
     },
     "infuse-cost": {
-      "immediate": 2,
-      "oneCloser": 3,
+      "immediate": 4,
+      "oneCloser": 1,
       "multiCloser": 9,
-      "totalContaining": 14
-    },
-    "sacrifice-cost": {
-      "immediate": 5,
-      "oneCloser": 6,
-      "multiCloser": 3,
       "totalContaining": 14
     },
     "pre-ability-movement": {
       "immediate": 1,
-      "oneCloser": 5,
-      "multiCloser": 7,
+      "oneCloser": 7,
+      "multiCloser": 5,
       "totalContaining": 13
     },
     "rush-modifier": {
-      "immediate": 1,
-      "oneCloser": 4,
-      "multiCloser": 6,
-      "totalContaining": 11
-    },
-    "stance-gate": {
       "immediate": 2,
       "oneCloser": 4,
       "multiCloser": 5,
       "totalContaining": 11
     },
+    "stance-gate": {
+      "immediate": 4,
+      "oneCloser": 2,
+      "multiCloser": 5,
+      "totalContaining": 11
+    },
     "blessing-spend": {
       "immediate": 1,
-      "oneCloser": 2,
-      "multiCloser": 8,
+      "oneCloser": 3,
+      "multiCloser": 7,
       "totalContaining": 11
     },
     "cure-on-trigger": {
-      "immediate": 3,
-      "oneCloser": 2,
+      "immediate": 4,
+      "oneCloser": 1,
       "multiCloser": 3,
       "totalContaining": 8
     },
     "effect-count": {
       "immediate": 3,
-      "oneCloser": 2,
-      "multiCloser": 1,
+      "oneCloser": 3,
+      "multiCloser": 0,
       "totalContaining": 6
     },
     "combo-spend": {
       "immediate": 0,
-      "oneCloser": 3,
-      "multiCloser": 3,
+      "oneCloser": 4,
+      "multiCloser": 2,
+      "totalContaining": 6
+    },
+    "distance-predicate": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 4,
       "totalContaining": 6
     },
     "heroics-economy": {
       "immediate": 3,
-      "oneCloser": 1,
-      "multiCloser": 1,
+      "oneCloser": 2,
+      "multiCloser": 0,
       "totalContaining": 5
     },
     "entity-vacate": {
@@ -4560,10 +4420,22 @@
       "multiCloser": 0,
       "totalContaining": 4
     },
-    "attack-modifier": {
-      "immediate": 0,
+    "unlimited-range": {
+      "immediate": 1,
       "oneCloser": 1,
       "multiCloser": 1,
+      "totalContaining": 3
+    },
+    "rebound": {
+      "immediate": 1,
+      "oneCloser": 2,
+      "multiCloser": 0,
+      "totalContaining": 3
+    },
+    "attack-modifier": {
+      "immediate": 0,
+      "oneCloser": 2,
+      "multiCloser": 0,
       "totalContaining": 2
     },
     "aura-user-gate": {
@@ -4585,8 +4457,14 @@
       "totalContaining": 2
     },
     "movement-modifier": {
-      "immediate": 1,
-      "oneCloser": 1,
+      "immediate": 2,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "ability-attack-modifier": {
+      "immediate": 2,
+      "oneCloser": 0,
       "multiCloser": 0,
       "totalContaining": 2
     },
@@ -4597,18 +4475,24 @@
       "totalContaining": 2
     },
     "damage-preview": {
-      "immediate": 1,
-      "oneCloser": 1,
+      "immediate": 2,
+      "oneCloser": 0,
       "multiCloser": 0,
       "totalContaining": 2
     },
-    "entity-consume": {
-      "immediate": 0,
-      "oneCloser": 1,
+    "object-distance": {
+      "immediate": 2,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 2
+    },
+    "condition-suppression": {
+      "immediate": 1,
+      "oneCloser": 0,
       "multiCloser": 0,
       "totalContaining": 1
     },
-    "rebound": {
+    "entity-consume": {
       "immediate": 0,
       "oneCloser": 1,
       "multiCloser": 0,
@@ -4625,287 +4509,342 @@
       "oneCloser": 0,
       "multiCloser": 0,
       "totalContaining": 1
+    },
+    "effect-redirect": {
+      "immediate": 1,
+      "oneCloser": 0,
+      "multiCloser": 0,
+      "totalContaining": 1
     }
   },
-  "residualCount": 58,
+  "residualCount": 79,
   "greedySimulation": [
     {
       "step": 1,
-      "implement": "range-modifier",
+      "implement": "area-define",
       "unlocks": 13,
       "cumulative": 13,
-      "remaining": 448
+      "remaining": 435
     },
     {
       "step": 2,
-      "implement": "area-define",
-      "unlocks": 12,
-      "cumulative": 25,
-      "remaining": 436
+      "implement": "teleport",
+      "unlocks": 14,
+      "cumulative": 27,
+      "remaining": 421
     },
     {
       "step": 3,
       "implement": "terrain-create",
-      "unlocks": 13,
-      "cumulative": 38,
-      "remaining": 423
+      "unlocks": 18,
+      "cumulative": 45,
+      "remaining": 403
     },
     {
       "step": 4,
-      "implement": "teleport",
-      "unlocks": 15,
-      "cumulative": 53,
-      "remaining": 408
+      "implement": "interrupt-modifier",
+      "unlocks": 16,
+      "cumulative": 61,
+      "remaining": 387
     },
     {
       "step": 5,
-      "implement": "damage-modifier",
-      "unlocks": 11,
-      "cumulative": 64,
-      "remaining": 397
+      "implement": "entity-create",
+      "unlocks": 13,
+      "cumulative": 74,
+      "remaining": 374
     },
     {
       "step": 6,
-      "implement": "mastery-attachment",
-      "unlocks": 31,
-      "cumulative": 95,
-      "remaining": 366
+      "implement": "mark-modifier",
+      "unlocks": 16,
+      "cumulative": 90,
+      "remaining": 358
     },
     {
       "step": 7,
-      "implement": "entity-create",
-      "unlocks": 16,
-      "cumulative": 111,
-      "remaining": 350
+      "implement": "fly-grant",
+      "unlocks": 12,
+      "cumulative": 102,
+      "remaining": 346
     },
     {
       "step": 8,
-      "implement": "mark-modifier",
-      "unlocks": 23,
-      "cumulative": 134,
-      "remaining": 327
+      "implement": "damage-modifier",
+      "unlocks": 20,
+      "cumulative": 122,
+      "remaining": 326
     },
     {
       "step": 9,
-      "implement": "fly-grant",
-      "unlocks": 13,
-      "cumulative": 147,
-      "remaining": 314
+      "implement": "action-type-change",
+      "unlocks": 17,
+      "cumulative": 139,
+      "remaining": 309
     },
     {
       "step": 10,
       "implement": "shove-modifier",
-      "unlocks": 11,
-      "cumulative": 158,
-      "remaining": 303
+      "unlocks": 10,
+      "cumulative": 149,
+      "remaining": 299
     },
     {
       "step": 11,
-      "implement": "interrupt-modifier",
-      "unlocks": 18,
-      "cumulative": 176,
-      "remaining": 285
+      "implement": "use-ledger",
+      "unlocks": 10,
+      "cumulative": 159,
+      "remaining": 289
     },
     {
       "step": 12,
-      "implement": "gamble-state",
-      "unlocks": 12,
-      "cumulative": 188,
-      "remaining": 273
+      "implement": "sacrifice-cost",
+      "unlocks": 9,
+      "cumulative": 168,
+      "remaining": 280
     },
     {
       "step": 13,
-      "implement": "sacrifice-cost",
-      "unlocks": 11,
-      "cumulative": 199,
+      "implement": "charge-state",
+      "unlocks": 18,
+      "cumulative": 186,
       "remaining": 262
     },
     {
       "step": 14,
-      "implement": "resource-management",
-      "unlocks": 6,
-      "cumulative": 205,
-      "remaining": 256
+      "implement": "gamble-state",
+      "unlocks": 14,
+      "cumulative": 200,
+      "remaining": 248
     },
     {
       "step": 15,
-      "implement": "use-ledger",
-      "unlocks": 14,
-      "cumulative": 219,
-      "remaining": 242
+      "implement": "resource-management",
+      "unlocks": 5,
+      "cumulative": 205,
+      "remaining": 243
     },
     {
       "step": 16,
-      "implement": "charge-state",
-      "unlocks": 19,
-      "cumulative": 238,
-      "remaining": 223
+      "implement": "cover-mechanic",
+      "unlocks": 9,
+      "cumulative": 214,
+      "remaining": 234
     },
     {
       "step": 17,
-      "implement": "cover-mechanic",
-      "unlocks": 11,
-      "cumulative": 249,
-      "remaining": 212
+      "implement": "infuse-cost",
+      "unlocks": 9,
+      "cumulative": 223,
+      "remaining": 225
     },
     {
       "step": 18,
-      "implement": "cure-on-trigger",
-      "unlocks": 5,
-      "cumulative": 254,
-      "remaining": 207
+      "implement": "stance-gate",
+      "unlocks": 7,
+      "cumulative": 230,
+      "remaining": 218
     },
     {
       "step": 19,
-      "implement": "effect-count",
-      "unlocks": 4,
-      "cumulative": 258,
-      "remaining": 203
+      "implement": "cure-on-trigger",
+      "unlocks": 5,
+      "cumulative": 235,
+      "remaining": 213
     },
     {
       "step": 20,
-      "implement": "heroics-economy",
-      "unlocks": 5,
-      "cumulative": 263,
-      "remaining": 198
+      "implement": "effect-count",
+      "unlocks": 4,
+      "cumulative": 239,
+      "remaining": 209
     },
     {
       "step": 21,
-      "implement": "action-type-change",
-      "unlocks": 24,
-      "cumulative": 287,
-      "remaining": 174
+      "implement": "heroics-economy",
+      "unlocks": 5,
+      "cumulative": 244,
+      "remaining": 204
     },
     {
       "step": 22,
-      "implement": "infuse-cost",
-      "unlocks": 14,
-      "cumulative": 301,
-      "remaining": 160
+      "implement": "rush-modifier",
+      "unlocks": 4,
+      "cumulative": 248,
+      "remaining": 200
     },
     {
       "step": 23,
-      "implement": "stance-gate",
-      "unlocks": 9,
-      "cumulative": 310,
-      "remaining": 151
+      "implement": "entity-vacate",
+      "unlocks": 2,
+      "cumulative": 250,
+      "remaining": 198
     },
     {
       "step": 24,
-      "implement": "entity-vacate",
+      "implement": "aura-user-gate",
       "unlocks": 2,
-      "cumulative": 312,
-      "remaining": 149
+      "cumulative": 252,
+      "remaining": 196
     },
     {
       "step": 25,
-      "implement": "aura-user-gate",
+      "implement": "movement-modifier",
       "unlocks": 2,
-      "cumulative": 314,
-      "remaining": 147
+      "cumulative": 254,
+      "remaining": 194
     },
     {
       "step": 26,
-      "implement": "pre-ability-movement",
-      "unlocks": 6,
-      "cumulative": 320,
-      "remaining": 141
+      "implement": "ability-attack-modifier",
+      "unlocks": 2,
+      "cumulative": 256,
+      "remaining": 192
     },
     {
       "step": 27,
-      "implement": "rush-modifier",
-      "unlocks": 10,
-      "cumulative": 330,
-      "remaining": 131
+      "implement": "damage-preview",
+      "unlocks": 2,
+      "cumulative": 258,
+      "remaining": 190
     },
     {
       "step": 28,
-      "implement": "blessing-spend",
-      "unlocks": 11,
-      "cumulative": 341,
-      "remaining": 120
+      "implement": "object-distance",
+      "unlocks": 2,
+      "cumulative": 260,
+      "remaining": 188
     },
     {
       "step": 29,
-      "implement": "threshold-modifier",
-      "unlocks": 2,
-      "cumulative": 343,
-      "remaining": 118
+      "implement": "range-modifier",
+      "unlocks": 41,
+      "cumulative": 301,
+      "remaining": 147
     },
     {
       "step": 30,
-      "implement": "movement-modifier",
-      "unlocks": 2,
-      "cumulative": 345,
-      "remaining": 116
+      "implement": "pre-ability-movement",
+      "unlocks": 11,
+      "cumulative": 312,
+      "remaining": 136
     },
     {
       "step": 31,
-      "implement": "choice-input",
-      "unlocks": 2,
-      "cumulative": 347,
-      "remaining": 114
+      "implement": "blessing-spend",
+      "unlocks": 11,
+      "cumulative": 323,
+      "remaining": 125
     },
     {
       "step": 32,
-      "implement": "damage-preview",
-      "unlocks": 2,
-      "cumulative": 349,
-      "remaining": 112
+      "implement": "distance-predicate",
+      "unlocks": 4,
+      "cumulative": 327,
+      "remaining": 121
     },
     {
       "step": 33,
-      "implement": "attack-trigger-grant",
-      "unlocks": 1,
-      "cumulative": 350,
-      "remaining": 111
+      "implement": "unlimited-range",
+      "unlocks": 3,
+      "cumulative": 330,
+      "remaining": 118
     },
     {
       "step": 34,
-      "implement": "pierce",
-      "unlocks": 1,
-      "cumulative": 351,
-      "remaining": 110
+      "implement": "rebound",
+      "unlocks": 2,
+      "cumulative": 332,
+      "remaining": 116
     },
     {
       "step": 35,
-      "implement": "vigor-grant",
-      "unlocks": 18,
-      "cumulative": 369,
-      "remaining": 92
+      "implement": "threshold-modifier",
+      "unlocks": 2,
+      "cumulative": 334,
+      "remaining": 114
     },
     {
       "step": 36,
-      "implement": "combo-spend",
-      "unlocks": 6,
-      "cumulative": 375,
-      "remaining": 86
+      "implement": "choice-input",
+      "unlocks": 2,
+      "cumulative": 336,
+      "remaining": 112
     },
     {
       "step": 37,
-      "implement": "attack-modifier",
-      "unlocks": 2,
-      "cumulative": 377,
-      "remaining": 84
+      "implement": "condition-suppression",
+      "unlocks": 1,
+      "cumulative": 337,
+      "remaining": 111
     },
     {
       "step": 38,
+      "implement": "attack-trigger-grant",
+      "unlocks": 1,
+      "cumulative": 338,
+      "remaining": 110
+    },
+    {
+      "step": 39,
+      "implement": "pierce",
+      "unlocks": 1,
+      "cumulative": 339,
+      "remaining": 109
+    },
+    {
+      "step": 40,
+      "implement": "effect-redirect",
+      "unlocks": 1,
+      "cumulative": 340,
+      "remaining": 108
+    },
+    {
+      "step": 41,
+      "implement": "vigor-grant",
+      "unlocks": 18,
+      "cumulative": 358,
+      "remaining": 90
+    },
+    {
+      "step": 42,
+      "implement": "combo-spend",
+      "unlocks": 6,
+      "cumulative": 364,
+      "remaining": 84
+    },
+    {
+      "step": 43,
+      "implement": "attack-modifier",
+      "unlocks": 2,
+      "cumulative": 366,
+      "remaining": 82
+    },
+    {
+      "step": 44,
       "implement": "save-modifier",
       "unlocks": 2,
-      "cumulative": 379,
-      "remaining": 82
+      "cumulative": 368,
+      "remaining": 80
+    },
+    {
+      "step": 45,
+      "implement": "entity-consume",
+      "unlocks": 1,
+      "cumulative": 369,
+      "remaining": 79
     }
   ],
   "invariants": [
     "✓ All source IDs are unique",
     "✓ Every unresolved unit appears exactly once",
     "✓ No executable unit appears in the unresolved census",
-    "✓ Per-kind totals sum to unresolved total (461)",
+    "✓ Per-kind totals sum to unresolved total (448)",
     "✓ All blocker-set frequencies derive from per-unit records",
     "✓ All marginal values derive from per-unit records",
     "✓ Marginal assertion: immediate + oneCloser + multiCloser === totalContaining for every blocker",
     "✓ Cumulative unlocked + remaining = baseline at every step",
     "✓ No non-implementable classifications in greedy simulation",
-    "✓ Final remaining: 82 (residual: 58 units need non-implementable capabilities)"
+    "✓ Final remaining: 79 (residual: 79 units need non-implementable capabilities)"
   ]
 }

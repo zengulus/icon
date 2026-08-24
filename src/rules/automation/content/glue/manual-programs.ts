@@ -22,10 +22,12 @@ import { compileFoeTraitKeywordRecipe } from '../../kernels/foe-trait-recipes.js
 import { compileAuraFoeTraitRecipe } from '../../kernels/aura.js';
 import { compileHpThresholdFoeTraitRecipe } from '../../kernels/hp-threshold.js';
 import { compileAttackModifierFoeTraitRecipe } from '../../kernels/attack-modifiers.js';
+import { compileRangeModifierRecipe } from '../../kernels/range.js';
 import { EXECUTABLE_JOB_TRAIT_IDS } from '../jobs/job-trait-recipes.js';
 import { JOB_SUMMON_SUITES } from '../jobs/summon-recipes.js';
 import { documentedTalentDetail } from '../jobs/talent-recipes.js';
 import { isExecutableTalent } from '../../kernels/talent-recipes.js';
+import { documentedMasteryDetail, isExecutableMastery } from '../../kernels/mastery.js';
 
 const coreUseCosts: Record<string, number> = {
   'core:dash': 1,
@@ -71,6 +73,12 @@ const independentlyExecutableManualPrograms = new Set([
   // by the Rescue reducer, so it is audited as a reviewed passive rather
   // than becoming a guessed active action.
   'mendicant:trait:succor',
+  // ICON p.204 Wright Aetherwall: "Gain resistance against abilities used
+  // by characters outside range 2." The `aetherwall` condition is projected
+  // from the trait (classes/trait-condition-recipes.ts) and the shared
+  // damage authority halves any instance whose source is beyond range 2 — a
+  // continuous, state-derived projection.
+  'wright:trait:aetherwall',
   // F6: every wired Job trait (condition projections, lifecycle recipes, and
   // typed resolvers) has its source fixture + replay test in
   // `__tests__/job-traits.test.ts`; the documented rows stay out of this set.
@@ -389,6 +397,12 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
   // talent audits as a complete program (allowlist + source fixture + replay
   // test); documented talents stay source-visible with their kernel need.
   if (unit.kind === 'talent') {
+    // A range-modifier talent (Valkyrie gains range 4, Incubus range 3/5,
+    // Harvest range 2/5, Open the Gates range = round) is fully represented
+    // by its reviewed range rule: the kernel compiles it complete, and the
+    // rule itself is the audit authority (folded at both command gates).
+    const rangeCompiled = compileRangeModifierRecipe(unit);
+    if (rangeCompiled) return rangeCompiled;
     const wired = isExecutableTalent(unit.id);
     const clause: RuleClauseCompilation = {
       id: `${unit.id}:clause:1`,
@@ -412,6 +426,40 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
       },
       clauses: [clause],
       unsupportedClauses: wired ? [] : [clause],
+    };
+  }
+  // A mastery is not an independently activated ability — it modifies or
+  // extends its parent ability (a fold, a program-level variant, a
+  // continuous projection, or a lifecycle/trigger augmentation, declared by
+  // the reviewed MasteryRecipe in content/jobs/mastery-recipes.ts). An
+  // implemented mastery audits as a complete program (allowlist + source
+  // fixture + replay test); unimplemented masteries stay source-visible with
+  // their documented remaining kernel need instead of the blanket
+  // attachment-required failure.
+  if (unit.kind === 'mastery') {
+    const implemented = isExecutableMastery(unit.id);
+    const clause: RuleClauseCompilation = {
+      id: `${unit.id}:clause:1`,
+      label: 'passive',
+      text: unit.rulesText,
+      effects: [],
+      complete: implemented,
+      unsupportedText: implemented ? '' : (documentedMasteryDetail(unit.id) || 'Mastery requires a typed mastery attachment or lifecycle resolver.'),
+    };
+    return {
+      program: {
+        schemaVersion: 1,
+        rulesVersion: '1.5',
+        id: `program:${unit.id}`,
+        sourceId: unit.id,
+        source: unit.source,
+        name: unit.name,
+        actions: [],
+        dependencies: unit.parentId ? [unit.parentId] : [],
+        classification: 'encounter',
+      },
+      clauses: [clause],
+      unsupportedClauses: implemented ? [] : [clause],
     };
   }
   if (unit.kind !== 'core' && unit.kind !== 'class-trait' && unit.kind !== 'job-trait' && unit.kind !== 'job-summon-rule') return null;

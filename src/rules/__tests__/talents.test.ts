@@ -85,17 +85,19 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 29 wired / 4 program-level / 3 passive-projection / 252 documented', () => {
+  it('covers exactly the 288 source talents with 29 wired / 4 program-level / 3 passive-projection / 4 range-modifier / 248 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
     expect(Object.keys(recipes)).toHaveLength(288);
     expect(Object.keys(recipes).sort()).toEqual([...sourceIds].sort());
-    // F7 + aura + HP-threshold: the three passive-projection rows (Rook t1,
-    // Dervish t1, Gentleness t1) are continuous aura-membership projections,
-    // not fold triggers or program-emitted variants.
-    expect(getExecutableTalentIds().size).toBe(36);
-    expect(getDocumentedTalentIds(units).size).toBe(252);
+    // F7 + aura + HP-threshold + range: the three passive-projection rows
+    // (Rook t1, Dervish t1, Gentleness t1) are continuous aura-membership
+    // projections; the four range-modifier rows (Valkyrie t1, Incubus t1,
+    // Harvest t2, Open the Gates t2) are executable through the shared range
+    // kernel. None are fold triggers or program-emitted variants.
+    expect(getExecutableTalentIds().size).toBe(40);
+    expect(getDocumentedTalentIds(units).size).toBe(248);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();

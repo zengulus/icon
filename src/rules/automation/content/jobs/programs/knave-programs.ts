@@ -1,5 +1,7 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { resolveAttackRoll } from '../../../primitives/attack-resolution.js';
+import { auraDefinitionFor, auraRuntimeView, isInAura } from '../../../kernels/aura.js';
+import { hasMastery } from '../../../kernels/mastery.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { Position } from '../../../../types.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
@@ -332,14 +334,41 @@ const bleakMercyEffects: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.144 Combo (Sweet Torment): aura 1 that stops cures and save clearing. */
+/** ICON p.144 Combo (Sweet Torment): aura 1 that stops cures and save clearing.
+ * Mastery (Painkiller): "Once gained, Sweet Torment's aura lasts indefinitely.
+ * If you use Sweet Torment again while the aura is active, deal 2 damage,
+ * once, to all foes in the aura within for every status they are suffering
+ * from, to a maximum of three times." The mastered branch keeps the aura
+ * (combat duration, the engine's indefinite boundary) and, on a re-use while
+ * it is active, deals the status-counted damage instead of re-gaining it. */
 const bleakMercyComboEffects: RuleResolver = (context, action) => {
   const source = sourceActor(context, context.actorId);
   if (!source) return [];
-  const mutations: RuleMutation[] = [{
-    kind: 'persistent', sourceId: context.sourceId, ownerId: source.id, operation: 'add', actorId: source.id,
-    effectId: 'sweet-torment', duration: untilNextTurnEnd, modifiers: [{ operation: 'grant', stat: 'aura', value: { kind: 'constant', value: 1 } }], triggers: [], state: {},
-  }];
+  const mastered = hasMastery(source, 'knave:bleak-mercy');
+  const auraActive = (source.activeEffects ?? []).some((effect) => effect.effectId === 'sweet-torment');
+  const mutations: RuleMutation[] = [];
+  if (mastered && auraActive) {
+    // Painkiller re-use: the aura is already active, so instead of re-gaining
+    // it, every foe inside takes 2 damage per status they suffer (max 3).
+    // Membership is the shared aura kernel's — the same authority the
+    // status-save policy hook uses.
+    const definition = auraDefinitionFor('knave:bleak-mercy');
+    if (definition) {
+      const view = auraRuntimeView(context.state);
+      for (const foe of Object.values(context.state.actors)) {
+        if (foe.side === source.side || foe.defeated) continue;
+        if (!isInAura(view, definition, foe.id)) continue;
+        const statuses = Math.min(3, foe.statuses.length);
+        if (statuses > 0) mutations.push(damageMutation(context, foe.id, 2 * statuses, 'effect'));
+      }
+    }
+  } else {
+    mutations.push({
+      kind: 'persistent', sourceId: context.sourceId, ownerId: source.id, operation: 'add', actorId: source.id,
+      effectId: 'sweet-torment', duration: mastered ? { kind: 'combat' } : untilNextTurnEnd,
+      modifiers: [{ operation: 'grant', stat: 'aura', value: { kind: 'constant', value: 1 } }], triggers: [], state: {},
+    });
+  }
   mutations.push(...bleakMercyEffects(context, action));
   return mutations;
 };

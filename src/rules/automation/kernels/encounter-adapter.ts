@@ -2,9 +2,10 @@ import type { EncounterActor, EncounterEntity, EncounterHeldDamage, EncounterPen
 import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
 import { projectedMarkConditionGrants, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
-import { auraStateView, projectedAuraConditions } from './aura.js';
+import { auraEffectRadius, auraStateView, projectedAuraArmorBonus, projectedAuraConditions, projectedAuraConditionPotencies } from './aura.js';
 import { projectedHpThresholdConditions } from './hp-threshold.js';
-import { applySpatialIntent, type SpatialIntent } from '../primitives/spatial-intent.js';
+import type { RangeStateView } from './range.js';
+import { applySpatialIntent, footprintDistance, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { summonCap } from './summon-recipes.js';
 import type { RuleActorView, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
@@ -93,6 +94,29 @@ export function registerOnDamageDealtHook(hook: OnDamageDealtHook): void {
  * pass the encounter state; the actor-only form is kept for tests and for
  * contexts without a spatial state (no aura is projected there).
  */
+/** Adapt the reducer state to the range kernel's read surface (the same
+ * positions/sizes/mastery the encounter authority carries, so the effective
+ * ability range and the distance predicates are evaluated from authoritative
+ * command-time state). */
+export function rangeStateView(state: EncounterState): RangeStateView {
+  const actors: RangeStateView['actors'] = Object.fromEntries(
+    Object.values(state.actors).map((actor): [string, RangeStateView['actors'][string]] => [actor.id, {
+      id: actor.id,
+      position: actor.onBattlefield ? actor.position : null,
+      size: actor.size,
+      hp: actor.hp,
+      maximumHp: Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality),
+      abilityIds: actor.abilityIds,
+      masteredAbilityIds: actor.masteredAbilityIds,
+      talents: actor.talents,
+    }]),
+  );
+  return { round: state.round, actors, conditionsFor: (actorId) => {
+    const actor = state.actors[actorId];
+    return actor ? encounterConditionSet(actor, state) : new Set<string>();
+  } };
+}
+
 export function encounterConditionSet(actor: EncounterActor, state?: EncounterState) {
   const conditions = new Set<string>(actor.statuses);
   for (const condition of actor.conditions) conditions.add(condition.id);
@@ -118,8 +142,13 @@ export function encounterConditionSet(actor: EncounterActor, state?: EncounterSt
   return conditions;
 }
 
-/** ICON p.94: a matching + condition makes that status ongoing. */
-function projectedStatuses(actor: EncounterActor): RuleActorView['statuses'] {
+/** ICON p.94: a matching + condition makes that status ongoing. Aura
+ * membership can upgrade an ordinary status to ongoing while the character is
+ * inside the aura (Rampant Nail's vulnerable+ inside the nail's aura,
+ * p.227): the aura potency projection folds into the same ongoing set, so
+ * leaving the aura drops the character back to the ordinary status without
+ * any durable snapshot. */
+function projectedStatuses(actor: EncounterActor, state?: EncounterState): RuleActorView['statuses'] {
   const ongoing = new Set(actor.conditions
     .filter(({ id, potency }) => potency === 'plus' && statusIds.has(id as StatusId))
     .map(({ id }) => id));
@@ -128,6 +157,13 @@ function projectedStatuses(actor: EncounterActor): RuleActorView['statuses'] {
   // denormalized `statuses` entry.  Keep the projection authoritative rather
   // than silently dropping a saveable/ongoing status from a command.
   for (const condition of actor.conditions) if (statusIds.has(condition.id as StatusId)) ids.add(condition.id);
+  if (state) {
+    for (const [conditionId, potency] of projectedAuraConditionPotencies(auraStateView(state), actor.id)) {
+      if (!statusIds.has(conditionId as StatusId)) continue;
+      if (potency === 'plus') ongoing.add(conditionId);
+      else ids.add(conditionId);
+    }
+  }
   return [...ids].map((id) => ({ id, potency: ongoing.has(id) ? 'plus' : 'normal' }));
 }
 
@@ -171,11 +207,19 @@ export function encounterRuleState(state: EncounterState): RuleRuntimeState {
       attacked: actor.attackedThisTurn,
       traitIds: [...actor.traitIds],
       talents: { ...actor.talents },
+      abilityIds: [...actor.abilityIds],
+      masteredAbilityIds: [...actor.masteredAbilityIds],
+      activeEffects: actor.activeEffects.map((effect) => {
+        const radius = auraEffectRadius({ sourceId: effect.sourceId, modifiers: effect.modifiers });
+        return radius === null
+          ? { sourceId: effect.sourceId, effectId: effect.effectId }
+          : { sourceId: effect.sourceId, effectId: effect.effectId, radius };
+      }),
       size: actor.size,
       defeated: actor.defeated,
       stance: actor.stance ? { stanceId: actor.stance.stanceId } : null,
       conditions: encounterConditionSet(actor, state),
-      statuses: projectedStatuses(actor),
+      statuses: projectedStatuses(actor, state),
       statusSavePolicy: encounterStatusSavePolicy(state, actor),
       resources: { ...actor.resources, resolve: state.partyResolve + (actor.resources['personal-resolve'] ?? 0) },
       state: { ...actor.ruleState, phaseId: actor.ruleState.phaseId ?? null },
@@ -347,6 +391,8 @@ export interface EncounterDamageIntent {
   ignoreDefiance?: boolean;
   /** True Strike's direct-damage exception to Dodge (ICON p.104). */
   ignoreDodge?: boolean;
+  /** Unerring's direct-damage exception to the Aetherwall halving (p.105). */
+  ignoreAetherwall?: boolean;
   /** Basic attacks derive terrain cover directly; other rule mutations use
    * their target's persistent cover state until the spatial gateway exists. */
   covered?: boolean;
@@ -363,8 +409,15 @@ export function determineEncounterDamage(state: EncounterState, intent: Encounte
   const source = intent.sourceActorId ? state.actors[intent.sourceActorId] : undefined;
   const sourceConditions = source ? encounterConditionSet(source, state) : new Set<string>();
   const targetConditions = encounterConditionSet(target, state);
+  // The shared p.92 footprint metric — the same distance authority targeting
+  // and auras use, so distance-gated defense (Aetherwall's "outside range 2")
+  // never disagrees with the canonical distance (large-foe footprints
+  // included). Size-1 actors collapse to the point-cell Chebyshev distance.
   const sourceDistance = source && source.onBattlefield && target.onBattlefield
-    ? Math.max(Math.abs(source.position.x - target.position.x), Math.abs(source.position.y - target.position.y))
+    ? footprintDistance(
+      { position: source.position, size: source.size },
+      { position: target.position, size: target.size },
+    )
     : 0;
   return determineDamage({
     amount: intent.amount,
@@ -374,10 +427,15 @@ export function determineEncounterDamage(state: EncounterState, intent: Encounte
     sourcePacified: sourceConditions.has('pacified'),
     sourceHatredDiverts: hatredDivertsDamage(state, source, target),
     targetVulnerable: targetConditions.has('vulnerable'),
-    targetArmor: target.armor + guardArmorBonus(state, target),
+    // Armor plus the registered armor-bonus sources (Heavy Guard) plus the
+    // continuous aura armor projection (Rook's Implacable Fortress — "as if
+    // by armor", p.123): all fold through the same damage authority, so
+    // command-time previews and replay derive the same reduced amount.
+    targetArmor: target.armor + guardArmorBonus(state, target) + projectedAuraArmorBonus(auraStateView(state), target.id),
     ignoreArmor: intent.ignoreArmor,
     targetResistance: targetConditions.has('resistance'),
     targetAetherwall: targetConditions.has('aetherwall') && sourceDistance > 2,
+    ignoreAetherwall: intent.ignoreAetherwall,
     targetCovered: intent.covered ?? target.ruleState.cover === true,
     targetIntangible: targetConditions.has('intangible'),
     targetDodge: targetConditions.has('dodge'),

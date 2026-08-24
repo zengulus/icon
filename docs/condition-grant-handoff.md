@@ -42,15 +42,15 @@ the set. These match the canonical census records exactly.
 
 | Source ID | Corrected blocker set | Source evidence |
 |---|---|---|
-| `bastion:heracule:mastery` | `{mastery-attachment, attack-modifier, effect-count}` | "gains rebound" (the attack-bounce modifier, same family as Trick Shot's armed rebound — NOT a condition) + "second effect triggers +1 more time" |
-| `colossus:massive-overhead:mastery` | `{mastery-attachment, action-type-change}` | "grants you 4 vigor" (fixed grant — expressible via the F7 fold's `'vigor'` mutation) + "no longer ends your turn" (round-gated) |
-| `knave:revenge:mastery` | `{mastery-attachment, damage-modifier, area-define}` | "deal 2 damage to all adjacent foes" after vigilance |
-| `knave:intimidate:mastery` | `{mastery-attachment}` | "become unstoppable" (grant — implemented) after stun trigger |
-| `shade:umbra:mastery` | `{mastery-attachment, range-modifier}` | "range to 6 and gains unerring" |
-| `sealer:sanctify:mastery` | `{mastery-attachment, area-define, action-type-change}` | "place two areas without replacing" + round-4+ 1-action |
-| `seer:wish:mastery` | `{mastery-attachment, damage-preview}` | "defiance, then unstoppable" (grants — implemented) on damage-would-reduce-to-0 |
-| `enochian:aethershard:mastery` | `{mastery-attachment, movement-modifier}` | "gain phasing" (grant — implemented) + "objects cost 0 spaces" |
-| `spellblade:nothung:mastery` | `{mastery-attachment, damage-modifier}` | "1 piercing damage becomes divine" |
+| `bastion:heracule:mastery` | `{attack-modifier, effect-count}` | "gains rebound" (the attack-bounce modifier, same family as Trick Shot's armed rebound — NOT a condition) + "second effect triggers +1 more time" |
+| `colossus:massive-overhead:mastery` | `{action-type-change}` | "grants you 4 vigor" (fixed grant — expressible via the F7 fold's `'vigor'` mutation) + "no longer ends your turn" (round-gated) |
+| `knave:revenge:mastery` | `{damage-modifier, area-define}` | "deal 2 damage to all adjacent foes" after vigilance |
+| `shade:umbra:mastery` | `{range-modifier}` | "range to 6 and gains unerring" |
+| `sealer:sanctify:mastery` | `{area-define, action-type-change}` | "place two areas without replacing" + round-4+ 1-action |
+| `seer:wish:mastery` | `{damage-preview}` | "defiance, then unstoppable" (grants — implemented) on damage-would-reduce-to-0 |
+| `enochian:aethershard:mastery` | `{movement-modifier}` | "gain phasing" (grant — implemented) + "objects cost 0 spaces" |
+| `spellblade:nothung:mastery` | `{damage-modifier}` | "1 piercing damage becomes divine" |
+| `knave:intimidate:mastery` | *(executable — F8)* | "become unstoppable" after the stun trigger, wired through the shared mastery gate |
 | `demon-slayer:soul-blade:talent:2` | `{stance-gate, attack-modifier}` | "attacks gain exceed: tick the die up by 1" |
 | `knave:revenge:talent:1` | `{save-modifier, area-define}` | "attacks against adjacent allies gain +1 curse" |
 | `fool:gallows-humor:talent:2` | `{effect-count, threshold-modifier}` | "deal 4 damage again to a target at 25% hp or lower" |
@@ -216,10 +216,13 @@ generic capability that does not exist yet:
 
 ### D. ARCHITECTURALLY SENSITIVE (do not bulk-convert)
 
-- **All 9 masteries** — need the `mastery-attachment` mechanism (the
-  compiler rejects every mastery until a typed mastery recipe exists). This
-  is a single reusable mechanism spanning all 144 masteries, not
-  condition-grant work.
+- **Masteries** — the typed mastery-attachment mechanism landed as F8
+  (`kernels/mastery.ts` + `EncounterActor.masteredAbilityIds`), so
+  `mastery-attachment` is no longer a missing primitive. The 7 former
+  `{mastery-attachment}` singletons (rook, dark-knight, intimidate,
+  bleak-mercy, warding-bolts, gentleness, rampant-nail) are now executable;
+  the remaining masteries above stay unresolved for their **effect**
+  blockers only.
 - `enochian:trait:soulfire` — threshold overrides interact with the attack
   roll pipeline (critical/exceed thresholds), not a grant.
 - `spellblade:nothung:mastery` — damage-type override (piercing → divine)
@@ -251,7 +254,7 @@ C-family capabilities and re-scans the units above.
 
 | Family | Minimum missing capability | Units |
 |---|---|---|
-| Mastery attachment | typed mastery recipe mechanism (compiler currently rejects all 144 masteries) | 9 reclassified masteries + 135 others |
+| Mastery attachment | **DONE (F8)** — `kernels/mastery.ts`; 7 former singletons executable | remaining masteries need only their effect blockers (see the regenerated census) |
 | Effect-count trigger | "when an ability's named effect fires N times" fold trigger | aria t2, soul-burn t1, gallows-humor t2, odinforce t1/t2 |
 | Damage-preview gate | "if damage would reduce target to ≤X hp" predicate on the fold | crimson-bloom t1, wish mastery |
 | After-swap timing | post-swap window (mirrors the existing post-resolution fold) | masquerade t1, shadow-play t2 |

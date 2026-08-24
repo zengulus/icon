@@ -36,7 +36,7 @@ baselines. The audit backlog that the kernels below unblock:
 | class-trait | 8 | relic-aspect | 40 |
 | job-trait | 42 | foe-ability | 1,247 |
 | talent | 256 | foe-trait | 612 |
-| mastery | 144 | foe-phase | 19 |
+| mastery | 137 | foe-phase | 19 |
 | limit-break | 16 | foe-chapter-rule | 116 |
 | trophy | 68 | camp-fixture | 16 |
 | camp-feature | 85 | reward-rule | 9 |
@@ -122,10 +122,18 @@ kernel lands (exactly as the wired slay/collide tranche did):
   existing kernels.
 - **ability-specific modifier hooks** — a typed resolver for that ability.
 
-### 1.3 Masteries — 144 units
+### 1.3 Masteries — 137 units
 
-Masteries are mostly **ability-recipe modifier hooks**: a flag plus a typed
-override on the ability's recipe row. Families:
+The typed mastery-attachment mechanism is **DONE** (F8,
+`kernels/mastery.ts`): `EncounterActor.masteredAbilityIds` is the durable
+ownership record, a reviewed `MasteryRecipe` declares one of four attachment
+kinds (fold / program-level / continuous projection / lifecycle) gated on the
+shared `hasMastery(actor, abilityId)`, and the compiler audits an implemented
+mastery complete. 7 of the former 144 units are now executable (Rook
+Implacable Fortress, Dark Knight Infectious Hatred, Intimidate Iron Skull,
+Bleak Mercy Painkiller, Warding Bolts Phantom Bolts, Gentleness Gentle
+Prayer, Rampant Nail Voracious Nail). The 137 remaining units need their
+**effect** overrides, not the attachment: families:
 
 - **Round-gated timing** — ability becomes a free action / upgrades at round 4+
   (`bastion:valiant:mastery`, `bastion:endless-battlement:mastery`). F3.

@@ -317,6 +317,7 @@ registry, or reducer seam) that content rows plug into. Found at
 | **Summon recipes** (`summon-recipes.ts`) | placement ranges, per-owner caps, companion survival | entity | existing |
 | **Aura membership kernel** (`aura.ts`) | generic Aura authority: origin resolution (trait/state/stance/aura-effect/entity), continuous membership from current positions through the canonical p.92 footprint range (`footprintDistance`), and ephemeral condition/modifier projection onto current members; lifecycle recipes query it with `isInAura` | spatial-intent, condition, attack | existing (Commander's Aura, Aura of Shielding, Rook t1, Dervish t1, Gentleness base+t1, Shieldmaster, Bleak Mercy) |
 | **HP-threshold projection kernel** (`hp-threshold.ts`) | generic conditional-passive authority for the two canonical HP states — bloodied (at or under 50% of the wounds-adjusted maximum, p.94/p.104) and at-or-under-25% (the exact quarter mark) — answering "is this passive active" (`isAtHpThreshold`) and projecting conditions / the turn-start +actions bonus onto the owner, with an inverted gate for "loses X when bloodied"; the shared predicates also feed the VM (`quarter` predicate) and the attack-modifier fold (target-threshold bonus damage) | condition, attack, state | existing (Rogue Slippery, the Enrage family ×9, True Enrage, Arkentech Hover Chair, Furious Berserk sturdy, Strigoi Blood Hunger, Divine Aegis t2) |
+| **Range / distance kernel** (`range.ts`, F12) | the single reusable authority for ICON's range family: canonical distance (`distanceBetween`/`isWithinRange`/`isExactlyRange` over the shared p.92 footprint metric), authoritative listed-range modification (`effectiveAbilityRange` folding registered `RangeModifierRule`s — fixed override, conditional override under stealth/comeback/mastery gates, dynamic round-number — at both command gates, so a range change genuinely widens target legality), and distance-gated effects (exact-range attack modifiers via the attack-modifier fold's `exactRange`/unerring, Aetherwall's outside-range-2 damage halving through the same footprint distance). Distance predicates never change targeting range, and listed-range changes never affect damage | spatial-intent, attack, damage | existing (Valkyrie t1, Incubus t1, Harvest t2, Open the Gates t2, Trigrammaton, Aetherwall) |
 
 ### Missing kernels named by the ontology
 
@@ -574,14 +575,29 @@ only authority for "done."
 - **F5 Passive projection + role baselines** — closed `FOE_ROLE_BASELINE_RECIPES`
   + job-trait condition recipes; feature/mark projection.
 - **F6 Job traits / attack-path kernel** — closed `JOB_TRAIT_RECIPES`; five
-  wiring homes; `attack-modifiers.ts` fold; plus the F9 reactive fold rows.
-  23/65 traits wired.
+  wiring homes; `attack-modifiers.ts` fold; plus the F9 reactive fold rows
+  and Trigrammaton's exactly-range-3 row (F12). 25/65 traits wired.
 - **F7 Talents fold** — closed `TALENT_RECIPES` (288); `talentTriggerMutations`
   (exceed/comeback/finishing-blow/slay/collide/always) + `affectedFoeIds`
-  condition-grant; 3 program-level. 32/288 executable.
-- **F8 Mastery attachment** — every mastery needs a typed ability-recipe
-  modifier hook + mastery attachment; uniformly reflected in the census
-  (`mastery-attachment` on all 144).
+  condition-grant; 3 program-level + 4 range-modifier (F12).
+  40/288 executable.
+- **F8 Mastery attachment** — `kernels/mastery.ts`: the typed mastery
+  attachment mechanism. `EncounterActor.masteredAbilityIds` (projected from
+  `CharacterAbility.mastered`, migrated deterministically for old snapshots)
+  is the durable ownership record; a reviewed `MasteryRecipe` declares one of
+  four attachment kinds (fold / program-level / continuous projection /
+  lifecycle) gated on the shared `hasMastery(actor, abilityId)` — the parent
+  must be equipped AND mastered, so an unmastered actor behaves exactly as
+  before. The compiler audits an implemented mastery as a complete program
+  and an unimplemented one for its actual effect blockers; `mastery-attachment`
+  is no longer a missing primitive. Wired: Rook Implacable Fortress (aura
+  armor projection), Dark Knight Infectious Hatred (stance aura + turn-end
+  save-or-hatred), Intimidate Iron Skull (stun-triggered unstoppable),
+  Bleak Mercy Painkiller (indefinite aura + status-counted re-use), Warding
+  Bolts Phantom Bolts (aura-2 hover + start-in/end-out strike), Gentleness
+  Gentle Prayer (aura resize + pacify), Rampant Nail Voracious Nail
+  (adjacent vulnerable + upgrade-only aura). Fixtures:
+  `__tests__/mastery.test.ts`.
 - **F9 Once-per-round reactive job-trait fold** — `kernels/trait-reactions.ts`
   (a `collide`/`shove`/`slay` reaction with an optional durable round ledger
   reset at the round-start boundary), folded into the ability mutation stream
@@ -606,6 +622,25 @@ only authority for "done."
   attacks), Aura of Shielding (p.304, dodge), Rook t1 counter, Dervish t1
   counter, Gentleness base (+1 curse) + t1 counter, Shieldmaster turn-end
   vigilance/sturdy, Bleak Mercy combo. Fixtures: `__tests__/aura.test.ts`.
+- **F12 Range / distance kernel** — `kernels/range.ts`: one canonical
+  distance (the p.92 footprint metric, shared by targeting, areas, auras, and
+  the distance predicates — never a competing implementation) plus
+  authoritative listed-range modification: a content row registers a
+  reviewed `RangeModifierRule` (fixed override, conditional override under
+  stealth/comeback/mastery gates, or the dynamic round-number value);
+  `effectiveAbilityRange` folds them against current encounter state at both
+  command gates (USE_ABILITY and EXECUTE_RULE) BEFORE a target is accepted,
+  so "Valkyrie gains range 4" widens target legality and a lost stealth
+  condition shrinks Incubus back to range 3 immediately. The exact-distance
+  family (Trigrammaton's "at exactly range 3: +1 boon and unerring") and the
+  distance-gated defense family (Aetherwall's "resistance against abilities
+  from characters outside range 2") are NOT range-modifier rows: they ride
+  the attack-modifier fold's `exactRange`/unerring seam and the damage
+  halving's `targetAetherwall`/`ignoreAetherwall` intent, both reading the
+  same footprint distance. Wired: Valkyrie t1 (range 4), Incubus t1 (3/5
+  from stealth), Harvest t2 (2/5 Comeback), Open the Gates t2 (range = round
+  number), Trigrammaton (exactly-range-3 boon + unerring), Aetherwall
+  (outside-range-2 halving). Fixtures: `__tests__/range.test.ts`.
 - **F11 HP-threshold passive projection kernel** — `kernels/hp-threshold.ts`:
   the source-ID-free authority for the canonical conditional passives
   ("while bloodied, X" / "while at or under 25% HP, X"). Bloodied is at or
@@ -632,10 +667,21 @@ only authority for "done."
 - Forced-movement entry remains an incomplete semantic boundary; one-shot
   movement-entry triggers must not double-fire, and distinct triggers must stay
   independent (AGENTS.md §8).
-- Mastery and limit-break machinery is structurally present only through the
-  blocker census; no mastery or limit break is wired.
+- Masteries are wired through the typed mastery attachment (F8) for the
+  seven singleton candidates; limit-break actions remain unwired and stay
+  census-visible (their blockers name the missing effect machinery, not
+  `mastery-attachment`).
 - Rebound (attack bounce) is not a modeled mechanic beyond Trick Shot's armed
   variant.
+- Range is NOT globally complete: the listed-range family (fixed/conditional/
+  dynamic override) is generic authority, but unlimited/no-maximum-range
+  grants (`unlimited-range`), exact-distance predicates whose payload is not
+  an existing attack modifier (damage/teleport/explosion at exactly range N),
+  object-anchored distance ("in range N of that object"), per-ability
+  attack-modifier attachment for talent/mastery-owned unerring, and the
+  effect-redirect family all remain unresolved by design — the census exposes
+  each as its own blocker family (`distance-predicate`, `unlimited-range`,
+  `object-distance`, `ability-attack-modifier`, `effect-redirect`).
 - The seer 13-card deck mechanics may stay table-facing by design.
 - Aura is NOT globally complete: source-defined aura semantics still
   unresolved include the ability-user-presence gate over an ally-carried aura

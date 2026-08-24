@@ -22,6 +22,9 @@ import { applyDeterminedDamageToVitals } from './automation/primitives/damage-re
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAttackRoll } from './automation/primitives/attack-resolution.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
+import { rangeStateView } from './automation/kernels/encounter-adapter.js';
+import { effectiveAbilityRange } from './automation/kernels/range.js';
+import { footprintDistance } from './automation/primitives/spatial-intent.js';
 import { auraStateView, projectedAuraAttackModifiers } from './automation/kernels/aura.js';
 import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
@@ -71,6 +74,7 @@ function canonicalActorForAdd(actor: EncounterActor): EncounterActor {
   for (const key of Object.keys(ruleStateOwners)) if (!(key in ruleState)) delete ruleStateOwners[key];
   return {
     ...actor,
+    masteredAbilityIds: [...(actor.masteredAbilityIds ?? [])],
     foeProfileId: actor.foeProfileId ?? null,
     conditions: (actor.conditions ?? []).map((condition) => ({ ...condition, ownerId: condition.ownerId ?? null })),
     ruleState,
@@ -124,6 +128,7 @@ export function migrateEncounter(input: unknown): EncounterState {
       size: actor.size ?? 1,
       chapter: actor.chapter ?? 1,
       abilityIds: [...(actor.abilityIds ?? [])],
+      masteredAbilityIds: [...(actor.masteredAbilityIds ?? [])],
       conditions: (actor.conditions ?? []).map((condition) => ({ ...condition, ownerId: condition.ownerId ?? null })),
       resources: { ...(actor.resources ?? {}) },
       ruleState: { ...(actor.ruleState ?? {}) },
@@ -238,6 +243,12 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     talents: Object.fromEntries(
       character.abilities.filter(({ talent }) => talent !== null).map(({ abilityId, talent }) => [abilityId, talent as 1 | 2]),
     ),
+    // Mastery ownership is projected from the character sheet the same way:
+    // only abilities that are both equipped and legitimately mastered appear,
+    // so a mastery gate never fires for an unmastered or unequipped parent.
+    masteredAbilityIds: character.abilities
+      .filter(({ abilityId, mastered }) => mastered && character.equippedAbilityIds.includes(abilityId))
+      .map(({ abilityId }) => abilityId),
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -290,6 +301,7 @@ export function createFoe(name: string, position: Position): EncounterActor {
     stance: null,
     traitIds: [],
     talents: {},
+    masteredAbilityIds: [],
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -377,6 +389,7 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     stance: null,
     traitIds: foeTraitIds(profile.id),
     talents: {},
+    masteredAbilityIds: [],
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
@@ -721,11 +734,17 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   // F6 attack-path trait fold: armed one-shot modifiers (Demon Edge true
   // strike, Hissatsu +1 boon / true strike / d10) and permanent elevation
   // mechanics (Pulverize flat damage; the exceed threshold only matters on
-  // the VM path, where exceed effects fire).
+  // the VM path, where exceed effects fire), distance-gated rules
+  // (Trigrammaton's exactly-range-3 boon/unerring) through the canonical
+  // p.92 footprint distance, and unerring (ignores cover + aetherwall).
   const traitOwner = { traitIds: actor.traitIds, state: actor.ruleState };
   const traitModifier = traitAttackModifier(traitOwner, actorElevation - targetElevation, {
     hp: target.hp,
     maxHp: Math.max(1, target.baseMaxHp - target.wounds * target.vitality),
+    distance: footprintDistance(
+      { position: actor.position, size: actor.size },
+      { position: target.position, size: target.size },
+    ),
   });
   // Aura membership feeds the same attack-modifier authority as the trait
   // fold: the attacker's own aura boons/curses plus any defensive curse an
@@ -741,6 +760,7 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
     targetEvasion: encounterConditionSet(target, state).has('evasion'),
     trueStrike: traitModifier.trueStrike,
     bonusDamageFlat: traitModifier.bonusDamageFlat,
+    unerring: traitModifier.unerring,
   }, dice);
   if (massiveOverheadArmed(actor)) actor.resources['bonus-damage'] = (actor.resources['bonus-damage'] ?? 0) + 1;
   const bonusDice = (critical ? 1 : 0) + Math.max(0, actor.resources['bonus-damage'] ?? 0);
@@ -756,7 +776,8 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
     damageType: 'normal',
     delivery: hit ? 'hit' : 'miss',
     instance: 1,
-    ignoreCover: false,
+    ignoreCover: traitModifier.unerring,
+    ignoreAetherwall: traitModifier.unerring,
     covered,
   });
   const defiance = encounterConditionSet(target, state).has('defiance');
@@ -1106,9 +1127,15 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // attack-range and line-of-sight gate for the single attack target.
   if (attackAbility && !noAttackSpace) {
     const attackTargetActor = targets[0]!;
+    // The effective listed range folds every registered range-modifier rule
+    // (listed/conditional/dynamic) for this ability against the current
+    // encounter state, so a talent like "Valkyrie gains range 4" genuinely
+    // widens target legality — it is never UI-only.
+    const baseRange = abilityRange(ability.header, ability.range);
+    const maximumRange = effectiveAbilityRange(rangeStateView(state), actor.id, ability.id, baseRange);
     assertDirectTarget(state, actor, attackTargetActor, {
       relation: 'foe',
-      maximumRange: abilityRange(ability.header, ability.range),
+      maximumRange,
       trueStrike: ability.tags.includes('true strike'),
       requireLineOfSight: true,
     }, 'ability');
@@ -1272,7 +1299,13 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         if (!target || target.defeated || !target.onBattlefield) throw new RuleViolation('attack.invalid-target', 'That rule target is unavailable.');
         assertDirectTarget(state, actor, target, {
           relation: action.tags.includes('attack') ? 'foe' : 'any',
-          maximumRange: action.range?.kind === 'constant' ? action.range.value : 1,
+          maximumRange: effectiveAbilityRange(
+            rangeStateView(state),
+            actor.id,
+            unit.id,
+            action.range?.kind === 'constant' ? action.range.value : 1,
+            action.id,
+          ),
           trueStrike: action.tags.includes('true strike'),
           // Preserve the current explicitly reviewed Stealth gate for attacks;
           // non-attack direct-target semantics move with TargetQuery's broader

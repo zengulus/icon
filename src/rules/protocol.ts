@@ -92,6 +92,9 @@ const actor = z.object({
   traitIds: z.array(identifier).max(500),
   // F7: the equipped talent choice per ability (1 or 2).
   talents: boundedRecord(z.union([z.literal(1), z.literal(2)])),
+  // F8: the mastered ability ids — durable encounter authority for the
+  // mastery attachment gate (never queried from the character sheet).
+  masteredAbilityIds: z.array(identifier).max(200),
   onBattlefield: z.boolean(),
   defeated: z.boolean(),
   actionsRemaining: z.number().int().min(0).max(20),

@@ -152,9 +152,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
     detail: 'Attacks on rounds 3 and 6 gaining bonus damage and triggering exceed needs a round-gated attack-path modifier hook.',
   },
   'freelancer:trait:trigrammaton': {
-    sourceId: 'freelancer:trait:trigrammaton', name: 'Trigrammaton', status: 'documented',
-    mechanic: '',
-    detail: 'The exactly-range-3 +1 boon and unerring needs a distance-gated attack-path modifier hook.',
+    sourceId: 'freelancer:trait:trigrammaton', name: 'Trigrammaton', status: 'wired',
+    mechanic: 'The exactly-range-3 attack-path rule is wired through the shared attack-modifier fold: abilities used against a foe at exactly range 3 (the canonical p.92 footprint distance) gain +1 boon on attack rolls and unerring (ignore cover + aetherwall). The distance read never widens targeting range.',
+    detail: '',
   },
   'freelancer:trait:astral-binding': {
     sourceId: 'freelancer:trait:astral-binding', name: 'Astral Binding', status: 'documented',

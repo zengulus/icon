@@ -81,10 +81,14 @@ const IMPLEMENTED_PRIMITIVES = new Set(['condition-grant', 'aura']);
  *  semantics need other missing reusable capabilities). Each entry is the
  *  corrected MINIMAL blocker set after reading the full source text.
  *
- *  Masteries all require the missing typed mastery-attachment mechanism
- *  (the compiler rejects every mastery until a mastery recipe exists), so
- *  every mastery row carries `mastery-attachment` in addition to its
- *  effect blockers.
+ *  Masteries: after the typed mastery-attachment kernel landed
+ *  (kernels/mastery.ts), `mastery-attachment` is no longer a missing
+ *  primitive — an implemented mastery compiles complete (allowlist +
+ *  fixture + replay), and an unimplemented mastery stays unresolved for
+ *  its actual effect blockers below. The seven former
+ *  `{mastery-attachment}` singletons (rook, dark-knight, intimidate,
+ *  bleak-mercy, warding-bolts, gentleness, rampant-nail) are now
+ *  executable and dropped out of the census entirely.
  *
  *  Re-audit: 3 of the 28 claimed `{condition-grant}` singletons were
  *  genuine (bastion:valiant:talent:2, knave:provoke:talent:1,
@@ -105,26 +109,28 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // evasion, phasing, pacified, vulnerable) is now implemented, so it is
   // intentionally NOT listed here — the record shows what still blocks.
   //
-  // ── 9 masteries — all need the missing mastery-attachment mechanism ──
-  'bastion:heracule:mastery': ['mastery-attachment', 'attack-modifier', 'effect-count'],
+  // ── 8 masteries — attachment solved (kernels/mastery.ts); the remaining
+  //    blockers are their actual effect semantics ──
+  'bastion:heracule:mastery': ['attack-modifier', 'effect-count'],
   // "gains rebound" — the attack-bounce modifier (same family as Trick Shot's armed rebound / skipjack rank 2, NOT a condition) + "second effect triggers +1 more time" (effect-count)
-  'colossus:massive-overhead:mastery': ['mastery-attachment', 'action-type-change'],
+  'colossus:massive-overhead:mastery': ['action-type-change'],
   // "grants you 4 vigor" (the fixed-amount vigor grant is expressible via the
   // F7 fold's 'vigor' mutation — demon-cutter:talent:1 is audit-complete) + "no
   // longer ends your turn" (round-gated action-type change)
-  'knave:revenge:mastery': ['mastery-attachment', 'damage-modifier', 'area-define'],
+  'knave:revenge:mastery': ['damage-modifier', 'area-define'],
   // "deal 2 damage to all adjacent foes" after vigilance
-  'knave:intimidate:mastery': ['mastery-attachment'],
-  // "become unstoppable" (condition-grant — implemented; triggered after the stun fires)
-  'shade:umbra:mastery': ['mastery-attachment', 'range-modifier'],
-  // "range to 6 and gains unerring"
-  'sealer:sanctify:mastery': ['mastery-attachment', 'area-define', 'action-type-change'],
+  'shade:umbra:mastery': ['ability-attack-modifier'],
+  // "Increase Umbra and Penumbra's range to 6 and it gains unerring" — the
+  // range half is wired through the shared range kernel (range-recipes.ts),
+  // but the per-ability unerring needs the attack-modifier attachment gate
+  // for a mastery-owned ability (the kernel is trait-keyed today)
+  'sealer:sanctify:mastery': ['area-define', 'action-type-change'],
   // "place two areas without replacing the first" + round-4+ 1-action
-  'seer:wish:mastery': ['mastery-attachment', 'damage-preview'],
+  'seer:wish:mastery': ['damage-preview'],
   // "gain defiance, then unstoppable" (condition-grant — implemented) on a damage-would-reduce-to-0 preview
-  'enochian:aethershard:mastery': ['mastery-attachment', 'movement-modifier'],
+  'enochian:aethershard:mastery': ['movement-modifier'],
   // "gain phasing" (condition-grant — implemented) + "objects cost a maximum of 0 spaces to enter"
-  'spellblade:nothung:mastery': ['mastery-attachment', 'damage-modifier'],
+  'spellblade:nothung:mastery': ['damage-modifier'],
   // "All 1 piercing damage listed by this ability becomes divine" (damage-type override)
 
   // ── 16 talents / traits / abilities with non-condition mechanics ──
@@ -171,8 +177,6 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // space in your aura" — the free-space-in-aura placement is expressible
   // (auraCells + the shared free-cell search); the thrall burrow/removal
   // and the player's choice of thralls are still missing
-  'sealer:open-the-gates:talent:2': ['range-modifier'],
-  // "gains a range equal to the round number" (dynamic range)
   'seer:sisyphus:talent:1': ['save-modifier', 'entity-vacate'],
   // "foes gain +1 curse on the save" + "pacified after being returned" (condition-grant — implemented)
   'enochian:trait:soulfire': ['threshold-modifier'],
@@ -185,6 +189,54 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "If you end a turn without attacking, gain +2 more bolts" (turn-end gate + bolt count)
   'spellblade:odinforce:talent:2': ['effect-count'],
   // "Comeback: Odinforce gains 4 bolts instead of 2 on refresh" (bolt count override)
+
+  // ── Range re-audit (after the generic range kernel landed) ──
+  // kernels/range.ts now implements LISTED-RANGE changes (fixed override,
+  // conditional override under stealth/comeback/mastery gates, and the
+  // dynamic round-number range), folded at both command gates. The six
+  // former `{range-modifier}` singletons whose complete semantics were a
+  // listed-range change or a distance-gated effect with existing authority
+  // (Valkyrie t1, Incubus t1, Harvest t2, Open the Gates t2, Trigrammaton,
+  // Aetherwall) are executable and dropped out of the census entirely. The
+  // remaining singletons were misclassified: `range-modifier` conflated
+  // several genuinely different families, reclassified below.
+  'knave:limit-break': ['condition-suppression'],
+  // MOCK's "cannot gain or benefit from evasion, dodge, or stealth" needs a
+  // general condition-suppression projection (mark suppressions exist, a
+  // non-mark suppression does not); the potency-plus condition grants, the
+  // turn-end/two-turn durations, and DREAD MOCK's "gains range 5" are all
+  // expressible
+  'knave:strongarm:talent:1': ['teleport'],
+  // "Remove your target and place them into adjacency" is a remove-and-place
+  // reposition; the Comeback range-2 half is wired through the range kernel
+  'freelancer:trick-shot:talent:2': ['rebound', 'distance-predicate'],
+  // "phantom projectiles … at exactly range 3 from its rebound target" —
+  // needs the rebound machinery plus an exact-distance damage gate
+  'freelancer:trick-shot:mastery': ['rebound'],
+  // "cause an ability to rebound twice … off a new character or object in
+  // range 3 of the first" — the attack-bounce modifier; the range-3
+  // placement check is expressible
+  'freelancer:soul-shot:talent:1': ['distance-predicate'],
+  // "considers all characters in the line to be at exactly range 3" (round-4+
+  // gate) — a dynamic exact-distance reclassification of the ability's own
+  // distance tiers, not a targeting-range change
+  'warden:apex:talent:2': ['ability-attack-modifier'],
+  // "If you attack a foe at exactly range 3, this ability gains unerring" —
+  // the exact-range unerring fold exists (Trigrammaton) but is trait-keyed;
+  // a talent-owned per-ability attack rule needs the attachment gate. The
+  // post-resolution shove is expressible
+  'enochian:lance:talent:1': ['object-distance'],
+  // "a character in range 3 of that object" — distance measured from an
+  // OBJECT footprint, which the range kernel (actor-to-actor) does not cover
+  'enochian:blackstar:mastery': ['sacrifice-cost'],
+  // "split sacrifice into 25% max hp to yourself, and 25% to an ally in
+  // range 4" — the split-sacrifice cost; the range-4 check is expressible
+  'geomancer:quaking-palm:mastery': ['object-distance'],
+  // "triggers for each object in range 2 instead of adjacent" — object
+  // footprints in range, not characters
+  'spellblade:blitz:talent:2': ['effect-redirect'],
+  // "grant Blitz's first effect to any ally in range 2 instead" — an
+  // effect-redirect target change; the range-2 check is expressible
 };
 
 /** Classify a source unit's rules text into a blocker set.
@@ -282,8 +334,28 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('interrupt-modifier');
   }
 
-  // Range modifier: range N, gains range
-  if (/\brange\s+\d+\b/.test(text) || /\bgains?\s+range\b/.test(text)) {
+  // Range family (re-audited with kernels/range.ts): the old single
+  // `range-modifier` rule conflated listed-range changes with exact-distance
+  // predicates and unlimited-range grants. Listed-range changes are
+  // implemented by the range kernel but only for registered recipes, so the
+  // blocker still names an unwired unit's missing recipe.
+  //
+  // Exact-distance predicate: "at exactly range N" inspects distance for an
+  // effect (boon/unerring/damage/teleport/explosion) without changing
+  // targeting legality — a distinct family from listed-range modification.
+  if (/at exactly range \d+|exactly range \d+|at exactly range\b/.test(text)) {
+    blockers.push('distance-predicate');
+  }
+  // Unlimited / no-maximum range: "no maximum range" / "unlimited range" is
+  // a distinct grant (the range kernel supports fixed/conditional/dynamic
+  // values, not an unbounded marker).
+  if (/no maximum range|unlimited range|no range limit/.test(text)) {
+    blockers.push('unlimited-range');
+  }
+  // Listed range modifier: range N, gains range, range to N, range equal to
+  // N, range increases/becomes.
+  if (/\brange\s+\d+\b/.test(text) || /\bgains?\s+range\b/.test(text)
+    || /\brange\s+(?:to|becomes|equal to|increases|grows)\b/.test(text)) {
     blockers.push('range-modifier');
   }
 
@@ -418,14 +490,6 @@ function generateCensus(): CensusResult {
     }
 
     let blockers = RECLASSIFIED_BLOCKERS[unit.id] ?? classifyBlockers(unit);
-    // Every mastery requires the missing typed mastery-attachment mechanism
-    // (the compiler marks `mastery` as attachmentRequired — no mastery is
-    // executable until a mastery recipe exists). The reclassification table
-    // already carries it for the audited rows; the syntactic classifier
-    // never emits it, so add it uniformly here.
-    if (unit.kind === 'mastery' && !blockers.includes('mastery-attachment')) {
-      blockers = [...blockers, 'mastery-attachment'];
-    }
     // Phase 5 harvest: an implemented primitive no longer blocks anything.
     blockers = blockers.filter((blocker) => !IMPLEMENTED_PRIMITIVES.has(blocker));
     if (blockers.length === 0) {

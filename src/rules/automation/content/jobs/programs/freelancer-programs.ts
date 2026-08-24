@@ -1,4 +1,6 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { auraDefinitionFor, auraRuntimeView, isInAura } from '../../../kernels/aura.js';
+import { hasMastery } from '../../../kernels/mastery.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
@@ -189,10 +191,42 @@ const showdown: RuleResolver = (context) => {
 };
 
 /** ICON p.158: a small-blast hover zone of projectiles; foes that start their
- * turn inside and end outside are struck for 2 unerring and dazed. */
+ * turn inside and end outside are struck for 2 unerring and dazed.
+ *
+ * Mastery (Phantom Bolts): "You can cause the area to hover around you as an
+ * Aura 2 instead, which lasts for the rest of combat, with the same effect as
+ * the default area. When this ability triggers again, you may deal 2 unerring
+ * damage to all foes in this aura instead of replacing the aura." The
+ * mastered branch emits the durable `phantom-bolts` aura effect (combat
+ * duration) in place of the terrain; a re-use while the aura is active deals
+ * the retrigger damage through the shared aura kernel instead of replacing
+ * it. (The "you can" choice is the deterministic mastered branch.) */
 const wardingBolts: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source.position) return [];
+  const mastered = hasMastery(source, 'freelancer:warding-bolts');
+  if (mastered) {
+    const auraActive = (source.activeEffects ?? []).some((effect) => effect.effectId === 'phantom-bolts');
+    if (auraActive) {
+      // Retrigger: 2 unerring damage to all foes in the aura instead of
+      // replacing it. Unerring = ignore cover, through the shared damage
+      // authority's direct-damage provenance.
+      const definition = auraDefinitionFor('freelancer:warding-bolts:mastery');
+      const mutations: RuleMutation[] = [];
+      if (definition) {
+        const view = auraRuntimeView(context.state);
+        for (const foe of Object.values(context.state.actors)) {
+          if (foe.side === source.side || foe.defeated) continue;
+          if (isInAura(view, definition, foe.id)) mutations.push(damageMutation(context, foe.id, 2, 'effect', 'normal', { ignoreCover: true }));
+        }
+      }
+      return mutations;
+    }
+    return [{
+      kind: 'persistent', sourceId: context.sourceId, ownerId: source.id, operation: 'add', actorId: source.id,
+      effectId: 'phantom-bolts', duration: { kind: 'combat' }, modifiers: [{ operation: 'grant', stat: 'aura', value: { kind: 'constant', value: 2 } }], triggers: [], state: {},
+    }];
+  }
   const center = context.input.positions?.['area-center']?.[0] ?? source.position;
   if (distance(source.position, center) > 3) throw new RuleProgramViolation('choice.position-range', 'Warding Bolts places a small blast in range 3.');
   const mutations: RuleMutation[] = [];

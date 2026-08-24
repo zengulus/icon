@@ -29,7 +29,7 @@
 import type { RuleSourceUnit } from '../../../source-units.js';
 import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
 import type { RuleMutation } from '../../primitives/types.js';
-import { affectedFoeIds, registerPassiveProjectionTalent, registerProgramLevelTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
+import { affectedFoeIds, registerPassiveProjectionTalent, registerProgramLevelTalent, registerRangeModifierTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
 import type { TalentEffect } from '../../kernels/talent-recipes.js';
 
 /** The party-favor mine's position from the ability's recorded terrain
@@ -706,6 +706,37 @@ for (const [sourceId, row] of Object.entries(PASSIVE_PROJECTION_TALENT_RECIPES))
   registerPassiveProjectionTalent(sourceId, row.mechanic);
 }
 
+/** Range-modifier talents: the talent's COMPLETE semantics are a listed-range
+ * change on its parent ability, executed by the shared range kernel
+ * (`kernels/range.ts`) at both command gates (the reviewed rules live in
+ * `content/jobs/range-recipes.ts`). Each row audits as complete through
+ * `registerRangeModifierTalent` with its source fixture + replay test in
+ * __tests__/range.test.ts. */
+const RANGE_MODIFIER_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }>> = {
+  // ICON p.136 Valkyrie talent 1: "Valkyrie gains range 4."
+  'colossus:valkyrie:talent:1': {
+    mechanic: 'Valkyrie\u2019s listed range becomes 4 through the shared effective-range authority; the attack target may be chosen at range 4.',
+  },
+  // ICON p.164 Incubus talent 1: "Incubus gains range 3. If you make it from
+  // stealth, gains range 5."
+  'shade:incubus:talent:1': {
+    mechanic: 'Incubus\u2019s listed range becomes 3 (5 from stealth) through the shared effective-range authority, evaluated against the user\u2019s current stealth condition.',
+  },
+  // ICON p.185 Harvest talent 2: "Gains Range 2. Comeback: Range 5."
+  'harvester:harvest:talent:2': {
+    mechanic: 'Harvest\u2019s listed range becomes 2 (5 while the user is bloodied) through the shared effective-range authority, evaluated from current HP.',
+  },
+  // ICON p.194 Open the Gates talent 2: "Both versions of this ability gains
+  // a range equal to the round number."
+  'sealer:open-the-gates:talent:2': {
+    mechanic: 'Open the Gates\u2019s listed range equals the round number through the shared effective-range authority (both the base and CENTER THE TEMPLE versions).',
+  },
+};
+
+for (const [sourceId, row] of Object.entries(RANGE_MODIFIER_TALENT_RECIPES)) {
+  registerRangeModifierTalent(sourceId, row.mechanic);
+}
+
 /** Classify a documented talent by the kernel it needs. Advisory build-time
  * categorization, never parsed at runtime — the runtime fold only reads the
  * explicit `wired` rows. */
@@ -761,13 +792,14 @@ export function getTalentRecipes(units: readonly RuleSourceUnit[]): Readonly<Rec
         const wired = WIRED_TALENT_RECIPES[unit.id];
         const programLevel = PROGRAM_LEVEL_TALENT_RECIPES[unit.id];
         const passive = PASSIVE_PROJECTION_TALENT_RECIPES[unit.id];
-        const executable = wired ?? programLevel ?? passive;
+        const rangeModifier = RANGE_MODIFIER_TALENT_RECIPES[unit.id];
+        const executable = wired ?? programLevel ?? passive ?? rangeModifier;
         return [unit.id, {
           sourceId: unit.id,
           abilityId: unit.parentId ?? '',
           name: unit.name,
-          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : passive ? 'passive-projection' as const : 'documented' as const,
-          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? passive?.mechanic ?? '',
+          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : passive ? 'passive-projection' as const : rangeModifier ? 'range-modifier' as const : 'documented' as const,
+          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? passive?.mechanic ?? rangeModifier?.mechanic ?? '',
           detail: executable ? '' : documentedTalentDetail(unit),
           ...(wired ? { triggerEffect: wired.triggerEffect } : {}),
         }];

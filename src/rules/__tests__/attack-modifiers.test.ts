@@ -84,7 +84,9 @@ describe('F6 attack-path trait registry', () => {
       expect(JOB_TRAIT_RECIPES[id].status).toBe('wired');
       expect(JOB_TRAIT_RECIPES[id].mechanic.length).toBeGreaterThan(0);
     }
-    expect(Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired')).toHaveLength(24);
+    // Trigrammaton joined the wired rows through the range kernel's
+    // exactly-range-3 attack fold, so the closed inventory is now 25.
+    expect(Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired')).toHaveLength(25);
   });
 });
 
@@ -243,7 +245,7 @@ describe('Pulverize (p.142)', () => {
       defense: 6, armor: 0, speed: 4, dash: 2, fray: 4, damageDie: 6, actions: 2, attacked: false,
       size: 1, defeated: false, conditions: new Set<string>(), statuses: [],
       statusSavePolicy: { cureDenied: false, statusSaveDenied: false, saveBoon: 0, saveCurse: 0 },
-      resources: {}, state: {}, traitIds, talents: {}, marks: [],
+      resources: {}, state: {}, traitIds, talents: {}, abilityIds: [], masteredAbilityIds: [], marks: [],
     });
     const state = {
       round: 1, grid: { width: 10, height: 10 },

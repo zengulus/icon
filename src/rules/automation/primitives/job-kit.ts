@@ -250,8 +250,8 @@ export function resolveAttack(
     trueStrike: options.trueStrike ?? false,
     autoHit: options.autoHit ?? false,
   }, context.dice);
-  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, bonusFlat } = attack;
-  const damageProvenance = { ignoreDodge, ignoreCover, bonusFlat };
+  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat } = attack;
+  const damageProvenance = { ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat };
   rememberAttackDamage(context, target.id, damageProvenance);
   const attackMutation: RuleMutation = {
     kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
@@ -288,9 +288,11 @@ export const damageMutation = (
   const inherited = directAttackDamageProvenance(context, actorId, delivery);
   const ignoreCover = Boolean(provenance.ignoreCover || inherited?.ignoreCover);
   const ignoreDodge = Boolean(provenance.ignoreDodge || inherited?.ignoreDodge);
+  const ignoreAetherwall = Boolean(provenance.ignoreAetherwall || inherited?.ignoreAetherwall);
   return {
     kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId, amount, damageType, instance: 1, delivery, ignoreCover,
     ...(ignoreDodge ? { ignoreDodge: true } : {}),
+    ...(ignoreAetherwall ? { ignoreAetherwall: true } : {}),
     ...(provenance.bypassVigor ? { bypassVigor: true } : {}),
     ...(provenance.ignoreArmor ? { ignoreArmor: true } : {}),
     ...(provenance.ignoreDefiance ? { ignoreDefiance: true } : {}),

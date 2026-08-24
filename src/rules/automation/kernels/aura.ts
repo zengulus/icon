@@ -2,6 +2,7 @@ import { squareArea } from '../../area-geometry.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import type { EncounterState, Position } from '../../types.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
+import { hasMastery } from './mastery.js';
 import type { RuleAction, RuleClauseCompilation, RuleEffect, RuleProgramCompilation, RuleRuntimeState, RuleSelector } from '../primitives/types.js';
 
 /**
@@ -50,17 +51,20 @@ export type AuraRelation = 'allies' | 'foes' | 'characters';
  *   program sets and a lifecycle recipe clears).
  * - `stance`: every actor currently holding the stance (Gentleness).
  * - `aura-effect`: every actor carrying a durable `aura` active effect whose
- *   provenance (`effect.sourceId`) matches this definition. The effect is the
- *   aura's lifetime record (Rook, Dervish, Endless Battlement) and its
- *   radius is read from the effect's `aura`-grant modifier, so heroic size
- *   increases and lifetime expiry need no parallel state.
- * - `entity-type`: entities of the named type (Spirit Shrine's aura).
+ *   provenance (`effect.sourceId`) matches this definition — or the
+ *   definition's declared `sourceId` override (a mastery row can interpret
+ *   the aura the parent ability carries under its own provenance). The
+ *   effect is the aura's lifetime record (Rook, Dervish, Endless Battlement)
+ *   and its radius is read from the effect's `aura`-grant modifier, so
+ *   heroic size increases and lifetime expiry need no parallel state.
+ * - `entity-type`: entities of the named type (Spirit Shrine's aura, Rampant
+ *   Nail's lightning-spike aura).
  */
 export type AuraOrigin =
   | { kind: 'actor-trait'; traitId: string }
   | { kind: 'actor-state'; stateKey: string }
   | { kind: 'stance'; stanceId: string }
-  | { kind: 'aura-effect' }
+  | { kind: 'aura-effect'; sourceId?: string }
   | { kind: 'entity-type'; entityType: string };
 
 /** Projected attack-path modifiers. Positive numbers are boons; the consumer
@@ -96,10 +100,38 @@ export interface AuraDefinition {
    * p.123/p.179). Declarative content data — the kernel never branches on
    * the ids. */
   talentGate?: { abilityId: string; talent: 1 | 2 };
+  /** Optional mastery gate: the aura's projections apply only while the
+   * origin actor has mastered the named ability (Rook's Implacable Fortress,
+   * Dark Knight's Infectious Hatred, Gentleness' Gentle Prayer, Rampant
+   * Nail's Voracious Nail). Checked per-origin-actor exactly like
+   * `talentGate`, through the shared mastery kernel gate — the kernel never
+   * branches on the id. */
+  masteryGate?: { abilityId: string };
+  /** For stance/state origins: the origin actor's durable rule-state key
+   * that holds the aura's *current* radius when present (Gentleness' aura
+   * resize, p.179). The static `radius` stays the default. Declarative data. */
+  radiusStateKey?: string;
   /** Conditions projected onto current members (dodge, counter, …). */
   conditions?: readonly string[];
+  /** Per-condition potency overrides projected onto current members while
+   * inside the aura (Rampant Nail: vulnerable characters are vulnerable+
+   * instead while inside the nail's aura, p.227). The condition must also be
+   * in `conditions` for the projection to exist; the override only changes
+   * its potency (ordinary → ongoing, p.94). */
+  conditionPotencies?: Readonly<Record<string, 'normal' | 'plus'>>;
+  /** Upgrade-only projection (Rampant Nail, p.227): the aura does NOT grant
+   * the `conditions` — it only upgrades the potency of a condition the
+   * member already has ("vulnerable characters are vulnerable+ instead while
+   * inside the nail's aura"). Without this flag, membership would grant the
+   * condition to characters who never earned it. The grant is skipped and
+   * only `conditionPotencies` entries with `plus` potency project. */
+  upgradeOnly?: boolean;
   /** Attack-path modifiers projected onto current members. */
   attackModifiers?: AuraAttackModifiers;
+  /** Flat damage reduction projected onto current members, applied exactly
+   * like armor in the shared damage kernel (Rook's Implacable Fortress:
+   * "reduce all damage by 2, as if by armor", p.123). */
+  armorBonus?: number;
 }
 
 /** The minimal spatial read surface both the reducer state (`EncounterState`)
@@ -117,10 +149,18 @@ export interface AuraActorView {
   /** Durable rule-state (ruleState on the reducer actor; the view's `state`). */
   state?: Readonly<Record<string, unknown>>;
   stance?: { stanceId: string } | null;
-  /** Durable aura-effect records (`aura`-grant modifiers). */
+  /** Equipped ability ids (the mastery-gate ownership read). */
+  abilityIds?: readonly string[];
+  /** Mastered ability ids — the continuous-projection mastery gate. */
+  masteredAbilityIds?: readonly string[];
+  /** Durable aura-effect records (`aura`-grant modifiers). The reducer view
+   * carries the raw `modifiers`; the runtime view carries the resolved
+   * `radius` (computed by the adapter so resolvers and the reducer derive
+   * the same aura size). */
   activeEffects?: ReadonlyArray<{
     sourceId: string;
-    modifiers: ReadonlyArray<{ stat: string; operation: string; value?: unknown }>;
+    radius?: number;
+    modifiers?: ReadonlyArray<{ stat: string; operation: string; value?: unknown }>;
   }>;
 }
 
@@ -149,9 +189,11 @@ export function registeredAuraDefinitions(): readonly AuraDefinition[] {
 
 /** The durable `aura`-grant radius of an active effect, or null when the
  * effect carries none. Supports the numeric `RuleNumber` constant form the
- * ability programs emit. */
-function auraEffectRadius(effect: NonNullable<AuraActorView['activeEffects']>[number]): number | null {
-  for (const modifier of effect.modifiers) {
+ * ability programs emit. Exported so the rule-runtime adapter can project
+ * the resolved radius onto the view for resolver reads. */
+export function auraEffectRadius(effect: NonNullable<AuraActorView['activeEffects']>[number]): number | null {
+  if (effect.radius !== undefined) return Math.max(0, effect.radius);
+  for (const modifier of effect.modifiers ?? []) {
     if (modifier.stat !== 'aura' || modifier.operation !== 'grant') continue;
     const value = modifier.value;
     if (typeof value === 'number') return Math.max(0, value);
@@ -184,20 +226,30 @@ export function auraOriginRefs(state: AuraStateView, definition: AuraDefinition)
   for (const actor of Object.values(state.actors)) {
     if (actor.defeated || actor.onBattlefield === false || !actor.position) continue;
     if (definition.talentGate && actor.talents?.[definition.talentGate.abilityId] !== definition.talentGate.talent) continue;
+    if (definition.masteryGate && !hasMastery(actor, definition.masteryGate.abilityId)) continue;
+    // A stance/state origin's current radius may be carried by the origin
+    // actor's durable state (Gentleness' aura resize); the static radius is
+    // the default when the key is absent.
+    const radiusOverride = definition.radiusStateKey
+      ? Number(actor.state?.[definition.radiusStateKey])
+      : Number.NaN;
+    const radius = Number.isFinite(radiusOverride) && radiusOverride > 0 ? radiusOverride : definition.radius;
     if (origin.kind === 'actor-trait' && (actor.traitIds?.includes(origin.traitId) ?? false)) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius: definition.radius, side: actor.side });
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, side: actor.side });
     } else if (origin.kind === 'actor-state' && actor.state?.[origin.stateKey]) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius: definition.radius, side: actor.side });
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, side: actor.side });
     } else if (origin.kind === 'stance' && actor.stance?.stanceId === origin.stanceId) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius: definition.radius, side: actor.side });
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, side: actor.side });
     } else if (origin.kind === 'aura-effect') {
       for (const effect of actor.activeEffects ?? []) {
         // The durable aura effect is the lifetime record; provenance pairs it
-        // with the definition that interprets its projections.
-        if (effect.sourceId !== definition.sourceId) continue;
-        const radius = auraEffectRadius(effect);
-        if (radius === null) continue;
-        origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, side: actor.side });
+        // with the definition that interprets its projections. A definition
+        // may declare an explicit effect source (a mastery row interpreting
+        // the aura the parent ability carries under its own provenance).
+        if (effect.sourceId !== (origin.sourceId ?? definition.sourceId)) continue;
+        const effectRadius = auraEffectRadius(effect);
+        if (effectRadius === null) continue;
+        origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius: effectRadius, side: actor.side });
       }
     }
   }
@@ -270,6 +322,9 @@ export function projectedAuraConditions(state: AuraStateView, actorId: string): 
   for (const definition of auraDefinitions) {
     if (!definition.conditions || definition.conditions.length === 0) continue;
     if (!isInAura(state, definition, actorId)) continue;
+    // Upgrade-only rows (Rampant Nail) never grant the condition — they only
+    // upgrade the potency of one the member already has.
+    if (definition.upgradeOnly) continue;
     for (const condition of definition.conditions) conditions.add(condition);
   }
   return conditions;
@@ -292,14 +347,60 @@ export function projectedAuraAttackModifiers(state: AuraStateView, actorId: stri
   return modifiers;
 }
 
-/** The combined projection (conditions + attack modifiers) onto one actor. */
+/** The per-condition potency an aura projects onto the actor, or null when
+ * no aura projects the condition. Ordinary projections default to `normal`;
+ * a definition's `conditionPotencies` override (vulnerable+ inside the
+ * Rampant Nail aura, p.227) upgrades the potency while membership lasts. */
+export function projectedAuraConditionPotencies(
+  state: AuraStateView,
+  actorId: string,
+): ReadonlyMap<string, 'normal' | 'plus'> {
+  const potencies = new Map<string, 'normal' | 'plus'>();
+  for (const definition of auraDefinitions) {
+    if (!definition.conditions || definition.conditions.length === 0) continue;
+    if (!isInAura(state, definition, actorId)) continue;
+    for (const condition of definition.conditions) {
+      const potency = definition.conditionPotencies?.[condition] ?? 'normal';
+      // Upgrade-only rows project only their `plus` override: a normal entry
+      // would otherwise grant the status to non-members (projectedStatuses
+      // adds a normal-potency entry to the status set).
+      if (definition.upgradeOnly && potency !== 'plus') continue;
+      // The highest projected potency wins; an override never downgrades a
+      // durable plus condition (projectedStatuses handles the union).
+      if (potency === 'plus') potencies.set(condition, 'plus');
+      else if (!potencies.has(condition)) potencies.set(condition, 'normal');
+    }
+  }
+  return potencies;
+}
+
+/** Flat damage reduction projected onto the actor by every aura it is
+ * currently inside, applied exactly like armor in the shared damage kernel
+ * (Rook's Implacable Fortress, p.123). Ephemeral by construction: leaving
+ * the aura removes the reduction immediately. */
+export function projectedAuraArmorBonus(state: AuraStateView, actorId: string): number {
+  let bonus = 0;
+  for (const definition of auraDefinitions) {
+    if (!definition.armorBonus) continue;
+    if (!isInAura(state, definition, actorId)) continue;
+    bonus += definition.armorBonus;
+  }
+  return bonus;
+}
+
+/** The combined projection (conditions + potencies + attack modifiers +
+ * armor bonus) onto one actor. */
 export function projectAuraEffects(state: AuraStateView, actorId: string): {
   conditions: ReadonlySet<string>;
+  conditionPotencies: ReadonlyMap<string, 'normal' | 'plus'>;
   attackModifiers: AuraAttackModifiers;
+  armorBonus: number;
 } {
   return {
     conditions: projectedAuraConditions(state, actorId),
+    conditionPotencies: projectedAuraConditionPotencies(state, actorId),
     attackModifiers: projectedAuraAttackModifiers(state, actorId),
+    armorBonus: projectedAuraArmorBonus(state, actorId),
   };
 }
 
@@ -318,6 +419,8 @@ export function auraStateView(state: EncounterState): AuraStateView {
       defeated: actor.defeated,
       traitIds: actor.traitIds,
       talents: actor.talents,
+      abilityIds: actor.abilityIds,
+      masteredAbilityIds: actor.masteredAbilityIds,
       state: actor.ruleState,
       stance: actor.stance ? { stanceId: actor.stance.stanceId } : null,
       activeEffects: actor.activeEffects.map((effect) => ({
@@ -349,8 +452,11 @@ export function auraRuntimeView(state: RuleRuntimeState): AuraStateView {
       defeated: actor.defeated,
       traitIds: actor.traitIds,
       talents: actor.talents,
+      abilityIds: actor.abilityIds,
+      masteredAbilityIds: actor.masteredAbilityIds,
       state: actor.state,
       stance: actor.stance ? { stanceId: actor.stance.stanceId } : null,
+      activeEffects: actor.activeEffects,
     };
   }
   return {

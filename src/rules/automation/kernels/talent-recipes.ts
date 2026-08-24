@@ -36,7 +36,7 @@ function isBloodied(actor: EncounterActor): boolean {
   return actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2;
 }
 
-export type TalentStatus = 'wired' | 'program-level' | 'passive-projection' | 'documented';
+export type TalentStatus = 'wired' | 'program-level' | 'passive-projection' | 'range-modifier' | 'documented';
 
 /** The resolved mutation kinds a wired talent may emit (each without its
  * sourceId — the kernel fills the talent's source id at fold time).
@@ -173,28 +173,50 @@ export function registerPassiveProjectionTalent(sourceId: string, mechanic: stri
   passiveProjectionTalentRecipes[sourceId] = mechanic;
 }
 
+/** Range-modifier talents: the talent's COMPLETE semantics are a listed-range
+ * change on its parent ability ("Valkyrie gains range 4"), executed by the
+ * shared range kernel (`kernels/range.ts`) at both command gates whenever the
+ * parent ability is used. The row is executable (audit-complete) but
+ * deliberately not a fold row: there is no mutation to fold — the effective
+ * range is authoritative target validation. The rule itself lives in
+ * `content/jobs/range-recipes.ts`; this allowlist mirrors it for audit. */
+const rangeModifierTalentRecipes: Record<string, string> = {};
+
+/** Register a range-modifier talent implementation (content/jobs/
+ * talent-recipes.ts + range-recipes.ts). */
+export function registerRangeModifierTalent(sourceId: string, mechanic: string): void {
+  rangeModifierTalentRecipes[sourceId] = mechanic;
+}
+
 /** The executable talent ids — the allowlist that makes each talent's
  * compilation complete (audit authority: allowlist + source fixture + replay
- * test). The wired fold rows, the program-level implementations, and the
- * continuous passive-projection rows are all explicit, so this never touches
- * the source manifest. */
+ * test). The wired fold rows, the program-level implementations, the
+ * continuous passive-projection rows, and the range-modifier rows are all
+ * explicit, so this never touches the source manifest. */
 export function getExecutableTalentIds(): ReadonlySet<string> {
   return new Set([
     ...Object.keys(wiredTalentRecipes),
     ...Object.keys(programLevelTalentRecipes),
     ...Object.keys(passiveProjectionTalentRecipes),
+    ...Object.keys(rangeModifierTalentRecipes),
   ]);
 }
 
 export const isExecutableTalent = (sourceId: string): boolean =>
   Object.prototype.hasOwnProperty.call(wiredTalentRecipes, sourceId)
   || Object.prototype.hasOwnProperty.call(programLevelTalentRecipes, sourceId)
-  || Object.prototype.hasOwnProperty.call(passiveProjectionTalentRecipes, sourceId);
+  || Object.prototype.hasOwnProperty.call(passiveProjectionTalentRecipes, sourceId)
+  || Object.prototype.hasOwnProperty.call(rangeModifierTalentRecipes, sourceId);
 
 /** The mechanic text of a program-level talent implementation, or undefined
  * for a fold-wired or documented talent. */
 export function getProgramLevelTalentMechanic(sourceId: string): string | undefined {
   return programLevelTalentRecipes[sourceId];
+}
+
+/** The mechanic text of a range-modifier talent implementation, or undefined. */
+export function getRangeModifierTalentMechanic(sourceId: string): string | undefined {
+  return rangeModifierTalentRecipes[sourceId];
 }
 
 /** The post-application trigger targets a wired slay/collide talent needs.

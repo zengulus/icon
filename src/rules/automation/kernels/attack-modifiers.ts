@@ -22,6 +22,8 @@ export interface TraitAttackModifier {
   damageDieOverride: number | null;
   bonusDamageFlat: number;
   exceedThreshold: number | null;
+  /** Unerring (p.105): the attack ignores cover and aetherwall. */
+  unerring: boolean;
 }
 
 /** The minimal read surface both the declarative actor view and the direct
@@ -31,12 +33,15 @@ export interface TraitModifierOwner {
   state: Record<string, unknown>;
 }
 
-/** The minimal target read surface for target-threshold modifiers (the
- * bloodied check needs only the target's current HP vs its wounds-adjusted
- * maximum). */
+/** The minimal target read surface for target-threshold and distance-gated
+ * modifiers: the target's HP vs its wounds-adjusted maximum, plus the
+ * canonical source→target distance (computed by the caller through the
+ * shared range kernel, so the fold and the targeting gates agree on the same
+ * metric). */
 export interface AttackModifierTarget {
   hp: number;
   maxHp: number;
+  distance?: number;
 }
 
 /**
@@ -65,6 +70,14 @@ export interface AttackModifierRule {
    * "+2 damage with all abilities against bloodied foes"). The gate is the
    * shared bloodied predicate (at or under 50% of the target's maximum). */
   targetBloodiedBonusDamage?: number;
+  /** Exact-distance gate: the rule applies only when the target is at exactly
+   * this range from the source (Trigrammaton: "against foes at exactly range
+   * 3"). The distance is the shared p.92 footprint metric; the rule never
+   * changes targeting legality. */
+  exactRange?: number;
+  /** Unerring grant (Trigrammaton: "gain +1 boon on attack rolls and
+   * unerring"): the attack ignores cover and aetherwall (p.105). */
+  unerring?: boolean;
 }
 
 const attackModifierRules: AttackModifierRule[] = [];
@@ -85,16 +98,19 @@ export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: nu
     damageDieOverride: null,
     bonusDamageFlat: 0,
     exceedThreshold: null,
+    unerring: false,
   };
   for (const rule of attackModifierRules) {
     if (!owner.traitIds.includes(rule.traitId)) continue;
     if (rule.armedKey && owner.state[rule.armedKey] !== true) continue;
+    if (rule.exactRange !== undefined && target?.distance !== rule.exactRange) continue;
     if (rule.boons) modifier.boons += rule.boons;
     if (rule.trueStrike) modifier.trueStrike = true;
     if (rule.damageDieOverride) modifier.damageDieOverride = rule.damageDieOverride;
     if (rule.elevationBonusDamage && elevationDiff >= 1) modifier.bonusDamageFlat += rule.elevationBonusDamage;
     if (rule.elevationExceedThreshold && elevationDiff >= 2) modifier.exceedThreshold = rule.elevationExceedThreshold;
     if (rule.targetBloodiedBonusDamage && target && target.hp <= target.maxHp / 2) modifier.bonusDamageFlat += rule.targetBloodiedBonusDamage;
+    if (rule.unerring) modifier.unerring = true;
   }
   return modifier;
 }

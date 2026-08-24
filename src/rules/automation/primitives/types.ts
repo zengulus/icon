@@ -207,6 +207,20 @@ export interface RuleActorView {
    * talent (e.g. Demon Cutter t2's pre-ability rush) exactly as the fold
    * reads the durable selection on command and replay. */
   talents: Readonly<Record<string, 1 | 2>>;
+  /** The equipped ability ids (the mastery gate's ownership read). */
+  abilityIds: readonly string[];
+  /** The mastered ability ids projected into encounter authority — a mastery
+   * attachment executes only when its parent ability is equipped (abilityIds)
+   * and present here, never by querying the character sheet. */
+  masteredAbilityIds: readonly string[];
+  /** Durable active-effect records (the `aura`-grant effects the aura kernel
+   * reads). Exposed on the runtime view so ability resolvers can gate on an
+   * active aura's presence — e.g. Painkiller's Sweet Torment re-use and
+   * Phantom Bolts' retrigger (p.144/p.158) — and so the runtime aura view
+   * resolves `aura-effect` origins identically to the reducer view. Only the
+   * effectId/sourceId and the resolved aura radius are projected; the modifier
+   * payload stays reducer-side. */
+  activeEffects?: ReadonlyArray<{ sourceId: string; effectId: string; radius?: number }>;
   size: number;
   defeated: boolean;
   /** The durable stance this actor holds, when any (the stance gate the
@@ -299,6 +313,8 @@ export type RuleMutation =
       damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice'; instance: number;
       delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain'; ignoreCover: boolean;
       /** Present only when an attack's True Strike provenance applies. */ ignoreDodge?: boolean;
+      /** Present when an attack's Unerring provenance applies (p.105). */
+      ignoreAetherwall?: boolean;
       /** Explicit source exceptions. They are not aliases for Divine. */
       bypassVigor?: boolean;
       ignoreArmor?: boolean;

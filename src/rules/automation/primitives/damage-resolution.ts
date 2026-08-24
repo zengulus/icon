@@ -41,8 +41,10 @@ export interface DamageIntent {
   ignoreDodge?: boolean;
   targetDamageImmune?: boolean;
   /** An effect marked Unerring may opt out of cover once its source recipe
-   * has been audited.  It does not currently imply aetherwall immunity. */
+   * has been audited. */
   ignoreCover?: boolean;
+  /** Unerring (p.105) also ignores the Aetherwall halving. */
+  ignoreAetherwall?: boolean;
   /** Intangibility only ignores hostile effects; terrain/self effects do not
    * carry this flag. */
   hostile?: boolean;
@@ -91,7 +93,7 @@ export function determineDamage(intent: DamageIntent): DeterminedDamage {
     if (intent.sourcePacified) halvings.push('pacified');
     if (intent.sourceHatredDiverts) halvings.push('hatred');
     if (intent.targetResistance) halvings.push('resistance');
-    if (intent.targetAetherwall) halvings.push('aetherwall');
+    if (intent.targetAetherwall && !intent.ignoreAetherwall) halvings.push('aetherwall');
     if (intent.targetCovered && !intent.ignoreCover) halvings.push('cover');
     if (halvings.length > 0) amount = Math.ceil(amount / 2);
   }
