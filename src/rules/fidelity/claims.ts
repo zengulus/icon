@@ -27,9 +27,21 @@ import { SCOPE_STATUS_RANK, type ScopeStatus } from './types.js';
 
 export type ClaimStrength = 'authoritative' | 'complete' | 'closed';
 
+/** One machine-audited input of a compound (phase-gate) claim. */
+export type CompoundRequirement =
+  | { kind: 'fidelity-scope'; scopeId: string; minStatus: ScopeStatus }
+  | { kind: 'generated-audit'; command: string };
+
 export type ClaimBinding =
   | { kind: 'fidelity-scope'; scopeId: string }
+  /** Bound to a package.json audit script AND its RECORDED RESULT. A script
+   * merely existing proves nothing: without a recorded 'passed' result the
+   * claim cannot verify, and a recorded 'failed' result is a hard violation. */
   | { kind: 'generated-audit'; command: string }
+  /** Phase-gate style compound evidence: EVERY requirement must hold for the
+   * claim to verify; otherwise it is reported LEGACY/UNVERIFIED rather than
+   * silently accepted. */
+  | { kind: 'compound'; subject: string; requirements: readonly CompoundRequirement[] }
   | { kind: 'legacy-unverified'; reason: string };
 
 export interface ProjectClaim {
@@ -52,11 +64,17 @@ const REQUIRED_RANK: Readonly<Record<ClaimStrength, ScopeStatus>> = {
   closed: 'closed',
 };
 
-/** Canonical documents the secondary guard scans for strong claims. */
+/** Canonical documents the secondary guard scans for strong claims. Every
+ * document that can make project-level rules-authority or phase-gate claims
+ * is inside this list — a strong claim cannot hide in an unscanned status
+ * file. */
 export const CANONICAL_CLAIM_FILES = [
   'TODO.md',
+  'README.md',
   'docs/deliverables.md',
   'docs/rules-foundations.md',
+  'docs/rules-coverage.md',
+  'docs/roadmap.md',
 ] as const;
 
 const STRONG_TOKEN = /\b(AUTHORITATIVE|CLOSED|COMPLETE)\b/;
@@ -213,6 +231,42 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     binding: legacy('settlement.test.ts covers the mechanics; scene flow remains open and no fidelity scope exists'),
   },
 
+  // --- phase gates (computed in src/rules/catalog.ts) ------------------------
+  // The gates are compound claims: every machine-audited input must hold
+  // before the claim verifies. Today the fidelity requirement is far from met,
+  // so both gates report LEGACY/UNVERIFIED — matching the roadmap's own
+  // "gate stays false" state — instead of being silently accepted.
+  {
+    id: 'claim:phase-two-ready',
+    file: 'docs/roadmap.md',
+    anchor: '## PHASE_TWO_READY — "Rules-authoritative tactical core"',
+    strength: 'complete',
+    subject: 'PHASE_TWO_READY — rules-authoritative tactical core',
+    binding: {
+      kind: 'compound',
+      subject: 'PHASE_TWO_READY',
+      requirements: [
+        { kind: 'generated-audit', command: 'audit:automation' },
+        { kind: 'fidelity-scope', scopeId: 'sourcebook-at-large', minStatus: 'closed' },
+      ],
+    },
+  },
+  {
+    id: 'claim:phase-three-ready',
+    file: 'docs/roadmap.md',
+    anchor: '## PHASE_THREE_READY — "Closed local gameplay, shared authority released"',
+    strength: 'closed',
+    subject: 'PHASE_THREE_READY — closed local gameplay, shared authority released',
+    binding: {
+      kind: 'compound',
+      subject: 'PHASE_THREE_READY',
+      requirements: [
+        { kind: 'generated-audit', command: 'audit:automation' },
+        { kind: 'fidelity-scope', scopeId: 'sourcebook-at-large', minStatus: 'closed' },
+      ],
+    },
+  },
+
   // --- docs/rules-foundations.md maturity sections ---------------------------
   {
     id: 'claim:foundations:command-event-purity',
@@ -329,6 +383,7 @@ export interface ProjectClaimViolation {
     | 'claim-anchor-missing'
     | 'claim-stronger-than-evidence'
     | 'claim-command-missing'
+    | 'generated-audit-failed'
     | 'unregistered-strong-claim';
   detail: string;
 }
@@ -336,6 +391,11 @@ export interface ProjectClaimViolation {
 export interface ClaimCheckDeps {
   root: string;
   readFile?(path: string): string;
+  /** RECORDED results of prerequisite generated audits (from strict
+   * orchestration / CI artifacts). A generated-audit-bound claim verifies only
+   * when its command has a recorded 'passed' result here; 'failed' is a hard
+   * violation; an absent record means the claim cannot verify. */
+  auditResults?: Readonly<Record<string, 'passed' | 'failed'>>;
 }
 
 function read(deps: ClaimCheckDeps, path: string): string | null {
@@ -406,6 +466,40 @@ export function checkProjectClaims(
     } else if (claim.binding.kind === 'generated-audit') {
       if (!scripts.has(claim.binding.command)) {
         violations.push({ check: 'claim-command-missing', detail: `${claim.id}: bound audit script "${claim.binding.command}" is not a package.json script` });
+        continue;
+      }
+      const recorded = deps.auditResults?.[claim.binding.command];
+      if (recorded === 'failed') {
+        violations.push({
+          check: 'generated-audit-failed',
+          detail: `${claim.id}: bound audit "${claim.binding.command}" has a recorded FAILED result — the claim does not verify`,
+        });
+      } else if (recorded === undefined) {
+        unverifiedClaims.push({
+          ...claim,
+          binding: legacy(`prerequisite audit "${claim.binding.command}" exists but no pass/fail result was recorded for this run`),
+        });
+      }
+      // recorded === 'passed': verified.
+    } else if (claim.binding.kind === 'compound') {
+      const unmet: string[] = [];
+      for (const requirement of claim.binding.requirements) {
+        if (requirement.kind === 'generated-audit') {
+          if (!scripts.has(requirement.command)) unmet.push(`audit script "${requirement.command}" missing`);
+          else if (deps.auditResults?.[requirement.command] !== 'passed') unmet.push(`audit "${requirement.command}" not passed`);
+        } else {
+          const scope = scopeById.get(requirement.scopeId);
+          if (!scope) unmet.push(`scope ${requirement.scopeId} missing`);
+          else if (SCOPE_STATUS_RANK[scope.status] < SCOPE_STATUS_RANK[requirement.minStatus]) {
+            unmet.push(`scope ${requirement.scopeId} at ${scope.status} (needs ${requirement.minStatus})`);
+          }
+        }
+      }
+      if (unmet.length > 0) {
+        unverifiedClaims.push({
+          ...claim,
+          binding: legacy(`${claim.binding.subject}: unmet machine-audited requirements — ${unmet.join('; ')}`),
+        });
       }
     } else {
       unverifiedClaims.push(claim);

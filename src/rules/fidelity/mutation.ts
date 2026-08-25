@@ -43,6 +43,21 @@ export const SYNTHETIC_DOMAIN = {
   kinds: ['physical', 'divine'] as const,
 };
 
+/** The DECLARED finite legal-input domain (48 members). Declared separately
+ * from the expectation rows so the audit can verify evaluated-input-set ==
+ * declared-domain structurally instead of trusting an 'exhaustive' label. */
+export const MITIGATION_DOMAIN: readonly MitigationInput[] = (() => {
+  const inputs: MitigationInput[] = [];
+  for (const base of SYNTHETIC_DOMAIN.bases) {
+    for (const armor of SYNTHETIC_DOMAIN.armors) {
+      for (const kind of SYNTHETIC_DOMAIN.kinds) {
+        inputs.push({ base, armor, kind });
+      }
+    }
+  }
+  return inputs;
+})();
+
 /** Independent expectation derivation — the ORACLE. Written from the spec
  * above; implementations under test share nothing with it but the types. */
 export function deriveExpectedMitigation({ base, armor, kind }: MitigationInput): number {

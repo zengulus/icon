@@ -197,4 +197,294 @@ export const ADVANCEMENT_IRRELEVANT_CLAUSES: readonly { text: string; reason: st
     text: 'point. improve two actions or gain a bond power 9 3 get your third relic gain a bond power 10 3 gain a mastery point improve an action 11 3 gain +1ap improve an action 12 3 gain a mastery point gain a bond power',
     reason: 'Character-advancement table rows above level 0/1 and narrative benefits: future scope; only the level-1 combat row is claimed here and is quoted via icon-1.5:advancement:limit-break-unlock-level.',
   },
+
+  // -------------------------------------------------------------------------
+  // Exhaustive-page accounting (third hardening pass): with the selection
+  // filter removed, EVERY line on pp.44/99/112/115/240/241 must be accounted.
+  // Entries below cover the remaining non-selected lines, categorized per
+  // subsystem. Each still matches exactly one canonical clause.
+  // -------------------------------------------------------------------------
+
+  // --- p.44 session-end procedure framing ----------------------------------
+  {
+    text: 'session end whenever you end a session of icon, go',
+    reason: 'Session-end section heading and table-flow framing: session scene flow is intentionally not automated.',
+  },
+  {
+    text: 'not. these triggers are on pg. xx but are repeated',
+    reason: 'XP-trigger cross-reference prose: award INPUTS to the bar procedure, not bar/bank semantics.',
+  },
+  {
+    text: 'here for your convenience: check at the end of a session : 1. did you fulfill at least one of your ideals? 1',
+    reason: 'XP-trigger checklist: award INPUTS to the bar procedure, not bar/bank semantics.',
+  },
+  {
+    text: 'any dust they have unlocking additional features',
+    reason: 'Dust spending (camp/relic subsystem): outside the advancement-arithmetic scope.',
+  },
+  {
+    text: 'for their camp, or infusing them into their relics.',
+    reason: 'Dust spending (camp/relic subsystem): outside the advancement-arithmetic scope.',
+  },
+
+  // --- p.99 resolve economy / limit-break usage ----------------------------
+  {
+    text: 'resolve and limit',
+    reason: 'Resolve economy and limit-break USAGE rules (pools, once-per-combat, spending): outside this unlock-boundary scope.',
+  },
+  {
+    text: 'break limit breaks are the most powerful abilities in',
+    reason: 'Resolve economy and limit-break USAGE rules (pools, once-per-combat, spending): outside this unlock-boundary scope.',
+  },
+  {
+    text: '2. limit breaks are special abilities (with an action',
+    reason: 'Resolve economy and limit-break USAGE rules (pools, once-per-combat, spending): outside this unlock-boundary scope.',
+  },
+  {
+    text: 'cost, etc) that do not count against the max',
+    reason: 'Resolve economy and limit-break USAGE rules (pools, once-per-combat, spending): outside this unlock-boundary scope.',
+  },
+  {
+    text: 'number of abilities taken. all limit breaks depend',
+    reason: 'Resolve economy and limit-break USAGE rules (pools, once-per-combat, spending): outside this unlock-boundary scope.',
+  },
+  {
+    text: 'on a unique resource, called resolve , to use, and',
+    reason: 'Resolve economy and limit-break USAGE rules (pools, once-per-combat, spending): outside this unlock-boundary scope.',
+  },
+  {
+    text: 'combat unless specified. resolve is split into two pools, party and personal resolve. • party resolve goes up by 1 at the start of each',
+    reason: 'Resolve pool mechanics: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'round in combat, and depletes to 0 after combat',
+    reason: 'Resolve pool mechanics: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'ends. you can use a die to track it. • personal resolve is gained the following ways: • all characters gain 1 personal resolve after',
+    reason: 'Resolve pool mechanics: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'personal resolve to another character who has',
+    reason: 'Resolve pool mechanics: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'resting in order to get the most out of your',
+    reason: 'Resolve pool mechanics: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'you can use any combination of party or',
+    reason: 'Resolve spending rules: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'personal resolve, but party resolve is shared',
+    reason: 'Resolve spending rules: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'between all members of the group, so any use of',
+    reason: 'Resolve spending rules: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'it must be used with the consent of your your',
+    reason: 'Resolve spending rules: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'team members . resolve is always spent at the',
+    reason: 'Resolve spending rules: separate resource subsystem, not advancement arithmetic.',
+  },
+  {
+    text: 'beginning of the action.',
+    reason: 'Resolve spending rules: separate resource subsystem, not advancement arithmetic.',
+  },
+
+  // --- p.112 job selection / AP-spending choices / ability limits -----------
+  {
+    text: 'choosing your job to make the tactical combat part of your character',
+    reason: 'Level-0 job/ability selection guidance: player-choice workflow of a separate character-construction subsystem.',
+  },
+  {
+    text: 'at level 0, pick a job and two abilities from your',
+    reason: 'Level-0 job/ability selection guidance: player-choice workflow of a separate character-construction subsystem.',
+  },
+  {
+    text: "job. you get all the traits or actions from your class (basically a meta-job, of which there are 4),",
+    reason: 'Class/job structure description: separate character-construction subsystem.',
+  },
+  {
+    text: "plus the traits from your job itself. if you're unsure about which abilities to pick, pick",
+    reason: 'Ability-selection advice prose: player-choice workflow, not runtime semantics.',
+  },
+  {
+    text: "the first two abilities listed, you'll have plenty of",
+    reason: 'Ability-selection advice prose: player-choice workflow, not runtime semantics.',
+  },
+  {
+    text: 'to choose new abilities, or unlock the talents of',
+    reason: 'Line merges the improvement-sentence tail with AP-spending choice workflow; the operative breakpoint sentences are quoted verbatim in icon-1.5:advancement:xp-bar-bank.',
+  },
+  {
+    text: 'an ability point. you can use this point during a camp, interlude, or at the end of any',
+    reason: 'AP-spending/talent choice is player-choice workflow; the operative breakpoint sentences are quoted verbatim in icon-1.5:advancement:xp-bar-bank.',
+  },
+  {
+    text: 'session to gain a new ability from one of your jobs or unlock a talent for an existing ability,',
+    reason: 'AP-spending/talent choice is player-choice workflow; the operative breakpoint sentences are quoted verbatim in icon-1.5:advancement:xp-bar-bank.',
+  },
+  {
+    text: 'choosing either the first or second choice. at other levels you will also gain additional bonus',
+    reason: 'Talent mutual exclusivity choice and higher-level bonus AP: future scope beyond the level-0/1 boundary rows claimed here.',
+  },
+  {
+    text: 'ability points, which can be spent along the way. at level 4 and 8 you will get the opportunity to',
+    reason: 'Higher-level bonus AP and new-job opportunity: future scope beyond the boundary rows claimed here.',
+  },
+  {
+    text: 'same job and get an extra mastery. you can',
+    reason: 'New-job/mastery alternative choice: player-choice workflow intentionally not automated by this scope.',
+  },
+  {
+    text: 'choose to train broadly or deeply - choose wisely! ability limits you can only take at most 6 abilities into any',
+    reason: 'Mastery training choice plus ABILITY LIMITS (expedition deck-building constraint): separate loadout subsystem.',
+  },
+  {
+    text: 'expedition, though you can change these out every',
+    reason: 'ABILITY LIMITS (expedition deck-building constraint): separate loadout subsystem.',
+  },
+  {
+    text: 'expedition. at least half these abilities must be the',
+    reason: 'ABILITY LIMITS (expedition deck-building constraint): separate loadout subsystem.',
+  },
+  {
+    text: 'same class (color) as your job. traits and limit breaks your traits are unique passive or active abilities',
+    reason: 'ABILITY LIMITS plus trait-ownership rule: separate loadout/job subsystems.',
+  },
+  {
+    text: 'that you get from both your job and class . your',
+    reason: 'Trait ownership description: separate job/class subsystem.',
+  },
+  {
+    text: 'job only, so think carefully when selecting your',
+    reason: 'Trait ownership advice: separate job/class subsystem.',
+  },
+  {
+    text: 'jobs.',
+    reason: 'Trait ownership advice: separate job/class subsystem.',
+  },
+
+  // --- p.240 narrative/pacing/onboarding ------------------------------------
+  {
+    text: 'advancement the power of characters in icon is measured by',
+    reason: 'Section heading and descriptive framing; the operative procedure sentences are quoted verbatim in icon-1.5:advancement:xp-bar-bank.',
+  },
+  {
+    text: 'level 0 for the first session only. this is to let',
+    reason: 'First-session onboarding guidance: expedition/session scene flow intentionally not automated (roadmap F10).',
+  },
+  {
+    text: 'players familiarize themselves with the system in',
+    reason: 'First-session onboarding guidance: expedition/session scene flow intentionally not automated (roadmap F10).',
+  },
+  {
+    text: 'relics, only 2 combat abilities and 1 narrative',
+    reason: 'First-session starting-loadout limits: separate character-construction subsystem.',
+  },
+  {
+    text: "power). it's perfectly possible to start a game at",
+    reason: 'Optional start-at-level guidance: campaign setup policy, not runtime semantics.',
+  },
+  {
+    text: "level 1 or later if you so choose. if you're playing with the level 0 rule, it's not",
+    reason: 'Optional start-at-level guidance: campaign setup policy, not runtime semantics.',
+  },
+  {
+    text: "it's good practice. after the first session, all",
+    reason: 'First-session onboarding guidance: scene flow intentionally not automated (roadmap F10).',
+  },
+  {
+    text: '(1-4, 5-8, 9-12). moving up a chapter is a group',
+    reason: 'Chapter banding and group progression decision: campaign pacing policy; the cap VALUE enters spending as game state (contract row covers the p.44 cap sentence).',
+  },
+  {
+    text: 'decision and represents a different scale of',
+    reason: 'Chapter banding and group progression decision: campaign pacing policy.',
+  },
+  {
+    text: 'power, scale, influence, and danger for',
+    reason: 'Chapter banding and group progression decision: campaign pacing policy.',
+  },
+  {
+    text: 'characters . certain abilities cannot be gained until later',
+    reason: 'Chapter gating of abilities/foes: future availability-gate scope; the durable unlock boundary claimed here is Limit Break (adjudicated level 1).',
+  },
+  {
+    text: 'chapters, and certain foes are powerful and are',
+    reason: 'Chapter gating of abilities/foes: future availability-gate scope.',
+  },
+  {
+    text: 'generally not encountered until later chapters. until the chapter passes, characters cannot level',
+    reason: 'Chapter gating of leveling: the cap VALUE enters spending as game state; group-pacing prose itself is not automated here.',
+  },
+  {
+    text: 'up past the cap of each chapter, and characters',
+    reason: 'Chapter gating of leveling: cap VALUE enters spending as game state; pacing prose not automated here.',
+  },
+  {
+    text: 'any character . this is to allow characters to',
+    reason: 'Group XP donation for catch-up: group-session policy, not individual advancement mechanics.',
+  },
+  {
+    text: "catch up on experience if they're behind, invest",
+    reason: 'Group XP donation / dust investment policy: not individual advancement mechanics.',
+  },
+  {
+    text: 'dust they have earned, and also allows them to set',
+    reason: 'Pacing-policy prose: not individual advancement mechanics.',
+  },
+  {
+    text: 'the pace of the game, since foes become slightly',
+    reason: 'Pacing-policy prose: not individual advancement mechanics.',
+  },
+  {
+    text: 'more complicated in higher chapters of the game. experience during their adventures, characters earn',
+    reason: 'Line merges chapter-pacing prose with the opening of the XP-bar procedure sentence quoted verbatim in icon-1.5:advancement:xp-bar-bank; the pacing half is not runtime semantics.',
+  },
+  {
+    text: '(6 for expedition, 1 per expedition for a quest) check at the end of a session : 1. did you fulfill at least one of your ideals? 1',
+    reason: 'XP-trigger checklist (award INPUTS): trigger-table inputs, not bar/bank semantics.',
+  },
+  {
+    text: "level 8. if you don't choose a new job, you can gain",
+    reason: 'New-job/mastery alternative at level 8: player-choice workflow intentionally not automated by this scope.',
+  },
+  {
+    text: 'tracks in low chapters) but it will mean characters',
+    reason: 'Explicitly optional variant rules ("Alternate XP"): intentionally not automated.',
+  },
+  {
+    text: 'will take a while to fill out their abilities.',
+    reason: 'Explicitly optional variant rules ("Alternate XP"): intentionally not automated.',
+  },
+
+  // --- p.241 advancement table ----------------------------------------------
+  {
+    text: "characters can't level higher than the chapter the game is currently in. lvl chapter combat benefit narrative benefit 0 1 choose a job and two abilities. choose a culture and kin type. then choose",
+    reason: 'Chapter-cap restatement plus advancement-table header/level-0 row: the cap VALUE enters spending as game state; table rows below are future scope.',
+  },
+  {
+    text: 'a bond and gets 2 dots in a specific action, a',
+    reason: 'Level-0 narrative-benefit table (Bond/culture/kin construction): separate character-construction subsystem.',
+  },
+  {
+    text: 'bond power, then gain 4 extra dots to',
+    reason: 'Level-0 narrative-benefit table (Bond construction): separate character-construction subsystem.',
+  },
+  {
+    text: 'improve actions. none can be taken past 3 at',
+    reason: 'Level-0 narrative-benefit table (action-dot limits): separate character-construction subsystem.',
+  },
+  {
+    // Matches BOTH identical occurrences of this table fragment on p.241.
+    text: 'or the same job and gain a mastery',
+    reason: 'Advancement-table row fragments (levels 4/8 new-job/mastery alternative, two identical lines): player-choice workflow intentionally not automated by this scope.',
+  },
 ];

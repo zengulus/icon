@@ -59,14 +59,14 @@ export function generateMarkdown(report: FidelityReport): string {
   lines.push('');
   lines.push('## Scope capability ladder');
   lines.push('');
-  lines.push('Each rung adds exactly one mechanical predicate:');
+  lines.push('Each rung adds exactly one mechanical predicate (canonical ordering, enforced by engine.ts):');
   lines.push('');
-  lines.push('- **blocked** — unclassified or unadjudicated-conflicted obligations present.');
-  lines.push('- **partial** — no unknown material, but the frontier is incomplete or some deterministic obligation lacks full evidence.');
-  lines.push('- **executable** — every deterministic obligation resolves to real code, carries machine-readable contract rows, and PASSED evaluation against them.');
-  lines.push('- **source-tested** — executable + declared replay evidence for every stateful contract.');
-  lines.push('- **replay-tested** — source-tested + required integration evidence.');
-  lines.push('- **closed** — replay-tested + exhaustively accounted source frontier.');
+  lines.push('- **blocked** — unknown material present: unclassified or partially-decomposed obligations, or an unadjudicated source conflict.');
+  lines.push('- **partial** — known scope with incomplete execution/accounting evidence: a deterministic obligation lacking consumer/structural-contract/passing-evaluation; OR a relevant deferred obligation; OR an unevidenced runtime-supported player choice.');
+  lines.push('- **executable** — every executable-semantics obligation resolves, carries structurally sufficient contract proof, and PASSED evaluation; the declared source frontier is missing, vacuous, or has uncovered clauses. A scope with NO frontier can never rise past this rung.');
+  lines.push('- **source-tested** — executable + the declared frontier resolves non-vacuously and every clause inside it is covered or explicitly dispositioned.');
+  lines.push('- **replay-tested** — source-tested + every stateful contract has declared replay evidence.');
+  lines.push('- **closed** — replay-tested + required integration evidence exists.');
   lines.push('');
   lines.push('| Scope | Status | Obligations | Unclassified | Deterministic | Proven supported | Frontier clauses (cov/irr/uncovered) | Blockers |');
   lines.push('| --- | --- | ---: | ---: | ---: | ---: | --- | --- |');
@@ -120,8 +120,18 @@ export function generateMarkdown(report: FidelityReport): string {
     lines.push('');
   }
 
+  lines.push('## Remaining human trust roots');
+  lines.push('');
+  lines.push('Once a human makes the semantic decisions below, every downstream completeness/correctness claim is mechanically checked. These decisions themselves are NOT machine-provable without formalizing the sourcebook:');
+  lines.push('');
+  lines.push('- choosing the semantic interpretation of unambiguous prose (and writing the independent expected semantics);');
+  lines.push('- adjudicating genuine source contradictions (via adopted adjudications);');
+  lines.push('- classifying a passage as descriptive vs executable vs table-facing vs deferred;');
+  lines.push('- defining legitimate subsystem boundaries (frontier page lists, disposition reasons, subdivision assignments);');
+  lines.push('- declaring player-choice automation as table-only vs runtime-supported.');
+  lines.push('');
+
   return `${lines.join('\n')}\n`;
-}
 
 function appendScopeDetail(lines: string[], scope: FidelityAuditResult['scopes'][number]): void {
   lines.push(`### ${scope.title} (\`${scope.scopeId}\`) — ${scope.status.toUpperCase()}`);

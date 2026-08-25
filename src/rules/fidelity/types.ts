@@ -77,33 +77,46 @@ export interface SourceClause {
 
 /**
  * The SOURCE FRONTIER of a closable scope: an explicit, mechanically
- * enumerable boundary over the canonical corpus. Every clause selected by the
- * definition must be either covered by a classified obligation's passages or
- * explicitly dispositioned irrelevant — "not mentioned" never means
- * "irrelevant". A scope whose frontier has uncovered clauses cannot close,
- * no matter how complete its curated obligation list looks.
+ * enumerable boundary over the canonical corpus. There is deliberately NO
+ * selector/filter escape hatch: EVERY clause on the declared pages must be
+ * either covered by a classified obligation's passages or explicitly
+ * dispositioned (irrelevant / subdivided). "Not mentioned" never means
+ * "irrelevant", and a narrow selection policy cannot make omitted material
+ * disappear from the completeness proof. A scope whose frontier has uncovered
+ * clauses cannot close; a frontier that resolves to ZERO clauses is vacuous
+ * and equally cannot close.
  */
 export interface ScopeFrontier {
-  /** Pages of the canonical corpus inside this scope's boundary. */
+  /** Pages of the canonical corpus inside this scope's boundary. The whole
+   * page is inside the boundary — there is no clause-selection filter. */
   pages: readonly number[];
-  /** Explicit irrelevance dispositions for frontier clauses this scope does
-   * not implement (narrative guidance, other-scope material, table-facing
-   * prose). Every entry must match exactly one resolved clause. */
-  irrelevant?: readonly IrrelevantClauseDisposition[];
-  /** Case-insensitive regex (source form) selecting RELEVANT clauses from
-   * those pages. Omitting it selects every clause on the pages. The filter
-   * is part of the audited scope definition: it is visible, debatable
-   * evidence policy, not hidden curation. */
-  include?: string;
+  /** Explicit accounting for frontier clauses this scope does not implement
+   * (narrative guidance, other-scope material, merged lines quoted across
+   * obligations). Every entry must match exactly one resolved clause. */
+  irrelevant?: readonly ClauseDisposition[];
 }
 
-/** An explicit "this clause does not matter to this scope" disposition,
- * recorded with its reason and matched against resolved clauses by exact
- * normalized text. An entry matching no clause is a stale policy and an
- * integrity violation; an uncovered clause without one blocks closure. */
-export interface IrrelevantClauseDisposition {
+/**
+ * The explicit accounting of one frontier clause this scope deliberately
+ * does NOT implement.
+ *
+ * - `irrelevant` (default): the clause is outside this scope's claimed
+ *   semantics entirely.
+ * - `subdivided`: the extraction line MERGES several semantic pieces; the
+ *   named curated obligations jointly quote it. This keeps extraction-line
+ *   accounting honest WITHOUT pretending one line is one semantic proposition
+ *   (the line granularity is stable, not semantic).
+ *
+ * Every entry must match exactly one resolved clause by normalized text; a
+ * stale entry is an integrity violation, and an uncovered clause without an
+ * entry blocks closure.
+ */
+export interface ClauseDisposition {
   text: string;
   reason: string;
+  kind?: 'irrelevant' | 'subdivided';
+  /** Required for `subdivided`: curated obligations whose passages jointly contain the clause. */
+  subdividedInto?: readonly string[];
 }
 
 /** Frontier input resolved from the canonical corpus and handed to the pure
@@ -162,32 +175,53 @@ export interface SourceObligation {
    * Existing somewhere in source code does NOT count — only typed
    * registrations that RESOLVE to real files/exports do. */
   consumerIds?: readonly string[];
-  /** Explicit decomposition relationship: which unit-grain obligations this
-   * curated material replaces. Prevents shadow double-counting where a unit
-   * keeps its catch-all obligation while curated fragments quietly coexist. */
-  supersedesUnits?: readonly string[];
+  /** For `player-choice` obligations only: does the software intentionally
+   * leave this choice to the table, or does it claim runtime workflow
+   * support? Classification alone is never completion:
+   * - `table-only`: explicit non-runtime disposition (with reason) — the
+   *   scope may still close; the delegation is the intended product behavior.
+   * - `runtime-supported`: the software claims the choice workflow (pending
+   *   representation, legal-choice validation, persistence, deterministic
+   *   replay). This demands the SAME evidence as a deterministic obligation
+   *   PLUS replay proof — a missing workflow blocks closure.
+   * A player-choice obligation WITHOUT this field is conservative: it can
+   * neither close its scope nor claim support.
+   */
+  choice?: { automation: 'table-only'; reason: string } | { automation: 'runtime-supported' };
 }
 
 // ---------------------------------------------------------------------------
-// Unit decompositions — explicit completeness of semantic decomposition
+// Unit decompositions — COMPUTED completeness of semantic decomposition
 // ---------------------------------------------------------------------------
 
+/** One explicitly declared semantic subdivision of a parent source unit's
+ * rulesText, assigned to the curated obligation that carries it — or
+ * explicitly disposed irrelevant. The TEXT must be a verbatim substring of
+ * the parent unit's rules text and must be quoted by the named child's
+ * passages: the audit verifies correspondence mechanically. */
+export interface UnitDecompositionPiece {
+  text: string;
+  /** Curated child obligation carrying this piece, or null when explicitly
+   * disposed as not requiring representation. */
+  obligationId: string | null;
+  /** Required when `obligationId` is null. */
+  reason?: string;
+}
+
 /**
- * Declares how a catalogued RuleSourceUnit has been semantically decomposed
- * into curated obligations. `complete: true` is a claim that EVERY semantic
- * clause of the unit is represented/disposed in the linked obligations; the
- * strict audit checks the linked obligations exist and carry the unit's
- * material, but the completeness claim itself remains reviewable — an
- * unproven `complete` flag leaves the unit partially decomposed in reports
- * unless the audit can verify coverage.
+ * Declares how a catalogued RuleSourceUnit has been semantically subdivided
+ * into curated obligations. There is deliberately NO load-bearing
+ * `complete: true` flag: the audit COMPUTES decomposition completeness by
+ * checking that every semantic sentence of the parent unit's rulesText is
+ * represented by a declared piece whose child actually quotes it. An
+ * incomplete piece list leaves the unit partially decomposed — visible,
+ * conservative, and blocking strong claims.
  */
 export interface UnitDecomposition {
   /** Catalogued RuleSourceUnit ID (`unit:<id>` obligation grain). */
   unitId: string;
-  /** Curated obligations that together replace the unit-grain catch-all. */
-  obligationIds: readonly string[];
-  /** Claim: the unit's semantics are fully represented above. */
-  complete: boolean;
+  /** Explicit subdivision/assignment of the parent's source material. */
+  pieces: readonly UnitDecompositionPiece[];
 }
 
 // ---------------------------------------------------------------------------
@@ -217,8 +251,10 @@ export interface ConsumerRegistration {
 
 /**
  * The shape of independent expectation the contract carries. Proof
- * requirements are derived from this class, so the required evidence matches
- * the semantics instead of being uniform boilerplate.
+ * requirements are derived from this class AND from structural checks on the
+ * declared domain/probe data, so the required evidence matches the semantics
+ * instead of being uniform boilerplate — and row CLASS LABELS alone can never
+ * manufacture a proof shape.
  */
 export type ContractKind =
   /** Pins a numeric boundary constant (e.g. AP claimed at exactly 7 XP).
@@ -267,12 +303,24 @@ export interface SemanticContract {
   /** Human-readable statement of what the contract pins, derived from source.
    * Useful for humans; NEVER sufficient for strong status without `rows`. */
   statement: string;
-  /** Machine-checkable boundary pinned by a `boundary-constant` contract. */
-  boundary?: { kind: 'level' | 'xp' | 'count'; value: number };
+  /** Machine-checkable boundary pinned by a `boundary-constant` contract.
+   * The PROBE INPUTS are load-bearing structure: the audit requires rows
+   * realizing each side (below/at/above), each labelled `boundary`, so a
+   * relabelled positive row cannot manufacture boundary proof. */
+  boundary?: {
+    kind: 'level' | 'xp' | 'count';
+    value: number;
+    probes: { below: unknown; at: unknown; above: unknown };
+  };
+  /** Declared finite legal-input domain for an `exhaustive-finite` contract.
+   * Exhaustive proof is satisfied ONLY when the evaluated row inputs equal
+   * this domain exactly (no missing member, no extra case, no duplicate).
+   * A single row labelled `exhaustive` over a larger declared domain fails. */
+  domain?: readonly unknown[];
   /** Executable expectation rows. Strong ("proven-supported") status requires
-   * rows covering every proof class the contract kind demands AND a passing
-   * evaluation against the registered adapter. A prose-only contract caps at
-   * implemented-unproven. */
+   * rows covering every proof class the contract kind demands — with the
+   * STRUCTURAL shape checks above — AND a passing evaluation against the
+   * registered adapter. A prose-only contract caps at implemented-unproven. */
   rows?: readonly ContractRow[];
   // Note: contracts deliberately carry DATA, never pointers to runtime
   // functions. Adapter registries mapping row inputs to production code live
@@ -397,26 +445,35 @@ export interface ObligationFinding {
 }
 
 /**
- * Scope capability ladder. Each rung adds exactly one mechanical predicate
- * on top of the previous one:
+ * Scope capability ladder. Each rung adds exactly one mechanical predicate on
+ * top of the previous one — this ordering is canonical and enforced by
+ * `engine.ts`, documented identically in generated docs, and exercised rung
+ * by rung in the self-tests:
  *
- * - blocked            — the scope contains unclassified or
- *                        conflicted-unadjudicated obligations; unknown blocks
- *                        everything stronger.
- * - partial            — no unknown material, but the frontier is incomplete
- *                        or at least one deterministic obligation lacks full
- *                        evidence (consumer / contract / execution / proofs).
- * - executable         — every deterministic obligation resolves to a real
- *                        implementation, carries a machine-readable contract,
- *                        and PASSED evaluation against it.
- * - source-tested      — executable + every stateful contract has declared
- *                        replay evidence.
- * - replay-tested      — source-tested + the scope's required integration
- *                        evidence exists.
- * - closed             — replay-tested + the source frontier is exhaustively
- *                        accounted for (every clause covered or explicitly
- *                        irrelevant) and no integrity violations touch
- *                        the scope.
+ * - blocked            — unknown material (unclassified or partially-
+ *                        decomposed obligations) or an unadjudicated source
+ *                        conflict is present in the scope.
+ * - partial            — known scope whose execution/accounting evidence is
+ *                        incomplete: some deterministic obligation lacks a
+ *                        resolving consumer / structural contract proof /
+ *                        passing evaluation; OR a relevant `deferred`
+ *                        obligation exists; OR a runtime-supported player
+ *                        choice lacks its workflow evidence.
+ * - executable         — every executable-semantics obligation resolves,
+ *                        carries structurally sufficient contract proof, and
+ *                        PASSED evaluation — but the source frontier is not
+ *                        yet fully accounted (missing, vacuous, or has
+ *                        uncovered clauses). A scope with NO declared
+ *                        frontier can never rise past this rung.
+ * - source-tested      — executable + the declared source frontier resolves
+ *                        non-vacuously and every clause inside it is covered
+ *                        or explicitly dispositioned.
+ * - replay-tested      — source-tested + every stateful contract has
+ *                        declared replay evidence.
+ * - closed             — replay-tested + the scope's required integration
+ *                        evidence exists. (Deferred obligations and
+ *                        unevidenced runtime-supported choices already cap
+ *                        at partial.)
  */
 export type ScopeStatus =
   | 'blocked'
@@ -484,11 +541,29 @@ export type IntegrityCheck =
   | 'passage-fingerprint-mismatch'
   | 'passage-not-in-canonical-source'
   | 'passage-outside-frontier'
-  | 'frontier-irrelevant-entry-dangling'
+  | 'frontier-disposition-entry-dangling'
   | 'frontier-page-outside-corpus'
-  | 'decomposition-dangling-obligation'
+  | 'subdivision-unsupported'
+  | 'decomposition-dangling-piece'
+  | 'decomposition-piece-not-in-unit'
+  | 'decomposition-piece-unquoted-by-child'
+  | 'decomposition-irrelevant-piece-missing-reason'
   | 'duplicate-unit-decomposition'
-  | 'decomposition-supersede-mismatch';
+  | 'duplicate-contract-input'
+  | 'contradictory-contract-expectations'
+  | 'exhaustive-domain-duplicate'
+  | 'boundary-probe-duplicate';
+
+/** Deterministic canonicalization of a fixture input for duplicate/coverage
+ * accounting: stable key ordering so structurally equal objects collide and
+ * arbitrary key order cannot hide duplicates. Deliberately NOT symbolic
+ * equivalence — just deterministic JSON-shaped keys. */
+export function canonicalFixtureKey(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'undefined';
+  if (Array.isArray(value)) return `[${value.map(canonicalFixtureKey).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalFixtureKey(v)}`).join(',')}}`;
+}
 
 export interface FidelityIntegrityViolation {
   check: IntegrityCheck;

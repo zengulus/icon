@@ -39,9 +39,11 @@ import type {
   ScopeStatus,
   SemanticContract,
   SourceObligation,
+  UnitDecompositionPiece,
 } from './types.js';
 import { REQUIRED_PROOF_KINDS } from './types.js';
 import { clauseCoveredBy } from './provenance.js';
+import { canonicalFixtureKey } from './types.js';
 
 export function passageFingerprint(quote: string): string {
   return createHash('sha256').update(quote).digest('hex');
@@ -73,6 +75,25 @@ export interface AuditInputs {
 }
 
 const ROW_CLASS_PROOF_KINDS: readonly string[] = ['positive', 'boundary', 'negative', 'invariant', 'exhaustive'];
+
+/** Whitespace-stripped containment — matches the subdivision/correspondence policy. */
+function containsStripped(haystack: string, needle: string): boolean {
+  if (needle.length === 0) return false;
+  return haystack.replace(/\s+/g, '').includes(needle.replace(/\s+/g, ''));
+}
+
+/** COMPUTED decomposition completeness: every sentence of the parent unit's
+ * rules text must be represented by some declared piece (assigned to a child
+ * or explicitly disposed). Missing pieces ⇒ partially decomposed. */
+export function unitDecompositionComplete(parentRulesText: string, pieces: readonly { text: string }[]): boolean {
+  const accounted = pieces.map((piece) => piece.text.replace(/\s+/g, '')).join('');
+  if (accounted.length === 0) return false;
+  const sentences = parentRulesText
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
+  return sentences.every((sentence) => containsStripped(accounted, sentence));
+}
 
 // ---------------------------------------------------------------------------
 // Integrity checks
@@ -138,6 +159,34 @@ export function checkIntegrity(world: FidelityWorld): FidelityIntegrityViolation
     }
     const count = contractsByObligation.get(contract.obligationId) ?? 0;
     contractsByObligation.set(contract.obligationId, count + 1);
+
+    // Case-shape integrity over fixture inputs (deterministic canonicalization;
+    // no symbolic equivalence).
+    const casesByKey = new Map<string, unknown>();
+    for (const row of contract.rows ?? []) {
+      const key = canonicalFixtureKey(row.input);
+      const existing = casesByKey.get(key);
+      if (existing !== undefined) {
+        violations.push({ check: 'duplicate-contract-input', detail: `${contract.obligationId} row "${row.label}": duplicate input case` });
+        if (JSON.stringify(existing) !== JSON.stringify(row.expected)) {
+          violations.push({ check: 'contradictory-contract-expectations', detail: `${contract.obligationId}: contradictory expectations for input ${key}` });
+        }
+        continue;
+      }
+      casesByKey.set(key, row.expected);
+    }
+    if (contract.domain) {
+      const domainKeys = contract.domain.map(canonicalFixtureKey);
+      if (new Set(domainKeys).size !== domainKeys.length) {
+        violations.push({ check: 'exhaustive-domain-duplicate', detail: `${contract.obligationId}: declared exhaustive domain contains duplicate member(s)` });
+      }
+    }
+    if (contract.boundary) {
+      const probeKeys = Object.values(contract.boundary.probes).map(canonicalFixtureKey);
+      if (new Set(probeKeys).size !== probeKeys.length) {
+        violations.push({ check: 'boundary-probe-duplicate', detail: `${contract.obligationId}: boundary probes below/at/above are not distinct inputs` });
+      }
+    }
   }
   for (const [obligationId, count] of contractsByObligation) {
     if (count > 1) violations.push({ check: 'duplicate-contract', detail: obligationId });
@@ -149,36 +198,49 @@ export function checkIntegrity(world: FidelityWorld): FidelityIntegrityViolation
     }
   }
 
-  // Decomposition records: explicit unit → obligations relationship. Prevents
-  // shadow double-counting where curated fragments coexist with the original
-  // unit-grain catch-all without any linkage.
-  const derivedUnitIds = new Set(
-    world.obligations.filter((o) => o.origin.kind === 'derived-unit').map((o) => o.origin.kind === 'derived-unit' ? o.origin.unitId : ''),
-  );
+  // Decomposition records: ONE authoritative unit → pieces relationship.
+  // Completeness is COMPUTED against the parent's actual rules text and each
+  // piece must genuinely correspond to the child that claims it — an
+  // unrelated obligation cannot retire a parent unit, and a missing sentence
+  // leaves the unit partially decomposed. There is no load-bearing
+  // "complete" flag to assert.
+  const derivedUnitById = new Map<string, SourceObligation>();
+  for (const obligation of world.obligations) {
+    if (obligation.origin.kind === 'derived-unit') derivedUnitById.set(obligation.origin.unitId, obligation);
+  }
   const decompositionsByUnit = new Map<string, number>();
   for (const decomposition of world.decompositions ?? []) {
     const count = decompositionsByUnit.get(decomposition.unitId) ?? 0;
     decompositionsByUnit.set(decomposition.unitId, count + 1);
-    if (!derivedUnitIds.has(decomposition.unitId)) {
-      violations.push({ check: 'decomposition-dangling-obligation', detail: `decomposition names unknown source unit ${decomposition.unitId}` });
+    const parent = derivedUnitById.get(decomposition.unitId);
+    if (!parent) {
+      violations.push({ check: 'decomposition-dangling-piece', detail: `decomposition names unknown source unit ${decomposition.unitId}` });
+      continue;
     }
-    for (const obligationId of decomposition.obligationIds) {
-      const obligation = obligationsById.get(obligationId);
-      if (!obligation || obligation.origin.kind !== 'curated') {
-        violations.push({ check: 'decomposition-dangling-obligation', detail: `decomposition of ${decomposition.unitId} → non-curated obligation ${obligationId}` });
+    const parentText = parent.passages[0]?.quote ?? '';
+    if (decomposition.pieces.length === 0) {
+      violations.push({ check: 'decomposition-dangling-piece', detail: `decomposition of ${decomposition.unitId} declares no pieces` });
+    }
+    for (const piece of decomposition.pieces) {
+      if (!containsStripped(parentText, piece.text)) {
+        violations.push({ check: 'decomposition-piece-not-in-unit', detail: `${decomposition.unitId}: piece is not part of the unit's rules text: "${piece.text.slice(0, 80)}"` });
       }
-    }
-  }
-  for (const [, count] of decompositionsByUnit) {
-    if (count > 1) violations.push({ check: 'duplicate-unit-decomposition', detail: `unit has more than one decomposition record` });
-  }
-  for (const obligation of world.obligations) {
-    for (const unitId of obligation.supersedesUnits ?? []) {
-      const record = (world.decompositions ?? []).find((d) => d.unitId === unitId);
-      if (!record || !record.obligationIds.includes(obligation.id)) {
+      if (piece.obligationId === null) {
+        if (!piece.reason || piece.reason.trim().length === 0) {
+          violations.push({ check: 'decomposition-irrelevant-piece-missing-reason', detail: `${decomposition.unitId}: irrelevant piece lacks a recorded reason: "${piece.text.slice(0, 80)}"` });
+        }
+        continue;
+      }
+      const child = obligationsById.get(piece.obligationId);
+      if (!child || child.origin.kind !== 'curated') {
+        violations.push({ check: 'decomposition-dangling-piece', detail: `decomposition of ${decomposition.unitId} → non-curated obligation ${piece.obligationId}` });
+        continue;
+      }
+      const childQuotes = child.passages.map((passage) => passage.quote).join(' ');
+      if (!containsStripped(childQuotes, piece.text)) {
         violations.push({
-          check: 'decomposition-supersede-mismatch',
-          detail: `${obligation.id} supersedes ${unitId} without a matching decomposition record listing it`,
+          check: 'decomposition-piece-unquoted-by-child',
+          detail: `${decomposition.unitId}: piece assigned to ${piece.obligationId} is not quoted by its passages — unrelated obligations cannot retire a parent unit`,
         });
       }
     }
@@ -200,16 +262,56 @@ interface DerivationContext {
   adjudications: ReadonlyMap<string, AdjudicationLink>;
 }
 
-/** Which required proof classes a PASSING evaluation covers with its rows. */
-function evaluatedProofKinds(contract: SemanticContract, evaluation: ContractEvaluation | undefined): { kinds: string[]; passed: boolean; ran: boolean } {
+// ---------------------------------------------------------------------------
+// Structural proof shape — row CLASS LABELS alone prove nothing
+// ---------------------------------------------------------------------------
+
+/** Boundary proof is satisfied STRUCTURALLY: the contract must declare
+ * below/at/above probe INPUTS, and each probe must appear as a passing,
+ * boundary-labelled row. Relabelling a positive row cannot manufacture this:
+ * the probe inputs themselves must realize all three sides of the edge. */
+export function boundaryShapeSatisfied(contract: SemanticContract): boolean {
+  const probes = contract.boundary?.probes;
+  if (!probes) return false;
+  const keys = ['below', 'at', 'above'] as const;
+  const seen = new Set<string>();
+  for (const side of keys) {
+    const probeKey = canonicalFixtureKey(probes[side]);
+    if (seen.has(probeKey)) return false; // duplicated slot proves nothing extra
+    seen.add(probeKey);
+    const matched = contract.rows?.some(
+      (row) => row.cls === 'boundary' && canonicalFixtureKey(row.input) === probeKey,
+    );
+    if (!matched) return false;
+  }
+  return true;
+}
+
+/** Exhaustive proof is satisfied STRUCTURALLY: the declared finite domain and
+ * the evaluated row inputs must be the SAME SET under deterministic
+ * canonicalization — no missing member, no extra case. Duplicate cases within
+ * either side are separate integrity violations, not silent collapse. */
+export function exhaustiveShapeSatisfied(contract: SemanticContract): boolean {
+  if (!contract.domain || contract.domain.length === 0) return false;
+  const domainKeys = contract.domain.map(canonicalFixtureKey);
+  if (new Set(domainKeys).size !== domainKeys.length) return false;
+  const rowKeys = (contract.rows ?? []).filter((row) => row.cls === 'exhaustive').map((row) => canonicalFixtureKey(row.input));
+  return new Set(rowKeys).size === domainKeys.length && domainKeys.every((key) => new Set(rowKeys).has(key));
+}
+
+/** Which required proof classes a PASSING evaluation covers with its rows —
+ * verified against the contract's DECLARED STRUCTURE, never just row labels. */
+function structuralEvaluatedProofKinds(contract: SemanticContract, evaluation: ContractEvaluation | undefined): { kinds: string[]; passed: boolean; ran: boolean } {
   if (!evaluation) return { kinds: [], passed: false, ran: false };
   if (!evaluation.passed) return { kinds: [], passed: false, ran: true };
   const coveredClasses = new Set<ContractRowClass>(contract.rows?.map((row) => row.cls) ?? []);
-  return {
-    kinds: REQUIRED_PROOF_KINDS[contract.kind].filter((kind) => ROW_CLASS_PROOF_KINDS.includes(kind) && coveredClasses.has(kind as ContractRowClass)),
-    passed: true,
-    ran: true,
-  };
+  const kinds = REQUIRED_PROOF_KINDS[contract.kind].filter((kind) => {
+    if (kind === 'positive' || kind === 'negative') return coveredClasses.has(kind as ContractRowClass);
+    if (kind === 'boundary') return boundaryShapeSatisfied(contract);
+    if (kind === 'exhaustive') return exhaustiveShapeSatisfied(contract);
+    return false; // invariant/replay are never evaluator-derived
+  });
+  return { kinds, passed: true, ran: true };
 }
 
 function deriveStatus(
@@ -241,8 +343,23 @@ function deriveStatus(
       return { status: 'descriptive', blockers: [] };
     case 'gm-facing':
       return { status: 'gm-facing', blockers: ['requires GM/table judgment'] };
-    case 'player-choice':
-      return { status: 'player-choice', blockers: ['requires a durable player choice'] };
+    case 'player-choice': {
+      // The source says the PLAYER chooses — that is not the same as "the
+      // software has nothing to implement". An explicit automation decision
+      // is required either way.
+      const automation = obligation.choice?.automation;
+      if (automation === 'table-only') {
+        // Intentional non-runtime disposition; delegation is the product behavior.
+        return { status: 'player-choice', blockers: [] };
+      }
+      if (automation === 'runtime-supported') {
+        // Claims the full choice workflow (pending representation, legal-
+        // choice validation, persistence, replay): same evidence path as a
+        // deterministic obligation, PLUS mandatory replay proof below.
+        break;
+      }
+      return { status: 'player-choice', blockers: ['player-choice obligation has no explicit table-only/runtime-supported automation decision'] };
+    }
     case 'conflicted':
     case 'deterministic-executable':
       break;
@@ -273,7 +390,7 @@ function deriveStatus(
   }
 
   const evaluation = context.evaluations.get(obligation.id);
-  const evaluated = evaluatedProofKinds(contract, evaluation);
+  const evaluated = structuralEvaluatedProofKinds(contract, evaluation);
   if (!evaluated.ran) {
     return {
       status: 'implemented-unproven',
@@ -297,6 +414,7 @@ function deriveStatus(
   ]);
   const missing = REQUIRED_PROOF_KINDS[contract.kind].filter((kind) => !provided.has(kind));
   if (contract.stateful && !provided.has('replay')) missing.push('replay');
+  if (obligation.disposition === 'player-choice' && !provided.has('replay')) missing.push('replay');
   if (missing.length > 0) {
     return {
       status: 'implemented-unproven',
@@ -356,17 +474,19 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
   const adjudications = new Map(world.adjudications.map((adjudication) => [adjudication.id, adjudication]));
   const context: DerivationContext = { consumers, resolvedConsumers, contracts, proofs, evaluations, adjudications };
 
-  // Decomposition census over catalogued units.
-  const decompositionByUnit = new Map<string, { obligationIds: readonly string[]; complete: boolean }>();
+  // Decomposition census over catalogued units — completeness is COMPUTED
+  // from piece coverage of each parent's rules text, never asserted.
+  const decompositionByUnit = new Map<string, { pieces: readonly UnitDecompositionPiece[]; complete: boolean }>();
   for (const decomposition of world.decompositions ?? []) {
     if (!decompositionByUnit.has(decomposition.unitId)) {
-      decompositionByUnit.set(decomposition.unitId, { obligationIds: decomposition.obligationIds, complete: decomposition.complete });
-    }
-  }
-  const supersededUnits = new Set<string>();
-  for (const obligation of world.obligations) {
-    if (obligation.origin.kind === 'derived-unit' && decompositionByUnit.get(obligation.origin.unitId)?.complete) {
-      supersededUnits.add(obligation.id);
+      const parent = world.obligations.find(
+        (obligation) => obligation.origin.kind === 'derived-unit' && obligation.origin.unitId === decomposition.unitId,
+      );
+      const parentRulesText = parent?.passages[0]?.quote ?? '';
+      decompositionByUnit.set(decomposition.unitId, {
+        pieces: decomposition.pieces,
+        complete: unitDecompositionComplete(parentRulesText, decomposition.pieces),
+      });
     }
   }
 
@@ -443,7 +563,7 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
       const hasRows = contract !== undefined && (contract.rows?.length ?? 0) > 0;
       const evaluation = evaluations.get(obligation.id);
       const evaluatedPass = hasRows && evaluation !== undefined && evaluation.passed;
-      const evaluatedKinds = evaluatedPass ? evaluatedProofKinds(contract!, evaluation).kinds : [];
+      const evaluatedKinds = evaluatedPass ? structuralEvaluatedProofKinds(contract!, evaluation).kinds : [];
       const provided = new Set<string>([
         ...evaluatedKinds,
         ...(proofs.get(obligation.id) ?? []).filter((p) => p.evidence !== 'declared').map((p) => p.kind),
@@ -467,16 +587,48 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
     const integrationPresent = !integrationRequired
       || (proofs.get(`scope:${scopeDef.id}`) ?? []).some((proof) => proof.kind === 'integration');
 
-    // Rung selection — each rung strictly adds one predicate.
+    // Non-deterministic closure gates.
+    const deferredPresent = scopeFindings.some(({ status: s }) => s === 'deferred');
+    const findingsByObligation = new Map(scopeFindings.map(({ obligationId, status: s }) => [obligationId, s]));
+    const runtimeChoiceGapIds = scopeObligations
+      .filter((obligation) => obligation.disposition === 'player-choice')
+      .filter((obligation) => {
+        // Undecided choices can never support closure; table-only choices are
+        // intentionally non-runtime and accounted; runtime-supported claims
+        // must actually be PROVEN.
+        if (obligation.choice === undefined) return true;
+        if (obligation.choice.automation === 'runtime-supported') {
+          return findingsByObligation.get(obligation.id) !== 'proven-supported';
+        }
+        return false;
+      })
+      .map(({ id }) => id);
+
+    // Frontier gates: a scope without a declared source frontier can never
+    // be source-accounted; a frontier resolving to ZERO clauses is vacuous;
+    // uncovered clauses mean incomplete accounting.
+    const declaredFrontier = scopeDef.frontier !== undefined;
+    const frontierAccounted = declaredFrontier && frontier !== null && frontier.total > 0 && frontier.uncoveredIds.length === 0;
+    const frontierVacuousOrUnresolved = declaredFrontier && (frontier === null || frontier.total === 0);
+
+    // Rung selection — each rung strictly adds exactly one predicate:
+    //   closed ⊃ replay-tested ⊃ source-tested ⊃ executable ⊃ partial ⊃ blocked
     let status: ScopeStatus;
     if (unknownMaterial || conflictedUnadjudicated.length > 0) {
       status = 'blocked';
-    } else if (evidence.length === 0 || !allDeterministicResolvedAndExecuted || (frontier !== null && frontier.uncoveredIds.length > 0)) {
+    } else if (
+      evidence.length === 0
+      || !allDeterministicResolvedAndExecuted
+      || deferredPresent
+      || runtimeChoiceGapIds.length > 0
+    ) {
       status = 'partial';
-    } else if (statefulWithoutReplay) {
+    } else if (!frontierAccounted) {
       status = 'executable';
-    } else if (!integrationPresent) {
+    } else if (statefulWithoutReplay) {
       status = 'source-tested';
+    } else if (!integrationPresent) {
+      status = 'replay-tested';
     } else {
       status = 'closed';
     }
@@ -523,8 +675,14 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
     for (const failure of result.evaluatorFailures) {
       blockers.push(`semantic evaluation FAILED for ${failure.obligationId} (${failure.failures} row(s))`);
     }
+    if (deferredPresent) blockers.push('a relevant deferred obligation blocks closure');
+    for (const gapId of runtimeChoiceGapIds) {
+      blockers.push(`player-choice obligation ${gapId} lacks an explicit table-only disposition or proven runtime workflow`);
+    }
     if (statefulWithoutReplay) blockers.push('a stateful contract lacks replay evidence');
     if (!integrationPresent) blockers.push('required integration evidence is absent');
+    if (!declaredFrontier) blockers.push('scope has no declared source frontier');
+    if (frontierVacuousOrUnresolved) blockers.push('declared source frontier resolves to zero clauses (vacuous boundary)');
     if (frontier && frontier.uncoveredIds.length > 0) {
       blockers.push(`${frontier.uncoveredIds.length} uncovered frontier clause(s): ${frontier.uncoveredIds.slice(0, 5).join(', ')}${frontier.uncoveredIds.length > 5 ? ', …' : ''}`);
     }

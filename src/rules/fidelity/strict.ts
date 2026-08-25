@@ -29,6 +29,7 @@ import {
   CORRECT_MITIGATION,
   SEMANTIC_MUTATIONS,
   MITIGATION_CONTRACT_ROWS,
+  MITIGATION_DOMAIN,
   runMutationResistanceSuite,
 } from './mutation.js';
 import type { ContractRow, FidelityAuditResult, FidelityIntegrityViolation, SemanticContract, SourceObligation } from './types.js';
@@ -69,6 +70,10 @@ export function runPipelineMutationSelfCheck(): string[] {
     kind: 'exhaustive-finite',
     stateful: false,
     statement: 'Exhaustive synthetic mitigation table.',
+    // The declared domain makes exhaustive proof STRUCTURAL: the evaluator
+    // must cover exactly these inputs, so a subset labelled 'exhaustive'
+    // cannot certify the domain.
+    domain: MITIGATION_DOMAIN,
     rows: MITIGATION_CONTRACT_ROWS.map((row): ContractRow => ({
       label: `base=${row.base} armor=${row.armor} kind=${row.kind}`,
       cls: 'exhaustive',
@@ -110,7 +115,14 @@ export function runPipelineMutationSelfCheck(): string[] {
   return violations;
 }
 
-export function runStrictFidelityAudit(repoRoot: string): StrictAuditReport {
+/** Orchestration-level options. Prerequisite audit RESULTS come from outside
+ * the pure engine (CI artifacts or an aggregate command that ran the
+ * prerequisites once); generated-audit-bound claims verify only against them. */
+export interface StrictAuditOptions {
+  auditResults?: Readonly<Record<string, 'passed' | 'failed'>>;
+}
+
+export function runStrictFidelityAudit(repoRoot: string, options: StrictAuditOptions = {}): StrictAuditReport {
   const world = buildProductionWorld();
 
   // 1. Canonical corpus + provenance.
@@ -119,7 +131,7 @@ export function runStrictFidelityAudit(repoRoot: string): StrictAuditReport {
   try {
     const corpus = loadCanonicalCorpus(repoRoot);
     provenanceViolations = verifyPassageProvenance(world, corpus);
-    const resolved = resolveScopeFrontiers(world.scopes, corpus);
+    const resolved = resolveScopeFrontiers(world.scopes, corpus, world.obligations);
     frontierInputs = resolved.inputs;
     provenanceViolations.push(...resolved.violations);
   } catch (error) {
@@ -159,8 +171,8 @@ export function runStrictFidelityAudit(repoRoot: string): StrictAuditReport {
   const pipelineSelfCheck = runPipelineMutationSelfCheck();
   const mutationViolations = [...mutations.violations, ...pipelineSelfCheck];
 
-  // 7. Project claims.
-  const claims = checkProjectClaims(result, { root: repoRoot }, PROJECT_CLAIMS);
+  // 7. Project claims (generated-audit bindings consume RECORDED results).
+  const claims = checkProjectClaims(result, { root: repoRoot, auditResults: options.auditResults }, PROJECT_CLAIMS);
 
   // 8. Aggregate hard failures.
   const hardFailures: string[] = [

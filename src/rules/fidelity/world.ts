@@ -39,24 +39,21 @@ import { ADVANCEMENT_IRRELEVANT_CLAUSES } from './advancement-frontier.js';
 // ---------------------------------------------------------------------------
 // Scopes
 //
-// `advancement` declares its SOURCE FRONTIER: the canonical pages whose
-// advancement-relevant clauses define the scope's boundary. Every filtered
-// clause must be covered by an obligation's passages or explicitly listed as
- // irrelevant below — omission is not irrelevance, so the scope cannot close
-// on an incomplete accounting.
+// `advancement` declares its SOURCE FRONTIER as whole canonical pages: there
+// is NO selection filter. EVERY extraction line on these pages must be
+// covered by an obligation's passages or explicitly dispositioned
+// (irrelevant / subdivided) below — a narrow selection policy can no longer
+// make omitted material disappear from the completeness proof.
 // ---------------------------------------------------------------------------
-
-const ADVANCEMENT_FRONTIER_FILTER = '\\b(xp|level up|level-up|limit break|advance)\\b|\\bap\\b|(?<=\\d)ap\\b';
 
 const SCOPES: readonly ScopeDefinition[] = [
   {
     id: 'advancement',
-    title: 'Character advancement',
+    title: 'Advancement procedure — XP bar, AP breakpoint & Limit Break unlock boundary',
     description:
-      'The ICON 1.5 XP bar / ability-point / level-banking procedure and the Limit Break unlock boundary. Includes both adopted source adjudications.',
+      'The ICON 1.5 XP bar / ability-point / level-banking procedure and the Limit Break unlock boundary across pp.44/99/112/115/240/241, including both adopted source adjudications. The frontier is EXHAUSTIVE over those pages (no selection filter): every line is covered or explicitly accounted.',
     frontier: {
       pages: [44, 99, 112, 115, 240, 241],
-      include: ADVANCEMENT_FRONTIER_FILTER,
       irrelevant: ADVANCEMENT_IRRELEVANT_CLAUSES,
     },
   },
@@ -223,11 +220,19 @@ const CONTRACTS: readonly SemanticContract[] = [
     stateful: false,
     statement:
       'The mid-level AP is claimed at EXACTLY 7 XP (not 5, not 10) and only once per level until spendLevelUp resets the claim; the claimed point enters the ability-point allowance. Matches the adopted adjudication boundary (xp=7). Expectations from the adjudicated reading, not from awardXp.',
-    boundary: { kind: 'xp', value: 7 },
+    boundary: {
+      kind: 'xp',
+      value: 7,
+      probes: {
+        below: { op: 'award', char: fresh, amount: 6 },
+        at: { op: 'award', char: fresh, amount: 7 },
+        above: { op: 'award', char: fresh, amount: 10 },
+      },
+    },
     rows: [
       { label: '6 XP does not claim the mid-level AP (below edge)', cls: 'boundary', input: { op: 'award', char: fresh, amount: 6 }, expected: { xp: 6, pendingLevelUps: 0, claimed: false, level: 0 } },
       { label: 'exactly 7 XP claims it (at edge)', cls: 'boundary', input: { op: 'award', char: fresh, amount: 7 }, expected: { xp: 7, pendingLevelUps: 0, claimed: true, level: 0 } },
-      { label: '10 XP crosses the same single boundary — no separate unlock (above edge)', cls: 'positive', input: { op: 'award', char: fresh, amount: 10 }, expected: { xp: 10, pendingLevelUps: 0, claimed: true, level: 0 } },
+      { label: '10 XP crosses the same single boundary — no separate unlock (above edge)', cls: 'boundary', input: { op: 'award', char: fresh, amount: 10 }, expected: { xp: 10, pendingLevelUps: 0, claimed: true, level: 0 } },
       { label: 'an unclaimed level-0 character has 2 AP (base table)', cls: 'positive', input: { op: 'allowance', char: { ...fresh, xpAbilityPointClaimed: false } }, expected: { allowance: 2 } },
       { label: 'the claimed mid-level AP enters the allowance (+1)', cls: 'positive', input: { op: 'allowance', char: { ...fresh, xpAbilityPointClaimed: true } }, expected: { allowance: 3 } },
     ],
@@ -238,11 +243,19 @@ const CONTRACTS: readonly SemanticContract[] = [
     stateful: false,
     statement:
       'The Limit Break unlock boundary is level EXACTLY 1 (adjudicated): the durable engine constant must equal the adopted boundary value, and the level-1 advancement row (+2 AP, total 2→5) sits above level 0. No availability gate exists yet; this constant is what a future gate must agree with.',
-    boundary: { kind: 'level', value: 1 },
+    boundary: {
+      kind: 'level',
+      value: 1,
+      probes: {
+        below: { op: 'allowance', char: { ...fresh, level: 0, xpAbilityPointClaimed: false } },
+        at: { op: 'limitBreakUnlockLevel' },
+        above: { op: 'allowance', char: { ...fresh, level: 1, xpAbilityPointClaimed: false } },
+      },
+    },
     rows: [
       { label: 'engine constant equals the adjudicated boundary (level 1)', cls: 'boundary', input: { op: 'limitBreakUnlockLevel' }, expected: { limitBreakUnlockLevel: 1 } },
       { label: 'a level-0 character has 2 AP — below the advancement row', cls: 'boundary', input: { op: 'allowance', char: { ...fresh, level: 0, xpAbilityPointClaimed: false } }, expected: { allowance: 2 } },
-      { label: 'a level-1 character has 5 AP — the "gain +2 ap and unlock limit break" row', cls: 'positive', input: { op: 'allowance', char: { ...fresh, level: 1, xpAbilityPointClaimed: false } }, expected: { allowance: 5 } },
+      { label: 'a level-1 character has 5 AP — the "gain +2 ap and unlock limit break" row', cls: 'boundary', input: { op: 'allowance', char: { ...fresh, level: 1, xpAbilityPointClaimed: false } }, expected: { allowance: 5 } },
     ],
   },
 ];

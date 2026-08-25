@@ -23,7 +23,7 @@
  *   node --import tsx scripts/audit-source-fidelity.ts [--strict] [--write] [--json]
  */
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runStrictFidelityAudit } from '../src/rules/fidelity/strict.js';
@@ -34,7 +34,17 @@ const strict = process.argv.includes('--strict');
 const write = process.argv.includes('--write');
 const json = process.argv.includes('--json');
 
-const report = runStrictFidelityAudit(repoRoot);
+/** RECORDED prerequisite-audit results ({command: 'passed'|'failed'}), from
+ * an aggregate CI step that ran the prerequisites once. Without this input,
+ * generated-audit-bound claims cannot verify (reported unverified, never
+ * silently accepted). */
+let auditResults: Record<string, 'passed' | 'failed'> | undefined;
+const prereqIndex = process.argv.indexOf('--prereq-results');
+if (prereqIndex !== -1 && process.argv[prereqIndex + 1]) {
+  auditResults = JSON.parse(readFileSync(process.argv[prereqIndex + 1], 'utf8')) as Record<string, 'passed' | 'failed'>;
+}
+
+const report = runStrictFidelityAudit(repoRoot, { auditResults });
 const { result, hardFailures, unverifiedClaims } = report;
 
 // --- Documentation -----------------------------------------------------------

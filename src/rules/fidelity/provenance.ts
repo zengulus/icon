@@ -113,16 +113,31 @@ export function pageClauses(corpus: CanonicalCorpus, page: number): SourceClause
     .map((text_) => ({ page, text: text_, sha256: createHash('sha256').update(text_).digest('hex'), id: clauseId(page, text_) }));
 }
 
-/** Resolves every scope frontier definition into its exhaustive clause list
- * plus the clause IDs matched by the scope's explicit irrelevant
- * dispositions. Also reports stale dispositions (entries that match no
- * resolved clause) as integrity violations. */
+/** Resolves every scope frontier definition into its EXHAUSTIVE clause list
+ * (every canonical extraction line on the declared pages — no selection
+ * filter exists anymore) plus the clause IDs matched by explicit
+ * dispositions.
+ *
+ * Subdivided dispositions are verified here against the curated obligations:
+ * the clause's whitespace-stripped text must appear inside the concatenation
+ * of the named obligations' passage quotes. This lets a merged extraction
+ * line be accounted as several semantic pieces without pretending the line
+ * itself is atomic semantics.
+ *
+ * Stale dispositions (matching no resolved clause), unsupported subdivisions,
+ * and out-of-corpus pages are integrity violations. */
 export function resolveScopeFrontiers(
   scopes: readonly ScopeDefinition[],
   corpus: CanonicalCorpus,
+  obligations: readonly SourceObligation[] = [],
 ): { inputs: ScopeFrontierInput[]; violations: FidelityIntegrityViolation[] } {
   const inputs: ScopeFrontierInput[] = [];
   const violations: FidelityIntegrityViolation[] = [];
+  const quotesById = new Map(
+    obligations
+      .filter((obligation) => obligation.origin.kind === 'curated')
+      .map((obligation) => [obligation.id, obligation.passages.map((passage) => passage.quote).join(' ')]),
+  );
   for (const scope of scopes) {
     if (scope.frontier === undefined) continue;
     for (const page of scope.frontier.pages) {
@@ -130,22 +145,45 @@ export function resolveScopeFrontiers(
         violations.push({ check: 'frontier-page-outside-corpus', detail: `scope ${scope.id}: frontier page ${page} is outside the canonical corpus` });
       }
     }
-    const filter = scope.frontier.include ? new RegExp(scope.frontier.include, 'i') : null;
-    const clauses = scope.frontier.pages
-      .flatMap((page) => pageClauses(corpus, page))
-      .filter((clause) => filter === null || filter.test(clause.text));
+    // NO selection policy: every clause on every declared page is inside the
+    // boundary and must later be covered or explicitly dispositioned.
+    const clauses = scope.frontier.pages.flatMap((page) => pageClauses(corpus, page));
     const irrelevantIds: string[] = [];
     for (const disposition of scope.frontier.irrelevant ?? []) {
       const normalized = normalizeSourceText(disposition.text);
       const matches = clauses.filter((clause) => clause.text === normalized);
-      if (matches.length !== 1) {
+      // Identical canonical lines (repeated table fragments) are covered by
+      // the same disposition; ZERO matches is staleness.
+      if (matches.length === 0) {
         violations.push({
-          check: 'frontier-irrelevant-entry-dangling',
-          detail: `scope ${scope.id}: irrelevant disposition matches ${matches.length} frontier clause(s) (expected exactly 1): "${disposition.text.slice(0, 80)}" — ${disposition.reason}`,
+          check: 'frontier-disposition-entry-dangling',
+          detail: `scope ${scope.id}: disposition matches no frontier clause: "${disposition.text.slice(0, 80)}" — ${disposition.reason}`,
         });
         continue;
       }
-      irrelevantIds.push(matches[0].id);
+      if ((disposition.kind ?? 'irrelevant') === 'subdivided') {
+        const named = disposition.subdividedInto ?? [];
+        const jointQuotes = named.map((id) => quotesById.get(id)).filter((quote): quote is string => quote !== undefined);
+        if (jointQuotes.length !== named.length || named.length === 0) {
+          violations.push({
+            check: 'subdivision-unsupported',
+            detail: `scope ${scope.id}: subdivided disposition names unknown/non-curated obligation(s): "${disposition.text.slice(0, 80)}"`,
+          });
+          continue;
+        }
+        // Direct concatenation (no separator): a merged extraction line is
+        // the TAIL of one quoted sentence plus the HEAD of the next, so the
+        // clause spans exactly the junction between the two quotes.
+        const haystack = jointQuotes.map((quote) => quote.replace(/\s+/g, '')).join('');
+        if (!haystack.includes(normalized.replace(/\s+/g, ''))) {
+          violations.push({
+            check: 'subdivision-unsupported',
+            detail: `scope ${scope.id}: subdivided clause is not jointly quoted by ${named.join(', ')}: "${disposition.text.slice(0, 80)}"`,
+          });
+          continue;
+        }
+      }
+      irrelevantIds.push(...matches.map((clause) => clause.id));
     }
     inputs.push({ scopeId: scope.id, clauses, irrelevantIds });
   }

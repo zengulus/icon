@@ -12,6 +12,12 @@ Read this file before making changes.
 
 ---
 
+## 0. Commit Directive
+
+After every change, propose a detailed commit message, up to a paragraph.
+
+---
+
 ## 1. Project Direction
 
 The project is rules-first.
