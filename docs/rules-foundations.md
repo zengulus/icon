@@ -191,9 +191,10 @@ exception). The durable handoff is `characterFromActor`
 (`src/rules/encounter.ts`): projects HP attrition (`hpLost`, measured against
 the wounds-adjusted maximum after the projected wound), wounds, and personal
 resolve back onto the persistent sheet; `actorFromCharacter` re-enters combat
-from that record. Camp/interlude sheet transitions: `campCharacter` (strain,
-personal resolve reset) / `beginInterlude` (HP, wounds, strain restored),
-p.56/p.99. Tests: `settlement.test.ts` (round-trip combat 1 → settlement →
+from that record. Camp/interlude sheet transitions: `campCharacter` heals all
+strain, unticks all effort (Bond maximum), heals all HP, and resets personal
+resolve (p.253/p.99; wounds persist) / `beginInterlude` additionally restores
+wounds (p.56). Tests: `settlement.test.ts` (round-trip combat 1 → settlement →
 combat 2, purity, replay, schema v4 migration).
 
 ### Cost/payment — AUTHORITATIVE + SOURCE-TESTED

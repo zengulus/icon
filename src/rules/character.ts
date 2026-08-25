@@ -118,11 +118,24 @@ export function characterCurrentHp(character: IconCharacter): number | null {
   return Math.max(0, stats.maxHp - Math.max(0, character.hpLost));
 }
 
-/** Camping (p.56): strain is healed. Pure — returns a new character.
- * Hit points and wounds are NOT restored at camp by this transition; the
- * source grounds full restoration at the start of an interlude. */
+/** Camping (p.253, "The Camp"): camping "heals all strain, unticks all
+ * effort, and heals all HP". Pure — returns a new character.
+ *
+ * - all strain healed (`strain` → 0);
+ * - all effort unticked (`effort` → back to the Bond's maximum);
+ * - all HP healed (`hpLost` → 0).
+ * Wounds are NOT healed by camping (the source grounds wound recovery at the
+ * interlude), and personal resolve resets to 0 after camping (p.99). */
 export function campCharacter(character: IconCharacter, now = new Date().toISOString()): IconCharacter {
-  return { ...character, strain: 0, personalResolve: 0, updatedAt: now };
+  const bond = character.bondId ? findBond(character.bondId) : undefined;
+  return {
+    ...character,
+    strain: 0,
+    effort: bond ? Math.max(0, bond.effort) : character.effort,
+    hpLost: 0,
+    personalResolve: 0,
+    updatedAt: now,
+  };
 }
 
 /** The start of an interlude (p.56): hit points, wounds, and strain are all

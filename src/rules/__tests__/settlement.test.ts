@@ -1,6 +1,7 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { beginInterlude, campCharacter, characterCurrentHp, characterStats, createCharacter, migrateCharacter, validateCharacter } from '../character.js';
+import { findBond } from '../catalog.js';
 import { actorFromCharacter, applyEvents, characterFromActor, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterState, IconCharacter } from '../types.js';
 import { endTurnOnly, expectCommandPurity, scriptedDice, startEncounterTo, validCharacter } from './fixtures.js';
@@ -149,20 +150,26 @@ describe('character schema v4 — durable attrition field', () => {
     expect(() => migrateCharacter({ ...settled, schemaVersion: 99 })).toThrow(/Unsupported character schema/);
   });
 
-  it('camp heals strain and resets personal resolve; an interlude restores HP, wounds, and strain (p.56)', () => {
+  it('camp heals all strain, unticks all effort, and heals all HP (p.253); wounds persist until the interlude', () => {
     const { state, character, heroId } = settlementFixture();
     const started = startEncounterTo(state, heroId, scriptedDice());
     started.actors[heroId].hp = 12;
     started.actors[heroId].wounds = 1;
-    const sheet = { ...characterFromActor(character, started.actors[heroId]), strain: 3 };
+    const sheet = { ...characterFromActor(character, started.actors[heroId]), strain: 3, effort: 1 };
     expect(characterCurrentHp(sheet)).toBe(12);
 
     const camped = campCharacter(sheet, '2026-08-25T00:00:00.000Z');
-    expect(camped.strain).toBe(0); // strain is healed by camping
-    expect(camped.personalResolve).toBe(0); // personal resolve resets to 0 after camping (p.99)
-    expect(camped.hpLost).toBe(sheet.hpLost); // attrition persists through camp
+    expect(camped.strain).toBe(0); // "heals all strain"
+    expect(camped.hpLost).toBe(0); // "heals all HP" — attrition does NOT persist through camp
+    expect(characterCurrentHp(camped)).toBe(characterStats(camped)!.maxHp);
+    // "unticks all effort": effort returns to the Bond's maximum.
+    expect(camped.effort).toBe(findBond(sheet.bondId)!.effort);
+    expect(validateCharacter(camped)).toEqual([]);
+    // Wounds are NOT healed by camping; personal resolve resets to 0 (p.99).
     expect(camped.wounds).toBe(sheet.wounds);
+    expect(camped.personalResolve).toBe(0);
 
+    // The interlude is what fully restores wounds alongside HP and strain.
     const interlude = beginInterlude(camped, '2026-08-25T01:00:00.000Z');
     expect(interlude.hpLost).toBe(0);
     expect(interlude.wounds).toBe(0);
