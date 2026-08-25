@@ -2,77 +2,109 @@
  * fidelity/world.ts — assembles the PRODUCTION evidence graph for the strict
  * source-fidelity audit.
  *
- * Two kinds of obligations live here:
+ * Kinds of obligations:
  *
  * 1. CURATED atomic obligations — hand-decomposed semantic propositions with
- *    stable `icon-1.5:<topic>:<mechanic>` IDs, exact quoted passages with
- *    SHA-256 fingerprints, explicit dispositions, typed consumers,
- *    independent contracts, and statically verifiable proofs.
+ *    stable `icon-1.5:<topic>:<mechanic>` IDs, exact quoted passages
+ *    fingerprinted AND verified against the canonical extraction corpus,
+ *    explicit dispositions, typed RESOLVABLE consumers, contracts carrying
+ *    machine-checkable expectation rows, and statically verifiable proofs.
  *
  * 2. DERIVED unit-grain obligations — one per `collectRuleSourceUnit()`,
  *    disposition `unclassified`, fingerprinted against the catalog text.
- *    They exist so the audit can answer "what is not yet accounted for" and
- *    so unclassified material blocks strong claims by construction. This is
- *    the conservative migration state: legacy allowlist membership is NOT
- *    silently grandfathered in as authoritative.
+ *    They answer "what is not yet accounted for" and block strong claims by
+ *    construction. A derived unit leaves the unclassified catch-all only via
+ *    an explicit decomposition record.
  *
- * Migration rule (AGENTS.md §18 style): a derived unit becomes a curated
- * obligation only when someone decomposes its semantics, classifies them,
- * writes an independent contract, registers the consumer, and records real
+ * Migration rule: a derived unit becomes curated material only when someone
+ * decomposes its semantics, classifies them, writes an independent contract
+ * with expectation rows, registers a resolving consumer, and records real
  * proof — never automatically.
  */
 
 import { collectRuleSourceUnits } from '../source-units.js';
 import { SOURCE_ADJUDICATIONS } from '../source-adjudications.js';
-import type { AdjudicationLink, ConsumerRegistration, FidelityWorld, ProofRecord, ScopeDefinition, SemanticContract, SourceObligation } from './types.js';
+import type {
+  AdjudicationLink,
+  ConsumerRegistration,
+  FidelityWorld,
+  ProofRecord,
+  ScopeDefinition,
+  SemanticContract,
+  SourceObligation,
+} from './types.js';
 import { withFingerprints } from './engine.js';
+import { ADVANCEMENT_IRRELEVANT_CLAUSES } from './advancement-frontier.js';
 
 // ---------------------------------------------------------------------------
 // Scopes
+//
+// `advancement` declares its SOURCE FRONTIER: the canonical pages whose
+// advancement-relevant clauses define the scope's boundary. Every filtered
+// clause must be covered by an obligation's passages or explicitly listed as
+ // irrelevant below — omission is not irrelevance, so the scope cannot close
+// on an incomplete accounting.
 // ---------------------------------------------------------------------------
+
+const ADVANCEMENT_FRONTIER_FILTER = '\\b(xp|level up|level-up|limit break|advance)\\b|\\bap\\b|(?<=\\d)ap\\b';
 
 const SCOPES: readonly ScopeDefinition[] = [
   {
     id: 'advancement',
     title: 'Character advancement',
-    aliases: ['character advancement', 'advancement'],
     description:
       'The ICON 1.5 XP bar / ability-point / level-banking procedure and the Limit Break unlock boundary. Includes both adopted source adjudications.',
+    frontier: {
+      pages: [44, 99, 112, 115, 240, 241],
+      include: ADVANCEMENT_FRONTIER_FILTER,
+      irrelevant: ADVANCEMENT_IRRELEVANT_CLAUSES,
+    },
   },
   {
     id: 'sourcebook-at-large',
     title: 'Sourcebook at large (unit-grain)',
-    aliases: [],
     description:
-      'Every catalogued RuleSourceUnit not yet decomposed into curated obligations. Everything here is deliberately unclassified: this scope cannot be closed, and that is the honest migration state, not a failure of the build.',
+      'Every catalogued RuleSourceUnit not yet decomposed into curated obligations. Everything here is deliberately unclassified: this scope cannot close, and that is the honest migration state, not a failure of the build.',
   },
 ];
 
 // ---------------------------------------------------------------------------
-// Consumers — typed implementation-coverage registrations
+// Consumers — typed, RESOLVABLE implementation-coverage registrations
 // ---------------------------------------------------------------------------
 
 const CONSUMERS: readonly ConsumerRegistration[] = [
   {
     id: 'character.awardXp',
-    location: 'src/rules/character.ts — awardXp',
+    file: 'src/rules/character.ts',
+    symbol: 'awardXp',
     description: 'Applies XP to the 15-tick bar: claims the mid-level AP at exactly 7 XP (once per level) and banks a level-up at 15 XP with a bar reset.',
   },
   {
     id: 'character.spendLevelUp',
-    location: 'src/rules/character.ts — spendLevelUp',
+    file: 'src/rules/character.ts',
+    symbol: 'spendLevelUp',
     description: 'Spends a banked level-up; resets the per-level AP claim so the next level’s 7 XP boundary applies again.',
   },
   {
     id: 'character.limit-break-unlock-level',
-    location: 'src/rules/character.ts — LIMIT_BREAK_UNLOCK_LEVEL',
+    file: 'src/rules/character.ts',
+    symbol: 'LIMIT_BREAK_UNLOCK_LEVEL',
     description: 'The durable executable boundary for the adopted Limit Break unlock level; any future availability gate must agree with it.',
   },
 ];
 
 // ---------------------------------------------------------------------------
 // Curated obligations + contracts + proofs
+//
+// Contract rows are pure EXPECTATION DATA hand-derived from the source
+// passages and adopted adjudications below. They are never generated from the
+// implementation; adapters.ts maps row inputs onto real code and the
+// evaluator compares. Expected values cite their source basis in labels.
 // ---------------------------------------------------------------------------
+
+type AwardChar = { level: number; xp: number; pendingLevelUps: number; xpAbilityPointClaimed: boolean };
+
+const fresh: AwardChar = { level: 0, xp: 0, pendingLevelUps: 0, xpAbilityPointClaimed: false };
 
 const CURATED_OBLIGATIONS: readonly SourceObligation[] = [
   withFingerprints({
@@ -80,20 +112,27 @@ const CURATED_OBLIGATIONS: readonly SourceObligation[] = [
     scopeId: 'advancement',
     disposition: 'deterministic-executable',
     summary:
-      'The XP bar is 15 ticks long; awarding XP up to a full bar banks exactly one level-up and resets the bar. A second full bar while a level is banked stays capped in the bar rather than being lost or double-banked.',
+      'The XP bar is 15 ticks long; awarding XP up to a full bar banks exactly one level-up and resets the bar. A second full bar while a level is banked stays capped in the bar rather than being lost or double-banked; spending the banked level resets the once-per-level AP claim.',
     passages: [
       {
         page: 240,
         sectionId: null,
         quote:
-          'The xp bar is 15 ticks long. At 7 xp gained, during an interlude, at the end of a session or at camp characters can gain +1 ap, and spend it to unlock a new combat ability in any job they have, or gain a new talent for an ability they already have. This only triggers once per level. Once the bar is full (15 xp), a character can clear all xp and mark a level up.',
+          'Experience during their adventures, characters earn experience points, filling out an experience bar. At certain breakpoints in the bar, they will unlock new abilities or talents. The xp bar is 15 ticks long. At 7 xp gained, during an interlude, at the end of a session or at camp characters can gain +1 ap, and spend it to unlock a new combat ability in any job they have, or gain a new talent for an ability they already have. This only triggers once per level. Once the bar is full (15 xp), a character can clear all xp and mark a level up . At the end of an interlude or session, they may cash in that level up to increase their level by 1. Certain benefits are only gained on level up.',
+        sha256: '',
+      },
+      {
+        page: 44,
+        sectionId: null,
+        quote:
+          'Any character that has a level up banked at the end of a session can increase their level by 1, but no higher than the current chapter number. A character can only \'save\' one banked level up at once.',
         sha256: '',
       },
       {
         page: 241,
         sectionId: null,
         quote:
-          'At level 1 and every level afterwards, characters gain +1 ap when they hit 7 xp and go into a camp, enter an interlude, or at the end of a session. When a character hits 15 xp, they clear their xp bar and accumulate a level up.',
+          'At level 1 and every level afterwards, characters gain +1 ap when they hit 7 xp and go into a camp, enter an interlude, or at the end of a session. When a character hits 15 xp, they clear their xp bar and accumulate a level up, which can be spent at the end of a interlude (a downtime period) or at the end of a session to level up their character.',
         sha256: '',
       },
     ],
@@ -131,12 +170,12 @@ const CURATED_OBLIGATIONS: readonly SourceObligation[] = [
     scopeId: 'advancement',
     disposition: 'conflicted',
     summary:
-      'CONFLICTED SOURCE: pp.15/115/241 tables and p.112 prose grant the Limit Break at level 1; p.99 says level 2. The engine adopts level 1, recorded durably as LIMIT_BREAK_UNLOCK_LEVEL, via adjudication icon-1.5:advancement:limit-break-level.',
+      'CONFLICTED SOURCE: pp.15/115/241 tables and p.112 prose grant the Limit Break at level 1 (the p.115 Level-1 table row reads "gain +2 ap and unlock limit break", total ap 5); p.99 says level 2. The engine adopts level 1, recorded durably as LIMIT_BREAK_UNLOCK_LEVEL, via adjudication icon-1.5:advancement:limit-break-level.',
     passages: [
       {
         page: 115,
         sectionId: null,
-        quote: 'Tactical Combat Advancement table, Level 1 row: "Gain +2 ap and unlock Limit Break".',
+        quote: 'gain +2 ap and unlock limit break 5',
         sha256: '',
       },
       {
@@ -158,38 +197,58 @@ const CONTRACTS: readonly SemanticContract[] = [
     kind: 'input-output-table',
     stateful: false,
     statement:
-      'awardXp over character state: total < 15 keeps the bar (capped at 14); total >= 15 banks pendingLevelUps=1 and resets the bar to 0; banking is refused while a level is already banked (bar caps at 14). Derived from pp.240–241, independent of awardXp’s code.',
+      'awardXp/spendLevelUp over advancement state, expectations hand-derived from pp.240–241: total < 15 keeps the bar (capped at 14); total >= 15 banks pendingLevelUps=1 and resets the bar; banking is refused while a level is banked; spending requires a bank and resets the AP claim.',
+    rows: [
+      { label: '14 XP fills the bar without banking', cls: 'positive', input: { op: 'award', char: fresh, amount: 14 }, expected: { xp: 14, pendingLevelUps: 0, claimed: true, level: 0 } },
+      { label: '15 XP banks one level and clears the bar', cls: 'positive', input: { op: 'award', char: fresh, amount: 15 }, expected: { xp: 0, pendingLevelUps: 1, claimed: true, level: 0 } },
+      { label: 'a second full bar while banked stays capped — no double-bank', cls: 'negative', input: { op: 'award', char: { ...fresh, pendingLevelUps: 1, xpAbilityPointClaimed: true }, amount: 15 }, expected: { xp: 14, pendingLevelUps: 1, claimed: true, level: 0 } },
+      { label: 'spending requires a banked level', cls: 'negative', input: { op: 'spend', char: fresh, chapterCap: 3 }, expected: { error: 'No banked level-up is available.' } },
+      { label: 'spending the bank resets the per-level AP claim', cls: 'negative', input: { op: 'spend', char: { ...fresh, pendingLevelUps: 1, xpAbilityPointClaimed: true }, chapterCap: 3 }, expected: { xp: 0, pendingLevelUps: 0, claimed: false, level: 1 } },
+      { label: 'spending respects the campaign chapter cap (p.44)', cls: 'negative', input: { op: 'spend', char: { ...fresh, pendingLevelUps: 1 }, chapterCap: 0 }, expected: { error: 'The campaign chapter does not permit this level yet.' } },
+    ],
   },
   {
     obligationId: 'icon-1.5:advancement:mid-level-ap-boundary',
     kind: 'boundary-constant',
     stateful: false,
     statement:
-      'The mid-level AP is claimed at EXACTLY 7 XP (not 5, not 10) and only once per level until spendLevelUp resets the claim. Matches the adopted adjudication boundary.',
+      'The mid-level AP is claimed at EXACTLY 7 XP (not 5, not 10) and only once per level until spendLevelUp resets the claim; the claimed point enters the ability-point allowance. Matches the adopted adjudication boundary (xp=7). Expectations from the adjudicated reading, not from awardXp.',
     boundary: { kind: 'xp', value: 7 },
+    rows: [
+      { label: '6 XP does not claim the mid-level AP (below edge)', cls: 'boundary', input: { op: 'award', char: fresh, amount: 6 }, expected: { xp: 6, pendingLevelUps: 0, claimed: false, level: 0 } },
+      { label: 'exactly 7 XP claims it (at edge)', cls: 'boundary', input: { op: 'award', char: fresh, amount: 7 }, expected: { xp: 7, pendingLevelUps: 0, claimed: true, level: 0 } },
+      { label: '10 XP crosses the same single boundary — no separate unlock (above edge)', cls: 'positive', input: { op: 'award', char: fresh, amount: 10 }, expected: { xp: 10, pendingLevelUps: 0, claimed: true, level: 0 } },
+      { label: 'an unclaimed level-0 character has 2 AP (base table)', cls: 'positive', input: { op: 'allowance', char: { ...fresh, xpAbilityPointClaimed: false } }, expected: { allowance: 2 } },
+      { label: 'the claimed mid-level AP enters the allowance (+1)', cls: 'positive', input: { op: 'allowance', char: { ...fresh, xpAbilityPointClaimed: true } }, expected: { allowance: 3 } },
+    ],
   },
   {
     obligationId: 'icon-1.5:advancement:limit-break-unlock-level',
     kind: 'boundary-constant',
     stateful: false,
     statement:
-      'The Limit Break unlock boundary is level EXACTLY 1: level 0 has none, level 1 does. Matches the adopted adjudication boundary recorded in LIMIT_BREAK_UNLOCK_LEVEL.',
+      'The Limit Break unlock boundary is level EXACTLY 1 (adjudicated): the durable engine constant must equal the adopted boundary value, and the level-1 advancement row (+2 AP, total 2→5) sits above level 0. No availability gate exists yet; this constant is what a future gate must agree with.',
     boundary: { kind: 'level', value: 1 },
+    rows: [
+      { label: 'engine constant equals the adjudicated boundary (level 1)', cls: 'boundary', input: { op: 'limitBreakUnlockLevel' }, expected: { limitBreakUnlockLevel: 1 } },
+      { label: 'a level-0 character has 2 AP — below the advancement row', cls: 'boundary', input: { op: 'allowance', char: { ...fresh, level: 0, xpAbilityPointClaimed: false } }, expected: { allowance: 2 } },
+      { label: 'a level-1 character has 5 AP — the "gain +2 ap and unlock limit break" row', cls: 'positive', input: { op: 'allowance', char: { ...fresh, level: 1, xpAbilityPointClaimed: false } }, expected: { allowance: 5 } },
+    ],
   },
 ];
 
 const ADJUDICATION_TEST_FILE = 'src/rules/__tests__/source-adjudications.test.ts';
 
+/** Declared TRACEABILITY pointers into the human-authored test suite. They
+ * document where those tests exercise these semantics; strong status comes
+ * from executed evaluator results, so these are never load-bearing alone. */
 const PROOFS: readonly ProofRecord[] = [
-  // xp-bar-bank: positive + negative from the existing semantic pins.
-  { obligationId: 'icon-1.5:advancement:xp-bar-bank', kind: 'positive', file: ADJUDICATION_TEST_FILE, test: 'the engine banks a level at exactly 15 XP, resets the bar, and allows one banked level' },
-  { obligationId: 'icon-1.5:advancement:xp-bar-bank', kind: 'negative', file: ADJUDICATION_TEST_FILE, test: 'the AP claim is once per level: it resets when the banked level is spent' },
-  // mid-level AP boundary: positive + boundary on both sides of the edge.
-  { obligationId: 'icon-1.5:advancement:mid-level-ap-boundary', kind: 'boundary', file: ADJUDICATION_TEST_FILE, test: 'the engine claims the mid-level AP at exactly 7 XP, not at 5 or 10' },
-  { obligationId: 'icon-1.5:advancement:mid-level-ap-boundary', kind: 'positive', file: ADJUDICATION_TEST_FILE, test: 'the claimed mid-level AP is included in the ability-point allowance' },
-  // limit break boundary.
-  { obligationId: 'icon-1.5:advancement:limit-break-unlock-level', kind: 'boundary', file: ADJUDICATION_TEST_FILE, test: 'the engine boundary constant matches the adjudication and cannot drift' },
-  { obligationId: 'icon-1.5:advancement:limit-break-unlock-level', kind: 'positive', file: ADJUDICATION_TEST_FILE, test: 'the advancement table the engine implements grants the boundary row at level 1' },
+  { obligationId: 'icon-1.5:advancement:xp-bar-bank', kind: 'positive', evidence: 'declared', file: ADJUDICATION_TEST_FILE, test: 'the engine banks a level at exactly 15 XP, resets the bar, and allows one banked level' },
+  { obligationId: 'icon-1.5:advancement:xp-bar-bank', kind: 'negative', evidence: 'declared', file: ADJUDICATION_TEST_FILE, test: 'the AP claim is once per level: it resets when the banked level is spent' },
+  { obligationId: 'icon-1.5:advancement:mid-level-ap-boundary', kind: 'boundary', evidence: 'declared', file: ADJUDICATION_TEST_FILE, test: 'the engine claims the mid-level AP at exactly 7 XP, not at 5 or 10' },
+  { obligationId: 'icon-1.5:advancement:mid-level-ap-boundary', kind: 'positive', evidence: 'declared', file: ADJUDICATION_TEST_FILE, test: 'the claimed mid-level AP is included in the ability-point allowance' },
+  { obligationId: 'icon-1.5:advancement:limit-break-unlock-level', kind: 'boundary', evidence: 'declared', file: ADJUDICATION_TEST_FILE, test: 'the engine boundary constant matches the adjudication and cannot drift' },
+  { obligationId: 'icon-1.5:advancement:limit-break-unlock-level', kind: 'positive', evidence: 'declared', file: ADJUDICATION_TEST_FILE, test: 'the advancement table the engine implements grants the boundary row at level 1' },
 ];
 
 // ---------------------------------------------------------------------------

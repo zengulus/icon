@@ -1,75 +1,51 @@
 /**
  * Canonical SOURCE-FIDELITY AUDIT CLI.
  *
- * Computes the strict source → semantics → execution → proof → status chain
- * from the evidence graph in src/rules/fidelity/, verifies that every
- * registered proof's evidence file actually exists and names its test,
- * checks documentation claims against the computed state, regenerates (or
- * drift-checks) docs/source-fidelity.md, and runs the semantic
- * mutation-resistance suite.
+ * Thin wrapper over the shared strict pipeline (`src/rules/fidelity/strict.ts`)
+ * so the command line, generated documentation, and self-tests all exercise
+ * the SAME evidence path:
  *
- * Exit status (with --strict):
- *   fails on INTEGRITY violations and INCONSISTENT CLAIMS OF COMPLETENESS —
- *   dangling references, executable claims without consumers, proven claims
- *   without required proof evidence, conflicts used without adjudication,
- *   documentation claiming stronger status than computed, generated-doc
- *   drift, or a semantic mutation accepted by the oracle.
+ *     canonical corpus → frontiers → passage provenance → consumer
+ *     resolution → executed contract evaluation → pure audit computation
+ *     → declared-proof verification → semantic mutation resistance
+ *     → project-claim audit
  *
- *   Legitimate INCOMPLETENESS (unclassified obligations, unimplemented
- *   content) does NOT fail the build; it lowers computed status instead.
+ * Exit status (--strict): fails on INTEGRITY violations and INCONSISTENT
+ * CLAIMS OF COMPLETENESS — false source provenance, unresolvable consumers,
+ * failed semantic evaluations, dangling references, accepted semantic
+ * mutants, unregistered/overstated project claims, generated-doc drift.
+ *
+ * Legitimate INCOMPLETENESS (unclassified obligations, uncovered frontier
+ * clauses, unimplemented content) does NOT fail the build; it lowers computed
+ * status instead.
  *
  * Usage:
  *   node --import tsx scripts/audit-source-fidelity.ts [--strict] [--write] [--json]
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeFidelityAudit } from '../src/rules/fidelity/engine.js';
-import { buildProductionWorld } from '../src/rules/fidelity/world.js';
-import { checkDocumentationClaims, checkGeneratedDocDrift, generateMarkdown, GENERATED_DOC_PATH } from '../src/rules/fidelity/docs.js';
-import { runMutationResistanceSuite } from '../src/rules/fidelity/mutation.js';
+import { runStrictFidelityAudit } from '../src/rules/fidelity/strict.js';
+import { checkGeneratedDocDrift, generateMarkdown, GENERATED_DOC_PATH } from '../src/rules/fidelity/docs.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const strict = process.argv.includes('--strict');
 const write = process.argv.includes('--write');
 const json = process.argv.includes('--json');
 
-const world = buildProductionWorld();
-const result = computeFidelityAudit(world);
+const report = runStrictFidelityAudit(repoRoot);
+const { result, hardFailures, unverifiedClaims } = report;
 
-// --- Proof evidence: static verification (file exists + test name present) ---
-interface EvidenceFailure {
-  obligationId: string;
-  kind: string;
-  detail: string;
-}
-const evidenceFailures: EvidenceFailure[] = [];
-for (const proof of world.proofs) {
-  const path = join(repoRoot, proof.file);
-  if (!existsSync(path)) {
-    evidenceFailures.push({ obligationId: proof.obligationId, kind: proof.kind, detail: `evidence file missing: ${proof.file}` });
-    continue;
-  }
-  if (!readFileSync(path, 'utf8').includes(proof.test)) {
-    evidenceFailures.push({ obligationId: proof.obligationId, kind: proof.kind, detail: `test name not found in ${proof.file}: "${proof.test}"` });
-  }
-}
-
-// --- Mutation resistance ---
-const mutations = runMutationResistanceSuite();
-
-// --- Documentation ---
-const docsDir = join(repoRoot, 'docs');
+// --- Documentation -----------------------------------------------------------
+const docDrift = write ? [] : checkGeneratedDocDrift(join(repoRoot, 'docs'), report);
 if (write) {
-  writeFileSync(join(docsDir, GENERATED_DOC_PATH.split('/').pop()!), generateMarkdown(result));
+  writeFileSync(join(repoRoot, 'docs', GENERATED_DOC_PATH.split('/').pop()!), generateMarkdown(report));
 }
-const docDrift = write ? [] : checkGeneratedDocDrift(docsDir, result);
-const docClaims = checkDocumentationClaims(docsDir, result, world.scopes);
 
-// --- Output ---
+// --- Output ------------------------------------------------------------------
 if (json) {
-  console.log(JSON.stringify({ summary: result.summary, scopes: result.scopes, evidenceFailures, mutations, docDrift, docClaims }, null, 2));
+  console.log(JSON.stringify({ summary: result.summary, scopes: result.scopes, unverifiedClaims, hardFailures, docDrift }, null, 2));
 } else {
   const { summary } = result;
   console.log('Source-fidelity audit');
@@ -81,34 +57,35 @@ if (json) {
   console.log(`  lacking execution:      ${summary.lackingExecution.length}`);
   console.log(`  lacking required proof: ${summary.lackingRequiredProof.length}`);
   console.log(`  unresolved conflicts:   ${summary.unresolvedConflicts.length}`);
+  console.log(`  contracts evaluated:    ${summary.evaluationsRun} (${summary.evaluationsPassed} passed, ${summary.evaluationsFailed.length} FAILED)`);
+  console.log(`  units fully/partially decomposed: ${summary.unitsFullyDecomposed.length}/${summary.unitsPartiallyDecomposed.length} (untouched: ${summary.unitsUntouched})`);
   console.log(`  table-facing:           ${summary.tableFacing}`);
   console.log(`  deferred/unsupported:   ${summary.deferredUnsupported}`);
   console.log('');
   for (const scope of result.scopes) {
     console.log(`  [${scope.status.toUpperCase()}] ${scope.title} — ${scope.totalObligations} obligation(s), ${scope.blockers.length} blocker(s)`);
+    if (scope.frontierTotalClauses > 0) {
+      console.log(`          · frontier: ${scope.frontierTotalClauses} clause(s) — covered ${scope.frontierCoveredClauses}, irrelevant ${scope.frontierIrrelevantClauses}, UNCOVERED ${scope.frontierUncoveredIds.length}`);
+    }
     for (const blocker of scope.blockers) console.log(`          · ${blocker}`);
   }
   console.log('');
-  console.log(`mutation resistance: ${mutations.checkedMutations.length} mutants over a ${mutations.domainSize}-row domain, ${mutations.violations.length} violation(s)`);
-  for (const violation of mutations.violations) console.log(`  ✗ ${violation}`);
-  for (const failure of evidenceFailures) console.log(`  ✗ proof evidence: ${failure.obligationId} (${failure.kind}) ${failure.detail}`);
+  if (unverifiedClaims.length > 0) {
+    console.log(`project claims declared LEGACY / UNVERIFIED: ${unverifiedClaims.length}`);
+    for (const claim of unverifiedClaims) console.log(`  ~ ${claim.id}: ${claim.subject} (${claim.strength.toUpperCase()}) — ${claim.reason}`);
+    console.log('');
+  }
+  for (const failure of report.mutationViolations) console.log(`  ✗ mutation resistance: ${failure}`);
+  for (const failure of report.evidenceFailures) console.log(`  ✗ proof evidence: ${failure}`);
   for (const violation of summary.integrityViolations) console.log(`  ✗ integrity: ${violation.check} — ${violation.detail}`);
   for (const violation of docDrift) console.log(`  ✗ doc drift: ${violation.detail}`);
-  for (const violation of docClaims) console.log(`  ✗ doc claim: docs/${violation.file.split('/').pop()}:${violation.line} ${violation.detail}`);
 }
 
-// --- Strict exit behavior ---
-const hardFailures = [
-  ...result.summary.integrityViolations.map((v) => `integrity: ${v.check} — ${v.detail}`),
-  ...mutations.violations,
-  ...evidenceFailures.map((f) => `proof evidence: ${f.obligationId} (${f.kind}) ${f.detail}`),
-  ...docDrift.map((v) => `doc drift: ${v.detail}`),
-  ...docClaims.map((v) => `doc claim (${v.file}:${v.line}): ${v.detail}`),
-];
-if (strict && hardFailures.length > 0) {
-  console.error(`\nsource-fidelity audit FAILED with ${hardFailures.length} integrity/claim violation(s):`);
-  for (const failure of hardFailures) console.error(`  - ${failure}`);
+const totalHardFailures = [...hardFailures, ...docDrift.map((v) => `doc drift: ${v.detail}`)];
+if (strict && totalHardFailures.length > 0) {
+  console.error(`\nsource-fidelity audit FAILED with ${totalHardFailures.length} integrity/claim violation(s):`);
+  for (const failure of totalHardFailures) console.error(`  - ${failure}`);
   process.exitCode = 1;
-} else if (!json && hardFailures.length === 0) {
+} else if (!json && totalHardFailures.length === 0) {
   console.log('\nNo integrity violations. Incompleteness is reported as lowered status, not build failure.');
 }
