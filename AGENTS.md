@@ -362,6 +362,7 @@ Unless the task is explicitly documentation-only, finish with:
 
     npm run audit:architecture
     npm run audit:automation
+    npm run audit:source-fidelity -- --strict
     npm run typecheck
     npm test
     npm run build
@@ -372,6 +373,36 @@ If the canonical Class/Job census command exists, also run:
     npm run audit:class-job-census
 
 Do not report success while relevant introduced failures remain.
+
+### Source-fidelity audit (strict)
+
+The strict semantic audit (`npm run audit:source-fidelity -- --strict`)
+derives capability/closure status from an evidence graph in
+`src/rules/fidelity/`: atomic source obligations (stable IDs + SHA-256
+passage fingerprints) → explicit disposition → typed consumer registration →
+independent semantic contract → statically verified proof records → computed
+status. Its rules:
+
+- Passing implementation tests are NOT evidence of source fidelity on their
+  own; a claim of deterministic execution requires a registered consumer,
+  an independent contract, and the proof kinds its contract class demands.
+- `unclassified` never counts as supported. A newly relevant obligation must
+  be classified before any scope containing it can close.
+- Source conflicts are executable only through an ADOPTED adjudication in
+  `src/rules/source-adjudications.ts`, linked from the obligation.
+- Strong status labels are COMPUTED, never asserted. Documentation may not
+  claim CLOSED/COMPLETE/AUTHORITATIVE for a registered scope beyond the
+  computed status; `docs/source-fidelity.md` is GENERATED and must be
+  regenerated (`npm run audit:source-fidelity -- --write`) whenever evidence
+  changes.
+- Legitimate incompleteness lowers status; it does not fail the build.
+  INCONSISTENT CLAIMS OF COMPLETENESS (executable without consumer, proven
+  without required proof, conflict without adjudication, dangling references,
+  doc/status mismatch) DO fail strict mode.
+- To promote content: decompose source text into curated obligations in
+  `src/rules/fidelity/world.ts`, classify them, register the consumer, write
+  the independent contract, and record real proof. Never auto-promote from
+  allowlists or compilation results.
 
 ---
 
@@ -411,6 +442,8 @@ Important documentation includes:
 - docs/rules-coverage.md — content coverage by capability ladder
 - docs/blocker-census.md — GENERATED Class/Job census
   (`npm run audit:class-job-census`; never hand-edit)
+- docs/source-fidelity.md — GENERATED canonical source-fidelity status
+  (`npm run audit:source-fidelity -- --write`; never hand-edit)
 - docs/source-adjudications.md — genuine source contradictions only
 - docs/glossary-executable-inventory.md — per-term combat-glossary status
 

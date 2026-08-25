@@ -10,9 +10,50 @@ ledger**.
 Related documents: [`deliverables.md`](deliverables.md) (artifact status),
 [`rules-coverage.md`](rules-coverage.md) (content-family coverage),
 [`blocker-census.md`](blocker-census.md) (**generated** Class/Job unit graph),
-[`glossary-executable-inventory.md`](glossary-executable-inventory.md)
+[`source-fidelity.md`](source-fidelity.md) (**generated** strict
+source-fidelity status), [`glossary-executable-inventory.md`](glossary-executable-inventory.md)
 (per-term combat-glossary detail), [`../TODO.md`](../TODO.md) (actionable
 backlog).
+
+## Source-fidelity auditing (strict)
+
+The engine's capability/closure claims are COMPUTED, not asserted. The strict
+audit (`npm run audit:source-fidelity -- --strict`) derives every strong
+status from the evidence graph in `src/rules/fidelity/`:
+
+    immutable source (SHA-pinned PDF → byte-verified extraction catalogs)
+        ↓  collectRuleSourceUnits() + curated decomposition
+    atomic source obligations (stable semantic IDs + passage fingerprints)
+        ↓
+    explicit disposition (deterministic / player-choice / gm-facing /
+    descriptive / table-facing / deferred / conflicted / unclassified)
+        ↓
+    typed consumer registration + independent semantic contract
+        ↓
+    proof registry (positive/boundary/negative/exhaustive/replay/integration,
+    statically verified against actual test files; line coverage is not proof)
+        ↓
+    computed obligation status + scope ladder
+    (blocked < partial < executable < source-tested < replay-tested < closed)
+
+Key semantics:
+
+- `unclassified` never counts as supported; it blocks closure of its scope.
+  Every catalogued source unit is seeded as an unclassified unit-grain
+  obligation until deliberately decomposed into curated obligations — that is
+  the documented migration state for legacy coverage.
+- Source conflicts are executable only via an ADOPTED record in
+  `src/rules/source-adjudications.ts`, linked from the obligation.
+- The audit distinguishes legitimate incompleteness (lowers status) from
+  inconsistent claims of completeness (fails strict mode): dangling
+  references, executable claims without consumers/contracts/proofs,
+  unadjudicated conflicts used in executable paths, documentation claiming a
+  stronger status than computed, generated-doc drift, or a semantic mutation
+  accepted by the mutation-resistance oracle.
+- The audit framework itself is tested against synthetic fixtures covering
+  failure classes A–I (`src/rules/__tests__/fidelity-audit.test.ts`),
+  including mutants that pass naive positive-only test suites but violate an
+  exhaustive semantic contract.
 
 ## Maturity states
 

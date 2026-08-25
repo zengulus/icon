@@ -32,6 +32,11 @@ jobs:
       - run: npm run verify:source-artifacts -- --expect-source-pdf=absent
       - run: npm run audit:automation
       - run: npm run audit:architecture
+      # Strict source-fidelity audit: fails on integrity violations
+      # (executable claims without consumers/proofs, unadjudicated conflicts,
+      # dangling references), documentation claiming stronger status than
+      # computed, generated-doc drift, or accepted semantic mutations.
+      - run: npm run audit:source-fidelity -- --strict
       - run: npm test
       - run: npm run typecheck
       # This launches the compiled realtime service with an isolated in-memory
