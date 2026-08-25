@@ -51,7 +51,15 @@ test('Lab persists table and encounter reducer operations across a reload', asyn
   // The fixture hero starts at (2, 4); a one-cell move puts the Bastion's
   // range-3 light attack in range of the foe at (6, 4). Both operations are
   // submitted to the encounter reducer, never to a UI-local actor copy.
+  //
+  // Combat begins awaiting an explicit controller decision (ICON p.87: a
+  // player character always takes the first turn, and the players decide
+  // which): the fixture hero must TAKE the turn through the real selection
+  // UI before Move/Attack controls exist at all.
   await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await expect(page.getByText('Awaiting actor selection', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /takes the turn/ }).click();
+  await expect(page.getByRole('button', { name: /^Move/ })).toBeVisible();
   await page.getByRole('button', { name: /^Move/ }).click();
   await page.getByRole('button', { name: 'Grid 3, 4', exact: true }).click();
   await expect(page.getByText('✓ deterministic room replay matches', { exact: true })).toBeVisible();
@@ -61,7 +69,7 @@ test('Lab persists table and encounter reducer operations across a reload', asyn
   // here because the UI intentionally routes targeting through the grid cell.
   await page.getByRole('button', { name: 'Grid 6, 4', exact: true }).click({ force: true });
   await expect(page.getByText('ATTACK RESOLVED', { exact: true })).toBeVisible();
-  await expect(page.locator('.battle-status')).toContainText('ROOM REV 8');
+  await expect(page.locator('.battle-status')).toContainText('ROOM REV 9');
 
   const persisted = await page.evaluate((key) => {
     const raw = localStorage.getItem(key);
@@ -69,9 +77,9 @@ test('Lab persists table and encounter reducer operations across a reload', asyn
   }, localRoomKey);
   expect(persisted).toMatchObject({
     schemaVersion: 2,
-    revision: 8,
+    revision: 9,
     encounter: {
-      revision: 5,
+      revision: 6,
       actors: {
         'actor:browser-vtt-hero': { position: { x: 3, y: 4 }, actionsRemaining: 1 },
       },
@@ -84,7 +92,7 @@ test('Lab persists table and encounter reducer operations across a reload', asyn
   });
 
   await page.reload();
-  await expect(page.locator('.battle-status')).toContainText('ROOM REV 8');
+  await expect(page.locator('.battle-status')).toContainText('ROOM REV 9');
   await expect(page.locator('.vtt-annotation')).toHaveCount(1);
   await expect(page.locator('.vtt-template')).toHaveCount(1);
   await expect(page.locator('.vtt-fog-cell')).toHaveCount(1);

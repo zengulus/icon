@@ -2200,6 +2200,12 @@ function applyTurnTransition(
     for (const candidate of Object.values(state.actors)) {
       candidate.turnTaken = false;
       candidate.turnsTakenThisRound = 0;
+      // A voluntary GO_SLOW election belongs only to the round in which it
+      // was made: it ends with the round, exactly like turnTaken. Persistent
+      // source-backed pending-Delay state (`six-hells:slow-turn`) is NOT
+      // cleared here — it forces the actor's NEXT actual turn Slow even
+      // across this boundary until the forced turn itself consumes it.
+      candidate.slow = false;
       // Re-derive the round's turn entitlements from the registered sources
       // (multi-turn elites/legends keep their extra turns every round).
       candidate.turnsRemaining = Math.max(1, turnEntitlements(state, candidate));

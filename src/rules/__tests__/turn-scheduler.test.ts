@@ -2,13 +2,17 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import {
+  isActorSlowCommitted,
+  mustNextTurnBeSlow,
+  normalEligibleActors,
   registerSlowTurnEligibilitySource,
   registerTurnEntitlementSource,
-  turnEligibleActorIds,
   slowElectableActorIds,
+  slowEligibleActors,
+  turnEligibleActorIds,
 } from '../turn-scheduler.js';
 import type { EncounterActor, EncounterState } from '../types.js';
-import { endTurnOnly, endTurnTo, scriptedDice, startEncounterTo, validCharacter } from './fixtures.js';
+import { endTurnOnly, endTurnTo, expectCommandPurity, scriptedDice, startEncounterTo, validCharacter } from './fixtures.js';
 
 /**
  * ICON 1.5 turn-order scheduler matrix (p.87 — "Turn order", "Slow turns").
@@ -433,5 +437,208 @@ describe('ICON 1.5 turn order — lifecycle, replay, and multi-turn foes', () =>
       current = executeCommand(current, { type: 'TAKE_TURN', actorId: chosen }, scriptedDice()).state;
       current = endTurnOnly(current, scriptedDice());
     }
+  });
+});
+
+describe('ICON 1.5 turn order — combat start admits a PLAYER CHARACTER only', () => {
+  /** Heroes side with one PC and one allied NON-PC (a summon), built as a
+   * narrow explicit test fixture — no production content is involved. */
+  function fixtureWithSummon(): { state: EncounterState; hero: EncounterActor; summon: EncounterActor; foe: EncounterActor } {
+    const base = schedulerFixture({ heroes: 1, foes: 1 });
+    const hero = base.heroes[0]!;
+    const summon: EncounterActor = {
+      ...hero,
+      id: 'summon:conjured-blade',
+      name: 'Conjured Blade',
+      actorKind: 'summon',
+      characterId: null,
+      position: { x: 0, y: 0 },
+    };
+    const state = executeCommand(base.state, { type: 'ADD_ACTOR', actor: summon }, scriptedDice()).state;
+    return { state, hero, summon, foe: base.foes[0]! };
+  }
+
+  it('combat start rejects an allied-side non-PC and accepts a legal player character', () => {
+    const { state, hero, summon } = fixtureWithSummon();
+    const started = executeCommand(state, { type: 'START_ENCOUNTER' }, scriptedDice()).state;
+    expect(started.eligibleSide).toBe('heroes');
+    // The opening slot offers only the player character.
+    expect(turnEligibleActorIds(started)).toEqual([hero.id]);
+    // The allied summon cannot take — or elect Slow at — the opening slot.
+    expect(() => executeCommand(started, { type: 'TAKE_TURN', actorId: summon.id }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'turn.select' }));
+    expect(() => executeCommand(started, { type: 'GO_SLOW', actorId: summon.id }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'slow.not-eligible' }));
+    // The legal player character is accepted, with command purity intact.
+    const first = expectCommandPurity(started, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice());
+    expect(first.state.activeActorId).toBe(hero.id);
+  });
+
+  it('after the opening turn the allied non-PC may take an ordinary allied slot (the gate is scoped to combat start)', () => {
+    const { state, hero, summon, foe } = fixtureWithSummon();
+    let current = startEncounterTo(state, hero.id, scriptedDice());
+    current = endTurnTo(current, foe.id, scriptedDice());
+    current = endTurnOnly(current, scriptedDice());
+    expect(current.eligibleSide).toBe('heroes');
+    expect(turnEligibleActorIds(current)).toContain(summon.id);
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: summon.id }, scriptedDice()).state;
+    expect(current.activeActorId).toBe(summon.id);
+  });
+});
+
+/** A fixture with UNIQUE actor names: scheduler-source registrations in
+ * earlier tests of this file are global and some key on names like 'Foe 1',
+ * so these boundary regressions must not reuse those names. */
+function boundaryFixture(options: { heroes?: number; foes?: number } = {}): { state: EncounterState; heroes: EncounterActor[]; foes: EncounterActor[] } {
+  let state = createEncounter('Round boundary fixture');
+  const heroes = Array.from({ length: options.heroes ?? 2 }, (_, index) =>
+    actorFromCharacter(validCharacter(`Boundary Hero ${index + 1}`), { x: 1, y: index + 1 }));
+  const foes = Array.from({ length: options.foes ?? 1 }, (_, index) =>
+    createFoe(`Boundary Foe ${index + 1}`, { x: 6, y: index + 1 }));
+  for (const actor of [...heroes, ...foes]) {
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor }, scriptedDice()).state;
+  }
+  return { state, heroes, foes };
+}
+
+describe('ICON 1.5 turn order — voluntary Slow ends with the round', () => {
+  it('a PC who elected Slow in round 1 is normal-eligible in round 2, and the stale commitment cannot reappear in round 3', () => {
+    const { state, heroes, foes } = boundaryFixture({ heroes: 2, foes: 1 });
+    const started = executeCommand(state, { type: 'START_ENCOUNTER' }, scriptedDice()).state;
+    // Round 1: H1 elects Slow (H2 retains the allied slot); H2 and F1 act.
+    const afterSlow = expectCommandPurity(started, { type: 'GO_SLOW', actorId: heroes[0]!.id }, scriptedDice()).state;
+    expect(afterSlow.actors[heroes[0]!.id].slow).toBe(true);
+    let current = executeCommand(afterSlow, { type: 'TAKE_TURN', actorId: heroes[1]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: foes[0]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    expect(current.turnPhase).toBe('slow'); // the Slow mini-round opens for H1
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[0]!.id }, scriptedDice()).state;
+    const ended = executeCommand(current, { type: 'END_TURN', actorId: heroes[0]!.id }, scriptedDice());
+
+    // The transition RECORD itself opens round 2 in the NORMAL phase:
+    // next-round planning reads next-round semantics, where H1's voluntary
+    // round-1 election no longer exists.
+    expect(ended.events.find((event) => event.type === 'TURN_ENDED'))
+      .toMatchObject({ round: 2, eligibleSide: 'foes', turnPhase: 'normal' });
+
+    // Round 2 state: the election is gone; H1 is normal-eligible again.
+    const round2 = ended.state;
+    expect(round2.round).toBe(2);
+    expect(round2.turnPhase).toBe('normal');
+    expect(round2.actors[heroes[0]!.id].slow).toBe(false);
+    expect(isActorSlowCommitted(round2.actors[heroes[0]!.id])).toBe(false);
+    expect(normalEligibleActors(round2, 'heroes').map(({ id }) => id)).toContain(heroes[0]!.id);
+    expect(slowEligibleActors(round2, 'heroes')).toHaveLength(0);
+
+    // Round 2 runs clean, and the stale commitment cannot reappear in 3.
+    current = executeCommand(round2, { type: 'TAKE_TURN', actorId: foes[0]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[0]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[1]!.id }, scriptedDice()).state;
+    const round3 = endTurnOnly(current, scriptedDice());
+    expect(round3.round).toBe(3);
+    expect(round3.actors[heroes[0]!.id].slow).toBe(false);
+    expect(normalEligibleActors(round3, 'heroes').map(({ id }) => id)).toContain(heroes[0]!.id);
+  });
+
+  it('next-round planning ignores prior-round voluntary Slow: the recorded transition never opens a phantom slow phase', () => {
+    // Every combatant slow-committed in round 1 (the foes under a registered
+    // source row): the stale round-1 flags must not make round 2 open Slow.
+    registerSlowTurnEligibilitySource({
+      sourceId: 'fixture:slow-foe-transition',
+      eligible: (_state, actor) => actor.id.startsWith('foe:'),
+    });
+    const { state, heroes, foes } = boundaryFixture({ heroes: 2, foes: 2 });
+    const started = executeCommand(state, { type: 'START_ENCOUNTER' }, scriptedDice()).state;
+    let current = executeCommand(started, { type: 'GO_SLOW', actorId: heroes[0]!.id }, scriptedDice()).state; // H1 slow, H2 retains
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[1]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    current = executeCommand(current, { type: 'GO_SLOW', actorId: foes[0]!.id }, scriptedDice()).state; // F1 slow, F2 retains
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: foes[1]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    // Normal phase exhausted: the Slow mini-round alternates H1 → F1 → H2.
+    expect(current.turnPhase).toBe('slow');
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[0]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: foes[0]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[1]!.id }, scriptedDice()).state;
+    const ended = executeCommand(current, { type: 'END_TURN', actorId: heroes[1]!.id }, scriptedDice());
+    // Every voluntary Slow election belonged to round 1 and is spent; no
+    // pending Delay exists. The recorded transition opens round 2 opposite
+    // H2 (the foes) in the NORMAL phase — reading the stale commitments
+    // would have produced a bogus slow opening.
+    expect(ended.events.find((event) => event.type === 'TURN_ENDED'))
+      .toMatchObject({ round: 2, eligibleSide: 'foes', turnPhase: 'normal' });
+    expect(ended.state.turnPhase).toBe('normal');
+    expect(ended.state.actors[heroes[1]!.id].slow).toBe(false);
+    expect([...turnEligibleActorIds(ended.state)].sort()).toEqual([foes[0]!.id, foes[1]!.id].sort());
+  });
+});
+
+describe('ICON 1.5 turn order — pending Delay survives the round boundary', () => {
+  it('a source-backed "next turn must be slow" persists across the round reset, forces the Slow pool, and is consumed by that turn only', () => {
+    const { state, heroes, foes } = boundaryFixture({ heroes: 1, foes: 2 });
+    let current = startEncounterTo(state, heroes[0]!.id, scriptedDice());
+    current = endTurnOnly(current, scriptedDice());
+    expect(current.eligibleSide).toBe('foes');
+    // A Delay effect lands later in the round ("your next turn must be a
+    // slow turn", p.95): the same durable pending-Delay state the Six Hells
+    // Trigram program writes. The hero has ALREADY acted this round, so the
+    // forced turn necessarily falls in the next round.
+    current.actors[heroes[0]!.id].ruleState['six-hells:slow-turn'] = true;
+    current.actors[heroes[0]!.id].ruleStateOwners['six-hells:slow-turn'] = heroes[0]!.id;
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: foes[0]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: foes[1]!.id }, scriptedDice()).state;
+    const ended = executeCommand(current, { type: 'END_TURN', actorId: foes[1]!.id }, scriptedDice());
+
+    // The recorded transition honors the persistent requirement WITHOUT
+    // inventing a phantom slow opening: unlike a spent voluntary election,
+    // pending Delay legitimately crosses the boundary, placing the delayed
+    // hero in ROUND 2's Slow pool while the pass rule gives round 2's normal
+    // turns to the side that still has them (p.87).
+    expect(ended.events.find((event) => event.type === 'TURN_ENDED'))
+      .toMatchObject({ round: 2, eligibleSide: 'foes', turnPhase: 'normal' });
+    // The reducer's round reset cleared voluntary Slow but kept the delay:
+    // the hero is out of the normal pool and into the Slow pool.
+    expect(mustNextTurnBeSlow(ended.state.actors[heroes[0]!.id])).toBe(true);
+    expect(isActorSlowCommitted(ended.state.actors[heroes[0]!.id])).toBe(true);
+    expect(normalEligibleActors(ended.state, 'heroes')).toHaveLength(0);
+    expect(slowEligibleActors(ended.state, 'heroes').map(({ id }) => id)).toEqual([heroes[0]!.id]);
+
+    // The hostile normal turns run first; once the normal phase is exhausted,
+    // the Slow mini-round opens with the delayed hero.
+    current = executeCommand(ended.state, { type: 'TAKE_TURN', actorId: foes[0]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: foes[1]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    expect(current.turnPhase).toBe('slow');
+    expect(turnEligibleActorIds(current)).toEqual([heroes[0]!.id]);
+
+    // The forced turn is a real Slow turn (the Charge-trigger flag), and
+    // taking it consumes the pending Delay at turn start.
+    const forced = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[0]!.id }, scriptedDice()).state;
+    expect(forced.actors[heroes[0]!.id].ruleState['slow-turn']).toBe(true);
+    expect(forced.actors[heroes[0]!.id].actionsRemaining).toBe(2);
+    expect(forced.actors[heroes[0]!.id].ruleState['six-hells:slow-turn']).toBeUndefined();
+
+    // The forced Slow turn was the final actual turn of round 2: round 3
+    // opens with ordinary hostile turns, and nothing forces the hero's later
+    // turns Slow.
+    const continued = endTurnOnly(forced, scriptedDice());
+    expect(continued.round).toBe(3);
+    expect(continued.turnPhase).toBe('normal');
+    expect(continued.eligibleSide).toBe('foes');
+    current = executeCommand(continued, { type: 'TAKE_TURN', actorId: foes[0]!.id }, scriptedDice()).state;
+    current = endTurnOnly(current, scriptedDice());
+    // The slot alternates back to the hero's side (the other foe still owes
+    // its turn later); the delayed hero takes an ORDINARY normal turn.
+    expect(current.eligibleSide).toBe('heroes');
+    expect(isActorSlowCommitted(current.actors[heroes[0]!.id])).toBe(false);
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[0]!.id }, scriptedDice()).state;
+    expect(current.activeActorId).toBe(heroes[0]!.id);
   });
 });

@@ -855,7 +855,9 @@ insertion/iteration order.
 
 - Combat starts awaiting the player side's `TAKE_TURN` choice: a player
   character always takes the first turn of combat, and the players decide
-  which one.
+  which one. The opening slot admits only hero-kind actors (`actorKind:
+  'hero'`) — allied summons/companions on the player side wait for an
+  ordinary later slot; the gate is scoped to the combat-start slot alone.
 - Normal turns alternate sides while both sides have eligible turn
   entitlements; a side with no eligible normal actors concedes consecutive
   turns to the other side. `turnsRemaining` is re-derived at each round reset
@@ -868,6 +870,23 @@ insertion/iteration order.
   fires no turn lifecycle for that character. Most enemies cannot take a Slow
   turn; a source-backed slow-eligibility row (`registerSlowTurnEligibilitySource`)
   grants it to a specific foe when a rule says so.
+- Voluntary Slow and pending Delay are distinct lifecycles. `isActorSlowCommitted`
+  (current-round commitment: in the Slow pool NOW) reads either state, but
+  they end differently:
+  - A voluntary `GO_SLOW` election lives in `actor.slow` and belongs ONLY to
+    the current round: the round reset clears it exactly like `turnTaken`, so
+    an actor who elected Slow in round N is normal-eligible in round N+1.
+  - A source-backed Delay ("your next turn must be a slow turn", e.g. Six
+    Hells Trigram) lives in the durable pending flag (`mustNextTurnBeSlow`,
+    the `six-hells:slow-turn` ruleState key), survives the round boundary,
+    and is consumed at the start of the forced Slow turn itself (converted to
+    the Charge-visible `slow-turn` flag). It never forces later turns Slow.
+  - Next-round scheduling (`roundAdvanceTransition`) classifies round N+1
+    eligibility from NEXT-round semantics only: refreshed entitlements plus
+    pending-Delay state — never the previous round's voluntary elections.
+    When the nominal opening side has no normal-eligible actor for such a
+    legitimate reason, the ordinary p.87 pass rule applies (the other side's
+    normal turns run first; the Slow mini-round follows).
 - Slow characters act only after ALL non-slow characters have acted (the Slow
   mini-round). The mini-round alternates sides where slow actors exist on both
   sides; a side with no slow actors remaining concedes the rest. A Slow turn

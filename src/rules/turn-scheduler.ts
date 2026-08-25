@@ -61,10 +61,25 @@ const opposite = (side: TurnSide): TurnSide => (side === 'heroes' ? 'foes' : 'he
  * the turn-start conversion consumes for the Charge trigger. */
 const DELAYED_SLOW_KEY = 'six-hells:slow-turn';
 
-/** True while the actor is committed to the Slow mini-round this round:
- * elected via GO_SLOW (`slow`) or forced by a delay effect. */
+/** True when a persistent source rule requires this actor's NEXT actual turn
+ * to be a Slow turn — even across a round boundary. Unlike the current-round
+ * commitment (`isActorSlowCommitted`), this state survives the round reset:
+ * it is consumed only at the start of the forced Slow turn itself
+ * (`resolveTurnStart` converts it to the Charge-visible flag).
+ *
+ * This predicate is deliberately SEPARATE from the voluntary election:
+ * next-round scheduling must read THIS state, never the previous round's
+ * GO_SLOW commitments. */
+export function mustNextTurnBeSlow(actor: EncounterActor): boolean {
+  return actor.ruleState[DELAYED_SLOW_KEY] === true;
+}
+
+/** True while the actor is committed to the Slow mini-round of the CURRENT
+ * round: either elected via GO_SLOW this round (`slow`, cleared by the round
+ * reset — an election belongs only to the round in which it was made) or
+ * forced by a pending delay effect (`mustNextTurnBeSlow`). */
 export function isActorSlowCommitted(actor: EncounterActor): boolean {
-  return actor.slow === true || actor.ruleState[DELAYED_SLOW_KEY] === true;
+  return actor.slow === true || mustNextTurnBeSlow(actor);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +143,19 @@ export function canElectSlow(state: EncounterState, actor: EncounterActor): bool
 
 const actable = (actor: EncounterActor) => !actor.defeated && actor.onBattlefield && actor.turnsRemaining > 0;
 
+/** ICON p.87: combat begins with a PLAYER CHARACTER, and the players decide
+ * which one. The opening slot is identified by round 1 never having had a
+ * turn (`lastSide` still null): only hero-kind actors are legal there.
+ * Allied summons/companions on the player side wait for a later slot. */
+function isCombatStartSelection(state: EncounterState): boolean {
+  return state.phase === 'active' && state.round === 1 && state.lastSide === null && state.activeActorId === null && state.eligibleSide === 'heroes';
+}
+
+/** The combat-start legality filter for the opening slot: PCs only. */
+function combatStartLegal(actor: EncounterActor): boolean {
+  return actor.actorKind === 'hero';
+}
+
 /** Actors of `side` that may take a NORMAL turn right now: alive, on the
  * battlefield, with a turn entitlement left, and not committed to Slow. */
 export function normalEligibleActors(state: EncounterState, side: TurnSide): EncounterActor[] {
@@ -145,7 +173,9 @@ export function slowEligibleActors(state: EncounterState, side: TurnSide): Encou
  * the side has no eligible actors). UI-friendly, deterministic. */
 export function turnEligibleActorIds(state: EncounterState): string[] {
   if (state.phase !== 'active' || state.activeActorId !== null || state.eligibleSide === null) return [];
+  const combatStart = isCombatStartSelection(state);
   return (state.turnPhase === 'slow' ? slowEligibleActors(state, state.eligibleSide) : normalEligibleActors(state, state.eligibleSide))
+    .filter((actor) => !combatStart || combatStartLegal(actor))
     .map((actor) => actor.id);
 }
 
@@ -161,6 +191,9 @@ export function slowElectableActorIds(state: EncounterState): string[] {
 export function isActorTurnSelectable(state: EncounterState, actor: EncounterActor): boolean {
   if (state.phase !== 'active' || state.activeActorId !== null || state.eligibleSide === null) return false;
   if (actor.side !== state.eligibleSide) return false;
+  // The combat-start opening slot admits a PLAYER CHARACTER only (p.87);
+  // every later slot follows the ordinary side/phase rules.
+  if (isCombatStartSelection(state) && !combatStartLegal(actor)) return false;
   if (!actable(actor)) return false;
   return state.turnPhase === 'slow' ? isActorSlowCommitted(actor) : !isActorSlowCommitted(actor);
 }
@@ -221,15 +254,21 @@ export function resolveEligiblePhase(state: EncounterState, eligibleSide: TurnSi
 /** The opening slot of the NEXT round, computed from the pre-turn state: the
  * side opposite the side whose actor ended the round opens, in the normal
  * phase unless the pass rule moves it (a side whose whole roster is
- * slow-committed yields; a slow-only opening becomes the Slow mini-round). */
+ * slow-committed yields; a slow-only opening becomes the Slow mini-round).
+ *
+ * Round N+1 eligibility is classified from ROUND N+1 semantics: entitlements
+ * refresh for everyone and voluntary GO_SLOW elections belong only to round
+ * N, so ONLY persistent source-backed pending-Delay state
+ * (`mustNextTurnBeSlow`) may place an actor in the next round's Slow pool.
+ * Reading the current-round commitment here would leak a spent voluntary
+ * election across the boundary and wrongly open the next round in Slow. */
 function roundAdvanceTransition(state: EncounterState, endingSide: TurnSide): TurnTransitionDecision {
   const nextRound = state.round + 1;
   const normal: Record<TurnSide, boolean> = { heroes: false, foes: false };
   const slow: Record<TurnSide, boolean> = { heroes: false, foes: false };
   for (const actor of Object.values(state.actors)) {
     if (actor.defeated || !actor.onBattlefield || turnEntitlements(state, actor) <= 0) continue;
-    const committed = isActorSlowCommitted(actor);
-    if (committed) slow[actor.side as TurnSide] = true;
+    if (mustNextTurnBeSlow(actor)) slow[actor.side as TurnSide] = true;
     else normal[actor.side as TurnSide] = true;
   }
   const opener = opposite(endingSide);
