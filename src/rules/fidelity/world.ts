@@ -129,10 +129,20 @@ const CURATED_OBLIGATIONS: readonly SourceObligation[] = [
         sha256: '',
       },
       {
+        // Recorded as its own passage because the extraction places a bullet
+        // separator between this sentence and the next; each curated quote
+        // must be a contiguous canonical span on its cited page.
         page: 241,
         sectionId: null,
         quote:
-          'At level 1 and every level afterwards, characters gain +1 ap when they hit 7 xp and go into a camp, enter an interlude, or at the end of a session. When a character hits 15 xp, they clear their xp bar and accumulate a level up, which can be spent at the end of a interlude (a downtime period) or at the end of a session to level up their character.',
+          'At level 1 and every level afterwards, characters gain +1 ap when they hit 7 xp and go into a camp, enter an interlude, or at the end of a session.',
+        sha256: '',
+      },
+      {
+        page: 241,
+        sectionId: null,
+        quote:
+          'When a character hits 15 xp, they clear their xp bar and accumulate a level up, which can be spent at the end of a interlude (a downtime period) or at the end of a session to level up their character.',
         sha256: '',
       },
     ],

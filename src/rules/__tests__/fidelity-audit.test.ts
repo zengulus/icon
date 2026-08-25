@@ -266,7 +266,8 @@ describe('fidelity hardening: required self-tests A–P', () => {
     expect(resolveConsumerRegistrations([{ id: 'ok', file: 'good.ts', symbol: 'goodImpl', description: '' }], { root: dir })).toEqual([]);
 
     // And the engine downgrades an obligation whose consumer did NOT resolve.
-    const unresolved = computeFidelityAudit(provenWorld({ resolvedConsumerIds: [] }).world, provenWorld().inputs);
+    const unresolvedCase = provenWorld({ resolvedConsumerIds: [] });
+    const unresolved = computeFidelityAudit(unresolvedCase.world, unresolvedCase.inputs);
     expect(unresolved.findings[0].status).toBe('unimplemented');
     expect(unresolved.findings[0].blockers.join(' ')).toMatch(/does not resolve/);
   });
@@ -566,7 +567,7 @@ describe('adversarial acceptance simulations', () => {
       ),
     };
     // Recompute the local fingerprints so they are internally consistent…
-    const refingerprinted = withFingerprints(tampered);
+    const refingerprinted = { ...tampered, obligations: tampered.obligations.map((o) => withFingerprints(o)) };
     const fingerprintChecks = refingerprinted.obligations.every((o) =>
       o.passages.every((p) => p.sha256 === passageFingerprint(p.quote)),
     );
@@ -658,5 +659,36 @@ describe('canonical provenance primitives', () => {
       syntheticCorpus(),
     );
     expect(filtered.violations.map((v) => v.check)).toContain('frontier-irrelevant-entry-dangling');
+  });
+
+  it('the evidence graph cannot import the implementation layer (anti-circularity guard)', () => {
+    // §7 mechanical circularity guard: the evidence modules must stay
+    // observation-only. If any of them starts importing the adapter layer or
+    // runtime rules code, contracts could trivially agree with the code they
+    // certify — this test fails BEFORE that design can take hold.
+    const evidenceModules = [
+      'src/rules/fidelity/types.ts',
+      'src/rules/fidelity/world.ts',
+      'src/rules/fidelity/engine.ts',
+      'src/rules/fidelity/provenance.ts',
+      'src/rules/fidelity/docs.ts',
+      'src/rules/fidelity/claims.ts',
+    ];
+    for (const modulePath of evidenceModules) {
+      const source = readFileSync(join(REPO_ROOT, modulePath), 'utf8');
+      expect(source, `${modulePath} must not import the adapter layer`).not.toMatch(/from '\.\/adapters\.js'/);
+      expect(source, `${modulePath} must not import runtime rules code`).not.toMatch(/from '\.\.\/(character|encounter|automation)\.js'/);
+      expect(source, `${modulePath} must not import the strict pipeline`).not.toMatch(/from '\.\/strict\.js'/);
+    }
+    // And the contract registry stays pure DATA: no runtime callbacks can be
+    // smuggled into expectation rows via the production world.
+    for (const contractEntry of buildProductionWorld().contracts) {
+      for (const row of contractEntry.rows ?? []) {
+        expect(typeof row.input === 'object' || typeof row.input === 'number' || typeof row.input === 'string',
+          `contract ${contractEntry.obligationId} row "${row.label}" input must be data`).toBe(true);
+        expect(typeof row.expected === 'object' || typeof row.expected === 'number' || typeof row.expected === 'string' || typeof row.expected === 'boolean',
+          `contract ${contractEntry.obligationId} row "${row.label}" expected must be data`).toBe(true);
+      }
+    }
   });
 });

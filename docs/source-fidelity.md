@@ -20,18 +20,67 @@ No status here can be edited by hand; edit the evidence instead.
 | Unresolved source conflicts | 0 |
 | Explicitly table-facing | 0 |
 | Explicitly deferred/unsupported | 0 |
+| Semantic contracts evaluated (executed evidence) | 3 |
+| Semantic evaluations passed | 3 |
+| Semantic evaluations FAILED | 0 |
+| Catalogued units fully decomposed | 0 |
+| Catalogued units partially decomposed | 0 |
 | Integrity violations | 0 |
 
 ## Scope capability ladder
 
-Ladder: blocked < partial < executable < source-tested < replay-tested < closed.
+Each rung adds exactly one mechanical predicate:
 
-| Scope | Status | Obligations | Unclassified | Deterministic | Proven supported | Blockers |
-| --- | --- | ---: | ---: | ---: | ---: | --- |
-| Character advancement (`advancement`) | closed | 3 | 0 | 3 | 3 | — |
-| Sourcebook at large (unit-grain) (`sourcebook-at-large`) | blocked | 3275 | 3275 | 0 | 0 | 3275 unclassified obligation(s) |
+- **blocked** — unclassified or unadjudicated-conflicted obligations present.
+- **partial** — no unknown material, but the frontier is incomplete or some deterministic obligation lacks full evidence.
+- **executable** — every deterministic obligation resolves to real code, carries machine-readable contract rows, and PASSED evaluation against them.
+- **source-tested** — executable + declared replay evidence for every stateful contract.
+- **replay-tested** — source-tested + required integration evidence.
+- **closed** — replay-tested + exhaustively accounted source frontier.
+
+| Scope | Status | Obligations | Unclassified | Deterministic | Proven supported | Frontier clauses (cov/irr/uncovered) | Blockers |
+| --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| Character advancement (`advancement`) | closed | 3 | 0 | 3 | 3 | 9/46/0 | — |
+| Sourcebook at large (unit-grain) (`sourcebook-at-large`) | blocked | 3275 | 3275 | 0 | 0 | — | 3275 unclassified obligation(s) |
 
 ## Scope detail
 
 ### Character advancement (`advancement`) — CLOSED
+
+Source frontier: 55 clause(s) — 9 covered by obligation passages, 46 explicitly irrelevant, 0 uncovered.
+
+## Project claims declared LEGACY / UNVERIFIED
+
+These strong project claims exist outside migrated fidelity scopes. They are reported, not silently accepted; migrating one means building its scope and rebinding the claim.
+
+| Claim | Document | Strength | Why unverified |
+| --- | --- | --- | --- |
+| Character creation/advancement engine breadth (`claim:deliverables:character-rules-engine`) | docs/deliverables.md | COMPLETE | character validation is tested but not decomposed into a strict fidelity scope |
+| Encounter command/event core purity + replay (`claim:deliverables:encounter-command-event-core`) | docs/deliverables.md | COMPLETE | purity/replay contract is tested directly; no strict fidelity scope exists yet |
+| Turn-order scheduler (`claim:deliverables:turn-scheduler`) | docs/deliverables.md | COMPLETE | scheduler replay matrix exists; not bound to a fidelity scope |
+| Damage determination/apply kernel (`claim:deliverables:damage-kernel`) | docs/deliverables.md | AUTHORITATIVE | kernel tests are extensive but no independent source-derived oracle is wired into the fidelity evaluator |
+| Attack resolution/modifiers kernel (`claim:deliverables:attack-kernel`) | docs/deliverables.md | AUTHORITATIVE | kernel tests are extensive but no independent source-derived oracle is wired into the fidelity evaluator |
+| Targeting/area/range/movement spatial kernels (`claim:deliverables:targeting-spatial-kernels`) | docs/deliverables.md | AUTHORITATIVE | core geometry is source-tested via fixtures; not bound to a fidelity scope |
+| Interrupt/window engine for wired triggers (`claim:deliverables:interrupt-window-engine`) | docs/deliverables.md | AUTHORITATIVE | replay-tested via encounter fixtures; not bound to a fidelity scope |
+| Turn/round boundary lifecycle engine (`claim:deliverables:lifecycle-engine`) | docs/deliverables.md | AUTHORITATIVE | replay-tested via lifecycle fixtures; not bound to a fidelity scope |
+| Shared resource registry (nine resources) (`claim:deliverables:resource-registry`) | docs/deliverables.md | COMPLETE | reducer-enforced with source pages; not bound to a fidelity scope |
+| Combat settlement & attrition handoff (`claim:deliverables:combat-settlement`) | docs/deliverables.md | COMPLETE | settlement regression suite exists; not decomposed into a strict fidelity scope |
+| Local lab harness (#/lab) (`claim:deliverables:local-vtt-lab`) | docs/deliverables.md | COMPLETE | phase-exempt human-test surface by design (AGENTS.md §16) |
+| Checkpoint persistence & recovery (`claim:deliverables:checkpoint-persistence`) | docs/deliverables.md | COMPLETE | transport/e2e coverage exists; not bound to a fidelity scope |
+| Encounter closure Slice A (baseline) (`claim:slice-a-baseline`) | docs/deliverables.md | CLOSED | closure rests on the P1 integration suites; slice semantics are not yet a strict fidelity scope |
+| Encounter closure Slice A (baseline), TODO mirror (`claim:slice-a-todo-mirror`) | TODO.md | CLOSED | mirror of claim:slice-a-baseline |
+| Encounter closure Slice D (attrition mechanics) (`claim:slice-d-mechanics`) | docs/deliverables.md | CLOSED | settlement.test.ts covers the mechanics; scene flow remains open and no fidelity scope exists |
+| Command/event purity (`claim:foundations:command-event-purity`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors deliverables encounter-command-event-core |
+| Dice & randomness (record-once replay) (`claim:foundations:dice-randomness`) | docs/rules-foundations.md | AUTHORITATIVE | replay determinism tests exist; no fidelity scope |
+| Damage kernel (foundations mirror) (`claim:foundations:damage`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:damage-kernel |
+| Attack kernel (foundations mirror) (`claim:foundations:attacks`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:attack-kernel |
+| Targeting & target sets (`claim:foundations:targeting`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:targeting-spatial-kernels |
+| Spatial geometry (`claim:foundations:spatial-geometry`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:targeting-spatial-kernels |
+| Resource system (foundations mirror) (`claim:foundations:resources`) | docs/rules-foundations.md | COMPLETE | mirrors claim:deliverables:resource-registry |
+| Lifecycle engine (foundations mirror) (`claim:foundations:lifecycle`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:lifecycle-engine |
+| Interrupt/window engine (foundations mirror) (`claim:foundations:interrupt-window`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:interrupt-window-engine |
+| Turn scheduler (foundations mirror) (`claim:foundations:turn-scheduler`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:turn-scheduler |
+| Passive projection (foe-trait keyword manifests) (`claim:foundations:passive-projection`) | docs/rules-foundations.md | AUTHORITATIVE | closed-manifest negative tests exist; no fidelity scope |
+| Combat settlement (foundations mirror) (`claim:foundations:combat-settlement`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:combat-settlement |
+| Cost/payment kernel (`claim:foundations:cost-payment`) | docs/rules-foundations.md | AUTHORITATIVE | source-tested via payment fixtures; no fidelity scope |
 

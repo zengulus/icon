@@ -448,8 +448,11 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
         ...evaluatedKinds,
         ...(proofs.get(obligation.id) ?? []).filter((p) => p.evidence !== 'declared').map((p) => p.kind),
       ]);
-      const requiredKinds = hasRows ? [...REQUIRED_PROOF_KINDS[contract!.kind]] : [];
-      if (hasRows && contract!.stateful) requiredKinds.push('replay');
+      // Replay is deliberately NOT folded into the class gate: a stateful
+      // contract without declared replay evidence must land on the
+      // `executable` rung (via statefulWithoutReplay below), not on
+      // `partial` — each ladder rung adds exactly one predicate.
+      const requiredKinds = hasRows ? REQUIRED_PROOF_KINDS[contract!.kind] : [];
       const classesOk = hasRows && requiredKinds.every((kind) => provided.has(kind));
       return { obligation, contract, consumersResolve, hasRows, evaluatedPass, classesOk, fullyProven: finding.status === 'proven-supported' };
     });
