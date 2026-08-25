@@ -34,7 +34,10 @@ import type {
   SourceObligation,
 } from './types.js';
 import { withFingerprints } from './engine.js';
-import { ADVANCEMENT_IRRELEVANT_CLAUSES } from './advancement-frontier.js';
+import {
+  ADVANCEMENT_ATTRIBUTED_CLAUSES,
+  ADVANCEMENT_IRRELEVANT_CLAUSES,
+} from './advancement-frontier.js';
 
 // ---------------------------------------------------------------------------
 // Scopes
@@ -55,6 +58,10 @@ const SCOPES: readonly ScopeDefinition[] = [
     frontier: {
       pages: [44, 99, 112, 115, 240, 241],
       irrelevant: ADVANCEMENT_IRRELEVANT_CLAUSES,
+      // Coverage is ATTRIBUTION-BASED: only clauses explicitly attributed to
+      // a curated obligation count as covered — a large quotation never
+      // automatically covers every clause inside it.
+      attributed: ADVANCEMENT_ATTRIBUTED_CLAUSES,
     },
   },
   {
@@ -228,6 +235,9 @@ const CONTRACTS: readonly SemanticContract[] = [
         at: { op: 'award', char: fresh, amount: 7 },
         above: { op: 'award', char: fresh, amount: 10 },
       },
+      // Each probe must PROVE its side of the edge: the extracted scalar is
+      // checked strictly (below < 7, at === 7, above > 7).
+      probeValuePaths: { below: 'amount', at: 'amount', above: 'amount' },
     },
     rows: [
       { label: '6 XP does not claim the mid-level AP (below edge)', cls: 'boundary', input: { op: 'award', char: fresh, amount: 6 }, expected: { xp: 6, pendingLevelUps: 0, claimed: false, level: 0 } },
@@ -242,20 +252,24 @@ const CONTRACTS: readonly SemanticContract[] = [
     kind: 'boundary-constant',
     stateful: false,
     statement:
-      'The Limit Break unlock boundary is level EXACTLY 1 (adjudicated): the durable engine constant must equal the adopted boundary value, and the level-1 advancement row (+2 AP, total 2→5) sits above level 0. No availability gate exists yet; this constant is what a future gate must agree with.',
+      'The Limit Break unlock boundary is level EXACTLY 1 (adjudicated): the durable engine constant must equal the adopted boundary value (positive proof), and the ability-point allowance across the level-0/1/2 advancement rows proves the boundary sits between level 0 (2 AP) and level 1 (5 AP, the "gain +2 ap and unlock limit break" row). No availability gate exists yet; this constant is what a future gate must agree with.',
     boundary: {
       kind: 'level',
       value: 1,
       probes: {
         below: { op: 'allowance', char: { ...fresh, level: 0, xpAbilityPointClaimed: false } },
-        at: { op: 'limitBreakUnlockLevel' },
-        above: { op: 'allowance', char: { ...fresh, level: 1, xpAbilityPointClaimed: false } },
+        at: { op: 'allowance', char: { ...fresh, level: 1, xpAbilityPointClaimed: false } },
+        above: { op: 'allowance', char: { ...fresh, level: 2, xpAbilityPointClaimed: false } },
       },
+      // The probes prove genuinely below/at/above LEVEL values, not merely
+      // distinct inputs.
+      probeValuePaths: { below: 'char.level', at: 'char.level', above: 'char.level' },
     },
     rows: [
-      { label: 'engine constant equals the adjudicated boundary (level 1)', cls: 'boundary', input: { op: 'limitBreakUnlockLevel' }, expected: { limitBreakUnlockLevel: 1 } },
-      { label: 'a level-0 character has 2 AP — below the advancement row', cls: 'boundary', input: { op: 'allowance', char: { ...fresh, level: 0, xpAbilityPointClaimed: false } }, expected: { allowance: 2 } },
+      { label: 'engine constant equals the adjudicated boundary (level 1)', cls: 'positive', input: { op: 'limitBreakUnlockLevel' }, expected: { limitBreakUnlockLevel: 1 } },
+      { label: 'a level-0 character has 2 AP — below the advancement boundary', cls: 'boundary', input: { op: 'allowance', char: { ...fresh, level: 0, xpAbilityPointClaimed: false } }, expected: { allowance: 2 } },
       { label: 'a level-1 character has 5 AP — the "gain +2 ap and unlock limit break" row', cls: 'boundary', input: { op: 'allowance', char: { ...fresh, level: 1, xpAbilityPointClaimed: false } }, expected: { allowance: 5 } },
+      { label: 'a level-2 character has 6 AP — above the boundary row', cls: 'boundary', input: { op: 'allowance', char: { ...fresh, level: 2, xpAbilityPointClaimed: false } }, expected: { allowance: 6 } },
     ],
   },
 ];

@@ -24,13 +24,17 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FidelityAuditResult } from './types.js';
 import { SCOPE_STATUS_RANK, type ScopeStatus } from './types.js';
+import { PHASE_GATES, type PhaseGateId } from '../phase-gates.js';
 
 export type ClaimStrength = 'authoritative' | 'complete' | 'closed';
 
-/** One machine-audited input of a compound (phase-gate) claim. */
+/** One machine-audited input of a compound (phase-gate) claim. The
+ * requirement LIST is not maintained here: it is projected from the single
+ * phase-gate registry (`src/rules/phase-gates.ts`). */
 export type CompoundRequirement =
   | { kind: 'fidelity-scope'; scopeId: string; minStatus: ScopeStatus }
-  | { kind: 'generated-audit'; command: string };
+  | { kind: 'generated-audit'; command: string }
+  | { kind: 'coverage-item'; id: string };
 
 export type ClaimBinding =
   | { kind: 'fidelity-scope'; scopeId: string }
@@ -77,7 +81,11 @@ export const CANONICAL_CLAIM_FILES = [
   'docs/roadmap.md',
 ] as const;
 
-const STRONG_TOKEN = /\b(AUTHORITATIVE|CLOSED|COMPLETE)\b/;
+/** Strong authority tokens are matched CASE-INSENSITIVELY: writing "complete"
+ * or "closed" in lowercase does not downgrade a claim's meaning, so a strong
+ * claim cannot hide from the registry by changing its letter case. Definitional
+ * prose is handled by the visible allowlist below, never by case games. */
+const STRONG_TOKEN = /\b(AUTHORITATIVE|CLOSED|COMPLETE)\b/i;
 
 /** Lines that mention strong tokens without claiming authority (vocabulary
  * definitions, generated-doc references). Each entry must still match a real
@@ -85,6 +93,30 @@ const STRONG_TOKEN = /\b(AUTHORITATIVE|CLOSED|COMPLETE)\b/;
 export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reason: string }[] = [
   { file: 'docs/deliverables.md', linePrefix: '[`roadmap.md`](roadmap.md). Status vocabulary:', reason: 'definitional status-vocabulary legend' },
   { file: 'docs/rules-foundations.md', linePrefix: '| AUTHORITATIVE | Execution matches source semantics for its scope |', reason: 'capability-ladder vocabulary definition' },
+  // --- descriptive architecture / product prose (README) -------------------
+  { file: 'README.md', linePrefix: 'A rules-first ICON 1.5 character manager', reason: 'product summary; "authoritative" describes server topology, not audit status' },
+  { file: 'README.md', linePrefix: '`#/lab` is a public, browser-local human-testing service', reason: 'phase-gate behavior description' },
+  { file: 'README.md', linePrefix: 'Render exposes `/health` and `/realtime`.', reason: 'architecture description of command authority' },
+  { file: 'README.md', linePrefix: '| `npm run test:e2e` | Run both authoritative transport', reason: 'test-suite table description' },
+  // --- definitional closure legend (deliverables) --------------------------
+  { file: 'docs/deliverables.md', linePrefix: 'What must exist for the product to be genuinely complete', reason: 'section intro defining scope of document' },
+  { file: 'docs/deliverables.md', linePrefix: '> A slice is **closed** when', reason: 'definitional slice-closure criterion' },
+  // --- capability-ladder definitions + pattern names (foundations) ---------
+  { file: 'docs/rules-foundations.md', linePrefix: "Authoritative map of the engine's reusable mechanical foundations", reason: 'document self-description' },
+  { file: 'docs/rules-foundations.md', linePrefix: '    (blocked < partial < executable < source-tested < replay-tested < closed)', reason: 'ladder-order definition' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'source-complete).', reason: 'wrapped sentence continuation describing coverage policy' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'Closed source-ID manifests, never runtime prose parsing', reason: 'implementation-pattern description' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'projection (Rot → Regeneration / defiance suppression). Closed-negative tests', reason: 'test-pattern name in wrapped sentence' },
+  { file: 'docs/rules-foundations.md', linePrefix: '| K-P5 | Mastery fold |', reason: 'foundations ledger row; status vocabulary in notes column' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'closed-manifest pattern; the foe declarative recipe factories', reason: 'pattern reference in wrapped sentence' },
+  // --- ladder rung definition (coverage) -----------------------------------
+  { file: 'docs/rules-coverage.md', linePrefix: '| 5 | Authoritative | Execution matches source semantics without hidden bypasses |', reason: 'capability-ladder vocabulary definition' },
+  // --- gate/criterion definitions (roadmap) --------------------------------
+  { file: 'docs/roadmap.md', linePrefix: 'Phase gates are acceptance criteria, not feature lists. A phase is complete', reason: 'gate-completion definition' },
+  { file: 'docs/roadmap.md', linePrefix: '  authoritative with replay fixtures.', reason: 'gate-criterion continuation fragment' },
+  { file: 'docs/roadmap.md', linePrefix: '## P2 — Foe role entitlements and the first closed foe-complexity slice', reason: 'phase heading naming a GOAL, not a status claim' },
+  { file: 'docs/roadmap.md', linePrefix: 'replay; closed negative for unequipped mastery.', reason: 'test-plan continuation fragment' },
+  { file: 'docs/roadmap.md', linePrefix: '(P1–P2) does multiplayer have something authoritative to share.', reason: 'rhetorical phase-justification criterion' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -97,6 +129,19 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
 // ---------------------------------------------------------------------------
 
 const legacy = (reason: string): ClaimBinding => ({ kind: 'legacy-unverified', reason });
+
+/** Projects a phase-gate definition from the single registry into auditable
+ * compound requirements. There is deliberately no independent copy of the
+ * criteria here — editing the registry edits every consumer at once. */
+function gateRequirements(gateId: PhaseGateId): readonly CompoundRequirement[] {
+  return PHASE_GATES[gateId].requirements.map((requirement) =>
+    requirement.kind === 'coverage-item'
+      ? { kind: 'coverage-item' as const, id: requirement.id }
+      : requirement.kind === 'generated-audit'
+        ? { kind: 'generated-audit' as const, command: requirement.command }
+        : { kind: 'fidelity-scope' as const, scopeId: requirement.scopeId, minStatus: requirement.minStatus },
+  );
+}
 
 export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
   // --- docs/deliverables.md subsystem table ---------------------------------
@@ -245,10 +290,7 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     binding: {
       kind: 'compound',
       subject: 'PHASE_TWO_READY',
-      requirements: [
-        { kind: 'generated-audit', command: 'audit:automation' },
-        { kind: 'fidelity-scope', scopeId: 'sourcebook-at-large', minStatus: 'closed' },
-      ],
+      requirements: gateRequirements('PHASE_TWO_READY'),
     },
   },
   {
@@ -260,10 +302,7 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     binding: {
       kind: 'compound',
       subject: 'PHASE_THREE_READY',
-      requirements: [
-        { kind: 'generated-audit', command: 'audit:automation' },
-        { kind: 'fidelity-scope', scopeId: 'sourcebook-at-large', minStatus: 'closed' },
-      ],
+      requirements: gateRequirements('PHASE_THREE_READY'),
     },
   },
 
@@ -372,6 +411,32 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     subject: 'Cost/payment kernel',
     binding: legacy('source-tested via payment fixtures; no fidelity scope'),
   },
+
+  // --- lowercase strong claims surfaced by the case-insensitive scan --------
+  {
+    id: 'claim:infra:schema-v3-migration',
+    file: 'docs/roadmap.md',
+    anchor: 'schema v3 migration — complete.',
+    strength: 'complete',
+    subject: 'Schema v3 checkpoint migration',
+    binding: legacy('verified by transport/persistence tests; no fidelity scope'),
+  },
+  {
+    id: 'claim:deliverables:settlement-slice-closed',
+    file: 'docs/deliverables.md',
+    anchor: 'Mechanically closed by P1 (`settlement.test.ts`)',
+    strength: 'closed',
+    subject: 'Combat settlement slice (P1)',
+    binding: legacy('mirrors claim:deliverables:combat-settlement'),
+  },
+  {
+    id: 'claim:roadmap:p2-slice-a-closed',
+    file: 'docs/roadmap.md',
+    anchor: 'is close (Slice A closed) but Slice B/C closure',
+    strength: 'closed',
+    subject: 'P2 Slice A (foe-complexity repair slice)',
+    binding: legacy('roadmap progress note; tracked by the deliverables census, no fidelity scope'),
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -396,6 +461,10 @@ export interface ClaimCheckDeps {
    * when its command has a recorded 'passed' result here; 'failed' is a hard
    * violation; an absent record means the claim cannot verify. */
   auditResults?: Readonly<Record<string, 'passed' | 'failed'>>;
+  /** Current RULES_COVERAGE status lookup for coverage-item requirements,
+   * wired in by the CLI (the fidelity layer never imports runtime rules
+   * code directly). An absent lookup fails the requirement. */
+  coverageStatus?: (id: string) => string | undefined;
 }
 
 function read(deps: ClaimCheckDeps, path: string): string | null {
@@ -487,6 +556,8 @@ export function checkProjectClaims(
         if (requirement.kind === 'generated-audit') {
           if (!scripts.has(requirement.command)) unmet.push(`audit script "${requirement.command}" missing`);
           else if (deps.auditResults?.[requirement.command] !== 'passed') unmet.push(`audit "${requirement.command}" not passed`);
+        } else if (requirement.kind === 'coverage-item') {
+          if (deps.coverageStatus?.(requirement.id) !== 'complete') unmet.push(`coverage item "${requirement.id}" not complete`);
         } else {
           const scope = scopeById.get(requirement.scopeId);
           if (!scope) unmet.push(`scope ${requirement.scopeId} missing`);

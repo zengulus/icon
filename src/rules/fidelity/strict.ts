@@ -14,6 +14,7 @@
  * fails the build.
  */
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -32,7 +33,8 @@ import {
   MITIGATION_DOMAIN,
   runMutationResistanceSuite,
 } from './mutation.js';
-import type { ContractRow, FidelityAuditResult, FidelityIntegrityViolation, SemanticContract, SourceObligation } from './types.js';
+import type { AdapterRegistry, ContractRow, FidelityAuditResult, FidelityIntegrityViolation, SemanticContract, SourceObligation } from './types.js';
+import type { ProjectClaim } from './claims.js';
 
 export interface StrictAuditReport {
   result: FidelityAuditResult;
@@ -115,11 +117,112 @@ export function runPipelineMutationSelfCheck(): string[] {
   return violations;
 }
 
-/** Orchestration-level options. Prerequisite audit RESULTS come from outside
- * the pure engine (CI artifacts or an aggregate command that ran the
- * prerequisites once); generated-audit-bound claims verify only against them. */
+/** Orchestration-level options. Prerequisite audit RESULTS come only from
+ * the aggregate authority path (`--run-prereqs` runs each bound script here
+ * and records its exit status); generated-audit/replay/integration evidence
+ * verifies ONLY against those recordings — there is no trusted hand-written
+ * results file. */
 export interface StrictAuditOptions {
   auditResults?: Readonly<Record<string, 'passed' | 'failed'>>;
+  /** RULES_COVERAGE lookup for coverage-item phase-gate requirements (wired
+   * by the CLI; the fidelity layer never imports runtime rules code). */
+  coverageStatus?: (id: string) => string | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Aggregate authority — real prerequisite executions, recorded once
+// ---------------------------------------------------------------------------
+
+/** Every npm script bound as EXECUTED evidence anywhere in the registry:
+ * generated-audit/compound claim requirements plus replay/integration proofs. */
+export function boundEvidenceCommands(
+  world: ReturnType<typeof buildProductionWorld>,
+  claims: readonly ProjectClaim[] = PROJECT_CLAIMS,
+): string[] {
+  const commands = new Set<string>();
+  for (const claim of claims) {
+    if (claim.binding.kind === 'generated-audit') commands.add(claim.binding.command);
+    if (claim.binding.kind === 'compound') {
+      for (const requirement of claim.binding.requirements) {
+        if (requirement.kind === 'generated-audit') commands.add(requirement.command);
+      }
+    }
+  }
+  for (const proof of world.proofs) {
+    if ((proof.evidence === 'replay' || proof.evidence === 'integration') && proof.command !== undefined) {
+      commands.add(proof.command);
+    }
+  }
+  return [...commands].sort();
+}
+
+export interface PrereqRunnerDeps {
+  npm?(args: readonly string[]): { status: number | null };
+}
+
+/** The aggregate authority runner: executes each bound npm script ONCE with
+ * inherited stdio and records its exit status. These recordings are the ONLY
+ * input by which generated-audit/replay/integration evidence can verify. */
+export function runPrerequisiteAudits(commands: readonly string[], deps: PrereqRunnerDeps = {}): Record<string, 'passed' | 'failed'> {
+  const npm = deps.npm ?? ((args: readonly string[]) => spawnSync('npm', [...args], { stdio: 'inherit' }));
+  const results: Record<string, 'passed' | 'failed'> = {};
+  for (const command of [...new Set(commands)].sort()) {
+    const outcome = npm(['run', command]);
+    results[command] = outcome.status === 0 ? 'passed' : 'failed';
+  }
+  return results;
+}
+
+/** Convenience for the CLI: binds the CURRENT world + registry to a single
+ * recorded prerequisite pass. */
+export function runRecordedPrerequisiteAudits(): Record<string, 'passed' | 'failed'> {
+  return runPrerequisiteAudits(boundEvidenceCommands(buildProductionWorld()));
+}
+
+// ---------------------------------------------------------------------------
+// Adapter-exercise verification
+// ---------------------------------------------------------------------------
+
+const DEFAULT_ADAPTER_SOURCE_PATH = 'src/rules/fidelity/adapters.ts';
+
+/** Mechanically verifies that every production adapter EXERCISES the
+ * registered production consumers of its obligation: for each obligation with
+ * a contract AND a registered adapter, every consumer registration's declared
+ * export symbol must appear in the adapter module's source. A stub adapter
+ * (or one calling unrelated code) fails this check — and combined with the
+ * executed passing evaluations, the registered production implementation is
+ * provably what produced the evidence. */
+export function verifyAdaptersExerciseConsumers(
+  world: Parameters<typeof computeFidelityAudit>[0],
+  adapters: AdapterRegistry,
+  deps: { root: string; adapterSourcePath?: string; readFile?(path: string): string },
+): FidelityIntegrityViolation[] {
+  const sourcePath = deps.adapterSourcePath ?? DEFAULT_ADAPTER_SOURCE_PATH;
+  let source: string;
+  try {
+    source = (deps.readFile ?? ((path: string) => readFileSync(path, 'utf8')))(join(deps.root, sourcePath));
+  } catch {
+    return [{ check: 'adapter-does-not-exercise-consumer', detail: `adapter module ${sourcePath} could not be read` }];
+  }
+  const consumersById = new Map(world.consumers.map((consumer) => [consumer.id, consumer]));
+  const violations: FidelityIntegrityViolation[] = [];
+  for (const contract of world.contracts) {
+    if (!adapters.has(contract.obligationId)) continue; // a missing adapter fails evaluation outright
+    const obligation = world.obligations.find((candidate) => candidate.id === contract.obligationId);
+    if (!obligation) continue;
+    for (const consumerId of obligation.consumerIds ?? []) {
+      const registration = consumersById.get(consumerId);
+      if (!registration) continue; // dangling reference reported by the engine
+      const symbol = registration.symbol;
+      if (symbol === undefined || !new RegExp(`\\b${symbol}\\b`).test(source)) {
+        violations.push({
+          check: 'adapter-does-not-exercise-consumer',
+          detail: `${contract.obligationId}: adapter does not exercise registered consumer ${consumerId}${symbol ? ` (symbol "${symbol}" absent from ${sourcePath})` : ` (registration declares no symbol)`}`,
+        });
+      }
+    }
+  }
+  return violations;
 }
 
 export function runStrictFidelityAudit(repoRoot: string, options: StrictAuditOptions = {}): StrictAuditReport {
@@ -150,8 +253,11 @@ export function runStrictFidelityAudit(repoRoot: string, options: StrictAuditOpt
   // 3. Executed semantic evaluation of production contracts.
   const evaluations = evaluateContracts(world, PRODUCTION_ADAPTERS);
 
+  // 3b. Adapters must actually EXERCISE the registered production consumers.
+  const adapterViolations = verifyAdaptersExerciseConsumers(world, PRODUCTION_ADAPTERS, { root: repoRoot });
+
   // 4. Pure audit computation over the assembled evidence.
-  const result = computeFidelityAudit(world, { frontiers: frontierInputs, evaluations, resolvedConsumerIds });
+  const result = computeFidelityAudit(world, { frontiers: frontierInputs, evaluations, resolvedConsumerIds, auditResults: options.auditResults });
 
   // 5. Declared proof traceability: file exists + test name present.
   const evidenceFailures: string[] = [];
@@ -172,7 +278,11 @@ export function runStrictFidelityAudit(repoRoot: string, options: StrictAuditOpt
   const mutationViolations = [...mutations.violations, ...pipelineSelfCheck];
 
   // 7. Project claims (generated-audit bindings consume RECORDED results).
-  const claims = checkProjectClaims(result, { root: repoRoot, auditResults: options.auditResults }, PROJECT_CLAIMS);
+  const claims = checkProjectClaims(
+    result,
+    { root: repoRoot, auditResults: options.auditResults, coverageStatus: options.coverageStatus },
+    PROJECT_CLAIMS,
+  );
 
   // 8. Aggregate hard failures.
   const hardFailures: string[] = [
@@ -183,6 +293,7 @@ export function runStrictFidelityAudit(repoRoot: string, options: StrictAuditOpt
       failures.map((f) => `semantic evaluation: ${obligationId} row "${f.row}" expected ${f.expected}, received ${f.actual}`),
     ),
     ...evidenceFailures,
+    ...adapterViolations.map((v) => `integrity: ${v.check} — ${v.detail}`),
     ...mutations.violations,
     ...pipelineSelfCheck,
     ...claims.violations.map((v) => `project claim: ${v.check} — ${v.detail}`),

@@ -14,12 +14,15 @@
  *    artifacts are sufficient for CI.
  *
  * 2. SCOPE FRONTIERS: a scope's declared frontier is resolved into atomic
- *    canonical clauses (extraction lines on the frontier pages, filtered by
- *    the scope's visible include policy). Every clause must later be covered
- *    by an obligation's passages or explicitly dispositioned irrelevant;
- *    resolution here is exhaustive and deterministic, so omitting
- *    inconvenient material from a curated obligation list cannot fake a
- *    complete boundary.
+ *    canonical clauses (EVERY extraction line on the frontier pages — there
+ *    is no selection filter). Coverage is ATTRIBUTION-BASED: a clause counts
+ *    as covered only through an explicit `attributed` entry naming the
+ *    obligation that accounts for it — verified mechanically against that
+ *    obligation's own passages. Containment alone is PROVENANCE, never
+ *    coverage: a page-spanning quotation cannot silently sweep every clause
+ *    inside it into "covered". Repeated identical occurrences have DISTINCT
+ *    identities and each accounting entry covers exactly its declared
+ *    occurrence count.
  */
 
 import { readFileSync } from 'node:fs';
@@ -28,6 +31,8 @@ import { createHash } from 'node:crypto';
 import type {
   FidelityIntegrityViolation,
   FidelityWorld,
+  IntegrityCheck,
+  OccurrenceCount,
   ScopeDefinition,
   ScopeFrontierInput,
   SourceClause,
@@ -96,8 +101,11 @@ export function loadCanonicalCorpus(repoRoot: string): CanonicalCorpus {
   return corpusFromPages(raw.pages);
 }
 
-function clauseId(page: number, normalized: string): string {
-  return `p${page}:${createHash('sha256').update(normalized).digest('hex').slice(0, 12)}`;
+/** Clause identity: page + LINE INDEX + content hash. The index is what
+ * gives REPEATED identical lines distinct identities — two occurrences of the
+ * same table fragment are two clauses, each needing its own accounting. */
+function clauseId(page: number, lineIndex: number, normalized: string): string {
+  return `p${page}:${lineIndex}:${createHash('sha256').update(normalized).digest('hex').slice(0, 12)}`;
 }
 
 /** Atomic clauses of one page: canonical extraction lines, normalized. Lines
@@ -106,26 +114,33 @@ function clauseId(page: number, normalized: string): string {
 export function pageClauses(corpus: CanonicalCorpus, page: number): SourceClause[] {
   const text = corpus.pageText(page);
   if (text === undefined) return [];
-  return text
-    .split('\n')
-    .map((line) => normalizeSourceText(line))
-    .filter((line) => line.length > 0)
-    .map((text_) => ({ page, text: text_, sha256: createHash('sha256').update(text_).digest('hex'), id: clauseId(page, text_) }));
+  const clauses: SourceClause[] = [];
+  text.split('\n').forEach((line, lineIndex) => {
+    const normalized = normalizeSourceText(line);
+    if (normalized.length === 0) return;
+    clauses.push({ page, text: normalized, sha256: createHash('sha256').update(normalized).digest('hex'), id: clauseId(page, lineIndex, normalized) });
+  });
+  return clauses;
 }
 
 /** Resolves every scope frontier definition into its EXHAUSTIVE clause list
  * (every canonical extraction line on the declared pages — no selection
- * filter exists anymore) plus the clause IDs matched by explicit
- * dispositions.
+ * filter exists) plus the clause IDs explicitly accounted by dispositions
+ * and attributions.
  *
- * Subdivided dispositions are verified here against the curated obligations:
- * the clause's whitespace-stripped text must appear inside the concatenation
- * of the named obligations' passage quotes. This lets a merged extraction
- * line be accounted as several semantic pieces without pretending the line
- * itself is atomic semantics.
+ * - Dispositions account for clauses this scope deliberately does NOT
+ *   implement; `subdivided` entries must be jointly quoted by the named
+ *   curated obligations.
+ * - Attributions are explicit FRONTIER COVERAGE claims: the named obligation
+ *   (same scope, curated) accounts for the matched clause(s), verified
+ *   against that obligation's OWN passages. Containment alone never covers.
+ * - Repeated identical occurrences have distinct identities: each entry
+ *   covers exactly its declared occurrence count of still-unaccounted
+ *   occurrences, in deterministic page/line order.
  *
- * Stale dispositions (matching no resolved clause), unsupported subdivisions,
- * and out-of-corpus pages are integrity violations. */
+ * Stale/over-claiming entries, unsupported subdivisions, unquoted
+ * attributions, double accounting, and out-of-corpus pages are integrity
+ * violations. */
 export function resolveScopeFrontiers(
   scopes: readonly ScopeDefinition[],
   corpus: CanonicalCorpus,
@@ -133,11 +148,49 @@ export function resolveScopeFrontiers(
 ): { inputs: ScopeFrontierInput[]; violations: FidelityIntegrityViolation[] } {
   const inputs: ScopeFrontierInput[] = [];
   const violations: FidelityIntegrityViolation[] = [];
-  const quotesById = new Map(
+  const curatedById = new Map(
     obligations
       .filter((obligation) => obligation.origin.kind === 'curated')
-      .map((obligation) => [obligation.id, obligation.passages.map((passage) => passage.quote).join(' ')]),
+      .map((obligation) => [obligation.id, obligation]),
   );
+  const stripped = (text: string): string => text.replace(/\s+/g, '');
+
+  /** Occurrence selection shared by dispositions and attributions. Zero
+   * matches, exhausted matches, or an explicit count exceeding the remaining
+   * occurrences is staleness — an entry may never silently cover more than
+   * it declares. */
+  function selectOccurrences(
+    scopeId: string,
+    check: IntegrityCheck,
+    entryKind: string,
+    normalized: string,
+    occurrences: OccurrenceCount | undefined,
+    accounted: Map<string, number>,
+    clausesByText: ReadonlyMap<string, SourceClause[]>,
+  ): { selected: SourceClause[]; stale: boolean } {
+    const all = clausesByText.get(normalized) ?? [];
+    const used = accounted.get(normalized) ?? 0;
+    const remaining = all.slice(used);
+    if (remaining.length === 0) {
+      violations.push({
+        check,
+        detail: `scope ${scopeId}: ${entryKind} matches no unaccounted frontier clause occurrence: "${normalized.slice(0, 80)}"`,
+      });
+      return { selected: [], stale: true };
+    }
+    const want = occurrences ?? 1;
+    if (want !== 'all' && want > remaining.length) {
+      violations.push({
+        check,
+        detail: `scope ${scopeId}: ${entryKind} declares ${want} occurrence(s) but only ${remaining.length} remain unaccounted: "${normalized.slice(0, 80)}"`,
+      });
+      return { selected: [], stale: true };
+    }
+    const selected = want === 'all' ? remaining : remaining.slice(0, want);
+    accounted.set(normalized, used + selected.length);
+    return { selected, stale: false };
+  }
+
   for (const scope of scopes) {
     if (scope.frontier === undefined) continue;
     for (const page of scope.frontier.pages) {
@@ -148,34 +201,32 @@ export function resolveScopeFrontiers(
     // NO selection policy: every clause on every declared page is inside the
     // boundary and must later be covered or explicitly dispositioned.
     const clauses = scope.frontier.pages.flatMap((page) => pageClauses(corpus, page));
+    const clausesByText = new Map<string, SourceClause[]>();
+    for (const clause of clauses) {
+      const list = clausesByText.get(clause.text) ?? [];
+      list.push(clause);
+      clausesByText.set(clause.text, list);
+    }
+
     const irrelevantIds: string[] = [];
+    const accountedIrrelevant = new Map<string, number>();
     for (const disposition of scope.frontier.irrelevant ?? []) {
       const normalized = normalizeSourceText(disposition.text);
-      const matches = clauses.filter((clause) => clause.text === normalized);
-      // Identical canonical lines (repeated table fragments) are covered by
-      // the same disposition; ZERO matches is staleness.
-      if (matches.length === 0) {
-        violations.push({
-          check: 'frontier-disposition-entry-dangling',
-          detail: `scope ${scope.id}: disposition matches no frontier clause: "${disposition.text.slice(0, 80)}" — ${disposition.reason}`,
-        });
-        continue;
-      }
       if ((disposition.kind ?? 'irrelevant') === 'subdivided') {
         const named = disposition.subdividedInto ?? [];
-        const jointQuotes = named.map((id) => quotesById.get(id)).filter((quote): quote is string => quote !== undefined);
-        if (jointQuotes.length !== named.length || named.length === 0) {
+        const jointQuotes = named.map((id) => curatedById.get(id)?.passages.map((passage) => passage.quote).join(' '));
+        if (named.length === 0 || jointQuotes.some((quote) => quote === undefined)) {
           violations.push({
             check: 'subdivision-unsupported',
-            detail: `scope ${scope.id}: subdivided disposition names unknown/non-curated obligation(s): "${disposition.text.slice(0, 80)}"`,
+            detail: `scope ${scope.id}: subdivided disposition names unknown/non-curated/out-of-scope obligation(s): "${disposition.text.slice(0, 80)}"`,
           });
           continue;
         }
         // Direct concatenation (no separator): a merged extraction line is
         // the TAIL of one quoted sentence plus the HEAD of the next, so the
         // clause spans exactly the junction between the two quotes.
-        const haystack = jointQuotes.map((quote) => quote.replace(/\s+/g, '')).join('');
-        if (!haystack.includes(normalized.replace(/\s+/g, ''))) {
+        const haystack = jointQuotes.map((quote) => stripped(quote!)).join('');
+        if (!haystack.includes(stripped(normalized))) {
           violations.push({
             check: 'subdivision-unsupported',
             detail: `scope ${scope.id}: subdivided clause is not jointly quoted by ${named.join(', ')}: "${disposition.text.slice(0, 80)}"`,
@@ -183,9 +234,60 @@ export function resolveScopeFrontiers(
           continue;
         }
       }
-      irrelevantIds.push(...matches.map((clause) => clause.id));
+      const { selected } = selectOccurrences(
+        scope.id,
+        'frontier-disposition-entry-dangling',
+        'disposition',
+        normalized,
+        disposition.occurrences,
+        accountedIrrelevant,
+        clausesByText,
+      );
+      irrelevantIds.push(...selected.map((clause) => clause.id));
     }
-    inputs.push({ scopeId: scope.id, clauses, irrelevantIds });
+
+    const attributedIds: string[] = [];
+    const accountedAttributed = new Map<string, number>();
+    for (const attribution of scope.frontier.attributed ?? []) {
+      const normalized = normalizeSourceText(attribution.text);
+      const obligation = curatedById.get(attribution.obligationId);
+      if (!obligation || obligation.scopeId !== scope.id) {
+        violations.push({
+          check: 'frontier-attribution-entry-dangling',
+          detail: `scope ${scope.id}: attribution names unknown or out-of-scope obligation ${attribution.obligationId}`,
+        });
+        continue;
+      }
+      const quotes = obligation.passages.map((passage) => passage.quote).join(' ');
+      const { selected } = selectOccurrences(
+        scope.id,
+        'frontier-attribution-entry-dangling',
+        'attribution',
+        normalized,
+        attribution.occurrences,
+        accountedAttributed,
+        clausesByText,
+      );
+      if (selected.length === 0) continue;
+      const quoted = selected.filter((clause) => sourceTextContains(quotes, clause.text));
+      if (quoted.length < selected.length) {
+        violations.push({
+          check: 'frontier-attribution-unquoted',
+          detail: `scope ${scope.id}: attribution to ${attribution.obligationId} covers clause(s) its passages do not quote: "${normalized.slice(0, 80)}"`,
+        });
+      }
+      attributedIds.push(...quoted.map((clause) => clause.id));
+    }
+
+    const irrelevantSet = new Set(irrelevantIds);
+    const doubled = [...new Set(attributedIds)].filter((id) => irrelevantSet.has(id));
+    if (doubled.length > 0) {
+      violations.push({
+        check: 'frontier-double-accounting',
+        detail: `scope ${scope.id}: ${doubled.length} clause(s) are BOTH dispositioned irrelevant and attributed to an obligation`,
+      });
+    }
+    inputs.push({ scopeId: scope.id, clauses, irrelevantIds, attributedIds });
   }
   return { inputs, violations };
 }

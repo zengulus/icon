@@ -42,8 +42,8 @@ import type {
   UnitDecompositionPiece,
 } from './types.js';
 import { REQUIRED_PROOF_KINDS } from './types.js';
-import { clauseCoveredBy } from './provenance.js';
 import { canonicalFixtureKey } from './types.js';
+import { contractFingerprint } from './evaluate.js';
 
 export function passageFingerprint(quote: string): string {
   return createHash('sha256').update(quote).digest('hex');
@@ -72,6 +72,11 @@ export interface AuditInputs {
    * every registered consumer id is assumed resolvable (pure mode); strict
    * runs always pass resolution results. */
   resolvedConsumerIds?: readonly string[];
+  /** RECORDED prerequisite-audit results ({command: 'passed'|'failed'}) from
+   * the aggregate authority runner. Replay/integration proof records provide
+   * evidence ONLY when their bound command has a recorded passing run here —
+   * a test-name substring in a file is traceability, never execution. */
+  auditResults?: Readonly<Record<string, 'passed' | 'failed'>>;
 }
 
 const ROW_CLASS_PROOF_KINDS: readonly string[] = ['positive', 'boundary', 'negative', 'invariant', 'exhaustive'];
@@ -80,6 +85,59 @@ const ROW_CLASS_PROOF_KINDS: readonly string[] = ['positive', 'boundary', 'negat
 function containsStripped(haystack: string, needle: string): boolean {
   if (needle.length === 0) return false;
   return haystack.replace(/\s+/g, '').includes(needle.replace(/\s+/g, ''));
+}
+
+/** Resolves a dotted path ('a.b.0.c') through a structured probe input. */
+function resolveProbePath(value: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((acc, segment) => {
+    if (acc === null || acc === undefined) return undefined;
+    if (Array.isArray(acc)) return acc[Number(segment)];
+    if (typeof acc === 'object') return (acc as Record<string, unknown>)[segment];
+    return undefined;
+  }, value);
+}
+
+/** Boundary probes must PROVE their side of the edge: each probe declares a
+ * dotted path extracting, from its own INPUT, the numeric scalar compared
+ * against the pinned value. Probes that cannot extract a finite scalar, or
+ * whose extracted value sits on the wrong side of the edge, are integrity
+ * violations — a relabelled positive row cannot manufacture boundary proof. */
+export function validateBoundaryProbes(contract: SemanticContract): FidelityIntegrityViolation[] {
+  const violations: FidelityIntegrityViolation[] = [];
+  const boundary = contract.boundary;
+  if (!boundary) return violations;
+  const sides = ['below', 'at', 'above'] as const;
+  for (const side of sides) {
+    const path = boundary.probeValuePaths?.[side];
+    const input = boundary.probes[side];
+    if (!path) {
+      violations.push({
+        check: 'boundary-probe-scalar-missing',
+        detail: `${contract.obligationId}: boundary probe "${side}" declares no scalar extraction path`,
+      });
+      continue;
+    }
+    const scalar = resolveProbePath(input, path);
+    if (typeof scalar !== 'number' || !Number.isFinite(scalar)) {
+      violations.push({
+        check: 'boundary-probe-scalar-missing',
+        detail: `${contract.obligationId}: boundary probe "${side}" path "${path}" does not resolve to a finite number`,
+      });
+      continue;
+    }
+    const holds = side === 'below'
+      ? scalar < boundary.value
+      : side === 'at'
+        ? scalar === boundary.value
+        : scalar > boundary.value;
+    if (!holds) {
+      violations.push({
+        check: 'boundary-probe-relation-wrong',
+        detail: `${contract.obligationId}: probe "${side}" extracts ${scalar} via "${path}" — must be ${side === 'below' ? '<' : side === 'at' ? '===' : '>'} ${boundary.value}`,
+      });
+    }
+  }
+  return violations;
 }
 
 /** COMPUTED decomposition completeness: every sentence of the parent unit's
@@ -186,6 +244,7 @@ export function checkIntegrity(world: FidelityWorld): FidelityIntegrityViolation
       if (new Set(probeKeys).size !== probeKeys.length) {
         violations.push({ check: 'boundary-probe-duplicate', detail: `${contract.obligationId}: boundary probes below/at/above are not distinct inputs` });
       }
+      violations.push(...validateBoundaryProbes(contract));
     }
   }
   for (const [obligationId, count] of contractsByObligation) {
@@ -195,6 +254,17 @@ export function checkIntegrity(world: FidelityWorld): FidelityIntegrityViolation
   for (const proof of world.proofs) {
     if (!obligationIds.has(proof.obligationId)) {
       violations.push({ check: 'dangling-proof-obligation', detail: `${proof.file} (${proof.kind}) → ${proof.obligationId}` });
+    }
+    // Replay/integration claims point at EXECUTED evidence: without the bound
+    // command they can never be more than traceability prose.
+    if (
+      (proof.evidence === 'replay' || proof.evidence === 'integration')
+      && proof.command === undefined
+    ) {
+      violations.push({
+        check: 'proof-evidence-command-missing',
+        detail: `${proof.obligationId} (${proof.kind}): ${proof.evidence} evidence requires the npm script whose recorded passing run IS the evidence`,
+      });
     }
   }
 
@@ -244,6 +314,21 @@ export function checkIntegrity(world: FidelityWorld): FidelityIntegrityViolation
         });
       }
     }
+
+    // Span integrity: two declared pieces may not OVERLAP — an overlap makes
+    // span-coverage accounting untrustworthy even when every individual
+    // sentence is present.
+    const declared = decomposition.pieces;
+    for (let i = 0; i < declared.length; i += 1) {
+      for (let j = i + 1; j < declared.length; j += 1) {
+        if (containsStripped(declared[i].text, declared[j].text) || containsStripped(declared[j].text, declared[i].text)) {
+          violations.push({
+            check: 'decomposition-overlapping-pieces',
+            detail: `${decomposition.unitId}: declared pieces "${declared[i].text.slice(0, 40)}" and "${declared[j].text.slice(0, 40)}" overlap`,
+          });
+        }
+      }
+    }
   }
 
   return violations;
@@ -260,6 +345,20 @@ interface DerivationContext {
   proofs: ReadonlyMap<string, ProofRecord[]>;
   evaluations: ReadonlyMap<string, ContractEvaluation>;
   adjudications: ReadonlyMap<string, AdjudicationLink>;
+  auditResults: Readonly<Record<string, 'passed' | 'failed'>> | null;
+}
+
+/** Kinds provided by non-declared proof records that carry a RECORDED PASSING
+ * run of their bound command. Without the recording, replay/integration
+ * evidence provides nothing (it is reported as unverified upstream). */
+function recordedEvidenceKinds(
+  proofs: readonly ProofRecord[] | undefined,
+  auditResults: Readonly<Record<string, 'passed' | 'failed'>> | null,
+): string[] {
+  return (proofs ?? [])
+    .filter((proof) => proof.evidence !== 'declared')
+    .filter((proof) => proof.command !== undefined && auditResults?.[proof.command] === 'passed')
+    .map((proof) => proof.kind);
 }
 
 // ---------------------------------------------------------------------------
@@ -300,15 +399,43 @@ export function exhaustiveShapeSatisfied(contract: SemanticContract): boolean {
 }
 
 /** Which required proof classes a PASSING evaluation covers with its rows —
- * verified against the contract's DECLARED STRUCTURE, never just row labels. */
-function structuralEvaluatedProofKinds(contract: SemanticContract, evaluation: ContractEvaluation | undefined): { kinds: string[]; passed: boolean; ran: boolean } {
+ * verified against what was actually EXECUTED plus the contract's DECLARED
+ * STRUCTURE, never just row labels:
+ *
+ * - the evaluation's fingerprint must match the CURRENT contract exactly
+ *   (otherwise the result is STALE and certifies nothing);
+ * - a passing result must record having executed EVERY row input;
+ * - boundary/exhaustive proof additionally requires the probe/domain fixture
+ *   keys among the recorded EXECUTED inputs. */
+function structuralEvaluatedProofKinds(
+  contract: SemanticContract,
+  evaluation: ContractEvaluation | undefined,
+): { kinds: string[]; passed: boolean; ran: boolean; stale?: boolean } {
   if (!evaluation) return { kinds: [], passed: false, ran: false };
+  // Anti-staleness binding: a result computed against a DIFFERENT VERSION of
+  // this contract says nothing about the current one.
+  if (evaluation.contractFingerprint !== contractFingerprint(contract)) {
+    return { kinds: [], passed: false, ran: true, stale: true };
+  }
   if (!evaluation.passed) return { kinds: [], passed: false, ran: true };
+  const executed = new Set(evaluation.executedInputKeys ?? []);
+  const rowKeys = (contract.rows ?? []).map((row) => canonicalFixtureKey(row.input));
+  if (rowKeys.length === 0 || !rowKeys.every((key) => executed.has(key))) {
+    // Claims a pass over rows that were never run.
+    return { kinds: [], passed: false, ran: true };
+  }
   const coveredClasses = new Set<ContractRowClass>(contract.rows?.map((row) => row.cls) ?? []);
   const kinds = REQUIRED_PROOF_KINDS[contract.kind].filter((kind) => {
     if (kind === 'positive' || kind === 'negative') return coveredClasses.has(kind as ContractRowClass);
-    if (kind === 'boundary') return boundaryShapeSatisfied(contract);
-    if (kind === 'exhaustive') return exhaustiveShapeSatisfied(contract);
+    if (kind === 'boundary') {
+      return boundaryShapeSatisfied(contract)
+        && (['below', 'at', 'above'] as const).every((side) =>
+          executed.has(canonicalFixtureKey(contract.boundary!.probes[side])));
+    }
+    if (kind === 'exhaustive') {
+      return exhaustiveShapeSatisfied(contract)
+        && (contract.domain ?? []).every((member) => executed.has(canonicalFixtureKey(member)));
+    }
     return false; // invariant/replay are never evaluator-derived
   });
   return { kinds, passed: true, ran: true };
@@ -398,19 +525,27 @@ function deriveStatus(
       missingProofKinds: [...REQUIRED_PROOF_KINDS[contract.kind]],
     };
   }
-  if (!evaluated.passed) {
+  if (evaluated.stale) {
     return {
       status: 'implemented-unproven',
-      blockers: [`semantic evaluation FAILED (${evaluation!.failures.length} row(s))`],
+      blockers: ['recorded evaluation is STALE: it was computed against a different version of this contract'],
+      missingProofKinds: [...REQUIRED_PROOF_KINDS[contract.kind]],
+    };
+  }
+  if (!evaluated.passed) {
+    const reason = evaluation!.passed
+      ? 'passing evaluation did not actually execute every contract row'
+      : `semantic evaluation FAILED (${evaluation!.failures.length} row(s))`;
+    return {
+      status: 'implemented-unproven',
+      blockers: [reason],
       missingProofKinds: [...REQUIRED_PROOF_KINDS[contract.kind]],
     };
   }
 
   const provided = new Set<string>([
     ...evaluated.kinds,
-    ...(context.proofs.get(obligation.id) ?? [])
-      .filter((proof) => proof.evidence !== 'declared')
-      .map((proof) => proof.kind),
+    ...recordedEvidenceKinds(context.proofs.get(obligation.id), context.auditResults),
   ]);
   const missing = REQUIRED_PROOF_KINDS[contract.kind].filter((kind) => !provided.has(kind));
   if (contract.stateful && !provided.has('replay')) missing.push('replay');
@@ -433,26 +568,42 @@ interface FrontierAccounting {
   total: number;
   covered: number;
   irrelevant: number;
+  doubleAccounted: number;
   uncoveredIds: string[];
 }
 
-function accountFrontier(input: ScopeFrontierInput, scopeObligations: readonly SourceObligation[]): FrontierAccounting {
+/** Attribution-based frontier accounting: a clause counts as COVERED only
+ * through an explicit attribution entry — verified at resolution time against
+ * the named obligation's own passages. Containment alone is PROVENANCE, never
+ * coverage: a large quotation cannot sweep every clause inside it into
+ * "covered". A clause both dispositioned and attributed is conservatively
+ * UNCOVERED here; resolution already raised the integrity violation. */
+function accountFrontier(input: ScopeFrontierInput): FrontierAccounting {
   const irrelevant = new Set(input.irrelevantIds);
+  const attributed = new Set(input.attributedIds);
   const uncoveredIds: string[] = [];
   let covered = 0;
   let irrelevantCount = 0;
+  let doubleAccounted = 0;
   for (const clause of input.clauses) {
-    if (irrelevant.has(clause.id)) {
+    const dispositioned = irrelevant.has(clause.id);
+    const attributedClause = attributed.has(clause.id);
+    if (dispositioned && attributedClause) {
+      doubleAccounted += 1;
+      uncoveredIds.push(clause.id);
+      continue;
+    }
+    if (dispositioned) {
       irrelevantCount += 1;
       continue;
     }
-    if (clauseCoveredBy(clause, scopeObligations)) {
+    if (attributedClause) {
       covered += 1;
     } else {
       uncoveredIds.push(clause.id);
     }
   }
-  return { total: input.clauses.length, covered, irrelevant: irrelevantCount, uncoveredIds };
+  return { total: input.clauses.length, covered, irrelevant: irrelevantCount, doubleAccounted, uncoveredIds };
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +623,8 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
   }
   const evaluations = new Map((inputs.evaluations ?? []).map((evaluation) => [evaluation.obligationId, evaluation]));
   const adjudications = new Map(world.adjudications.map((adjudication) => [adjudication.id, adjudication]));
-  const context: DerivationContext = { consumers, resolvedConsumers, contracts, proofs, evaluations, adjudications };
+  const auditResults = inputs.auditResults ?? null;
+  const context: DerivationContext = { consumers, resolvedConsumers, contracts, proofs, evaluations, adjudications, auditResults };
 
   // Decomposition census over catalogued units — completeness is COMPUTED
   // from piece coverage of each parent's rules text, never asserted.
@@ -551,7 +703,7 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
     const conflictedUnadjudicated = scopeFindings.filter(({ status }) => status === 'conflicted-unadjudicated');
 
     const frontierInput = frontierInputs.get(scopeDef.id);
-    const frontier = frontierInput ? accountFrontier(frontierInput, scopeObligations) : null;
+    const frontier = frontierInput ? accountFrontier(frontierInput) : null;
 
     // Per-deterministic-obligation evidence flags.
     const evidence = deterministicFindingsInScope.map((finding) => {
@@ -561,9 +713,10 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
       const consumersResolve = registeredConsumers.length > 0
         && (resolvedConsumers === null || registeredConsumers.every((id) => resolvedConsumers.has(id)));
       const hasRows = contract !== undefined && (contract.rows?.length ?? 0) > 0;
-      const evaluation = evaluations.get(obligation.id);
-      const evaluatedPass = hasRows && evaluation !== undefined && evaluation.passed;
-      const evaluatedKinds = evaluatedPass ? structuralEvaluatedProofKinds(contract!, evaluation).kinds : [];
+      const evaluated = hasRows ? structuralEvaluatedProofKinds(contract!, evaluations.get(obligation.id)) : null;
+      // Stale or row-skipping results do not count as executed evidence.
+      const evaluatedPass = evaluated !== null && evaluated.ran && !evaluated.stale && evaluated.passed;
+      const evaluatedKinds = evaluatedPass ? evaluated.kinds : [];
       const provided = new Set<string>([
         ...evaluatedKinds,
         ...(proofs.get(obligation.id) ?? []).filter((p) => p.evidence !== 'declared').map((p) => p.kind),
@@ -581,11 +734,13 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
       && evidence.every((entry) => entry.consumersResolve && entry.hasRows && entry.evaluatedPass && entry.classesOk);
     const statefulWithoutReplay = evidence.some((entry) => {
       if (!entry.contract?.stateful) return false;
-      return !(proofs.get(entry.obligation.id) ?? []).some((proof) => proof.kind === 'replay');
+      return !recordedEvidenceKinds(proofs.get(entry.obligation.id), auditResults).includes('replay');
     });
     const integrationRequired = scopeDef.closure?.requiresIntegrationEvidence ?? false;
+    // Integration evidence is EXECUTED evidence: the bound command must have
+    // a recorded passing run in this authority pass.
     const integrationPresent = !integrationRequired
-      || (proofs.get(`scope:${scopeDef.id}`) ?? []).some((proof) => proof.kind === 'integration');
+      || recordedEvidenceKinds(proofs.get(`scope:${scopeDef.id}`), auditResults).includes('integration');
 
     // Non-deterministic closure gates.
     const deferredPresent = scopeFindings.some(({ status: s }) => s === 'deferred');
@@ -683,6 +838,9 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
     if (!integrationPresent) blockers.push('required integration evidence is absent');
     if (!declaredFrontier) blockers.push('scope has no declared source frontier');
     if (frontierVacuousOrUnresolved) blockers.push('declared source frontier resolves to zero clauses (vacuous boundary)');
+    if (frontier && frontier.doubleAccounted > 0) {
+      blockers.push(`${frontier.doubleAccounted} frontier clause(s) are DOUBLE-accounted (both dispositioned and attributed)`);
+    }
     if (frontier && frontier.uncoveredIds.length > 0) {
       blockers.push(`${frontier.uncoveredIds.length} uncovered frontier clause(s): ${frontier.uncoveredIds.slice(0, 5).join(', ')}${frontier.uncoveredIds.length > 5 ? ', …' : ''}`);
     }
@@ -726,7 +884,7 @@ export function computeFidelityAudit(world: FidelityWorld, inputs: AuditInputs =
       unitsPartiallyDecomposed,
       unitsUntouched: Math.max(0, derivedTotal - decompositionByUnit.size),
       frontierScopes: (inputs.frontiers ?? []).map((input) => {
-        const accounting = accountFrontier(input, obligationsByScope.get(input.scopeId) ?? []);
+        const accounting = accountFrontier(input);
         return { scopeId: input.scopeId, total: accounting.total, covered: accounting.covered, irrelevant: accounting.irrelevant, uncovered: accounting.uncoveredIds.length };
       }),
     },

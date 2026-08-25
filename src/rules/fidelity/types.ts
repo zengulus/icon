@@ -92,9 +92,22 @@ export interface ScopeFrontier {
   pages: readonly number[];
   /** Explicit accounting for frontier clauses this scope does not implement
    * (narrative guidance, other-scope material, merged lines quoted across
-   * obligations). Every entry must match exactly one resolved clause. */
+   * obligations). Every entry must match at least one resolved clause. */
   irrelevant?: readonly ClauseDisposition[];
+  /** Explicit per-clause coverage claims tying frontier clauses to the
+   * curated obligations that account for them. A clause is covered ONLY
+   * through an entry here — never merely because some large quotation
+   * happens to contain it. */
+  attributed?: readonly ClauseAttribution[];
 }
+
+/**
+ * How many identical frontier occurrences one accounting entry covers.
+ * Repeated source occurrences have DISTINCT identities, so an entry covers
+ * exactly `count` occurrences (the first unaccounted ones in deterministic
+ * page/line order) unless it explicitly declares `'all'`.
+ */
+export type OccurrenceCount = number | 'all';
 
 /**
  * The explicit accounting of one frontier clause this scope deliberately
@@ -107,9 +120,9 @@ export interface ScopeFrontier {
  *   accounting honest WITHOUT pretending one line is one semantic proposition
  *   (the line granularity is stable, not semantic).
  *
- * Every entry must match exactly one resolved clause by normalized text; a
- * stale entry is an integrity violation, and an uncovered clause without an
- * entry blocks closure.
+ * Every entry must match at least one resolved clause by normalized text;
+ * a stale entry is an integrity violation, and an uncovered clause without
+ * an entry blocks closure.
  */
 export interface ClauseDisposition {
   text: string;
@@ -117,6 +130,37 @@ export interface ClauseDisposition {
   kind?: 'irrelevant' | 'subdivided';
   /** Required for `subdivided`: curated obligations whose passages jointly contain the clause. */
   subdividedInto?: readonly string[];
+  /** Default 1: repeated occurrences have distinct identities and must be
+   * accounted individually. Use `'all'` only when every identical occurrence
+   * genuinely carries the same disposition. */
+  occurrences?: OccurrenceCount;
+}
+
+/**
+ * An explicit FRONTIER COVERAGE claim: the named obligation declares that the
+ * frontier clause(s) matching `text` are semantically ACCOUNTED FOR by its
+ * classification + contract. This deliberately separates the two evidence
+ * acts:
+ *
+ *     provenance — the obligation's passages really quote this material
+ *                 (verified against the canonical corpus);
+ *     coverage   — a human decided THIS obligation accounts for THIS clause,
+ *                 clause by clause.
+ *
+ * Containment alone is provenance, never coverage: a page-spanning quotation
+ * cannot silently sweep every clause inside it into "covered". Each
+ * attribution is verified mechanically: the text must resolve to frontier
+ * clause occurrence(s), and each must be contained in the named obligation's
+ * own verified passages. Stale/unquoted/attribution-of-nothing are integrity
+ * violations.
+ */
+export interface ClauseAttribution {
+  text: string;
+  /** Curated obligation claiming semantic accountability for this clause. */
+  obligationId: string;
+  /** Default 1 (distinct identities per occurrence); `'all'` for genuinely
+   * identical repeated fragments. */
+  occurrences?: OccurrenceCount;
 }
 
 /** Frontier input resolved from the canonical corpus and handed to the pure
@@ -126,6 +170,10 @@ export interface ScopeFrontierInput {
   clauses: readonly SourceClause[];
   /** Clause IDs matched by the scope's explicit irrelevant dispositions. */
   irrelevantIds: readonly string[];
+  /** Clause IDs explicitly ATTRIBUTED to a classified curated obligation
+   * (verified: contained in that obligation's own passages). Coverage is
+   * attribution-based; containment alone never covers a clause. */
+  attributedIds: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +359,12 @@ export interface SemanticContract {
     kind: 'level' | 'xp' | 'count';
     value: number;
     probes: { below: unknown; at: unknown; above: unknown };
+    /** Dotted paths extracting, from each probe INPUT, the numeric scalar
+     * compared against `value`. REQUIRED: every side must resolve to a finite
+     * number, and the relations are enforced strictly — below < value,
+     * at === value, above > value. Probes that cannot prove their side of
+     * the edge are integrity violations, not silently accepted structure. */
+    probeValuePaths: { below: string; at: string; above: string };
   };
   /** Declared finite legal-input domain for an `exhaustive-finite` contract.
    * Exhaustive proof is satisfied ONLY when the evaluated row inputs equal
@@ -351,15 +405,20 @@ export type ProofKind =
  *   TRACEABILITY pointers only; they document where human-authored tests
  *   exercise the semantics. They cannot by themselves lift a deterministic
  *   obligation to proven-supported — executed evaluator results do that.
- * - `replay` proofs are required declared evidence for stateful contracts.
- * - `integration` proofs are required declared evidence for scopes whose
- *   closure demands workflow integration. */
+ * - `replay`/`integration` proofs are EXECUTED evidence: they additionally
+ *   REQUIRE `command` — a package.json script whose RECORDED PASSING RUN
+ *   (from the aggregate authority runner) constitutes the evidence. A test
+ *   name substring in a file is traceability, never execution. Without a
+ *   recorded passing result the proof provides nothing. */
 export interface ProofRecord {
   obligationId: string;
   kind: ProofKind;
   file: string;
   test: string;
   evidence: 'declared' | 'replay' | 'integration';
+  /** Required for replay/integration evidence: the npm script whose recorded
+   * passing run IS the evidence. */
+  command?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,12 +427,22 @@ export interface ProofRecord {
 
 /** Result of actually running a contract's rows against the registered
  * adapter (which calls the production implementation). Recorded as part of
- * the audit computation; strong status consumes these results directly. */
+ * the audit computation; strong status consumes these results directly.
+ *
+ * Two anti-staleness bindings: `contractFingerprint` pins the EXACT contract
+ * identity+rows evaluated (a result computed against a since-changed contract
+ * is discarded as stale, never counted as passing evidence), and
+ * `executedInputKeys` records the canonical fixture keys ACTUALLY run, so
+ * exhaustive/boundary proof shapes verify against execution, not declaration. */
 export interface ContractEvaluation {
   obligationId: string;
   adapterId: string | null;
   rowsRun: number;
   passed: boolean;
+  /** SHA-256 of the evaluated contract's canonical serialization. */
+  contractFingerprint: string;
+  /** Deduplicated canonical fixture keys of the rows actually executed. */
+  executedInputKeys: readonly string[];
   failures: readonly { row: string; cls: ContractRowClass; expected: string; actual: string }[];
 }
 
@@ -537,6 +606,7 @@ export type IntegrityCheck =
   | 'dangling-contract-obligation'
   | 'duplicate-contract'
   | 'dangling-proof-obligation'
+  | 'proof-evidence-command-missing'
   | 'missing-passages'
   | 'passage-fingerprint-mismatch'
   | 'passage-not-in-canonical-source'
@@ -552,7 +622,14 @@ export type IntegrityCheck =
   | 'duplicate-contract-input'
   | 'contradictory-contract-expectations'
   | 'exhaustive-domain-duplicate'
-  | 'boundary-probe-duplicate';
+  | 'boundary-probe-duplicate'
+  | 'boundary-probe-scalar-missing'
+  | 'boundary-probe-relation-wrong'
+  | 'decomposition-overlapping-pieces'
+  | 'frontier-attribution-entry-dangling'
+  | 'frontier-attribution-unquoted'
+  | 'frontier-double-accounting'
+  | 'adapter-does-not-exercise-consumer';
 
 /** Deterministic canonicalization of a fixture input for duplicate/coverage
  * accounting: stable key ordering so structurally equal objects collide and

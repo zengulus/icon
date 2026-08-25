@@ -12,7 +12,13 @@
  * and on any newly uncovered clause without an entry.
  */
 
-export const ADVANCEMENT_IRRELEVANT_CLAUSES: readonly { text: string; reason: string }[] = [
+import type { OccurrenceCount } from './types.js';
+
+export const ADVANCEMENT_IRRELEVANT_CLAUSES: readonly {
+  text: string;
+  reason: string;
+  occurrences?: OccurrenceCount;
+}[] = [
   {
     text: 'around the table and check your xp triggers, then',
     reason: 'Session-end XP-award trigger table: award INPUTS to the bar procedure, not bar/bank semantics; no automation claimed by this scope.',
@@ -483,8 +489,45 @@ export const ADVANCEMENT_IRRELEVANT_CLAUSES: readonly { text: string; reason: st
     reason: 'Level-0 narrative-benefit table (action-dot limits): separate character-construction subsystem.',
   },
   {
-    // Matches BOTH identical occurrences of this table fragment on p.241.
+    // Repeated occurrences have DISTINCT identities: this entry explicitly
+    // covers BOTH identical occurrences of this table fragment on p.241.
     text: 'or the same job and gain a mastery',
+    occurrences: 'all',
     reason: 'Advancement-table row fragments (levels 4/8 new-job/mastery alternative, two identical lines): player-choice workflow intentionally not automated by this scope.',
   },
+  {
+    text: 'the same job and gain a mastery',
+    occurrences: 'all',
+    reason: 'Advancement-table row fragment (merged-line tail where the leading "or" ended the previous extraction line): same player-choice workflow as the sibling fragment above.',
+  },
+];
+
+/**
+ * Explicit FRONTIER COVERAGE claims: each entry names the curated obligation
+ * whose VERIFIED passages semantically account for the matched frontier
+ * clause(s). Containment alone is provenance, never coverage — these entries
+ * ARE the per-clause coverage decision, mechanically re-verified against the
+ * canonical corpus on every audit run (an entry whose text stops matching a
+ * clause, or whose obligation does not actually quote it, is an integrity
+ * violation).
+ */
+export const ADVANCEMENT_ATTRIBUTED_CLAUSES: readonly { text: string; obligationId: string }[] = [
+  // --- icon-1.5:advancement:xp-bar-bank (pp.44/240/241 procedure) -----------
+  { text: 'experience points, filling out an experience bar. at', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'certain breakpoints in the bar, they will unlock', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'new abilities or talents. the xp bar is 15 ticks long. at 7 xp gained, during', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'an interlude, at the end of a session or at', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'camp characters can gain +1 ap, and spend it to unlock a new combat ability in any job they', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'have, or gain a new talent for an ability they', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'already have. this only triggers once per level. once the bar is full (15 xp), a character can clear', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'all xp and mark a level up . at the end of an', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'interlude or session, they may cash in that level up', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'the end of a interlude (a downtime period) or at the end of a session to level up their character.', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'to increase their level by 1. certain benefits are', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'a level up banked at the end of a session can', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'increase their level by 1, but no higher than the', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  { text: 'current chapter number. a character can only', obligationId: 'icon-1.5:advancement:xp-bar-bank' },
+  // --- icon-1.5:advancement:mid-level-ap-boundary (conflicted p.44 reading) --
+  { text: "xp, they can unlock an ability or talent at the end", obligationId: 'icon-1.5:advancement:mid-level-ap-boundary' },
+  { text: "of that session or during a camp or interlude. if a character's xp bar is full (15 xp), they can clear", obligationId: 'icon-1.5:advancement:mid-level-ap-boundary' },
 ];

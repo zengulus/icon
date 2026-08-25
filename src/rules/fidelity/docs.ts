@@ -132,7 +132,9 @@ export function generateMarkdown(report: FidelityReport): string {
   lines.push('');
 
   return `${lines.join('\n')}\n`;
+}
 
+/** Renders per-scope detail sections below the summary tables. */
 function appendScopeDetail(lines: string[], scope: FidelityAuditResult['scopes'][number]): void {
   lines.push(`### ${scope.title} (\`${scope.scopeId}\`) — ${scope.status.toUpperCase()}`);
   lines.push('');

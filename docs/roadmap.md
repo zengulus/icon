@@ -262,9 +262,13 @@ Criteria:
 Current state: **false** (inherits everything above plus foe/player
 complexity gaps).
 
-Gate constants: `src/rules/catalog.ts` (`PHASE_TWO_READY`,
-`PHASE_THREE_READY`) are derived from `RULES_COVERAGE`; they must not be
-flipped by hand while their criteria fail.
+Gate constants have ONE machine-readable source of truth:
+`src/rules/phase-gates.ts` defines each gate's requirements once.
+`src/rules/catalog.ts` derives `PHASE_TWO_READY` / `PHASE_THREE_READY` and
+`RULES_COVERAGE` item status from it, and the source-fidelity claims audit
+(`claim:phase-two-ready` / `claim:phase-three-ready`) binds the same registry
+to recorded audit results — so no consumer can drift or be flipped by hand
+while its criteria fail. CI exercises that aggregate authority path.
 
 ---
 

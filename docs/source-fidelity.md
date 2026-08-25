@@ -29,25 +29,25 @@ No status here can be edited by hand; edit the evidence instead.
 
 ## Scope capability ladder
 
-Each rung adds exactly one mechanical predicate:
+Each rung adds exactly one mechanical predicate (canonical ordering, enforced by engine.ts):
 
-- **blocked** — unclassified or unadjudicated-conflicted obligations present.
-- **partial** — no unknown material, but the frontier is incomplete or some deterministic obligation lacks full evidence.
-- **executable** — every deterministic obligation resolves to real code, carries machine-readable contract rows, and PASSED evaluation against them.
-- **source-tested** — executable + declared replay evidence for every stateful contract.
-- **replay-tested** — source-tested + required integration evidence.
-- **closed** — replay-tested + exhaustively accounted source frontier.
+- **blocked** — unknown material present: unclassified or partially-decomposed obligations, or an unadjudicated source conflict.
+- **partial** — known scope with incomplete execution/accounting evidence: a deterministic obligation lacking consumer/structural-contract/passing-evaluation; OR a relevant deferred obligation; OR an unevidenced runtime-supported player choice.
+- **executable** — every executable-semantics obligation resolves, carries structurally sufficient contract proof, and PASSED evaluation; the declared source frontier is missing, vacuous, or has uncovered clauses. A scope with NO frontier can never rise past this rung.
+- **source-tested** — executable + the declared frontier resolves non-vacuously and every clause inside it is covered or explicitly dispositioned.
+- **replay-tested** — source-tested + every stateful contract has declared replay evidence.
+- **closed** — replay-tested + required integration evidence exists.
 
 | Scope | Status | Obligations | Unclassified | Deterministic | Proven supported | Frontier clauses (cov/irr/uncovered) | Blockers |
 | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
-| Character advancement (`advancement`) | closed | 3 | 0 | 3 | 3 | 9/46/0 | — |
-| Sourcebook at large (unit-grain) (`sourcebook-at-large`) | blocked | 3275 | 3275 | 0 | 0 | — | 3275 unclassified obligation(s) |
+| Advancement procedure — XP bar, AP breakpoint & Limit Break unlock boundary (`advancement`) | closed | 3 | 0 | 3 | 3 | 16/115/0 | — |
+| Sourcebook at large (unit-grain) (`sourcebook-at-large`) | blocked | 3275 | 3275 | 0 | 0 | — | 3275 unclassified obligation(s); scope has no declared source frontier |
 
 ## Scope detail
 
-### Character advancement (`advancement`) — CLOSED
+### Advancement procedure — XP bar, AP breakpoint & Limit Break unlock boundary (`advancement`) — CLOSED
 
-Source frontier: 55 clause(s) — 9 covered by obligation passages, 46 explicitly irrelevant, 0 uncovered.
+Source frontier: 131 clause(s) — 16 covered by obligation passages, 115 explicitly irrelevant, 0 uncovered.
 
 ## Project claims declared LEGACY / UNVERIFIED
 
@@ -55,6 +55,7 @@ These strong project claims exist outside migrated fidelity scopes. They are rep
 
 | Claim | Document | Strength | Why unverified |
 | --- | --- | --- | --- |
+| Source provenance/extraction pipeline (`claim:deliverables:source-provenance-pipeline`) | docs/deliverables.md | COMPLETE | prerequisite audit "verify:source-artifacts" exists but no pass/fail result was recorded for this run |
 | Character creation/advancement engine breadth (`claim:deliverables:character-rules-engine`) | docs/deliverables.md | COMPLETE | character validation is tested but not decomposed into a strict fidelity scope |
 | Encounter command/event core purity + replay (`claim:deliverables:encounter-command-event-core`) | docs/deliverables.md | COMPLETE | purity/replay contract is tested directly; no strict fidelity scope exists yet |
 | Turn-order scheduler (`claim:deliverables:turn-scheduler`) | docs/deliverables.md | COMPLETE | scheduler replay matrix exists; not bound to a fidelity scope |
@@ -70,6 +71,8 @@ These strong project claims exist outside migrated fidelity scopes. They are rep
 | Encounter closure Slice A (baseline) (`claim:slice-a-baseline`) | docs/deliverables.md | CLOSED | closure rests on the P1 integration suites; slice semantics are not yet a strict fidelity scope |
 | Encounter closure Slice A (baseline), TODO mirror (`claim:slice-a-todo-mirror`) | TODO.md | CLOSED | mirror of claim:slice-a-baseline |
 | Encounter closure Slice D (attrition mechanics) (`claim:slice-d-mechanics`) | docs/deliverables.md | CLOSED | settlement.test.ts covers the mechanics; scene flow remains open and no fidelity scope exists |
+| PHASE_TWO_READY — rules-authoritative tactical core (`claim:phase-two-ready`) | docs/roadmap.md | COMPLETE | PHASE_TWO_READY: unmet machine-audited requirements — coverage item "combat-core" not complete; coverage item "advancement" not complete; coverage item "job-automation" not complete; coverage item "relic-automation" not complete; coverage item "foe-automation" not complete; coverage item "reward-structure" not complete; audit "audit:automation" not passed; audit "audit:architecture" not passed; scope sourcebook-at-large at blocked (needs closed) |
+| PHASE_THREE_READY — closed local gameplay, shared authority released (`claim:phase-three-ready`) | docs/roadmap.md | CLOSED | PHASE_THREE_READY: unmet machine-audited requirements — coverage item "combat-core" not complete; coverage item "advancement" not complete; coverage item "job-automation" not complete; coverage item "relic-automation" not complete; coverage item "foe-automation" not complete; coverage item "reward-structure" not complete; audit "audit:automation" not passed; audit "audit:architecture" not passed; scope sourcebook-at-large at blocked (needs closed) |
 | Command/event purity (`claim:foundations:command-event-purity`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors deliverables encounter-command-event-core |
 | Dice & randomness (record-once replay) (`claim:foundations:dice-randomness`) | docs/rules-foundations.md | AUTHORITATIVE | replay determinism tests exist; no fidelity scope |
 | Damage kernel (foundations mirror) (`claim:foundations:damage`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:damage-kernel |
@@ -83,4 +86,17 @@ These strong project claims exist outside migrated fidelity scopes. They are rep
 | Passive projection (foe-trait keyword manifests) (`claim:foundations:passive-projection`) | docs/rules-foundations.md | AUTHORITATIVE | closed-manifest negative tests exist; no fidelity scope |
 | Combat settlement (foundations mirror) (`claim:foundations:combat-settlement`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:combat-settlement |
 | Cost/payment kernel (`claim:foundations:cost-payment`) | docs/rules-foundations.md | AUTHORITATIVE | source-tested via payment fixtures; no fidelity scope |
+| Schema v3 checkpoint migration (`claim:infra:schema-v3-migration`) | docs/roadmap.md | COMPLETE | verified by transport/persistence tests; no fidelity scope |
+| Combat settlement slice (P1) (`claim:deliverables:settlement-slice-closed`) | docs/deliverables.md | CLOSED | mirrors claim:deliverables:combat-settlement |
+| P2 Slice A (foe-complexity repair slice) (`claim:roadmap:p2-slice-a-closed`) | docs/roadmap.md | CLOSED | roadmap progress note; tracked by the deliverables census, no fidelity scope |
+
+## Remaining human trust roots
+
+Once a human makes the semantic decisions below, every downstream completeness/correctness claim is mechanically checked. These decisions themselves are NOT machine-provable without formalizing the sourcebook:
+
+- choosing the semantic interpretation of unambiguous prose (and writing the independent expected semantics);
+- adjudicating genuine source contradictions (via adopted adjudications);
+- classifying a passage as descriptive vs executable vs table-facing vs deferred;
+- defining legitimate subsystem boundaries (frontier page lists, disposition reasons, subdivision assignments);
+- declaring player-choice automation as table-only vs runtime-supported.
 

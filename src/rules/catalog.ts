@@ -1,5 +1,6 @@
 import mechanics from '../content/generated/mechanics-1.5.json' with { type: 'json' };
 import { EXECUTABLE_JOB_ABILITY_IDS } from './automation/content/glue/manual-programs.js';
+import { PHASE_GATES, phaseGateCoverageMet } from './phase-gates.js';
 import type {
   AbilityDefinition,
   ActionDefinition,
@@ -234,5 +235,10 @@ export const RULES_COVERAGE = [
   { id: 'reward-structure', label: 'Trophies, camp fixtures, and expedition rewards', status: 'reference' },
 ] as const;
 
-export const PHASE_TWO_READY = RULES_COVERAGE.every(({ status }) => status === 'complete');
-export const PHASE_THREE_READY = PHASE_TWO_READY;
+// Phase gates are derived from the SINGLE machine-readable registry in
+// `phase-gates.ts` (coverage-item half). The generated-audit and
+// fidelity-scope halves of each gate are enforced by the strict
+// source-fidelity authority path (`npm run audit:source-fidelity -- --strict
+// --run-prereqs`); they can never be satisfied by flipping anything here.
+export const PHASE_TWO_READY = phaseGateCoverageMet(PHASE_GATES.PHASE_TWO_READY, RULES_COVERAGE);
+export const PHASE_THREE_READY = phaseGateCoverageMet(PHASE_GATES.PHASE_THREE_READY, RULES_COVERAGE);

@@ -22,12 +22,32 @@
  * call throws; expected `{ error }` values compare against that message.
  */
 
+import { createHash } from 'node:crypto';
 import type {
   AdapterRegistry,
   ContractEvaluation,
   FidelityWorld,
   SemanticContract,
 } from './types.js';
+import { canonicalFixtureKey } from './types.js';
+
+/** Deterministic fingerprint of a contract's EXACT current content
+ * (identity, kind, statefulness, statement, boundary structure, declared
+ * domain, and every expectation row). Evaluations record it so a result
+ * computed against a since-changed contract is detectably STALE and can
+ * never certify the new version. */
+export function contractFingerprint(contract: SemanticContract): string {
+  const canonical = JSON.stringify({
+    obligationId: contract.obligationId,
+    kind: contract.kind,
+    stateful: contract.stateful,
+    statement: contract.statement,
+    boundary: contract.boundary ?? null,
+    domain: contract.domain ?? null,
+    rows: contract.rows ?? null,
+  });
+  return createHash('sha256').update(canonical).digest('hex');
+}
 
 interface MutableEvaluationFailure {
   row: string;
@@ -64,7 +84,12 @@ function deepEqual(a: unknown, b: unknown): boolean {
 
 /** Evaluates one contract's rows through its adapter. Contracts without rows
  * yield no evaluation — they are declarative-only and can never reach strong
- * status; the engine treats them as unproven. */
+ * status; the engine treats them as unproven.
+ *
+ * The recorded evaluation is bound to the EXACT current contract via its
+ * fingerprint, and `executedInputKeys` records which fixture inputs ACTUALLY
+ * ran — so downstream proof-shape checks verify against execution, never
+ * against declaration. */
 export function evaluateContract(
   contract: SemanticContract,
   adapters: AdapterRegistry,
@@ -77,9 +102,12 @@ export function evaluateContract(
       adapterId: null,
       rowsRun: contract.rows.length,
       passed: false,
+      contractFingerprint: contractFingerprint(contract),
+      executedInputKeys: [],
       failures: [{ row: '(adapter)', cls: 'positive', expected: 'a registered adapter', actual: 'none' }],
     };
   }
+  const executedInputKeys = new Set<string>();
   const failures: MutableEvaluationFailure[] = [];
   for (const row of contract.rows) {
     let actual: unknown;
@@ -88,6 +116,7 @@ export function evaluateContract(
     } catch (error) {
       actual = { error: error instanceof Error ? error.message : String(error) };
     }
+    executedInputKeys.add(canonicalFixtureKey(row.input));
     const normalized = normalizeActual(actual);
     if (!deepEqual(normalized, row.expected)) {
       failures.push({
@@ -103,6 +132,8 @@ export function evaluateContract(
     adapterId: adapter.id,
     rowsRun: contract.rows.length,
     passed: failures.length === 0,
+    contractFingerprint: contractFingerprint(contract),
+    executedInputKeys: [...executedInputKeys],
     failures,
   };
 }

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import {
   computeFidelityAudit,
   passageFingerprint,
+  validateBoundaryProbes,
   withFingerprints,
 } from '../fidelity/engine.js';
 import {
@@ -15,7 +16,6 @@ import {
   runMutationResistanceSuite,
 } from '../fidelity/mutation.js';
 import { buildProductionWorld } from '../fidelity/world.js';
-import { generateMarkdown } from '../fidelity/docs.js';
 import { checkProjectClaims, PROJECT_CLAIMS } from '../fidelity/claims.js';
 import { resolveConsumerRegistrations } from '../fidelity/consumers.js';
 import { evaluateContract, evaluateContracts } from '../fidelity/evaluate.js';
@@ -28,17 +28,25 @@ import {
   sourceTextContains,
   verifyPassageProvenance,
 } from '../fidelity/provenance.js';
-import { runPipelineMutationSelfCheck, runStrictFidelityAudit } from '../fidelity/strict.js';
+import {
+  boundEvidenceCommands,
+  runPipelineMutationSelfCheck,
+  runPrerequisiteAudits,
+  runStrictFidelityAudit,
+  verifyAdaptersExerciseConsumers,
+} from '../fidelity/strict.js';
 import type {
   ContractEvaluation,
   ConsumerRegistration,
   FidelityWorld,
   ProofRecord,
+  ScopeDefinition,
   ScopeFrontierInput,
   SemanticContract,
   SourceClause,
   SourceObligation,
 } from '../fidelity/types.js';
+import { canonicalFixtureKey } from '../fidelity/types.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../../..');
 
@@ -50,6 +58,9 @@ const SYNTHETIC_SCOPE = {
   id: 'synthetic-selftest',
   title: 'Synthetic self-test scope',
   description: 'Fixture scope used by the audit framework tests.',
+  // A scope cannot close without a DECLARED source frontier — even when a
+  // fully-accounted ScopeFrontierInput is supplied by the harness.
+  frontier: { pages: [7] },
 };
 
 const SYNTHETIC_PAGE = [
@@ -68,8 +79,8 @@ function clause(page: number, text: string): SourceClause {
   return { page, text: normalized, sha256: passageFingerprint(normalized), id: `p${page}:${normalized.slice(0, 10)}` };
 }
 
-function passage(quote = SYNTHETIC_PAGE) {
-  return { page: 7, sectionId: null, quote, sha256: passageFingerprint(quote) };
+function passage(quote = SYNTHETIC_PAGE, page = 7) {
+  return { page, sectionId: null, quote, sha256: passageFingerprint(quote) };
 }
 
 function obligation(overrides: Partial<SourceObligation> = {}): SourceObligation {
@@ -89,17 +100,40 @@ function contractRows() {
   // Hand-derived expectation table for the synthetic "widget" rule.
   return [
     { label: 'invoke below threshold is refused', cls: 'negative' as const, input: { charges: 2 }, expected: { invoked: false, charges: 2 } },
-    { label: 'invoke at exactly 3 succeeds', cls: 'boundary' as const, input: { charges: 3 }, expected: { invoked: true, charges: 0 } },
-    { label: 'invoke above threshold also succeeds', cls: 'positive' as const, input: { charges: 4 }, expected: { invoked: true, charges: 0 } },
+    { label: 'invoke above threshold succeeds and resets', cls: 'positive' as const, input: { charges: 4 }, expected: { invoked: true, charges: 0 } },
   ];
+}
+
+/** A boundary-constant variant of the synthetic contract carrying genuine
+ * below/at/above probes over an extracted scalar path. */
+function boundaryContract(overrides: Partial<SemanticContract> = {}): SemanticContract {
+  return {
+    obligationId: 'synthetic:rule',
+    kind: 'boundary-constant',
+    stateful: false,
+    statement: 'Synthetic boundary contract: invocation unlocks at exactly 3 charge.',
+    boundary: {
+      kind: 'count',
+      value: 3,
+      probes: { below: { charges: 2 }, at: { charges: 3 }, above: { charges: 4 } },
+      probeValuePaths: { below: 'charges', at: 'charges', above: 'charges' },
+    },
+    rows: [
+      { label: 'below the edge: refused', cls: 'boundary', input: { charges: 2 }, expected: { invoked: false, charges: 2 } },
+      { label: 'at the edge: unlocked', cls: 'boundary', input: { charges: 3 }, expected: { invoked: true, charges: 0 } },
+      { label: 'above the edge: unlocked too', cls: 'boundary', input: { charges: 4 }, expected: { invoked: true, charges: 0 } },
+      { label: 'zero-charge baseline', cls: 'positive', input: { charges: 0 }, expected: { invoked: false, charges: 0 } },
+    ],
+    ...overrides,
+  };
 }
 
 function contract(overrides: Partial<SemanticContract> = {}): SemanticContract {
   return {
     obligationId: 'synthetic:rule',
-    kind: 'boundary-constant',
+    kind: 'input-output-table',
     stateful: false,
-    statement: 'Synthetic boundary contract over the widget rule.',
+    statement: 'Synthetic input-output contract over the widget rule.',
     rows: contractRows(),
     ...overrides,
   };
@@ -123,34 +157,43 @@ const passingEvaluation = (run: (input: unknown) => unknown = correctWidget): Co
 function proof(overrides: Partial<ProofRecord> = {}): ProofRecord {
   return {
     obligationId: 'synthetic:rule',
-    kind: 'boundary',
-    evidence: 'declared',
+    kind: 'replay',
+    evidence: 'replay',
     file: 'src/rules/fidelity/mutation.ts',
     test: 'MITIGATION_CONTRACT_ROWS',
+    command: 'audit:fidelity-selftest',
     ...overrides,
   };
 }
 
-function frontierInput(clauses: SourceClause[], irrelevantIds: string[] = []): ScopeFrontierInput {
-  return { scopeId: SYNTHETIC_SCOPE.id, clauses, irrelevantIds };
+function frontierInput(
+  clauses: SourceClause[],
+  irrelevantIds: string[] = [],
+  attributedIds: string[] = [],
+): ScopeFrontierInput {
+  return { scopeId: SYNTHETIC_SCOPE.id, clauses, irrelevantIds, attributedIds };
 }
 
 function fullSyntheticFrontier(): ScopeFrontierInput {
-  return frontierInput(pageClauses(syntheticCorpus(), 7));
+  const clauses = pageClauses(syntheticCorpus(), 7);
+  // Every clause is attributed to the curated obligation that quotes it —
+  // the verified-resolution equivalent of ADVANCEMENT_ATTRIBUTED_CLAUSES.
+  return frontierInput(clauses, [], clauses.map(({ id }) => id));
 }
 
 /** Fully-evidenced synthetic world: covered frontier + resolving consumer +
- * row-carrying contract + passing evaluation + declared proof coverage. */
-function provenWorld(overrides: Partial<FidelityWorld> & { evaluations?: ContractEvaluation[]; frontiers?: ScopeFrontierInput[]; resolvedConsumerIds?: string[] } = {}) {
+ * row-carrying contract + passing evaluation. Declared proofs are traceability
+ * only and never load-bearing. */
+function provenWorld(overrides: Partial<FidelityWorld> & { evaluations?: ContractEvaluation[]; frontiers?: ScopeFrontierInput[]; resolvedConsumerIds?: string[]; auditResults?: Readonly<Record<string, 'passed' | 'failed'>> } = {}) {
   const base: FidelityWorld = {
     scopes: [SYNTHETIC_SCOPE],
     obligations: [obligation()],
     consumers: [{ id: 'synthetic.impl', file: 'src/rules/character.ts', symbol: 'awardXp', description: 'fixture consumer' }],
     contracts: [contract()],
-    proofs: [proof({ kind: 'boundary' }), proof({ kind: 'positive', test: 'CORRECT_MITIGATION' })],
+    proofs: [],
     adjudications: [],
   };
-  const { evaluations, frontiers, resolvedConsumerIds, ...worldOverrides } = overrides;
+  const { evaluations, frontiers, resolvedConsumerIds, auditResults, ...worldOverrides } = overrides;
   const world = { ...base, ...worldOverrides };
   return {
     world,
@@ -158,82 +201,122 @@ function provenWorld(overrides: Partial<FidelityWorld> & { evaluations?: Contrac
       frontiers: frontiers ?? [fullSyntheticFrontier()],
       evaluations: evaluations ?? [passingEvaluation()],
       resolvedConsumerIds: resolvedConsumerIds ?? ['synthetic.impl'],
+      ...(auditResults ? { auditResults } : {}),
     },
   };
 }
 
 // ---------------------------------------------------------------------------
-// Required self-test classes A–P through the real audit machinery
+// Required self-tests through the real audit machinery
 // ---------------------------------------------------------------------------
 
-describe('fidelity hardening: required self-tests A–P', () => {
+describe('fidelity hardening: required self-tests', () => {
   it('A. missing source material prevents a scope from closing', () => {
     const { world, inputs } = provenWorld();
     // An uncovered clause present in the frontier — cited by nobody,
-    // dispositioned by nobody — blocks closure.
+    // attributed by nobody, dispositioned by nobody — blocks closure past
+    // source-tested (it caps at `executable`, never `closed`).
+    const extraClause = clause(7, 'A hidden clause about taxes that nobody cited.');
     const withUncovered = computeFidelityAudit(world, {
       ...inputs,
-      frontiers: [frontierInput([...inputs.frontiers![0].clauses, clause(7, 'A hidden clause about taxes that nobody cited.')])],
+      frontiers: [frontierInput([...inputs.frontiers![0].clauses, extraClause], [], [...inputs.frontiers![0].attributedIds])],
     });
     expect(withUncovered.scopes[0].status).not.toBe('closed');
-    expect(withUncovered.scopes[0].status).toBe('partial');
+    expect(withUncovered.scopes[0].status).toBe('executable');
     expect(withUncovered.scopes[0].blockers.join(' ')).toMatch(/uncovered frontier clause/);
   });
 
-  it('B. a partially decomposed source unit prevents source-complete closure', () => {
+  it('B. a partially decomposed source unit prevents closure; a complete one retires the catch-all', () => {
     const unitOb = withFingerprints({
       id: 'unit:synthetic:parent',
       scopeId: SYNTHETIC_SCOPE.id,
       disposition: 'unclassified',
       summary: 'Unit-grain catch-all.',
-      passages: [passage('The widget gauge is 5 ticks long.')],
+      passages: [passage()],
       origin: { kind: 'derived-unit', unitId: 'synthetic:parent' },
     });
-    const partial = computeFidelityAudit(provenWorld({
-      obligations: [obligation(), unitOb],
-    }).world, {
-      ...provenWorld().inputs,
-    });
-    // Without ANY decomposition record the derived obligation stays unclassified → blocked.
-    expect(partial.findings.find((f) => f.obligationId === 'unit:synthetic:parent')?.status).toBe('unclassified');
-    expect(partial.scopes[0].status).toBe('blocked');
+    const base = provenWorld({ obligations: [obligation(), unitOb] });
 
-    // With only a PARTIAL decomposition record it becomes partially-decomposed —
-    // still conservative, still blocking.
+    // Without ANY decomposition record the derived obligation stays unclassified → blocked.
+    const none = computeFidelityAudit(base.world, base.inputs);
+    expect(none.findings.find((f) => f.obligationId === 'unit:synthetic:parent')?.status).toBe('unclassified');
+    expect(none.scopes[0].status).toBe('blocked');
+
+    // With only a PARTIAL piece list it becomes partially-decomposed —
+    // still conservative, still blocking. Completeness is COMPUTED from
+    // sentence coverage, never asserted via a flag.
+    const sentences = SYNTHETIC_PAGE.split(/(?<=[.!?])\s+/);
     const partialRecord = computeFidelityAudit(
-      { ...provenWorld({ obligations: [obligation(), unitOb] }).world, decompositions: [{ unitId: 'synthetic:parent', obligationIds: ['synthetic:rule'], complete: false }] },
-      provenWorld().inputs,
+      { ...base.world, decompositions: [{ unitId: 'synthetic:parent', pieces: [{ text: sentences[0], obligationId: 'synthetic:rule' }] }] },
+      base.inputs,
     );
     expect(partialRecord.findings.find((f) => f.obligationId === 'unit:synthetic:parent')?.status).toBe('partially-decomposed');
     expect(partialRecord.scopes[0].status).toBe('blocked');
+
+    // The complete piece list (every sentence, each carried by the child that
+    // quotes it) genuinely retires the catch-all and restores closure.
+    const complete = computeFidelityAudit(
+      {
+        ...base.world,
+        decompositions: [{ unitId: 'synthetic:parent', pieces: sentences.map((text) => ({ text, obligationId: 'synthetic:rule' })) }],
+      },
+      base.inputs,
+    );
+    expect(complete.summary.integrityViolations).toEqual([]);
+    expect(complete.findings.find((f) => f.obligationId === 'unit:synthetic:parent')?.status).toBe('decomposed');
+    expect(complete.scopes[0].status).toBe('closed');
   });
 
-  it('C. a curated obligation cannot silently leave its parent unit fully accounted-for', () => {
+  it('C. decomposition records must PROVE span coverage, not just declare pieces', () => {
+    const sentences = SYNTHETIC_PAGE.split(/(?<=[.!?])\s+/);
     const unitOb = withFingerprints({
       id: 'unit:synthetic:parent',
       scopeId: SYNTHETIC_SCOPE.id,
       disposition: 'unclassified',
       summary: 'Unit-grain catch-all.',
-      passages: [passage('The widget gauge is 5 ticks long.')],
+      passages: [passage()],
       origin: { kind: 'derived-unit', unitId: 'synthetic:parent' },
     });
-    // Curated obligation claims to supersede the unit but no decomposition record exists.
-    const orphan = computeFidelityAudit(
-      provenWorld({ obligations: [obligation({ supersedesUnits: ['synthetic:parent'] }), unitOb] }).world,
-      provenWorld().inputs,
-    );
-    expect(orphan.summary.integrityViolations.map((v) => v.check)).toContain('decomposition-supersede-mismatch');
-    // The unit remains unclassified — never silently accounted-for.
-    expect(orphan.summary.unitsFullyDecomposed).toEqual([]);
-    expect(orphan.findings.find((f) => f.obligationId === 'unit:synthetic:parent')?.status).toBe('unclassified');
+    const world = provenWorld({ obligations: [obligation(), unitOb] }).world;
+    const decompose = (pieces: readonly { text: string; obligationId: string | null; reason?: string }[]) =>
+      ({ ...world, decompositions: [{ unitId: 'synthetic:parent', pieces }] });
 
-    // Only an explicit COMPLETE decomposition record retires the catch-all.
-    const complete = computeFidelityAudit(
-      { ...provenWorld({ obligations: [obligation(), unitOb] }).world, decompositions: [{ unitId: 'synthetic:parent', obligationIds: ['synthetic:rule'], complete: true }] },
+    // Piece outside the parent's rules text → hard violation.
+    const notInUnit = computeFidelityAudit(
+      decompose([...sentences.map((text) => ({ text, obligationId: 'synthetic:rule' as const })), { text: 'Totally invented sentence about taxes.', obligationId: null, reason: 'narrative' }]),
       provenWorld().inputs,
     );
-    expect(complete.findings.find((f) => f.obligationId === 'unit:synthetic:parent')?.status).toBe('decomposed');
-    expect(complete.summary.integrityViolations).toEqual([]);
+    expect(notInUnit.summary.integrityViolations.map((v) => v.check)).toContain('decomposition-piece-not-in-unit');
+
+    // Piece assigned to a child whose passages do not quote it → hard violation.
+    const unquoted = computeFidelityAudit(
+      decompose(sentences.map((text) => ({ text, obligationId: 'synthetic:rule' as const })).map((piece, i) => (i === 1 ? { ...piece, obligationId: null, reason: 'descriptive' } : piece))),
+      provenWorld().inputs,
+    );
+    // (sanity: the irrelevant-piece variant is legal when reasoned)
+    expect(unquoted.summary.integrityViolations.map((v) => v.check)).not.toContain('decomposition-piece-unquoted-by-child');
+    const childlessUnquoted = computeFidelityAudit(
+      decompose([
+        { text: 'An orphan piece the child never quoted.', obligationId: 'synthetic:rule' },
+        ...sentences.map((text) => ({ text, obligationId: 'synthetic:rule' as const })),
+      ]),
+      provenWorld().inputs,
+    );
+    expect(childlessUnquoted.summary.integrityViolations.map((v) => v.check)).toContain('decomposition-piece-unquoted-by-child');
+
+    // Irrelevant piece without a recorded reason → hard violation.
+    const noReason = computeFidelityAudit(
+      decompose([{ text: sentences[0], obligationId: null }, ...sentences.slice(1).map((text) => ({ text, obligationId: 'synthetic:rule' as const }))]),
+      provenWorld().inputs,
+    );
+    expect(noReason.summary.integrityViolations.map((v) => v.check)).toContain('decomposition-irrelevant-piece-missing-reason');
+
+    // Overlapping pieces (double-counted span) → hard violation.
+    const overlapping = computeFidelityAudit(
+      decompose([...sentences.map((text) => ({ text, obligationId: 'synthetic:rule' as const })), { text: sentences[0], obligationId: 'synthetic:rule' }]),
+      provenWorld().inputs,
+    );
+    expect(overlapping.summary.integrityViolations.map((v) => v.check)).toContain('decomposition-overlapping-pieces');
   });
 
   it('D. a materially false source quote fails even if its local SHA is recomputed', () => {
@@ -282,14 +365,11 @@ describe('fidelity hardening: required self-tests A–P', () => {
     };
     const failing = passingEvaluation(mutantRun);
     expect(failing.passed).toBe(false);
-    const world = provenWorld({
-      evaluations: [failing],
-      // Keep all declared proofs intact — metadata untouched.
-    });
+    const world = provenWorld({ evaluations: [failing] });
     const result = computeFidelityAudit(world.world, world.inputs);
     expect(result.findings[0].status).toBe('implemented-unproven');
     expect(result.findings[0].blockers.join(' ')).toMatch(/semantic evaluation FAILED/);
-    expect(result.scopes[0].blockers.join(' ')).toMatch(/evaluation FAILED/);
+    expect(result.scopes[0].status).toBe('partial');
   });
 
   it('G. a prose-only contract cannot reach the strongest semantic proof state', () => {
@@ -301,40 +381,73 @@ describe('fidelity hardening: required self-tests A–P', () => {
     expect(result.scopes[0].status).toBe('partial');
   });
 
-  it('H. missing required boundary/invariant/exhaustive evidence downgrades status', () => {
-    // Boundary-constant requires positive + boundary; rows only carry positive.
-    const rowsMissingBoundary = provenWorld({
-      contracts: [contract({ rows: contractRows().filter((row) => row.cls !== 'boundary') })],
-      evaluations: [passingEvaluation()],
+  it('H. missing required proof classes downgrade status', () => {
+    // input-output-table requires positive + negative; rows only carry positive.
+    const rowsMissingNegative = provenWorld({
+      contracts: [contract({ rows: contractRows().filter((row) => row.cls !== 'negative') })],
+      evaluations: [evaluateContract(contract({ rows: contractRows().filter((row) => row.cls !== 'negative') }), syntheticAdapterFor(correctWidget))!],
     });
-    const result = computeFidelityAudit(rowsMissingBoundary.world, rowsMissingBoundary.inputs);
+    const result = computeFidelityAudit(rowsMissingNegative.world, rowsMissingNegative.inputs);
     expect(result.findings[0].status).toBe('implemented-unproven');
-    expect(result.findings[0].missingProofKinds).toContain('boundary');
+    expect(result.findings[0].missingProofKinds).toContain('negative');
     expect(result.scopes[0].status).toBe('partial');
 
-    // Exhaustive-finite demands the exhaustive class specifically.
-    const exhaustiveContract: SemanticContract = {
-      ...contract({ kind: 'exhaustive-finite', rows: [contractRows()[0]] }),
-    };
+    // exhaustive-finite demands the exhaustive class specifically.
+    const exhaustiveContract: SemanticContract = contract({
+      kind: 'exhaustive-finite',
+      domain: [{ charges: 2 }, { charges: 3 }, { charges: 4 }],
+      rows: [
+        { label: 'refused below', cls: 'exhaustive', input: { charges: 2 }, expected: { invoked: false, charges: 2 } },
+        { label: 'unlocked at', cls: 'exhaustive', input: { charges: 3 }, expected: { invoked: true, charges: 0 } },
+        { label: 'unlocked above', cls: 'exhaustive', input: { charges: 4 }, expected: { invoked: true, charges: 0 } },
+      ],
+    });
     const finding = computeFidelityAudit(
       { ...provenWorld().world, contracts: [exhaustiveContract] },
       { ...provenWorld().inputs, evaluations: [evaluateContract(exhaustiveContract, syntheticAdapterFor(correctWidget))!] },
     );
-    expect(finding.findings[0].missingProofKinds).toContain('exhaustive');
+    expect(finding.findings[0].missingProofKinds ?? []).not.toContain('exhaustive');
+    // …but a row set SMALLER than the declared domain proves nothing.
+    const shrunken = computeFidelityAudit(
+      { ...provenWorld().world, contracts: [{ ...exhaustiveContract, rows: exhaustiveContract.rows!.slice(0, 2) }] },
+      { ...provenWorld().inputs, evaluations: [evaluateContract({ ...exhaustiveContract, rows: exhaustiveContract.rows!.slice(0, 2) }, syntheticAdapterFor(correctWidget))!] },
+    );
+    expect(shrunken.findings[0].missingProofKinds).toContain('exhaustive');
   });
+  it('I. a stateful rule closes ONLY on RECORDED passing replay evidence', () => {
+    const statefulContract = contract({ stateful: true });
+    const stateful = provenWorld({ contracts: [statefulContract], evaluations: [evaluateContract(statefulContract, syntheticAdapterFor(correctWidget))!] });
+    const recordedProof = proof({ kind: 'replay', evidence: 'replay', command: 'audit:fidelity-selftest' });
 
-  it('I. a stateful rule without replay evidence cannot close', () => {
-    const stateful = provenWorld({ contracts: [contract({ stateful: true })] });
-    const result = computeFidelityAudit(stateful.world, stateful.inputs);
-    expect(result.findings[0].missingProofKinds).toContain('replay');
-    expect(result.scopes[0].status).toBe('executable'); // executed semantics done; replay missing
-    expect(result.scopes[0].blockers.join(' ')).toMatch(/replay/);
-
-    const withReplay = computeFidelityAudit(
-      { ...stateful.world, proofs: [...stateful.world.proofs, proof({ kind: 'replay', evidence: 'replay', test: 'naivePositiveSuite' })] },
+    // No recorded result → replay evidence contributes nothing → capped below closed.
+    const withoutRecording = computeFidelityAudit(
+      { ...stateful.world, proofs: [recordedProof] },
       stateful.inputs,
     );
-    expect(withReplay.scopes[0].status).toBe('closed');
+    expect(withoutRecording.findings[0].missingProofKinds).toContain('replay');
+    expect(withoutRecording.scopes[0].status).not.toBe('closed');
+
+    // A RECORDED FAILURE also contributes nothing.
+    const failedRecording = computeFidelityAudit(
+      { ...stateful.world, proofs: [recordedProof] },
+      { ...stateful.inputs, auditResults: { 'audit:fidelity-selftest': 'failed' } },
+    );
+    expect(failedRecording.scopes[0].status).not.toBe('closed');
+
+    // Only a recorded PASSING run constitutes executed replay evidence.
+    const passedRecording = computeFidelityAudit(
+      { ...stateful.world, proofs: [recordedProof] },
+      { ...stateful.inputs, auditResults: { 'audit:fidelity-selftest': 'passed' } },
+    );
+    expect(passedRecording.findings[0].status).toBe('proven-supported');
+    expect(passedRecording.scopes[0].status).toBe('closed');
+
+    // A test-name substring alone (declared evidence) can NEVER satisfy replay.
+    const declaredOnly = computeFidelityAudit(
+      { ...stateful.world, proofs: [proof({ kind: 'replay', evidence: 'declared', command: undefined })] },
+      { ...stateful.inputs, auditResults: { 'audit:fidelity-selftest': 'passed' } },
+    );
+    expect(declaredOnly.scopes[0].status).not.toBe('closed');
   });
 
   it('J. a source conflict without an adopted adjudication cannot become executable', () => {
@@ -409,32 +522,22 @@ describe('fidelity hardening: required self-tests A–P', () => {
     const repo = mkdtempSync(join(tmpdir(), 'fidelity-repo2-'));
     mkdirSync(join(repo, 'docs'), { recursive: true });
     writeFileSync(join(repo, 'docs', 'kernel.md'), `${anchorText}\nsome prose\n`);
-    const { violations } = checkProjectClaims(
-      weakResult,
-      { root: repo, readFile: (p: string) => readFileSync(p, 'utf8') },
-      [{
-        id: 'claim:widget',
-        file: 'docs/kernel.md',
-        anchor: anchorText,
-        strength: 'closed',
-        subject: 'Widget kernel',
-        binding: { kind: 'fidelity-scope', scopeId: SYNTHETIC_SCOPE.id },
-      }],
-    );
+    const claim = {
+      id: 'claim:widget',
+      file: 'docs/kernel.md',
+      anchor: anchorText,
+      strength: 'closed' as const,
+      subject: 'Widget kernel',
+      binding: { kind: 'fidelity-scope', scopeId: SYNTHETIC_SCOPE.id },
+    } as const;
+    const { violations } = checkProjectClaims(weakResult, { root: repo, readFile: (p: string) => readFileSync(p, 'utf8') }, [claim]);
     expect(violations.some((v) => v.check === 'claim-stronger-than-evidence')).toBe(true);
     // And when the computed status supports the claim, it passes.
     const closedScope = { ...partialScope, status: 'closed' as const, blockers: [] };
     const ok = checkProjectClaims(
       { summary: { integrityViolations: [] }, findings: [], scopes: [{ ...closedScope }] } as never,
       { root: repo, readFile: (p: string) => readFileSync(p, 'utf8') },
-      [{
-        id: 'claim:widget',
-        file: 'docs/kernel.md',
-        anchor: anchorText,
-        strength: 'closed',
-        subject: 'Widget kernel',
-        binding: { kind: 'fidelity-scope', scopeId: SYNTHETIC_SCOPE.id },
-      }],
+      [claim],
     );
     expect(ok.violations).toEqual([]);
   });
@@ -469,7 +572,11 @@ describe('fidelity hardening: required self-tests A–P', () => {
           kind: 'exhaustive-finite' as const,
           stateful: false,
           statement: '',
-          rows: MITIGATION_CONTRACT_ROWS.map((row) => ({ label: '', cls: 'exhaustive' as const, input: row, expected: row.expected })),
+          rows: MITIGATION_CONTRACT_ROWS.map((row) => ({
+            label: '', cls: 'exhaustive' as const,
+            input: { base: row.base, armor: row.armor, kind: row.kind },
+            expected: row.expected,
+          })),
         }],
         proofs: [],
         adjudications: [],
@@ -481,10 +588,6 @@ describe('fidelity hardening: required self-tests A–P', () => {
     // tests are insufficient.
     const sneaky = SEMANTIC_MUTATIONS.find(({ id }) => id === 'floor-off-by-one')!;
     expect(naivePositiveSuite(sneaky.impl)).toBe(true);
-    expect(evaluateMitigation(sneaky.impl).length).toBeGreaterThan(0);
-    function evaluateMitigation(impl: typeof sneaky.impl) {
-      return MITIGATION_CONTRACT_ROWS.flatMap((row) => (impl(row) === row.expected ? [] : [row]));
-    }
   });
 
   it('O. a fully and genuinely evidenced synthetic scope reaches CLOSED', () => {
@@ -499,7 +602,7 @@ describe('fidelity hardening: required self-tests A–P', () => {
     expect(frontier.frontierUncoveredIds).toEqual([]);
   });
 
-  it('P. the small real production scope reaches strong status ONLY because its implementation was actually executed', () => {
+  it('P. the small real production scope reaches CLOSED only because its implementation was actually executed', () => {
     const report = runStrictFidelityAudit(REPO_ROOT);
     const advancement = report.result.scopes.find(({ scopeId }) => scopeId === 'advancement')!;
     expect(advancement.status).toBe('closed');
@@ -510,11 +613,321 @@ describe('fidelity hardening: required self-tests A–P', () => {
     // drops below closed — proving execution, not declarations, carries it.
     const world = buildProductionWorld();
     const corpus = corpusFromPages(JSON.parse(readFileSync(join(REPO_ROOT, 'src/content/generated/icon-1.5.json'), 'utf8')).pages);
-    const { inputs: frontiers } = resolveScopeFrontiers(world.scopes, corpus);
+    const { inputs: frontiers } = resolveScopeFrontiers(world.scopes, corpus, world.obligations);
     const withoutExecution = computeFidelityAudit(world, { frontiers });
     const dropped = withoutExecution.scopes.find(({ scopeId }) => scopeId === 'advancement')!;
     expect(dropped.status).not.toBe('closed');
     expect(dropped.status).toBe('partial');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Compact regressions — one per loophole closed in this hardening pass
+// ---------------------------------------------------------------------------
+
+describe('hardening regressions: attribution-based frontier coverage', () => {
+  const ATTRIBUTION_PAGE = [
+    'The frobnicator gains two mojo per interlude.',
+    'A frobnicator may also hum once per scene.',
+  ].join('\n');
+  const ATTRIBUTION_CORPUS = corpusFromPages([{ number: 11, text: ATTRIBUTION_PAGE }]);
+  const QUOTED_OBLIGATION = () => withFingerprints({
+    id: 'synthetic:frob',
+    scopeId: SYNTHETIC_SCOPE.id,
+    disposition: 'descriptive',
+    summary: 'Quotes the frobnicator passage.',
+    passages: [passage(ATTRIBUTION_PAGE, 11)],
+    origin: { kind: 'curated' },
+  });
+
+  function attributionScope(frontier: ScopeDefinition['frontier']): ScopeDefinition {
+    return { ...SYNTHETIC_SCOPE, frontier };
+  }
+
+  it('R1. containment alone is PROVENANCE, never coverage: an unattributed quoted clause blocks closure', () => {
+    // The obligation quotes the WHOLE page, yet with no attribution entries
+    // every clause stays uncovered — a large quotation cannot sweep the
+    // clauses inside it into "covered".
+    const { inputs } = resolveScopeFrontiers(
+      [attributionScope({ pages: [11] })],
+      ATTRIBUTION_CORPUS,
+      [QUOTED_OBLIGATION()],
+    );
+    expect(inputs[0].clauses.length).toBe(2);
+    expect(inputs[0].attributedIds).toEqual([]);
+
+    // With attributions present, both clauses count as covered.
+    const covered = resolveScopeFrontiers(
+      [attributionScope({ pages: [11], attributed: [
+        { text: 'The frobnicator gains two mojo per interlude.', obligationId: 'synthetic:frob' },
+        { text: 'A frobnicator may also hum once per scene.', obligationId: 'synthetic:frob' },
+      ] })],
+      ATTRIBUTION_CORPUS,
+      [QUOTED_OBLIGATION()],
+    );
+    expect(covered.violations).toEqual([]);
+    expect(covered.inputs[0].attributedIds.length).toBe(2);
+
+    // Engine-level: identical worlds differ ONLY in attributedIds → closed vs executable.
+    const world = provenWorld().world;
+    const clauses = pageClauses(syntheticCorpus(), 7);
+    const unattributed = computeFidelityAudit(world, { ...provenWorld().inputs, frontiers: [frontierInput(clauses)] });
+    expect(unattributed.scopes[0].status).toBe('executable');
+  });
+
+  it('R2. an attribution naming an out-of-scope obligation or an unquoted clause is an integrity violation', () => {
+    const dangling = resolveScopeFrontiers(
+      [attributionScope({ pages: [11], attributed: [{ text: 'The frobnicator gains two mojo per interlude.', obligationId: 'synthetic:nope' }] })],
+      ATTRIBUTION_CORPUS,
+      [QUOTED_OBLIGATION()],
+    );
+    expect(dangling.violations.map((v) => v.check)).toContain('frontier-attribution-entry-dangling');
+    expect(dangling.inputs[0].attributedIds).toEqual([]);
+
+    // The named obligation exists but its passages do NOT quote the clause.
+    const otherQuotes = withFingerprints({
+      ...QUOTED_OBLIGATION(),
+      passages: [passage('Some entirely unrelated material.', 12)],
+    });
+    const unquoted = resolveScopeFrontiers(
+      [attributionScope({ pages: [11], attributed: [{ text: 'The frobnicator gains two mojo per interlude.', obligationId: 'synthetic:frob' }] })],
+      ATTRIBUTION_CORPUS,
+      [otherQuotes],
+    );
+    expect(unquoted.violations.map((v) => v.check)).toContain('frontier-attribution-unquoted');
+    expect(unquoted.inputs[0].attributedIds).toEqual([]);
+  });
+
+  it('R3. repeated occurrences have DISTINCT identities: one entry covers exactly one occurrence', () => {
+    const DOUBLE_PAGE = [
+      'or the same job and gain a mastery',
+      'choose a new ability from your job',
+      'or the same job and gain a mastery',
+    ].join('\n');
+    const doubleCorpus = corpusFromPages([{ number: 9, text: DOUBLE_PAGE }]);
+    const scopeWith = (irrelevant: readonly { text: string; reason: string; occurrences?: number | 'all' }[]) =>
+      [{ ...SYNTHETIC_SCOPE, frontier: { pages: [9], irrelevant } }];
+
+    // Default count 1: only the FIRST occurrence is dispositioned; the second
+    // remains an independent uncovered clause.
+    const one = resolveScopeFrontiers(
+      scopeWith([{ text: 'or the same job and gain a mastery', reason: 'table fragment' }]),
+      doubleCorpus,
+    );
+    expect(one.violations).toEqual([]);
+    expect(one.inputs[0].irrelevantIds.length).toBe(1);
+    expect(one.inputs[0].clauses.length).toBe(3);
+
+    // 'all': every identical occurrence is explicitly accounted for.
+    const all = resolveScopeFrontiers(
+      scopeWith([{ text: 'or the same job and gain a mastery', reason: 'table fragment', occurrences: 'all' }]),
+      doubleCorpus,
+    );
+    expect(all.violations).toEqual([]);
+    expect(all.inputs[0].irrelevantIds.length).toBe(2);
+
+    // Declaring MORE than exist is staleness, not silent saturation.
+    const greedy = resolveScopeFrontiers(
+      scopeWith([{ text: 'or the same job and gain a mastery', reason: 'table fragment', occurrences: 3 }]),
+      doubleCorpus,
+    );
+    expect(greedy.violations.map((v) => v.check)).toContain('frontier-disposition-entry-dangling');
+
+    // Two default entries consume the two occurrences one at a time.
+    const twice = resolveScopeFrontiers(
+      scopeWith([
+        { text: 'or the same job and gain a mastery', reason: 'first occurrence' },
+        { text: 'or the same job and gain a mastery', reason: 'second occurrence' },
+      ]),
+      doubleCorpus,
+    );
+    expect(twice.violations).toEqual([]);
+    expect(twice.inputs[0].irrelevantIds.length).toBe(2);
+  });
+
+  it('R4. double accounting (disposition + attribution for one clause) fails loudly', () => {
+    const doubled = resolveScopeFrontiers(
+      [attributionScope({
+        pages: [11],
+        irrelevant: [{ text: 'The frobnicator gains two mojo per interlude.', reason: 'also dispositioned' }],
+        attributed: [{ text: 'The frobnicator gains two mojo per interlude.', obligationId: 'synthetic:frob' }],
+      })],
+      ATTRIBUTION_CORPUS,
+      [QUOTED_OBLIGATION()],
+    );
+    expect(doubled.violations.map((v) => v.check)).toContain('frontier-double-accounting');
+    // And engine-level accounting conservatively refuses to count it either way.
+    const engineResult = computeFidelityAudit(provenWorld().world, {
+      ...provenWorld().inputs,
+      frontiers: [frontierInput(pageClauses(syntheticCorpus(), 7), [pageClauses(syntheticCorpus(), 7)[0].id], [pageClauses(syntheticCorpus(), 7)[0].id])],
+    });
+    expect(engineResult.scopes[0].blockers.join(' ')).toMatch(/DOUBLE-accounted/);
+  });
+});
+
+describe('hardening regressions: structural proof shapes', () => {
+  it('R5. boundary probes must PROVE below/at/above via extracted scalars, not labels', () => {
+    // Genuine probes pass validation…
+    expect(validateBoundaryProbes(boundaryContract())).toEqual([]);
+    // …a missing extraction path cannot.
+    const noPaths = boundaryContract({ boundary: { ...boundaryContract().boundary!, probeValuePaths: undefined! } });
+    expect(validateBoundaryProbes(noPaths).every((v) => v.check === 'boundary-probe-scalar-missing')).toBe(true);
+    // …a probe extracting a value on the WRONG side of the edge cannot.
+    const wrongBelow = boundaryContract({
+      boundary: { ...boundaryContract().boundary!, probes: { ...boundaryContract().boundary!.probes, below: { charges: 9 } } },
+    });
+    expect(validateBoundaryProbes(wrongBelow).map((v) => v.check)).toContain('boundary-probe-relation-wrong');
+    // …and a path resolving to nothing cannot.
+    const deadPath = boundaryContract({
+      boundary: { ...boundaryContract().boundary!, probeValuePaths: { below: 'nope.deep', at: 'charges', above: 'charges' } },
+    });
+    expect(validateBoundaryProbes(deadPath).map((v) => v.check)).toContain('boundary-probe-scalar-missing');
+
+    // Engine level: the genuine boundary contract reaches proven-supported…
+    const good = computeFidelityAudit(
+      provenWorld({ contracts: [boundaryContract()] }).world,
+      { ...provenWorld().inputs, evaluations: [evaluateContract(boundaryContract(), syntheticAdapterFor(correctWidget))!] },
+    );
+    expect(good.findings[0].status).toBe('proven-supported');
+
+    // …but dropping one probe's key from the EXECUTED set removes boundary proof.
+    const evaluation = evaluateContract(boundaryContract(), syntheticAdapterFor(correctWidget))!;
+    const atProbeKey = canonicalFixtureKey({ charges: 3 });
+    const truncated: ContractEvaluation = {
+      ...evaluation,
+      executedInputKeys: evaluation.executedInputKeys.filter((key) => key !== atProbeKey),
+    };
+    const bad = computeFidelityAudit(
+      provenWorld({ contracts: [boundaryContract()], evaluations: [truncated] }).world,
+      provenWorld({ contracts: [boundaryContract()], evaluations: [truncated] }).inputs,
+    );
+    expect(bad.findings[0].status).toBe('implemented-unproven');
+    expect(bad.findings[0].missingProofKinds).toContain('boundary');
+  });
+
+  it('R6. an evaluation is bound to the EXACT current contract: stale results certify nothing', () => {
+    const evaluation = passingEvaluation();
+    expect(evaluation.passed).toBe(true);
+    // Change the contract AFTER the evaluation was recorded (here: tighten a
+    // row). The fingerprint no longer matches, so the old pass must be
+    // discarded rather than counted as passing evidence.
+    const driftedContract = contract({
+      rows: [...contractRows(), { label: 'new demand', cls: 'positive' as const, input: { charges: 5 }, expected: { invoked: true, charges: 0 } }],
+    });
+    const result = computeFidelityAudit(
+      provenWorld({ contracts: [driftedContract], evaluations: [evaluation] }).world,
+      provenWorld({ contracts: [driftedContract], evaluations: [evaluation] }).inputs,
+    );
+    expect(result.findings[0].status).toBe('implemented-unproven');
+    expect(result.findings[0].blockers.join(' ')).toMatch(/STALE/i);
+
+    // Re-evaluating the CURRENT contract restores proof.
+    const fresh = evaluateContract(driftedContract, syntheticAdapterFor(correctWidget))!;
+    const recovered = computeFidelityAudit(
+      provenWorld({ contracts: [driftedContract], evaluations: [fresh] }).world,
+      provenWorld({ contracts: [driftedContract], evaluations: [fresh] }).inputs,
+    );
+    expect(recovered.findings[0].status).toBe('proven-supported');
+  });
+
+  it('R7. a "passing" evaluation that did not execute every row is rejected', () => {
+    const evaluation = passingEvaluation();
+    // Hand-truncate the executed-input record: claims a pass over rows that
+    // never ran.
+    const lying: ContractEvaluation = { ...evaluation, executedInputKeys: evaluation.executedInputKeys.slice(0, 1) };
+    const result = computeFidelityAudit(
+      provenWorld({ evaluations: [lying] }).world,
+      provenWorld({ evaluations: [lying] }).inputs,
+    );
+    expect(result.findings[0].status).toBe('implemented-unproven');
+    expect(result.findings[0].blockers.join(' ')).toMatch(/did not actually execute|FAILED/);
+  });
+
+  it('R8. exhaustive proof requires evaluated inputs == declared domain EXACTLY', () => {
+    // Domain superset of rows: a single labelled row cannot fake exhaustiveness.
+    const domainMissingRow = contract({
+      kind: 'exhaustive-finite',
+      domain: [{ charges: 2 }, { charges: 3 }, { charges: 4 }],
+      rows: [
+        { label: 'refused below', cls: 'exhaustive', input: { charges: 2 }, expected: { invoked: false, charges: 2 } },
+      ],
+    });
+    const partial = computeFidelityAudit(
+      provenWorld({ contracts: [domainMissingRow] }).world,
+      { ...provenWorld().inputs, evaluations: [evaluateContract(domainMissingRow, syntheticAdapterFor(correctWidget))!] },
+    );
+    expect(partial.findings[0].missingProofKinds).toContain('exhaustive');
+
+    // Row beyond the declared domain is equally rejected.
+    const extraCase = contract({
+      kind: 'exhaustive-finite',
+      domain: [{ charges: 2 }],
+      rows: [
+        { label: 'refused below', cls: 'exhaustive', input: { charges: 2 }, expected: { invoked: false, charges: 2 } },
+        { label: 'smuggled extra case', cls: 'exhaustive', input: { charges: 7 }, expected: { invoked: true, charges: 0 } },
+      ],
+    });
+    expect(evaluateContract(extraCase, syntheticAdapterFor(correctWidget))!.executedInputKeys.length).toBe(2);
+    const smuggled = computeFidelityAudit(
+      provenWorld({ contracts: [extraCase] }).world,
+      { ...provenWorld().inputs, evaluations: [evaluateContract(extraCase, syntheticAdapterFor(correctWidget))!] },
+    );
+    expect(smuggled.findings[0].missingProofKinds).toContain('exhaustive');
+  });
+});
+
+describe('hardening regressions: executed authority chain', () => {
+  const ADAPTER_WORLD = (): Parameters<typeof verifyAdaptersExerciseConsumers>[0] => ({
+    scopes: [SYNTHETIC_SCOPE],
+    obligations: [obligation()],
+    consumers: [{ id: 'synthetic.impl', file: 'src/rules/character.ts', symbol: 'awardXp', description: '' }],
+    contracts: [contract()],
+    proofs: [],
+    adjudications: [],
+  });
+
+  it('R9. adapters must mechanically exercise their registered production consumers', () => {
+    // Adapter source referencing the registered symbol → fine.
+    const exercising = verifyAdaptersExerciseConsumers(
+      ADAPTER_WORLD(),
+      syntheticAdapterFor(correctWidget),
+      { root: '/unused', adapterSourcePath: 'adapter-src.ts', readFile: () => 'import { awardXp } from "../character.js";\nexport const run = awardXp;\n' },
+    );
+    expect(exercising).toEqual([]);
+
+    // Stub adapter calling unrelated code → hard violation.
+    const stubbed = verifyAdaptersExerciseConsumers(
+      ADAPTER_WORLD(),
+      syntheticAdapterFor(correctWidget),
+      { root: '/unused', adapterSourcePath: 'adapter-src.ts', readFile: () => 'const run = (input) => ({ invoked: true, charges: 0 });\n' },
+    );
+    expect(stubbed.map((v) => v.check)).toContain('adapter-does-not-exercise-consumer');
+
+    // Unreadable adapter module → hard violation (fail-closed).
+    const unreadable = verifyAdaptersExerciseConsumers(
+      ADAPTER_WORLD(),
+      syntheticAdapterFor(correctWidget),
+      { root: '/unused', adapterSourcePath: 'adapter-src.ts', readFile: () => { throw new Error('missing'); } },
+    );
+    expect(unreadable.map((v) => v.check)).toContain('adapter-does-not-exercise-consumer');
+
+    // And the production repository passes its own adapter-exercise check.
+    const production = verifyAdaptersExerciseConsumers(buildProductionWorld(), PRODUCTION_ADAPTERS, { root: REPO_ROOT });
+    expect(production).toEqual([]);
+  });
+
+  it('R10. prerequisite recordings come from ACTUAL executions, recorded once', () => {
+    const results = runPrerequisiteAudits(['good-script', 'bad-script'], {
+      npm: (args) => ({ status: args[1] === 'good-script' ? 0 : 1 }),
+    });
+    expect(results).toEqual({ 'bad-script': 'failed', 'good-script': 'passed' });
+
+    // Bound commands are derived from the registry itself: generated-audit
+    // claim bindings plus every replay/integration proof command.
+    const world = buildProductionWorld();
+    const commands = boundEvidenceCommands(world);
+    expect(commands).toEqual([...commands].sort());
+    expect(new Set(commands).size).toBe(commands.length);
   });
 });
 
@@ -573,18 +986,14 @@ describe('adversarial acceptance simulations', () => {
     );
     expect(fingerprintChecks).toBe(true);
     // …yet canonical correspondence still fails.
-    const corpus = loadRealCorpus();
-    expect(verifyPassageProvenance(refingerprinted, corpus).length).toBeGreaterThan(0);
-    function loadRealCorpus() {
-      const parsed = JSON.parse(readFileSync(join(REPO_ROOT, 'src/content/generated/icon-1.5.json'), 'utf8')) as { pages: { number: number; text: string }[] };
-      return corpusFromPages(parsed.pages);
-    }
+    const parsed = JSON.parse(readFileSync(join(REPO_ROOT, 'src/content/generated/icon-1.5.json'), 'utf8')) as { pages: { number: number; text: string }[] };
+    expect(verifyPassageProvenance(refingerprinted, corpusFromPages(parsed.pages)).length).toBeGreaterThan(0);
   });
 
   it('4. removing one clause disposition while claiming completeness blocks closure', () => {
     const world = buildProductionWorld();
-    const corpusJson = JSON.parse(readFileSync(join(REPO_ROOT, 'src/content/generated/icon-1.5.json'), 'utf8')) as { pages: { number: number; text: string }[] };
-    const corpus = corpusFromPages(corpusJson.pages);
+    const parsed = JSON.parse(readFileSync(join(REPO_ROOT, 'src/content/generated/icon-1.5.json'), 'utf8')) as { pages: { number: number; text: string }[] };
+    const corpus = corpusFromPages(parsed.pages);
     const advancement = world.scopes.find(({ id }) => id === 'advancement')!;
     // Drop ONE irrelevant disposition (a clause nothing cites).
     const victim = advancement.frontier!.irrelevant![0];
@@ -594,7 +1003,7 @@ describe('adversarial acceptance simulations', () => {
         : scope,
     );
     const narrowedWorld = { ...world, scopes: narrowedScopes };
-    const { inputs: reResolved } = resolveScopeFrontiers(narrowedWorld.scopes, corpus);
+    const { inputs: reResolved } = resolveScopeFrontiers(narrowedWorld.scopes, corpus, narrowedWorld.obligations);
     const result = computeFidelityAudit(narrowedWorld, { frontiers: reResolved });
     const scope = result.scopes.find(({ scopeId }) => scopeId === 'advancement')!;
     expect(scope.frontierUncoveredIds.length).toBe(1);
@@ -621,6 +1030,18 @@ describe('adversarial acceptance simulations', () => {
     expect(mutant.passesNaiveSuite).toBe(true);
     expect(runPipelineMutationSelfCheck()).toEqual([]);
   });
+
+  it('7. lowercase strong tokens are held to the same registration standard', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'fidelity-lowercase-claims-'));
+    mkdirSync(join(repo, 'docs'), { recursive: true });
+    writeFileSync(join(repo, 'TODO.md'), 'the advancement rules are complete and shipped.\n');
+    const { violations } = checkProjectClaims(
+      { summary: { integrityViolations: [] }, findings: [], scopes: [] } as never,
+      { root: repo, readFile: (p: string) => readFileSync(p, 'utf8') },
+      PROJECT_CLAIMS,
+    );
+    expect(violations.some((v) => v.check === 'unregistered-strong-claim')).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -635,16 +1056,18 @@ describe('canonical provenance primitives', () => {
     expect(normalizeSourceText('“curly” — dash\u2019')).toBe('"curly" - dash\'');
   });
 
-  it('clause resolution is exhaustive per page under the include filter', () => {
+  it('clause resolution is exhaustive per page — there is NO selection filter', () => {
     const corpus = syntheticCorpus();
     const all = pageClauses(corpus, 7);
     expect(all.length).toBe(SYNTHETIC_PAGE.split('\n').length);
-    const filtered = resolveScopeFrontiers(
-      [{ ...SYNTHETIC_SCOPE, frontier: { pages: [7], include: 'gauge|invok' } }],
+    // A scope CANNOT narrow its frontier by pattern; every declared page is
+    // fully inside the boundary.
+    const resolved = resolveScopeFrontiers(
+      [{ ...SYNTHETIC_SCOPE, frontier: { pages: [7] } }],
       corpus,
     );
-    expect(filtered.violations).toEqual([]);
-    expect(filtered.inputs[0].clauses.length).toBe(all.length - 1);
+    expect(resolved.violations).toEqual([]);
+    expect(resolved.inputs[0].clauses).toEqual(all);
   });
 
   it('stale irrelevant dispositions are integrity failures, not silent matches', () => {
@@ -658,17 +1081,16 @@ describe('canonical provenance primitives', () => {
       }],
       syntheticCorpus(),
     );
-    expect(filtered.violations.map((v) => v.check)).toContain('frontier-irrelevant-entry-dangling');
+    expect(filtered.violations.map((v) => v.check)).toContain('frontier-disposition-entry-dangling');
   });
 
   it('the evidence graph cannot import the implementation layer (anti-circularity guard)', () => {
-    // §7 mechanical circularity guard: the evidence modules must stay
+    // Mechanical circularity guard: the evidence modules must stay
     // observation-only. If any of them starts importing the adapter layer or
     // runtime rules code, contracts could trivially agree with the code they
     // certify — this test fails BEFORE that design can take hold.
     const evidenceModules = [
       'src/rules/fidelity/types.ts',
-      'src/rules/fidelity/world.ts',
       'src/rules/fidelity/engine.ts',
       'src/rules/fidelity/provenance.ts',
       'src/rules/fidelity/docs.ts',
@@ -680,6 +1102,12 @@ describe('canonical provenance primitives', () => {
       expect(source, `${modulePath} must not import runtime rules code`).not.toMatch(/from '\.\.\/(character|encounter|automation)\.js'/);
       expect(source, `${modulePath} must not import the strict pipeline`).not.toMatch(/from '\.\/strict\.js'/);
     }
+    // world.ts observes the catalog/adjudications but never the adapter layer
+    // or the strict pipeline.
+    const worldSource = readFileSync(join(REPO_ROOT, 'src/rules/fidelity/world.ts'), 'utf8');
+    expect(worldSource).not.toMatch(/from '\.\/adapters\.js'/);
+    expect(worldSource).not.toMatch(/from '\.\.\/(character|encounter|automation)\.js'/);
+    expect(worldSource).not.toMatch(/from '\.\/strict\.js'/);
     // And the contract registry stays pure DATA: no runtime callbacks can be
     // smuggled into expectation rows via the production world.
     for (const contractEntry of buildProductionWorld().contracts) {

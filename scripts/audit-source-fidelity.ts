@@ -20,31 +20,47 @@
  * status instead.
  *
  * Usage:
- *   node --import tsx scripts/audit-source-fidelity.ts [--strict] [--write] [--json]
+ *   node --import tsx scripts/audit-source-fidelity.ts [--strict] [--write]
+ *        [--json] [--run-prereqs]
+ *
+ * `--run-prereqs` is the aggregate authority path: it EXECUTES every npm
+ * script bound as generated-audit/compound-claim/replay/integration evidence
+ * and records the results for this run.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runStrictFidelityAudit } from '../src/rules/fidelity/strict.js';
+import { runRecordedPrerequisiteAudits, runStrictFidelityAudit } from '../src/rules/fidelity/strict.js';
 import { checkGeneratedDocDrift, generateMarkdown, GENERATED_DOC_PATH } from '../src/rules/fidelity/docs.js';
+import { RULES_COVERAGE } from '../src/rules/catalog.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const strict = process.argv.includes('--strict');
 const write = process.argv.includes('--write');
 const json = process.argv.includes('--json');
 
-/** RECORDED prerequisite-audit results ({command: 'passed'|'failed'}), from
- * an aggregate CI step that ran the prerequisites once. Without this input,
- * generated-audit-bound claims cannot verify (reported unverified, never
- * silently accepted). */
+// Aggregate authority path: when --run-prereqs is given, this process runs
+// every bound prerequisite script ITSELF and records the exit statuses.
+// There is no trusted hand-written results file — recorded evidence can only
+// come from a real execution in this run. Without --run-prereqs,
+// generated-audit/replay/integration-bound claims cannot verify (reported
+// unverified, never silently accepted).
+const runPrereqs = process.argv.includes('--run-prereqs');
 let auditResults: Record<string, 'passed' | 'failed'> | undefined;
-const prereqIndex = process.argv.indexOf('--prereq-results');
-if (prereqIndex !== -1 && process.argv[prereqIndex + 1]) {
-  auditResults = JSON.parse(readFileSync(process.argv[prereqIndex + 1], 'utf8')) as Record<string, 'passed' | 'failed'>;
+if (runPrereqs) {
+  console.log('Running bound prerequisite audits (aggregate authority path)...');
+  auditResults = runRecordedPrerequisiteAudits();
+  for (const [command, outcome] of Object.entries(auditResults)) {
+    console.log(`  ${outcome === 'passed' ? '✓' : '✗'} ${command}`);
+  }
+  console.log('');
 }
 
-const report = runStrictFidelityAudit(repoRoot, { auditResults });
+const report = runStrictFidelityAudit(repoRoot, {
+  auditResults,
+  coverageStatus: (id: string) => RULES_COVERAGE.find((item) => item.id === id)?.status,
+});
 const { result, hardFailures, unverifiedClaims } = report;
 
 // --- Documentation -----------------------------------------------------------
