@@ -5,7 +5,10 @@ export interface ServerConfig {
   supabaseServiceRoleKey: string;
   discordWebhookUrl: string;
   allowDevAuth: boolean;
-  /** Explicit non-production escape hatch for the engineering VTT preview. */
+  /** Explicit non-production escape hatch for the engineering VTT preview.
+   * While the full PHASE_THREE_READY evidence is unbound from deployment
+   * configuration, this is the ONLY admission path for multiplayer joins —
+   * coverage readiness never admits a deployment. */
   allowIncompleteVtt: boolean;
 }
 

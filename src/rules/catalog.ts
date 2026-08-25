@@ -1,6 +1,6 @@
 import mechanics from '../content/generated/mechanics-1.5.json' with { type: 'json' };
 import { EXECUTABLE_JOB_ABILITY_IDS } from './automation/content/glue/manual-programs.js';
-import { PHASE_GATES, phaseGateCoverageMet } from './phase-gates.js';
+import { coverageLadderComplete } from './phase-gates.js';
 import type {
   AbilityDefinition,
   ActionDefinition,
@@ -235,12 +235,14 @@ export const RULES_COVERAGE = [
   { id: 'reward-structure', label: 'Trophies, camp fixtures, and expedition rewards', status: 'reference' },
 ] as const;
 
-// Coverage-only gate halves derived from the SINGLE machine-readable registry
-// in `phase-gates.ts` (coverage-item half only). These are NOT the full phase
-// gates: `*_COVERAGE_READY` means every coverage-item requirement holds; the
-// generated-audit, fidelity-scope, and acceptance-criterion halves of each
-// gate (the full PHASE_*_READY authority) are enforced by the strict
-// source-fidelity claims path (`npm run audit:source-fidelity -- --strict
-// --run-prereqs`) and can never be satisfied by flipping anything here.
-export const PHASE_TWO_COVERAGE_READY = phaseGateCoverageMet(PHASE_GATES.PHASE_TWO_READY, RULES_COVERAGE);
-export const PHASE_THREE_COVERAGE_READY = phaseGateCoverageMet(PHASE_GATES.PHASE_THREE_READY, RULES_COVERAGE);
+// Coverage-ladder telemetry derived from the shared COVERAGE_ITEM_IDS registry
+// in `phase-gates.ts`. These are NOT the phase gates and are NOT release
+// authority: `*_COVERAGE_READY` means only that every tracked sourcebook
+// coverage item is complete (both constants evaluate the same ladder, as both
+// gates always subsumed it). The full PHASE_*_READY gates — roadmap acceptance
+// criteria, generated audits, and fidelity scopes — are enforced solely by the
+// strict source-fidelity claims path (`npm run audit:source-fidelity --
+// --strict --run-prereqs`) and can never be satisfied by flipping anything
+// here.
+export const PHASE_TWO_COVERAGE_READY = coverageLadderComplete(RULES_COVERAGE);
+export const PHASE_THREE_COVERAGE_READY = coverageLadderComplete(RULES_COVERAGE);

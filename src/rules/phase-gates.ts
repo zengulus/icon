@@ -8,9 +8,6 @@
  * Three kinds of machine-auditable requirement, plus one explicit placeholder
  * kind that can never verify by construction:
  *
- * - `coverage-item`   — a RULES_COVERAGE entry (src/rules/catalog.ts) must be
- *                       `complete`. Evaluable at runtime/UI time; the app-side
- *                       gate constants are derived from exactly these.
  * - `generated-audit` — a package.json script whose RECORDED passing run (in
  *                       the aggregate authority path,
  *                       `npm run audit:source-fidelity -- --strict
@@ -18,18 +15,26 @@
  * - `fidelity-scope`  — a computed strict source-fidelity scope status must
  *                       reach the given minimum. Enforced by the project-claims
  *                       audit; can never be flipped by hand.
- * - `acceptance-criterion` — a real roadmap criterion for which NO machine-
- *                       auditable proxy exists yet. It is UNMET by
- *                       construction: a gate carrying one cannot pass until
- *                       the row is explicitly upgraded to a machine kind
+ * - `coverage-item`   — a RULES_COVERAGE entry (src/rules/catalog.ts) marked
+ *                       `complete`. NOT currently used by either gate: broad
+ *                       sourcebook coverage is progress telemetry, never phase
+ *                       readiness. The kind remains part of the vocabulary for
+ *                       future machine-backed rows.
+ * - `acceptance-criterion` — a real roadmap criterion (docs/roadmap.md) for
+ *                       which NO machine-auditable proxy exists yet. It is
+ *                       UNMET by construction: a gate carrying one cannot pass
+ *                       until the row is explicitly upgraded to a machine kind
  *                       (`generated-audit` or `fidelity-scope`). This keeps an
  *                       unrepresentable criterion visible and load-bearing
  *                       instead of approximating it with weaker evidence.
  *
- * A phase gate may therefore never outrun its evidence: the UI constants only
- * see the coverage half, while the claims audit enforces ALL requirements and
- * reports the gate LEGACY/UNVERIFIED until every one holds. A later gate must
- * always be strictly stronger than the gate it builds on.
+ * Both gates below encode docs/roadmap.md's acceptance criteria DIRECTLY; the
+ * coverage ladder lives in COVERAGE_ITEM_IDS, deliberately outside the gates.
+ *
+ * A phase gate may therefore never outrun its evidence: no app-side constant
+ * can assert a full gate true, while the claims audit enforces ALL
+ * requirements and reports the gate LEGACY/UNVERIFIED until every one holds.
+ * A later gate must always be strictly stronger than the gate it builds on.
  */
 
 export type PhaseGateRequirement =
@@ -46,7 +51,11 @@ export interface PhaseGateDefinition {
   requirements: readonly PhaseGateRequirement[];
 }
 
-const ALL_COVERAGE_ITEMS = [
+/** The RULES_COVERAGE progress ladder (src/rules/catalog.ts): sourcebook
+ * automation breadth tracked for UI/audit telemetry. DELIBERATELY NOT part of
+ * either phase gate's requirements — completing this ladder never asserts
+ * phase readiness. */
+export const COVERAGE_ITEM_IDS = [
   'source',
   'creation',
   'narrative',
@@ -63,11 +72,30 @@ const ALL_COVERAGE_ITEMS = [
   'reward-structure',
 ] as const;
 
+/** The roadmap's PHASE_TWO_READY criteria (docs/roadmap.md), one row each in
+ * roadmap order. Criteria with a recorded-run proxy use `generated-audit`;
+ * everything else is an explicit acceptance-criterion row that stays unmet by
+ * construction until real machine evidence becomes bindable. Broad coverage
+ * rows were removed: sourcebook breadth is not Phase Two readiness. */
 const PHASE_TWO_REQUIREMENTS: readonly PhaseGateRequirement[] = [
-  ...ALL_COVERAGE_ITEMS.map((id): PhaseGateRequirement => ({ kind: 'coverage-item', id })),
+  // Roadmap criterion 1: no known P0/P1 correctness defects open in TODO.md.
+  { kind: 'acceptance-criterion', id: 'todo-no-open-p0-p1-correctness-defects' },
+  // Roadmap criterion 2: command purity + exact-replay suites green.
+  { kind: 'acceptance-criterion', id: 'command-purity-and-exact-replay-green' },
+  // Roadmap criterion 3: combat settlement implemented (P1 acceptance tests).
+  { kind: 'acceptance-criterion', id: 'combat-settlement-p1-acceptance-green' },
+  // Roadmap criterion 4: encounter-closure Slices A and D close end to end.
+  { kind: 'acceptance-criterion', id: 'encounter-slices-a-and-d-close-end-to-end' },
+  // Roadmap criterion 5: automation/architecture audits green; conservative
+  // counts unregressed.
   { kind: 'generated-audit', command: 'audit:automation' },
   { kind: 'generated-audit', command: 'audit:architecture' },
+  // Strict-authority binding retained beyond the literal roadmap list: the
+  // "rules-authoritative tactical core" title still demands the closed
+  // sourcebook fidelity scope from the strict claims path.
   { kind: 'fidelity-scope', scopeId: 'sourcebook-at-large', minStatus: 'closed' },
+  // Roadmap criterion 6: full CI green.
+  { kind: 'acceptance-criterion', id: 'full-ci-green' },
 ];
 
 /** The roadmap's PHASE_THREE_READY-only criteria (docs/roadmap.md), each
@@ -113,18 +141,14 @@ export const PHASE_GATES: Readonly<
 
 export type PhaseGateId = keyof typeof PHASE_GATES;
 
-/** Runtime/UI evaluation: ONLY the coverage half can be evaluated inside the
- * app (audit and fidelity-scope requirements are enforced by the strict
- * authority path in CI). Deliberately conservative: an unknown item never
- * counts as complete, and a gate whose audit/scope halves are unmet cannot be
- * asserted true from this function alone. */
-export function phaseGateCoverageMet(
-  gate: PhaseGateDefinition,
+/** Runtime/UI evaluation of the COVERAGE LADDER ONLY — never a phase gate.
+ * Deliberately conservative: an unknown item never counts as complete. The
+ * full PHASE_*_READY gates are evaluated exclusively by the strict claims
+ * path; no runtime boolean can assert them. */
+export function coverageLadderComplete(
   coverage: ReadonlyArray<{ id: string; status: string }>,
 ): boolean {
-  return gate.requirements.every(
-    (requirement) =>
-      requirement.kind !== 'coverage-item'
-      || coverage.find((item) => item.id === requirement.id)?.status === 'complete',
+  return COVERAGE_ITEM_IDS.every(
+    (id) => coverage.find((item) => item.id === id)?.status === 'complete',
   );
 }

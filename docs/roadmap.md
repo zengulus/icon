@@ -263,14 +263,21 @@ Current state: **false** (inherits everything above plus foe/player
 complexity gaps).
 
 Gate constants have ONE machine-readable source of truth:
-`src/rules/phase-gates.ts` defines each gate's requirements once.
-`src/rules/catalog.ts` derives the coverage-only halves
-`PHASE_TWO_COVERAGE_READY` / `PHASE_THREE_COVERAGE_READY` from its
-coverage-item rows plus `RULES_COVERAGE`; anything named `PHASE_*_READY`
+`src/rules/phase-gates.ts` defines each gate's requirements once, encoding
+THIS document's acceptance criteria directly (machine-backed rows where a
+faithful proxy exists; explicit acceptance-criterion rows — unmet by
+construction — where it does not).
+`src/rules/catalog.ts` derives the coverage-only telemetry constants
+`PHASE_TWO_COVERAGE_READY` / `PHASE_THREE_COVERAGE_READY` from the shared
+`COVERAGE_ITEM_IDS` ladder plus `RULES_COVERAGE`; that ladder is deliberately
+NOT part of any gate's requirements. Anything named `PHASE_*_READY`
 unqualified means the FULL gate, evaluated only by the source-fidelity claims
 audit (`claim:phase-two-ready` / `claim:phase-three-ready`) binding the same
 registry to recorded audit results — so no consumer can drift or be flipped by
-hand while its criteria fail. CI exercises that aggregate authority path.
+hand while its criteria fail, and coverage readiness never admits production
+multiplayer (the realtime server default-denies until the full gate's
+evidence is bound to deployment configuration). CI exercises that aggregate
+authority path.
 
 `PHASE_THREE_READY` is a strict superset of `PHASE_TWO_READY`: criteria 2–5
 above are registry rows in their own right. Criteria without a faithful

@@ -3,7 +3,6 @@ import cors from 'cors';
 import express from 'express';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { parseClientMessage, type ServerMessage } from '../src/rules/protocol.js';
-import { PHASE_THREE_COVERAGE_READY } from '../src/rules/catalog.js';
 import { loadConfig } from './config.js';
 import { sendDiscordNotice } from './discord.js';
 import { RoomManager, type AuthenticatedClient } from './rooms.js';
@@ -132,7 +131,7 @@ sockets.on('connection', (socket, request) => {
     closeSocket(1008, 'Authentication failed.');
   };
   const rejectPhaseGate = () => {
-    send({ type: 'error', code: 'phase.gated', message: 'Multiplayer is unavailable until the ICON rules coverage gate passes.' });
+    send({ type: 'error', code: 'phase.gated', message: 'Multiplayer is unavailable until the ICON phase-three release gate passes.' });
     closeSocket(1008, 'Multiplayer phase gate is active.');
   };
   joinTimeout = setTimeout(() => closeSocket(1008, 'Join message timed out.'), 10_000);
@@ -143,10 +142,16 @@ sockets.on('connection', (socket, request) => {
     try {
       message = parseClientMessage(raw.toString());
       if (message.type === 'join') {
-        // The client UI is not the authority for a release gate. Prevent raw
-        // WebSocket use from turning incomplete automation into a production
-        // multiplayer path; test/development preview must opt in server-side.
-        if (!PHASE_THREE_COVERAGE_READY && !config.allowIncompleteVtt) {
+        // The client UI and coverage telemetry are not release authority.
+        // Admission requires the FULL PHASE_THREE_READY gate (roadmap
+        // acceptance criteria, generated audits, fidelity scopes), which is
+        // evaluated only by the strict claims path in CI — there is
+        // deliberately no app-side boolean that can assert it, and
+        // PHASE_THREE_COVERAGE_READY never admits a deployment on its own.
+        // Until that evidence is bound into deployment configuration,
+        // multiplayer joins are default-denied here; the explicit
+        // development/test escape hatch below is the only way in.
+        if (!config.allowIncompleteVtt) {
           rejectPhaseGate();
           return;
         }

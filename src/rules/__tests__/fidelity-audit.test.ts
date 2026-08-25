@@ -1012,9 +1012,11 @@ describe('phase-gate strictness regressions', () => {
     }
   });
 
-  it('Phase Two fully met still leaves Phase Three LEGACY/UNVERIFIED on a Phase Three-only criterion', () => {
-    // Every machine-auditable input BOTH gates share is satisfied: complete
-    // coverage, passing prerequisite audits, and a closed sourcebook scope.
+  it('every machine input satisfied still leaves BOTH gates LEGACY/UNVERIFIED on their acceptance-criterion rows', () => {
+    // Every machine-auditable input EITHER gate carries is satisfied: passing
+    // prerequisite audits and a closed sourcebook scope. (The coverage ladder
+    // is telemetry, not a gate input.) Both claims must still stay unverified,
+    // purely because of their explicit acceptance-criterion rows.
     const deps = {
       root: REPO_ROOT,
       auditResults: {
@@ -1031,11 +1033,15 @@ describe('phase-gate strictness regressions', () => {
     const satisfied = { summary: { integrityViolations: [] }, findings: [], scopes: [closedSourcebookScope] } as never;
     const { violations, unverifiedClaims } = checkProjectClaims(satisfied, deps, PROJECT_CLAIMS);
 
-    // No hard violations, and the Phase Two gate genuinely verifies…
+    // No hard violations — and neither gate can be talked into passing.
     expect(violations).toEqual([]);
-    expect(unverifiedClaims.some(({ id }) => id === 'claim:phase-two-ready')).toBe(false);
-    // …yet the Phase Three gate stays unmet purely because of its extra
-    // acceptance-criterion rows.
+    const twoClaim = unverifiedClaims.find(({ id }) => id === 'claim:phase-two-ready');
+    expect(twoClaim).toBeDefined();
+    expect(twoClaim!.binding.kind).toBe('legacy-unverified');
+    if (twoClaim!.binding.kind === 'legacy-unverified') {
+      expect(twoClaim!.binding.reason).toMatch(/acceptance criterion "todo-no-open-p0-p1-correctness-defects"/);
+    }
+    // Phase Three additionally stays unmet on its own Phase Three-only rows.
     const threeClaim = unverifiedClaims.find(({ id }) => id === 'claim:phase-three-ready');
     expect(threeClaim).toBeDefined();
     expect(threeClaim!.binding.kind).toBe('legacy-unverified');
