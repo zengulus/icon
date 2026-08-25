@@ -1,5 +1,5 @@
 /**
- * Talent coverage content (docs/rules-foundations.md §8, freebuff-plan.md §4).
+ * Talent coverage content (docs/rules-foundations.md §8).
  *
  * The closed inventory of all 288 Job talents (two per ability, one per
  * chapter tier — `talent: 1` and `talent: 2`). Every row is keyed by the

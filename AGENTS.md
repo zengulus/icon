@@ -403,16 +403,16 @@ Delete stale claims rather than accumulating contradictory historical prose.
 
 Important documentation includes:
 
-- TODO.md
-- docs/rules-foundations.md
-- docs/rules-coverage.md
-- docs/primitives-needed.md
-- docs/kernels-needed.md
-- docs/roadmap.md
-- docs/blocker-census.md
-- docs/condition-grant-handoff.md
-- docs/glossary-executable-inventory.md
-- freebuff-plan.md
+- TODO.md — currently actionable backlog
+- docs/roadmap.md — phase sequencing, priorities, and gate definitions
+- docs/deliverables.md — concrete artifacts and encounter-closure slices
+- docs/rules-foundations.md — foundation maturity, missing kernels/primitives,
+  architecture-debt ledger
+- docs/rules-coverage.md — content coverage by capability ladder
+- docs/blocker-census.md — GENERATED Class/Job census
+  (`npm run audit:class-job-census`; never hand-edit)
+- docs/source-adjudications.md — genuine source contradictions only
+- docs/glossary-executable-inventory.md — per-term combat-glossary status
 
 Do not change phase gates, schemas, or implementation solely to make a document
 easier to update.

@@ -12,11 +12,11 @@ The project does not claim affiliation with Massif Press. ICON, its text, art, l
 - Characters save locally without configuration or sync through Supabase when configured.
 - Versioned JSON import/export and schema migration are built in.
 - Narrative rolls implement zero-rating rolls, boons/curses, and criticals.
-- The shared encounter reducer implements movement, core terrain, basic attacks, armor, cover, vigor, statuses, wounds, recovery, deterministic events, and replay. All 144 Job abilities are on the independently reviewed execution allowlist with typed programs and replay fixtures; unresolved supporting rules remain explicitly gated or table-facing rather than silently approximated.
+- The shared encounter reducer implements movement, core terrain, basic attacks, armor, cover, vigor, statuses, wounds, recovery, deterministic events, and replay. Turn order is scheduler-driven: combat starts awaiting an explicit player-character selection, sides alternate, Slow rounds are elected per round, and Delay persists across round boundaries. All 144 Job abilities are on the independently reviewed execution allowlist with typed programs and replay fixtures; unresolved supporting rules remain explicitly gated or table-facing rather than silently approximated.
 - The Render service validates network commands, authenticates users, enforces campaign roles and actor ownership, checks optimistic revisions, redacts GM-hidden state for players, and persists append-only room checkpoints.
 - Discord webhook secrets remain server-side.
 
-Phase 2 is intentionally production-gated. All Job abilities are executable, but core/supporting rules, Relic invokes, mobs, summons, full foe/legend behavior, and other encounter-required content are still incomplete. See [rules coverage](docs/rules-coverage.md), the cross-cutting [rules foundations](docs/rules-foundations.md), and the [delivery roadmap](docs/roadmap.md).
+Phase 2 is intentionally production-gated. All Job abilities are executable, but combat settlement (post-combat character handoff, personal Resolve +1), Elite/Legend multi-turn wiring, mobs, foe phases, Relic invokes, masteries, Limit Break effects, and other encounter-required content are still incomplete. See [rules coverage](docs/rules-coverage.md), the cross-cutting [rules foundations](docs/rules-foundations.md), the concrete [deliverables](docs/deliverables.md), and the [delivery roadmap](docs/roadmap.md). The current actionable backlog is [TODO.md](TODO.md).
 
 ## Local development
 

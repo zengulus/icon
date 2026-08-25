@@ -1,5 +1,5 @@
 /**
- * Talent fold kernel (F7, docs/rules-foundations.md §8, freebuff-plan.md §4).
+ * Talent fold kernel (F7, docs/rules-foundations.md §8).
  *
  * A wired talent declares a trigger-effect (`exceed` when the ability's
  * attack roll is 15+, `comeback` while the user is bloodied, `slay` when the

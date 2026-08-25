@@ -1,0 +1,59 @@
+# Deliverables
+
+What must exist for the product to be genuinely complete, translated from
+[`roadmap.md`](roadmap.md). Status vocabulary: `COMPLETE` · `PARTIAL` ·
+`NOT STARTED` · `BLOCKED` · `TABLE-FACING / NOT SOFTWARE`.
+
+| Deliverable | Status | Owner/subsystem | Completion condition |
+| --- | --- | --- | --- |
+| Source provenance pipeline | COMPLETE | `scripts/extract-*`, `content/generated/`, digest evidence | 501 pages extracted; pinned SHA-256; byte-for-byte regeneration with the PDF (`verify:extraction`); hosted CI validates checked-in artifacts without the PDF |
+| Character rules engine | COMPLETE | `src/rules/character.ts`, `types.ts` (schema v3) | Creation/advancement validation, import/export, v1→v3 migration, strict version rejection — all tested |
+| Encounter command/event engine | COMPLETE (core) / PARTIAL (breadth) | `src/rules/encounter.ts`, `types.ts` | Purity contract + exact replay for every command; remaining breadth = new commands only |
+| Turn scheduler | COMPLETE | `src/rules/turn-scheduler.ts` | Explicit side/phase authority, controller-chosen actors, Slow lifecycle, pending Delay, multi-turn entitlements — replay-tested |
+| Damage kernel | AUTHORITATIVE | `automation/kernels/encounter-adapter.ts`, `damage-resolution`, `damage-ledger` | Determine → apply pipeline, armor/resistance/weakened/vulnerable/pierce/divine/vigor/Defiance/Defy Death, held damage, wounds on defeat |
+| Attack kernel | AUTHORITATIVE | `attack-resolution`, `attack-modifiers` | Roll, boons/curses, crit ≥20, Exceed ≥15, True Strike/Unerring/Evasion/Dodge/Stealth/Cover |
+| Save kernel | PARTIAL | `save-window` primitives, status-save ledger | Normal saves + reroll windows done; save-trigger breadth pending |
+| Targeting & spatial kernels | AUTHORITATIVE (core) | `targeting.ts`, `area.ts`, `range.ts`, `movement.ts`, `spatial-intent` | Target sets, areas (burst/blast/line/cone), range, LoS/LoE, cover, footprints (Size footprint half PENDING) |
+| Movement & forced movement | PARTIAL | `movement.ts`, movement-triggers kernel | Standard/dash/difficult/dangerous/elevation/Flying/Rush/Shove/Collide done; Teleport/Place/Swap per-program (P4 consolidates) |
+| Interrupt/window engine | AUTHORITATIVE (when-damaged, defeated, uses-ability, area-inclusion, targeted-by-ability, save-rolled) | `trigger-window.ts`, held-window reducer paths | LIFO windows, retarget, held damage/effects/saves — replay-tested. Vigilance triggers BLOCKED (B5) |
+| Lifecycle engine | AUTHORITATIVE | `lifecycle.ts` (F3), boundary expiry | Turn-start/end, round-start/end phases with recorded participants; cross-character ordering |
+| Resource registry | COMPLETE | `core.ts` RESOURCE_RULES | All nine shared resources with source pages, caps, reset scopes; reducer-enforced |
+| Turn-order content wiring | PARTIAL | entitlement/slow-eligibility registries | Machinery done; Elite/Legend production rows missing (B2); no slow-eligibility content rows |
+| Combat settlement | NOT STARTED | `encounter.ts` settlement + actor→character projection | Personal Resolve +1; durable attrition handoff; combat1→settlement→combat2 regression (P1) |
+| Player content runtime | PARTIAL | job/trait/talent/mastery/relic programs & recipes | 144/144 abilities; 27/65 traits; 47/288 talents; 8?/? masteries; 0/16 Limit Break effects; Relic runtime NOT STARTED |
+| Foe runtime | PARTIAL | `foes.ts`, foe recipes, trait projections | Profiles/roles/scaling construction done; 22 abilities executable; Mob BLOCKED; Elite/Legend turns B2; phases inert (B4) |
+| Local VTT (Lab) | COMPLETE (harness) | `BrowserVtt.tsx`, `vtt/*`, `vtt-room.ts` | Setup→selection→actions→persistence→replay in-browser; phase-exempt by design |
+| Realtime room authority | PARTIAL (preview) | `server/rooms.ts`, `index.ts` | Authz, redaction, revisions/CAS, checkpoints, reconnect basics, transport acceptance green; gated behind PHASE_THREE_READY |
+| Checkpoint persistence & recovery | COMPLETE | `server/checkpoints.ts`, Supabase migrations | Append-only CAS snapshots, retention bounds, recovery checkpoint above corrupt revision |
+| Narrative deterministic rules | PARTIAL | `character.ts`, dice, resource registry | Zero-rating rolls, boons/curses/crits, Effort/Strain accounting; camp/interlude flows NOT STARTED; outcomes of freeform powers TABLE-FACING |
+
+## Encounter closure (primary completeness metric)
+
+> A slice is **closed** when a legal player build and legal opposition execute
+> from setup through combat exit with every mechanically deterministic source
+> consequence represented authoritatively and nothing silently ignored.
+
+### Slice A — Baseline encounter — *nearly closed*
+PC (validCharacter-class build) vs one regular profiled foe. Exercises:
+setup, combat-start PC selection, alternation, basic attacks, damage pipeline,
+defeat/wounds, END_TURN boundaries.
+**Blocking:** exit only — settlement (P1/B1).
+
+### Slice B — Player complexity — *blocked*
+PC with a Job trait (e.g., Demon Edge), wired talents, an equipped mastery, a
+Relic invoke, and an interrupt (Righteous Disdain or Riposte).
+**Blocking:** mastery fold (P3), Relic runtime (P5), Vigilance windows (B5).
+
+### Slice C — Foe complexity — *blocked*
+Elite (double HP, two turns) or Legend (per-player turns, Juggernaut) with
+keyword traits and reactive behavior.
+**Blocking:** B2 entitlements; then phases/chapter rules (B4) for phased
+legends.
+
+### Slice D — Attrition chain — *blocked*
+Combat 1 → settlement → combat 2 with HP attrition, a wound, spent personal
+Resolve carrying through, camp resetting what camp resets.
+**Blocking:** P1 entirely.
+
+Each slice gets a named integration test when it closes; the closing commit is
+referenced here.

@@ -1,52 +1,276 @@
-# Rules-first delivery roadmap
+# Delivery roadmap
 
-Phase boundaries are acceptance gates. A later phase may have engineering scaffolding, but it is not a production feature until every earlier gate passes.
+Derived from the full-repository audit of 2026-08-25. The previous
+Phase 1/2/3 definitions were historical hypotheses; the phases below are
+redefined from what the implementation actually is. Phase names are kept
+where they still fit.
 
-## Phase 1 — Rules and character management (active)
+Phase gates are acceptance criteria, not feature lists. A phase is complete
+only when every exit criterion is observably true.
 
-- [x] Reproducible, credited extraction of the supplied ICON 1.5 sourcebook, with a pinned source digest and local byte-for-byte regeneration evidence; hosted CI explicitly validates checked-in artifacts without claiming to possess the untracked PDF.
-- [x] Searchable 501-page compendium and versioned structured catalogs for Bonds, Jobs, abilities, Relics, and foes.
-- [x] Framework-independent TypeScript rules package with character schemas, migration, validation, deterministic dice, and event reducers.
-- [x] Rules-backed character manager with local persistence, Supabase sync, import/export, and GitHub Pages deployment workflow.
-- [x] Source-derived fixtures for character creation, advancement, content cardinality, foe taxonomy, and core encounter behavior.
-- [ ] Normalize trophies, camp fixtures, and the remaining equipment/reward catalogs.
-- [x] Implement dedicated Refocus and all Relic infusion/aspect transitions as validated character-engine functions with source-derived tests (see the `refocusCharacter`, `infuseRelicDust`, `completeRelicAspectQuest`, `aspectRelicFromSharedQuest`, and `resolveRelicAspect` transitions).
-- [x] Make the nine Bastion abilities (p.122–124) independently executable with typed programs, named deterministic resolvers (shoves, rushes, burst areas, stances, interrupts, delayed marks), and source-derived replay fixtures.
-- [x] Make the nine Demon Slayer abilities (p.128–130) independently executable with typed programs, deterministic area geometry for lines/blasts, reducer lifecycle hooks for delay and round-start effects (Six Hells Trigram activation, Comet weapon pickup, Soul Blade refresh, Wicked Sheath power die), and source-derived replay fixtures.
-- [x] Make the nine Colossus abilities (p.133–138) independently executable with typed programs and named deterministic resolvers (object/terrain creation, sacrifice, size-2-adjacent shoves, tiered bloodied chains), plus reducer lifecycle hooks for Boiling Blood's defy-death (stay at 1 hp, damage clamp, bonus damage) and Massive Overhead's next-attack enhancement (bonus die, pit, Heroic blast), and source-derived replay fixtures.
-- [x] Make the nine Knave abilities (p.139–144) independently executable with typed programs and named deterministic resolvers (combo actions, gamble, circular shove, status-count gating), plus reducer lifecycle hooks for Dark Knight's turn-start hatred/turn-end vigilance and Intimidate's turn-start fray/stun, and source-derived replay fixtures.
-- [x] Make the nine Fool abilities (p.150–152) — the first Vagabond job — independently executable with typed programs and named deterministic resolvers (bomb entities, gamble dashes, unerring cross/line attacks, power-die stance), plus reducer lifecycle hooks for Carnevale's turn-end bomb detonation (pre-rolled gamble) and Gallows Humor's miss/refresh power-die ticks, and source-derived replay fixtures.
-- [x] Make the nine Freelancer abilities (p.153–158) — the second Vagabond job — independently executable using only the shared `primitives/job-kit.ts` and `docs/job-template.md` recipe, with typed programs and named deterministic resolvers (marks, power dice, interrupts, delayed shots, hover zones), plus reducer lifecycle hooks for Exorcism's turn-end power-die tick/volley, Astral Chain's turn-start lightning, Showdown's foe-turn-end shot, Warding Bolts' start-in/end-out strike, and Ace's armed next attack, and source-derived replay fixtures.
-- [x] Make the nine Shade abilities (p.159–164) — the third Vagabond job — independently executable using the shared `primitives/job-kit.ts` and `docs/job-template.md` recipe, with typed programs and named deterministic resolvers (shadow entities, teleports, swaps, marks, interrupts, a power-die stance), plus reducer lifecycle hooks for Assassinate's foe-turn-end shot, Incubus's turn-end adjacency detonation, and Umbral Echo's no-adjacent-foe turn-end refresh, and source-derived replay fixtures.
-- [x] Make the nine Warden abilities (p.165–171) — the fourth Vagabond job — independently executable using the shared `primitives/job-kit.ts` and `docs/job-template.md` recipe, with typed programs and named deterministic resolvers (beast summons, mist-cloud terrain, marks, a delay, a refreshing stance, and portals), plus reducer lifecycle hooks for Sidhe's foe-turn-end toxin, Stampede's once-per-round spirit charge, Morrigan's slow-turn flock, Strength of the Pack's turn-start refresh, and Underway's turn-end second portal, and source-derived replay fixtures.
-- [x] Make the nine Chanter abilities (p.174–181) — the first Mendicant job — independently executable using the shared `primitives/job-kit.ts` and `docs/job-template.md` recipe, with typed programs and named deterministic resolvers (blessings, motes, pits, delays, stances, tales, retribution marks), plus reducer lifecycle hooks for Aria's delay blast (with foe-hit blast growth), Symphony's mote detonations, Monogatari's turn-end gamble, Chastise's retribution and Charism, and Gentleness's damage reflection, and source-derived replay fixtures.
-- [x] Complete the remaining seven Job ability suites — Harvester, Sealer, Seer, Enochian, Geomancer, Spellblade, and Stormbender — so the independently reviewed allowlist exactly matches all 144 source Job abilities. The catalog test pins that equality; each suite has typed programs, deterministic resolvers, and source-derived replay fixtures.
-- [x] Establish the first shared combat-condition paths: Rampart (dash/fly/teleport blocking with Slip/Unstoppable ignoring it), Counter's non-recursive application path, Hatred-of-X damage routing/defeat clearing, Stealth adjacency targeting/break-on-use, a replayable Vigilance fixture surface, Chain Reaction aether, Bloodied/literal-Regeneration, and state-derived Charge/Comeback/Finishing Blow/Exceed triggers, with source-derived fixtures.
-- [ ] Complete the cross-cutting damage, attack/target, save-window, passive-projection, and turn-transition contracts before promoting additional traits. The current kernel/routes and every explicit source-linked TODO live in [rules foundations](rules-foundations.md); partial reducer behavior is not automation-audit authority.
-- [x] Formalize every shared resource in a typed registry (`core.ts` `RESOURCE_RULES` / `SHARED_RESOURCE_RULES`): source pages and text for Aether (p.204), Combo (p.103), Blessing and Bonus damage (p.102), Resolve + personal resolve (p.99), Vigilance (p.105), and the narrative Effort/Strain (p.56, bonds), with per-encounter reset scope, an encounter/narrative tier, and Combo's one-token cap; the reducer resets through the registry at encounter start/end, clamps gains at registry maxima, and derives the missing combo-gain rule (base version of a combo ability grants a token, capped at one), with source-derived replay fixtures in `__tests__/resources.test.ts`.
-- [x] Derive reactive Collide and Slay triggers from mutation results (a two-pass resolver re-runs only the newly-qualifying trigger steps), so shoves into obstructions and reduce-to-0-HP no longer require an explicit caller assertion.
-- [x] Formalize single-ability trigger ordering (ICON p.85/p.107 §4): simultaneously-derived triggers resolve in source-listing order via `orderedSelectedSteps`, with reactive Collide/Slay activating after the base pass, deterministically.
-- [x] Formalize cross-character effect ordering (p.107): effects resolving at a shared boundary resolve non-turn-character first and hostile before beneficial, via `orderCrossCharacterEffects`; round-start/round-end duration expiry now runs through it.
-- [x] Formalize nested-interrupt priority (p.107 — the most recently triggered interrupt resolves first, with same-trigger simultaneous interrupts resolving in turn order): the reducer opens `when-damaged` interrupt windows when damage applies, pops the most recently triggered window when that character interrupts (LIFO), and closes all windows at the end of the turn, with `orderInterrupts` as the stable total order and source-derived replay fixtures in `__tests__/interrupts.test.ts`.
-- [x] Wire the held-damage protocol (p.107): when a character with an available `when-damaged` interrupt (Righteous Disdain, p.128) takes foe damage, the reducer holds the determined damage in the window and resolves the interrupt before it applies — the damage applies after the interrupt (or at the turn boundary) unless the interrupt re-dealt it. `applyHeldDamage` re-runs the shared application pipeline so defeat, defiance, counter, and the Chastise/Gentleness/Aria hooks behave identically for held and immediate blows; the window's `heldDamage` is cloned, checkpoint-validated, and redacted with the window.
-- [x] Extend the deferral to the uses-ability trigger (p.107/p.122): when a foe uses an ability that targets the armored ally of a character in the armed stance (Endless Battlement's Heroic Intervention), the reducer holds the ability's effect mutations — costs pay immediately — in a `uses-ability` window and resolves the interrupt before the ability resolves. The held effects apply after the interrupt or at the turn boundary (`resolveHeldInterruptWindows` drains the queue, so deferred blows that open new windows still resolve), with `heldEffects` cloned, checkpoint-validated (bounded JSON), and redacted for hidden sources, plus source-derived fixtures in `__tests__/bastion.test.ts`.
-- [x] Wire every pre-resolution interrupt trigger in the executable set through the deferral protocol (p.107): **defeated** (Boiling Blood, p.138 — a lethal foe blow is held until the interrupt arms defy-death, then lands clamped to 1 hp), **area-inclusion** (Perseus, p.123 — an allied area effect is held until the immunity applies), and **targeted-by-ability** (Masquerade, p.151 — an ability aimed at the user is held, the swap redirects the held effects to the ally via the window's `retarget`). All windows are cloned, checkpoint-validated, and redacted; when a foe's damage qualifies for both a damage window and Masquerade, the damage window wins (the more specific p.107 mechanism). Fixtures in `__tests__/colossus.test.ts`, `__tests__/bastion.test.ts`, and `__tests__/fool.test.ts`.
-- [x] Wire the held-save re-derivation protocol (p.143): when a foe's ability makes a save, the reducer holds the save record and its branch effects in a `save-rolled` window (costs pay immediately); Sucker Punch re-rolls the save through the command layer and the held branch is regenerated from the save effect's AST with the second result — the re-roll keeps the second result whether it succeeds or fails, and an unanswered window resolves the original save's branch at the turn boundary. Fixtures in `__tests__/knave.test.ts`.
-- [x] Sweep the executable set for every remaining table-facing mechanic and wire or document each one. The typed `TABLE_FACING_MECHANICS` registry in `src/rules/core.ts` (pinned by `__tests__/table-facing.test.ts`) enumerates the nineteen remaining human-ruling mechanics with their source pages and rulings; four previously documented gaps were wired in the sweep: **Sucker Punch Heroic's +1 curse** is consumed by the re-rolled save (p.144), **Penumbra's save-to-resist** is rolled with blinded foes failing automatically (p.162), **Chronotemper's Cheat Time** is gated on the mark that grants it (p.152), and **Trick Shot's +1 boon** is applied to the armed next attack (p.156).
-- [x] Genericise foe ability execution: the first `foe-ability` slices (Crusher p.301; Warrior, Soldier, Brute p.300; Pepperbox, Hunter p.302, Cantrix, Chaos-Wright — 22 abilities) are declarative `FoeRecipe` entries in `automation/content/foes/ability-recipes.ts`, compiled into typed programs and named deterministic resolvers by generic factories (attack with true strike/bonus damage/splash/criticals, shove with collide, rush, vigor, mark, swap, dash-strike, blast area, terrain, end-turn stealth) — no per-ability resolver code, with golden replay fixtures in `__tests__/foe.test.ts` (see `docs/foe-template.md`).
-- [x] Project the 36 audited full-text Flying/Phasing foe traits through an explicit source-ID recipe table: 19 Flying-only, 14 Phasing-only, and three both (including Smoke Demon's p.410 `Phasing, Flying`). The projection powers authoritative movement but does not make unrelated passive text or Sturdy executable; the catalog/compiler/replay audit is in `__tests__/foe-traits.test.ts`.
-- [ ] Extend that bar to every remaining encounter-relevant class trait, talent, mastery, Limit Break, Relic effect, foe ability, foe trait, and legend component — the recipe layers make the remaining 1,247 unsupported foe abilities and 590 traceable foe traits a data-authoring pipeline rather than resolver work.
+---
 
-Phase 1 exits only when representative character builds and all encounter-required content validate without unresolved gameplay behavior.
+# Product goal
 
-## Phase 2 — Rules-driven local VTT (gated)
+A rules-first ICON 1.5 implementation in which:
 
-The local browser harness already exercises maps, actors, turns, movement, basic abilities, straightforward attacks, terrain, damage, statuses, persistence, and event replay. Production access remains disabled.
+1. the **rules engine** (`src/rules/`) is the sole mechanical authority,
+   source-traceable, deterministic, and replay-safe;
+2. the **character manager** persists versioned player characters through an
+   expedition (creation → combats → attrition → camp);
+3. the **tactical VTT** (local Lab first, shared realtime room second) is a
+   consumer/test harness of that same engine;
+4. **narrative/expedition support** automates only what ICON defines
+   deterministically and leaves table judgment to humans.
 
-Remaining acceptance work includes area templates, target selection, summons/objects, marks, stances, interrupts and trigger ordering, class resources, mobs, complete foe behavior, Relic invokes, source-derived encounter fixtures, and exhaustive replay tests. Any defect found here must be corrected in the shared rules package or structured content rather than patched into the UI.
+The engine never automates table judgment without source justification.
 
-## Phase 3 — Multiplayer VTT (gated)
+# Current baseline (verified 2026-08-25)
 
-The Render/Supabase/WebSocket path exists as an engineering preview: server authority, validated commands, authentication, campaign roles, optimistic revisions, persistence, reconnection, and server-side Discord activity notices are scaffolded.
+- Source pipeline: all 501 pages extracted, digested, credited; byte-for-byte
+  regeneration evidence via `npm run verify:extraction`.
+- Character engine: creation, advancement, validation, import/export,
+  schema v3 migration — complete.
+- Encounter engine: command/event purity enforced; movement, terrain,
+  attacks, damage pipeline (armor/resistance/defiance/vigor/held damage),
+  saves, statuses, conditions, marks, stances, resources, interrupt windows,
+  turn scheduler (explicit actor selection, Slow rounds, pending Delay) —
+  authoritative with replay fixtures.
+- Content: all 144 Job abilities executable with replay fixtures; Mendicant
+  class traits; 47 talents; 27 Job traits; 22 foe ability recipes; 115 foe
+  trait keyword rows; foe role baselines; resource registry.
+- Verification: unit 993 tests green; e2e green; architecture +
+  automation audits green; automation audit reports 3,103 explicitly
+  unsupported clauses across 16 content kinds (the honest gap).
+- NOT built: combat settlement / post-combat character handoff; Mob model;
+  Elite/Legend multi-turn wiring; foe phase engine; Relic runtime; masteries;
+  Limit Break effects; camp/expedition lifecycle.
 
-It remains gated on Phase 2. Before release it also needs full multiplayer integration tests, campaign invitations/session UX, reconnect recovery under load, authoritative actor assignment, durable activity replay, and deployment smoke tests against configured Supabase and Render projects.
+---
+
+# Priority sequence
+
+Each priority is executable by one coding-agent pass unless marked otherwise.
+Categories: REPAIR · FOUNDATION · VERTICAL SLICE · CONTENT EXPANSION ·
+INTEGRATION · POLISH.
+
+## P1 — Combat settlement and cross-combat character continuity (REPAIR)
+
+**Goal.** End an encounter into a durable post-combat state that can start the
+next encounter.
+
+**Why now.** Every gameplay loop longer than one fight is impossible without
+it; it is the largest correctness hole per line of code needed. Nothing else
+in Phases 2–4 can be acceptance-tested without it.
+
+**Depends on.** Nothing; existing event/reducer machinery suffices.
+
+**Deliverables.** `ENCOUNTER_ENDED` settlement: personal Resolve +1 for each
+surviving PC (p.99); durable actor→character projection (HP, wounds, spent
+personal Resolve, level/chapter state); explicit statement that vigor,
+statuses, marks, stances, and per-encounter resources end with combat (already
+true). Camp/interlude reset functions on the character sheet as pure
+validated transitions.
+
+**Source rules.** p.99 Resolve/personal resolve; p.94 wounds & defeat; p.113
+Refocus; p.56 Effort/Strain; p.107 end-of-combat cleanup.
+
+**Acceptance tests.** Round-trip regression: create character → combat 1 (take
+damage, gain wound, spend personal Resolve) → END_ENCOUNTER → project →
+combat 2 starts from projected sheet; personal Resolve granted exactly once;
+replay reproduces settlement exactly; purity assertions on every new path.
+
+**Explicitly excluded.** Camp scene UX; trophies/rewards; narrative clocks.
+
+**Agent-pass size.** MEDIUM.
+
+## P2 — Foe role entitlements and the first closed foe-complexity slice (REPAIR + VERTICAL SLICE)
+
+**Goal.** Elites act twice per round; Legends act once per PC per round; one
+Elite/Legend encounter executes source-correctly end to end.
+
+**Why now.** The scheduler already supports entitlements; this is small work
+unblocking all high-tier foes, and it completes Slice C except phases.
+
+**Depends on.** Nothing (scheduler done in the stabilization pass).
+
+**Deliverables.** Content-owned entitlement rows (elite = +1 extra turn;
+legend = turns equal to live hero count, with defeated PCs counted per
+p.298); census regeneration; Elite and Legend encounter fixtures.
+
+**Source rules.** p.298 foe glossary (roles, Elite double HP/two turns,
+Legend HP scaling/turns/Juggernaut).
+
+**Acceptance tests.** Entitlement matrix through round boundaries (entitlements
+refresh each round); Legend turn count tracks party size including defeated
+PCs (pin the source reading or adjudicate); multi-turn scheduler tests stay
+green; replay fixtures.
+
+**Excluded.** Mob members; foe phases; new foe ability recipes beyond the
+slice's needs.
+
+**Agent-pass size.** SMALL–MEDIUM.
+
+## P3 — Mastery fold + talent subfamilies (FOUNDATION + CONTENT EXPANSION)
+
+**Goal.** An equipped mastery can alter its parent ability's execution; the
+highest-frequency talent subfamilies promote in exact-ID slices.
+
+**Why now.** 136 masteries + 241 talents are the two largest unresolved
+player-content families; both funnel through one execution-time fold.
+
+**Depends on.** Existing talent fold (F7) and projected `talents`/
+`masteredAbilityIds` surfaces (both durable).
+
+**Deliverables.** A mastery kernel keyed off the parent program's execution
+(modifier families first: range, area, damage, repeat, duration), then
+exact-ID promotion waves ordered by `docs/blocker-census.json`
+`blockerFrequencies`.
+
+**Source rules.** Per-ability mastery text pp.122–236.
+
+**Acceptance tests.** Each promoted row: source fixture + positive/negative +
+replay; closed negative for unequipped mastery.
+
+**Excluded.** Table-facing mastery choices remain documented rows.
+
+**Agent-pass size.** MULTI-PASS (one wave per pass).
+
+## P4 — Forced-movement & entity primitives (FOUNDATION)
+
+**Goal.** Teleport/Place/Remove/Swap/Fly-grant as shared primitives so the
+census's top blockers ({teleport} 15, {entity-create} 13, {terrain-create} 13,
+{fly-grant} 11) stop forcing per-ability resolver code.
+
+**Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
+data rows.
+
+**Depends on.** Spatial-intent gateway (exists); entity/terrain mutations
+(exist per-program).
+
+**Deliverables.** Primitive APIs + migration of existing job resolvers onto
+them (behavior-preserving, proven by unchanged replay fixtures).
+
+**Source rules.** p.104–105 movement vocabulary; per-ability clauses.
+
+**Acceptance tests.** Behavior-preserving refactor: existing golden fixtures
+unchanged; new primitive unit tests incl. Sturdy/Rampart interactions.
+
+**Excluded.** New content promotion beyond de-duplication.
+
+**Agent-pass size.** LARGE.
+
+## P5 — Relic runtime (CONTENT EXPANSION)
+
+**Goal.** Relic invokes and persistent rank effects execute authoritatively.
+
+**Why now.** After player-content folds; relics are self-contained and
+high-value for Slice B.
+
+**Depends on.** P4 primitives for effect bodies; settlement (P1) for dust /
+expedition persistence boundaries.
+
+**Deliverables.** Typed relic-effect recipes mirroring the foe-recipe model
+(data-first), starting with chapter-1 relics.
+
+**Source rules.** pp.242–260 (relics, ranks, aspects).
+
+**Acceptance tests.** One source-exact invoke + one persistent effect per
+promoted relic, replay-verified; aspect transition tests extend the existing
+character-engine coverage.
+
+**Agent-pass size.** MULTI-PASS.
+
+## P6 — Foe breadth via recipes; Vigilance windows; Mob model (FOUNDATION + CONTENT EXPANSION)
+
+**Goal.** Grow executable foe abilities along the recipe factory set; make
+Vigilance trigger-driven; design the member-based Mob representation.
+
+**Why now.** Turns 1,247 unsupported foe-ability units into a data-authoring
+pipeline; closes B5/B3.
+
+**Depends on.** P4 primitives; window protocol (exists).
+
+**Deliverables.** New recipe kinds (save riders, area riders, summons);
+Vigilance guard/punish windows from real triggers; Mob member model + one Mob
+encounter.
+
+**Source rules.** pp.298–310+; p.105 Vigilance; p.298 Mob.
+
+**Agent-pass size.** MULTI-PASS.
+
+## P7 — Shared realtime VTT release (INTEGRATION)
+
+**Goal.** `#/vtt/:encounterId` leaves the gate for real tables.
+
+**Why now.** Only after the engine above it is trustworthy and settled
+(P1–P2) does multiplayer have something authoritative to share.
+
+**Depends on.** PHASE_TWO criteria below.
+
+**Deliverables.** GM tooling parity with Lab; reconnect/session UX;
+campaign invitation flow; deployment smoke tests.
+
+**Agent-pass size.** LARGE.
+
+## P8 — Expedition & narrative integration (INTEGRATION)
+
+**Goal.** Camp, interlude, trophies, rewards, clocks/burdens/ambitions as
+deterministic-where-source-is-deterministic flows around the tactical core.
+
+**Depends on.** P1 settlement; P7 rooms.
+
+**Agent-pass size.** MULTI-PASS.
+
+---
+
+# Phase gates
+
+## PHASE_TWO_READY — "Rules-authoritative tactical core"
+
+Machine/test-observable criteria (all must hold):
+
+1. No known P0/P1 correctness defects open in `TODO.md`.
+2. Command purity + exact-replay suite green (existing suites).
+3. Combat settlement implemented (P1 acceptance tests).
+4. Encounter closure Slices A and D pass end to end (see
+   [`deliverables.md`](deliverables.md)).
+5. Automation/architecture audits green; no regression in the conservative
+   audit counts.
+6. Full CI green.
+
+Current state: **criteria 3 and 4 fail**; gate stays `false`.
+
+## PHASE_THREE_READY — "Closed local gameplay, shared authority released"
+
+Criteria:
+
+1. PHASE_TWO_READY true.
+2. Encounter Slices B and C close end to end.
+3. Local VTT covers setup, selection, Slow, targeting, movement, abilities,
+   interrupts, reload/replay without UI-local mechanics decisions.
+4. Multiplayer transport + browser acceptance suites green against a
+   configured deployment; reconnect recovery tested.
+5. No hidden-state oracle leaks in the server projection test suite.
+
+Current state: **false** (inherits everything above plus foe/player
+complexity gaps).
+
+Gate constants: `src/rules/catalog.ts` (`PHASE_TWO_READY`,
+`PHASE_THREE_READY`) are derived from `RULES_COVERAGE`; they must not be
+flipped by hand while their criteria fail.
+
+---
+
+# Encounter-closure slices
+
+Canonical definitions live in [`deliverables.md`](deliverables.md)
+§Encounter closure. They are the primary completeness metric: raw source-unit
+counts never substitute for a slice closing.
+
+# What is deliberately NOT in any phase
+
+- Automating table judgment (optional ally dashes' consent, either/or GM
+  choices) — documented table-facing instead.
+- Horizontal scaling of the realtime service (single-instance by design).
+- Mobile/native clients, accounts beyond Supabase auth, asset marketplace.

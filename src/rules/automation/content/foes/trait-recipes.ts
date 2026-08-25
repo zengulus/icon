@@ -25,7 +25,7 @@ import type { FoeTraitKeywordEffect, FoeTraitKeywordRecipe } from '../../kernels
  * Deliberately absent (no projection, no row): prose rows that are not pure
  * keyword lists (Elite/Legend suffixes, `Enrage`, `Mob`, `Shelter`,
  * `Phasing. This trait also transfers to a rider`). They stay source-visible
- * with their kernel need in `docs/kernels-needed.md`.
+ * with their kernel need in `docs/rules-foundations.md`.
  */
 
 const SIZE_FOOTPRINT_PENDING = 'Size footprint (p.92) is not enforced yet (F1 footprint matrix pending).';

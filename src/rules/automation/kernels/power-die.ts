@@ -1,7 +1,7 @@
 import type { EncounterActor } from '../../types.js';
 
 /**
- * Power-die kernel (docs/primitives-needed.md §"Power-die stance"; ICON
+ * Power-die kernel (docs/rules-foundations.md §"Power dice & stances"; ICON
  * pp.118–130, 151).
  *
  * A power die is a persistent per-actor counter (a `ruleState` number) that

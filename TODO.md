@@ -1,242 +1,220 @@
-# ICON Companion — orchestrator handoff
+# ICON Remaining Work
 
-This is the starting point for any future agent working in this repository. It
-is a coordination and delivery guide, not a substitute for source rules or
-acceptance tests.
+This is the **current actionable backlog**, rebuilt from the full-repository
+audit of 2026-08-25 (commit `55c7b6f` and later). It contains no completed
+work except where a dependency must be explained.
 
-Read, in order:
+Canonical document ownership:
 
-1. [`README.md`](README.md) for product and deployment boundaries.
-2. [`docs/roadmap.md`](docs/roadmap.md) for phase status.
-3. The subsystem-specific document named below before changing that subsystem.
-4. Existing tests around the behavior before modifying implementation.
+| Question | Document |
+| --- | --- |
+| What is this project? What works today? | [`README.md`](README.md) |
+| In what order do we build it? Phase gates? | [`docs/roadmap.md`](docs/roadmap.md) |
+| What are the concrete artifacts and their completion criteria? | [`docs/deliverables.md`](docs/deliverables.md) |
+| Which mechanic foundations exist and how mature are they? | [`docs/rules-foundations.md`](docs/rules-foundations.md) |
+| What content can execute, at what level? | [`docs/rules-coverage.md`](docs/rules-coverage.md) |
+| Machine-generated Class/Job unit dependency graph | [`docs/blocker-census.md`](docs/blocker-census.md) (**generated** — `npm run audit:class-job-census`; never hand-edit) |
+| Genuine source-text contradictions only | [`docs/source-adjudications.md`](docs/source-adjudications.md) |
 
-## Product invariants — do not weaken these
+Status vocabulary used below: `BLOCKED` · `READY` · `PARTIAL` ·
+`SOURCE/ADJUDICATION NEEDED` · `TABLE-FACING` · `DONE`.
 
-| Invariant | Meaning | Where to verify |
-| --- | --- | --- |
-| Public Lab | `#/lab` is a browser-local human-testing service at **every** phase. It uses no Supabase, Render, authentication, realtime connection, or shared checkpoint, and may deploy on GitHub Pages. | `src/App.tsx`, `src/pages/BrowserVtt.tsx`, `src/vtt/`, browser E2E |
-| Authoritative VTT | `#/vtt/:encounterId` is the real shared room and remains phase-gated until release criteria are genuinely met. | `src/App.tsx`, `src/rules/catalog.ts`, `server/index.ts`, transport E2E |
-| Server authority | Browser clients never write live encounter state or durable checkpoints. Render validates commands, permissions, revisions, and redaction; its service role is the checkpoint writer. | `server/rooms.ts`, `server/checkpoints.ts`, `supabase/migrations/` |
-| Conservative automation | Parser output is not execution authority. A rule becomes executable only through an explicit reviewed program/recipe with source-page and replay evidence. | `docs/rules-coverage.md`, `src/rules/automation/content/glue/manual-programs.ts` |
-| Replayability | Durable events and checkpoints must yield the same canonical state on replay/hydration. | `src/rules/encounter.ts`, `src/rules/vtt-room.ts`, `server/__tests__/` |
-| Single live authority | The realtime room manager is deliberately single-instance. Do not horizontally scale or overlap Render deployments until there is a fenced lease/relay design. | `README.md`, `server/rooms.ts` |
+---
 
-`PHASE_TWO_READY` and `PHASE_THREE_READY` are intentionally `false`. Do not
-flip a gate to make a route available, satisfy a test, or ship a partial
-subsystem.
+## Immediate correctness blockers
 
-## System map
+These precede breadth work. Each has a concrete acceptance condition.
 
-| Area | Start here | Supporting references |
-| --- | --- | --- |
-| Routes, client shells, local Lab | `src/App.tsx`, `src/pages/BrowserVtt.tsx`, `src/pages/Sandbox.tsx` | `src/vtt/`, browser E2E |
-| Character creation, import, local/cloud persistence | `src/rules/character.ts`, `src/services/characters.ts`, `src/context/CharacterContext.tsx` | `src/rules/__tests__/character.test.ts`, `src/services/__tests__/characters.test.ts` |
-| Shared combat state and replay | `src/rules/encounter.ts`, `src/rules/types.ts`, `src/rules/vtt-room.ts` | `src/rules/__tests__/encounter.test.ts`, `server/__tests__/rooms.test.ts` |
-| Rules programs, source coverage, extraction | `src/rules/automation/`, `src/rules/source-units.ts` | [`docs/rules-coverage.md`](docs/rules-coverage.md), `scripts/audit-automation.ts` |
-| Damage, target, save, and turn foundations | `src/rules/automation/kernels/encounter-adapter.ts` | [`docs/rules-foundations.md`](docs/rules-foundations.md) |
-| Realtime client/server | `src/services/realtime.ts`, `server/index.ts`, `server/rooms.ts` | `scripts/e2e-realtime.mjs`, `src/services/__tests__/realtime.test.ts` |
-| Checkpoints and Supabase schema | `server/checkpoints.ts`, `supabase/migrations/` | `server/__tests__/checkpoints.test.ts`, README Supabase section |
-| Geometry/table/fog/annotations | `src/vtt/`, `src/rules/vtt-room.ts` | `src/vtt/__tests__/`, `src/rules/__tests__/vtt-room.test.ts` |
-| Build, Pages, CI, Render | `package.json`, `vite.config.ts`, `.github/workflows/ci.yml`, `render.yaml` | README deployment sections |
+### B1. Combat settlement does not exist — `READY`
 
-## Immediate rule-engine repair queue
+**Problem.** `END_ENCOUNTER` (`src/rules/encounter.ts`, `ENCOUNTER_ENDED`
+handler) clears per-encounter resources, statuses, marks, stances, vigor, and
+sets `partyResolve = 0` — but never grants the post-combat **personal Resolve
++1** (ICON p.99: "all characters gain 1 personal resolve after every
+combat"), and there is no function anywhere that projects an encounter actor's
+durable post-combat state back into the persistent `IconCharacter`. HP
+attrition, wounds gained in combat, and personal Resolve spent on Limit
+Breaks therefore have **no path back to the persistent sheet**: combat 2
+cannot start from combat 1's outcome.
 
-These are concrete replay/authority defects found after the latest damage
-work. Repair them before promoting new damage, trait, or foe coverage.
+**Acceptance condition.** A tested `actorFromCharacter ↔ characterFromActor`
+projection pair plus an `ENCOUNTER_ENDED` settlement step that (a) grants each
+surviving hero-side PC personal Resolve +1 exactly once, (b) preserves wounds,
+HP, and spent personal Resolve through settlement, and (c) round-trips a
+character through combat 1 → settlement → combat 2 in a regression test.
+Source: p.99 (Resolve), p.94 (wounds), p.107 (end of combat cleanup).
 
-1. **Persist Defiance’s application result for legacy attack/Vigilance events.**
-   **Repaired.** `ATTACK_RESOLVED` and `VIGILANCE_SPENT` previously recorded an
-   amount after the 1-HP Defiance floor, then replay re-inferred Defiance from
-   that reduced amount, so a lethal hit could replay with Defiance still
-   present and without its temporary immunity. Event construction now records
-   a durable `defianceTriggered` result (`src/rules/encounter.ts`); the
-   application kernel honors it via an `EncounterHeldDamage.defianceTriggered`
-   override (`src/rules/automation/kernels/encounter-adapter.ts`
-   `applyDeterminedEncounterDamage`); and replay passes it through for both
-   event shapes. Fresh held interrupt windows never persist the flag — they
-   carry the full determined amount and still re-infer. Defiance replay
-   fixtures cover both event shapes (`__tests__/encounter.test.ts`,
-   `__tests__/conditions.test.ts`).
-2. **Open a defeated interrupt window only for an actual defeat.**
-   **Repaired.** VM `applyDamage` now computes prospective applied defeat —
-   the determined amount against HP+vigor, minus Defiance (p.104) and Defy
-   Death (p.138) application-time floors — before arming Boiling Blood’s
-   `defeated` window, mirroring the exact test the application kernel uses.
-   Fixtures cover a defiant hero and an already-defy-death hero with only the
-   defeated interrupt available (`__tests__/colossus.test.ts`).
-3. **Do not preempt Masquerade using raw damage.**
-   **Repaired.** `deferrableEffectWindow` previously let a hypothetical
-   defeated/when-damaged window suppress Masquerade from the raw mutation
-   amount, so armor/resistance absorption or a Defiance/Defy Death floor could
-   prevent that window and leave neither interrupt. The priority check now
-   mirrors the damage pipeline: it determines the blow through the shared
-   kernel, lets Masquerade win when no damage window would actually open
-   (including a fully mitigated amount), and uses the shared
-   `prospectiveAppliedDefeat` gate before preferring a `defeated` window
-   (`src/rules/automation/kernels/encounter-adapter.ts`). Window-order regressions
-   cover armor mitigation, Defiance protection, and the genuinely-lethal
-   control (`__tests__/fool.test.ts`).
-4. **Gate Bleak Mercy on statuses, not broad conditions.**
-   **Repaired.** ICON p.144 requires three or more *statuses*; the resolver
-   now counts the status-only projection instead of every projected condition,
-   so passive positive conditions (Counter, Defiance, Resistance) can no
-   longer grant the true-strike/bypass package
-   (`src/rules/automation/content/jobs/programs/knave-programs.ts`). A three-positive-conditions
-   negative fixture joins the existing p.144 replay cases
-   (`__tests__/knave.test.ts`).
+### B2. Elite and Legend multi-turn entitlements are machinery without content — `READY`
 
-All four repairs are closed and replay-verified. Do not reopen them by
-removing replay tests, reclassifying a recorded amount as raw, weakening
-Defiance/Defy Death, or changing the source text.
+**Problem.** The turn scheduler supports registered extra-turn entitlements
+(`registerTurnEntitlementSource`, `src/rules/turn-scheduler.ts`), and tests
+register fixtures — but **no production row registers the p.298 rules**: an
+Elite acts twice per round; a Legend acts once per player character per round.
+`createFoeFromProfile` (`src/rules/encounter.ts`) gives Elites double HP and
+Legends scaled HP but leaves `turnsRemaining = 1`.
 
-## Active work tracks and safe order
+**Acceptance condition.** Content-owned entitlement rows keyed on
+`roleId === 'elite'` / `'legend'` (Legend reading live player-count), so a
+default Elite gets 2 turns and a Legend in a 4-player party gets 4, verified
+through the existing scheduler matrix plus a source fixture each. Defeated PCs
+still counting toward Legend turns (p.298) must be pinned or explicitly ruled.
 
-### 1. Rules foundations — current highest-leverage track
+### B3. Mob foes cannot exist at all — `BLOCKED` on a member model
 
-Read [`docs/rules-foundations.md`](docs/rules-foundations.md) fully. Work in
-this order:
+**Problem.** `createFoeFromProfile` throws `foe.mob-unsupported` for the mob
+role. Mobs need member-level state (two members per player, removed after two
+hits, no slay triggering) that the single-body `EncounterActor` cannot
+represent.
 
-1. Complete durable `DamageIntent → DeterminedDamage → AppliedDamage` and
-   `AttackResolution` records before promoting broad damage, defense, or role
-   traits.
-2. Extend `TargetQuery` into `SpatialIntent` before expanding areas,
-   teleports, forced movement, or arbitrary target selectors.
-3. Generalize `SaveWindow` and then the ordered turn-boundary plan. Preserve
-   recorded dice and explicit choice consumption.
-4. Only then add closed source-ID passive recipes (Rot/Regeneration, foe role
-   baselines, Defiance/Counter/Dodge/Sturdy delivery matrices).
+**Acceptance condition.** A designed member representation (entity pool or
+actor-with-members) with hits accounting, removal, and slay-suppression, plus
+one full Mob encounter test.
 
-Rules-specific hard stops:
+### B4. Foe phases and chapter rules are inert data — `PARTIAL`
 
-- A raw amount must go through `determineAndApplyEncounterDamage`; a persisted
-  final amount must go through `applyDeterminedEncounterDamage`. Never add an
-  unlabeled numeric damage field or alternate mitigation arithmetic.
-- `bypassVigor`, `ignoreArmor`, and `ignoreDefiance` are distinct source
-  exceptions. Do not use `divine` as shorthand for a partial bypass.
-- Slashed applies after a self/ally **ability** move, once per turn. Lifecycle
-  source/self movement must use `applyLifecycleAbilityMove`; core Move/Dash
-  must not consume it.
-- Do not turn parser-complete source text into `EXECUTE_RULE` authority without
-  an allowlist entry, source-page fixture, and deterministic replay test.
-- A reducer improvement does not change automation-audit numbers on its own.
+**Problem.** Profiles carry parsed `phases` and `chapterRules`
+(`content/generated/foes-1.5.json`, projected in `src/rules/foes.ts`), and
+`createFoeFromProfile` seeds `ruleState.phaseId` with the first phase — but
+no engine reads either. Phase transitions and chapter-scaling rules never
+execute.
 
-### 2. Lab usability and local VTT acceptance
+**Acceptance condition.** A phase-transition kernel (trigger → transition,
+recorded durably for replay) and chapter-rule rows wired like trait recipes;
+one source-exact phased legend as the first consumer.
 
-Keep the Lab useful for human testing without connecting it to backend systems.
-Favor shared reducer/session/viewport behavior over duplicate simulation code.
+### B5. Vigilance is command-driven, not trigger-driven — `PARTIAL`
 
-Before claiming a Lab interaction complete, exercise its persisted browser
-state, reload behavior, and deterministic reducer replay. Browser-only work
-must not add an E2E identity marker, loopback websocket CSP allowance, or
-backend configuration to production output.
+**Problem.** Vigilance spends run through the dedicated `SPEND_VIGILANCE`
+command with declared results (fixture-grade). The p.105 triggers (ally
+within range 2 takes damage / foe enters adjacency) never open a window, and
+range-2 eligibility is not enforced from a trigger record.
 
-### 3. Authoritative rooms, privacy, and durability
+**Acceptance condition.** Guard/punish windows open from real damage/movement
+triggers through the existing window protocol (`decideDamageWindow` family),
+with once-per-trigger ledger and replay fixtures.
 
-Treat `server/rooms.ts` and Supabase migrations as security-sensitive.
+---
 
-- Revalidate command ownership, role, revision, and visibility before reducer
-  execution. Player input must not resolve against hidden state in a way that
-  leaks identities, coordinates, terrain, or rules text.
-- Keep player room/event projections redacted. New state fields need ownership
-  provenance and projection tests before they can originate from hidden actors.
-- Preserve checkpoint append-only/CAS semantics, strict hydration, bounded
-  retention/event history, and hard-save acknowledgement only after a durable
-  write succeeds.
-- Treat dynamic runtime authority as single-instance until a real lease/relay
-  design exists. Do not solve a scale problem by relaxing ordering or CAS.
+## Foundational mechanics (high fan-out)
 
-### 4. Character/import and generated-content integrity
+Ordered roughly by how many otherwise-valid source units they unblock (see
+also `docs/blocker-census.json` `blockerFrequencies`):
 
-- Current-schema malformed or future-version records must reject/quarantine;
-  they must never be silently defaulted and then overwritten on next save.
-- Keep local recovery copies before repairing persisted data. Isolate bad cloud
-  rows rather than discarding a healthy roster.
-- Generated source artifacts are checked in. Extraction changes require the
-  supplied PDF and `npm run verify:extraction`; hosted CI intentionally checks
-  the no-PDF evidence path instead.
+| # | Foundation | Status | Unblocks (approx.) | Notes |
+| --- | --- | --- | --- | --- |
+| F1 | Teleport / Place / Remove / Swap as shared forced-movement primitives | PARTIAL (ad-hoc in Shade/Fool/Bastion resolvers) | 15+ talents, several abilities | Census top blocker `{teleport}` |
+| F2 | Interrupt-modifier family (rank change, extra uses, timing override) | PARTIAL | 13+ talents | Census `{interrupt-modifier}` |
+| F3 | Terrain-create / entity-create recipe primitives | PARTIAL (job-program-local today) | 13 + 13 talents/abilities | Generalize from existing resolvers |
+| F4 | Fly-grant / movement-modifier primitives | PARTIAL | 11+ | Census `{fly-grant}` |
+| F5 | Mark-modifier family | PARTIAL | 11+ | |
+| F6 | Damage-modifier family beyond bonus dice | PARTIAL | 11+ | |
+| F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (8 wired shape, 136 unresolved) | 136 masteries | Biggest single content family |
+| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL (47/288 wired) | ~200 talents | See census frequencies |
+| F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
+| F10 | Settlement & expedition lifecycle | BLOCKED on B1 | all cross-combat play | |
 
-## Content coverage inventory — concrete future work
+---
 
-Catalog presence, a rendered rules card, or a parser-complete source unit is
-not automation coverage. Consult [`docs/rules-coverage.md`](docs/rules-coverage.md)
-and `npm run audit:automation` before claiming any item below is complete.
+## Encounter-closure blockers
 
-| Area | What exists now | Concrete remaining work and safe entry point |
-| --- | --- | --- |
-| **Job abilities** | All 16 Jobs / 144 active abilities have reviewed typed programs and replay fixtures. This does **not** release Phase 2. | Keep source-specific behavior honest while foundations are incomplete. Any new conditional behavior must use the shared damage/target/save/turn contracts, not an ability-local shortcut. Start in `src/rules/automation/content/jobs/programs/*-programs.ts` and its job fixture. |
-| **Class and Job traits** | 27 Job traits are wired with engine mechanics across five wiring homes (condition projections, combat-start grants/companion summons, lifecycle recipes, active resolvers, command/kernel hooks); 38 remain documented. The audit still lists **7 class-trait** and **38 job-trait** source units unresolved. | Implement closed source-ID recipes only after their prerequisite foundation works. Do not infer a trait from title or prose. Start in `automation/passive-projection.ts`, `manual-programs.ts`, and the exact source unit/fixture. |
-| **Talents and masteries** | Catalogued and validated for builds. 43 talents are executable (30 wired fold + 5 program-level + 3 passive-projection + 4 range-modifier + 1 area-modifier); 245 remain documented. The audit lists **245 talents** and **136 masteries** unresolved. | Sort into passive projection, command-time resolution, lifecycle hook, table-facing choice, or unavailable. Promote a small exact-ID slice with source-page/replay evidence; do not bulk-enable by parser result. |
-| **Limit Breaks and Job summons** | Limit Breaks structured in catalog/loadout validation; summon placement, ownership, and entity caps are wired (`summon-recipes.ts`). The audit lists **16 limit-break** units unresolved; the 6 summon-rule source units are complete. | Finish `SpatialIntent`, targeting, entities, areas, lifecycle, and ownership/projection semantics before automation. Start in `src/rules/automation/`, `src/rules/encounter.ts`, and `src/rules/vtt-room.ts`; add server redaction tests for owner-visible state. |
-| **Relics** | All 40 Relics, ranks I–III, aspects, and character validation exist. The audit lists **120 relic-rank** and **40 relic-aspect** units unresolved. | Relic invokes, persistent effects, aspect transitions, and table choices must be classified individually. Do not route a Relic through generic `EXECUTE_RULE` without an explicit recipe and durable lifecycle/projection design. Start in `src/rules/catalog.ts`, `src/rules/character.ts`, and relic source units. |
-| **Foe abilities** | 449 profiles/components with 1,365 catalogued abilities; 22 exact reviewed recipe abilities are active. | The remaining catalog abilities are not independent authority. The audit separately tracks **1,247 traceable foe-ability** units plus phases/chapter rules. Prefer bounded attack-tagged recipes only after target/damage contracts are ready; do not implement mobs, areas, summons, or phases through client assertions. Start in `automation/foe-recipes.ts`, `foes.ts`, and `__tests__/foe.test.ts`. |
-| **Foe traits, roles, phases, and chapter rules** | The p.298 role baselines (Skirmisher/Heavy/Artillery/Legend) project through closed `FOE_ROLE_BASELINE_RECIPES`; 36 Flying/Phasing foe trait IDs project through the manifest. The audit lists **590 foe traits**, **19 foe phases**, and **116 foe chapter rules** unresolved. | Extend passive-projection closed-ID rows after damage/target/lifecycle contracts. Build exact source-ID manifests; never derive mechanics from a role label or trait text at runtime. |
-| **Core combat** | Shared reducer and initial damage/attack/save/target/turn seams exist. The audit still lists **70 core** source units unresolved. | Complete the immediate repair queue and foundations before promoting Defiance, Counter, Dodge, Sturdy, Vigilance, Regeneration, broad areas, summons, and trigger ordering. See `docs/rules-foundations.md`. |
-| **Bonds, powers, rewards, trophies, camp** | Character choices and content are visible/validated; narrative outcomes are table-facing. Audit backlog includes **68 trophies**, **16 camp fixtures**, **85 camp features**, and **9 reward rules**. | Keep narrative/freeform choices visible and non-authoritative until a deterministic source-backed model exists. Do not fabricate combat outcomes from descriptive text. |
+The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
+§Encounter closure. Current first unsupported dependency per slice:
 
-When selecting a coverage slice, pick one exact source behavior whose target,
-cost, timing, save/damage/movement semantics, ownership, and replay shape are
-already supported. If any prerequisite is missing, leave it source-visible and
-add a source-linked TODO at that prerequisite instead of approximating it.
+- **Slice A (baseline)**: closes except settlement exit (B1).
+- **Slice B (player complexity)**: blocked on mastery/talent folds (F7/F8),
+  Relic runtime (F9), Vigilance windows (B5).
+- **Slice C (foe complexity)**: blocked on Elite/Legend entitlements (B2),
+  foe traits beyond keywords (590 rows), phases (B4).
+- **Slice D (attrition chain)**: blocked on B1 entirely.
 
-## What not to do
+## Player content
 
-- Do not relax phase gates, RLS, server-side authorization, checkpoint
-  ownership, revision checks, or redaction to make a feature easier to demo.
-- Do not expose a Supabase service-role secret, Discord webhook, dev-auth
-  token, E2E identity path, or loopback-only CSP rule in a production build.
-- Do not mutate a shared room from the browser, trust client role/actor IDs,
-  or make player actions reveal hidden information through success, error,
-  damage, cost, or event payloads.
-- Do not use prose heuristics for traits/roles/powers, silently approximate
-  unimplemented rules, or claim broad source coverage from a generic fallback.
-- Do not bypass source migration/strict validation by defaulting malformed
-  objects, stripping unknown data, or rewriting future rules versions.
-- Do not discard unrelated changes in this intentionally dirty worktree.
-  Inspect the diff first; make narrow patches and preserve concurrent work.
-- Do not add a deployment, remote configuration, database migration, or
-  external message outside the user-authorized scope.
+- **Class traits** — `PARTIAL`: Mendicant slice (Diaga/Bless/Succor) done;
+  **7 unresolved** (audit `class-trait`). Classify each: passive projection /
+  command-time / table-facing.
+- **Job traits** — `PARTIAL`: 27/65 wired across the five wiring homes;
+  **38 documented** rows remain, each carrying its kernel need. Work the
+  highest-frequency kernel first (see F1–F6), then harvest rows.
+- **Talents** — `PARTIAL`: 47/288 executable (fold, program-level, aura
+  projection, range/area modifiers). **241 unresolved**. Do not bulk-enable;
+  promote exact-ID slices per subfamily with replay fixtures.
+- **Masteries** — `PARTIAL`: equipped-mastery surface is validated and
+  durable; **136 unresolved**. Requires the F7 fold (mastery mutates parent
+  ability at execution time) before broad promotion.
+- **Limit Breaks** — `SOURCE/ADJUDICATION NEEDED` + `PARTIAL`: costs parse and
+  pay through the resolve pool; the 16 limit-break effect bodies are
+  unresolved. Unlock level is adjudicated at level 1
+  (`docs/source-adjudications.md`). Availability gating does not exist yet.
+- **Relics** — structured only (ranks, aspects, quests validate in the
+  character engine; Refocus/infusion transitions are DONE). Invoke and
+  persistent-effect automation is F9, not started.
 
-## Working protocol for an orchestrator
+## Foe content
 
-1. **Establish scope.** Identify the affected product boundary and read its
-   tests/docs before changing code. Split only independent, bounded work; do
-   not let parallel edits collide in shared reducer/protocol files.
-2. **Keep authority narrow.** Prefer data/validation/projection changes to UI
-   claims. If a requirement needs a user choice, external configuration, or a
-   release decision, report the blocker instead of assuming it.
-3. **Make handoffs explicit.** For every partial implementation, leave a
-   source-linked `TODO(ICON-rules, p.X)` or equivalent implementation note at
-   the seam, plus a concise doc entry explaining prerequisite, safe next step,
-   and what must not be inferred.
-4. **Test at the boundary.** Add unit tests for pure logic, reducer replay for
-   durable state, server integration for authority/redaction/checkpoints, and
-   browser E2E for a user-visible flow when appropriate.
-5. **Report honestly.** State what is verified, what remains gated, audit
-   deltas (only if authority changed), and deployment constraints. Never call
-   a phase ready merely because a focused test passes.
+- **Regular foes** — `PARTIAL`: standard profile construction + basic attacks
+  work; **22 abilities** across 7 faction profiles execute as declarative
+  recipes. Extend the recipe factory set before adding profiles (data-only +
+  one fixture each).
+- **Templates/factions** — remaining faction profiles need the recipe kinds
+  above; prose traits stay table-facing.
+- **Mob** — B3.
+- **Elite** — double HP DONE; second turn B2.
+- **Legend** — HP scaling DONE; per-player turns B2; Juggernaut round-start
+  clear DONE; component ability inheritance DONE.
+- **Traits** — 79 keyword rows fully executable, 36 partial projections;
+  **590 traceable foe-trait units** unresolved overall. Prose traits are
+  table-facing by design.
+- **Phases / chapter rules** — B4.
 
-## Verification baseline
+## Persistent / expedition lifecycle
 
-Run the smallest relevant test while iterating, then run the applicable final
-checks:
+- Character schema v3, import/export, migration v1→v3: `DONE`.
+- Camp / interlude resets of effort/strain/wounds: fields exist, **no camp
+  flow** — `NOT STARTED` (needs B1's settlement output as input).
+- Trophies (68), camp fixtures (16), features (85), reward rules (9):
+  structured/table-facing; deterministic subset needs classification before
+  any automation.
+
+## Narrative deterministic mechanics
+
+- Zero-rating rolls, boons/curses, criticals: `DONE`.
+- Effort/Strain spending and Second Wind recovery: registry + validation
+  `DONE`; bond-power execution effects are `TABLE-FACING`.
+- Clocks/burdens/ambitions progress trackers: `NOT STARTED`.
+- Expedition structure itself: `NOT STARTED` (roadmap Phase 4).
+
+## VTT / realtime
+
+- Lab (`#/lab`): explicit actor selection, movement, attacks, ability use,
+  persistence/reload/replay — `DONE` as a human-testing harness.
+- Shared VTT route + Render authority: engineering preview, gated behind
+  `PHASE_THREE_READY`; transport acceptance passes. Missing: GM tooling parity
+  with Lab, reconnect UX under load, campaign invitation/session flow.
+- Single-instance room manager: intentional; do not scale horizontally.
+
+## Later polish
+
+- Compendium search UX, token art pipeline, map asset management, mobile
+  layout, sound/log filtering. Nothing here blocks rules authority.
+
+---
+
+## Verification baseline (unchanged)
 
 ```sh
 npm test
 npm run typecheck
 npm run audit:automation
-npm run test:e2e       # routes, realtime, auth, or room behavior
-npm run build          # client/server/deployment changes
+npm run test:e2e
+npm run build
 git diff --check
+# generated-content changes only:
+npm run verify:extraction   # requires the supplied PDF locally
 ```
 
-For generated-content changes, also run `npm run verify:extraction` locally
-with the supplied PDF. For Supabase migration changes, add or extend a
-migration test and manually review RLS/RPC authority as part of the change.
-
-## Definition of done
-
-A task is done only when its behavior is implemented within the correct
-authority boundary, its durable representation is validated and replay-safe,
-its user-visible surface is covered where relevant, its source/docs/audit
-claims are truthful, and the appropriate checks above pass.
+Observed at the audit commit: unit 75 files / 993 tests green; e2e 4 passed;
+architecture audit green (83 files); automation audit green with 3,103
+explicitly unsupported clauses (expected while incomplete);
+`verify:source-artifacts -- --expect-source-pdf=absent` fails only on
+machines where the untracked PDF exists (it is a hosted-CI check; the default
+invocation passes locally).

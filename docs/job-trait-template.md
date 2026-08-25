@@ -94,5 +94,4 @@ per-owner entity cap (`summonCap` in `content/jobs/summon-recipes.ts`, six per t
 
 - `docs/rules-foundations.md` §7 — the executed F6 inventory and remaining
   documented rows.
-- `freebuff-plan.md` — the F6 status.
 - `docs/rules-coverage.md` — the audit note.
