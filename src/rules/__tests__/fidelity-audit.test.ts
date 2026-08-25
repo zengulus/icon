@@ -17,6 +17,8 @@ import {
 } from '../fidelity/mutation.js';
 import { buildProductionWorld } from '../fidelity/world.js';
 import { checkProjectClaims, PROJECT_CLAIMS } from '../fidelity/claims.js';
+import { generateMarkdown } from '../fidelity/docs.js';
+import { PHASE_GATES } from '../phase-gates.js';
 import { resolveConsumerRegistrations } from '../fidelity/consumers.js';
 import { evaluateContract, evaluateContracts } from '../fidelity/evaluate.js';
 import { PRODUCTION_ADAPTERS } from '../fidelity/adapters.js';
@@ -928,6 +930,118 @@ describe('hardening regressions: executed authority chain', () => {
     const commands = boundEvidenceCommands(world);
     expect(commands).toEqual([...commands].sort());
     expect(new Set(commands).size).toBe(commands.length);
+  });
+
+  it('R11. recorded prerequisite results are load-bearing for authority claims', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'fidelity-recordings-'));
+    mkdirSync(join(repo, 'docs'), { recursive: true });
+    writeFileSync(join(repo, 'package.json'), JSON.stringify({ scripts: { 'some:audit': 'true' } }));
+    writeFileSync(join(repo, 'docs', 'widget.md'), '| Widget kernel | CLOSED |\n');
+    const claim = {
+      id: 'claim:widget-audit',
+      file: 'docs/widget.md',
+      anchor: '| Widget kernel | CLOSED |',
+      strength: 'closed' as const,
+      subject: 'Widget kernel audit',
+      binding: { kind: 'generated-audit' as const, command: 'some:audit' },
+    };
+    const emptyResult = { summary: { integrityViolations: [] }, findings: [], scopes: [] } as never;
+
+    // No recording → the claim cannot verify (reported, never accepted).
+    const unrecorded = checkProjectClaims(emptyResult, { root: repo, readFile: (p: string) => readFileSync(p, 'utf8') }, [claim]);
+    expect(unrecorded.violations).toEqual([]);
+    expect(unrecorded.unverifiedClaims.map(({ id }) => id)).toContain('claim:widget-audit');
+
+    // A recorded FAILURE is a hard violation.
+    const failed = checkProjectClaims(
+      emptyResult,
+      { root: repo, readFile: (p: string) => readFileSync(p, 'utf8'), auditResults: { 'some:audit': 'failed' } },
+      [claim],
+    );
+    expect(failed.violations.map(({ check }) => check)).toContain('generated-audit-failed');
+
+    // Only a recorded PASSING run verifies the claim.
+    const passed = checkProjectClaims(
+      emptyResult,
+      { root: repo, readFile: (p: string) => readFileSync(p, 'utf8'), auditResults: { 'some:audit': 'passed' } },
+      [claim],
+    );
+    expect(passed.violations).toEqual([]);
+    expect(passed.unverifiedClaims).toEqual([]);
+  });
+
+  it('R12. doc rendering is identical with and without per-run authority evidence', () => {
+    // The stable doc-mode report must be byte-identical whether or not this
+    // particular run executed prerequisites — otherwise the committed
+    // document could never survive an aggregate-authority run.
+    const plain = runStrictFidelityAudit(REPO_ROOT);
+    const withEvidence = runStrictFidelityAudit(REPO_ROOT, {
+      auditResults: { 'verify:source-artifacts': 'passed' },
+    });
+
+    // The AUTHORITY projection reacts to the recording: the bound claim now
+    // verifies and leaves the ephemeral LEGACY/UNVERIFIED list…
+    const id = 'claim:deliverables:source-provenance-pipeline';
+    expect(plain.unverifiedClaims.some((claim) => claim.id === id)).toBe(true);
+    expect(withEvidence.unverifiedClaims.some((claim) => claim.id === id)).toBe(false);
+    // …while the STABLE doc-mode output is unchanged.
+    expect(generateMarkdown(withEvidence.stableReport))
+      .toBe(generateMarkdown({ result: plain.result, unverifiedClaims: plain.unverifiedClaims }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase-gate strictness — PHASE_THREE_READY must outrun PHASE_TWO_READY
+// ---------------------------------------------------------------------------
+
+describe('phase-gate strictness regressions', () => {
+  const two = PHASE_GATES.PHASE_TWO_READY.requirements;
+  const three = PHASE_GATES.PHASE_THREE_READY.requirements;
+
+  it('the Phase Three registry is a strict superset of the Phase Two registry', () => {
+    expect(three.length).toBeGreaterThan(two.length);
+    for (const requirement of two) {
+      expect(three).toContainEqual(requirement);
+    }
+    const onlyThree = three.filter((requirement) => !two.includes(requirement));
+    expect(onlyThree.length).toBeGreaterThanOrEqual(1);
+    // Every extra row names a real roadmap criterion, either machine-backed
+    // or an explicit (never-verifiable-by-construction) acceptance criterion.
+    for (const requirement of onlyThree) {
+      expect(['generated-audit', 'fidelity-scope', 'acceptance-criterion']).toContain(requirement.kind);
+    }
+  });
+
+  it('Phase Two fully met still leaves Phase Three LEGACY/UNVERIFIED on a Phase Three-only criterion', () => {
+    // Every machine-auditable input BOTH gates share is satisfied: complete
+    // coverage, passing prerequisite audits, and a closed sourcebook scope.
+    const deps = {
+      root: REPO_ROOT,
+      auditResults: {
+        'audit:automation': 'passed',
+        'audit:architecture': 'passed',
+        'verify:source-artifacts': 'passed',
+      } as Record<string, 'passed' | 'failed'>,
+      coverageStatus: () => 'complete',
+    };
+    const closedSourcebookScope = {
+      scopeId: 'sourcebook-at-large',
+      status: 'closed',
+    };
+    const satisfied = { summary: { integrityViolations: [] }, findings: [], scopes: [closedSourcebookScope] } as never;
+    const { violations, unverifiedClaims } = checkProjectClaims(satisfied, deps, PROJECT_CLAIMS);
+
+    // No hard violations, and the Phase Two gate genuinely verifies…
+    expect(violations).toEqual([]);
+    expect(unverifiedClaims.some(({ id }) => id === 'claim:phase-two-ready')).toBe(false);
+    // …yet the Phase Three gate stays unmet purely because of its extra
+    // acceptance-criterion rows.
+    const threeClaim = unverifiedClaims.find(({ id }) => id === 'claim:phase-three-ready');
+    expect(threeClaim).toBeDefined();
+    expect(threeClaim!.binding.kind).toBe('legacy-unverified');
+    if (threeClaim!.binding.kind === 'legacy-unverified') {
+      expect(threeClaim!.binding.reason).toMatch(/acceptance criterion "encounter-slices-b-and-c-close-end-to-end"/);
+    }
   });
 });
 

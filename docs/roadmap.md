@@ -270,6 +270,13 @@ Gate constants have ONE machine-readable source of truth:
 to recorded audit results — so no consumer can drift or be flipped by hand
 while its criteria fail. CI exercises that aggregate authority path.
 
+`PHASE_THREE_READY` is a strict superset of `PHASE_TWO_READY`: criteria 2–5
+above are registry rows in their own right. Criteria without a faithful
+machine-auditable proxy yet are carried as acceptance-criterion rows, which
+stay unmet by construction until upgraded to a machine-backed requirement
+(a generated audit or fidelity scope); the gate cannot pass while any row is
+unmet, and a passing Phase Two never implies a passing Phase Three.
+
 ---
 
 # Encounter-closure slices

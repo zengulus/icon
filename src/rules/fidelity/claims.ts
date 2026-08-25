@@ -34,7 +34,12 @@ export type ClaimStrength = 'authoritative' | 'complete' | 'closed';
 export type CompoundRequirement =
   | { kind: 'fidelity-scope'; scopeId: string; minStatus: ScopeStatus }
   | { kind: 'generated-audit'; command: string }
-  | { kind: 'coverage-item'; id: string };
+  | { kind: 'coverage-item'; id: string }
+  /** Projected from the phase-gate registry's acceptance-criterion rows:
+   * real roadmap criteria with no machine-auditable proxy yet. They are UNMET
+   * by construction and keep their gate LEGACY/UNVERIFIED until upgraded to a
+   * machine kind in `src/rules/phase-gates.ts`. */
+  | { kind: 'acceptance-criterion'; id: string };
 
 export type ClaimBinding =
   | { kind: 'fidelity-scope'; scopeId: string }
@@ -139,7 +144,9 @@ function gateRequirements(gateId: PhaseGateId): readonly CompoundRequirement[] {
       ? { kind: 'coverage-item' as const, id: requirement.id }
       : requirement.kind === 'generated-audit'
         ? { kind: 'generated-audit' as const, command: requirement.command }
-        : { kind: 'fidelity-scope' as const, scopeId: requirement.scopeId, minStatus: requirement.minStatus },
+        : requirement.kind === 'acceptance-criterion'
+          ? { kind: 'acceptance-criterion' as const, id: requirement.id }
+          : { kind: 'fidelity-scope' as const, scopeId: requirement.scopeId, minStatus: requirement.minStatus },
   );
 }
 
@@ -558,6 +565,10 @@ export function checkProjectClaims(
           else if (deps.auditResults?.[requirement.command] !== 'passed') unmet.push(`audit "${requirement.command}" not passed`);
         } else if (requirement.kind === 'coverage-item') {
           if (deps.coverageStatus?.(requirement.id) !== 'complete') unmet.push(`coverage item "${requirement.id}" not complete`);
+        } else if (requirement.kind === 'acceptance-criterion') {
+          // Deliberately unverifiable: an acceptance criterion keeps its gate
+          // unmet until it is upgraded to a machine-backed requirement.
+          unmet.push(`acceptance criterion "${requirement.id}" not yet bound to machine evidence`);
         } else {
           const scope = scopeById.get(requirement.scopeId);
           if (!scope) unmet.push(`scope ${requirement.scopeId} missing`);

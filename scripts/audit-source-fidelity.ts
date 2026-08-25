@@ -19,6 +19,14 @@
  * clauses, unimplemented content) does NOT fail the build; it lowers computed
  * status instead.
  *
+ * STABLE vs EPHEMERAL state: recorded prerequisite results are per-run
+ * AUTHORITY evidence (they drive claim verification and hard failures) but
+ * never feed the generated document. docs/source-fidelity.md is rendered —
+ * and drift-checked — from the SAME pipeline recomputed with NO recorded
+ * evidence (the stable doc mode), so the committed artifact cannot conflict
+ * with an authority run merely because real prerequisite results differ from
+ * documentation mode.
+ *
  * Usage:
  *   node --import tsx scripts/audit-source-fidelity.ts [--strict] [--write]
  *        [--json] [--run-prereqs]
@@ -64,9 +72,11 @@ const report = runStrictFidelityAudit(repoRoot, {
 const { result, hardFailures, unverifiedClaims } = report;
 
 // --- Documentation -----------------------------------------------------------
-const docDrift = write ? [] : checkGeneratedDocDrift(join(repoRoot, 'docs'), report);
+// Rendered/drift-checked ONLY against the stable doc-mode report — never the
+// per-run authority projection of this particular execution.
+const docDrift = write ? [] : checkGeneratedDocDrift(join(repoRoot, 'docs'), report.stableReport);
 if (write) {
-  writeFileSync(join(repoRoot, 'docs', GENERATED_DOC_PATH.split('/').pop()!), generateMarkdown(report));
+  writeFileSync(join(repoRoot, 'docs', GENERATED_DOC_PATH.split('/').pop()!), generateMarkdown(report.stableReport));
 }
 
 // --- Output ------------------------------------------------------------------

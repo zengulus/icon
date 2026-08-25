@@ -26,6 +26,7 @@ import { resolveConsumerRegistrations } from './consumers.js';
 import { evaluateContracts } from './evaluate.js';
 import { PRODUCTION_ADAPTERS } from './adapters.js';
 import { checkProjectClaims, PROJECT_CLAIMS } from './claims.js';
+import type { FidelityReport } from './docs.js';
 import {
   CORRECT_MITIGATION,
   SEMANTIC_MUTATIONS,
@@ -35,6 +36,8 @@ import {
 } from './mutation.js';
 import type { AdapterRegistry, ContractRow, FidelityAuditResult, FidelityIntegrityViolation, SemanticContract, SourceObligation } from './types.js';
 import type { ProjectClaim } from './claims.js';
+// NOTE: `ProjectClaim` is imported as a type only; the evidence layer stays
+// observation-only (see the anti-circularity guard in fidelity-audit tests).
 
 export interface StrictAuditReport {
   result: FidelityAuditResult;
@@ -48,6 +51,14 @@ export interface StrictAuditReport {
   unverifiedClaims: readonly { id: string; file: string; subject: string; strength: string; reason: string }[];
   /** Domain-level mutation bookkeeping (fixture drift etc.). */
   mutationViolations: readonly string[];
+  /** STABLE DOC-MODE report: the same evidence pipeline computed WITHOUT any
+   * recorded per-run prerequisite evidence. `docs/source-fidelity.md` renders
+   * THIS and only this, so doc-drift comparison happens in one deterministic,
+   * non-ephemeral mode and can never fail merely because a real prerequisite
+   * execution elevated claim/scope verification state this run. When no
+   * per-run evidence was supplied, this is the same object as the authority
+   * report above. */
+  stableReport: FidelityReport;
 }
 
 /** The generic proof-pipeline mutant self-check (AGENTS.md §13 / task req. N):
@@ -121,7 +132,10 @@ export function runPipelineMutationSelfCheck(): string[] {
  * the aggregate authority path (`--run-prereqs` runs each bound script here
  * and records its exit status); generated-audit/replay/integration evidence
  * verifies ONLY against those recordings — there is no trusted hand-written
- * results file. */
+ * results file.
+ *
+ * These recordings are PER-RUN AUTHORITY EVIDENCE ONLY. They deliberately do
+ * NOT feed the generated documentation: see `stableReport` below. */
 export interface StrictAuditOptions {
   auditResults?: Readonly<Record<string, 'passed' | 'failed'>>;
   /** RULES_COVERAGE lookup for coverage-item phase-gate requirements (wired
@@ -284,6 +298,32 @@ export function runStrictFidelityAudit(repoRoot: string, options: StrictAuditOpt
     PROJECT_CLAIMS,
   );
 
+  // 7b. Stable DOC-MODE projection. Recorded prerequisite evidence is
+  // load-bearing for AUTHORITY (hard failures above) but is ephemeral:
+  // re-rendering the canonical document around it would make a committed
+  // artifact depend on whichever audits happened to run this time. The doc is
+  // therefore rendered from the SAME pipeline recomputed with NO recorded
+  // evidence — one deterministic mode for generation and drift-checking.
+  const toUnverified = (list: readonly ProjectClaim[]) => list.map((claim) => ({
+    id: claim.id,
+    file: claim.file,
+    subject: claim.subject,
+    strength: claim.strength,
+    reason: claim.binding.kind === 'legacy-unverified' ? claim.binding.reason : '',
+  }));
+  const stableReport: FidelityReport =
+    options.auditResults === undefined
+      ? { result, unverifiedClaims: toUnverified(claims.unverifiedClaims) }
+      : (() => {
+          const stableResult = computeFidelityAudit(world, { frontiers: frontierInputs, evaluations, resolvedConsumerIds });
+          const stableClaims = checkProjectClaims(
+            stableResult,
+            { root: repoRoot, coverageStatus: options.coverageStatus },
+            PROJECT_CLAIMS,
+          );
+          return { result: stableResult, unverifiedClaims: toUnverified(stableClaims.unverifiedClaims) };
+        })();
+
   // 8. Aggregate hard failures.
   const hardFailures: string[] = [
     ...result.summary.integrityViolations.map((v) => `integrity: ${v.check} — ${v.detail}`),
@@ -299,19 +339,12 @@ export function runStrictFidelityAudit(repoRoot: string, options: StrictAuditOpt
     ...claims.violations.map((v) => `project claim: ${v.check} — ${v.detail}`),
   ];
 
-  const unverifiedClaims = claims.unverifiedClaims.map((claim) => ({
-    id: claim.id,
-    file: claim.file,
-    subject: claim.subject,
-    strength: claim.strength,
-    reason: claim.binding.kind === 'legacy-unverified' ? claim.binding.reason : '',
-  }));
-
   return {
     result,
     hardFailures,
     evidenceFailures,
-    unverifiedClaims,
+    unverifiedClaims: toUnverified(claims.unverifiedClaims),
     mutationViolations,
+    stableReport,
   };
 }
