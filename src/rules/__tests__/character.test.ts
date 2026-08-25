@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { abilityPointAllowance, aspectRelicFromSharedQuest, awardXp, chapterForLevel, completeRelicAspectQuest, createCharacter, infuseRelicDust, jobSlotsForLevel, masteryPointAllowance, migrateCharacter, narrativeBudgets, REFOCUS_DUST_COST, REFOCUS_KEEP_JOBS_DUST_COST, refocusCharacter, refocusDustCost, relicMinimumInfusedDust, relicRankForDust, relicSlotsForLevel, resolveRelicAspect, spendLevelUp, validateCharacter } from '../character.js';
+import { CHARACTER_SCHEMA_VERSION } from '../types.js';
 import { JOBS, RELICS } from '../catalog.js';
 import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
@@ -103,7 +104,7 @@ describe('ICON character creation', () => {
     legacy.relics = [{ relicId: RELICS[0].id, rank: 4, dustInfused: 12 }];
 
     const migrated = migrateCharacter(legacy);
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(CHARACTER_SCHEMA_VERSION);
     expect(migrated.relics).toEqual([{ relicId: RELICS[0].id, rank: 4, dustInfused: 12, aspectState: 'unresolved' }]);
     expect(validateCharacter(migrated).map(({ code }) => code)).toContain('relic.aspect-unresolved');
   });

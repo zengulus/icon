@@ -16,7 +16,7 @@ The project does not claim affiliation with Massif Press. ICON, its text, art, l
 - The Render service validates network commands, authenticates users, enforces campaign roles and actor ownership, checks optimistic revisions, redacts GM-hidden state for players, and persists append-only room checkpoints.
 - Discord webhook secrets remain server-side.
 
-Phase 2 is intentionally production-gated. All Job abilities are executable, but combat settlement (post-combat character handoff, personal Resolve +1), Elite/Legend multi-turn wiring, mobs, foe phases, Relic invokes, masteries, Limit Break effects, and other encounter-required content are still incomplete. See [rules coverage](docs/rules-coverage.md), the cross-cutting [rules foundations](docs/rules-foundations.md), the concrete [deliverables](docs/deliverables.md), and the [delivery roadmap](docs/roadmap.md). The current actionable backlog is [TODO.md](TODO.md).
+Phase 2 is intentionally production-gated. Combat settlement (post-combat personal Resolve +1 and the durable attrition handoff between combats) is implemented, but Elite/Legend multi-turn wiring, mobs, foe phases, Relic invokes, masteries, Limit Break effects, and other encounter-required content are still incomplete. See [rules coverage](docs/rules-coverage.md), the cross-cutting [rules foundations](docs/rules-foundations.md), the concrete [deliverables](docs/deliverables.md), and the [delivery roadmap](docs/roadmap.md). The current actionable backlog is [TODO.md](TODO.md).
 
 ## Local development
 

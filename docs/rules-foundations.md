@@ -144,7 +144,7 @@ total order for simultaneous, retargeting (Masquerade), held effects cloned +
 checkpoint-validated + redacted, drain-at-boundary. Deferral priority mirrors
 the damage pipeline (mitigated blows don't open phantom windows). Tests:
 `interrupts.test.ts`, `bastion.test.ts`, `colossus.test.ts`, `fool.test.ts`,
-`knave.test.ts`. Hole: Vigilance guard/punish are commands, not windows (B5).
+`knave.test.ts`. Hole: Vigilance guard/punish are commands, not windows (B4).
 
 ### Turn scheduler — AUTHORITATIVE + REPLAY-TESTED
 
@@ -183,9 +183,18 @@ members absent.
 Profiles parse phases/chapter rules; `ruleState.phaseId` seeds phase 0; no
 transition logic executes.
 
-### Combat settlement — ABSENT
-`ENCOUNTER_ENDED` cleans state but grants no personal Resolve and there is no
-actor→character handoff (TODO B1; roadmap P1).
+### Combat settlement — AUTHORITATIVE + REPLAY-TESTED
+`ENCOUNTER_ENDED` clears per-encounter state (vigor, statuses, marks, stances,
+shared resources; objects persist) and grants every player-character actor
+exactly +1 personal resolve (p.99, defeated included — the source names no
+exception). The durable handoff is `characterFromActor`
+(`src/rules/encounter.ts`): projects HP attrition (`hpLost`, measured against
+the wounds-adjusted maximum after the projected wound), wounds, and personal
+resolve back onto the persistent sheet; `actorFromCharacter` re-enters combat
+from that record. Camp/interlude sheet transitions: `campCharacter` (strain,
+personal resolve reset) / `beginInterlude` (HP, wounds, strain restored),
+p.56/p.99. Tests: `settlement.test.ts` (round-trip combat 1 → settlement →
+combat 2, purity, replay, schema v4 migration).
 
 ### Cost/payment — AUTHORITATIVE + SOURCE-TESTED
 Action costs, resource spends, resolve pools (party + personal), sacrifice,
@@ -260,4 +269,5 @@ references remain meaningful through this map:
 | F9 | Reactive once-per-round folds; range semantics |
 | F10 | Gamble window; ability-use choices |
 | F14 / §10 item 1 | Cost/payment |
+| Settlement (was TODO B1 / roadmap P1) | Combat settlement family above |
 | §Area / §Range / §Aura / §"Power dice & stances" | Spatial geometry · Attacks · Statuses/stances · Power-die kernel |

@@ -245,7 +245,9 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     position,
     vitality: stats.vitality,
     baseMaxHp: stats.hp,
-    hp: stats.maxHp,
+    // Durable attrition from previous combats (settlement projection) enters
+    // combat with the character: current HP = wounds-adjusted max − hpLost.
+    hp: Math.max(0, stats.maxHp - Math.max(0, character.hpLost)),
     vigor: 0,
     wounds: character.wounds,
     defense: stats.defense,
@@ -291,6 +293,31 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     turnsTakenThisRound: 0,
     slow: false,
   };
+}
+
+/** The settlement handoff (ICON p.99/p.94): project one player-character
+ * actor's durable post-combat state back onto its persistent character sheet.
+ * Pure — returns a new character and mutates neither input.
+ *
+ * What survives combat: current HP attrition (`hpLost`, measured against the
+ * wounds-adjusted maximum), wounds, and personal resolve (already including
+ * the ENCOUNTER_ENDED settlement grant). Everything else that ended with the
+ * combat — vigor, statuses, conditions, marks, stances, shared per-encounter
+ * resources — is deliberately not transferred; `ENCOUNTER_ENDED` already
+ * cleared it on the actor. */
+export function characterFromActor(character: IconCharacter, actor: EncounterActor, now = new Date().toISOString()): IconCharacter {
+  if (actor.characterId !== character.id) throw new RuleViolation('character.mismatch', 'That actor does not belong to this character.');
+  if (actor.side !== 'heroes' || actor.actorKind !== 'hero') throw new RuleViolation('character.not-player-character', 'Only a player-character actor can be settled back onto a character.');
+  const job = character.primaryJobId ? findJob(character.primaryJobId) : undefined;
+  const jobClass = job ? findClass(job.classId) : undefined;
+  if (!job || !jobClass) throw new RuleViolation('character.job-required', 'A valid primary Job is required to settle an actor back onto a character.');
+  const wounds = Math.min(4, Math.max(0, actor.wounds));
+  // Recompute the maximum from the PROJECTED wounds so a wound gained in this
+  // combat shrinks the bar before attrition is measured (p.94).
+  const maximumHp = Math.max(1, jobClass.stats.hp - wounds * jobClass.stats.vitality);
+  const hpLost = Math.min(maximumHp, Math.max(0, maximumHp - Math.max(0, Math.floor(actor.hp))));
+  const personalResolve = Math.max(0, Math.floor(actor.resources['personal-resolve'] ?? character.personalResolve));
+  return { ...character, wounds, hpLost, personalResolve, updatedAt: now };
 }
 
 export function createFoe(name: string, position: Position): EncounterActor {
@@ -2695,6 +2722,15 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           actor.resources['bonus-damage'] = 0;
         }
         state.entities = Object.fromEntries(Object.entries(state.entities).filter(([, entity]) => entity.type === 'object'));
+        // ICON p.99 settlement: "all characters gain 1 personal resolve after
+        // every combat" — granted exactly once per player-character actor at
+        // this boundary, defeated or not (the source names no exception), and
+        // never to summons or foes. Personal resolve survives combat; only
+        // camping resets it.
+        for (const actor of Object.values(state.actors)) {
+          if (actor.side !== 'heroes' || actor.actorKind !== 'hero') continue;
+          actor.resources['personal-resolve'] = (actor.resources['personal-resolve'] ?? 0) + 1;
+        }
         break;
     }
     state.revision += 1;

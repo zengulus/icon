@@ -25,26 +25,7 @@ Status vocabulary used below: `BLOCKED` · `READY` · `PARTIAL` ·
 
 These precede breadth work. Each has a concrete acceptance condition.
 
-### B1. Combat settlement does not exist — `READY`
-
-**Problem.** `END_ENCOUNTER` (`src/rules/encounter.ts`, `ENCOUNTER_ENDED`
-handler) clears per-encounter resources, statuses, marks, stances, vigor, and
-sets `partyResolve = 0` — but never grants the post-combat **personal Resolve
-+1** (ICON p.99: "all characters gain 1 personal resolve after every
-combat"), and there is no function anywhere that projects an encounter actor's
-durable post-combat state back into the persistent `IconCharacter`. HP
-attrition, wounds gained in combat, and personal Resolve spent on Limit
-Breaks therefore have **no path back to the persistent sheet**: combat 2
-cannot start from combat 1's outcome.
-
-**Acceptance condition.** A tested `actorFromCharacter ↔ characterFromActor`
-projection pair plus an `ENCOUNTER_ENDED` settlement step that (a) grants each
-surviving hero-side PC personal Resolve +1 exactly once, (b) preserves wounds,
-HP, and spent personal Resolve through settlement, and (c) round-trips a
-character through combat 1 → settlement → combat 2 in a regression test.
-Source: p.99 (Resolve), p.94 (wounds), p.107 (end of combat cleanup).
-
-### B2. Elite and Legend multi-turn entitlements are machinery without content — `READY`
+### B1. Elite and Legend multi-turn entitlements are machinery without content — `READY`
 
 **Problem.** The turn scheduler supports registered extra-turn entitlements
 (`registerTurnEntitlementSource`, `src/rules/turn-scheduler.ts`), and tests
@@ -59,7 +40,7 @@ default Elite gets 2 turns and a Legend in a 4-player party gets 4, verified
 through the existing scheduler matrix plus a source fixture each. Defeated PCs
 still counting toward Legend turns (p.298) must be pinned or explicitly ruled.
 
-### B3. Mob foes cannot exist at all — `BLOCKED` on a member model
+### B2. Mob foes cannot exist at all — `BLOCKED` on a member model
 
 **Problem.** `createFoeFromProfile` throws `foe.mob-unsupported` for the mob
 role. Mobs need member-level state (two members per player, removed after two
@@ -70,7 +51,7 @@ represent.
 actor-with-members) with hits accounting, removal, and slay-suppression, plus
 one full Mob encounter test.
 
-### B4. Foe phases and chapter rules are inert data — `PARTIAL`
+### B3. Foe phases and chapter rules are inert data — `PARTIAL`
 
 **Problem.** Profiles carry parsed `phases` and `chapterRules`
 (`content/generated/foes-1.5.json`, projected in `src/rules/foes.ts`), and
@@ -82,7 +63,7 @@ execute.
 recorded durably for replay) and chapter-rule rows wired like trait recipes;
 one source-exact phased legend as the first consumer.
 
-### B5. Vigilance is command-driven, not trigger-driven — `PARTIAL`
+### B4. Vigilance is command-driven, not trigger-driven — `PARTIAL`
 
 **Problem.** Vigilance spends run through the dedicated `SPEND_VIGILANCE`
 command with declared results (fixture-grade). The p.105 triggers (ally
@@ -111,7 +92,7 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 | F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (8 wired shape, 136 unresolved) | 136 masteries | Biggest single content family |
 | F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL (47/288 wired) | ~200 talents | See census frequencies |
 | F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
-| F10 | Settlement & expedition lifecycle | BLOCKED on B1 | all cross-combat play | |
+| F10 | Expedition scene flow (camp/interlude as playable steps around the sheet transitions) | PARTIAL (sheet transitions DONE) | cross-combat play UX | |
 
 ---
 
@@ -120,12 +101,14 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 §Encounter closure. Current first unsupported dependency per slice:
 
-- **Slice A (baseline)**: closes except settlement exit (B1).
+- **Slice A (baseline)**: CLOSED — setup through combat exit incl. settlement.
 - **Slice B (player complexity)**: blocked on mastery/talent folds (F7/F8),
-  Relic runtime (F9), Vigilance windows (B5).
-- **Slice C (foe complexity)**: blocked on Elite/Legend entitlements (B2),
-  foe traits beyond keywords (590 rows), phases (B4).
-- **Slice D (attrition chain)**: blocked on B1 entirely.
+  Relic runtime (F9), Vigilance windows (B4).
+- **Slice C (foe complexity)**: blocked on Elite/Legend entitlements (B1),
+  foe traits beyond keywords (590 rows), phases (B3).
+- **Slice D (attrition chain)**: settlement + projection DONE; remaining
+  blocker is camp/interlude *scene flow* around the (already implemented)
+  sheet transitions.
 
 ## Player content
 
@@ -157,20 +140,23 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
   one fixture each).
 - **Templates/factions** — remaining faction profiles need the recipe kinds
   above; prose traits stay table-facing.
-- **Mob** — B3.
-- **Elite** — double HP DONE; second turn B2.
-- **Legend** — HP scaling DONE; per-player turns B2; Juggernaut round-start
+- **Mob** — B2.
+- **Elite** — double HP DONE; second turn B1.
+- **Legend** — HP scaling DONE; per-player turns B1; Juggernaut round-start
   clear DONE; component ability inheritance DONE.
 - **Traits** — 79 keyword rows fully executable, 36 partial projections;
   **590 traceable foe-trait units** unresolved overall. Prose traits are
   table-facing by design.
-- **Phases / chapter rules** — B4.
+- **Phases / chapter rules** — B3.
 
 ## Persistent / expedition lifecycle
 
-- Character schema v3, import/export, migration v1→v3: `DONE`.
-- Camp / interlude resets of effort/strain/wounds: fields exist, **no camp
-  flow** — `NOT STARTED` (needs B1's settlement output as input).
+- Character schema v4, import/export, migration v1→v4: `DONE`.
+- Settlement & attrition handoff (`ENCOUNTER_ENDED` personal Resolve +1,
+  `characterFromActor` projection of HP attrition/wounds/resolve): `DONE`
+  (2026-08-25, roadmap P1).
+- Camp/interlude sheet transitions (`campCharacter`, `beginInterlude`):
+  `DONE`; playable camp/interlude scene flow around them: `NOT STARTED`.
 - Trophies (68), camp fixtures (16), features (85), reward rules (9):
   structured/table-facing; deterministic subset needs classification before
   any automation.
@@ -212,7 +198,7 @@ git diff --check
 npm run verify:extraction   # requires the supplied PDF locally
 ```
 
-Observed at the audit commit: unit 75 files / 993 tests green; e2e 4 passed;
+Observed at the P1 commit: unit 76 files / 1002 tests green; e2e 4 passed;
 architecture audit green (83 files); automation audit green with 3,103
 explicitly unsupported clauses (expected while incomplete);
 `verify:source-artifacts -- --expect-source-pdf=absent` fails only on

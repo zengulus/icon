@@ -191,6 +191,9 @@ describe('shared resources (p.99–105, p.204)', () => {
     expect(afterFoe.actors[hero.id].resources['personal-resolve']).toBe(3);
     const ended = executeCommand(afterFoe, { type: 'END_ENCOUNTER' }).state;
     expect(ended.partyResolve).toBe(0);
-    expect(ended.actors[hero.id].resources['personal-resolve']).toBe(3); // survives combat
+    // Survives combat AND earns the settlement grant (p.99: +1 after every
+    // combat) exactly once at the ENCOUNTER_ENDED boundary.
+    expect(ended.actors[hero.id].resources['personal-resolve']).toBe(4);
+    expect(applyEvents(afterFoe, executeCommand(afterFoe, { type: 'END_ENCOUNTER' }).events)).toEqual(ended);
   });
 });

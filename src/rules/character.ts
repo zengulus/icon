@@ -37,6 +37,7 @@ export function createCharacter(now = new Date().toISOString()): IconCharacter {
     effort: 3,
     strain: 0,
     wounds: 0,
+    hpLost: 0,
     personalResolve: 0,
     notes: '',
     portraitUrl: '',
@@ -106,6 +107,28 @@ export function characterStats(character: IconCharacter) {
   if (!jobClass) return null;
   const maxHp = Math.max(0, jobClass.stats.hp - character.wounds * jobClass.stats.vitality);
   return { ...jobClass.stats, maxHp, chapter: chapterForLevel(character.level) };
+}
+
+/** Current hit points against the wounds-adjusted maximum (p.94): the
+ * persistent attrition record between combats. Null when the character has
+ * no primary Job to derive stats from. */
+export function characterCurrentHp(character: IconCharacter): number | null {
+  const stats = characterStats(character);
+  if (!stats) return null;
+  return Math.max(0, stats.maxHp - Math.max(0, character.hpLost));
+}
+
+/** Camping (p.56): strain is healed. Pure — returns a new character.
+ * Hit points and wounds are NOT restored at camp by this transition; the
+ * source grounds full restoration at the start of an interlude. */
+export function campCharacter(character: IconCharacter, now = new Date().toISOString()): IconCharacter {
+  return { ...character, strain: 0, personalResolve: 0, updatedAt: now };
+}
+
+/** The start of an interlude (p.56): hit points, wounds, and strain are all
+ * fully restored. Pure — returns a new character. */
+export function beginInterlude(character: IconCharacter, now = new Date().toISOString()): IconCharacter {
+  return { ...character, hpLost: 0, wounds: 0, strain: 0, updatedAt: now };
 }
 
 export function validateCharacter(character: IconCharacter, complete = true): ValidationIssue[] {
@@ -190,6 +213,14 @@ export function validateCharacter(character: IconCharacter, complete = true): Va
   if (character.xp < 0 || character.xp > 14) error('xp', 'xp.range', 'XP must be between 0 and 14; reaching 15 banks a level-up and resets XP.');
   if (character.wounds < 0 || character.wounds > 4) error('wounds', 'wounds.range', 'Wounds must be between 0 and 4.');
   if (character.wounds === 4) warning('wounds', 'character.fallen', 'A character with four wounds is Fallen and cannot continue as a player character.');
+  if (!Number.isInteger(character.hpLost) || character.hpLost < 0) {
+    error('hpLost', 'hp-lost.range', 'Hit points lost must be a non-negative whole number.');
+  } else {
+    const primaryClassStats = primaryJob ? findClass(primaryJob.classId)?.stats : undefined;
+    if (primaryClassStats && character.hpLost > Math.max(0, primaryClassStats.hp - character.wounds * primaryClassStats.vitality)) {
+      error('hpLost', 'hp-lost.maximum', 'Hit points lost cannot exceed the wounds-adjusted maximum.');
+    }
+  }
   if (!Number.isInteger(character.dust) || character.dust < 0 || character.dust > 8) error('dust', 'dust.range', 'A character can carry from 0 to 8 dust.');
   if (character.relics.length > relicSlotsForLevel(character.level)) error('relics', 'relic.slot-budget', `Level ${character.level} permits ${relicSlotsForLevel(character.level)} relic slot${relicSlotsForLevel(character.level) === 1 ? '' : 's'}.`);
   if (new Set(character.relics.map(({ relicId }) => relicId)).size !== character.relics.length) error('relics', 'relic.duplicate', 'A relic can only occupy one slot.');
@@ -372,7 +403,7 @@ const CHARACTER_FIELDS = [
   'level', 'xp', 'pendingLevelUps', 'xpAbilityPointClaimed', 'jobs',
   'primaryJobId', 'abilities', 'equippedAbilityIds', 'relics', 'dust',
   'activeKit', 'customKitItems', 'looseGear', 'equippedLooseGear',
-  'burdens', 'ambitions', 'effort', 'strain', 'wounds', 'personalResolve',
+  'burdens', 'ambitions', 'effort', 'strain', 'wounds', 'hpLost', 'personalResolve',
   'notes', 'portraitUrl', 'createdAt', 'updatedAt',
 ] as const;
 
@@ -445,7 +476,7 @@ function assertCurrentCharacterStructure(input: unknown): IconCharacter {
   const actions = characterRecord(character.actions, 'Character.actions');
   exactCharacterKeys(actions, 'Character.actions', ACTION_IDS);
   ACTION_IDS.forEach((action) => characterInteger(actions[action], `Character.actions.${action}`));
-  for (const field of ['level', 'xp', 'pendingLevelUps', 'dust', 'effort', 'strain', 'wounds', 'personalResolve'] as const) {
+  for (const field of ['level', 'xp', 'pendingLevelUps', 'dust', 'effort', 'strain', 'wounds', 'hpLost', 'personalResolve'] as const) {
     characterInteger(character[field], `Character.${field}`);
   }
   characterBoolean(character.xpAbilityPointClaimed, 'Character.xpAbilityPointClaimed');
@@ -505,7 +536,10 @@ function historicalArray(value: unknown, path: string): unknown[] {
 export function migrateCharacter(input: unknown): IconCharacter {
   const raw = characterRecord(input, 'Character import');
   const candidate = raw as Omit<Partial<IconCharacter>, 'schemaVersion'> & { schemaVersion?: number; relicIds?: string[] };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== CHARACTER_SCHEMA_VERSION) throw new Error(`Unsupported character schema version: ${String(candidate.schemaVersion)}`);
+  // Schema v3 predates the durable hpLost attrition field; it migrates like
+  // v1/v2 with hpLost defaulting to 0 (full health between combats — the
+  // implicit pre-v4 semantics).
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== CHARACTER_SCHEMA_VERSION) throw new Error(`Unsupported character schema version: ${String(candidate.schemaVersion)}`);
   if (candidate.rulesVersion !== undefined && candidate.rulesVersion !== RULES_VERSION) {
     throw new Error(`Unsupported ICON rules version: ${String(candidate.rulesVersion)}.`);
   }

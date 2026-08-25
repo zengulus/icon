@@ -4,7 +4,7 @@ import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/ker
 import type { TurnTransitionIntent } from './automation/kernels/lifecycle.js';
 
 export const RULES_VERSION = '1.5' as const;
-export const CHARACTER_SCHEMA_VERSION = 3 as const;
+export const CHARACTER_SCHEMA_VERSION = 4 as const;
 // Schema 6 records ownership for every persisted mechanic produced by
 // automation. Player projections use that provenance to withhold mechanics
 // created by a GM-hidden actor without leaking the source id.
@@ -312,6 +312,12 @@ export interface IconCharacter {
   effort: number;
   strain: number;
   wounds: number;
+  /** Hit points lost below the current (wounds-adjusted) maximum — the
+   * durable record of combat attrition between combats. Current HP is
+   * `maxHp - hpLost`; camping and interludes reset it to 0 alongside wounds
+   * (p.56). Schema v4; v3 records migrate with `hpLost: 0`, preserving the
+   * prior implicit "always full between combats" semantics. */
+  hpLost: number;
   personalResolve: number;
   notes: string;
   portraitUrl: string;

@@ -42,9 +42,13 @@ The engine never automates table judgment without source justification.
 - Verification: unit 993 tests green; e2e green; architecture +
   automation audits green; automation audit reports 3,103 explicitly
   unsupported clauses across 16 content kinds (the honest gap).
-- NOT built: combat settlement / post-combat character handoff; Mob model;
-  Elite/Legend multi-turn wiring; foe phase engine; Relic runtime; masteries;
-  Limit Break effects; camp/expedition lifecycle.
+- Settlement: `ENCOUNTER_ENDED` grants each PC +1 personal resolve; the
+  `characterFromActor` projection carries HP attrition, wounds, and personal
+  resolve back onto the persistent sheet (schema v4); camp/interlude sheet
+  transitions exist — implemented 2026-08-25 (P1).
+- NOT built: playable camp/interlude scene flow; Mob model; Elite/Legend
+  multi-turn wiring; foe phase engine; Relic runtime; masteries;
+  Limit Break effects.
 
 ---
 
@@ -54,7 +58,7 @@ Each priority is executable by one coding-agent pass unless marked otherwise.
 Categories: REPAIR · FOUNDATION · VERTICAL SLICE · CONTENT EXPANSION ·
 INTEGRATION · POLISH.
 
-## P1 — Combat settlement and cross-combat character continuity (REPAIR)
+## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the
 next encounter.
@@ -187,7 +191,7 @@ character-engine coverage.
 Vigilance trigger-driven; design the member-based Mob representation.
 
 **Why now.** Turns 1,247 unsupported foe-ability units into a data-authoring
-pipeline; closes B5/B3.
+pipeline; closes B4/B3.
 
 **Depends on.** P4 primitives; window protocol (exists).
 
@@ -239,7 +243,9 @@ Machine/test-observable criteria (all must hold):
    audit counts.
 6. Full CI green.
 
-Current state: **criteria 3 and 4 fail**; gate stays `false`.
+Current state: criterion 3 now passes (settlement landed); criteria 4's Slice D
+is close (Slice A closed) but Slice B/C closure and full CI re-verification of
+the remaining criteria have not been earned; gate stays `false`.
 
 ## PHASE_THREE_READY — "Closed local gameplay, shared authority released"
 
