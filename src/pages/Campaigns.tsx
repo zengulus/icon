@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PHASE_THREE_READY } from '../rules/index.js';
+import { PHASE_THREE_COVERAGE_READY } from '../rules/index.js';
 import { useCharacters } from '../context/CharacterContext.js';
 import { createCampaign, createEncounterRecord, listCampaigns, listEncounters, type Campaign, type EncounterRecord } from '../services/campaigns.js';
 
-const testingEnabled = PHASE_THREE_READY || import.meta.env.DEV;
+const testingEnabled = PHASE_THREE_COVERAGE_READY || import.meta.env.DEV;
 
 export function Campaigns() {
   const { user, cloudEnabled } = useCharacters();

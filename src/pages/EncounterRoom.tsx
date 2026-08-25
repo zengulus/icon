@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PHASE_THREE_READY, findAbility } from '../rules/index.js';
+import { PHASE_THREE_COVERAGE_READY, findAbility } from '../rules/index.js';
 import type { EncounterCommand, EncounterEvent, EncounterState, Position } from '../rules/types.js';
 import type { TableCommand } from '../rules/vtt-room.js';
 import {
@@ -13,7 +13,7 @@ import { supabase } from '../services/supabase.js';
 import { VttRoomBoard } from './Sandbox.js';
 
 const realtimeUrl = import.meta.env.VITE_REALTIME_URL?.trim() ?? '';
-const multiplayerPreviewEnabled = PHASE_THREE_READY
+const multiplayerPreviewEnabled = PHASE_THREE_COVERAGE_READY
   || import.meta.env.DEV;
 
 interface PingNotice {

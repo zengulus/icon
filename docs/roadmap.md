@@ -264,11 +264,13 @@ complexity gaps).
 
 Gate constants have ONE machine-readable source of truth:
 `src/rules/phase-gates.ts` defines each gate's requirements once.
-`src/rules/catalog.ts` derives `PHASE_TWO_READY` / `PHASE_THREE_READY` and
-`RULES_COVERAGE` item status from it, and the source-fidelity claims audit
-(`claim:phase-two-ready` / `claim:phase-three-ready`) binds the same registry
-to recorded audit results — so no consumer can drift or be flipped by hand
-while its criteria fail. CI exercises that aggregate authority path.
+`src/rules/catalog.ts` derives the coverage-only halves
+`PHASE_TWO_COVERAGE_READY` / `PHASE_THREE_COVERAGE_READY` from its
+coverage-item rows plus `RULES_COVERAGE`; anything named `PHASE_*_READY`
+unqualified means the FULL gate, evaluated only by the source-fidelity claims
+audit (`claim:phase-two-ready` / `claim:phase-three-ready`) binding the same
+registry to recorded audit results — so no consumer can drift or be flipped by
+hand while its criteria fail. CI exercises that aggregate authority path.
 
 `PHASE_THREE_READY` is a strict superset of `PHASE_TWO_READY`: criteria 2–5
 above are registry rows in their own right. Criteria without a faithful

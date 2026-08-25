@@ -3,7 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { parseClientMessage, type ServerMessage } from '../src/rules/protocol.js';
-import { PHASE_THREE_READY } from '../src/rules/catalog.js';
+import { PHASE_THREE_COVERAGE_READY } from '../src/rules/catalog.js';
 import { loadConfig } from './config.js';
 import { sendDiscordNotice } from './discord.js';
 import { RoomManager, type AuthenticatedClient } from './rooms.js';
@@ -146,7 +146,7 @@ sockets.on('connection', (socket, request) => {
         // The client UI is not the authority for a release gate. Prevent raw
         // WebSocket use from turning incomplete automation into a production
         // multiplayer path; test/development preview must opt in server-side.
-        if (!PHASE_THREE_READY && !config.allowIncompleteVtt) {
+        if (!PHASE_THREE_COVERAGE_READY && !config.allowIncompleteVtt) {
           rejectPhaseGate();
           return;
         }

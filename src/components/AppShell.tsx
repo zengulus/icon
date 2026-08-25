@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { PHASE_THREE_READY } from '../rules/index.js';
+import { PHASE_THREE_COVERAGE_READY } from '../rules/index.js';
 import { useCharacters } from '../context/CharacterContext.js';
 
 const links = [
@@ -23,7 +23,7 @@ export function AppShell() {
           {links.map(([to, label, icon]) => (
             <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => isActive ? 'active' : ''}>
               <span>{icon}</span>{label}
-              {(to === '/campaigns' || to === '/vtt') && !PHASE_THREE_READY && <i title="Rules gate active">GATED</i>}
+              {(to === '/campaigns' || to === '/vtt') && !PHASE_THREE_COVERAGE_READY && <i title="Rules gate active">GATED</i>}
             </NavLink>
           ))}
         </nav>

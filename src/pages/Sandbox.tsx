@@ -7,7 +7,7 @@ import {
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { JOBS, PHASE_TWO_READY, RULES_COVERAGE, findAbility, findJob } from '../rules/catalog.js';
+import { JOBS, PHASE_TWO_COVERAGE_READY, RULES_COVERAGE, findAbility, findJob } from '../rules/catalog.js';
 import { createCharacter, validateCharacter } from '../rules/character.js';
 import { actorFromCharacter, createEncounter, createFoe, createFoeFromProfile } from '../rules/encounter.js';
 import { slowElectableActorIds, turnEligibleActorIds } from '../rules/turn-scheduler.js';
@@ -57,7 +57,7 @@ const LAB_PREFERENCES_KEY = 'icon.rules-lab.preferences.v1';
 // A public build must never unlock incomplete rules automation through a
 // browser-visible VITE flag. Engineering use happens only in a Vite dev/test
 // server; production remains governed by the source coverage gate.
-const testingEnabled = PHASE_TWO_READY || import.meta.env.DEV;
+const testingEnabled = PHASE_TWO_COVERAGE_READY || import.meta.env.DEV;
 
 const labFoes = FOE_PROFILES.filter(({ roleId }) => roleId !== 'mob' && roleId !== 'special');
 const defaultLabFoe = labFoes.find(({ roleId }) => roleId === 'heavy') ?? labFoes[0]!;

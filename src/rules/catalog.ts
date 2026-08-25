@@ -235,10 +235,12 @@ export const RULES_COVERAGE = [
   { id: 'reward-structure', label: 'Trophies, camp fixtures, and expedition rewards', status: 'reference' },
 ] as const;
 
-// Phase gates are derived from the SINGLE machine-readable registry in
-// `phase-gates.ts` (coverage-item half). The generated-audit and
-// fidelity-scope halves of each gate are enforced by the strict
-// source-fidelity authority path (`npm run audit:source-fidelity -- --strict
-// --run-prereqs`); they can never be satisfied by flipping anything here.
-export const PHASE_TWO_READY = phaseGateCoverageMet(PHASE_GATES.PHASE_TWO_READY, RULES_COVERAGE);
-export const PHASE_THREE_READY = phaseGateCoverageMet(PHASE_GATES.PHASE_THREE_READY, RULES_COVERAGE);
+// Coverage-only gate halves derived from the SINGLE machine-readable registry
+// in `phase-gates.ts` (coverage-item half only). These are NOT the full phase
+// gates: `*_COVERAGE_READY` means every coverage-item requirement holds; the
+// generated-audit, fidelity-scope, and acceptance-criterion halves of each
+// gate (the full PHASE_*_READY authority) are enforced by the strict
+// source-fidelity claims path (`npm run audit:source-fidelity -- --strict
+// --run-prereqs`) and can never be satisfied by flipping anything here.
+export const PHASE_TWO_COVERAGE_READY = phaseGateCoverageMet(PHASE_GATES.PHASE_TWO_READY, RULES_COVERAGE);
+export const PHASE_THREE_COVERAGE_READY = phaseGateCoverageMet(PHASE_GATES.PHASE_THREE_READY, RULES_COVERAGE);
