@@ -96,14 +96,10 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
 function ruleHolds(rule: MasteryModifierRule, view: MasteryFoldStateView, actorId: string): boolean {
   const actor = view.actors[actorId];
   if (!actor || !hasMastery(actor, rule.abilityId)) return false;
-  switch (rule.gate?.kind ?? 'always') {
-    case 'always':
-      return true;
-    case 'round-at-least':
-      return view.round >= rule.gate.value;
-    default:
-      return false;
-  }
+  const gate = rule.gate;
+  if (!gate || gate.kind === 'always') return true;
+  if (gate.kind === 'round-at-least') return view.round >= gate.value;
+  return false;
 }
 
 /**
@@ -152,20 +148,23 @@ export function effectiveInterruptRank(
  * parent is mastered and whose gate hold applies in registration order, so
  * chained conversions compose deterministically. An unmatched base type
  * passes through unchanged — the fold never invents a conversion.
+ *
+ * Generic over the caller's damage-type literal so an unconverted base type
+ * keeps its exact type at the call site.
  */
-export function convertedDamageType(
+export function convertedDamageType<T extends string>(
   view: MasteryFoldStateView,
   actorId: string,
   abilityId: string,
-  baseType: string,
-): string {
-  let type = baseType;
+  baseType: T,
+): T {
+  let type: string = baseType;
   for (const rule of masteryModifierRules) {
     if (rule.abilityId !== abilityId || rule.modifier.kind !== 'damage-type') continue;
     if (!ruleHolds(rule, view, actorId)) continue;
     if (rule.modifier.from === type) type = rule.modifier.to;
   }
-  return type;
+  return type as T;
 }
 
 /**

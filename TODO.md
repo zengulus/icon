@@ -89,7 +89,7 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 | F4 | Fly-grant / movement-modifier primitives | PARTIAL | 11+ | Census `{fly-grant}` |
 | F5 | Mark-modifier family | PARTIAL | 11+ | |
 | F6 | Damage-modifier family beyond bonus dice | PARTIAL | 11+ | |
-| F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (8 wired shape, 136 unresolved) | 136 masteries | Biggest single content family |
+| F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (modifier kernel K-P5 live; 3 wired, 133 unresolved) | 133 masteries | Biggest single content family |
 | F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL (47/288 wired) | ~200 talents | See census frequencies |
 | F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
 | F10 | Expedition scene flow (camp/interlude as playable steps around the sheet transitions) | PARTIAL (sheet transitions DONE) | cross-combat play UX | |
@@ -123,8 +123,9 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
   projection, range/area modifiers). **241 unresolved**. Do not bulk-enable;
   promote exact-ID slices per subfamily with replay fixtures.
 - **Masteries** — `PARTIAL`: equipped-mastery surface is validated and
-  durable; **136 unresolved**. Requires the F7 fold (mastery mutates parent
-  ability at execution time) before broad promotion.
+  durable; the mastery-modifier fold (K-P5: interrupt-rank, damage-type
+  conversion, unlimited range) promotes 3 rows; **133 unresolved**. Broader
+  promotion needs more modifier families added to the fold.
 - **Limit Breaks** — `SOURCE/ADJUDICATION NEEDED` + `PARTIAL`: costs parse and
   pay through the resolve pool; the 16 limit-break effect bodies are
   unresolved. Unlock level is adjudicated at level 1
@@ -184,8 +185,8 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 
 - Compendium search UX, token art pipeline, map asset management, mobile
   layout, sound/log filtering. Nothing here blocks rules authority.
-- Authoritative animated 3D dice presentation — strictly presentation-layer
-  staged roll-result choreography; requirements and authority boundary are
+- Animated 3D dice presentation — strictly presentation-layer staged
+  roll-result choreography; requirements and the authority boundary are
   recorded in [`docs/dice-presentation.md`](docs/dice-presentation.md). Not a
   phase gate; nothing here blocks rules authority.
 

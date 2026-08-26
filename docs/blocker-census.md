@@ -1,6 +1,6 @@
 # Class/Job Blocker Census (Canonical, Machine-Checked)
 
-> Generated from 438 unresolved source units: 7 class-trait, 38 job-trait, 241 talent, 136 mastery, 16 limit-break.
+> Generated from 435 unresolved source units: 7 class-trait, 38 job-trait, 241 talent, 133 mastery, 16 limit-break.
 >
 > All counts are derived from the canonical census tool with machine-checked
 > assertions. Singleton blocker sets must be audit-verified separately.
@@ -111,22 +111,6 @@
 - `spellblade:fulminate:talent:1`
 - `spellblade:fulminate:talent:2`
 
-### `interrupt-modifier` (13 units)
-
-- `bastion:catapult:talent:1`
-- `bastion:catapult:mastery`
-- `bastion:perseus:mastery`
-- `colossus:raging-wolf:mastery`
-- `knave:sucker-punch:talent:1`
-- `knave:sucker-punch:talent:2`
-- `fool:chronotemper:mastery`
-- `freelancer:strafe-shot:mastery`
-- `freelancer:deus-ex-machina:talent:2`
-- `freelancer:deus-ex-machina:mastery`
-- `sealer:spirit-shrine:mastery`
-- `seer:wish:talent:1`
-- `stormbender:heave-ho:talent:2`
-
 ### `terrain-create` (13 units)
 
 - `colossus:massive-overhead:talent:2`
@@ -159,19 +143,20 @@
 - `harvester:dark-sliver:mastery`
 - `seer:chaos-tarot:mastery`
 
-### `damage-modifier` (11 units)
+### `interrupt-modifier` (12 units)
 
-- `vagabond:trait:finesse`
-- `knave:low-blow:talent:1`
-- `freelancer:trait:aether-shot`
-- `shade:incubus:talent:2`
-- `chanter:gentleness:talent:2`
-- `harvester:dark-sliver:talent:1`
-- `sealer:matsuri:talent:2`
-- `sealer:open-the-gates:mastery`
-- `seer:astra:talent:2`
-- `spellblade:nothung:talent:1`
-- `spellblade:nothung:mastery`
+- `bastion:catapult:talent:1`
+- `bastion:perseus:mastery`
+- `colossus:raging-wolf:mastery`
+- `knave:sucker-punch:talent:1`
+- `knave:sucker-punch:talent:2`
+- `fool:chronotemper:mastery`
+- `freelancer:strafe-shot:mastery`
+- `freelancer:deus-ex-machina:talent:2`
+- `freelancer:deus-ex-machina:mastery`
+- `sealer:spirit-shrine:mastery`
+- `seer:wish:talent:1`
+- `stormbender:heave-ho:talent:2`
 
 ### `fly-grant` (11 units)
 
@@ -200,6 +185,19 @@
 - `sealer:divine-aegis:mastery`
 - `seer:polaris:talent:1`
 - `enochian:blazing-bond:mastery`
+
+### `damage-modifier` (10 units)
+
+- `vagabond:trait:finesse`
+- `knave:low-blow:talent:1`
+- `freelancer:trait:aether-shot`
+- `shade:incubus:talent:2`
+- `chanter:gentleness:talent:2`
+- `harvester:dark-sliver:talent:1`
+- `sealer:matsuri:talent:2`
+- `sealer:open-the-gates:mastery`
+- `seer:astra:talent:2`
+- `spellblade:nothung:talent:1`
 
 ### `action-type-change` (8 units)
 
@@ -438,12 +436,12 @@
 |---|---|
 | {irreducible} | 78 |
 | {teleport} | 15 |
-| {interrupt-modifier} | 13 |
 | {terrain-create} | 13 |
 | {entity-create} | 13 |
-| {damage-modifier} | 11 |
+| {interrupt-modifier} | 12 |
 | {fly-grant} | 11 |
 | {mark-modifier} | 11 |
+| {damage-modifier} | 10 |
 | {resource-management, vigor-grant} | 9 |
 | {action-type-change} | 8 |
 | {charge-state} | 8 |
@@ -497,7 +495,6 @@
 | {rush-modifier, shove-trigger} | 1 |
 | {attack-modifier, effect-count} | 1 |
 | {cure-on-trigger, shove-modifier} | 1 |
-| {interrupt-modifier, unlimited-range} | 1 |
 | {aura-to-area-conversion} | 1 |
 | {aura-trigger-grant} | 1 |
 | {area-define, charge-state, rush-modifier} | 1 |
@@ -614,10 +611,10 @@
 | fly-grant | 11 | 8 | 10 | 29 |
 | action-type-change | 8 | 10 | 9 | 27 |
 | resource-management | 5 | 10 | 11 | 26 |
-| damage-modifier | 11 | 9 | 6 | 26 |
+| damage-modifier | 10 | 9 | 6 | 25 |
 | charge-state | 8 | 8 | 9 | 25 |
-| interrupt-modifier | 13 | 7 | 4 | 24 |
 | area-define | 0 | 15 | 9 | 24 |
+| interrupt-modifier | 12 | 6 | 4 | 22 |
 | blast-template | 3 | 5 | 13 | 21 |
 | vigor-grant | 0 | 9 | 9 | 18 |
 | shove-modifier | 7 | 5 | 5 | 17 |
@@ -634,7 +631,6 @@
 | choice-input | 3 | 1 | 0 | 4 |
 | passive | 4 | 0 | 0 | 4 |
 | attack-modifier | 1 | 2 | 0 | 3 |
-| unlimited-range | 1 | 1 | 1 | 3 |
 | ability-attack-modifier | 3 | 0 | 0 | 3 |
 | threshold-modifier | 2 | 1 | 0 | 3 |
 | rebound | 1 | 2 | 0 | 3 |
@@ -642,6 +638,7 @@
 | aura-user-gate | 2 | 0 | 0 | 2 |
 | save-modifier | 0 | 2 | 0 | 2 |
 | gamble-result-selection | 0 | 2 | 0 | 2 |
+| unlimited-range | 1 | 0 | 1 | 2 |
 | movement-modifier | 2 | 0 | 0 | 2 |
 | area-extension | 2 | 0 | 0 | 2 |
 | damage-preview | 2 | 0 | 0 | 2 |
@@ -673,63 +670,63 @@
 
 | Step | Implement | Unlocks | Cumulative | Remaining |
 |---|---|---|---|---|
-| 1 | teleport | 15 | 15 | 423 |
-| 2 | terrain-create | 13 | 28 | 410 |
-| 3 | entity-create | 16 | 44 | 394 |
-| 4 | interrupt-modifier | 18 | 62 | 376 |
-| 5 | mark-modifier | 18 | 80 | 358 |
-| 6 | fly-grant | 13 | 93 | 345 |
-| 7 | damage-modifier | 19 | 112 | 326 |
-| 8 | action-type-change | 15 | 127 | 311 |
-| 9 | charge-state | 14 | 141 | 297 |
-| 10 | shove-modifier | 10 | 151 | 287 |
-| 11 | range-modifier | 29 | 180 | 258 |
-| 12 | resource-management | 7 | 187 | 251 |
-| 13 | heroics-economy | 5 | 192 | 246 |
-| 14 | cover-mechanic | 8 | 200 | 238 |
-| 15 | stance-gate | 9 | 209 | 229 |
-| 16 | effect-count | 4 | 213 | 225 |
-| 17 | gamble-dice-pool-modifier | 4 | 217 | 221 |
-| 18 | passive | 4 | 221 | 217 |
-| 19 | blast-template | 18 | 239 | 199 |
-| 20 | rush-modifier | 4 | 243 | 195 |
-| 21 | cure-on-trigger | 5 | 248 | 190 |
-| 22 | entity-vacate | 3 | 251 | 187 |
-| 23 | choice-input | 4 | 255 | 183 |
-| 24 | ability-attack-modifier | 3 | 258 | 180 |
-| 25 | threshold-modifier | 3 | 261 | 177 |
-| 26 | delivery-immunity | 2 | 263 | 175 |
-| 27 | aura-user-gate | 2 | 265 | 173 |
-| 28 | movement-modifier | 2 | 267 | 171 |
-| 29 | area-extension | 2 | 269 | 169 |
-| 30 | damage-preview | 2 | 271 | 167 |
-| 31 | sacrifice-percent | 2 | 273 | 165 |
-| 32 | object-distance | 2 | 275 | 163 |
-| 33 | pre-ability-movement | 13 | 288 | 150 |
-| 34 | distance-predicate | 4 | 292 | 146 |
-| 35 | attack-modifier | 3 | 295 | 143 |
-| 36 | unlimited-range | 3 | 298 | 140 |
-| 37 | rebound | 2 | 300 | 138 |
-| 38 | aura-to-area-conversion | 1 | 301 | 137 |
-| 39 | aura-trigger-grant | 1 | 302 | 136 |
-| 40 | condition-suppression | 1 | 303 | 135 |
-| 41 | gamble-result-override | 1 | 304 | 134 |
-| 42 | movement-trigger | 1 | 305 | 133 |
-| 43 | attack-trigger-grant | 1 | 306 | 132 |
-| 44 | post-roll-reactive-choice | 1 | 307 | 131 |
-| 45 | pierce | 1 | 308 | 130 |
-| 46 | effect-redirect | 1 | 309 | 129 |
-| 47 | terrain-move-lifecycle | 1 | 310 | 128 |
-| 48 | infuse-permanence | 1 | 311 | 127 |
-| 49 | area-define | 21 | 332 | 106 |
-| 50 | vigor-grant | 18 | 350 | 88 |
-| 51 | save-modifier | 2 | 352 | 86 |
-| 52 | gamble-result-selection | 2 | 354 | 84 |
-| 53 | shove-trigger | 1 | 355 | 83 |
-| 54 | entity-consume | 1 | 356 | 82 |
-| 55 | variable-cost | 1 | 357 | 81 |
+| 1 | teleport | 15 | 15 | 420 |
+| 2 | terrain-create | 13 | 28 | 407 |
+| 3 | entity-create | 16 | 44 | 391 |
+| 4 | interrupt-modifier | 17 | 61 | 374 |
+| 5 | mark-modifier | 18 | 79 | 356 |
+| 6 | fly-grant | 13 | 92 | 343 |
+| 7 | damage-modifier | 18 | 110 | 325 |
+| 8 | action-type-change | 15 | 125 | 310 |
+| 9 | charge-state | 14 | 139 | 296 |
+| 10 | shove-modifier | 10 | 149 | 286 |
+| 11 | range-modifier | 29 | 178 | 257 |
+| 12 | resource-management | 7 | 185 | 250 |
+| 13 | heroics-economy | 5 | 190 | 245 |
+| 14 | cover-mechanic | 8 | 198 | 237 |
+| 15 | stance-gate | 9 | 207 | 228 |
+| 16 | effect-count | 4 | 211 | 224 |
+| 17 | gamble-dice-pool-modifier | 4 | 215 | 220 |
+| 18 | passive | 4 | 219 | 216 |
+| 19 | blast-template | 18 | 237 | 198 |
+| 20 | rush-modifier | 4 | 241 | 194 |
+| 21 | cure-on-trigger | 5 | 246 | 189 |
+| 22 | entity-vacate | 3 | 249 | 186 |
+| 23 | choice-input | 4 | 253 | 182 |
+| 24 | ability-attack-modifier | 3 | 256 | 179 |
+| 25 | threshold-modifier | 3 | 259 | 176 |
+| 26 | delivery-immunity | 2 | 261 | 174 |
+| 27 | aura-user-gate | 2 | 263 | 172 |
+| 28 | movement-modifier | 2 | 265 | 170 |
+| 29 | area-extension | 2 | 267 | 168 |
+| 30 | damage-preview | 2 | 269 | 166 |
+| 31 | sacrifice-percent | 2 | 271 | 164 |
+| 32 | object-distance | 2 | 273 | 162 |
+| 33 | pre-ability-movement | 13 | 286 | 149 |
+| 34 | distance-predicate | 4 | 290 | 145 |
+| 35 | attack-modifier | 3 | 293 | 142 |
+| 36 | rebound | 2 | 295 | 140 |
+| 37 | unlimited-range | 2 | 297 | 138 |
+| 38 | aura-to-area-conversion | 1 | 298 | 137 |
+| 39 | aura-trigger-grant | 1 | 299 | 136 |
+| 40 | condition-suppression | 1 | 300 | 135 |
+| 41 | gamble-result-override | 1 | 301 | 134 |
+| 42 | movement-trigger | 1 | 302 | 133 |
+| 43 | attack-trigger-grant | 1 | 303 | 132 |
+| 44 | post-roll-reactive-choice | 1 | 304 | 131 |
+| 45 | pierce | 1 | 305 | 130 |
+| 46 | effect-redirect | 1 | 306 | 129 |
+| 47 | terrain-move-lifecycle | 1 | 307 | 128 |
+| 48 | infuse-permanence | 1 | 308 | 127 |
+| 49 | area-define | 21 | 329 | 106 |
+| 50 | vigor-grant | 18 | 347 | 88 |
+| 51 | save-modifier | 2 | 349 | 86 |
+| 52 | gamble-result-selection | 2 | 351 | 84 |
+| 53 | shove-trigger | 1 | 352 | 83 |
+| 54 | entity-consume | 1 | 353 | 82 |
+| 55 | variable-cost | 1 | 354 | 81 |
 
-After all implementable primitives: **357 unlocked, 81 remain** (78 residual units need non-implementable capabilities).
+After all implementable primitives: **354 unlocked, 81 remain** (78 residual units need non-implementable capabilities).
 
 ## Machine-checked invariants
 
@@ -737,7 +734,7 @@ After all implementable primitives: **357 unlocked, 81 remain** (78 residual uni
 ✓ All source IDs are unique
 ✓ Every unresolved unit appears exactly once
 ✓ No executable unit appears in the unresolved census
-✓ Per-kind totals sum to unresolved total (438)
+✓ Per-kind totals sum to unresolved total (435)
 ✓ All blocker-set frequencies derive from per-unit records
 ✓ All marginal values derive from per-unit records
 ✓ Marginal assertion: immediate + oneCloser + multiCloser === totalContaining for every blocker
