@@ -480,6 +480,281 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "roll 1 extra d6 when gambling, and choose any two results" —
   // extra Gamble die plus result-selection from the expanded pool;
   // the cure-on-trigger clause is a separate lifecycle mechanic.
+
+  // ── {irreducible} decomposition audit (2026-08-26): every unit that fell
+  //    through the syntactic first pass was re-read against its full source
+  //    text and given its concrete MINIMAL blocker set. None qualified as
+  //    non-automatable/table-facing: each names a distinct reusable capability
+  //    (or composes existing ones). New family labels are deliberately named
+  //    after the mechanic they generalize, not after the ability that needs
+  //    them; several units compose ONLY existing families and were previously
+  //    irreducible only because the keyword pass missed their vocabulary. ──
+
+  // ── Class traits ──
+  'stalwart:trait:armor-2': ['damage-taken-modifier'],
+  // "Reduce all damage taken by 2" — flat incoming-damage reduction on the
+  // trait owner; the damage kernel has no registered damage-TAKEN modifier
+  // seam (damage-modifier covers outgoing instances only)
+  'wright:trait:slip': ['movement-trigger-suppression'],
+  // "Movement ignores and does not trigger interrupts, Vigilance, or
+  // Rampart" — a per-mover suppression flag consulted by the movement-entry
+  // trigger folds; no such predicate exists today
+
+  // ── Bastion ──
+  'bastion:heracule:talent:1': ['shove-modifier'],
+  // "Heracule's shoves can be in any direction" — shove-direction override
+  'bastion:heracule:talent:2': ['effect-count'],
+  // "second effect triggers +1 more time" — repeat/effect-count modifier
+  'bastion:battering-ram:talent:2': ['object-interaction', 'collide-rider'],
+  // "shove objects … object triggers collide effects on the first character
+  // it collides with" — objects as shove participants + an object-collide
+  // effect rider
+
+  // ── Demon Slayer ──
+  'demon-slayer:draken-cross:talent:1': ['effect-count'],
+  // "Exceed: deal fray damage again to all characters in any area created by
+  // this ability" — an exceed-triggered repeat instance (area-member
+  // targeting itself is expressible)
+  'demon-slayer:righteous-disdain:talent:2': ['shove-modifier'],
+  // "Shove the triggering foe and ally each 1 space in any direction"
+  'demon-slayer:righteous-disdain:mastery': ['damage-taken-modifier'],
+  // "The damage from Righteous Disdain cannot reduce you past 1 hp" — an
+  // incoming-damage floor, same damage-taken seam as armor-2
+  'demon-slayer:demon-claw:talent:2': ['shove-modifier'],
+  // "After the second rush, you can shove an adjacent character 2 spaces"
+  'demon-slayer:demon-claw:mastery': ['damage-modifier'],
+  // "+1 damage per 25% max hp missing, max +3" — gated scaling damage bonus
+  'demon-slayer:soul-blade:mastery': ['power-die', 'area-effect-rider'],
+  // round-4+ stance-die refresh at turn start (persistent-ticker lifecycle,
+  // same family as Gran Reversa/Wicked Sheath) + "any area created by it
+  // shoves all characters inside 1" (rider attached to a created area)
+  'demon-slayer:six-hells-trigram:talent:1': ['area-effect-rider'],
+  // "You have counter and are sturdy while inside the area" — condition
+  // projection scoped to a CREATED area (the Aura kernel covers aura
+  // membership only); the conditions themselves are implemented
+  'demon-slayer:six-hells-trigram:talent:2': ['area-effect-rider', 'damage-taken-modifier'],
+  // "Allies inside the area reduce all damage by 2, as if from armor" —
+  // area-scoped projection OF a damage-taken modifier
+  'demon-slayer:wicked-sheath:mastery': ['power-die'],
+  // "If the die is 2+ and you would discard it, roll instead; on 1–2 keep it"
+  // — power-die reroll-on-discard lifecycle (trailing faction names in the
+  // extracted text are extraction noise, not mechanics)
+
+  // ── Colossus ──
+  'colossus:takedown:talent:2': ['shove-modifier', 'collide-rider'],
+  // optional double shove (target then self) + "Collide: deal fray damage"
+  'colossus:takedown:mastery': ['elevation-scaling'],
+  // "2 damage once per difference in elevation … maximum three times" —
+  // elevation-delta-driven instance count; geometry exposes height but no
+  // consumer scales effects by elevation difference
+  'colossus:great-suplex:mastery': ['target-count-override'],
+  // "You can target two adjacent characters" — target-count override
+  'colossus:gigaton-whip:talent:1': ['collide-rider', 'shove-modifier'],
+  // "If your target collides with another character, shove that character 1
+  // and deal 2 damage"
+  'colossus:raging-wolf:talent:2': ['fly-grant'],
+  // "While you're at 1 hp, increase flight to 3" — conditional fly grant
+  'colossus:boiling-blood:talent:1': ['ability-trigger-grant'],
+  // "While Defy Death is active, all abilities also trigger all exceed
+  // effects" — a durable state granting extra triggers to every ability
+
+  // ── Knave ──
+  'knave:trait:martial-master': ['stance-capacity'],
+  // "You can take two stances at once" — active-stance capacity override
+  'knave:riposte:mastery': ['use-count-override'],
+  // "Uses of Dire Parry stack up to 3, and you can bank these uses" — the
+  // use-ledger counts DOWN from once-per-round; stacking/banking accumulates
+  // UP across turns, which the ledger does not represent
+  'knave:strongarm:talent:2': ['object-interaction'],
+  // "phase through objects the same way as characters, though those objects
+  // are not shoved" — objects as movement-collision participants
+  'knave:intimidate:talent:2': ['status-count-scaling'],
+  // "takes 2 damage once for every status they are afflicted by, max three"
+  // — repeat count scaled by a state query (statuses on the target)
+  'knave:bleak-mercy:talent:1': ['attack-result-modifier'],
+  // "cannot miss (turn any miss into a hit)" at ≤25% hp — the miss-to-hit
+  // conversion seam (same family as Seer limit break); the hp gate exists
+
+  // ── Fool ──
+  'fool:trait:curse-of-chaos': ['delivery-immunity', 'distance-predicate'],
+  // "evasion against characters 3+ spaces away" — distance-gated delivery
+  // immunity on the trait owner
+  'fool:cavaliere:talent:2': ['movement-trigger'],
+  // "Allies you pass through during this movement can dash 1" — a reactive
+  // rider on the mover's own movement path (entry triggers cover cells, not
+  // passed-through characters granting actions to others)
+  'fool:death:mastery': ['threshold-modifier'],
+  // "Increase death's threshold to 16 hp or less"
+  'fool:gallows-humor:talent:1': ['defeat-trigger'],
+  // "instantly ticks up to maximum if an ally is defeated anywhere" — the
+  // ticker exists (lifecycle recipe); the on-any-defeat reactive is missing
+  'fool:party-favor:talent:1': ['fly-grant'],
+  // "Increase flight on yourself to 3"
+
+  // ── Freelancer / Shade ──
+  'freelancer:strafe-shot:talent:2': ['effect-count'],
+  // "Exceed: Dash 3 again" — exceed-triggered repeat of a movement instance
+  'shade:harrow:mastery': ['use-count-override'],
+  // "can trigger twice a round by default instead" — ledger allowance
+  // override (same family as Riposte's banking)
+  'shade:umbral-echo:talent:2': ['movement-modifier'],
+  // phasing (implemented) + "entering the space of shadows always costs a
+  // maximum of 1 movement" — entity-space entry-cost cap
+  'shade:assassinate:talent:1': ['range-modifier', 'condition-preserve'],
+  // "If in stealth, increase all ranges by +2, and doesn't break stealth" —
+  // listed-range override plus casting without breaking a condition
+  'shade:assassinate:talent:2': ['held-ability-gate'],
+  // "While you're holding assassinate, you have evasion" — a gate on the
+  // readied/unused (held) state of an ability; evasion itself is implemented
+  'shade:assassinate:mastery': ['target-count-override', 'choice-input'],
+  // "choose two foes … trigger its effects in any order" — target-count
+  // override plus ordered player choice over resolution
+
+  // ── Warden ──
+  'warden:gwynt:talent:1': ['range-modifier', 'movement-modifier'],
+  // "If made from stealth, increase the dashes and range by +1"
+  'warden:circle-the-oak:talent:1': ['movement-trigger'],
+  // "Allies you pass through may dash 1 after this ability resolves" — same
+  // path-through rider family as Cavaliere t2
+  'warden:mist-strider:talent:2': ['area-effect-rider', 'delivery-immunity'],
+  // "Foes in the area count all characters as having evasion" — area-scoped
+  // delivery-immunity projection onto opposing members
+  'warden:mist-strider:mastery': ['entity-create', 'area-exit-trigger'],
+  // "creates a beast inside when an area is created" + foes that start their
+  // turn inside and end outside take damage/dazed — creation plus an
+  // end-of-turn inside→outside boundary transition trigger (enter triggers
+  // exist; exit does not)
+  'warden:stampede:talent:2': ['path-count-predicate'],
+  // "If the beast passes through two or more characters before reaching your
+  // foe…instead" — a movement-path character-count predicate selecting an
+  // alternate effect body
+  'warden:stampede:mastery': ['entity-vacate', 'forced-placement'],
+  // riding removes allies from the battlefield mid-movement, then places
+  // them adjacent when it ends — removal + post-move placement primitives
+
+  // ── Chanter ──
+  'chanter:felicity:talent:1': ['movement-trigger', 'shove-modifier'],
+  // "When an ally ends any movement from this ability, they can shove all
+  // adjacent characters 1"
+  'chanter:dervish:talent:2': ['pre-ability-action'],
+  // "Before you use this ability, you can cause a wind blast, shoving all
+  // adjacent foes 1 and dealing 2 damage" — a declared pre-ability sub-action
+  // (pre-ability-movement covers self-repositioning; this is an effect)
+  'chanter:symphony:talent:1': ['effect-count', 'shared-turn-ledger', 'shove-modifier'],
+  // motes explode again + shove IF at least one other mote already exploded
+  // this turn — repeat, radial shove, and a cross-instance shared turn
+  // counter (the use-ledger gates ONE actor's own events, not a shared
+  // per-turn count across instances)
+  'chanter:monogatari:talent:1': ['recipient-expansion'],
+  // "cause the effect to also apply to foes; foes that fulfill the condition
+  // are sealed" — extending an ongoing effect's recipient set to the enemy
+  // side (sealing itself is implemented)
+  'chanter:chastise:talent:1': ['enemy-ability-trigger'],
+  // "your foe takes 1 divine damage after using any ability that damages
+  // another character" — a reactive keyed to the ENEMY's ability use
+  'chanter:chastise:talent:2': ['defeat-trigger', 'effect-count'],
+  // "if your foe defeats any character, they take 1 divine damage three times"
+
+  // ── Harvester / Sealer ──
+  'harvester:sow:talent:2': ['cross-ability-invoke'],
+  // "Comeback: Reap's Slay effect triggers" — invoking another ability's
+  // NAMED effect as a rider; no cross-ability invoke seam exists
+  'harvester:blood-grove:talent:1': ['movement-modifier'],
+  // "All spaces of the area cost 0 movement for thralls to enter" — an
+  // actor-kind-scoped terrain entry-cost override
+  'harvester:fairy-ring:talent:2': ['recipient-expansion', 'condition-suppression'],
+  // "use Spirit Away on allies; if you do, it doesn't seal them" — recipient
+  // expansion plus suppressing the ability's own condition application
+  'sealer:sanctify:talent:1': ['entry-save-gate'],
+  // "Bloodied foes must save if they attempt to enter the area; on a failed
+  // save they cannot voluntarily enter until the start of their next turn" —
+  // a save gate on area entry producing a denial window
+  'sealer:grand-banishment:mastery': ['distance-change-trigger'],
+  // inverted effect: damage the chosen foe if they move AWAY — a reactive on
+  // distance INCREASING from an anchor (proximity triggers decrease only)
+
+  // ── Seer ──
+  'seer:trait:the-wheel-of-fate': ['card-deck-system'],
+  // 13-card deck, draw-to-5 at combat start, hand cap 7, discard pile,
+  // reshuffle-on-empty persisting across combats — a dedicated persistent
+  // card subsystem (draw/hand/discard/shuffle), not expressible with any
+  // existing resource
+  'seer:trait:skein': ['card-deck-system'],
+  // draw at turn start / extra draw at turn end — rides the same missing
+  // card-deck subsystem
+  'seer:sleight-of-hand:talent:1': ['condition-preserve', 'effect-count'],
+  // "does not break the pacified condition" + "deals 2 damage again to any
+  // pacified foes in the area"
+  'seer:astra:mastery': ['member-count-scaling'],
+  // "deal 2 divine per blessed ally in the area, up to three times; foes can
+  // be damaged more than once" — repeat count scaled by a membership query
+  'seer:sisyphus:mastery': ['trigger-threshold-override'],
+  // "triggers no matter how far away a character is from their starting
+  // position" — removes the displacement-distance bound on the trigger
+  'seer:gran-reversa:talent:2': ['power-die'],
+  // "if your ally was bloodied, instantly regain a tick on this die"
+  'seer:gran-reversa:mastery': ['resource-cap-override'],
+  // "Vigor granted … can increase a character's total vigor over their
+  // maximum" — per-grant cap bypass
+  'seer:eclipse:mastery': ['duration-modifier', 'choice-input'],
+  // "does not expire … repeat its delay effect at the end of your turn without
+  // ending your turn; disappears if reused" — player-chosen duration
+  // extension with an end-of-turn repeat window
+  'seer:the-tower:mastery': ['damage-modifier', 'defense-bypass'],
+  // double meteor damage at ≤25% hp AND "ignores defiance" — the divine
+  // type's defiance bypass is fixed to the type; a generic ignore-defense
+  // flag does not exist
+
+  // ── Enochian / Geomancer ──
+  'enochian:lance:talent:2': ['damage-modifier'],
+  // "If you are at 1 hp or lower, deals maximum base damage" — max-damage
+  // variant of the damage-modifier seam
+  'enochian:implode:talent:1': ['area-effect-rider'],
+  // "Any character in the center space is also shattered" — shatter
+  // (implemented) attached to the created area's center cell
+  'enochian:implode:mastery': ['target-selector-variant', 'defeat-trigger'],
+  // "choose a character instead of a space (no stun); if that character is
+  // defeated, Implode activates immediately" — targeting-mode change plus a
+  // defeat-linked activation
+  'geomancer:dragon-dive:mastery': ['entity-vacate', 'forced-placement'],
+  // pull a willing ally along (removing them), then place adjacent after
+  'geomancer:helix-heel:talent:1': ['rebound', 'object-interaction'],
+  // "when bouncing off an object, shove it 1 before extending the line"
+  'geomancer:obsidian-flesh:talent:1': ['duration-modifier'],
+  // "if this ability ticks over, it doesn't end until the end of the current
+  // turn" — expiry grace-period timing override
+  'geomancer:realignment:talent:1': ['effect-count'],
+  // "take piercing fray damage again one more time if your target is bloodied"
+  'geomancer:realignment:mastery': ['save-modifier', 'status-reapply'],
+  // "must save or also be affected by every status that was just purged" —
+  // capturing the purged-status set and reapplying it on a failed save
+  'geomancer:midas:talent:1': ['entity-create', 'forced-placement'],
+  // returned character leaves a broken-shell statue OBJECT; place them
+  // adjacent to it
+  'geomancer:quaking-palm:talent:2': ['enemy-ability-trigger'],
+  // "after that character uses any ability that moves them, deal 1 piercing
+  // to adjacent foes" — same enemy-ability-use reactive family as Chastise t1
+
+  // ── Spellblade / Stormbender ──
+  'spellblade:atherwand:talent:1': ['area-extension'],
+  // "doesn't replace the old area, but extends it, as long as at least one
+  // space of the new area is adjacent" — adjacency-gated area growth
+  'spellblade:bifrost:talent:2': ['area-extension', 'area-effect-rider'],
+  // round-end growth anywhere in the pattern + "when they grow, deal 1
+  // piercing to all characters inside" — a growth-event rider
+  'stormbender:tsunami:talent:2': ['area-effect-rider', 'save-modifier'],
+  // "Foes inside Tsunami take +1 curse on saves" — area-scoped save-curse
+  // projection onto opposing members
+  'stormbender:cryo:talent:1': ['resource-management'],
+  // round-4+ on-use Aether generation — resource-management remains a live
+  // blocker family (economy mechanics beyond the plain gain mutation are not
+  // yet reusable capabilities)
+  'stormbender:cryo:talent:2': ['area-effect-rider'],
+  // round-4+ shatter-all-in-area — shatter implemented, area scoping missing
+  'stormbender:gust:mastery': ['area-persistence-override'],
+  // "Gust's area is not replaced if used again, though you cannot have more
+  // than three areas active" — replacement-policy override plus an active-
+  // area cap; the engine assumes one live area per program
 };
 
 /** Classify a source unit's rules text into a blocker set.

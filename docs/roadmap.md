@@ -61,6 +61,11 @@ Each priority is executable by one coding-agent pass unless marked otherwise.
 Categories: REPAIR · FOUNDATION · VERTICAL SLICE · CONTENT EXPANSION ·
 INTEGRATION · POLISH.
 
+The current step-by-step execution order across these priorities is tracked
+in [`TODO.md`](../TODO.md) §Current execution plan; this document owns phase
+definitions and gates, TODO.md owns live sequencing. On conflict, update both
+together — never let them assert different orders.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

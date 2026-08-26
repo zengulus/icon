@@ -42,7 +42,8 @@ defeat/wounds, END_TURN boundaries, settlement exit.
 ### Slice B — Player complexity — *blocked*
 PC with a Job trait (e.g., Demon Edge), wired talents, an equipped mastery, a
 Relic invoke, and an interrupt (Righteous Disdain or Riposte).
-**Blocking:** mastery fold (P3), Relic runtime (P5), Vigilance windows (B4).
+**Blocking:** broad mastery/talent promotion beyond the landed K-P5 modifier-fold
+tranche (P3), Relic runtime (P5), Vigilance windows (B4).
 
 ### Slice C — Foe complexity — *blocked*
 Elite (double HP, two turns) or Legend (per-player turns, Juggernaut) with

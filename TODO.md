@@ -21,6 +21,67 @@ Status vocabulary used below: `BLOCKED` · `READY` · `PARTIAL` ·
 
 ---
 
+## Current execution plan (ordered)
+
+This is the canonical step-by-step execution order. It sequences the
+backlog sections and roadmap priorities below; it does not replace them —
+each step links to the section that owns its detail. Work proceeds one step
+at a time; each step ends with a semantic audit against the step's meaning
+(not merely green tests), regeneration of every generated artifact its
+generator says is affected, and updated documentation recording the actual
+resulting state. If evidence discovered during a step contradicts an order
+assumption here, document the evidence and update this list before proceeding.
+
+1. **Verify canonical census + full verification baseline.** — `DONE`
+   (2026-08-26). Census regenerates byte-stable under strict mode; full
+   baseline green.
+2. **Remove temporary/debug artifacts; reconcile docs with `main`.** —
+   `DONE` (2026-08-26). Deleted committed throwaway
+   `scripts/page-dump.tmp.ts`; reconciled rules-foundations (K-P5 landed
+   state), rules-coverage (mastery/census figures), deliverables (Slice B
+   blocking statement) with the landed mastery-fold work.
+3. **Decompose all remaining `{irreducible}` census entries** (78 units)
+   into concrete implementable blocker families or explicitly
+   non-automatable/table-facing classifications; regenerate the census
+   afterward. — `DONE` (2026-08-26). All 78 audited against full source text
+   in the census tool's reclassification registry: every unit now carries a
+   concrete implementable blocker set (existing families reused where the
+   semantics match, e.g. shove-modifier/effect-count/fly-grant; ~30 new
+   named reusable families for genuinely distinct mechanics such as
+   area-effect-rider, use-count-override, card-deck-system,
+   enemy-ability-trigger). NONE qualified as non-automatable/table-facing.
+   Census regenerated: residual 0; no non-implementable class remains.
+4. **Shared spatial primitives: Teleport, Place, Remove, Swap**, then
+   terrain-create/entity-create, then fly/movement-grant primitives
+   (roadmap P4; F1/F3/F4). Migrate existing ad-hoc resolvers onto them with
+   no semantic changes (golden replay fixtures unchanged).
+5. **Promote-after-landing discipline.** After each primitive/foundation
+   lands, immediately promote every source unit whose blocker set becomes
+   empty, with source-exact fixtures and replay coverage, then regenerate
+   the census (this is §9 of AGENTS.md applied per-step rather than
+   per-batch).
+6. **Expand mastery/talent folds by regenerated census frequency**
+   (roadmap P3; F2/F5–F8): reusable high-fan-out modifier families first;
+   each modifier's mechanical authority lives at the existing mechanic's own
+   query point (e.g. the interrupt allowance reader, the damage pipeline),
+   never in a parallel mastery-specific subsystem.
+7. **Close one deliberately complex player-content vertical slice end to
+   end:** persistent character → encounter → talents/masteries/interrupts/
+   movement/status interactions → deterministic replay → settlement →
+   projected character → subsequent encounter (Slice B closure path;
+   [`deliverables.md`](docs/deliverables.md)).
+8. **Relic invoke/persistent-effect runtime** as typed source-traceable
+   recipes (roadmap P5; F9), closing the corresponding player-complexity
+   requirements.
+9. **Trigger-driven Vigilance** from real damage/movement trigger records
+   through the existing window protocol (B4).
+10. **Foe phase transitions + chapter-rule execution**, incl. one
+    source-exact phased Legend end to end (B3).
+11. **Mob member-state model**: member count, hit accounting, removal,
+    slay suppression, replay, and a full Mob encounter fixture (B2).
+
+---
+
 ## Immediate correctness blockers
 
 These precede breadth work. Each has a concrete acceptance condition.

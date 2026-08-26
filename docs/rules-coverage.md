@@ -54,7 +54,7 @@ the family's *typical* ceiling.
 | Class traits | NEEDS RECOUNT | ✔ | Mendicant slice (Diaga, Bless, Succor) | 7 | mixed 3–6 |
 | Job traits | 65 | ✔ | 27 | 38 | wired rows 6–7; rest 3 with kernel need recorded |
 | Talents | 288 | ✔ | 47 | 241 | wired 6–7; rest 3 |
-| Masteries | 144 (assumed; NEEDS RECOUNT) | ✔ (validated surface) | few (fold missing) | 136 | mostly 3 |
+| Masteries | 144 (assumed; NEEDS RECOUNT) | ✔ (validated surface) | 3 via the K-P5 modifier fold (2026-08-26) | 133 | wired 6–7; rest 3 pending further fold families |
 | Limit Breaks | 16 | ✔ (costs pay) | 0 effect bodies | 16 | 3–4 (payment) |
 | Relics | 40 (+120 ranks, 40 aspects) | ✔ | 0 effects | 160 | 2–3; character-engine infusion/refocus transitions DONE |
 | Foe profiles | 449 | ✔ | construction works | — | 5 for construction |
@@ -90,8 +90,10 @@ the family's *typical* ceiling.
 The machine-generated dependency graph lives in
 [`blocker-census.md`](blocker-census.md) /
 [`blocker-census.json`](blocker-census.json) (**generated** by
-`npm run audit:class-job-census`; never hand-edit). Current shape: baseline
-438 unresolved Class/Job units (7 class-trait, 38 job-trait, 241 talent,
-136 mastery, 16 limit-break); top shared blockers are teleport (15),
-interrupt-modifier (13), terrain-create (13), entity-create (13),
-damage-modifier (11), fly-grant (11), mark-modifier (11).
+`npm run audit:class-job-census`; never hand-edit). Current shape: baseline 435 unresolved Class/Job units
+(7 class-trait, 38 job-trait, 241 talent, 133 mastery, 16 limit-break); top
+shared blockers are teleport (15), fly-grant (13), terrain-create (13),
+entity-create (13), damage-modifier (12), interrupt-modifier (12). The former
+78-unit `{irreducible}` residual was fully decomposed into concrete
+implementable blocker families (2026-08-26) — the census no longer carries a
+non-implementable class.
