@@ -23,13 +23,14 @@ interface SpatialFixture {
   foe: EncounterActor;
 }
 
-function spatialEncounter(options: { terrain?: TerrainCell[] } = {}): SpatialFixture {
+function spatialEncounter(options: { terrain?: TerrainCell[]; extra?: EncounterActor[]; foePosition?: Position } = {}): SpatialFixture {
   let state = createEncounter('Spatial fixture');
   if (options.terrain) state.grid = { ...state.grid, terrain: options.terrain };
   const hero = actorFromCharacter(validCharacter('Green Witch'), { x: 1, y: 1 });
-  const foe = createFoe('Relict', { x: 4, y: 1 });
+  const foe = createFoe('Relict', options.foePosition ?? { x: 4, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+  for (const actor of options.extra ?? []) state = executeCommand(state, { type: 'ADD_ACTOR', actor }).state;
   state = startEncounterTo(state, hero.id);
   return { state, hero, foe };
 }
@@ -157,6 +158,100 @@ describe('F1 spatial gateway (pp.87–92, 94, 107)', () => {
     const heroMoved = applyEvents(state, [{ ...moveEvent(hero.id, hero.id, 'place', { x: 7, y: 1 }) }]);
     const nowFree = applyEvents(heroMoved, [moveEvent(heroMoved.actors[hero.id].id, foe.id, 'place', { x: 0, y: 1 })]);
     expect(nowFree.actors[foe.id].position).toEqual({ x: 0, y: 1 });
+  });
+});
+
+describe('F1 swap atomicity (prevalidated permutation, every leg or none)', () => {
+  /** A swap-style batch of explicit-destination legs. */
+  const swapEvent = (legs: Array<{ actorId: string; to: Position; movement?: 'place' | 'teleport' }>): EncounterEvent => ({
+    type: 'RULE_MUTATIONS_APPLIED',
+    actorId: legs[0].actorId,
+    sourceId: 'fixture:swap',
+    actionId: 'default',
+    timing: 'use',
+    tags: [],
+    mutations: legs.map(({ actorId, to, movement = 'place' }) => ({
+      kind: 'move', sourceId: 'fixture:swap', sourceActorId: actorId, actorId, movement, distance: null, positions: [to], direction: null, phasing: false,
+    })),
+  });
+
+  it('a swap with one illegal leg applies no leg — the legal leg is not applied either (out of bounds)', () => {
+    const { state, hero, foe } = spatialEncounter();
+    // The first leg onto the hero's cell is legal; the second leg's
+    // destination is off the grid. The complete permutation is prevalidated
+    // against the same pre-swap state, so the swap is denied as a whole.
+    const swap = swapEvent([{ actorId: foe.id, to: { x: 1, y: 1 } }, { actorId: hero.id, to: { x: 99, y: 1 } }]);
+    const result = applyEvents(state, [swap]);
+    expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(result.pendingInterrupts).toHaveLength(0); // no window from a denied swap
+    expect(applyEvents(state, [swap])).toEqual(result);
+  });
+
+  it('a swap leg targeting a cell occupied by a non-co-moved actor denies the whole swap', () => {
+    const third = createFoe('Relict', { x: 3, y: 1 });
+    const { state, hero, foe } = spatialEncounter({ extra: [third] });
+    // The second leg targets (3,1), occupied by the third actor, which is not
+    // part of the batch: the permutation is illegal against the pre-swap
+    // state, so neither the legal first leg nor the second leg applies.
+    const swap = swapEvent([{ actorId: foe.id, to: { x: 1, y: 1 } }, { actorId: hero.id, to: { x: 3, y: 1 } }]);
+    const result = applyEvents(state, [swap]);
+    expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(applyEvents(state, [swap])).toEqual(result);
+  });
+
+  it('two legs may not land on the same destination — the duplicate permutation is denied entirely', () => {
+    const { state, hero, foe } = spatialEncounter();
+    // Both legs target the free cell (5,1). A co-moved actor is never an
+    // obstruction to another leg, so per-leg validation alone would stack
+    // both actors on one cell; the permutation check rejects the duplicate
+    // destination and applies neither leg.
+    const swap = swapEvent([{ actorId: foe.id, to: { x: 5, y: 1 } }, { actorId: hero.id, to: { x: 5, y: 1 } }]);
+    const result = applyEvents(state, [swap]);
+    expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(applyEvents(state, [swap])).toEqual(result);
+  });
+
+  it('a full three-party rotation applies every leg of the permutation', () => {
+    const third = createFoe('Relict', { x: 7, y: 1 });
+    const { state, hero, foe } = spatialEncounter({ extra: [third] });
+    // A→B, B→C, C→A: every destination is the pre-swap cell of a co-moved
+    // participant, so the complete permutation is legal and all three legs
+    // apply.
+    const rotation = swapEvent([
+      { actorId: foe.id, to: { x: 1, y: 1 } },
+      { actorId: third.id, to: { x: 4, y: 1 } },
+      { actorId: hero.id, to: { x: 7, y: 1 } },
+    ]);
+    const result = applyEvents(state, [rotation]);
+    expect(result.actors[foe.id].position).toEqual({ x: 1, y: 1 });
+    expect(result.actors[third.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 7, y: 1 });
+    expect(applyEvents(state, [rotation])).toEqual(result);
+  });
+
+  it('a teleporting swap with one rampart-denied leg applies no leg (p.104)', () => {
+    const ally = actorFromCharacter(validCharacter('Second'), { x: 4, y: 1 });
+    const allyTwo = actorFromCharacter(validCharacter('Third'), { x: 7, y: 1 });
+    const { state, hero, foe } = spatialEncounter({ extra: [ally, allyTwo], foePosition: { x: 5, y: 1 } });
+    // A hostile rampart source adjacent to (4,1) makes that one cell
+    // rampart-affected for hero-side movers. In the rotation A→B, B→C, C→A
+    // the legs entering or leaving the affected cell are denied, so the
+    // whole teleporting swap is denied — the one legal leg (C→A) does not
+    // apply on its own.
+    state.actors[foe.id].conditions.push({ id: 'rampart', sourceId: 'fixture:rampart', ownerId: foe.id, potency: 'normal', duration: null });
+    const rotation = swapEvent([
+      { actorId: hero.id, to: { x: 4, y: 1 }, movement: 'teleport' },
+      { actorId: ally.id, to: { x: 7, y: 1 }, movement: 'teleport' },
+      { actorId: allyTwo.id, to: { x: 1, y: 1 }, movement: 'teleport' },
+    ]);
+    const result = applyEvents(state, [rotation]);
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(result.actors[ally.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.actors[allyTwo.id].position).toEqual({ x: 7, y: 1 });
+    expect(applyEvents(state, [rotation])).toEqual(result);
   });
 });
 

@@ -1036,6 +1036,40 @@ function shoveResolution(state: EncounterState, mutation: Extract<RuleMutation, 
   return { position, collided };
 }
 
+/** Build the SpatialIntent for an explicit-destination move mutation, or null
+ * when the mutation does not route through the gateway (shove, remove). The
+ * gateway decides bounds, occupancy, impassable terrain, and Rampart
+ * (automation/spatial-intent.ts); this construction is shared by the live
+ * application and the swap prevalidation so both decide from one source. */
+function movementSpatialIntent(
+  state: EncounterState,
+  mutation: Extract<RuleMutation, { kind: 'move' }>,
+  coMovedActorIds?: readonly string[],
+): SpatialIntent | null {
+  const destination = mutation.positions.at(-1);
+  if (!destination || mutation.movement === 'shove') return null;
+  const actor = state.actors[mutation.actorId];
+  if (!actor) return null;
+  return {
+    kind: mutation.movement === 'teleport' ? 'teleport' : mutation.movement === 'place' ? 'place' : 'move',
+    actorId: actor.id,
+    sourceActorId: mutation.sourceActorId,
+    sourceRuleId: mutation.sourceId,
+    from: actor.position,
+    to: destination,
+    coMovedActorIds,
+    // p.104 Rampart blocks dashing, flying, and teleporting. Placement is
+    // forced movement (a throw, a summon, a return), not a teleport; a
+    // teleport is denied when entering or leaving rampart differs; a
+    // fly/rush destination is denied when rampart-obstructed for the mover.
+    rampartObstructed: mutation.movement === 'teleport'
+      ? rampartObstructs(state, actor, actor.position) !== rampartObstructs(state, actor, destination)
+      : mutation.movement === 'fly' || mutation.movement === 'rush'
+        ? rampartObstructs(state, actor, destination)
+        : false,
+  };
+}
+
 function applyMovement(state: EncounterState, mutation: Extract<RuleMutation, { kind: 'move' }>, coMovedActorIds?: readonly string[]): boolean {
   const actor = state.actors[mutation.actorId];
   if (!actor || actor.defeated || encounterConditionSet(actor, state).has('immobile')) return false;
@@ -1049,29 +1083,8 @@ function applyMovement(state: EncounterState, mutation: Extract<RuleMutation, { 
   // Every explicit-destination path routes through the shared SpatialIntent
   // gateway: bounds, occupancy, impassable terrain, and rampart are decided
   // once (automation/spatial-intent.ts), never per resolver.
-  const destination = mutation.positions.at(-1);
-  if (mutation.movement === 'place' || mutation.movement === 'teleport' || (destination && mutation.movement !== 'shove')) {
-    if (!destination) return false;
-    const intent: SpatialIntent = {
-      kind: mutation.movement === 'teleport' ? 'teleport' : mutation.movement === 'place' ? 'place' : 'move',
-      actorId: actor.id,
-      sourceActorId: mutation.sourceActorId,
-      sourceRuleId: mutation.sourceId,
-      from: actor.position,
-      to: destination,
-      coMovedActorIds,
-      // p.104 Rampart blocks dashing, flying, and teleporting. Placement is
-      // forced movement (a throw, a summon, a return), not a teleport; a
-      // teleport is denied when entering or leaving rampart differs; a
-      // fly/rush destination is denied when rampart-obstructed for the mover.
-      rampartObstructed: mutation.movement === 'teleport'
-        ? rampartObstructs(state, actor, actor.position) !== rampartObstructs(state, actor, destination)
-        : mutation.movement === 'fly' || mutation.movement === 'rush'
-          ? rampartObstructs(state, actor, destination)
-          : false,
-    };
-    return applySpatialIntent(state, intent).moved;
-  }
+  const intent = movementSpatialIntent(state, mutation, coMovedActorIds);
+  if (intent) return applySpatialIntent(state, intent).moved;
   const resolved = shoveResolution(state, mutation);
   if (resolved) actor.position = resolved.position;
   return moved();
@@ -1285,12 +1298,111 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
   }
 }
 
+/** A move mutation that routes through the SpatialIntent gateway with an
+ * explicit destination: place/teleport/rush/fly (and generic moves with a
+ * destination). Shoves resolve step-wise and removes leave the battlefield;
+ * neither is a destination-permutation leg. */
+const isExplicitDestinationMove = (mutation: RuleMutation): mutation is Extract<RuleMutation, { kind: 'move' }> =>
+  mutation.kind === 'move' && mutation.movement !== 'shove' && mutation.movement !== 'remove' && mutation.positions.at(-1) !== undefined;
+
+/**
+ * Swap atomicity (F1). The explicit-destination move legs of one mutation
+ * batch form a single destination permutation: every swap emitter
+ * (`swapMutations` in primitives/job-kit.ts) and every multi-target
+ * repositioning emits its legs in one batch. The complete permutation is
+ * prevalidated against the SAME pre-swap state — the batch is simulated on a
+ * clone so interleaved damage/condition/terrain mutations shape the decision
+ * exactly as the live application would — and the batch then either applies
+ * every leg or none: when any leg would be denied, every explicit-destination
+ * leg is skipped, never a partial swap.
+ *
+ * The permutation must also be injective: two legs may not land on
+ * overlapping footprints. A co-moved actor is never an obstruction to another
+ * leg, so per-leg validation alone would let two actors stack on one
+ * destination cell mid-batch.
+ *
+ * Returns the mutation indices of the explicit-destination legs to skip.
+ * Non-destination mutations (damage, conditions, shoves, removes) are never
+ * part of the group and are applied regardless.
+ */
+function deniedDestinationLegIndices(state: EncounterState, mutations: readonly RuleMutation[]): Set<number> {
+  const denied = new Set<number>();
+  const legs: Array<{ index: number; mutation: Extract<RuleMutation, { kind: 'move' }> }> = [];
+  for (let index = 0; index < mutations.length; index += 1) {
+    const mutation = mutations[index];
+    if (isExplicitDestinationMove(mutation)) legs.push({ index, mutation });
+  }
+  if (legs.length < 2) return denied; // a single leg has no permutation to protect
+  // A destination permutation has each participant exactly once: two legs for
+  // the same actor are sequential steps of one movement (e.g. a multi-step
+  // rush path), not swap legs, and keep the existing per-leg behavior.
+  if (new Set(legs.map(({ mutation }) => mutation.actorId)).size !== legs.length) return denied;
+
+  const coMovedActorIds = [...new Set(mutations.filter((mutation) => mutation.kind === 'move').map((mutation) => mutation.actorId))];
+  const simulation = structuredClone(state);
+
+  // Effective destination per actor (the last explicit leg wins), used for
+  // the injectivity check and the vacating set.
+  const effective = new Map<string, Position>();
+  for (const { mutation } of legs) effective.set(mutation.actorId, mutation.positions.at(-1)!);
+  const entries = [...effective].map(([actorId, position]) => ({ actorId, position, size: Math.max(1, simulation.actors[actorId]?.size ?? 1) }));
+  for (let i = 0; i < entries.length; i += 1) {
+    for (let j = i + 1; j < entries.length; j += 1) {
+      if (footprintsOverlap(entries[i], entries[j])) {
+        for (const { index } of legs) denied.add(index);
+        return denied;
+      }
+    }
+  }
+
+  // Actors that provably vacate their current cell. A co-moved actor that
+  // stays (destination = own cell, or a shove whose resolution is unknown)
+  // remains an obstruction, so a leg can never land on a cell its occupant
+  // does not leave.
+  const vacating: string[] = [];
+  for (const mutation of mutations) {
+    if (mutation.kind !== 'move' || mutation.movement === 'shove') continue;
+    const destination = mutation.movement === 'remove' ? null : mutation.positions.at(-1);
+    const actor = state.actors[mutation.actorId];
+    if (mutation.movement === 'remove' || (destination && actor?.position && !samePosition(actor.position, destination))) vacating.push(mutation.actorId);
+  }
+
+  // Simulate the whole batch; every explicit leg must land on its
+  // destination (a no-op landing on the actor's own cell counts as applied).
+  const legByIndex = new Map(legs.map(({ index, mutation }) => [index, mutation]));
+  let allApplied = true;
+  for (let index = 0; index < mutations.length; index += 1) {
+    const mutation = mutations[index];
+    const leg = legByIndex.get(index);
+    if (leg) {
+      const destination = leg.positions.at(-1)!;
+      applyRuleMutation(simulation, leg, index, vacating);
+      const actor = simulation.actors[leg.actorId];
+      if (!actor?.position || !samePosition(actor.position, destination)) {
+        allApplied = false;
+        break;
+      }
+    } else {
+      applyRuleMutation(simulation, mutation, index, coMovedActorIds);
+    }
+  }
+  if (!allApplied) for (const { index } of legs) denied.add(index);
+  return denied;
+}
+
 export function applyRuleMutations(state: EncounterState, mutations: RuleMutation[]) {
   // Actors with a move mutation in this batch vacate their cells; the spatial
   // gateway treats them as co-moved so paired swaps and multi-target
   // repositioning validate atomically instead of colliding mid-batch.
   const coMovedActorIds = [...new Set(mutations.filter((mutation) => mutation.kind === 'move').map((mutation) => mutation.actorId))];
-  mutations.forEach((mutation, index) => applyRuleMutation(state, mutation, index, coMovedActorIds));
+  // Swap atomicity: the explicit-destination legs form one permutation
+  // prevalidated against the same pre-swap state; either every leg applies
+  // or none does — never a partial swap.
+  const denied = deniedDestinationLegIndices(state, mutations);
+  mutations.forEach((mutation, index) => {
+    if (denied.has(index)) return;
+    applyRuleMutation(state, mutation, index, coMovedActorIds);
+  });
 }
 
 /**
@@ -1307,12 +1419,16 @@ export function applyRuleMutations(state: EncounterState, mutations: RuleMutatio
 export function collidingShoveTargets(state: EncounterState, mutations: readonly RuleMutation[]): string[] {
   const targets: string[] = [];
   const simulation = structuredClone(state);
+  // The dry run must mirror the live batch exactly: swap legs denied by the
+  // prevalidation never apply, so they never contribute a collision.
+  const denied = deniedDestinationLegIndices(state, mutations);
+  const coMovedActorIds = [...new Set(mutations.filter((candidate) => candidate.kind === 'move').map((candidate) => candidate.actorId))];
   for (let index = 0; index < mutations.length; index += 1) {
     const mutation = mutations[index];
+    if (denied.has(index)) continue;
     if (mutation.kind === 'move' && mutation.movement === 'shove' && mutation.positions.length === 0 && mutation.distance !== null) {
       if (shoveResolution(simulation, mutation)?.collided) targets.push(mutation.actorId);
     }
-    const coMovedActorIds = [...new Set(mutations.filter((candidate) => candidate.kind === 'move').map((candidate) => candidate.actorId))];
     applyRuleMutation(simulation, mutation, index, coMovedActorIds);
   }
   return targets;
@@ -1323,8 +1439,13 @@ export function collidingShoveTargets(state: EncounterState, mutations: readonly
  * reactive trigger set and the slay talent fold. */
 export function reactiveSlayTargets(state: EncounterState, mutations: RuleMutation[]): string[] {
   const simulation = structuredClone(state);
+  // The dry run must mirror the live batch exactly: swap legs denied by the
+  // prevalidation never apply, so they never move anyone into or out of a
+  // fatal position.
+  const denied = deniedDestinationLegIndices(state, mutations);
+  const coMovedActorIds = [...new Set(mutations.filter((candidate) => candidate.kind === 'move').map((candidate) => candidate.actorId))];
   mutations.forEach((mutation, index) => {
-    const coMovedActorIds = [...new Set(mutations.filter((candidate) => candidate.kind === 'move').map((candidate) => candidate.actorId))];
+    if (denied.has(index)) return;
     applyRuleMutation(simulation, mutation, index, coMovedActorIds);
   });
   const slain: string[] = [];

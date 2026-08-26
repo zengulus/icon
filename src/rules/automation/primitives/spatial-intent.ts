@@ -96,6 +96,12 @@ export function footprintIntersectsCells(
  * (kind `move`) the event log serializes; this module is the shared pure
  * kernel both command construction and replay consume.
  *
+ * Swap legs are applied as one atomic batch: the reducer prevalidates the
+ * complete destination permutation against the same pre-swap state (with an
+ * injective-destination check) and applies every leg or none — a partial
+ * swap is never applied (kernels/encounter-adapter.ts
+ * `deniedDestinationLegIndices`).
+ *
  * Condition-derived authority stays with the encounter adapter: `immobile`
  * denial, and the fortify/rampart/slip/unstoppable projection that decides
  * whether a destination is rampart-obstructed for the mover. The kernel folds

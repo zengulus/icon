@@ -63,9 +63,13 @@ assumption here, document the evidence and update this list before proceeding.
    hand-rolled place pairs; fixtures distinguish the flavors (Masquerade legs
    assert `teleport` and are Rampart-denied; Shadow Play legs assert `place`
    and cross the same boundary freely); forced moves keep voluntary-only
-   movement-entry triggers and untouched turn entitlement. Remaining in step
-   4: terrain-create/entity-create, then fly/movement-grant primitives; then
-   promote the census `{teleport}`×15 units (step 5 discipline).
+   movement-entry triggers and untouched turn entitlement. Swap batches are
+   atomic: the reducer prevalidates the full destination permutation
+   against the same pre-swap state (simulated on a clone, injective
+   destinations) and applies every leg or none — never a partial swap.
+   Remaining in step 4: terrain-create/entity-create, then fly/movement-grant
+   primitives; then promote the census `{teleport}`×15 units (step 5
+   discipline).
 5. **Promote-after-landing discipline.** After each primitive/foundation
    lands, immediately promote every source unit whose blocker set becomes
    empty, with source-exact fixtures and replay coverage, then regenerate
