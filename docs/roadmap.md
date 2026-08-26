@@ -306,3 +306,6 @@ counts never substitute for a slice closing.
   choices) — documented table-facing instead.
 - Horizontal scaling of the realtime service (single-instance by design).
 - Mobile/native clients, accounts beyond Supabase auth, asset marketplace.
+- Animated 3D dice presentation — later presentation/polish work with a strict
+  presentation-only authority boundary ([`dice-presentation.md`](dice-presentation.md));
+  deliberately not in any phase gate.

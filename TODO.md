@@ -184,6 +184,10 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 
 - Compendium search UX, token art pipeline, map asset management, mobile
   layout, sound/log filtering. Nothing here blocks rules authority.
+- Authoritative animated 3D dice presentation — strictly presentation-layer
+  staged roll-result choreography; requirements and authority boundary are
+  recorded in [`docs/dice-presentation.md`](docs/dice-presentation.md). Not a
+  phase gate; nothing here blocks rules authority.
 
 ---
 
