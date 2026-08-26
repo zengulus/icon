@@ -7,7 +7,7 @@ import {
   constant, comboCost,
   distance, sourceActor, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
-  placeMutation, teleportMutation, entityMutation, terrainMutation,
+  placeMutation, teleportMutation, entityMutation, terrainMutation, swapMutations,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -177,8 +177,10 @@ const nightmareEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.163: swap two other characters (first in range 2, second in range 3
- * of the first); allies gain stealth, foes are dazed. Finishing Blow's "repeat"
- * is a table-facing second choice. */
+ * of the first); allies gain stealth, foes are dazed. The source has no
+ * movement word — this is a REMOVE/PLACE swap (movement 'place'), not a
+ * teleport: no rampart boundary check and no teleport trigger surface.
+ * Finishing Blow's "repeat" is a table-facing second choice. */
 const shadowPlayEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const sourcePosition = source.position;
@@ -190,10 +192,10 @@ const shadowPlayEffects: RuleResolver = (context) => {
   if (first.id === source.id || second.id === source.id || first.id === second.id) throw new RuleProgramViolation('choice.actor-range', 'Shadow Play requires two different characters other than yourself.');
   if (distance(sourcePosition, first.position) > 2) throw new RuleProgramViolation('choice.actor-range', 'The first character must be in range 2.');
   if (distance(first.position, second.position) > 3) throw new RuleProgramViolation('choice.actor-range', 'The second character must be in range 3 of the first.');
-  const mutations: RuleMutation[] = [
-    placeMutation(context, first.id, second.position),
-    placeMutation(context, second.id, first.position),
-  ];
+  const mutations: RuleMutation[] = swapMutations(context, 'place', [
+    { actorId: first.id, destination: second.position },
+    { actorId: second.id, destination: first.position },
+  ]);
   for (const character of [first, second]) {
     if (character.side === source.side) mutations.push(conditionMutation(context, character.id, 'stealth'));
     else mutations.push(conditionMutation(context, character.id, 'dazed'));

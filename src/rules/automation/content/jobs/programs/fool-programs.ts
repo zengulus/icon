@@ -9,7 +9,7 @@ import {
   constant, attackStep,
   distance, sourceActor, occupied, impassable, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, resourceMutation, stanceMutation, markMutation,
-  rushMutation, flyMutation, placeMutation, entityMutation, terrainMutation,
+  rushMutation, flyMutation, placeMutation, entityMutation, terrainMutation, swapMutations,
   gambleD6,
   untilNextTurnStart, action, compilation,
 } from '../../../primitives/job-kit.js';
@@ -268,7 +268,10 @@ registerMovementEntryTrigger({
   },
 });
 
-/** ICON p.151: swap places with a willing ally in range 3, teleporting both. */
+/** ICON p.151: swap places with a willing ally in range 3, TELEPORTING both.
+ * The shared Swap primitive emits each leg as a real teleport (movement
+ * 'teleport'): Rampart (p.104) can deny the swap and any "when you teleport"
+ * semantics see it — this is NOT a remove/place swap. */
 const masqueradeEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const sourcePosition = source.position;
@@ -278,7 +281,10 @@ const masqueradeEffects: RuleResolver = (context) => {
   if (!sourcePosition || !ally || !allyPosition) throw new RuleProgramViolation('choice.actor-count', 'Masquerade requires a willing ally.');
   if (ally.side !== source.side || ally.id === source.id) throw new RuleProgramViolation('choice.actor-range', 'Masquerade requires a different ally.');
   if (distance(sourcePosition, allyPosition) > 3) throw new RuleProgramViolation('choice.actor-range', 'Masquerade requires an ally in range 3.');
-  return [placeMutation(context, source.id, allyPosition), placeMutation(context, ally.id, sourcePosition)];
+  return swapMutations(context, 'teleport', [
+    { actorId: source.id, destination: allyPosition },
+    { actorId: ally.id, destination: sourcePosition },
+  ]);
 };
 
 /** ICON p.151: range-3 small-blast unerring attack whose attack space is an

@@ -51,10 +51,21 @@ assumption here, document the evidence and update this list before proceeding.
    area-effect-rider, use-count-override, card-deck-system,
    enemy-ability-trigger). NONE qualified as non-automatable/table-facing.
    Census regenerated: residual 0; no non-implementable class remains.
-4. **Shared spatial primitives: Teleport, Place, Remove, Swap**, then
-   terrain-create/entity-create, then fly/movement-grant primitives
-   (roadmap P4; F1/F3/F4). Migrate existing ad-hoc resolvers onto them with
-   no semantic changes (golden replay fixtures unchanged).
+4. **Shared spatial primitives: Teleport, Place, Remove, Swap** — `PARTIAL`
+   (2026-08-26). The spatial gateway (`primitives/spatial-intent.ts`) and the
+   mutation builders (`removeMutation`/`placeMutation`/`teleportMutation`)
+   were already shared; this tranche landed the Swap primitive
+   (`swapMutations`, `primitives/job-kit.ts`) with an explicit source-defined
+   movement mode: teleporting swap (Masquerade p.151 "teleporting both" — legs
+   are `movement: 'teleport'`, Rampart p.104-checked) vs remove/place swap
+   (Shadow Play p.163, Redondo p.300, Chanter Purgatorio rotation — legs are
+   `movement: 'place'`, never teleports). All four swap emitters migrated off
+   hand-rolled place pairs; fixtures distinguish the flavors (Masquerade legs
+   assert `teleport` and are Rampart-denied; Shadow Play legs assert `place`
+   and cross the same boundary freely); forced moves keep voluntary-only
+   movement-entry triggers and untouched turn entitlement. Remaining in step
+   4: terrain-create/entity-create, then fly/movement-grant primitives; then
+   promote the census `{teleport}`×15 units (step 5 discipline).
 5. **Promote-after-landing discipline.** After each primitive/foundation
    lands, immediately promote every source unit whose blocker set becomes
    empty, with source-exact fixtures and replay coverage, then regenerate
@@ -144,7 +155,7 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 
 | # | Foundation | Status | Unblocks (approx.) | Notes |
 | --- | --- | --- | --- | --- |
-| F1 | Teleport / Place / Remove / Swap as shared forced-movement primitives | PARTIAL (ad-hoc in Shade/Fool/Bastion resolvers) | 15+ talents, several abilities | Census top blocker `{teleport}` |
+| F1 | Teleport / Place / Remove / Swap as shared forced-movement primitives | PARTIAL (shared gateway + builders + Swap primitive landed 2026-08-26; emitters migrated; census promotion pending) | 15+ talents, several abilities | Census top blocker `{teleport}` |
 | F2 | Interrupt-modifier family (rank change, extra uses, timing override) | PARTIAL | 13+ talents | Census `{interrupt-modifier}` |
 | F3 | Terrain-create / entity-create recipe primitives | PARTIAL (job-program-local today) | 13 + 13 talents/abilities | Generalize from existing resolvers |
 | F4 | Fly-grant / movement-modifier primitives | PARTIAL | 11+ | Census `{fly-grant}` |

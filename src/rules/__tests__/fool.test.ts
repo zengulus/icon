@@ -176,6 +176,24 @@ describe('Fool ability automation (p.150–152)', () => {
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:masquerade', targetIds: [ally!.id] }, scriptedDice());
     expect(result.state.actors[hero.id].position).toEqual({ x: 4, y: 1 });
     expect(result.state.actors[ally!.id].position).toEqual({ x: 1, y: 1 });
+    // p.151 "swap places ... TELEPORTING both": each swap leg is recorded as
+    // a real teleport through the shared Swap primitive — distinct from a
+    // remove/place swap (Shadow Play p.163 / Redondo), whose legs are 'place'.
+    expect(mutationsOf(result.events, 'fool:masquerade')).toMatchObject([
+      { kind: 'move', actorId: hero.id, movement: 'teleport' },
+      { kind: 'move', actorId: ally!.id, movement: 'teleport' },
+    ]);
+  });
+
+  it('Masquerade: the swap is a teleporting swap — Rampart denies it across a rampart boundary (p.104)', () => {
+    const { state, hero, foe, ally } = foolEncounter({ foe: { x: 5, y: 1 }, ally: { x: 4, y: 1 }, second: null });
+    // A hostile rampart source stands adjacent to the destination cell: foes
+    // cannot enter or exit affected spaces by teleporting, so BOTH legs are
+    // denied and nobody moves.
+    state.actors[foe.id].conditions.push({ id: 'rampart', sourceId: 'fixture:rampart', ownerId: foe.id, potency: 'normal', duration: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:masquerade', targetIds: [ally!.id] }, scriptedDice());
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 }); // denied
+    expect(result.state.actors[ally!.id].position).toEqual({ x: 4, y: 1 }); // denied
   });
 
   it('Masquerade: holds an ability targeting the user and redirects it to the swap partner (p.151)', () => {

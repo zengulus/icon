@@ -325,6 +325,38 @@ export const teleportMutation = (context: RuleExecutionContext, actorId: string,
   kind: 'move', sourceId: context.sourceId, sourceActorId: context.actorId, actorId, movement: 'teleport', distance: null, positions: [destination], direction: null, phasing: false,
 });
 
+/** How a swap's legs move — a source-defined distinction, not an
+ * implementation detail (ICON p.151 vs p.163/p.300):
+ * - `'teleport'`: the source text says the characters **teleport** (Masquerade
+ *   p.151 "swap places … teleporting both"). Each leg is a real teleport and
+ *   carries teleport authority: Rampart (p.104) can deny it, and any
+ *   "when you teleport" reactive semantics see it.
+ * - `'place'`: the source text **removes and places** the characters (Redondo
+ *   p.300; Shadow Play p.163 says only "swap", with no movement word). The
+ *   legs are instantaneous repositioning that is NOT a teleport: no rampart
+ *   boundary check, no teleport trigger surface.
+ * Both flavors preserve forced-movement semantics at application time:
+ * movement-entry triggers stay voluntary-MOVE/DASH-only (AGENTS §8), turn
+ * entitlement is untouched (an ability effect, not a move command), and the
+ * batch's co-moved set makes each destination legal despite being occupied
+ * pre-batch. */
+export type SwapMovement = 'teleport' | 'place';
+
+/** The shared Swap primitive: paired destination mutations for two or more
+ * actors trading positions in one batch (`swaps` is a full permutation of the
+ * participants' destinations, so N-party rotations work). Every swap emitter
+ * routes through here so the movement kind is chosen once per source unit,
+ * explicitly, instead of every resolver hand-rolling place pairs that silently
+ * erase the teleport/remove-place distinction. */
+export const swapMutations = (
+  context: RuleExecutionContext,
+  movement: SwapMovement,
+  swaps: ReadonlyArray<{ actorId: string; destination: Position }>,
+): RuleMutation[] => swaps.map(({ actorId, destination }) => ({
+  kind: 'move', sourceId: context.sourceId, sourceActorId: context.actorId, actorId,
+  movement, distance: null, positions: [destination], direction: null, phasing: false,
+}));
+
 export const entityMutation = (
   context: RuleExecutionContext,
   ownerId: string,

@@ -15,7 +15,7 @@ import type {
 import {
   axisDirection, sameCell, squareArea,
   constant, distance, sourceActor, walk, freeCellsInRange, rushTowardFoes,
-  conditionMutation, markMutation, rushMutation, shoveMutation, terrainMutation, vigorMutation,
+  conditionMutation, markMutation, rushMutation, shoveMutation, terrainMutation, vigorMutation, swapMutations,
   action, compilation,
 } from '../primitives/foe-kit.js';
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
@@ -422,11 +422,13 @@ function swapResolver(): RuleResolver {
   return (context) => {
     const source = sourceActor(context, context.actorId);
     const target = requireAllyInRange(context, source, chosenTarget(context), context.sourceId, 1);
-    const mutations: RuleMutation[] = [
-      { kind: 'move', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: source.id, movement: 'place', distance: null, positions: [target.position!], direction: null, phasing: false },
-      { kind: 'move', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id, movement: 'place', distance: null, positions: [source.position!], direction: null, phasing: false },
-    ];
-    return mutations;
+    // The source text removes and places the two characters — a REMOVE/PLACE
+    // swap through the shared Swap primitive, not a teleport: no rampart
+    // boundary check and no teleport trigger surface on either leg.
+    return swapMutations(context, 'place', [
+      { actorId: source.id, destination: target.position! },
+      { actorId: target.id, destination: source.position! },
+    ]);
   };
 }
 

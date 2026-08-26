@@ -188,9 +188,27 @@ describe('Shade ability automation (p.159–164)', () => {
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:shadow-play', targetIds: [foe.id, ally!.id] }, scriptedDice());
     expect(result.state.actors[foe.id].position).toEqual({ x: 4, y: 1 });
     expect(result.state.actors[ally!.id].position).toEqual({ x: 3, y: 1 });
+    // p.163 has no movement word: this is a REMOVE/PLACE swap through the
+    // shared Swap primitive — neither leg is a teleport (contrast Masquerade,
+    // p.151, whose legs are movement 'teleport').
+    expect(mutationsOf(result.events, 'shade:shadow-play').filter((mutation) => mutation.kind === 'move')).toMatchObject([
+      { actorId: foe.id, movement: 'place' },
+      { actorId: ally!.id, movement: 'place' },
+    ]);
     expect(result.state.actors[foe.id].statuses).toContain('dazed');
     expect(result.state.actors[ally!.id].conditions.some(({ id }) => id === 'stealth')).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Shadow Play: the remove/place swap crosses a Rampart boundary that would deny a teleport (p.104 vs p.163)', () => {
+    const { state, foe, second, ally } = shadeEncounter({ foe: { x: 3, y: 1 }, ally: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
+    // The extra foe carries a hostile rampart adjacent to the ally's
+    // destination cell (3,1). If the swap legs were teleports, the ally could
+    // not enter; being remove/place repositioning, p.104 does not apply.
+    state.actors[second!.id].conditions.push({ id: 'rampart', sourceId: 'fixture:rampart', ownerId: second!.id, potency: 'normal', duration: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: state.activeActorId!, abilityId: 'shade:shadow-play', targetIds: [foe.id, ally!.id] }, scriptedDice());
+    expect(result.state.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.state.actors[ally!.id].position).toEqual({ x: 3, y: 1 }); // crossed freely
   });
 
   it('Umbral Echo: enters the stance with a d4 power die at 2, refreshing at turn end', () => {

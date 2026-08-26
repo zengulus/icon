@@ -10,7 +10,7 @@ import {
   distance, sourceActor, walk, freeCellsInRange, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
-  flyMutation, removeMutation, placeMutation, terrainMutation,
+  flyMutation, removeMutation, placeMutation, terrainMutation, swapMutations,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -173,11 +173,12 @@ const pandaemoniumEffects: RuleResolver = (context) => {
     })
     .sort((a, b) => a.id.localeCompare(b.id));
   if (inArea.length >= 2) {
-    for (let i = 0; i < inArea.length; i += 1) {
-      const next = inArea[(i + 1) % inArea.length];
-      const nextPosition = next.position;
-      if (nextPosition) mutations.push(placeMutation(context, inArea[i].id, nextPosition));
-    }
+    // Circular rotation of every character in the area — a REMOVE/PLACE swap
+    // family (the source has no movement word), so no leg is a teleport.
+    mutations.push(...swapMutations(context, 'place', inArea.map((character, i) => ({
+      actorId: character.id,
+      destination: inArea[(i + 1) % inArea.length].position!,
+    }))));
   }
   if (context.triggers?.has('charge')) {
     for (const character of Object.values(context.state.actors)) {
