@@ -65,6 +65,7 @@ export * from './content/jobs/programs/geomancer-programs.js';
 export * from './content/jobs/programs/spellblade-programs.js';
 export * from './content/jobs/programs/stormbender-programs.js';
 export * from './content/foes/role-baseline-recipes.js';
+export * from './content/foes/turn-entitlement-recipes.js';
 export * from './content/foes/mark-recipes.js';
 export * from './content/foes/ability-recipes.js';
 export * from './content/foes/trait-recipes.js';

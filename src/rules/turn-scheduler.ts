@@ -303,6 +303,18 @@ export function computeTurnEndTransition(state: EncounterState, endingActorId: s
     const eligibleSide: TurnSide = eligibility.slow[opposite(endingSide)] ? opposite(endingSide) : endingSide;
     return { roundAdvances: false, nextRound: state.round, eligibleSide, turnPhase: 'slow' };
   }
+  // A slow-phase actor whose forced/pending Slow turn just CONSUMED its delay
+  // can still owe leftover entitlement this round (a multi-turn elite/legend,
+  // pp.298–299). Those owed turns are ordinary normal turns of the SAME
+  // round: the round ends once every actual turn — normal and slow — is
+  // resolved, so continue in the normal phase instead of ending it early.
+  // Historical single-entitlement schedules never reach this branch (every
+  // slow actor had spent its only turn), so recorded legacy transitions are
+  // unaffected.
+  if (eligibility.normal.heroes || eligibility.normal.foes) {
+    const eligibleSide: TurnSide = eligibility.normal[opposite(endingSide)] ? opposite(endingSide) : endingSide;
+    return { roundAdvances: false, nextRound: state.round, eligibleSide, turnPhase: 'normal' };
+  }
   return roundAdvanceTransition(state, endingSide);
 }
 

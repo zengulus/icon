@@ -62,8 +62,8 @@ the family's *typical* ceiling.
 | Foe traits | NEEDS RECOUNT (traceable 658) | ✔ | 115 keyword rows (79 full, 36 partial) | 590 traceable units | keyword rows 6–7; prose 3 (table-facing) |
 | Foe roles/baselines | 6 | ✔ | p.298 baselines projected | — | 6–7 |
 | Mobs | role defined | — | 0 (rejected at creation) | — | 1 |
-| Elites | ✔ | ✔ (double HP) | turns NOT wired | — | 4 (HP only) |
-| Legends | ✔ | ✔ (HP scaling, Juggernaut, components) | turns NOT wired; phases inert | 19 phases + 116 chapter rules | 4–5 partial |
+| Elites | ✔ | ✔ (double HP) | 2 turns/round via `role:elite-template` row (B1) | — | 6–7 for the template halves |
+| Legends | ✔ | ✔ (HP scaling, Juggernaut, components, per-PC turns) | turns DONE (`role:legend-turns`, defeated PCs counted — pinned reading of source silence); phases inert | 19 phases + 116 chapter rules | 5–7 for executed halves; phases pending |
 | Summons/entities | — | ✔ engine | consumers wired | — | 6 for existing entity kinds |
 | Trophies | 68 | ✔ | 0 | 68 | 2–3 (table-facing by design today) |
 | Camp fixtures / features | 16 / 85(+87 features counted earlier; NEEDS RECOUNT) | ✔ | 0 | 101 | 2–3 |
@@ -74,8 +74,10 @@ the family's *typical* ceiling.
 ## Mechanically unresolved vs intentionally human-adjudicated
 
 - **Unresolved** (needs engineering): everything in
-  [`TODO.md`](../TODO.md) — settlement, Elite/Legend turns, Mob, phases,
+  [`TODO.md`](../TODO.md) — Mob, foe phases,
   masteries fold, talent subfamilies, relic runtime, Vigilance windows.
+  (Elite/Legend role turn entitlements done 2026-08-26; settlement done at
+  P1.)
 - **Intentionally table-facing** (typed registry `TABLE_FACING_MECHANICS` in
   `src/rules/core.ts`, pinned by `table-facing.test.ts`, 19 entries):
   freeform bond-power outcomes, GM either/or choices in foe abilities,

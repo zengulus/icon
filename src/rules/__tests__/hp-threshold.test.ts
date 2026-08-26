@@ -170,16 +170,21 @@ describe('Enrage execution (p.298: +1 action while bloodied)', () => {
     expect(archonTurn.actors[foe.id].actionsRemaining).toBe(3);
     // The derived action pool replays from the pre-turn state with no extra record.
     expect(applyEvents(state, turnEvent.events)).toEqual(awaiting);
-    // Heal above half: the next Archon turn derives 2 actions. The Archon's
-    // turn ends round 1; round 2 opens with the player side, then the player
-    // passes back to the Archon.
+    // Heal above half: the next Archon turn derives 2 actions. The Archon is
+    // an ELITE (p.299), so it owes a SECOND hostile slot this round before
+    // the round can end; round 2 then opens with the player side.
     state = archonTurn;
     state.actors[foe.id].hp = max;
-    const afterFoe = endTurnTo(state, hero.id, scriptedDice());
-    const afterHero = endTurnOnly(afterFoe, scriptedDice());
-    expect(afterHero.round).toBe(2);
-    expect(afterHero.eligibleSide).toBe('foes');
-    const heroAgain = executeCommand(afterHero, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    let current = endTurnOnly(state, scriptedDice());
+    expect(current.eligibleSide).toBe('foes'); // still owed its second entitlement
+    current = executeCommand(current, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    // Ending the second slot ends round 1; round 2 opens with the player
+    // side, whose turn passes back to the healed Archon.
+    current = endTurnTo(current, hero.id, scriptedDice());
+    expect(current.round).toBe(2);
+    const passedBack = endTurnOnly(current, scriptedDice());
+    expect(passedBack.eligibleSide).toBe('foes');
+    const heroAgain = executeCommand(passedBack, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
     expect(heroAgain.activeActorId).toBe(foe.id);
     expect(heroAgain.actors[foe.id].actionsRemaining).toBe(2);
   });

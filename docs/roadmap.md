@@ -46,9 +46,12 @@ The engine never automates table judgment without source justification.
   `characterFromActor` projection carries HP attrition, wounds, and personal
   resolve back onto the persistent sheet (schema v4); camp/interlude sheet
   transitions exist — implemented 2026-08-25 (P1).
-- NOT built: playable camp/interlude scene flow; Mob model; Elite/Legend
-  multi-turn wiring; foe phase engine; Relic runtime; masteries;
-  Limit Break effects.
+- Foe role entitlements: Elite two-turn and Legend per-player-character turn
+  rows registered as production content (`role:elite-template`,
+  `role:legend-turns`), replay-tested through the existing scheduler path —
+  implemented 2026-08-26 (P2).
+- NOT built: playable camp/interlude scene flow; Mob model; foe phase engine;
+  Relic runtime; masteries; Limit Break effects.
 
 ---
 
@@ -88,7 +91,7 @@ replay reproduces settlement exactly; purity assertions on every new path.
 
 **Agent-pass size.** MEDIUM.
 
-## P2 — Foe role entitlements and the first closed foe-complexity slice (REPAIR + VERTICAL SLICE)
+## P2 — Foe role entitlements and the first closed foe-complexity slice (REPAIR + VERTICAL SLICE) — **DONE 2026-08-26** (entitlements; Slice C itself stays blocked on phases/traits)
 
 **Goal.** Elites act twice per round; Legends act once per PC per round; one
 Elite/Legend encounter executes source-correctly end to end.
@@ -245,7 +248,10 @@ Machine/test-observable criteria (all must hold):
 
 Current state: criterion 3 now passes (settlement landed); criteria 4's Slice D
 is close (Slice A closed) but Slice B/C closure and full CI re-verification of
-the remaining criteria have not been earned; gate stays `false`.
+the remaining criteria have not been earned; gate stays `false`. P2's
+entitlement deliverables landed 2026-08-26 (Elite/Legend turn rows + fixtures),
+removing Slice C's entitlement dependency while phases/chapter rules (B3) and
+foe traits beyond keywords keep the slice itself blocked.
 
 ## PHASE_THREE_READY — "Closed local gameplay, shared authority released"
 

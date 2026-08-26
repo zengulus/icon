@@ -198,8 +198,18 @@ forced turn's start; multi-turn entitlements via registered sources; next-round
 planning reads next-round semantics only. Charge recognizes actual Slow turns.
 Slow turns have normal action economy.
 
-Content gap: **no production entitlement registrations** — Elite double-turn
-and Legend per-player turns are unwired (TODO B2).
+Production entitlement rows are registered by content
+(`automation/content/foes/turn-entitlement-recipes.ts`): an Elite
+(`foeKind === 'elite'`, projected durably at construction like `roleId`) owes
+2 turns per round (p.299); a Legend (`roleId === 'legend'`) owes one turn per
+player character re-read from live encounter state each round
+(p.298) re-read from live encounter state each round, defeated PCs included —
+a pinned reading of source silence (no
+second passage contradicts it), deliberately not a source-adjudication
+record. The Slow-phase transition continues the SAME round when the actor
+whose forced Delay turn was just consumed still owes leftover normal
+entitlement (multi-turn elites/legends); single-entitlement schedules never
+reach that branch, so recorded legacy transitions are unaffected.
 
 ### Passive projection — AUTHORITATIVE + SOURCE-TESTED
 

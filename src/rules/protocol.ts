@@ -62,6 +62,10 @@ const actor = z.object({
   characterId: z.string().max(160).nullable(),
   foeProfileId: z.string().max(200).nullable(),
   roleId: z.enum(['mob', 'heavy', 'skirmisher', 'leader', 'artillery', 'legend', 'special']).nullable(),
+  // Durable foe template identity (p.298–299 Elite/Legend entitlements).
+  // Optional for historical clients that predate the field; the reducer
+  // boundary canonicalizes it to null.
+  foeKind: z.enum(['job', 'variant', 'unique', 'elite', 'legend', 'component', 'special']).nullable().optional(),
   actorKind: z.enum(['hero', 'foe', 'summon']),
   size: z.number().int().min(1).max(20),
   tokenUrl: z.string().max(2_048).refine(isDurableAssetUrl, 'Token URL must be durable and cannot use blob:.'),

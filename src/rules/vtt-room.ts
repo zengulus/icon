@@ -563,7 +563,7 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
     'attackedThisTurn', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn',
     'slashedTriggeredThisTurn', 'dangerousTerrainTriggeredThisTurn', 'turnTaken',
     'turnsRemaining', 'turnsTakenThisRound', 'slow',
-  ]);
+  ], ['foeKind']);
   const actorId = strictIdentifier(actor.id, `${path}.id`);
   if (actorId !== expectedId) invalidSnapshot(`${path}.id`, 'must match its actors record key.');
   strictString(actor.name, `${path}.name`, 120, true);
@@ -572,6 +572,11 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
   strictNullableIdentifier(actor.characterId, `${path}.characterId`);
   if (actor.foeProfileId !== null) strictString(actor.foeProfileId, `${path}.foeProfileId`, 200, true);
   if (actor.roleId !== null) strictEnum(actor.roleId, `${path}.roleId`, roleIds);
+  // Optional durable foe template identity (p.298–299 entitlements); absent
+  // only on historical snapshots predating the field.
+  if (actor.foeKind !== undefined && actor.foeKind !== null) {
+    strictEnum(actor.foeKind, `${path}.foeKind`, new Set(['job', 'variant', 'unique', 'elite', 'legend', 'component', 'special']));
+  }
   strictEnum(actor.actorKind, `${path}.actorKind`, new Set(['hero', 'foe', 'summon']));
   strictInteger(actor.size, `${path}.size`, 1, 20);
   const tokenUrl = strictString(actor.tokenUrl, `${path}.tokenUrl`);

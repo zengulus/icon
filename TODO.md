@@ -25,20 +25,20 @@ Status vocabulary used below: `BLOCKED` · `READY` · `PARTIAL` ·
 
 These precede breadth work. Each has a concrete acceptance condition.
 
-### B1. Elite and Legend multi-turn entitlements are machinery without content — `READY`
+### B1. Elite and Legend multi-turn entitlements — `DONE` (2026-08-26)
 
-**Problem.** The turn scheduler supports registered extra-turn entitlements
-(`registerTurnEntitlementSource`, `src/rules/turn-scheduler.ts`), and tests
-register fixtures — but **no production row registers the p.298 rules**: an
-Elite acts twice per round; a Legend acts once per player character per round.
-`createFoeFromProfile` (`src/rules/encounter.ts`) gives Elites double HP and
-Legends scaled HP but leaves `turnsRemaining = 1`.
-
-**Acceptance condition.** Content-owned entitlement rows keyed on
-`roleId === 'elite'` / `'legend'` (Legend reading live player-count), so a
-default Elite gets 2 turns and a Legend in a 4-player party gets 4, verified
-through the existing scheduler matrix plus a source fixture each. Defeated PCs
-still counting toward Legend turns (p.298) must be pinned or explicitly ruled.
+Production entitlement rows live in
+`src/rules/automation/content/foes/turn-entitlement-recipes.ts`: an Elite
+(`foeKind === 'elite'`, projected durably onto the actor like `roleId`) owes 2
+turns per round (p.299); a Legend (`roleId === 'legend'`) owes one turn per
+player character read from live encounter state each round (p.298).
+The count includes DEFEATED PCs — a pinned reading of source silence, not an
+adjudication (no second passage contradicts it). Acceptance matrix incl.
+round-boundary refresh, Slow/Delay interaction, replay, and source-exact
+Elite/Legend fixtures: `src/rules/__tests__/foe-turn-entitlements.test.ts`.
+The scheduler's Slow-phase transition was repaired so a multi-turn actor whose
+forced Delay turn consumed its pending flag continues the SAME round with its
+leftover normal entitlement instead of ending the round early.
 
 ### B2. Mob foes cannot exist at all — `BLOCKED` on a member model
 
@@ -104,8 +104,9 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 - **Slice A (baseline)**: CLOSED — setup through combat exit incl. settlement.
 - **Slice B (player complexity)**: blocked on mastery/talent folds (F7/F8),
   Relic runtime (F9), Vigilance windows (B4).
-- **Slice C (foe complexity)**: blocked on Elite/Legend entitlements (B1),
-  foe traits beyond keywords (590 rows), phases (B3).
+- **Slice C (foe complexity)**: Elite/Legend entitlements done (B1,
+  2026-08-26); remaining blockers are foe traits beyond keywords (590 rows)
+  and phases/chapter rules (B3).
 - **Slice D (attrition chain)**: settlement + projection DONE; remaining
   blocker is camp/interlude *scene flow* around the (already implemented)
   sheet transitions.
@@ -141,9 +142,10 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 - **Templates/factions** — remaining faction profiles need the recipe kinds
   above; prose traits stay table-facing.
 - **Mob** — B2.
-- **Elite** — double HP DONE; second turn B1.
-- **Legend** — HP scaling DONE; per-player turns B1; Juggernaut round-start
-  clear DONE; component ability inheritance DONE.
+- **Elite** — double HP DONE; two turns per round DONE (2026-08-26, B1).
+- **Legend** — HP scaling DONE; per-player turns DONE (2026-08-26, B1;
+  defeated PCs counted — pinned reading of source silence); Juggernaut
+  round-start clear DONE; component ability inheritance DONE.
 - **Traits** — 79 keyword rows fully executable, 36 partial projections;
   **590 traceable foe-trait units** unresolved overall. Prose traits are
   table-facing by design.
@@ -198,9 +200,14 @@ git diff --check
 npm run verify:extraction   # requires the supplied PDF locally
 ```
 
-Observed at the P1 commit: unit 76 files / 1002 tests green; e2e 4 passed;
-architecture audit green (83 files); automation audit green with 3,103
-explicitly unsupported clauses (expected while incomplete);
+Observed at the B1 commit: unit 78 files / 1053 tests green; realtime
+transport acceptance green (one stale phase-gate message assertion repaired —
+commit `451205b` renamed the server gate message without updating the e2e
+regex); browser acceptance requires Playwright's Chromium system libraries on
+the host (`npx playwright install chromium`, plus e.g. libnspr4/libnss3);
+architecture audit green (84 files); automation audit green with 3,103
+explicitly unsupported clauses (expected while incomplete); strict
+source-fidelity audit green with incompleteness reported as lowered status.
 `verify:source-artifacts -- --expect-source-pdf=absent` fails only on
 machines where the untracked PDF exists (it is a hosted-CI check; the default
 invocation passes locally).

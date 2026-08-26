@@ -395,6 +395,13 @@ export interface EncounterActor {
   characterId: string | null;
   foeProfileId?: string | null;
   roleId: FoeRoleId | null;
+  /** The extracted foe profile kind ('job' | 'elite' | 'legend' | …),
+   * projected at construction exactly like `roleId`, so content rows (e.g.
+   * the p.299 Elite-template turn entitlement) read a durable actor fact
+   * instead of querying the generated catalog at execution time. Null for
+   * non-foe actors; absent only on historical/imported state until the
+   * reducer boundary canonicalizes it. */
+  foeKind?: FoeKind | null;
   actorKind: 'hero' | 'foe' | 'summon';
   size: number;
   tokenUrl: string;

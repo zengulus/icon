@@ -282,7 +282,7 @@ async function main() {
     const phaseGatedClosed = waitForClose(phaseGatedClient, 'the phase-gated client');
     send(phaseGatedClient, { type: 'join', encounterId: 'phase-gated-room', token: 'dev:phase-gate:gm' });
     const phaseGateError = await nextMessage(phaseGatedClient, (message) => message.type === 'error' && message.code === 'phase.gated', 'the server-side phase gate');
-    assert.match(phaseGateError.message, /rules coverage gate/i);
+    assert.match(phaseGateError.message, /phase-three release gate/i);
     assert.equal((await phaseGatedClosed).code, 1008);
 
     // Parsing and session-envelope errors are separate from RoomManager's
