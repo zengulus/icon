@@ -347,18 +347,29 @@ export type SwapMovement = 'teleport' | 'place';
  * participants' destinations, so N-party rotations work). Every swap emitter
  * routes through here so the movement kind is chosen once per source unit,
  * explicitly, instead of every resolver hand-rolling place pairs that silently
- * erase the teleport/remove-place distinction. The reducer applies the whole
- * batch atomically: the complete permutation is prevalidated against the same
- * pre-swap state and either every leg applies or none does
- * (kernels/encounter-adapter.ts `deniedDestinationLegIndices`). */
+ * erase the teleport/remove-place distinction.
+ *
+ * Every leg carries the same `spatialBatchId`, the source-declared atomic
+ * spatial group: the reducer prevalidates the whole permutation against the
+ * same pre-swap state and applies every leg or none
+ * (kernels/encounter-adapter.ts `deniedAtomicSpatialLegIndices`). Only
+ * explicitly grouped legs get that all-or-none treatment; ordinary
+ * multi-target movement is not grouped and resolves per-leg. Pass a distinct
+ * `options.spatialBatchId` when a resolver emits more than one swap group in
+ * one event. */
 export const swapMutations = (
   context: RuleExecutionContext,
   movement: SwapMovement,
   swaps: ReadonlyArray<{ actorId: string; destination: Position }>,
-): RuleMutation[] => swaps.map(({ actorId, destination }) => ({
-  kind: 'move', sourceId: context.sourceId, sourceActorId: context.actorId, actorId,
-  movement, distance: null, positions: [destination], direction: null, phasing: false,
-}));
+  options: { spatialBatchId?: string } = {},
+): RuleMutation[] => {
+  const batchId = options.spatialBatchId ?? `${context.sourceId}:spatial-swap`;
+  return swaps.map(({ actorId, destination }) => ({
+    kind: 'move', sourceId: context.sourceId, sourceActorId: context.actorId, actorId,
+    movement, distance: null, positions: [destination], direction: null, phasing: false,
+    spatialBatchId: batchId,
+  }));
+};
 
 export const entityMutation = (
   context: RuleExecutionContext,

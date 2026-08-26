@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, expectRejectedCommandPurity} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Fool ability
@@ -185,15 +185,15 @@ describe('Fool ability automation (p.150–152)', () => {
     ]);
   });
 
-  it('Masquerade: the swap is a teleporting swap — Rampart denies it across a rampart boundary (p.104)', () => {
+  it('Masquerade: the swap is a teleporting swap — Rampart denies it and the interrupt cannot be made (p.104, p.151)', () => {
     const { state, hero, foe, ally } = foolEncounter({ foe: { x: 5, y: 1 }, ally: { x: 4, y: 1 }, second: null });
     // A hostile rampart source stands adjacent to the destination cell: foes
-    // cannot enter or exit affected spaces by teleporting, so BOTH legs are
-    // denied and nobody moves.
+    // cannot enter or exit affected spaces by teleporting, so both legs are
+    // denied. ICON p.151: "If you or your ally can't make a valid teleport,
+    // this interrupt can't be made" — the command is rejected outright and
+    // the state is untouched.
     state.actors[foe.id].conditions.push({ id: 'rampart', sourceId: 'fixture:rampart', ownerId: foe.id, potency: 'normal', duration: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:masquerade', targetIds: [ally!.id] }, scriptedDice());
-    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 }); // denied
-    expect(result.state.actors[ally!.id].position).toEqual({ x: 4, y: 1 }); // denied
+    expectRejectedCommandPurity(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:masquerade', targetIds: [ally!.id] });
   });
 
   it('Masquerade: holds an ability targeting the user and redirects it to the swap partner (p.151)', () => {
@@ -236,6 +236,61 @@ describe('Fool ability automation (p.150–152)', () => {
     expect(interrupt.state.actors[hero.id].interruptUses['fool:masquerade']).toBe(1);
     expect(interrupt.state.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(false);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
+  });
+
+  it('Masquerade: an invalid teleport means the interrupt cannot be made — the held ability is neither redirected nor consumed (p.151)', () => {
+    const { state, hero, foe, ally } = foolEncounter({ foe: { x: 4, y: 1 }, ally: { x: 3, y: 1 }, second: null });
+    // Without Righteous Disdain the damage pipeline cannot hold the blow, so
+    // the targeted-by-ability window opens instead (a Fool's Masquerade).
+    state.actors[hero.id].abilityIds = state.actors[hero.id].abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain');
+    const deferred = applyEvents(state, [{
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: foe.id,
+      sourceId: 'fixture:foe-ability',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [
+        { kind: 'actions', sourceId: 'fixture:foe-ability', actorId: foe.id, operation: 'spend', amount: 1 },
+        { kind: 'damage', sourceId: 'fixture:foe-ability', sourceActorId: foe.id, actorId: hero.id, amount: 10, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: false },
+      ],
+    }]);
+    expect(deferred.actors[hero.id].hp).toBe(40); // held by the window, not applied
+    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability');
+    expect(window).toBeDefined();
+    expect(window!.retarget).toEqual({ fromActorId: hero.id, toActorId: ally!.id });
+
+    // The ally's cell (3,1) is adjacent to the rampart foe: the hero's teleport
+    // enters rampart and the ally's teleport leaves it, so neither leg is a
+    // valid teleport. ICON p.151: "If you or your ally can't make a valid
+    // teleport, this interrupt can't be made."
+    deferred.actors[foe.id].conditions.push({ id: 'rampart', sourceId: 'fixture:rampart', ownerId: foe.id, potency: 'normal', duration: null });
+    const before = structuredClone(deferred);
+    expect(() => executeCommand(deferred, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'fool:masquerade',
+      actionId: 'default',
+      timing: 'interrupt',
+      input: { actorIds: { target: [ally!.id] } },
+    }, scriptedDice())).toThrow(/cannot be made/);
+    // Rejected cleanly: nothing was consumed, redirected, or moved, and the
+    // triggering interaction is exactly where it was — the window stays open
+    // with its redirect armed, awaiting a legal interrupt.
+    expect(deferred).toEqual(before);
+    expect(deferred.actors[hero.id].interruptUses['fool:masquerade'] ?? 0).toBe(0);
+    expect(deferred.actors[hero.id].interruptUsedThisTurn).toBe(false);
+    expect(deferred.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(deferred.actors[ally!.id].position).toEqual({ x: 3, y: 1 });
+    expect(deferred.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(true);
+
+    // The triggering ability is NOT redirected: when the window closes at the
+    // turn boundary with no interrupt answering it, the held blow lands on
+    // the hero — never the ally.
+    const heroEnds = endTurnTo(deferred, foe.id, scriptedDice());
+    expect(heroEnds.actors[hero.id].hp).toBe(32); // 40 - (10 normal - armor 2)
+    expect(heroEnds.actors[ally!.id].hp).toBe(40);
+    expect(heroEnds.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(false);
   });
 
   it('Masquerade: an armor-mitigated blow is not preempted by a hypothetical defeated window', () => {

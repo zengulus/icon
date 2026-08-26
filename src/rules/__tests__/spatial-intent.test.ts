@@ -161,8 +161,8 @@ describe('F1 spatial gateway (pp.87–92, 94, 107)', () => {
   });
 });
 
-describe('F1 swap atomicity (prevalidated permutation, every leg or none)', () => {
-  /** A swap-style batch of explicit-destination legs. */
+describe('F1 atomic spatial groups (source-declared, every leg or none)', () => {
+  /** An explicitly grouped swap-style batch (the shape `swapMutations` emits). */
   const swapEvent = (legs: Array<{ actorId: string; to: Position; movement?: 'place' | 'teleport' }>): EncounterEvent => ({
     type: 'RULE_MUTATIONS_APPLIED',
     actorId: legs[0].actorId,
@@ -171,16 +171,56 @@ describe('F1 swap atomicity (prevalidated permutation, every leg or none)', () =
     timing: 'use',
     tags: [],
     mutations: legs.map(({ actorId, to, movement = 'place' }) => ({
-      kind: 'move', sourceId: 'fixture:swap', sourceActorId: actorId, actorId, movement, distance: null, positions: [to], direction: null, phasing: false,
+      kind: 'move', sourceId: 'fixture:swap', sourceActorId: actorId, actorId, movement, distance: null, positions: [to], direction: null, phasing: false, spatialBatchId: 'fixture:swap',
+    })),
+  });
+  /** The same legs WITHOUT the declared group: independent multi-target movement. */
+  const ungroupedEvent = (legs: Array<{ actorId: string; to: Position; movement?: 'place' | 'teleport' }>): EncounterEvent => ({
+    type: 'RULE_MUTATIONS_APPLIED',
+    actorId: legs[0].actorId,
+    sourceId: 'fixture:move',
+    actionId: 'default',
+    timing: 'use',
+    tags: [],
+    mutations: legs.map(({ actorId, to, movement = 'place' }) => ({
+      kind: 'move', sourceId: 'fixture:move', sourceActorId: actorId, actorId, movement, distance: null, positions: [to], direction: null, phasing: false,
     })),
   });
 
-  it('a swap with one illegal leg applies no leg — the legal leg is not applied either (out of bounds)', () => {
+  it('a legal two-way teleporting swap applies every leg', () => {
+    const ally = actorFromCharacter(validCharacter('Second'), { x: 4, y: 1 });
+    const { state, hero } = spatialEncounter({ extra: [ally], foePosition: { x: 7, y: 1 } });
+    // Both legs are real teleports; both destinations are the other
+    // participant's cell. The hero's own Fortify does not block same-side
+    // movers, so the declared permutation is legal and both legs apply.
+    const swap = swapEvent([
+      { actorId: hero.id, to: { x: 4, y: 1 }, movement: 'teleport' },
+      { actorId: ally.id, to: { x: 1, y: 1 }, movement: 'teleport' },
+    ]);
+    const result = applyEvents(state, [swap]);
+    expect(result.actors[hero.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.actors[ally.id].position).toEqual({ x: 1, y: 1 });
+    expect(applyEvents(state, [swap])).toEqual(result);
+  });
+
+  it('a legal remove/place swap applies every leg', () => {
     const { state, hero, foe } = spatialEncounter();
-    // The first leg onto the hero's cell is legal; the second leg's
-    // destination is off the grid. The complete permutation is prevalidated
+    const swap = swapEvent([{ actorId: foe.id, to: { x: 1, y: 1 } }, { actorId: hero.id, to: { x: 4, y: 1 } }]);
+    const result = applyEvents(state, [swap]);
+    expect(result.actors[foe.id].position).toEqual({ x: 1, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 4, y: 1 });
+    expect(applyEvents(state, [swap])).toEqual(result);
+  });
+
+  it('an asymmetric invalid teleport leg denies the whole declared swap — the legal leg is not applied either (out of bounds)', () => {
+    const { state, hero, foe } = spatialEncounter();
+    // The first teleport onto the hero's cell is legal; the second leg's
+    // destination is off the grid. The declared permutation is prevalidated
     // against the same pre-swap state, so the swap is denied as a whole.
-    const swap = swapEvent([{ actorId: foe.id, to: { x: 1, y: 1 } }, { actorId: hero.id, to: { x: 99, y: 1 } }]);
+    const swap = swapEvent([
+      { actorId: foe.id, to: { x: 1, y: 1 }, movement: 'teleport' },
+      { actorId: hero.id, to: { x: 99, y: 1 }, movement: 'teleport' },
+    ]);
     const result = applyEvents(state, [swap]);
     expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 });
     expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
@@ -201,7 +241,7 @@ describe('F1 swap atomicity (prevalidated permutation, every leg or none)', () =
     expect(applyEvents(state, [swap])).toEqual(result);
   });
 
-  it('two legs may not land on the same destination — the duplicate permutation is denied entirely', () => {
+  it('two grouped legs may not land on the same destination — the duplicate permutation is denied entirely', () => {
     const { state, hero, foe } = spatialEncounter();
     // Both legs target the free cell (5,1). A co-moved actor is never an
     // obstruction to another leg, so per-leg validation alone would stack
@@ -214,11 +254,26 @@ describe('F1 swap atomicity (prevalidated permutation, every leg or none)', () =
     expect(applyEvents(state, [swap])).toEqual(result);
   });
 
+  it('overlapping destination footprints (size 2) are denied even with distinct anchors', () => {
+    const { state, hero, foe } = spatialEncounter();
+    // Both actors are Size 2: a footprint anchored at (3,1) covers
+    // (3,1),(4,1),(3,2),(4,2) and one at (4,1) covers (4,1),(5,1),(4,2),(5,2)
+    // — the anchors differ but the footprints overlap, so the declared
+    // permutation is not injective and the whole swap is denied.
+    state.actors[hero.id].size = 2;
+    state.actors[foe.id].size = 2;
+    const swap = swapEvent([{ actorId: foe.id, to: { x: 3, y: 1 } }, { actorId: hero.id, to: { x: 4, y: 1 } }]);
+    const result = applyEvents(state, [swap]);
+    expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(applyEvents(state, [swap])).toEqual(result);
+  });
+
   it('a full three-party rotation applies every leg of the permutation', () => {
     const third = createFoe('Relict', { x: 7, y: 1 });
     const { state, hero, foe } = spatialEncounter({ extra: [third] });
     // A→B, B→C, C→A: every destination is the pre-swap cell of a co-moved
-    // participant, so the complete permutation is legal and all three legs
+    // participant, so the declared permutation is legal and all three legs
     // apply.
     const rotation = swapEvent([
       { actorId: foe.id, to: { x: 1, y: 1 } },
@@ -252,6 +307,19 @@ describe('F1 swap atomicity (prevalidated permutation, every leg or none)', () =
     expect(result.actors[ally.id].position).toEqual({ x: 4, y: 1 });
     expect(result.actors[allyTwo.id].position).toEqual({ x: 7, y: 1 });
     expect(applyEvents(state, [rotation])).toEqual(result);
+  });
+
+  it('ungrouped multi-target explicit movement stays non-atomic: the legal leg applies on its own', () => {
+    const { state, hero, foe } = spatialEncounter();
+    // Two explicit-destination place legs with NO spatialBatchId: atomicity
+    // is source-declared, never inferred from the mutation shape, so each
+    // leg resolves independently — the legal leg applies and the out-of-
+    // bounds leg is denied on its own.
+    const moves = ungroupedEvent([{ actorId: foe.id, to: { x: 3, y: 1 } }, { actorId: hero.id, to: { x: 99, y: 1 } }]);
+    const result = applyEvents(state, [moves]);
+    expect(result.actors[foe.id].position).toEqual({ x: 3, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(applyEvents(state, [moves])).toEqual(result);
   });
 });
 

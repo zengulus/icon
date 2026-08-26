@@ -534,8 +534,16 @@ export interface EncounterPendingInterrupt {
   heldEffects?: RuleMutation[];
   /** Present when the interrupt redirects the held ability (Masquerade, p.151:
    * the ability targeted `fromActorId` and targets `toActorId` instead after
-   * the swap). Applied when the held effects resolve. */
+   * the swap). Applied when the held effects resolve — and only when the
+   * interrupt that closes the window is the program that armed the redirect
+   * (`retargetProgramId`): if that interrupt cannot be made ("If you or your
+   * ally can't make a valid teleport, this interrupt can't be made") or the
+   * window closes at a boundary, the held ability hits its original target. */
   retarget?: { fromActorId: string; toActorId: string };
+  /** The interrupt program that armed `retarget` (the targeted-by-ability
+   * allowlist row). The reducer honors the redirect only when the closing
+   * interrupt event carries this exact source id. */
+  retargetProgramId?: string;
   /** Present when the window opened on a rolled save (Sucker Punch, p.143: an
    * enemy adjacent to the interrupt user rolled a save). `heldEffects` carries
    * the save's original branch; the interrupt re-rolls it, keeping the second

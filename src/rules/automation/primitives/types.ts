@@ -185,6 +185,12 @@ export interface RuleAction {
   choices: RuleChoice[];
   resolverId?: string;
   steps: RuleStep[];
+  /** Source-declared gate: the action cannot be made when its atomic
+   * spatial group (the `spatialBatchId` legs of the resolver's mutations)
+   * would be denied — e.g. ICON p.151 Masquerade: "If you or your ally
+   * can't make a valid teleport, this interrupt can't be made." The command
+   * is rejected before any event is emitted. */
+  requiresLegalSpatialBatch?: boolean;
 }
 
 export interface RuleProgram {
@@ -364,7 +370,11 @@ export type RuleMutation =
   | { kind: 'vigor'; sourceId: string; actorId: string; amount: number; uncapped: boolean }
   | { kind: 'condition'; sourceId: string; sourceActorId: string; actorId: string; conditionId: string; operation: 'apply' | 'remove'; potency: 'normal' | 'plus'; duration?: RuleDuration }
   | { kind: 'cure'; sourceId: string; actorId: string; all: boolean }
-  | { kind: 'move'; sourceId: string; sourceActorId: string; actorId: string; movement: 'rush' | 'shove' | 'fly' | 'teleport' | 'place' | 'remove' | 'swap'; distance: number | null; positions: Position[]; direction: Position | null; phasing: boolean }
+  | { kind: 'move'; sourceId: string; sourceActorId: string; actorId: string; movement: 'rush' | 'shove' | 'fly' | 'teleport' | 'place' | 'remove' | 'swap'; distance: number | null; positions: Position[]; direction: Position | null; phasing: boolean; /** Source-declared atomic spatial group: legs sharing an id are one
+     * destination permutation, prevalidated together against the pre-swap
+     * state and applied every-leg-or-none by the reducer (swapMutations,
+     * primitives/job-kit.ts). Absent = independent per-leg resolution. */
+    spatialBatchId?: string }
   | { kind: 'resource'; sourceId: string; actorId: string; resourceId: string; operation: 'gain' | 'spend' | 'set' | 'tick-up' | 'tick-down'; amount: number; minimum: number | null; maximum: number | null }
   | { kind: 'actions'; sourceId: string; actorId: string; operation: 'gain' | 'spend' | 'set' | 'refund'; amount: number }
   | { kind: 'terrain'; sourceId: string; sourceActorId: string; operation: 'create' | 'remove' | 'raise' | 'lower'; terrain: string; positions: Position[]; height: number | null; duration?: RuleDuration }

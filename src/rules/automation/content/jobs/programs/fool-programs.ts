@@ -462,6 +462,10 @@ export const FOOL_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourceUni
     costs: [{ kind: 'interrupt', amount: constant(1) }],
     tags: [],
     resolverId: 'fool:masquerade',
+    // ICON p.151: "If you or your ally can't make a valid teleport, this
+    // interrupt can't be made" — the swap legs are an atomic spatial batch
+    // and the command is rejected when any leg would be denied.
+    requiresLegalSpatialBatch: true,
     steps: [],
   })], ['trigger', 'effect']),
 

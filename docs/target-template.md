@@ -44,13 +44,15 @@ Rules of thumb:
 - **Occupancy honors co-moved actors.** `applyRuleMutations` passes the
   batch's move-actor set, so paired swaps and multi-target repositioning
   validate atomically; a single place onto an occupied cell is denied.
-- **Swaps are atomic destination permutations.** The explicit-destination
-  move legs of one batch are prevalidated together against the same pre-swap
-  state (simulated on a clone, with an injective-destination check), and the
-  batch applies every leg or none — a swap with one illegal leg (out of
-  bounds, occupied by a non-co-moved actor, Rampart-denied teleport, or a
-  duplicate destination) is denied entirely, never partially applied
-  (`kernels/encounter-adapter.ts` `deniedDestinationLegIndices`).
+- **Swaps are source-declared atomic destination permutations.**
+  `swapMutations` tags every leg with a `spatialBatchId`; the reducer
+  prevalidates only declared groups together against the same pre-swap state
+  (simulated on a clone, with an injective-destination check) and applies
+  every leg or none — a swap with one illegal leg (out of bounds, occupied
+  by a non-co-moved actor, Rampart-denied teleport, or a duplicate
+  destination) is denied entirely, never partially applied. Ordinary
+  multi-target movement without a batch id resolves per-leg, independently
+  (`kernels/encounter-adapter.ts` `deniedAtomicSpatialLegIndices`).
 - **Placement can return an off-battlefield actor** (e.g. Heroic
   Intervention p.122 leaves and returns in one batch) — the gateway only
   rejects missing or defeated actors, not off-field ones.
@@ -74,7 +76,7 @@ matching row, not just a happy-path unit:
 | --- | --- | --- |
 | Bounds | place/teleport/rush to x/y < 0 or ≥ grid edge → denied `out-of-bounds` | done (`__tests__/spatial-intent.test.ts`) |
 | Occupancy | place onto an occupied cell → denied `occupied`; co-moved swap applies | done |
-| Swap permutation | one illegal leg → the whole swap denied (every leg or none); duplicate destinations → denied; three-party rotation → all legs apply | done (`spatial-intent.test.ts` swap-atomicity matrix) |
+| Swap permutation | one illegal leg → the whole declared swap denied (every leg or none); duplicate destinations → denied; three-party rotation → all legs apply; ungrouped multi-target movement stays per-leg | done (`spatial-intent.test.ts` atomic-group matrix) |
 | Impassable terrain | place onto an `impassable` grid cell → denied `impassable-terrain` | done |
 | Rampart entry/exit | teleport into a fortify-projected rampart cell → denied `rampart`; slip ignores it | done |
 | Rampart dash/fly | rush/fly into a rampart cell → denied; free landing applies | done |

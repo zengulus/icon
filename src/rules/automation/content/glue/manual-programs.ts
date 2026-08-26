@@ -156,11 +156,14 @@ export const AREA_INCLUSION_INTERRUPT_IDS: Readonly<Record<string, { usesPerRoun
  * resolves first; Masquerade swaps places with a willing ally in range 3 and
  * the held effects are retargeted to the ally.
  */
-export const TARGETED_BY_ABILITY_INTERRUPT_IDS: Readonly<Record<string, { usesPerRound: number }>> = {
+export const TARGETED_BY_ABILITY_INTERRUPT_IDS: Readonly<Record<string, { usesPerRound: number; programId?: string }>> = {
   // ICON p.151 Masquerade (Fool): "Trigger: A character uses an ability
   // against you, and there's a willing ally in range 3 — swap places with
-  // your ally and the ability targets your ally instead".
-  'fool:masquerade': { usesPerRound: 1 },
+  // your ally and the ability targets your ally instead". `programId` names
+  // the interrupt program whose resolution arms the redirect (the reducer
+  // retargets the held ability only when this exact program resolves the
+  // window).
+  'fool:masquerade': { usesPerRound: 1, programId: 'fool:masquerade' },
 };
 
 /**

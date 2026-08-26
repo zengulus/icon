@@ -7,7 +7,7 @@ import { compileRuleSourceUnit } from './automation/content/glue/compiler.js';
 import type { RuleAction, RuleExecutionContext, RuleExecutionResult, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
-import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
+import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
 import { applyDamageLedger } from './automation/kernels/damage-ledger.js';
 import { decideDamageWindow } from './automation/kernels/trigger-window.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
@@ -1204,6 +1204,19 @@ function assertProgramCostsPayable(
   }
 }
 
+/** ICON p.151 Masquerade: "If you or your ally can't make a valid teleport,
+ * this interrupt can't be made." An action that declares
+ * `requiresLegalSpatialBatch` (its effect is a source-declared atomic
+ * spatial swap) is rejected at the command boundary when the swap would be
+ * denied against the current state — no event is emitted, so nothing is
+ * consumed, redirected, or half-applied. */
+function assertLegalSpatialBatch(state: EncounterState, action: RuleAction, mutations: RuleMutation[]) {
+  if (!action.requiresLegalSpatialBatch) return;
+  if (deniedAtomicSpatialLegIndices(state, mutations).size > 0) {
+    throw new RuleViolation('spatial.atomic-denied', `${action.name} cannot be made: its spatial effect is not legal right now.`);
+  }
+}
+
 function abilityEvents(state: EncounterState, command: Extract<EncounterCommand, { type: 'USE_ABILITY' }>, dice: DiceSource): EncounterEvent[] {
   if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
   const actor = state.actors[command.actorId];
@@ -1388,6 +1401,10 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   const demonEdgeMutations = actor.traitIds.includes(DEMON_EDGE_TRAIT)
     ? demonEdgeSlowTurnMutations(ability.id, actor.id, actor.id, programAction, result.mutations, state.round)
     : [];
+  const eventMutations = [...abilityUseCostMutations, ...result.mutations, ...talentMutations, ...traitReactionMutations_, ...demonEdgeMutations];
+  // An action whose effect is an atomic spatial swap cannot be made when the
+  // swap would be denied (Masquerade's interrupt-legality rule, p.151).
+  assertLegalSpatialBatch(state, programAction, eventMutations);
   let events: EncounterEvent[] = [attachSaveReroll(state, actor.id, ability.id, ruleContext, dice, {
     type: 'RULE_MUTATIONS_APPLIED',
     actorId: actor.id,
@@ -1395,7 +1412,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     actionId: programAction.id,
     timing,
     tags: [...programAction.tags],
-    mutations: [...abilityUseCostMutations, ...result.mutations, ...talentMutations, ...traitReactionMutations_, ...demonEdgeMutations],
+    mutations: eventMutations,
     ...(result.resolutionFacts ? { resolutionFacts: result.resolutionFacts } : {}),
     ...(result.continuation ? { continuation: result.continuation } : {}),
   })];
@@ -1615,6 +1632,10 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
           if (spent > available) throw new RuleViolation('resource.insufficient', `${unit.name} requires ${spent} ${mutation.resourceId}.`);
         }
       }
+      const eventMutations = [...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations];
+      // An action whose effect is an atomic spatial swap cannot be made when
+      // the swap would be denied (Masquerade's interrupt-legality rule, p.151).
+      assertLegalSpatialBatch(state, action, eventMutations);
       events = [attachSaveReroll(state, actor.id, unit.id, ruleContext, dice, {
         type: 'RULE_MUTATIONS_APPLIED',
         actorId: actor.id,
@@ -1623,7 +1644,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         timing: command.timing,
         tags: [...action.tags],
         // F7 talent fold + F9 reactive job-trait fold: symmetric with USE_ABILITY.
-        mutations: [...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations],
+        mutations: eventMutations,
       })];
       break;
     }
@@ -1917,10 +1938,18 @@ function retargetEffects(mutations: RuleMutation[], from: string, to: string): R
 }
 
 /** The held effects of a window, retargeted when the interrupt redirects the
- * ability (Masquerade). */
-function resolveHeldEffects(state: EncounterState, window: EncounterPendingInterrupt) {
+ * ability (Masquerade). The redirect is armed by the window's
+ * `retargetProgramId` and honored only when THAT interrupt program resolves
+ * the window (`closingSourceId`): if the interrupt cannot be made (p.151
+ * "If you or your ally can't make a valid teleport, this interrupt can't be
+ * made") or the window closes at a turn boundary, the held ability hits its
+ * original target instead. */
+function resolveHeldEffects(state: EncounterState, window: EncounterPendingInterrupt, closingSourceId?: string) {
   if (!window.heldEffects || window.heldEffects.length === 0) return;
-  const effects = window.retarget ? retargetEffects(window.heldEffects, window.retarget.fromActorId, window.retarget.toActorId) : window.heldEffects;
+  const redirects = window.retarget !== undefined
+    && window.retargetProgramId !== undefined
+    && closingSourceId === window.retargetProgramId;
+  const effects = redirects ? retargetEffects(window.heldEffects, window.retarget!.fromActorId, window.retarget!.toActorId) : window.heldEffects;
   applyRuleMutations(state, effects);
 }
 
@@ -2610,9 +2639,9 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
               // held one; any other interrupt (or the turn boundary) lets the
               // original roll stand.
               if (event.reroll?.mutations) applyRuleMutations(state, event.reroll.mutations);
-              else resolveHeldEffects(state, window);
+              else resolveHeldEffects(state, window, event.sourceId);
             } else {
-              resolveHeldEffects(state, window);
+              resolveHeldEffects(state, window, event.sourceId);
             }
           }
         }
