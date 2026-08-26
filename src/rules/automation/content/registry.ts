@@ -24,6 +24,7 @@ import './jobs/summon-recipes.js';
 import './jobs/encounter-hooks.js';
 import './jobs/aura-recipes.js';
 import './jobs/mastery-recipes.js';
+import './jobs/mastery-modifier-recipes.js';
 import './jobs/hp-threshold-recipes.js';
 import './jobs/range-recipes.js';
 import './jobs/area-recipes.js';

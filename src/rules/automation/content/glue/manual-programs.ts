@@ -112,11 +112,15 @@ export const WHEN_DAMAGED_INTERRUPT_IDS: Readonly<Record<string, { usesPerRound:
  * the interrupt; `programId` is the source program the interruptUses counter
  * is tracked under.
  */
-export const USES_ABILITY_INTERRUPT_IDS: Readonly<Record<string, { programId: string; usesPerRound: number }>> = {
+export const USES_ABILITY_INTERRUPT_IDS: Readonly<Record<string, { programId: string; usesPerRound: number; allyRange?: number }>> = {
   // ICON p.122 Endless Battlement (Bastion): while the aura is active, "you can
   // use the following interrupt: Heroic Intervention — Interrupt 1. Trigger: A
-  // foe targets your ally with an ability".
-  'endless-battlement': { programId: 'bastion:endless-battlement', usesPerRound: 1 },
+  // foe targets your ally with an ability". `allyRange` is the stance's own
+  // source bound ("the aura deactivates if your ally is out of range"); the
+  // window scan folds both it and the per-round rank through the mastery-fold
+  // kernel, so a mastered PERFECT BATTLEMENT at round 4+ (no maximum range,
+  // interrupt 2) genuinely widens them.
+  'endless-battlement': { programId: 'bastion:endless-battlement', usesPerRound: 1, allyRange: 4 },
 };
 
 /**

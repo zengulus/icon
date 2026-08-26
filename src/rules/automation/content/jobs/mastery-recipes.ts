@@ -93,3 +93,33 @@ registerMasteryRecipe({
   mechanic: 'Any area Sturmreiten would create is an arc 5 instead (the shared area kernel\'s shape override, gated on mastery): the player chooses the arc\'s orthogonal path, the arc geometry validates it (contiguous, orthogonal, no self-overlap, never the user\'s space), and the resolver teleports to the arc\'s end and pierces the characters in it, p.227.',
   detail: '',
 });
+
+registerMasteryRecipe({
+  sourceId: 'bastion:catapult:mastery',
+  abilityId: 'bastion:catapult',
+  name: 'MANGONEL',
+  status: 'implemented',
+  attachment: 'fold',
+  mechanic: 'Catapult becomes Interrupt 3 — the mastery-fold kernel\'s interrupt-rank override (uses per round 1 → 3), consumed at the USE_ABILITY interrupt gate so the extra uses are mechanically real, p.123.',
+  detail: '',
+});
+
+registerMasteryRecipe({
+  sourceId: 'spellblade:nothung:mastery',
+  abilityId: 'spellblade:nothung',
+  name: 'EXCALIBUR',
+  status: 'implemented',
+  attachment: 'fold',
+  mechanic: 'All 1 piercing damage listed by Nothung becomes divine — every piercing instance the resolver emits (the adjacent-character strikes and the GRAM flurry) asks the mastery-fold kernel\'s damage-type conversion and delivers through the shared damage pipeline\'s divine semantics (bypasses Defiance and vigor), p.225.',
+  detail: '',
+});
+
+registerMasteryRecipe({
+  sourceId: 'bastion:endless-battlement:mastery',
+  abilityId: 'bastion:endless-battlement',
+  name: 'PERFECT BATTLEMENT',
+  status: 'implemented',
+  attachment: 'program-level',
+  mechanic: 'At round 4 or higher: Endless Battlement has no maximum range (the mastery-fold unlimited-range rule collapses both the stance-enter ally-selection bound and the window-scan aura-range bound); Heroic Intervention deals 4 damage instead of 2 (the resolver\'s program-level value fold); and it becomes interrupt 2 (the kernel\'s round-gated interrupt-rank override consumed by the uses-ability window scan), p.122.',
+  detail: '',
+});

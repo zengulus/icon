@@ -6,6 +6,7 @@ import { auraEffectRadius, auraStateView, projectedAuraArmorBonus, projectedAura
 import { projectedHpThresholdConditions } from './hp-threshold.js';
 import type { RangeStateView } from './range.js';
 import type { AreaStateView } from './area.js';
+import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, type MasteryFoldStateView } from './mastery-fold.js';
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { summonCap } from './summon-recipes.js';
@@ -135,6 +136,20 @@ export function areaStateView(state: EncounterState, actorId: string): AreaState
       conditions: actor ? encounterConditionSet(actor, state) : undefined,
     },
   };
+}
+
+/** The minimal mastery-fold read surface: ownership/mastery plus the round
+ * (the round-gate family). */
+export function masteryFoldStateView(state: EncounterState): MasteryFoldStateView {
+  const actors: MasteryFoldStateView['actors'] = Object.fromEntries(
+    Object.values(state.actors).map((actor): [string, MasteryFoldActorView] => [actor.id, {
+      hp: actor.hp,
+      maximumHp: Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality),
+      abilityIds: actor.abilityIds,
+      masteredAbilityIds: actor.masteredAbilityIds,
+    }]),
+  );
+  return { round: state.round, actors };
 }
 
 export function encounterConditionSet(actor: EncounterActor, state?: EncounterState) {
@@ -558,12 +573,12 @@ export function hatredDivertsDamage(state: EncounterState, source: EncounterActo
  */
 const INTERRUPT_ALLOWLISTS: Record<
   string,
-  Readonly<Record<string, { usesPerRound: number; programId?: string }>>
+  Readonly<Record<string, { usesPerRound: number; programId?: string; allyRange?: number }>>
 > = {};
 
 export function registerInterruptAllowlist(
   trigger: string,
-  allowlist: Readonly<Record<string, { usesPerRound: number; programId?: string }>>,
+  allowlist: Readonly<Record<string, { usesPerRound: number; programId?: string; allyRange?: number }>>,
 ): void {
   INTERRUPT_ALLOWLISTS[trigger] = allowlist;
 }
@@ -641,15 +656,25 @@ export function deferrableEffectWindow(
   const source = state.actors[sourceActorId];
   if (!source) return null;
   // 1. Heroic Intervention — a foe ability targeting the armored ally.
+  //    The stance's interrupt rank and aura range are the mastery-fold
+  //    authorities: a mastered PERFECT BATTLEMENT (p.122) raises the rank to
+  //    2 and removes the maximum range at round 4+, so both the per-round
+  //    allowance and the ally-distance bound fold against current state.
   if (source.side === 'foes') {
+    const foldView = masteryFoldStateView(state);
     for (const candidate of Object.values(state.actors)) {
       if (candidate.side === source.side || candidate.defeated || !candidate.stance) continue;
       const entry = (INTERRUPT_ALLOWLISTS['uses-ability'] ?? {})[candidate.stance.stanceId];
-      if (!entry || !interruptAvailable(candidate, entry.programId!, entry.usesPerRound)) continue;
+      if (!entry || !entry.programId) continue;
+      const usesPerRound = effectiveInterruptRank(foldView, candidate.id, entry.programId, entry.usesPerRound);
+      if (!interruptAvailable(candidate, entry.programId, usesPerRound)) continue;
       const allyId = typeof candidate.stance.state.allyId === 'string' ? candidate.stance.state.allyId : undefined;
       if (!allyId || allyId === candidate.id) continue;
       const ally = state.actors[allyId];
-      if (!ally || !ally.position || !candidate.position || Math.max(Math.abs(candidate.position.x - ally.position.x), Math.abs(candidate.position.y - ally.position.y)) > 4) continue;
+      if (!ally || !ally.position || !candidate.position) continue;
+      if (entry.allyRange !== undefined
+        && !hasUnlimitedRange(foldView, candidate.id, entry.programId)
+        && Math.max(Math.abs(candidate.position.x - ally.position.x), Math.abs(candidate.position.y - ally.position.y)) > entry.allyRange) continue;
       if (!mutations.some((mutation) => 'actorId' in mutation && mutation.actorId === allyId)) continue;
       return {
         id: `uses-ability:${allyId}:${state.revision}:${state.pendingInterrupts.length}`,

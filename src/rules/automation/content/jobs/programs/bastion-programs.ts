@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { hasUnlimitedRange, masteryFoldRuleRuntimeView, masteryModifierActive } from '../../../kernels/mastery-fold.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { Position } from '../../../../types.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
@@ -106,13 +107,17 @@ const valiantMovement: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.122: enter the stance, record the aura ally, and grant that ally aura 1. */
+/** ICON p.122: enter the stance, record the aura ally, and grant that ally aura
+ * 1. PERFECT BATTLEMENT (p.122): at round 4+ the mastery-fold's unlimited-range
+ * rule removes the maximum range — the source's own wording — so the
+ * ally-selection bound collapses; before round 4 (or unmastered) it holds. */
 const battlementEnter: RuleResolver = (context) => {
   const source = context.state.actors[context.actorId];
   const allyId = context.input.actorIds?.target?.[0];
   if (!source || !allyId) return [];
+  const unlimited = hasUnlimitedRange(masteryFoldRuleRuntimeView(context), source.id, 'bastion:endless-battlement');
   const ally = context.state.actors[allyId];
-  if (!ally?.position || !source.position || distance(source.position, ally.position) > 4) {
+  if (!ally?.position || !source.position || (!unlimited && distance(source.position, ally.position) > 4)) {
     throw new RuleProgramViolation('choice.actor-range', 'Endless Battlement requires an ally in range 4.');
   }
   const mutations: RuleMutation[] = [
@@ -133,10 +138,14 @@ const battlementRefresh: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.122: Heroic Intervention — leave the battlefield, return in the aura, adjacent foes take 2 damage. */
+/** ICON p.122: Heroic Intervention — leave the battlefield, return in the aura,
+ * adjacent foes take 2 damage. PERFECT BATTLEMENT (p.122): at round 4+ the
+ * program-level value fold deals 4 instead of 2 (the mastery rows are the
+ * single source of the round gate). */
 const battlementInterrupt: RuleResolver = (context) => {
   const source = context.state.actors[context.actorId];
   if (!source) return [];
+  const perfectDamage = masteryModifierActive(masteryFoldRuleRuntimeView(context), source.id, 'bastion:endless-battlement:mastery') ? 4 : 2;
   const mutations: RuleMutation[] = [{
     kind: 'move', sourceId: context.sourceId, sourceActorId: source.id, actorId: source.id, movement: 'remove', distance: null, positions: [], direction: null, phasing: false,
   }];
@@ -144,7 +153,7 @@ const battlementInterrupt: RuleResolver = (context) => {
   if (destination && withinGrid(destination, context)) {
     mutations.push({ kind: 'move', sourceId: context.sourceId, sourceActorId: source.id, actorId: source.id, movement: 'place', distance: null, positions: [destination], direction: null, phasing: false });
     for (const foe of Object.values(context.state.actors).filter((candidate) => candidate.side !== source.side && candidate.position && distance(candidate.position, destination) <= 1)) {
-      mutations.push({ kind: 'damage', sourceId: context.sourceId, sourceActorId: source.id, actorId: foe.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false });
+      mutations.push({ kind: 'damage', sourceId: context.sourceId, sourceActorId: source.id, actorId: foe.id, amount: perfectDamage, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false });
     }
   }
   return mutations;

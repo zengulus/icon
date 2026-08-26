@@ -24,7 +24,8 @@ import { resolveAuthoritativeAttack } from './automation/kernels/attack-resoluti
 import { deriveResolutionTriggers } from './automation/kernels/resolution-triggers.js';
 import { resolveOrdinaryAttackMutations } from './automation/kernels/ordinary-attack.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
-import { areaStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
+import { areaStateView, masteryFoldStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
+import { effectiveInterruptRank } from './automation/kernels/mastery-fold.js';
 import { effectiveAbilityRange } from './automation/kernels/range.js';
 import { effectiveAreaFor } from './automation/kernels/area.js';
 import { footprintCells, footprintDistance, footprintsOverlap } from './automation/primitives/spatial-intent.js';
@@ -1228,7 +1229,10 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   if (interrupt) {
     if (actor.statuses.includes('stunned')) throw new RuleViolation('interrupt.stunned', 'Stunned characters cannot use interrupts.');
     if (actor.interruptUsedThisTurn) throw new RuleViolation('interrupt.turn-limit', 'A character can only use one interrupt during any turn.');
-    if ((actor.interruptUses[ability.id] ?? 0) >= ability.cost.value) throw new RuleViolation('interrupt.uses', 'This interrupt has no uses remaining before the actor’s next turn.');
+    // The per-round allowance is the mastery-fold authority: an interrupt's
+    // rank is its uses per round (p.91), and a mastered rank override
+    // (MANGONEL p.123, PERFECT BATTLEMENT p.122) genuinely raises it.
+    if ((actor.interruptUses[ability.id] ?? 0) >= effectiveInterruptRank(masteryFoldStateView(state), actor.id, ability.id, ability.cost.value)) throw new RuleViolation('interrupt.uses', 'This interrupt has no uses remaining before the actor’s next turn.');
   } else {
     assertActive(state, actor.id);
     if (ability.cost.kind === 'action' && actor.actionsRemaining < ability.cost.value) throw new RuleViolation('action.insufficient', `This ability costs ${ability.cost.value} action${ability.cost.value === 1 ? '' : 's'}.`);

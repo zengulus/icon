@@ -12,6 +12,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { convertedDamageType, masteryFoldRuleRuntimeView } from '../../../kernels/mastery-fold.js';
 
 /**
  * Independently reviewed Spellblade ability implementations (ICON p.222–229),
@@ -99,9 +100,12 @@ const odinforceBoltEffects: RuleResolver = (context) => {
 
 /** ICON p.225 Nothung: teleport 1 toward the target, 2[D]+fray on hit (fray on
  * miss), fray to the other characters in the arc, teleport 1, then deal 1
- * piercing to the target for every foe or ally adjacent to them (max 4). */
+ * piercing to the target for every foe or ally adjacent to them (max 4).
+ * EXCALIBUR (p.225): every 1-piercing instance this ability lists delivers as
+ * the mastery-fold's converted type (divine) when Nothung is mastered. */
 const nothungEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
+  const strikeType = convertedDamageType(masteryFoldRuleRuntimeView(context), source.id, 'spellblade:nothung', 'piercing');
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
@@ -126,22 +130,25 @@ const nothungEffects: RuleResolver = (context) => {
     return position && character.id !== source.id && character.id !== target.id && distance(position, targetPosition) <= 1;
   });
   const strikes = Math.min(4, adjacent.length);
-  if (strikes > 0) mutations.push(damageMutation(context, target.id, strikes, 'effect', 'piercing'));
+  if (strikes > 0) mutations.push(damageMutation(context, target.id, strikes, 'effect', strikeType));
   return mutations;
 };
 
 /** ICON p.225 Nothung slay/infuse (GRAM): after the ability resolves, release a
- * flurry of slashes in a burst 2 (self) area — 1 piercing twice to all foes. */
+ * flurry of slashes in a burst 2 (self) area — 1 piercing twice to all foes.
+ * The flurry instances are listed by Nothung itself, so they ride the same
+ * EXCALIBUR conversion as the main ability. */
 const gramEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
   const area = squareArea(source.position, 2);
+  const flurryType = convertedDamageType(masteryFoldRuleRuntimeView(context), source.id, 'spellblade:nothung', 'piercing');
   for (const character of Object.values(context.state.actors)) {
     const position = character.position;
     if (!position || character.side === source.side || !area.some((cell) => sameCell(cell, position))) continue;
-    mutations.push(damageMutation(context, character.id, 1, 'area', 'piercing'));
-    mutations.push(damageMutation(context, character.id, 1, 'area', 'piercing'));
+    mutations.push(damageMutation(context, character.id, 1, 'area', flurryType));
+    mutations.push(damageMutation(context, character.id, 1, 'area', flurryType));
   }
   return mutations;
 };
