@@ -103,3 +103,19 @@ registerRangeModifierRule({
   value: 6,
   gate: { kind: 'mastery', abilityId: 'shade:umbra' },
 });
+
+// ICON p.143 Knave Strongarm talent 1: "Comeback: this ability gains range 2."
+// A melee hold with no listed range (base 1 = adjacency); under Comeback
+// (user bloodied) the hold's target may be chosen at range 2. The rest of the
+// talent — "Remove your target and place them into adjacency before
+// activating this effect" — is a program-level remove/place reposition in the
+// Strongarm program (program-level talent row), so this rule is the range
+// authority only and the talent is NOT allowlisted as a range-modifier row.
+registerRangeModifierRule({
+  sourceId: 'knave:strongarm:talent:1',
+  abilityId: 'knave:strongarm',
+  mode: 'override',
+  value: 2,
+  talent: 1,
+  gate: { kind: 'comeback' },
+});

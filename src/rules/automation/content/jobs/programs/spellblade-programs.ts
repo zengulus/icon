@@ -108,8 +108,13 @@ const nothungEffects: RuleResolver = (context) => {
   const strikeType = convertedDamageType(masteryFoldRuleRuntimeView(context), source.id, 'spellblade:nothung', 'piercing');
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
+  // ICON p.225 Nothung talent 2: "Comeback: Increase teleport to 4." A
+  // program-level comeback clause (the same flag deriveTriggers turns into
+  // the `comeback` trigger): while the user is bloodied and the talent is
+  // equipped, both of the ability's teleport walks widen from 1 to 4.
+  const teleportRange = source.talents?.['spellblade:nothung'] === 2 && context.triggers?.has('comeback') ? 4 : 1;
   const mutations: RuleMutation[] = [];
-  const first = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
+  const first = walk(context, source.position, axisDirection(source.position, target.position), teleportRange, false, source.id);
   if (!sameCell(first, source.position)) mutations.push(teleportMutation(context, source.id, first));
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
@@ -122,7 +127,7 @@ const nothungEffects: RuleResolver = (context) => {
     if (character.id === target.id || character.id === source.id || !position || !arc.some((cell) => sameCell(cell, position))) continue;
     mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  const second = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
+  const second = walk(context, source.position, axisDirection(source.position, target.position), teleportRange, false, source.id);
   if (!sameCell(second, source.position)) mutations.push(teleportMutation(context, source.id, second));
   const targetPosition = target.position;
   const adjacent = Object.values(context.state.actors).filter((character) => {

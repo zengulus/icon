@@ -73,13 +73,16 @@ describe('rules automation coverage gate', () => {
     // exactly-range-3 row, the F9 once-per-round reactive fold row Dash on
     // the Rocks, and Shieldmaster's aura + turn-end membership recipe)
     // + 6 summon suites are complete programs; F7: the 30 wired talents
-    // (the closed `talent-recipes.ts` tranche) plus the five program-level
+    // (the closed `talent-recipes.ts` tranche) plus the seven program-level
     // talents, the three aura projection talents (Rook t1, Dervish t1,
     // Gentleness t1, which register as continuous passive-projection rows),
     // the four range-modifier talents (Valkyrie t1, Incubus t1,
     // Harvest t2, Open the Gates t2, executed by the shared range kernel),
     // and the one area-modifier talent (Soul Shot t2) audit as complete —
-    // 288 source talents, 43 complete / 245 documented. F8: the eight
+    // 288 source talents, 45 complete / 243 documented. F1 promote-after-
+    // landing: Strongarm t1 (program-level F1 remove/place + range-kernel
+    // comeback range) and Nothung t2 (program-level comeback teleport width)
+    // joined the complete set. F8: the eight
     // complete mastery rows are complete
     // through the typed mastery attachment (each audits as one reviewed
     // passive clause — the parent resolver/lifecycle/aura path, not parsed
@@ -95,19 +98,19 @@ describe('rules automation coverage gate', () => {
     // compile complete through the shared area authority. F14 cost-payment:
     // the four wired proofs (Provoke t2, Pyroclast t2, Blackstar t1,
     // Masquerade t1's turn-ledger evasion) audit complete through the talent
-    // fold — 47 complete / 241 documented. F7 mastery-modifier fold: the
+    // fold — 49 complete / 239 documented. F7 mastery-modifier fold: the
     // three promoted modifier-family masteries (Catapult t2's MANGONEL,
     // Nothung's EXCALIBUR conversion, Open the Gates' PERFECT BATTLEMENT)
     // audit complete through the registered kernel rows.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 460,
-      unsupportedPrograms: 2815,
-      completeClauses: 1600,
-      unsupportedClauses: 3100,
+      completePrograms: 462,
+      unsupportedPrograms: 2813,
+      completeClauses: 1602,
+      unsupportedClauses: 3098,
       unsupportedByKind: {
-        core: 70, 'class-trait': 7, 'job-trait': 38, 'limit-break': 16, 'talent': 241, 'mastery': 133,
+        core: 70, 'class-trait': 7, 'job-trait': 38, 'limit-break': 16, 'talent': 239, 'mastery': 133,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

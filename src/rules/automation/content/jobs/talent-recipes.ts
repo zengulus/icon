@@ -807,6 +807,21 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   'stormbender:eye-of-the-storm:talent:2': {
     mechanic: 'The center character takes 1 piercing damage for every other character in the area effect (foe or ally), up to three times.',
   },
+  // ICON p.143 Knave Strongarm talent 1: "Comeback: this ability gains range
+  // 2. Remove your target and place them into adjacency before activating
+  // this effect." The comeback range-2 half is wired through the shared
+  // range kernel (range-recipes.ts); the Strongarm program reads the
+  // equipped choice and emits the remove/place reposition into a free
+  // adjacent space BEFORE the spin, so the hold starts from adjacency.
+  'knave:strongarm:talent:1': {
+    mechanic: 'Comeback (user bloodied): the target may be chosen at range 2; the target is then removed and placed into a free adjacent space before the spin (the shared remove/place primitives through the F1 gateway).',
+  },
+  // ICON p.225 Spellblade Nothung talent 2: "Comeback: Increase teleport to
+  // 4." A program-level comeback clause: while the user is bloodied, both of
+  // the ability's teleport walks widen from 1 to 4 toward the target.
+  'spellblade:nothung:talent:2': {
+    mechanic: 'Comeback (user bloodied): both Nothung teleports become 4 toward the target (the shared walk + teleportMutation primitives).',
+  },
 };
 
 for (const [sourceId, row] of Object.entries(PROGRAM_LEVEL_TALENT_RECIPES)) {

@@ -51,10 +51,10 @@ assumption here, document the evidence and update this list before proceeding.
    area-effect-rider, use-count-override, card-deck-system,
    enemy-ability-trigger). NONE qualified as non-automatable/table-facing.
    Census regenerated: residual 0; no non-implementable class remains.
-4. **Shared spatial primitives: Teleport, Place, Remove, Swap** — `PARTIAL`
-   (2026-08-26). The spatial gateway (`primitives/spatial-intent.ts`) and the
+4. **Shared spatial primitives: Teleport, Place, Remove, Swap** — `DONE`
+   (2026-08-27). The spatial gateway (`primitives/spatial-intent.ts`) and the
    mutation builders (`removeMutation`/`placeMutation`/`teleportMutation`)
-   were already shared; this tranche landed the Swap primitive
+   were already shared; the tranche landed the Swap primitive
    (`swapMutations`, `primitives/job-kit.ts`) with an explicit source-defined
    movement mode: teleporting swap (Masquerade p.151 "teleporting both" — legs
    are `movement: 'teleport'`, Rampart p.104-checked) vs remove/place swap
@@ -68,18 +68,31 @@ assumption here, document the evidence and update this list before proceeding.
    every leg with a `spatialBatchId`, and the reducer prevalidates only
    declared groups — the full destination permutation against the same
    pre-swap state (simulated on a clone, injective destinations), applied
-   every-leg-or-none. Ordinary multi-target movement without a batch id
-   resolves per-leg, independently. Masquerade obeys p.151's
-   interrupt-legality rule: when a teleport leg is invalid the command is
-   rejected (nothing consumed or redirected; the held ability is untouched).
-   Remaining in step 4: terrain-create/entity-create, then
-   fly/movement-grant primitives; then promote the census `{teleport}`×15
-   units (step 5 discipline).
-5. **Promote-after-landing discipline.** After each primitive/foundation
-   lands, immediately promote every source unit whose blocker set becomes
-   empty, with source-exact fixtures and replay coverage, then regenerate
-   the census (this is §9 of AGENTS.md applied per-step rather than
-   per-batch).
+   every-leg-or-none. **Occupancy exemption is group-scoped (2026-08-27):**
+   a leg may ignore the footprints of actors in its OWN declared spatial
+   group only — ungrouped movement resolves independently against current
+   occupancy (a global event-wide co-moved set could let a mover into a cell
+   whose occupant's own leg then failed, stacking two actors on one space),
+   and actors in a different batch are never co-moved with a group; the live
+   fold, the group prevalidation (a denial fixpoint over declared groups),
+   and every dry run (`collidingShoveTargets`/`reactiveSlayTargets`) share
+   one helper (`coMovedActorIdsForMove`). Masquerade obeys p.151's interrupt-legality
+   rule: when a teleport leg is invalid the command is rejected (nothing
+   consumed or redirected; the held ability is untouched). Terrain-create /
+   entity-create and fly/movement-grant primitives are later foundations
+   (F3/F4), not part of F1.
+5. **Promote-after-landing discipline.** — `DONE` for F1 (2026-08-27).
+   Immediately after each primitive/foundation lands, promote every source
+   unit whose blocker set becomes empty, with source-exact fixtures and
+   replay coverage, then regenerate the census (this is §9 of AGENTS.md
+   applied per-step rather than per-batch). The F1 tranche promoted
+   `knave:strongarm:talent:1` (program-level remove/place-into-adjacency +
+   range-kernel comeback range) and `spellblade:nothung:talent:2`
+   (program-level comeback teleport width); the 13 remaining former
+   `{teleport}` singletons were re-read and reclassified to their true
+   residual blocker sets (choice-input, object-distance, entity-create,
+   pre-ability-movement, triggers, etc.) — none were bulk-enabled by
+   family. Census regenerated: `{teleport}` blocker family gone (15 → 0).
 6. **Expand mastery/talent folds by regenerated census frequency**
    (roadmap P3; F2/F5–F8): reusable high-fan-out modifier families first;
    each modifier's mechanical authority lives at the existing mechanic's own
@@ -164,14 +177,14 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 
 | # | Foundation | Status | Unblocks (approx.) | Notes |
 | --- | --- | --- | --- | --- |
-| F1 | Teleport / Place / Remove / Swap as shared forced-movement primitives | PARTIAL (shared gateway + builders + Swap primitive landed 2026-08-26; emitters migrated; census promotion pending) | 15+ talents, several abilities | Census top blocker `{teleport}` |
+| F1 | Teleport / Place / Remove / Swap as shared forced-movement primitives | DONE (2026-08-27): shared gateway + builders + Swap primitive + source-declared atomic groups + group-scoped occupancy; 2 census units promoted (Strongarm t1, Nothung t2), 13 reclassified; `{teleport}` family cleared | 2 promoted (15 originally listed) | Census `{teleport}` blocker cleared |
 | F2 | Interrupt-modifier family (rank change, extra uses, timing override) | PARTIAL | 13+ talents | Census `{interrupt-modifier}` |
 | F3 | Terrain-create / entity-create recipe primitives | PARTIAL (job-program-local today) | 13 + 13 talents/abilities | Generalize from existing resolvers |
 | F4 | Fly-grant / movement-modifier primitives | PARTIAL | 11+ | Census `{fly-grant}` |
 | F5 | Mark-modifier family | PARTIAL | 11+ | |
 | F6 | Damage-modifier family beyond bonus dice | PARTIAL | 11+ | |
 | F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (modifier kernel K-P5 live; 3 wired, 133 unresolved) | 133 masteries | Biggest single content family |
-| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL (47/288 wired) | ~200 talents | See census frequencies |
+| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL (49/288 wired) | ~200 talents | See census frequencies |
 | F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
 | F10 | Expedition scene flow (camp/interlude as playable steps around the sheet transitions) | PARTIAL (sheet transitions DONE) | cross-combat play UX | |
 
@@ -200,8 +213,9 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 - **Job traits** — `PARTIAL`: 27/65 wired across the five wiring homes;
   **38 documented** rows remain, each carrying its kernel need. Work the
   highest-frequency kernel first (see F1–F6), then harvest rows.
-- **Talents** — `PARTIAL`: 47/288 executable (fold, program-level, aura
-  projection, range/area modifiers). **241 unresolved**. Do not bulk-enable;
+- **Talents** — `PARTIAL`: 49/288 executable (fold, program-level
+  incl. F1 Strongarm t1 / Nothung t2, aura projection, range/area
+  modifiers). **239 unresolved**. Do not bulk-enable;
   promote exact-ID slices per subfamily with replay fixtures.
 - **Masteries** — `PARTIAL`: equipped-mastery surface is validated and
   durable; the mastery-modifier fold (K-P5: interrupt-rank, damage-type

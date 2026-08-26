@@ -11,7 +11,7 @@ import {
   distance, sourceActor, impassable, walk, nearestFoe, ringAround,
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
-  shoveMutation, rushMutation, placeMutation,
+  shoveMutation, rushMutation, placeMutation, removeMutation, freeCellsInRange,
   gambleD6,
   untilNextTurnEnd, action, compilation,
 } from '../../../primitives/job-kit.js';
@@ -203,17 +203,34 @@ const strongarmEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
-  if (!source || !source.position || !target || !target.position || distance(source.position, target.position) !== 1) {
+  // ICON p.143 Strongarm talent 1: "Comeback: this ability gains range 2.
+  // Remove your target and place them into adjacency before activating this
+  // effect." The shared range kernel widens target legality to range 2 while
+  // the user is bloodied (the same flag deriveTriggers turns into the
+  // `comeback` trigger); the program mirrors that gate so the hold still
+  // starts from adjacency, and when the talent is equipped it emits the
+  // remove/place reposition — into the canonical first free adjacent cell —
+  // BEFORE the spin mutations, so the spin starts from the placed cell.
+  const strongarmHold = source.talents?.['knave:strongarm'] === 1;
+  const comeback = strongarmHold && context.triggers?.has('comeback');
+  if (!source || !source.position || !target || !target.position || distance(source.position, target.position) > (comeback ? 2 : 1)) {
     throw new RuleProgramViolation('choice.actor-range', 'Strongarm requires an adjacent foe.');
   }
   if (target.side === source.side) throw new RuleProgramViolation('choice.actor-range', 'Strongarm requires an adjacent foe.');
   const sourcePosition = source.position;
-  const targetPosition = target.position;
+  const mutations: RuleMutation[] = [];
+  let targetPosition = target.position;
+  if (strongarmHold) {
+    const adjacency = freeCellsInRange(context, sourcePosition, 1)[0];
+    if (!adjacency) throw new RuleProgramViolation('choice.position-range', 'Strongarm talent 1 requires a free adjacent space.');
+    mutations.push(removeMutation(context, target.id));
+    mutations.push(placeMutation(context, target.id, adjacency));
+    targetPosition = adjacency;
+  }
   const clockwise = (context.input.options?.direction ?? 'clockwise') !== 'counter-clockwise';
   const ring = ringAround(sourcePosition);
   const startIndex = ring.findIndex((cell) => sameCell(cell, targetPosition));
   if (startIndex < 0) throw new RuleProgramViolation('choice.actor-range', 'Strongarm requires an adjacent foe.');
-  const mutations: RuleMutation[] = [];
   const passed = new Set<string>();
   let position = { ...targetPosition };
   let collided = false;

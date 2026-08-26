@@ -86,7 +86,17 @@ const NON_IMPLEMENTABLE = new Set(['irreducible']);
  *  spend mutation is implemented, but the label also covered economy
  *  mechanics (turn-start aether gain, per-ability spend limits) that are not
  *  yet reusable capabilities, so it is deliberately NOT stripped. */
-const IMPLEMENTED_PRIMITIVES = new Set(['condition-grant', 'aura', 'sacrifice-cost', 'combo-spend', 'blessing-spend', 'infuse-cost', 'use-ledger']);
+const IMPLEMENTED_PRIMITIVES = new Set(['condition-grant', 'aura', 'sacrifice-cost', 'combo-spend', 'blessing-spend', 'infuse-cost', 'use-ledger', 'teleport']);
+
+// `teleport` is the F1 foundation (primitives/spatial-intent.ts + the shared
+// teleportMutation/placeMutation/removeMutation/swapMutations builders in
+// primitives/job-kit.ts): bounded, size-aware occupancy, impassable terrain,
+// and Rampart (p.104) validation plus source-declared atomic swap groups are
+// implemented and covered by the spatial-gateway fixtures. A unit whose text
+// needs "teleport" no longer carries `teleport` as a missing capability —
+// its remaining blockers are whatever else its complete semantics need (the
+// {teleport} singletons were re-audited below; genuinely complete ones were
+// promoted onto content rows and dropped out of the census entirely).
 
 /** Audit-verified reclassifications: source units whose syntactic first-pass
  *  blocker set is WRONG (the regex keyword pass matched "gain/grant/become"
@@ -221,9 +231,93 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // non-mark suppression does not); the potency-plus condition grants, the
   // turn-end/two-turn durations, and DREAD MOCK's "gains range 5" are all
   // expressible
-  'knave:strongarm:talent:1': ['teleport'],
-  // "Remove your target and place them into adjacency" is a remove-and-place
-  // reposition; the Comeback range-2 half is wired through the range kernel
+  // ── F1 promote-after-landing re-audit: the `{teleport}` singletons ──
+  // The F1 foundation (teleport/place/remove/swap) landed, so `teleport` is
+  // stripped from every blocker set below. Each former `{teleport}`
+  // singleton was re-read in full; the two whose COMPLETE semantics now ride
+  // the shared F1 primitives plus existing kernels were promoted onto
+  // content rows (knave:strongarm:talent:1 — program-level remove/place +
+  // range-kernel comeback range; spellblade:nothung:talent:2 — program-level
+  // comeback teleport width) and dropped out of the census entirely. The
+  // rest still need genuinely distinct missing capabilities and keep their
+  // corrected residual blocker sets below.
+  'demon-slayer:comet:mastery': ['object-distance', 'choice-input'],
+  // "teleport to any space adjacent to your weapon at the start and end of
+  // your turn" — the thrown-weapon OBJECT footprint (the object-distance
+  // family, like lance t1 / quaking-palm mastery) plus the player-chosen
+  // space and turn-boundary timing (the mastery kernel's lifecycle
+  // attachment exists; the object targeting + choice do not)
+  'demon-slayer:draken-cross:mastery': ['area-define', 'choice-input'],
+  // "teleport to any space of any area created … foes in any area created
+  // are slashed and take 2 divine" — the created-blast cells must be
+  // durably available for a post-use fold (the ability's areas are
+  // instantaneous), plus the player-chosen space; the slashed status and
+  // divine damage themselves are implemented
+  'fool:trait:cheap-trick': ['attack-miss-trigger', 'entity-create'],
+  // "When an attack misses you, you may teleport 1 space, then leave a bomb
+  // in an adjacent space" — a defensive attack-miss reactive on the owner
+  // (no such trigger family exists) plus the bomb entity; the teleport and
+  // the adjacency placement are implemented
+  'freelancer:showdown:talent:1': ['damage-dealt-trigger', 'choice-input'],
+  // "Each time you deal damage with showdown, you may teleport 1" — the
+  // showdown damage lands at the end of the foe's turn (a delayed
+  // damage-dealt trigger, no reusable family) plus the player-chosen
+  // teleport; the teleport itself is implemented
+  'shade:death-blossom:mastery': ['pre-ability-movement', 'choice-input'],
+  // "You can teleport 2 spaces before and after using this ability" — a
+  // pre/post-ability self-repositioning window (the pre-ability-movement
+  // family) plus the player-chosen destination; the teleport is implemented
+  'shade:shadow-play:talent:1': ['choice-input'],
+  // "If you swap two foes, you may then teleport them 1 after this ability
+  // resolves" — the swap and the post-swap teleport-1 are implementable, but
+  // the destination cells must be chosen against the POST-swap occupancy
+  // (the shared free-cell helper reads the pre-swap state), so the
+  // reposition choice is the missing capability (the same family as the
+  // sibling talent 2)
+  'warden:underway:mastery': ['shove-trigger', 'object-distance', 'choice-input'],
+  // "Foes that are shoved into portals or that end their turn adjacent to an
+  // underway can be teleported to any free space adjacent to any other
+  // underway" — a shove-into-portal reactive, the underway OBJECT footprint
+  // distance, and the chosen destination; the save, the once-per-round
+  // ledger, and the bloodied auto-fail are implemented
+  'sealer:god-hand:talent:2': ['choice-input'],
+  // "Increase teleports to 2, and all version of this ability gain Slay:
+  // gain or lose a combo token" — the teleport increase is program-level
+  // expressible and the slay/combo mutations are implemented, but the
+  // player's gain-OR-lose choice needs the valued choice input (the same
+  // family as knave:revenge:talent:2)
+  'sealer:matsuri:talent:1': ['choice-input'],
+  // "Increase teleports by +1 and gains Slay: Repeat the teleport effect" —
+  // the +1 spans the ability's documented optional ally-teleport window
+  // (the parent ability's free-action window is itself unimplemented), and
+  // the slay repeat's referent (user vs ally teleport) is unresolved, so the
+  // optional-window/choice capability is the blocker
+  'sealer:spirit-shrine:talent:2': ['enemy-ability-trigger', 'choice-input'],
+  // "Foes that use any ability inside the shrine's aura can be teleported 1
+  // after the triggering ability resolves" — an enemy-ability-use reactive
+  // (the Chastise t1 family) plus the chosen teleport; the shrine aura
+  // membership projection is implemented
+  'sealer:grand-banishment:talent:2': ['enemy-ability-trigger', 'choice-input'],
+  // "Bloodied foes can be teleported 2 at the end of any turn this ability's
+  // damage activates" — the ability's damage rides its documented
+  // enemy-ability-trigger window (the same family as the ability's own
+  // movement trigger) plus the chosen teleport; bloodied and the teleport
+  // are implemented
+  'spellblade:fulminate:talent:1': ['choice-input'],
+  // "When marking a character, you can increase the area to 3, and the
+  // teleport to 2, but it only affects allies" — rides Fulminate's
+  // documented start-of-turn/mark aura-teleport window (the direction
+  // choice is itself unimplemented); the area/teleport magnitude changes
+  // and the ally-only filter are expressible once the window exists
+  'spellblade:fulminate:talent:2': ['choice-input'],
+  // "When marking a character, you can condense the aura to 1, but increase
+  // the teleport to 2 spaces instead" — same documented aura-teleport
+  // window family as talent 1
+  // knave:strongarm:talent:1 ("Remove your target and place them into
+  // adjacency" + "Comeback: gains range 2") was a {teleport} singleton whose
+  // F1 remove/place + range-kernel comeback range are now wired (program-
+  // level row + range rule); it is executable and dropped out of the census
+  // entirely, so it has no reclassification entry here.
   'freelancer:trick-shot:talent:2': ['rebound', 'distance-predicate'],
   // "phantom projectiles … at exactly range 3 from its rebound target" —
   // needs the rebound machinery plus an exact-distance damage gate

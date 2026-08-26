@@ -68,8 +68,14 @@ describe('F1 spatial gateway (pp.87–92, 94, 107)', () => {
     expect(applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 3, y: 1 })])).toEqual(legal);
   });
 
-  it('paired place mutations swap atomically (co-moved actors are not obstructions)', () => {
+  it('an ungrouped pair targeting each other\'s cells resolves per-leg and is denied (no batch-wide co-moved exemption)', () => {
     const { state, hero, foe } = spatialEncounter();
+    // Two explicit-destination place legs WITHOUT a spatialBatchId: occupancy
+    // exemption is group-scoped, so neither leg may ignore the other mover.
+    // The foe's leg targets the hero's occupied cell and the hero's leg
+    // targets the foe's still-occupied cell — both are denied independently
+    // and no actor moves, exactly like the F1 occupancy regression (an
+    // ungrouped mover is never exempted merely because it also moves).
     const swap: EncounterEvent = {
       type: 'RULE_MUTATIONS_APPLIED',
       actorId: hero.id,
@@ -83,11 +89,59 @@ describe('F1 spatial gateway (pp.87–92, 94, 107)', () => {
       ],
     };
     const result = applyEvents(state, [swap]);
-    // The foe was co-moved, so the first place onto the hero's cell is legal;
-    // the hero then takes the foe's old cell — a full swap.
-    expect(result.actors[foe.id].position).toEqual({ x: 1, y: 1 });
-    expect(result.actors[hero.id].position).toEqual({ x: 4, y: 1 });
+    // Each leg validates against authoritative current occupancy: the foe is
+    // still on the hero's cell when its leg resolves, and the hero is still
+    // on the foe's cell. No one moves; no overlap.
+    expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
     expect(applyEvents(state, [swap])).toEqual(result);
+  });
+
+  it('ungrouped A into B\'s cell is denied when B\'s independent move fails — B remains, no overlap (replay-equal)', () => {
+    const { state, hero, foe } = spatialEncounter();
+    // The foe (4,1) is a completely independent mover whose own leg is
+    // illegal (out of bounds). The hero's leg targets the foe's cell: the
+    // foe must NOT be treated as co-moved with the hero, so the hero is
+    // denied and no actor ends up sharing the foe's space (ICON p.88).
+    const moves: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: hero.id,
+      sourceId: 'fixture:move',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [
+        { kind: 'move', sourceId: 'fixture:move', sourceActorId: hero.id, actorId: hero.id, movement: 'place', distance: null, positions: [{ x: 4, y: 1 }], direction: null, phasing: false },
+        { kind: 'move', sourceId: 'fixture:move', sourceActorId: hero.id, actorId: foe.id, movement: 'place', distance: null, positions: [{ x: 99, y: 1 }], direction: null, phasing: false },
+      ],
+    };
+    const result = applyEvents(state, [moves]);
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 }); // denied — the foe's cell was occupied at resolution time
+    expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 }); // its own leg failed; it never left
+    expect(applyEvents(state, [moves])).toEqual(result); // replay equality
+  });
+
+  it('ungrouped independent moves to genuinely free destinations still apply per-leg', () => {
+    const { state, hero, foe } = spatialEncounter();
+    // Both legs are legal: the foe moves to (3,1) (free) and the hero to
+    // (5,1) (free). No declared group means each leg resolves independently
+    // against current occupancy — both apply.
+    const moves: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: hero.id,
+      sourceId: 'fixture:move',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [
+        { kind: 'move', sourceId: 'fixture:move', sourceActorId: hero.id, actorId: foe.id, movement: 'place', distance: null, positions: [{ x: 3, y: 1 }], direction: null, phasing: false },
+        { kind: 'move', sourceId: 'fixture:move', sourceActorId: hero.id, actorId: hero.id, movement: 'place', distance: null, positions: [{ x: 5, y: 1 }], direction: null, phasing: false },
+      ],
+    };
+    const result = applyEvents(state, [moves]);
+    expect(result.actors[foe.id].position).toEqual({ x: 3, y: 1 });
+    expect(result.actors[hero.id].position).toEqual({ x: 5, y: 1 });
+    expect(applyEvents(state, [moves])).toEqual(result);
   });
 
   it('teleport is denied when entering or leaving rampart differs (p.104)', () => {
@@ -320,6 +374,47 @@ describe('F1 atomic spatial groups (source-declared, every leg or none)', () => 
     expect(result.actors[foe.id].position).toEqual({ x: 3, y: 1 });
     expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
     expect(applyEvents(state, [moves])).toEqual(result);
+  });
+
+  it('separate spatialBatchId groups in one event do not exempt one another\'s occupants', () => {
+    const ally = actorFromCharacter(validCharacter('Second'), { x: 4, y: 1 });
+    const third = createFoe('Relict', { x: 7, y: 1 });
+    const fourth = createFoe('Relict', { x: 9, y: 1 });
+    // The default fixture foe moves to (5,1) so it does not collide with the
+    // extra actors on row 1; it is not part of either declared group.
+    const { state, hero } = spatialEncounter({ extra: [ally, third, fourth], foePosition: { x: 5, y: 1 } });
+    // Two distinct declared swaps in one event. The first group's first leg
+    // targets (7,1) — the THIRD actor's cell — and the third actor belongs
+    // to the OTHER group, whose own leg would vacate it later in the
+    // mutation order. Cross-group occupancy is never exempted: the first
+    // group is denied as a whole, while the second group (whose legs are
+    // legal against the authoritative state) applies.
+    const event: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED',
+      actorId: hero.id,
+      sourceId: 'fixture:groups',
+      actionId: 'default',
+      timing: 'use',
+      tags: [],
+      mutations: [
+        { kind: 'move', sourceId: 'fixture:groups', sourceActorId: hero.id, actorId: hero.id, movement: 'place', distance: null, positions: [{ x: 7, y: 1 }], direction: null, phasing: false, spatialBatchId: 'fixture:group-a' },
+        { kind: 'move', sourceId: 'fixture:groups', sourceActorId: hero.id, actorId: ally.id, movement: 'place', distance: null, positions: [{ x: 1, y: 1 }], direction: null, phasing: false, spatialBatchId: 'fixture:group-a' },
+        { kind: 'move', sourceId: 'fixture:groups', sourceActorId: hero.id, actorId: third.id, movement: 'place', distance: null, positions: [{ x: 9, y: 1 }], direction: null, phasing: false, spatialBatchId: 'fixture:group-b' },
+        { kind: 'move', sourceId: 'fixture:groups', sourceActorId: hero.id, actorId: fourth.id, movement: 'place', distance: null, positions: [{ x: 7, y: 1 }], direction: null, phasing: false, spatialBatchId: 'fixture:group-b' },
+      ],
+    };
+    const result = applyEvents(state, [event]);
+    // Group A denied entirely (its first leg targets a cell occupied by a
+    // group-B member; cross-group exemption never applies).
+    expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(result.actors[ally.id].position).toEqual({ x: 4, y: 1 });
+    // Group B applies every leg: third and fourth exchange cells.
+    expect(result.actors[third.id].position).toEqual({ x: 9, y: 1 });
+    expect(result.actors[fourth.id].position).toEqual({ x: 7, y: 1 });
+    // No two actors share a space.
+    const positions = Object.values(result.actors).map((actor) => `${actor.position.x},${actor.position.y}`);
+    expect(new Set(positions).size).toBe(positions.length);
+    expect(applyEvents(state, [event])).toEqual(result);
   });
 });
 

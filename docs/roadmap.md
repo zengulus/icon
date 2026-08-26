@@ -151,8 +151,12 @@ replay; closed negative for unequipped mastery.
 ## P4 — Forced-movement & entity primitives (FOUNDATION)
 
 **Goal.** Teleport/Place/Remove/Swap/Fly-grant as shared primitives so the
-census's top blockers ({teleport} 15, {entity-create} 13, {terrain-create} 13,
-{fly-grant} 11) stop forcing per-ability resolver code.
+census's top blockers stop forcing per-ability resolver code. The
+Teleport/Place/Remove/Swap half (F1) is DONE (2026-08-27) — shared gateway,
+source-declared atomic swap groups, group-scoped occupancy, and the
+`{teleport}` census family cleared — leaving Fly-grant, entity-create and
+terrain-create as the remaining high-fan-out blockers ({entity-create} 13,
+{terrain-create} 13, {fly-grant} 13).
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

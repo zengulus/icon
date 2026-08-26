@@ -1313,6 +1313,23 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
 const isExplicitDestinationMove = (mutation: RuleMutation): mutation is Extract<RuleMutation, { kind: 'move' }> =>
   mutation.kind === 'move' && mutation.movement !== 'shove' && mutation.movement !== 'remove' && mutation.positions.at(-1) !== undefined;
 
+/** The co-moved participants of one move mutation: the actors in the SAME
+ * source-declared spatial group (all move legs sharing its `spatialBatchId`,
+ * emitted by `swapMutations` in primitives/job-kit.ts). Occupancy exemption
+ * is GROUP-SCOPED: an ungrouped move leg receives no exemption at all (its
+ * destination must be genuinely free against authoritative current
+ * occupancy), and actors in a different spatial batch are never treated as
+ * co-moved with this leg — a grouped leg may only ignore the footprints of
+ * actors participating in its own declared simultaneous spatial group.
+ * Shared by the live application, the atomic-group prevalidation, and every
+ * dry run, so simulation and replay decide from one rule. */
+function coMovedActorIdsForMove(mutations: readonly RuleMutation[], mutation: Extract<RuleMutation, { kind: 'move' }>): string[] {
+  if (mutation.spatialBatchId === undefined) return [];
+  return [...new Set(mutations
+    .filter((candidate): candidate is Extract<RuleMutation, { kind: 'move' }> => candidate.kind === 'move' && candidate.spatialBatchId === mutation.spatialBatchId)
+    .map((candidate) => candidate.actorId))];
+}
+
 /**
  * Atomic spatial groups (F1). Atomicity is SOURCE-DECLARED, never inferred
  * from mutation shape: only explicit-destination move legs carrying the same
@@ -1331,6 +1348,12 @@ const isExplicitDestinationMove = (mutation: RuleMutation): mutation is Extract<
  * footprints (a co-moved actor is never an obstruction to another leg, so
  * per-leg validation alone would let two actors stack on one destination).
  *
+ * Group denial is computed to a FIXPOINT: the denial of one declared group
+ * can change another group's legality (its members may not vacate when
+ * denied), so the surviving groups are re-simulated against the running
+ * denial set until no group flips — the final pass applies and skips
+ * exactly what the live per-leg application does.
+ *
  * Returns the mutation indices of the grouped explicit-destination legs to
  * skip. Non-destination mutations (damage, conditions, shoves, removes) and
  * ungrouped legs are never part of a group and are applied regardless.
@@ -1346,13 +1369,19 @@ export function deniedAtomicSpatialLegIndices(state: EncounterState, mutations: 
     list.push({ index, mutation });
     groups.set(mutation.spatialBatchId, list);
   }
-  for (const legs of groups.values()) {
-    if (legs.length < 2) continue; // a single-leg group has no permutation to protect
-    // A destination permutation has each participant exactly once: two legs
-    // for the same actor are sequential steps of one movement, not swap legs.
-    if (new Set(legs.map(({ mutation }) => mutation.actorId)).size !== legs.length) continue;
-    if (atomicGroupDenied(state, mutations, legs)) {
-      for (const { index } of legs) denied.add(index);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const legs of groups.values()) {
+      if (legs.length < 2) continue; // a single-leg group has no permutation to protect
+      // A destination permutation has each participant exactly once: two legs
+      // for the same actor are sequential steps of one movement, not swap legs.
+      if (new Set(legs.map(({ mutation }) => mutation.actorId)).size !== legs.length) continue;
+      if (legs.some(({ index }) => denied.has(index))) continue;
+      if (atomicGroupDenied(state, mutations, legs, denied)) {
+        for (const { index } of legs) denied.add(index);
+        changed = true;
+      }
     }
   }
   return denied;
@@ -1360,17 +1389,28 @@ export function deniedAtomicSpatialLegIndices(state: EncounterState, mutations: 
 
 /** Prevalidate one declared atomic spatial group against the pre-swap state.
  * True when any group leg would be denied or the destinations are not
- * injective (see `deniedAtomicSpatialLegIndices`). */
+ * injective (see `deniedAtomicSpatialLegIndices`). The simulation mirrors
+ * the live application exactly: legs already in `denied` (other denied
+ * groups) never apply, group legs simulate with the group's OWN co-moved
+ * members, and every other leg simulates with its own group-scoped co-moved
+ * set (empty for ungrouped moves), so the prevalidation and the live fold
+ * can never disagree. */
 function atomicGroupDenied(
   state: EncounterState,
   mutations: readonly RuleMutation[],
   legs: ReadonlyArray<{ index: number; mutation: Extract<RuleMutation, { kind: 'move' }> }>,
+  denied: ReadonlySet<number>,
 ): boolean {
-  const coMovedActorIds = [...new Set(mutations.filter((mutation) => mutation.kind === 'move').map((mutation) => mutation.actorId))];
+  // The group's own members are co-moved with each other (and only with each
+  // other): a leg may land on a member's current cell because that member
+  // also leaves it, subject to the injective-permutation check below.
+  const coMovedActorIds = coMovedActorIdsForMove(mutations, legs[0].mutation);
   const simulation = structuredClone(state);
 
   // Effective destination per actor (the last explicit leg wins), used for
-  // the injectivity check and the vacating set.
+  // the injectivity check: two legs may not land on overlapping footprints
+  // (a co-moved actor is never an obstruction to another leg, so per-leg
+  // validation alone would let two actors stack on one destination).
   const effective = new Map<string, Position>();
   for (const { mutation } of legs) effective.set(mutation.actorId, mutation.positions.at(-1)!);
   const entries = [...effective].map(([actorId, position]) => ({ actorId, position, size: Math.max(1, simulation.actors[actorId]?.size ?? 1) }));
@@ -1380,50 +1420,39 @@ function atomicGroupDenied(
     }
   }
 
-  // Actors that provably vacate their current cell — across the whole batch,
-  // so a group leg can land on any cell whose occupant actually leaves. A
-  // co-moved actor that stays (destination = own cell, or a shove whose
-  // resolution is unknown) remains an obstruction.
-  const vacating: string[] = [];
-  for (const mutation of mutations) {
-    if (mutation.kind !== 'move' || mutation.movement === 'shove') continue;
-    const destination = mutation.movement === 'remove' ? null : mutation.positions.at(-1);
-    const actor = state.actors[mutation.actorId];
-    if (mutation.movement === 'remove' || (destination && actor?.position && !samePosition(actor.position, destination))) vacating.push(mutation.actorId);
-  }
-
-  // Simulate the whole batch; every group leg must land on its destination
-  // (a no-op landing on the actor's own cell counts as applied). Ungrouped
-  // legs and non-move mutations are simulated with the full co-moved set, so
-  // the decision matches the live per-leg application.
+  // Simulate the whole batch in mutation order; every group leg must land on
+  // its destination (a no-op landing on the actor's own cell counts as
+  // applied). Legs of other denied groups are skipped exactly as the live
+  // application skips them, so the decision matches the live fold.
   const legByIndex = new Map(legs.map(({ index, mutation }) => [index, mutation]));
   for (let index = 0; index < mutations.length; index += 1) {
     const mutation = mutations[index];
+    if (denied.has(index)) continue;
     const leg = legByIndex.get(index);
     if (leg) {
       const destination = leg.positions.at(-1)!;
-      applyRuleMutation(simulation, leg, index, vacating);
+      applyRuleMutation(simulation, leg, index, coMovedActorIds);
       const actor = simulation.actors[leg.actorId];
       if (!actor?.position || !samePosition(actor.position, destination)) return true;
     } else {
-      applyRuleMutation(simulation, mutation, index, coMovedActorIds);
+      applyRuleMutation(simulation, mutation, index, mutation.kind === 'move' ? coMovedActorIdsForMove(mutations, mutation) : undefined);
     }
   }
   return false;
 }
 
 export function applyRuleMutations(state: EncounterState, mutations: RuleMutation[]) {
-  // Actors with a move mutation in this batch vacate their cells; the spatial
-  // gateway treats them as co-moved so paired swaps and multi-target
-  // repositioning validate atomically instead of colliding mid-batch.
-  const coMovedActorIds = [...new Set(mutations.filter((mutation) => mutation.kind === 'move').map((mutation) => mutation.actorId))];
   // Source-declared atomic spatial groups: the `spatialBatchId` legs form a
   // permutation prevalidated against the same pre-swap state; either every
-  // leg of the group applies or none does — never a partial swap.
+  // leg of the group applies or none does — never a partial swap. Every
+  // other leg resolves per-leg, independently, against authoritative current
+  // occupancy: a leg's co-moved exemption is scoped to its OWN declared
+  // spatial group (empty for ungrouped legs) — never a batch-wide set of
+  // "everyone who moves somewhere in this event".
   const denied = deniedAtomicSpatialLegIndices(state, mutations);
   mutations.forEach((mutation, index) => {
     if (denied.has(index)) return;
-    applyRuleMutation(state, mutation, index, coMovedActorIds);
+    applyRuleMutation(state, mutation, index, mutation.kind === 'move' ? coMovedActorIdsForMove(mutations, mutation) : undefined);
   });
 }
 
@@ -1442,16 +1471,16 @@ export function collidingShoveTargets(state: EncounterState, mutations: readonly
   const targets: string[] = [];
   const simulation = structuredClone(state);
   // The dry run must mirror the live batch exactly: atomic-group legs denied
-  // by the prevalidation never apply, so they never contribute a collision.
+  // by the prevalidation never apply, so they never contribute a collision,
+  // and every leg applies with its own group-scoped co-moved set.
   const denied = deniedAtomicSpatialLegIndices(state, mutations);
-  const coMovedActorIds = [...new Set(mutations.filter((candidate) => candidate.kind === 'move').map((candidate) => candidate.actorId))];
   for (let index = 0; index < mutations.length; index += 1) {
     const mutation = mutations[index];
     if (denied.has(index)) continue;
     if (mutation.kind === 'move' && mutation.movement === 'shove' && mutation.positions.length === 0 && mutation.distance !== null) {
       if (shoveResolution(simulation, mutation)?.collided) targets.push(mutation.actorId);
     }
-    applyRuleMutation(simulation, mutation, index, coMovedActorIds);
+    applyRuleMutation(simulation, mutation, index, mutation.kind === 'move' ? coMovedActorIdsForMove(mutations, mutation) : undefined);
   }
   return targets;
 }
@@ -1463,12 +1492,12 @@ export function reactiveSlayTargets(state: EncounterState, mutations: RuleMutati
   const simulation = structuredClone(state);
   // The dry run must mirror the live batch exactly: atomic-group legs denied
   // by the prevalidation never apply, so they never move anyone into or out
-  // of a fatal position.
+  // of a fatal position, and every leg applies with its own group-scoped
+  // co-moved set.
   const denied = deniedAtomicSpatialLegIndices(state, mutations);
-  const coMovedActorIds = [...new Set(mutations.filter((candidate) => candidate.kind === 'move').map((candidate) => candidate.actorId))];
   mutations.forEach((mutation, index) => {
     if (denied.has(index)) return;
-    applyRuleMutation(simulation, mutation, index, coMovedActorIds);
+    applyRuleMutation(simulation, mutation, index, mutation.kind === 'move' ? coMovedActorIdsForMove(mutations, mutation) : undefined);
   });
   const slain: string[] = [];
   for (const [id, actor] of Object.entries(simulation.actors)) {

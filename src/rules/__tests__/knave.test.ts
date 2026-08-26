@@ -183,6 +183,44 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Strongarm talent 1: a comeback range-2 target is removed and placed into adjacency before the spin (F1 remove/place)', () => {
+    const { state, hero, foe } = knaveEncounter({ foe: { x: 3, y: 1 }, second: null });
+    state.actors[hero.id].talents = { 'knave:strongarm': 1 };
+    state.actors[hero.id].hp = 1; // bloodied → the comeback range override holds
+    // Range 2 is only legal with the talent's comeback override. The program
+    // then emits the F1 remove/place reposition BEFORE the spin: the target
+    // is removed and placed into the canonical first free adjacent cell
+    // (0,1), from which the circular spin starts.
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', targetIds: [foe.id] }, scriptedDice());
+    // The event's mutation stream is [actions spend, remove, place, shove…]:
+    // the F1 remove/place reposition precedes the spin.
+    const moves = mutationsOf(result.events, 'knave:strongarm').filter((mutation) => mutation.kind === 'move');
+    expect(moves[0]).toMatchObject({ actorId: foe.id, movement: 'remove' });
+    // The canonical first free adjacent cell (diagonals included, sorted by
+    // distance then coordinates) around the user at (1,1) is (0,0).
+    expect(moves[1]).toMatchObject({ actorId: foe.id, movement: 'place', positions: [{ x: 0, y: 0 }] });
+    // The spin (a place around the ring) then the final shove follow.
+    expect(moves.some((mutation) => mutation.movement === 'shove' && mutation.actorId === foe.id)).toBe(true);
+    expect(result.state.actors[foe.id].position).not.toEqual({ x: 1, y: 1 });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Strongarm talent 1: without the comeback trigger (or the talent) the range-2 target stays denied', () => {
+    // Strongarm is an effect ability (no Attack: line), so its hold range is
+    // enforced by the program's own gate mirroring the registered range rule:
+    // a range-2 target is only legal while the user is bloodied AND the
+    // talent is equipped. The remove/place reposition is never reached when
+    // the hold is denied.
+    const { state, hero, foe } = knaveEncounter({ foe: { x: 3, y: 1 }, second: null });
+    state.actors[hero.id].talents = { 'knave:strongarm': 1 };
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', targetIds: [foe.id] }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-range' }));
+    // No talent at all: the base ability stays a range-1 melee hold.
+    const plain = knaveEncounter({ foe: { x: 3, y: 1 }, second: null });
+    expect(() => executeCommand(plain.state, { type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'knave:strongarm', targetIds: [plain.foe.id] }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-range' }));
+  });
+
   it('Intimidate: marks a distant foe and ends the turn', () => {
     const { state, hero, foe } = knaveEncounter({ foe: { x: 6, y: 1 }, second: { x: 7, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:intimidate', targetIds: [foe.id] }, scriptedDice());

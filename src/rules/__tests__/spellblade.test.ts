@@ -99,6 +99,27 @@ describe('Spellblade ability automation (p.222–229)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Nothung talent 2: comeback widens both teleports toward the target to 4', () => {
+    // A diagonal target (range 2) makes the teleport distance observable: the
+    // walk along the dominant axis passes the target's column instead of
+    // stopping adjacent to it, so teleport 4 lands at (5,1) where teleport 1
+    // would land at (2,1).
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 2 }, second: null });
+    state.actors[hero.id].talents = { 'spellblade:nothung': 2 };
+    state.actors[hero.id].hp = 1; // bloodied → the comeback clause holds
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[hero.id].position).toEqual({ x: 5, y: 1 }); // walk 4 east
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Nothung talent 2: without the comeback trigger the teleports stay 1', () => {
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 2 }, second: null });
+    state.actors[hero.id].talents = { 'spellblade:nothung': 2 };
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 }); // walk 1 east
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Nothung slay/infuse (GRAM): flurries 1 piercing twice to foes in a burst 2 (self)', () => {
     const { state, hero, foe } = spellbladeEncounter({ second: null });
     state.actors[hero.id].resources.aether = 3;

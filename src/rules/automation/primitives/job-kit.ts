@@ -338,8 +338,9 @@ export const teleportMutation = (context: RuleExecutionContext, actorId: string,
  * Both flavors preserve forced-movement semantics at application time:
  * movement-entry triggers stay voluntary-MOVE/DASH-only (AGENTS §8), turn
  * entitlement is untouched (an ability effect, not a move command), and the
- * batch's co-moved set makes each destination legal despite being occupied
- * pre-batch. */
+ * declared group's co-moved set makes each destination legal despite being
+ * occupied pre-batch — the exemption is scoped to the legs of THIS swap
+ * group, never to unrelated movers in the same event. */
 export type SwapMovement = 'teleport' | 'place';
 
 /** The shared Swap primitive: paired destination mutations for two or more

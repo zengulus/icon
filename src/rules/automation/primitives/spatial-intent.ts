@@ -124,8 +124,12 @@ export interface SpatialIntent {
    * can return an actor, e.g. Heroic Intervention p.122). */
   from: Position | null;
   to: Position;
-  /** Actors that move within the same mutation batch — their current cells are
-   * not obstructions (paired swaps, multi-target repositioning). */
+  /** Actors in the SAME source-declared spatial group (legs sharing this
+   * intent's mutation `spatialBatchId`) — their current cells are not
+   * obstructions because they leave them in the same simultaneous swap.
+   * Group-scoped by design: an ungrouped leg carries no exemption, and
+   * actors in a different spatial batch are never exempted here
+   * (kernels/encounter-adapter.ts `coMovedActorIdsForMove`). */
   coMovedActorIds?: readonly string[];
   /** Rampart (p.104) blocks dashing, flying, and teleporting. The caller
    * computes this from the fortify/rampart/slip/unstoppable projection: a
