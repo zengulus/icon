@@ -121,9 +121,9 @@ assumption here, document the evidence and update this list before proceeding.
    (census regenerated, byte-stable). Per the regenerated census the next
    in-scope Step-6 family is the highest-immediate fold-shaped family — the
    highest-immediate families are entity-create (16), terrain-create (14),
-   range-modifier (11), then fly-grant/action-type-change/shove-modifier;
-   within the mastery/talent folds, range-modifier (11 immediate) is the
-   next fold-shaped family.
+   then fly-grant (14), action-type-change (10), shove-modifier (10);
+   within the mastery/talent folds, the next fold-shaped family is
+   action-type-change or shove-modifier (both 10 immediate).
 
    **Source-fidelity repair pass (2026-08-27):** Repaired three incorrect
    mastery-attack attachments: removed the invented Apex mastery Unerring
@@ -168,9 +168,31 @@ assumption here, document the evidence and update this list before proceeding.
    - resource-management (1): Conqueror's Edge — Infuse cost reduction
    The `range-modifier` singleton family is gone (11 → 0 immediate).
    Regenerated census: 423 unresolved, 0 residual.
-   New highest-immediate fold-shaped family: `entity-distance-selection` (5).
-   Next Step-6 family from the regenerated census: `entity-distance-selection`.
+   Highest-immediate fold-shaped families from the regenerated census:
+   `action-type-change` (10), `shove-modifier` (10), `charge-state` (8),
+   `effect-count` (8), `choice-input` (8), `resource-management` (7),
+   `entity-distance-selection` (5). The next Step-6 family should be
+   selected by the canonical highest-immediate rule; the prior claim that
+   `entity-distance-selection` was highest was incorrect.
    Full test suite green (1110 tests), all audits green.
+
+   **Entity-creation source-fidelity repair (2026-08-27):** Range validation
+   now uses the canonical p.92 footprint distance (L\u221e between occupied
+   footprints) instead of raw anchor-cell Chebyshev. creationOriginSize
+   threaded through RuleEffect \u2192 RuleMutation \u2192 reducer \u2192 kernel.
+   The VM origin selector rejects zero-actor origins before cost consumption.
+   End-to-end entity-creation regression tests added (RuleEffect \u2192
+   RuleMutation \u2192 reducer path with origin metadata and replay).
+   10 new tests added (summons + harvester), 1120 total.
+
+   **Dark Sliver Talent II sacrifice cost (2026-08-27):** Added the
+   `sacrifice-cost` talent registry (`kernels/talent-recipes.ts`) for
+   pre-resolution sacrifice HP costs. Dark Sliver t2 now pays Sacrifice 2
+   through the cost-payment authority when the talent choice is declared,
+   validated before any effect or RNG. Sacrifice fires at USE_ABILITY time
+   (before program resolution), recorded on the event for replay. 4 new
+   tests: sacrifice paid at start, no-choice produces no cost, insufficient
+   HP floors at 1, unequipped talent rejected.
 
 7. **Close one deliberately complex player-content vertical slice end to
    end:** persistent character → encounter → talents/masteries/interrupts/

@@ -17,7 +17,7 @@ import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
 import './automation/content/registry.js';
-import { talentReactiveTrigger, talentTriggerMutations, type TalentReactiveTargets } from './automation/kernels/talent-recipes.js';
+import { talentReactiveTrigger, talentTriggerMutations, getSacrificeCost, type TalentReactiveTargets } from './automation/kernels/talent-recipes.js';
 import { traitReactionMutations, traitReactionNeededTriggers } from './automation/kernels/trait-reactions.js';
 import { applyDeterminedDamageToVitals } from './automation/primitives/damage-resolution.js';
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
@@ -36,6 +36,7 @@ import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutati
 import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
 import { executeRuleProgram, integer, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
 import { assertRuleCostsPayable, costContextFromEncounter, effectiveRuleCosts, evaluateCosts, CostPaymentViolation } from './automation/kernels/cost-payment.js';
+import { sacrificeMutation } from './automation/primitives/cost-payment.js';
 import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
 import { hasLineOfSight as lineOfSightKernel } from './automation/primitives/line-of-sight.js';
 import { movementEntryTriggerMutations } from './automation/kernels/movement-triggers.js';
@@ -1362,6 +1363,19 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     }
     throw error;
   }
+  // Sacrifice-cost talents: when the player declares a talent choice that
+  // carries a pre-resolution sacrifice (ICON Sacrifice p.190: "The HP cost
+  // is paid at the start of the ability"), the sacrifice is validated and
+  // paid through the same cost-payment path as the ability's own costs —
+  // before any effect or RNG. The sacrifice mutation rides the ability's
+  // recorded event so replay applies exactly what the command decided.
+  const talentChoiceSet = new Set(command.input?.talentChoices ?? []);
+  for (const talentChoice of talentChoiceSet) {
+    const sacrificeAmount = getSacrificeCost(talentChoice);
+    if (sacrificeAmount !== undefined) {
+      abilityUseCostMutations.push(sacrificeMutation(ability.id, actor.id, sacrificeAmount));
+    }
+  }
   const ruleContext: RuleExecutionContext = {
     state: ruleStateView,
     encounterState: state,
@@ -1382,6 +1396,11 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     ...abilityUseCostMutations
       .filter((cost): cost is Extract<RuleMutation, { kind: 'resource' }> => cost.kind === 'resource')
       .map((cost) => ({ kind: 'use' as const, resourceId: cost.resourceId, amount: { kind: 'constant' as const, value: cost.amount } })),
+    // Sacrifice-cost talents: the sacrifice HP cost validated and paid
+    // at the start of the ability rides the same cost-validation gate.
+    ...abilityUseCostMutations
+      .filter((cost) => cost.kind === 'damage' && 'damageType' in cost && cost.damageType === 'sacrifice')
+      .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: (cost as Extract<RuleMutation, { kind: 'damage' }>).amount } })),
   ];
   assertProgramCostsPayable(state, actor, ability.name, ability.id, { costs: combinedCosts }, ruleContext);
   const result = executeRuleProgramWithReactiveTriggers(compilation.program, { ...ruleContext, abilityUseModifiers }, RULE_RESOLVERS, state);

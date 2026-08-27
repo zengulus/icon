@@ -1,5 +1,5 @@
 import type { EncounterEntity, EncounterState, Position } from '../../types.js';
-import { footprintCells } from '../primitives/spatial-intent.js';
+import { footprintCells, footprintDistance } from '../primitives/spatial-intent.js';
 import { hasLineOfSight } from '../primitives/line-of-sight.js';
 import { summonCap } from './summon-recipes.js';
 
@@ -16,8 +16,12 @@ export interface EntityCreationRequest {
    * checks line of sight from this position to each candidate cell and
    * optionally validates range. */
   origin?: Position;
-  /** Maximum distance from origin (Chebyshev). Validated only when origin is
-   * provided. Source-specific; the kernel does not hardcode one range. */
+  /** The origin actor's size for canonical p.92 footprint-distance range
+   * validation. When absent, the origin is treated as Size 1 (point cell). */
+  originSize?: number;
+  /** Maximum distance from origin (p.92 footprint metric). Validated only
+   * when origin is provided. Source-specific; the kernel does not hardcode
+   * one range. */
   maxRange?: number;
 }
 
@@ -75,10 +79,17 @@ export function validateEntityCreation(state: EncounterState, request: EntityCre
       for (const e of state.terrainEffects) if (e.positions.some((p) => p.x === pos.x && p.y === pos.y)) values.add(e.terrain);
       return values;
     }}, request.origin!, cell))) continue;
-    // Range validation (source-provided).
+    // ICON p.92: range validation using the canonical footprint metric (L∞
+    // between occupied footprints) — the same distance authority targeting,
+    // auras, and the attack modifiers use. For a Size-1 origin this
+    // collapses to plain Chebyshev. For larger origins, the distance is
+    // measured from the edge of the origin footprint, not the anchor cell.
     if (request.origin && request.maxRange !== undefined) {
-      const chebyshev = Math.max(Math.abs(position.x - request.origin.x), Math.abs(position.y - request.origin.y));
-      if (chebyshev > request.maxRange) continue;
+      const dist = footprintDistance(
+        { position: request.origin, size: request.originSize ?? 1 },
+        { position, size: 1 },
+      );
+      if (dist > request.maxRange) continue;
     }
     if (selected.some((cell) => sameCell(cell, position))) continue;
     selected.push({ ...position });

@@ -21,6 +21,7 @@ import type {
   RuleSelector,
   RuleStep,
 } from '../primitives/types.js';
+import type { Position } from '../../types.js';
 
 export class RuleProgramViolation extends Error {
   constructor(public readonly code: string, message: string) {
@@ -333,10 +334,23 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
         // The origin and maxRange are source-declared on the effect; evaluated
         // at command time and carried through to the reducer for authoritative
         // replay-safe enforcement.
-        const originActor = effect.origin ? selectActors(effect.origin, context)[0] : undefined;
-        const creationOrigin = originActor?.position ?? undefined;
+        // Fail-closed: if an entity effect declares an origin selector, the
+        // selector must resolve to exactly one actor with a valid battlefield
+        // position. Zero actors or actors without positions mean the source
+        // rule cannot determine where to create — the engine must reject,
+        // not silently skip LoS/range enforcement.
+        let creationOrigin: Position | undefined;
+        let creationOriginSize: number | undefined;
+        if (effect.origin) {
+          const originActors = selectActors(effect.origin, context);
+          if (originActors.length !== 1 || !originActors[0].position) {
+            throw new RuleProgramViolation('entity.origin-invalid', `Entity creation origin selector resolved to ${originActors.length} actor(s); expected exactly one with a valid position.`);
+          }
+          creationOrigin = originActors[0].position;
+          creationOriginSize = effect.originSize ? integer(effect.originSize, context) : originActors[0].size;
+        }
         const creationMaxRange = effect.maxRange;
-        for (const owner of owners) output.push({ kind: 'entity', sourceId: context.sourceId, operation: effect.operation, entityType: effect.entityType, ownerId: owner.id, positions: positions.slice(0, count), count, state: effect.state ?? {}, ...(effect.duration ? { duration: effect.duration } : {}), ...(creationOrigin ? { creationOrigin } : {}), ...(creationMaxRange !== undefined ? { creationMaxRange } : {}) });
+        for (const owner of owners) output.push({ kind: 'entity', sourceId: context.sourceId, operation: effect.operation, entityType: effect.entityType, ownerId: owner.id, positions: positions.slice(0, count), count, state: effect.state ?? {}, ...(effect.duration ? { duration: effect.duration } : {}), ...(creationOrigin ? { creationOrigin } : {}), ...(creationOriginSize !== undefined ? { creationOriginSize } : {}), ...(creationMaxRange !== undefined ? { creationMaxRange } : {}) });
         break;
       }
       case 'mark': for (const target of targets) output.push({ kind: 'mark', sourceId: context.sourceId, ownerId: context.actorId, operation: effect.operation, actorId: target.id, markId: effect.markId, ...(effect.duration ? { duration: effect.duration } : {}), state: effect.state ?? {} }); break;

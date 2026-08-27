@@ -225,6 +225,27 @@ export function registerMarkModifierTalent(sourceId: string, mechanic: string): 
   markModifierTalentRecipes[sourceId] = mechanic;
 }
 
+/** Sacrifice-cost talents: the talent's COMPLETE semantics include a
+ * pre-resolution sacrifice HP cost (ICON Sacrifice p.190: "The HP cost is
+ * paid at the start of the ability"). When the player declares the talent
+ * choice at USE_ABILITY time, the sacrifice is validated and paid through
+ * the same cost-payment authority the ability's own costs use — before any
+ * effect or RNG. The range/effect half (if any) is wired separately
+ * (e.g. through the range kernel). */
+const sacrificeCostTalentRecipes: Record<string, { sacrificeAmount: number; mechanic: string }> = {};
+
+/** Register a sacrifice-cost talent: the player-chosen talent triggers a
+ * sacrifice payment of `sacrificeAmount` HP at the start of the ability. */
+export function registerSacrificeCostTalent(sourceId: string, sacrificeAmount: number, mechanic: string): void {
+  sacrificeCostTalentRecipes[sourceId] = { sacrificeAmount, mechanic };
+}
+
+/** Whether a talent choice source ID carries a pre-resolution sacrifice
+ * cost that must be validated before the ability resolves. */
+export function getSacrificeCost(sourceId: string): number | undefined {
+  return sacrificeCostTalentRecipes[sourceId]?.sacrificeAmount;
+}
+
 /** Area-modifier talents: the talent's COMPLETE semantics are a shape/size
  * change on its parent ability's area ("Soul Shot becomes Line 6"), executed
  * by the shared area kernel (`kernels/area.ts`) inside the parent resolver
@@ -256,6 +277,7 @@ export function getExecutableTalentIds(): ReadonlySet<string> {
     ...Object.keys(areaModifierTalentRecipes),
     ...Object.keys(bonusDamageTalentRecipes),
     ...Object.keys(markModifierTalentRecipes),
+    ...Object.keys(sacrificeCostTalentRecipes),
   ]);
 }
 
@@ -266,7 +288,8 @@ export const isExecutableTalent = (sourceId: string): boolean =>
   || Object.prototype.hasOwnProperty.call(rangeModifierTalentRecipes, sourceId)
   || Object.prototype.hasOwnProperty.call(areaModifierTalentRecipes, sourceId)
   || Object.prototype.hasOwnProperty.call(bonusDamageTalentRecipes, sourceId)
-  || Object.prototype.hasOwnProperty.call(markModifierTalentRecipes, sourceId);
+  || Object.prototype.hasOwnProperty.call(markModifierTalentRecipes, sourceId)
+  || Object.prototype.hasOwnProperty.call(sacrificeCostTalentRecipes, sourceId);
 
 /** The mechanic text of a program-level talent implementation, or undefined
  * for a fold-wired or documented talent. */

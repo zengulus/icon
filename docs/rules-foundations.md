@@ -236,8 +236,11 @@ exemption — summoner occupies space like any character per the p.92 general
 rule), impassable terrain, and optionally line-of-sight and range from a
 declared origin (shared primitives LoS kernel). Origin/maxRange are
 source-declared on the `RuleMutation` entity kind and the VM `RuleEffect`
-tity type; the reducer threads them to the kernel at reducer authority.
-Mandatory vs optional creation remains a content-layer concern.
+entity type; the reducer threads them to the kernel at reducer authority.
+Range validation uses the canonical p.92 footprint distance (L\u221e between
+occupied footprints), not raw anchor-cell Chebyshev. The VM origin
+selector rejects zero-actor origins before cost consumption. Mandatory vs
+optional creation remains a content-layer concern.
 Holes: entity actions (a summon taking its own turn) are not modeled; Mob
 members absent.
 

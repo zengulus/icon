@@ -1,5 +1,5 @@
 import { registerRangeModifierRule } from '../../kernels/range.js';
-import { registerRangeModifierTalent } from '../../kernels/talent-recipes.js';
+import { registerRangeModifierTalent, registerSacrificeCostTalent } from '../../kernels/talent-recipes.js';
 
 /**
  * Range-modifier content rows (docs/rules-foundations.md §Range).
@@ -152,4 +152,12 @@ registerRangeModifierRule({
 registerRangeModifierTalent(
   'harvester:dark-sliver:talent:2',
   'Dark Sliver\'s listed range becomes 6 through the shared effective-range authority when the player declares the sacrifice talent choice at command time.',
+);
+// ICON p.187 Sacrifice rule (p.190): "The HP cost is paid at the start of
+// the ability." When the player declares the sacrifice talent choice, the
+// sacrifice-2 HP cost is validated and paid through the cost-payment
+// authority BEFORE the ability resolves, alongside the ability's own costs.
+registerSacrificeCostTalent(
+  'harvester:dark-sliver:talent:2', 2,
+  'Sacrifice 2 HP: Dark Sliver gains range 6. The sacrifice is paid at the start of the ability through the cost-payment authority.',
 );

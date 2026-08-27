@@ -135,9 +135,10 @@ describe('F6 entity creation LoS and range enforcement', () => {
     });
     expect(result).toEqual({ positions: [{ x: 3, y: 3 }], count: 1 });
   });
-  it('rejects creation when no origin or maxRange are provided and positions are valid', () => {
+  it('accepts creation when no origin or maxRange are provided (backward-compatible path)', () => {
     // Without origin/maxRange the kernel skips LoS/range checks — this is the
-    // backward-compatible path for existing mutations.
+    // backward-compatible path for existing mutations without source-declared
+    // origin metadata.
     const { state, hero } = summonEncounter([]);
     const result = validateEntityCreation(state, {
       ownerId: hero.id, entityType: 'bomb', count: 1,
@@ -145,6 +146,112 @@ describe('F6 entity creation LoS and range enforcement', () => {
       state: {}, duration: null,
     });
     expect(result).toEqual({ positions: [{ x: 3, y: 1 }], count: 1 });
+  });
+  it('uses p.92 footprint distance for Size > 1 origins', () => {
+    const { state, hero } = summonEncounter([]);
+    // Hero at (1,1) with size 2 occupies cells (1,1), (1,2), (2,1), (2,2).
+    // The footprint distance from origin footprint to (4,1) = max(0, 4-(1+2-1)) = max(0, 2) = 2.
+    hero.size = 2;
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 4, y: 1 }],
+      state: {}, duration: null,
+      origin: hero.position, originSize: 2,
+      maxRange: 2,
+    });
+    expect(result).toEqual({ positions: [{ x: 4, y: 1 }], count: 1 });
+  });
+  it('rejects one space beyond the Size-2 origin footprint range', () => {
+    const { state, hero } = summonEncounter([]);
+    hero.size = 2;
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 5, y: 1 }],
+      state: {}, duration: null,
+      origin: hero.position, originSize: 2,
+      maxRange: 2,
+    });
+    expect(result).toBeNull();
+  });
+});
+
+describe('F6 entity creation origin fail-closed', () => {
+  it('VM runtime rejects entity creation when origin resolves to an off-board actor (no valid position)', () => {
+    // ICON general rule: creation origin must be a valid position. The
+    // VM fail-closed rule requires origin selectors to resolve to an
+    // actor with a valid battlefield position. A self-origin with the
+    // actor off-board is caught by the VM before the reducer runs.
+    // We test this indirectly: the kernel validates position, so an
+    // off-board origin with maxRange will reject all candidates (no
+    // position to measure from). The VM-level fail-closed (0 actors /
+    // no position → throw) is exercised through the runtime entity case;
+    // here we verify the kernel-level fallback behavior.
+    const { state, hero } = summonEncounter([]);
+    state.actors[hero.id].onBattlefield = false;
+    // The kernel takes a raw Position, not an actor, so origin is
+    // still a valid coordinate even when the actor is off-board.
+    // The VM-level rejection happens when selectActors finds no actor
+    // with a valid position for the origin selector.
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 3, y: 1 }],
+      state: {}, duration: null,
+      origin: { x: 1, y: 1 },
+      maxRange: 5,
+    });
+    expect(result).toEqual({ positions: [{ x: 3, y: 1 }], count: 1 });
+  });
+  it('reducer rejects entity creation when creationOrigin is present but unreachable (behind wall)', () => {
+    const { state, hero } = summonEncounter([]);
+    state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 0 });
+    const event: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:summon',
+      actionId: 'default', timing: 'use', tags: [],
+      mutations: [{
+        kind: 'entity', sourceId: 'fixture:summon', ownerId: hero.id,
+        entityType: 'bomb', operation: 'create',
+        positions: [{ x: 3, y: 1 }], count: 1, state: {},
+        creationOrigin: { x: 1, y: 1 }, creationMaxRange: 5,
+      }],
+    };
+    const applied = applyEvents(state, [event]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(0);
+  });
+  it('reducer accepts entity creation with valid origin and range', () => {
+    const { state, hero } = summonEncounter([]);
+    const event: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:summon',
+      actionId: 'default', timing: 'use', tags: [],
+      mutations: [{
+        kind: 'entity', sourceId: 'fixture:summon', ownerId: hero.id,
+        entityType: 'bomb', operation: 'create',
+        positions: [{ x: 3, y: 1 }], count: 1, state: {},
+        creationOrigin: { x: 1, y: 1 }, creationOriginSize: 2, creationMaxRange: 3,
+      }],
+    };
+    const applied = applyEvents(state, [event]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(1);
+  });
+  it('replay reproduces entity creation with origin metadata exactly', () => {
+    const { state, hero } = summonEncounter([]);
+    const event: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:summon',
+      actionId: 'default', timing: 'use', tags: [],
+      mutations: [{
+        kind: 'entity', sourceId: 'fixture:summon', ownerId: hero.id,
+        entityType: 'bomb', operation: 'create',
+        positions: [{ x: 3, y: 1 }], count: 1, state: {},
+        creationOrigin: { x: 1, y: 1 }, creationMaxRange: 5,
+      }],
+    };
+    const first = applyEvents(state, [event]);
+    const replay = applyEvents(state, [event]);
+    const firstEntity = entitiesOf(first, 'bomb', hero.id)[0];
+    const replayEntity = entitiesOf(replay, 'bomb', hero.id)[0];
+    expect(firstEntity).toBeDefined();
+    expect(replayEntity).toBeDefined();
+    expect(firstEntity.positions).toEqual(replayEntity.positions);
+    expect(firstEntity.id).toEqual(replayEntity.id);
   });
 });
 

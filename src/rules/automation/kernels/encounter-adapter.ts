@@ -1245,6 +1245,7 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
           // ICON general rule: creation requires free, unobstructed, and LoS.
           // The origin/range are source-declared and carried through the mutation.
           ...(mutation.creationOrigin ? { origin: mutation.creationOrigin } : {}),
+          ...(mutation.creationOriginSize !== undefined ? { originSize: mutation.creationOriginSize } : {}),
           ...(mutation.creationMaxRange !== undefined ? { maxRange: mutation.creationMaxRange } : {}),
         });
         if (!validated) break;
