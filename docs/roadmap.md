@@ -37,8 +37,11 @@ The engine never automates table judgment without source justification.
   turn scheduler (explicit actor selection, Slow rounds, pending Delay) —
   authoritative with replay fixtures.
 - Content: all 144 Job abilities executable with replay fixtures; Mendicant
-  class traits; 53 talents; 27 Job traits; 22 foe ability recipes; 115 foe
-  trait keyword rows; foe role baselines; resource registry.
+  class traits; 56 talents; 27 Job traits; 22 foe ability recipes; 115 foe
+  trait keyword rows; foe role baselines; resource registry. The current
+  Step-6 mastery/talent tranche includes F1 teleport consumers, F5 mark rows,
+  F6a bonus-damage rows, and the K-P5 mastery fold; the remaining Class/Job
+  blocker set is regenerated in `docs/blocker-census.md`.
 - Verification: unit 993 tests green; e2e green; architecture +
   automation audits green; automation audit reports 3,103 explicitly
   unsupported clauses across 16 content kinds (the honest gap).
@@ -51,7 +54,9 @@ The engine never automates table judgment without source justification.
   `role:legend-turns`), replay-tested through the existing scheduler path —
   implemented 2026-08-26 (P2).
 - NOT built: playable camp/interlude scene flow; Mob model; foe phase engine;
-  Relic runtime; masteries; Limit Break effects.
+  Relic runtime; broad mastery/talent folds; Limit Break effects. The mastery
+  surface and four mastery rows are executable; the remaining rows stay
+  conservative and source-visible.
 
 ---
 
@@ -153,12 +158,12 @@ replay; closed negative for unequipped mastery.
 ## P4 — Forced-movement & entity primitives (FOUNDATION)
 
 **Goal.** Teleport/Place/Remove/Swap/Fly-grant as shared primitives so the
-census's top blockers stop forcing per-ability resolver code. The
-Teleport/Place/Remove/Swap half (F1) is DONE (2026-08-27) — shared gateway,
+census's top blockers stop forcing per-ability resolver code.The Teleport/Place/Remove/Swap half (F1) is DONE (2026-08-27) — shared gateway,
 source-declared atomic swap groups, group-scoped occupancy, and the
 `{teleport}` census family cleared — leaving Fly-grant, entity-create and
-terrain-create as the remaining high-fan-out blockers ({entity-create} 13,
-{terrain-create} 13, {fly-grant} 13).
+terrain-create as the remaining high-fan-out blockers. The regenerated census
+currently reports `{entity-create}` 16, `{terrain-create}` 14, and
+`{fly-grant}` 14 singleton blockers.
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

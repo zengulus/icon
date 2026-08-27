@@ -13,14 +13,14 @@ What must exist for the product to be genuinely complete, translated from
 | Damage kernel | AUTHORITATIVE | `automation/kernels/encounter-adapter.ts`, `damage-resolution`, `damage-ledger` | Determine → apply pipeline, armor/resistance/weakened/vulnerable/pierce/divine/vigor/Defiance/Defy Death, held damage, wounds on defeat |
 | Attack kernel | AUTHORITATIVE | `attack-resolution`, `attack-modifiers` | Roll, boons/curses, crit ≥20, Exceed ≥15, True Strike/Unerring/Evasion/Dodge/Stealth/Cover |
 | Save kernel | PARTIAL | `save-window` primitives, status-save ledger | Normal saves + reroll windows done; save-trigger breadth pending |
-| Targeting & spatial kernels | AUTHORITATIVE (core) | `targeting.ts`, `area.ts`, `range.ts`, `movement.ts`, `spatial-intent` | Target sets, areas (burst/blast/line/cone), range, LoS/LoE, cover, footprints (Size footprint half PENDING) |
-| Movement & forced movement | PARTIAL | `movement.ts`, movement-triggers kernel | Standard/dash/difficult/dangerous/elevation/Flying/Rush/Shove/Collide done; Teleport/Place/Swap shared primitives; source-declared swap batches prevalidate the destination permutation against pre-swap state and apply every leg or none, while ungrouped multi-target movement resolves per-leg (P4 consolidates) |
+| Targeting & spatial kernels | AUTHORITATIVE (core) | `targeting.ts`, `area.ts`, `range.ts`, `movement.ts`, `spatial-intent` | Target sets, areas (burst/blast/line/cone), listed-range modifiers, LoS/LoE, cover, footprints; remaining source-specific range/area attachment rows stay in the census. |
+| Movement & forced movement | PARTIAL | `movement.ts`, movement-triggers kernel | Standard/dash/difficult/dangerous/elevation/Flying/Rush/Shove/Collide done; Teleport/Place/Remove/Swap shared primitives; source-declared swap batches prevalidate the destination permutation against pre-swap state and apply every leg or none, while ungrouped multi-target movement resolves per-leg. Entity creation/caps are shared, but entity-specific lifecycle remains unresolved. |
 | Interrupt/window engine | AUTHORITATIVE (when-damaged, defeated, uses-ability, area-inclusion, targeted-by-ability, save-rolled) | `trigger-window.ts`, held-window reducer paths | LIFO windows, retarget, held damage/effects/saves — replay-tested. Vigilance triggers BLOCKED (B4) |
 | Lifecycle engine | AUTHORITATIVE | `lifecycle.ts` (F3), boundary expiry | Turn-start/end, round-start/end phases with recorded participants; cross-character ordering |
 | Resource registry | COMPLETE | `core.ts` RESOURCE_RULES | All nine shared resources with source pages, caps, reset scopes; reducer-enforced |
 | Turn-order content wiring | PARTIAL | entitlement/slow-eligibility registries | Elite/Legend production entitlement rows DONE (`role:elite-template`, `role:legend-turns`; B1 2026-08-26); no slow-eligibility content rows yet |
 | Combat settlement | COMPLETE | `encounter.ts` settlement + `characterFromActor` projection | Personal Resolve +1 at END_ENCOUNTER; durable attrition handoff; combat1→settlement→combat2 regression (`settlement.test.ts`) |
-| Player content runtime | PARTIAL | job/trait/talent/mastery/relic programs & recipes | 144/144 abilities; 27/65 traits; 53/288 talents; 4/136 masteries; 0/16 Limit Break effects; Relic runtime NOT STARTED |
+| Player content runtime | PARTIAL | job/trait/talent/mastery/relic programs & recipes | 144/144 abilities; 27/65 Job traits; 56/288 talents; 4/136 masteries; 0/16 Limit Break effects; Relic runtime NOT STARTED. Step-6 folds remain conservative and are tracked by the regenerated Class/Job census. |
 | Foe runtime | PARTIAL | `foes.ts`, foe recipes, trait projections | Profiles/roles/scaling construction + role turn entitlements done; 22 abilities executable; Mob BLOCKED; phases inert (B3) |
 | Local VTT (Lab) | COMPLETE (harness) | `BrowserVtt.tsx`, `vtt/*`, `vtt-room.ts` | Setup→selection→actions→persistence→replay in-browser; phase-exempt by design |
 | Realtime room authority | PARTIAL (preview) | `server/rooms.ts`, `index.ts` | Authz, redaction, revisions/CAS, checkpoints, reconnect basics, transport acceptance green; gated behind PHASE_THREE_READY |
@@ -43,7 +43,9 @@ defeat/wounds, END_TURN boundaries, settlement exit.
 PC with a Job trait (e.g., Demon Edge), wired talents, an equipped mastery, a
 Relic invoke, and an interrupt (Righteous Disdain or Riposte).
 **Blocking:** broad mastery/talent promotion beyond the landed K-P5 modifier-fold
-tranche (P3), Relic runtime (P5), Vigilance windows (B4).
+tranche (P3 / Step 6), Relic runtime (P5), Vigilance windows (B4). Current
+player coverage is 56/288 talents and 4/136 masteries; unresolved rows remain
+source-visible in the census.
 
 ### Slice C — Foe complexity — *blocked*
 Elite (double HP, two turns) or Legend (per-player turns, Juggernaut) with

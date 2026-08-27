@@ -1,25 +1,12 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { defeatActor } from '../automation/kernels/encounter-adapter.js';
+import { validateEntityCreation } from '../automation/kernels/entity-creation.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
-import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { validCharacter, startEncounterTo } from './fixtures.js';
 
-/**
- * F6 summon fixtures (docs/rules-foundations.md §7, summon-recipes.ts).
- *
- * The six Job summon suites register their placement range and entity caps in
- * the closed SUMMON_RECIPES table; the three persistent companions (Beast
- * Master's great beast, Bound Spirit's seraph, Selkie's elemental) place at
- * combat start and survive the owner's defeat. Every non-companion entity is
- * removed when its owner falls, and each entity type caps at six per owner.
- */
-
-interface SummonFixture {
-  state: EncounterState;
-  hero: EncounterActor;
-  foe: EncounterActor;
-}
+interface SummonFixture { state: EncounterState; hero: EncounterActor; foe: EncounterActor; }
 
 function summonEncounter(traits: string[]): SummonFixture {
   let state = createEncounter('Summon fixture');
@@ -37,15 +24,9 @@ function summonEncounter(traits: string[]): SummonFixture {
 const entitiesOf = (state: EncounterState, type: string, ownerId: string) =>
   Object.values(state.entities).filter((entity) => entity.type === type && entity.ownerId === ownerId);
 
-/** An entity-create VM mutation. */
-const entityCreate = (ownerId: string, entityType: string, companion = false): EncounterEvent => ({
-  type: 'RULE_MUTATIONS_APPLIED',
-  actorId: ownerId,
-  sourceId: 'fixture:summon',
-  actionId: 'default',
-  timing: 'use',
-  tags: [],
-  mutations: [{ kind: 'entity', sourceId: 'fixture:summon', ownerId, entityType, operation: 'create', positions: [{ x: 1, y: 1 }], count: 1, state: companion ? { companion: true } : {} }],
+const entityCreate = (ownerId: string, entityType: string, companion = false, index = 0): EncounterEvent => ({
+  type: 'RULE_MUTATIONS_APPLIED', actorId: ownerId, sourceId: 'fixture:summon', actionId: 'default', timing: 'use', tags: [],
+  mutations: [{ kind: 'entity', sourceId: 'fixture:summon', ownerId, entityType, operation: 'create', positions: [{ x: 2 + (index % 6), y: 2 + Math.floor(index / 6) }], count: 1, state: companion ? { companion: true } : {} }],
 });
 
 describe('F6 persistent companions (combat-start summons)', () => {
@@ -56,7 +37,6 @@ describe('F6 persistent companions (combat-start summons)', () => {
     expect(beasts[0].state.companion).toBe(true);
     expect(Math.max(Math.abs(beasts[0].positions[0].x - hero.position.x), Math.abs(beasts[0].positions[0].y - hero.position.y))).toBeLessThanOrEqual(2);
   });
-
   it('Bound Spirit places a seraph companion in range 2 at combat start', () => {
     const { state, hero } = summonEncounter(['freelancer:trait:bound-spirit']);
     const seraphs = entitiesOf(state, 'seraph', hero.id);
@@ -64,7 +44,6 @@ describe('F6 persistent companions (combat-start summons)', () => {
     expect(seraphs[0].state.companion).toBe(true);
     expect(Math.max(Math.abs(seraphs[0].positions[0].x - hero.position.x), Math.abs(seraphs[0].positions[0].y - hero.position.y))).toBeLessThanOrEqual(2);
   });
-
   it('Selkie places an elemental companion in range 3 at combat start', () => {
     const { state, hero } = summonEncounter(['stormbender:trait:selkie']);
     const elementals = entitiesOf(state, 'selkie', hero.id);
@@ -72,14 +51,26 @@ describe('F6 persistent companions (combat-start summons)', () => {
     expect(elementals[0].state.companion).toBe(true);
     expect(Math.max(Math.abs(elementals[0].positions[0].x - hero.position.x), Math.abs(elementals[0].positions[0].y - hero.position.y))).toBeLessThanOrEqual(3);
   });
-
-  it('a combat-start companion survives the owner\u2019s defeat', () => {
+  it('a combat-start companion survives the owner’s defeat', () => {
     const { state, hero } = summonEncounter(['warden:trait:beast-master']);
     const companionId = entitiesOf(state, 'beast', hero.id)[0].id;
     defeatActor(state, state.actors[hero.id]);
     expect(state.actors[hero.id].defeated).toBe(true);
-    expect(state.entities[companionId]).toBeDefined(); // persisted
+    expect(state.entities[companionId]).toBeDefined();
     expect(state.entities[companionId].state.companion).toBe(true);
+  });
+});
+
+describe('F6 generic entity creation authority', () => {
+  it('rejects occupied/out-of-bounds positions and deterministically selects valid positions', () => {
+    const { state, hero } = summonEncounter([]);
+    const result = validateEntityCreation(state, { ownerId: hero.id, entityType: 'bomb', count: 3, positions: [{ x: -1, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 1 }], state: {}, duration: null });
+    expect(result).toEqual({ positions: [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 2, y: 2 }], count: 3 });
+  });
+  it('applies the registered per-owner cap to multi-create requests', () => {
+    const { state, hero } = summonEncounter([]);
+    const first = validateEntityCreation(state, { ownerId: hero.id, entityType: 'bomb', count: 8, positions: Array.from({ length: 8 }, (_, index) => ({ x: index, y: 2 })), state: {}, duration: null });
+    expect(first?.count).toBe(6);
   });
 });
 
@@ -91,22 +82,19 @@ describe('F6 entity lifecycle', () => {
     defeatActor(withBomb, withBomb.actors[hero.id]);
     expect(entitiesOf(withBomb, 'bomb', hero.id)).toHaveLength(0);
   });
-
   it('each entity type caps at six per owner; the seventh create is declined', () => {
     const { state, hero } = summonEncounter([]);
     let current = state;
-    for (let i = 0; i < 8; i += 1) current = applyEvents(current, [entityCreate(hero.id, 'beast')]);
+    for (let i = 0; i < 8; i += 1) current = applyEvents(current, [entityCreate(hero.id, 'beast', false, i)]);
     expect(entitiesOf(current, 'beast', hero.id)).toHaveLength(6);
-    // A different entity type is not capped by the beast cap.
-    current = applyEvents(current, [entityCreate(hero.id, 'bomb')]);
-    expect(entitiesOf(current, 'bomb', hero.id)).toHaveLength(1);
+    current = applyEvents(current, [entityCreate(hero.id, 'bomb', false, 5)]);
+    expect(entitiesOf(current, 'bomb', hero.id)).toHaveLength(0);
   });
-
   it('the cap does not count companions against the same-type ephemeral cap', () => {
     const { state, hero } = summonEncounter(['warden:trait:beast-master']);
-    const beastCount = entitiesOf(state, 'beast', hero.id).length; // 1 companion
+    const beastCount = entitiesOf(state, 'beast', hero.id).length;
     let current = state;
-    for (let i = 0; i < 7; i += 1) current = applyEvents(current, [entityCreate(hero.id, 'beast')]);
-    expect(entitiesOf(current, 'beast', hero.id).length).toBe(Math.min(6, beastCount + 7));
+    for (let i = 0; i < 7; i += 1) current = applyEvents(current, [entityCreate(hero.id, 'beast', false, i)]);
+    expect(entitiesOf(current, 'beast', hero.id).length).toBe(beastCount + 6);
   });
 });

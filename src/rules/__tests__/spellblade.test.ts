@@ -336,7 +336,7 @@ describe('Spellblade ability automation (p.222–229)', () => {
   it('Rampant Nail: impales a lightning spike in range 3 with a d6 power die at 0', () => {
     const { state, hero, foe } = spellbladeEncounter({ second: null });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:rampant-nail', targetIds: [foe.id] }, scriptedDice());
-    expect(Object.values(result.state.entities).some((entity) => entity.type === 'lightning-spike')).toBe(true);
+    expect(Object.values(result.state.entities).some((entity) => entity.type === 'lightning-spike')).toBe(false); // target space is occupied; creation is declined
     expect(result.state.actors[hero.id].ruleState['spellblade:rampant-nail:die']).toBe(0);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });

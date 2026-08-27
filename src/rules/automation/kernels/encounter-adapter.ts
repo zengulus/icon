@@ -9,7 +9,7 @@ import type { AreaStateView } from './area.js';
 import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, type MasteryFoldStateView } from './mastery-fold.js';
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
-import { summonCap } from './summon-recipes.js';
+import { validateEntityCreation } from './entity-creation.js';
 import type { RuleActorView, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
 
 const statusIds = new Set<StatusId>(['slashed', 'blind', 'dazed', 'hatred', 'pacified', 'sealed', 'shattered', 'stunned', 'weakened', 'vulnerable']);
@@ -1235,12 +1235,16 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
         // F6: the six Job summon suites cap active entities per owner (max six
         // bombs/shadows/beasts/thralls/salt-sprites — summon-recipes.ts). A
         // create beyond the cap is declined deterministically.
-        const cap = summonCap(mutation.entityType);
-        if (cap !== null) {
-          const owned = Object.values(state.entities).filter((entity) => entity.type === mutation.entityType && entity.ownerId === mutation.ownerId).length;
-          if (owned >= cap) break;
-        }
-        const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, 'entity'), type: mutation.entityType, ownerId: mutation.ownerId, positions: clone(mutation.positions), state: { ...mutation.state }, duration: mutation.duration ?? null };
+        const validated = validateEntityCreation(state, {
+          ownerId: mutation.ownerId,
+          entityType: mutation.entityType,
+          positions: mutation.positions,
+          count: mutation.count,
+          state: mutation.state,
+          duration: mutation.duration ?? null,
+        });
+        if (!validated) break;
+        const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, 'entity'), type: mutation.entityType, ownerId: mutation.ownerId, positions: clone(validated.positions), state: { ...mutation.state }, duration: mutation.duration ?? null };
         state.entities[entity.id] = entity;
       }
       break;

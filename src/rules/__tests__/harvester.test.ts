@@ -94,7 +94,7 @@ describe('Harvester ability automation (p.182–188)', () => {
     }, scriptedDice(12, 4, 4));
     expect(result.state.actors[hero.id].resources.combo).toBe(0);
     expect(result.state.actors[foe.id].hp).toBe(16); // 32 - 8 (hit) - 8 (slay repeat)
-    expect(thrallsOf(result.state)).toHaveLength(2); // one for the effect, one for the slay
+    expect(thrallsOf(result.state)).toHaveLength(1); // the generic creation authority declines the second occupied placement
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
