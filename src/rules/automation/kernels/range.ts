@@ -119,6 +119,14 @@ export interface RangeModifierRule {
   /** Optional condition gate evaluated against the acting actor at command
    * time. Without a gate the rule always applies. */
   gate?: RangeModifierGate;
+  /** Optional named range scopes the rule modifies. A rule without an
+   * explicit scope list modifies the top-level attack range (`'attack'`).
+   * Source-declared INTERNAL ranges (placement selectors such as a soul-
+   * space or slay-placement) query the same authority by scope key, so a
+   * reviewed modifier like "increase ALL ranges by +1" (Dark Sliver talent
+   * 1, p.185) can declare every range it widens — the resolver never
+   * duplicates the gate logic. */
+  scopes?: ReadonlyArray<string>;
 }
 
 const rangeModifierRules: RangeModifierRule[] = [];
@@ -126,6 +134,22 @@ const rangeModifierRules: RangeModifierRule[] = [];
 /** Register a range-modifier rule (content/jobs/range-recipes.ts). */
 export function registerRangeModifierRule(rule: RangeModifierRule): void {
   rangeModifierRules.push(rule);
+}
+
+/** The scope keys a rule applies to: its declared `scopes`, or the default
+ * top-level `'attack'` scope when none are declared. */
+function ruleScopes(rule: RangeModifierRule): readonly string[] {
+  return rule.scopes ?? ['attack'];
+}
+
+/** The union of scope keys the registered rules for `sourceId` modify, or
+ * null when no range rule is registered for the unit. The compound-talent
+ * completeness manifest uses this to require every scope a compound talent's
+ * complete semantics need. */
+export function rangeModifierRuleScopes(sourceId: string): ReadonlySet<string> | null {
+  const rules = rangeModifierRules.filter((rule) => rule.sourceId === sourceId);
+  if (rules.length === 0) return null;
+  return new Set(rules.flatMap((rule) => ruleScopes(rule)));
 }
 
 function ruleApplies(rule: RangeModifierRule, view: RangeStateView, actorId: string): boolean {
@@ -149,15 +173,44 @@ function ruleApplies(rule: RangeModifierRule, view: RangeStateView, actorId: str
 }
 
 /**
- * The authoritative listed range of an ability after every registered
- * modifier for `abilityId` (scoped to `actionId` when given) applies. The
- * caller supplies the base range it would otherwise use (the source catalog
- * range for USE_ABILITY, the program action's range for EXECUTE_RULE), so
- * both gates agree on the same effective authority. Evaluated against the
- * current encounter state at command time — a conditional gate that stops
- * being true (stealth lost, healed above half) shrinks the range back
- * immediately.
+ * The authoritative range of `abilityId` at one named scope after every
+ * registered modifier for the ability (scoped to `actionId` when given)
+ * applies. The `'attack'` scope is the ability's top-level target range;
+ * source-declared internal ranges (terrain/slay placement selectors) query
+ * the same authority with their own scope key, so a reviewed modifier such
+ * as "increase all ranges by +1" widens every range it declares — the
+ * resolver never re-implements the gate. The caller supplies the base range
+ * it would otherwise use (the source catalog range for USE_ABILITY, the
+ * program action's range for EXECUTE_RULE, the source placement radius for
+ * an internal selector), so every consumer agrees on the same effective
+ * authority. Evaluated against the current encounter state at command time —
+ * a conditional gate that stops being true (stealth lost, healed above
+ * half) shrinks the range back immediately.
  */
+export function effectiveScopedRange(
+  view: RangeStateView,
+  actorId: string,
+  abilityId: string,
+  baseRange: number,
+  scope: string,
+  actionId?: string,
+): number {
+  let range = baseRange;
+  for (const rule of rangeModifierRules) {
+    if (rule.abilityId !== abilityId) continue;
+    if (rule.actionId !== undefined && rule.actionId !== actionId) continue;
+    if (!ruleScopes(rule).includes(scope)) continue;
+    if (!ruleApplies(rule, view, actorId)) continue;
+    range = rule.mode === 'add'
+      ? range + (rule.value === 'round' ? view.round : rule.value)
+      : rule.value === 'round' ? view.round : rule.value;
+  }
+  return Math.max(0, Math.floor(range));
+}
+
+/** The authoritative top-level target range of an ability: the `'attack'`
+ * scope of `effectiveScopedRange`, kept as the primary command-gate surface.
+ * Both USE_ABILITY and EXECUTE_RULE read this before accepting a target. */
 export function effectiveAbilityRange(
   view: RangeStateView,
   actorId: string,
@@ -165,16 +218,7 @@ export function effectiveAbilityRange(
   baseRange: number,
   actionId?: string,
 ): number {
-  let range = baseRange;
-  for (const rule of rangeModifierRules) {
-    if (rule.abilityId !== abilityId) continue;
-    if (rule.actionId !== undefined && rule.actionId !== actionId) continue;
-    if (!ruleApplies(rule, view, actorId)) continue;
-    range = rule.mode === 'add'
-      ? range + (rule.value === 'round' ? view.round : rule.value)
-      : rule.value === 'round' ? view.round : rule.value;
-  }
-  return Math.max(0, Math.floor(range));
+  return effectiveScopedRange(view, actorId, abilityId, baseRange, 'attack', actionId);
 }
 
 // ── Audit compilation ────────────────────────────────────────────────────────

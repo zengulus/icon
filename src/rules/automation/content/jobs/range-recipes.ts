@@ -1,5 +1,5 @@
 import { registerRangeModifierRule } from '../../kernels/range.js';
-import { registerPreUseTalentAugmentation, registerRangeModifierTalent } from '../../kernels/talent-recipes.js';
+import { registerCompoundTalentCompleteness, registerPreUseTalentAugmentation, registerRangeModifierTalent } from '../../kernels/talent-recipes.js';
 
 /**
  * Range-modifier content rows (docs/rules-foundations.md §Range).
@@ -121,19 +121,23 @@ registerRangeModifierRule({
 });
 
 // ICON p.185 Harvester Dark Sliver talent 1: "Comeback: Deal bonus damage,
-// and increase all ranges by +1." Dark Sliver lists Range 2; under Comeback
-// (user bloodied) the attack target may be chosen at range 3. The bonus-
-// damage half of the talent is the bonus-damage rule in
-// bonus-damage-recipes.ts, so this rule is the range authority only and the
-// talent is NOT allowlisted as a range-modifier row (program-level bonus-
-// damage row instead).
+// and increase all ranges by +1." "All ranges" is a scoped range rule: the
+// attack Range 2 becomes 3, AND the source-declared internal ranges — the
+// terrain-effect soul-space selector and the Slay plant placement, both
+// "range 3 of your foe" — become 4. The resolver queries the SAME authority
+// by scope key (harvester-programs.ts), so the Comeback gate lives here
+// once. The bonus-damage half is the bonus-damage rule in
+// bonus-damage-recipes.ts; the compound completeness manifest below requires
+// BOTH the full scope set and the bonus-damage rule before the talent audits
+// complete.
 registerRangeModifierRule({
   sourceId: 'harvester:dark-sliver:talent:1',
   abilityId: 'harvester:dark-sliver',
-  mode: 'override',
-  value: 3,
+  mode: 'add',
+  value: 1,
   talent: 1,
   gate: { kind: 'comeback' },
+  scopes: ['attack', 'terrain-placement', 'slay-placement'],
 });
 
 // ICON p.187 Harvester Dark Sliver talent 2: "Sacrifice 2: Ability gains
@@ -156,7 +160,7 @@ registerRangeModifierTalent(
   'harvester:dark-sliver:talent:2',
   'Dark Sliver\'s listed range becomes 6 through the shared effective-range authority when the player declares the sacrifice talent choice at command time.',
 );
-// ICON p.187 + Combat Glossary Sacrifice (p.102): "Sacrifice costs are paid
+// ICON p.187 + Combat Glossary Sacrifice (p.103): "Sacrifice costs are paid
 // at the start of an ability, cannot be reduced, ignored, transferred, or
 // resisted, cannot bring your hp below 1, and you can pay them even if you
 // don\'t have enough hp left." The augmentation row is the COMPLETE-semantics
@@ -174,3 +178,28 @@ registerPreUseTalentAugmentation({
   costs: [{ kind: 'sacrifice', amount: 2 }],
   mechanic: 'Sacrifice 2 HP: Dark Sliver gains range 6. The sacrifice is paid at the start of the ability through the cost-payment authority; the range override is gated on the same validated choice.',
 });
+
+// ── Compound talent completeness manifests ──────────────────────────────────
+// A range recipe may mark a source unit complete by itself only when the
+// reviewed unit's COMPLETE semantics are exclusively that range change.
+// Compound talents register an explicit composite manifest (kernels/
+// talent-recipes.ts) naming EVERY required semantic component; the compiler
+// audits the unit complete only when each component is genuinely wired, and
+// the audit fails if any one is removed.
+//
+// ICON p.185 Dark Sliver talent 1: "Comeback: Deal bonus damage, and increase
+// all ranges by +1." Complete semantics = the comeback-gated range rule
+// covering ALL THREE scopes (attack + the two internal placement ranges) AND
+// the comeback bonus-damage rule.
+registerCompoundTalentCompleteness('harvester:dark-sliver:talent:1', [
+  { kind: 'range-modifier', scopes: ['attack', 'terrain-placement', 'slay-placement'] },
+  { kind: 'bonus-damage' },
+]);
+
+// ICON p.187 Dark Sliver talent 2: "Sacrifice 2: Ability gains range 6."
+// Complete semantics = BOTH the validated Range-6 modifier (choice-gated
+// through the range kernel) AND the pre-use Sacrifice-2 augmentation.
+registerCompoundTalentCompleteness('harvester:dark-sliver:talent:2', [
+  { kind: 'range-modifier' },
+  { kind: 'pre-use-augmentation' },
+]);

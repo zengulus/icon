@@ -323,7 +323,7 @@ function sacrificeEncounter(over: { armor?: number; vigor?: number; defiance?: b
   return { state, heroId: hero.id };
 }
 
-describe('cost-payment: Sacrifice (Combat Glossary p.102)', () => {
+describe('cost-payment: Sacrifice (Combat Glossary p.103)', () => {
   it('with HP above the cost, HP is reduced by exactly the cost', () => {
     const { state, heroId } = sacrificeEncounter({ hp: 40 });
     applyRuleMutations(state, [sacrificeMutation('fixture:sacrifice', heroId, 6)]);

@@ -1240,6 +1240,15 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
         // contract carried through the mutation; the kernel rejects a range
         // without a valid in-bounds origin (fail-closed — a malformed
         // maxRange-only mutation can never become unlimited creation).
+        // Legacy spatial fields (creationOrigin/creationOriginSize/
+        // creationMaxRange from the pre-creationSpatial representation) are
+        // never emitted by new command construction; the migration boundary
+        // rewrites persisted events to creationSpatial. If one still reaches
+        // the reducer un-migrated, the creation is DECLINED — an old event
+        // with spatial restrictions can never silently become unrestricted
+        // creation because this code no longer reads the old fields.
+        const legacyEntity = mutation as Extract<RuleMutation, { kind: 'entity' }> & { creationOrigin?: unknown; creationOriginSize?: unknown; creationMaxRange?: unknown };
+        if (legacyEntity.creationOrigin !== undefined || legacyEntity.creationOriginSize !== undefined || legacyEntity.creationMaxRange !== undefined) break;
         const validated = validateEntityCreation(state, {
           ownerId: mutation.ownerId,
           entityType: mutation.entityType,

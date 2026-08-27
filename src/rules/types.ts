@@ -626,7 +626,8 @@ export interface EncounterTerrainEffect {
 }
 
 /**
- * A source-backed optional choice the player may make before an ability  * resolves (e.g. ICON p.184/p.191 Blessing of Rebirth / Blessing of War
+ * A source-backed optional choice the player may make before an ability
+ * resolves (e.g. ICON p.184/p.191 Blessing of Rebirth / Blessing of War
  * "spend N blessings"). The client names the narrow decision (which trait's
  * option and how much to spend); the rules engine derives every consequence
  * (resource spends, boons, bonus damage, pierce, forced triggers) from the
@@ -643,7 +644,8 @@ export interface AbilityUseChoice {
 
 /**
  * The player-declared input accepted by the core command save windows and the
- * pre-resolution ability-use choice fold. It keeps p.102 Blessing decisions  * and p.184/p.191 ability-use choices explicit without exposing the generic
+ * pre-resolution ability-use choice fold. It keeps p.102 Blessing decisions
+ * and p.184/p.191 ability-use choices explicit without exposing the generic
  * RuleProgram input surface on ordinary encounter commands.
  */
 export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices' | 'positions'> & {

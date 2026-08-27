@@ -164,6 +164,15 @@ export function registerRecipientBonusDamageRule(rule: RecipientBonusDamageRule)
   recipientBonusDamageRules.push(rule);
 }
 
+/** True when any bonus-damage rule (use-gated or recipient-scoped) is
+ * registered for `sourceId`. The compound-talent completeness manifest uses
+ * this to require a compound talent's bonus-damage component to be genuinely
+ * wired — a manifest entry never audits complete on a bare allowlist. */
+export function hasBonusDamageRule(sourceId: string): boolean {
+  return bonusDamageRules.some((rule) => rule.sourceId === sourceId)
+    || recipientBonusDamageRules.some((rule) => rule.sourceId === sourceId);
+}
+
 /**
  * The total bonus dice a damage roll against `recipientId` carries, per every
  * registered recipient-scoped rule whose source+recipient gate holds. Read at

@@ -71,6 +71,57 @@ const positionWithinGrid = (position: Position, state: Pick<EncounterState, 'gri
   position.x >= 0 && position.y >= 0 && position.x < state.grid.width && position.y < state.grid.height;
 
 /**
+ * Legacy entity-creation spatial normalization (schema-7 compatibility).
+ *
+ * aa736a6 renamed the durable entity RuleMutation spatial metadata from the
+ * independent `creationOrigin` / `creationOriginSize` / `creationMaxRange`
+ * fields into the single PAIRED `creationSpatial` contract. Persisted
+ * encounter/event data can still carry mutations emitted under the previous
+ * representation, and the new reducer only reads `creationSpatial` — so an
+ * old event with spatial restrictions must be REWRITTEN at the migration
+ * boundary, never allowed to replay as unrestricted creation because the
+ * reducer ignores the old fields.
+ *
+ * The migration rewrites a legacy mutation carrying a usable `creationOrigin`
+ * into the current shape and drops the legacy fields; a legacy
+ * `creationMaxRange` WITHOUT a usable origin is left untouched so the
+ * reducer's fail-closed guard declines that creation (a range with no origin
+ * can never become unlimited). New command construction never emits the
+ * legacy shape — the RuleMutation type has no such fields.
+ */
+function normalizeLegacyEntityMutation(mutation: unknown): unknown {
+  if (!mutation || typeof mutation !== 'object' || Array.isArray(mutation)) return mutation;
+  const record = mutation as Record<string, unknown>;
+  if (record.kind !== 'entity' || record.operation === 'remove') return mutation;
+  const origin = record.creationOrigin;
+  if (!origin || typeof origin !== 'object' || Array.isArray(origin)) return mutation;
+  const position = origin as Position;
+  if (!Number.isSafeInteger(position.x) || !Number.isSafeInteger(position.y)) return mutation;
+  const size = record.creationOriginSize;
+  const maxRange = record.creationMaxRange;
+  const creationSpatial: Record<string, unknown> = {
+    origin: { x: position.x, y: position.y },
+    originSize: typeof size === 'number' && Number.isSafeInteger(size) && size >= 1 ? size : 1,
+  };
+  if (typeof maxRange === 'number' && Number.isSafeInteger(maxRange) && maxRange >= 0) creationSpatial.maxRange = maxRange;
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (key === 'creationOrigin' || key === 'creationOriginSize' || key === 'creationMaxRange') continue;
+    normalized[key] = value;
+  }
+  normalized.creationSpatial = creationSpatial;
+  return normalized;
+}
+
+/** Rewrite legacy entity-creation spatial fields inside one durable mutation
+ * list (a RULE_MUTATIONS_APPLIED event's `mutations` or a held-interrupt
+ * window's `heldEffects`). Non-mutation values pass through untouched. */
+function normalizeLegacyMutationList(mutations: unknown): unknown {
+  if (!Array.isArray(mutations)) return mutations;
+  return mutations.map((mutation) => normalizeLegacyEntityMutation(mutation));
+}
+
+/**
  * The websocket schema already requires these fields, but local/imported
  * callers can invoke the reducer directly. Canonicalize optional historical
  * provenance at the reducer boundary so an accepted ADD_ACTOR event can
@@ -219,12 +270,44 @@ export function migrateEncounter(input: unknown): EncounterState {
       : null),
     entities: clone(candidate.entities ?? {}),
     terrainEffects: clone(candidate.terrainEffects ?? []),
-    pendingInterrupts: clone(candidate.pendingInterrupts ?? []),
+    // Schema-7 representation normalization: rewrite legacy entity-creation
+    // spatial fields (creationOrigin/creationOriginSize/creationMaxRange) on
+    // any durable mutation list — event history and held interrupt windows —
+    // into the current paired `creationSpatial` contract, so an old event
+    // with spatial restrictions can never replay as unrestricted creation
+    // (see normalizeLegacyEntityMutation). The version is unchanged: the
+    // durable current-state shape is already schema 7; this boundary
+    // upgrades the audit/display event history to the same representation.
+    pendingInterrupts: normalizeInterruptWindows(clone(candidate.pendingInterrupts ?? [])),
     // A migration may add canonical fields, but it must never erase an older
     // event simply to fit the current bounded-history policy. Reject and ask
     // for an explicit archive/compaction decision instead.
-    eventLog: candidate.eventLog ? clone(candidate.eventLog) : [],
+    eventLog: normalizeEventLog(candidate.eventLog ? clone(candidate.eventLog) : []),
   };
+}
+
+/** Normalize legacy entity mutations across a migrated encounter's held
+ * interrupt windows (their `heldEffects` are the triggering ability's
+ * already-generated durable mutation lists). */
+function normalizeInterruptWindows(windows: EncounterPendingInterrupt[]): EncounterPendingInterrupt[] {
+  for (const window of windows) {
+    if (window.heldEffects !== undefined) {
+      (window as { heldEffects: unknown }).heldEffects = normalizeLegacyMutationList(window.heldEffects);
+    }
+  }
+  return windows;
+}
+
+/** Normalize legacy entity mutations across a migrated encounter's event
+ * history (RULE_MUTATIONS_APPLIED events carry the ability's durable
+ * mutation lists). */
+function normalizeEventLog(eventLog: EncounterEvent[]): EncounterEvent[] {
+  for (const event of eventLog) {
+    if (event.type === 'RULE_MUTATIONS_APPLIED') {
+      (event as { mutations: unknown }).mutations = normalizeLegacyMutationList(event.mutations);
+    }
+  }
+  return eventLog;
 }
 
 export function actorFromCharacter(character: IconCharacter, position: Position, controllerId: string | null = null): EncounterActor {
@@ -1374,7 +1457,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // Pre-use talent augmentations: the validated declared choices for THIS
   // ability (equipped rank, parent-ability match, deduplicated) resolve once
   // here, before any effect or RNG. The cost half rides the same
-  // cost-payment path as the ability's own costs (Sacrifice p.102: "paid at
+  // cost-payment path as the ability's own costs (Sacrifice p.103: "paid at
   // the start of an ability"), and the validated source-ID set is what the
   // range kernel's choice gate reads — so the sacrifice mutation and the
   // range override always travel together, and an unrelated or unequipped

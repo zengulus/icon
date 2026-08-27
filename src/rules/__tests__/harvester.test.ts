@@ -6,6 +6,7 @@ import { encounterConditionSet } from '../automation/kernels/encounter-adapter.j
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
+import type { RuleMutation } from '../automation/primitives/types.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
 
@@ -49,6 +50,32 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 const thrallsOf = (state: EncounterState) => Object.values(state.entities).filter((entity) => entity.type === 'thrall');
+
+/** Occupy every in-grid cell within Chebyshev `radius` of `center` (except the
+ * center itself and the hero's cell) with blocker entities, so the Dark
+ * Sliver soul-space / plant selectors can only find free cells BEYOND the
+ * radius — pinning the exact placement range a test wants to prove. */
+function blockCellsNear(state: EncounterState, center: Position, radius: number): EncounterState {
+  const hero = Object.values(state.actors).find((actor) => actor.side === 'heroes')!;
+  const cells: Position[] = [];
+  for (let dx = -radius; dx <= radius; dx += 1) {
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      const cell = { x: center.x + dx, y: center.y + dy };
+      if (dx === 0 && dy === 0) continue;
+      if (cell.x < 0 || cell.y < 0 || cell.x >= state.grid.width || cell.y >= state.grid.height) continue;
+      if (cell.x === hero.position.x && cell.y === hero.position.y) continue; // already occupied by the hero
+      cells.push(cell);
+    }
+  }
+  const mutations: RuleMutation[] = cells.map((position, index) => ({
+    kind: 'entity', sourceId: 'fixture:blocker', operation: 'create', entityType: 'blocker',
+    ownerId: hero.id, positions: [position], count: 1, state: {},
+  }));
+  return applyEvents(state, [{
+    type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:blocker', actionId: 'default', timing: 'use', tags: [],
+    mutations,
+  }]);
+}
 
 describe('Harvester ability automation (p.182–188)', () => {
   it('marks all nine abilities executable in the catalog and audit', () => {
@@ -415,8 +442,84 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(applyEvents(comeback.state, at2.events)).toEqual(at2.state);
   });
 
+  it('Dark Sliver talent 1: healthy — the terrain-effect soul-space selector stays at Range 3 (p.185)', () => {
+    // Talent 1 equipped but NOT bloodied: no Comeback, so the attack range
+    // stays 2 (target at distance 2 is legal) and the soul-space selector
+    // stays at its source Range 3. Blocking every cell within distance 2 of
+    // the foe leaves the first free cell at exactly distance 3 — the
+    // soul-space must land there, proving the healthy placement range.
+    const fixture = harvesterEncounter({ second: null });
+    fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 1 };
+    fixture.state.actors[fixture.hero.id].hp = fixture.state.actors[fixture.hero.id].baseMaxHp; // healthy
+    fixture.state.actors[fixture.foe.id].position = { x: 0, y: 0 };
+    fixture.state.actors[fixture.hero.id].position = { x: 2, y: 0 }; // distance 2: legal at base Range 2
+    const blocked = blockCellsNear(fixture.state, { x: 0, y: 0 }, 2);
+    const result = executeCommand(blocked, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [fixture.foe.id] }, scriptedDice(12, 4));
+    const soul = Object.values(result.state.entities).find((entity) => entity.type === 'soul-space');
+    expect(soul).toBeDefined();
+    expect(soul!.positions[0]).toEqual({ x: 0, y: 3 }); // the first free cell at exactly distance 3
+    expect(applyEvents(blocked, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Dark Sliver talent 1 Comeback: the soul-space selector legally reaches Range 4, never Range 5 (p.185)', () => {
+    // Bloodied → Comeback: "increase all ranges by +1" widens the soul-space
+    // selector 3 → 4. Blocking every cell within distance 3 of the foe leaves
+    // the first free cell at distance 4 — the soul-space lands there. A
+    // second layout blocks everything within distance 4, leaving only
+    // distance-5 cells free: no soul-space is created, proving the selector
+    // never uses Range 5.
+    const fixture = harvesterEncounter({ second: null });
+    fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 1 };
+    fixture.state.actors[fixture.hero.id].hp = 1; // bloodied
+    fixture.state.actors[fixture.foe.id].position = { x: 0, y: 0 };
+    fixture.state.actors[fixture.hero.id].position = { x: 2, y: 0 }; // distance 2: legal under Comeback Range 3
+    const range4 = blockCellsNear(fixture.state, { x: 0, y: 0 }, 3);
+    const at4 = executeCommand(range4, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [fixture.foe.id] }, scriptedDice(12, 4));
+    const soul = Object.values(at4.state.entities).find((entity) => entity.type === 'soul-space');
+    expect(soul).toBeDefined();
+    expect(soul!.positions[0]).toEqual({ x: 0, y: 4 }); // the first free cell at exactly distance 4
+    expect(applyEvents(range4, at4.events)).toEqual(at4.state); // replay
+
+    const range5 = blockCellsNear(fixture.state, { x: 0, y: 0 }, 4);
+    const noSoul = executeCommand(range5, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [fixture.foe.id] }, scriptedDice(12, 4));
+    expect(Object.values(noSoul.state.entities).some((entity) => entity.type === 'soul-space')).toBe(false);
+    // The ability itself still resolved normally (attack + damage); replay is
+    // stable with the declined placement.
+    expect(applyEvents(range5, noSoul.events)).toEqual(noSoul.state);
+  });
+
+  it('Dark Sliver talent 1 Comeback: the Slay plant placement legally reaches Range 4, never Range 5 (p.185)', () => {
+    // The Slay clause's "create a plant in range 3 of your foe" is an "all
+    // ranges" scope too: under Comeback it becomes range 4. Blocking every
+    // cell within distance 3 leaves the first free cell at distance 4 — the
+    // plant lands there. With everything within distance 4 blocked, no plant
+    // is created even though distance-5 cells are free.
+    const fixture = harvesterEncounter({ second: null });
+    fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 1 };
+    fixture.state.actors[fixture.hero.id].hp = 1; // bloodied
+    fixture.state.actors[fixture.foe.id].position = { x: 0, y: 0 };
+    fixture.state.actors[fixture.hero.id].position = { x: 2, y: 0 };
+    const range4 = blockCellsNear(fixture.state, { x: 0, y: 0 }, 3);
+    const slay4 = executeCommand(range4, {
+      type: 'EXECUTE_RULE', actorId: fixture.hero.id, sourceId: 'harvester:dark-sliver',
+      actionId: 'default', timing: 'use', attackTargetId: fixture.foe.id, input: {}, triggers: ['slay'],
+    }, scriptedDice(12, 4));
+    const plant = Object.values(slay4.state.entities).find((entity) => entity.type === 'plant');
+    expect(plant).toBeDefined();
+    expect(plant!.positions[0]).toEqual({ x: 0, y: 4 }); // the first free cell at exactly distance 4
+    expect(applyEvents(range4, slay4.events)).toEqual(slay4.state); // replay
+
+    const range5 = blockCellsNear(fixture.state, { x: 0, y: 0 }, 4);
+    const noPlant = executeCommand(range5, {
+      type: 'EXECUTE_RULE', actorId: fixture.hero.id, sourceId: 'harvester:dark-sliver',
+      actionId: 'default', timing: 'use', attackTargetId: fixture.foe.id, input: {}, triggers: ['slay'],
+    }, scriptedDice(12, 4));
+    expect(Object.values(noPlant.state.entities).some((entity) => entity.type === 'plant')).toBe(false);
+    expect(applyEvents(range5, noPlant.events)).toEqual(noPlant.state);
+  });
+
   it('Dark Sliver talent 2: "Sacrifice 2: Ability gains range 6" (p.187)', () => {
-    // ICON p.187 + Combat Glossary Sacrifice (p.102): "Sacrifice costs are
+    // ICON p.187 + Combat Glossary Sacrifice (p.103): "Sacrifice costs are
     // paid at the start of an ability". The sacrifice-2 is validated and
     // paid through the cost-payment authority before any effect or RNG, and
     // the range becomes 6 through the range kernel's choice gate — both
@@ -455,7 +558,7 @@ describe('Harvester ability automation (p.182–188)', () => {
   });
 
   it('Dark Sliver talent 2: sacrifice with insufficient HP still pays (floor 1)', () => {
-    // ICON Sacrifice p.102: the cost "cannot bring your hp below 1, and you
+    // ICON Sacrifice p.103: the cost "cannot bring your hp below 1, and you
     // can pay them even if you don't have enough hp left" — floor 1 HP.
     const fixture = harvesterEncounter({ second: null, foe: { x: 6, y: 1 } });
     fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 2 };

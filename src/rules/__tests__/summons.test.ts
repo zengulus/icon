@@ -4,8 +4,8 @@ import { defeatActor, encounterRuleState } from '../automation/kernels/encounter
 import { validateEntityCreation } from '../automation/kernels/entity-creation.js';
 import { executeRuleProgram, RuleProgramViolation } from '../automation/kernels/runtime.js';
 import type { RuleEffect, RuleExecutionContext, RuleMutation, RuleProgram, RuleSelector } from '../automation/primitives/types.js';
-import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
-import type { EncounterActor, EncounterEvent, EncounterState, Position } from '../types.js';
+import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand, migrateEncounter } from '../encounter.js';
+import type { EncounterActor, EncounterEvent, EncounterState, Position, TerrainCell } from '../types.js';
 import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 interface SummonFixture { state: EncounterState; hero: EncounterActor; foe: EncounterActor; }
@@ -364,5 +364,196 @@ describe('F6 entity lifecycle', () => {
     let current = state;
     for (let i = 0; i < 7; i += 1) current = applyEvents(current, [entityCreate(hero.id, 'beast', false, i)]);
     expect(entitiesOf(current, 'beast', hero.id).length).toBe(beastCount + 6);
+  });
+});
+
+describe('legacy entity-event spatial migration (schema-7 compatibility)', () => {
+  /** A RULE_MUTATIONS_APPLIED event carrying an entity mutation in the
+   * PRE-creationSpatial durable shape (aa736a6's `creationOrigin` /
+   * `creationOriginSize` / `creationMaxRange` fields). */
+  const legacyEvent = (heroId: string, positions: Position[], options: { maxRange?: number } = {}): EncounterEvent => {
+    const mutation: Record<string, unknown> = {
+      kind: 'entity', sourceId: 'fixture:legacy', operation: 'create', entityType: 'bomb',
+      ownerId: heroId, positions, count: 1, state: {},
+      creationOrigin: { x: 1, y: 1 }, creationOriginSize: 1,
+    };
+    if (options.maxRange !== undefined) mutation.creationMaxRange = options.maxRange;
+    return {
+      type: 'RULE_MUTATIONS_APPLIED', actorId: heroId, sourceId: 'fixture:legacy', actionId: 'default', timing: 'use', tags: [],
+      mutations: [mutation as unknown as RuleMutation],
+    };
+  };
+
+  it('a valid legacy constrained creation is rewritten to creationSpatial at the migration boundary and replays correctly', () => {
+    const { state, hero } = summonEncounter([]);
+    // (3,1) is distance 2 from the origin (1,1) with max range 5 and clear LoS.
+    const migrated = migrateEncounter({ ...state, eventLog: [legacyEvent(hero.id, [{ x: 3, y: 1 }], { maxRange: 5 })] });
+    const normalized = migrated.eventLog.find((event) => event.type === 'RULE_MUTATIONS_APPLIED')!;
+    expect(normalized.type).toBe('RULE_MUTATIONS_APPLIED');
+    const mutation = normalized.mutations[0] as unknown as {
+      creationSpatial?: { origin: Position; originSize: number; maxRange?: number };
+      creationOrigin?: unknown; creationOriginSize?: unknown; creationMaxRange?: unknown;
+    };
+    expect(mutation.creationSpatial).toEqual({ origin: { x: 1, y: 1 }, originSize: 1, maxRange: 5 });
+    expect(mutation.creationOrigin).toBeUndefined();
+    expect(mutation.creationOriginSize).toBeUndefined();
+    expect(mutation.creationMaxRange).toBeUndefined();
+    const applied = applyEvents(migrated, [normalized]);
+    const bomb = entitiesOf(applied, 'bomb', hero.id)[0];
+    expect(bomb).toBeDefined();
+    expect(bomb.positions).toEqual([{ x: 3, y: 1 }]);
+  });
+
+  it('an old event whose target is outside the declared range does not suddenly create an entity', () => {
+    const { state, hero } = summonEncounter([]);
+    // (7,1) is distance 6 from the origin (1,1) — beyond max range 5.
+    const migrated = migrateEncounter({ ...state, eventLog: [legacyEvent(hero.id, [{ x: 7, y: 1 }], { maxRange: 5 })] });
+    const normalized = migrated.eventLog.find((event) => event.type === 'RULE_MUTATIONS_APPLIED')!;
+    const applied = applyEvents(migrated, [normalized]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(0);
+  });
+
+  it('an old event whose LoS is blocked does not become unrestricted', () => {
+    const { state, hero } = summonEncounter([]);
+    // Impassable terrain at (2,1) blocks the straight line from the origin
+    // (1,1) to the target (3,1) — the migrated contract must keep enforcing it.
+    state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 0 });
+    const migrated = migrateEncounter({ ...state, eventLog: [legacyEvent(hero.id, [{ x: 3, y: 1 }], { maxRange: 5 })] });
+    const normalized = migrated.eventLog.find((event) => event.type === 'RULE_MUTATIONS_APPLIED')!;
+    const applied = applyEvents(migrated, [normalized]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(0);
+  });
+
+  it('a current-format event replays identically without migration', () => {
+    const { state, hero } = summonEncounter([]);
+    const current: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:current', actionId: 'default', timing: 'use', tags: [],
+      mutations: [{
+        kind: 'entity', sourceId: 'fixture:current', operation: 'create', entityType: 'bomb',
+        ownerId: hero.id, positions: [{ x: 3, y: 1 }], count: 1, state: {},
+        creationSpatial: { origin: { x: 1, y: 1 }, originSize: 1, maxRange: 5 },
+      }],
+    };
+    const applied = applyEvents(state, [current]);
+    const bomb = entitiesOf(applied, 'bomb', hero.id)[0];
+    expect(bomb).toBeDefined();
+    expect(bomb.positions).toEqual([{ x: 3, y: 1 }]);
+    // Replay of the same current-format event is identical.
+    const replay = applyEvents(state, [current]);
+    expect(replay.entities[bomb.id]).toBeDefined();
+    expect(replay.entities[bomb.id].positions).toEqual(bomb.positions);
+  });
+
+  it('the reducer declines an UN-migrated legacy mutation instead of silently treating it as unrestricted', () => {
+    // A legacy-shaped mutation that bypasses the migration boundary must
+    // never replay as unrestricted creation — the reducer's fail-closed
+    // guard declines the whole creation even though the placement is
+    // in-range under the old fields.
+    const { state, hero } = summonEncounter([]);
+    const applied = applyEvents(state, [legacyEvent(hero.id, [{ x: 3, y: 1 }], { maxRange: 5 })]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(0);
+  });
+});
+
+describe('F6 companion placement uses one legality authority', () => {
+  /** Build a combat-start companion fixture with a configurable hero
+   * position, extra Size-N actors, blocker entities, and terrain. */
+  function companionEncounter(options: {
+    trait: string; heroAt: Position; big?: { position: Position; size: number };
+    blockers?: Position[];    terrain?: Omit<TerrainCell, 'elevation'>[];
+  }): { state: EncounterState; hero: EncounterActor } {
+    let state = createEncounter('Companion fixture');
+    const hero = actorFromCharacter(validCharacter('Aster'), options.heroAt);
+    hero.abilityIds = hero.abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain' && id !== 'colossus:boiling-blood');
+    hero.traitIds = hero.traitIds.filter((id) => id !== 'stalwart:trait:fortify');
+    hero.traitIds.push(options.trait);
+    const foe = createFoeFromProfile('basic:knuckle:301', { x: 5, y: 1 }, 4);
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+    if (options.big) {
+      const big = createFoeFromProfile('basic:knuckle:301', options.big.position, 4);
+      big.size = options.big.size;
+      big.id = 'foe:big';
+      state = executeCommand(state, { type: 'ADD_ACTOR', actor: big }).state;
+    }
+    for (const cell of options.terrain ?? []) state.grid.terrain.push({ ...cell, elevation: 0 });
+    if (options.blockers && options.blockers.length > 0) {
+      const mutations = options.blockers.map((position) => ({
+        kind: 'entity' as const, sourceId: 'fixture:blocker', operation: 'create' as const, entityType: 'blocker',
+        ownerId: hero.id, positions: [position], count: 1, state: {},
+      }));
+      state = applyEvents(state, [{
+        type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:blocker', actionId: 'default', timing: 'use', tags: [],
+        mutations,
+      }]);
+    }
+    // The companion summon fires at ENCOUNTER_STARTED (applyCombatStart-
+    // TraitEffects), exactly like the production combat-start boundary.
+    state = startEncounterTo(state, hero.id);
+    return { state, hero };
+  }
+
+  it('a Size-2 actor occupying a candidate through a non-anchor footprint cell is skipped; the next legal cell is used', () => {
+    // Hero at (2,2); the first candidates (1,1) and (1,2) lie inside a Size-2
+    // actor's footprint anchored at (0,1) — neither is its anchor cell. The
+    // old freeCellNear (anchor-cell occupancy only) would have picked (1,1);
+    // the shared validateEntityCreation authority uses full footprints and
+    // falls through to the next legal candidate (1,3).
+    const { state, hero } = companionEncounter({
+      trait: 'warden:trait:beast-master', heroAt: { x: 2, y: 2 },
+      big: { position: { x: 0, y: 1 }, size: 2 },
+    });
+    const beasts = entitiesOf(state, 'beast', hero.id);
+    expect(beasts).toHaveLength(1);
+    expect(beasts[0].positions[0]).toEqual({ x: 1, y: 3 });
+    expect(beasts[0].state.companion).toBe(true);
+  });
+
+  it('a LoS-blocked first candidate falls through to a later legal cell', () => {
+    // Hero at (0,0) with the Selkie's range-3 companion. Every candidate is
+    // occupied except (2,1) and (3,0); the FIRST free candidate (2,1) has its
+    // LoS blocked by impassable terrain at (1,1), so the companion is
+    // created at the LATER free candidate (3,0), which has clear LoS — the
+    // old freeCellNear (no LoS) would have picked (2,1) and the reducer
+    // would have declined the whole summon.
+    const { state, hero } = companionEncounter({
+      trait: 'stormbender:trait:selkie', heroAt: { x: 0, y: 0 },
+      blockers: [{ x: 0, y: 1 }, { x: 1, y: 0 }, { x: 0, y: 2 }, { x: 1, y: 1 }, { x: 2, y: 0 }, { x: 0, y: 3 }, { x: 1, y: 2 }, { x: 1, y: 3 }, { x: 2, y: 3 }, { x: 3, y: 1 }, { x: 3, y: 2 }, { x: 3, y: 3 }],
+      terrain: [{ position: { x: 1, y: 1 }, type: 'impassable' }],
+    });
+    const elementals = entitiesOf(state, 'selkie', hero.id);
+    expect(elementals).toHaveLength(1);
+    expect(elementals[0].positions[0]).toEqual({ x: 3, y: 0 });
+  });
+
+  it('candidate ordering is deterministic and replay is stable', () => {
+    // The same layout produced twice yields the identical companion cell,
+    // and the recorded ENCOUNTER_STARTED event replays to the same state.
+    const first = companionEncounter({
+      trait: 'warden:trait:beast-master', heroAt: { x: 2, y: 2 },
+      big: { position: { x: 0, y: 1 }, size: 2 },
+    });
+    const second = companionEncounter({
+      trait: 'warden:trait:beast-master', heroAt: { x: 2, y: 2 },
+      big: { position: { x: 0, y: 1 }, size: 2 },
+    });
+    expect(entitiesOf(first.state, 'beast', first.hero.id)[0].positions).toEqual(
+      entitiesOf(second.state, 'beast', second.hero.id)[0].positions,
+    );
+    const preStart = createEncounter('Companion fixture');
+    const hero = actorFromCharacter(validCharacter('Aster'), { x: 2, y: 2 });
+    hero.abilityIds = hero.abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain' && id !== 'colossus:boiling-blood');
+    hero.traitIds = hero.traitIds.filter((id) => id !== 'stalwart:trait:fortify');
+    hero.traitIds.push('warden:trait:beast-master');
+    const foe = createFoeFromProfile('basic:knuckle:301', { x: 5, y: 1 }, 4);
+    const big = createFoeFromProfile('basic:knuckle:301', { x: 0, y: 1 }, 4);
+    big.size = 2;
+    big.id = 'foe:big';
+    let built = executeCommand(preStart, { type: 'ADD_ACTOR', actor: hero }).state;
+    built = executeCommand(built, { type: 'ADD_ACTOR', actor: foe }).state;
+    built = executeCommand(built, { type: 'ADD_ACTOR', actor: big }).state;
+    const started = executeCommand(built, { type: 'START_ENCOUNTER' }, scriptedDice());
+    expect(applyEvents(built, started.events)).toEqual(started.state);
+    expect(entitiesOf(started.state, 'beast', hero.id)[0].positions[0]).toEqual({ x: 1, y: 3 });
   });
 });

@@ -136,6 +136,30 @@ Footprints (size-1), range bands, adjacency, LoS/LoE, burst/blast/line/cone
 areas (`area.ts`, `range.ts`, shared `area-geometry.ts`). Hole: p.92 Size
 footprints >1 space pending (trait rows project the stat, not the footprint).
 
+**Scoped range authority (2026-08-28):** `kernels/range.ts` is the single
+reusable listed-range authority, queryable by NAMED SCOPE — the default
+`attack` scope (the ability's top-level target range, read by both command
+gates through `effectiveAbilityRange`) plus source-declared INTERNAL range
+scopes (placement selectors such as Dark Sliver's terrain-effect soul-space
+and Slay plant placement). A reviewed rule may declare `scopes` so a
+modifier like Dark Sliver talent 1's Comeback "increase all ranges by +1"
+(p.185) widens the attack AND every internal placement range from one row;
+the resolver queries `effectiveScopedRange` by scope key instead of
+re-implementing the gate. `rangeModifierRuleScopes(sourceId)` exposes the
+covered scope set for the compound-talent completeness manifest.
+
+**Compound-talent completeness manifest (2026-08-28):** a range recipe may
+mark a source unit complete by itself ONLY when the unit's complete
+semantics are exclusively that range change. Compound talents (Dark Sliver
+talent 1's "bonus damage + all ranges", talent 2's "Sacrifice 2 + range 6")
+register an explicit composite manifest (`registerCompoundTalentCompleteness`,
+`kernels/talent-recipes.ts`) naming EVERY required semantic component — the
+range rule (with each required scope), the bonus-damage rule, the pre-use
+augmentation — checked against the real registries. The compiler audits such
+a unit complete only when every component is wired; removing any one
+component (or dropping a declared range scope) fails the audit, so a loose
+range-registry membership check can never overclaim a compound talent.
+
 ### Movement — PARTIAL
 
 Standard move/dash planner with difficult/dangerous/impassable/pit/slope
@@ -257,6 +281,31 @@ origin's full footprint is not yet represented in LoS sampling; a generic
 footprint-aware LoS query through the shared authority is future work.
 Entity creation is therefore NOT described as fully Size>1 LoS-correct —
 only the range half is footprint-correct today.
+
+**Companion placement is single-authority (2026-08-28):** combat-start
+companion summons (`applyCombatStartTraitEffects`, `kernels/lifecycle.ts`)
+no longer pick a cell with their own legality checks (`freeCellNear`). The
+lifecycle layer deterministically enumerates the ordered candidate cells
+within the summon range and carries the FULL candidate list on the entity
+mutation (`count: 1`); `validateEntityCreation` picks the first legal
+candidate through the central bounds/footprint-occupancy/terrain/LoS/range
+authority — so a Size>1 actor can never hide behind a non-anchor footprint
+cell, and a LoS-blocked first candidate falls through to the next legal
+cell instead of rejecting the whole summon.
+
+**Legacy entity-event compatibility (schema 7, 2026-08-28):** the durable
+entity RuleMutation previously carried `creationOrigin` /
+`creationOriginSize` / `creationMaxRange`; aa736a6 collapsed them into the
+paired `creationSpatial`. `migrateEncounter` is the normalization boundary:
+it rewrites legacy spatial fields on entity mutations inside the migrated
+event history and held interrupt windows to `creationSpatial`, so an old
+event with spatial restrictions can never replay as unrestricted creation
+because the reducer reads only the new shape. New command construction never
+emits the legacy fields (the type has no such members), and the reducer
+fail-closed: an un-migrated legacy-shaped mutation is declined, not
+silently executed. The schema version stays 7 — the durable current-state
+shape is unchanged; only the audit/display event history is upgraded at the
+migration boundary.
 Holes: entity actions (a summon taking its own turn) are not modeled; Mob
 members absent.
 

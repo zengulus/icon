@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { collectRuleSourceUnits } from '../source-units.js';
+import { collectRuleSourceUnits, findRuleSourceUnit, type RuleSourceUnit } from '../source-units.js';
 import { getDocumentedTalentIds, getTalentRecipes } from '../automation/content/jobs/talent-recipes.js';
-import { getExecutableTalentIds, isExecutableTalent, talentTriggerMutations } from '../automation/kernels/talent-recipes.js';
+import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+import { compileManualRuleProgram } from '../automation/content/glue/manual-programs.js';
+import { rangeModifierRuleScopes, registerRangeModifierRule } from '../automation/kernels/range.js';
+import { registerBonusDamageRule } from '../automation/kernels/bonus-damage.js';
+import {
+  compoundTalentMissingComponents, getExecutableTalentIds, isExecutableTalent,
+  registerCompoundTalentCompleteness, registerPreUseTalentAugmentation, talentTriggerMutations,
+} from '../automation/kernels/talent-recipes.js';
 import '../automation/content/registry.js';
 import { collidingShoveTargets } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand } from '../encounter.js';
@@ -750,5 +757,76 @@ describe('F14 use-ledger proof — Masquerade talent 1 (haven\u2019t-acted gate 
       targetIds: [ally!.id],
     }, scriptedDice());
     expect(result.state.actors[hero.id].conditions.some((candidate) => candidate.id === 'evasion')).toBe(true);
+  });
+});
+
+describe('compound talent completeness manifest (F-audit)', () => {
+  /** A fake talent source unit for compile-level manifest tests (never a real
+   * catalog row, so it cannot affect the census or the automation audit). */
+  const fixtureTalentUnit = (id: string): RuleSourceUnit => ({
+    id, kind: 'talent', name: 'Fixture compound talent',
+    rulesText: 'Fixture compound talent text.',
+    source: { page: 1, sectionId: 'fixture' }, parentId: 'fixture:ability', metadata: {},
+  });
+
+  it('Dark Sliver talent 1 is complete only with bonus damage AND every range scope represented (p.185)', () => {
+    // The compound manifest requires the comeback-gated range rule covering
+    // ALL THREE scopes (attack + the two internal placement ranges) and the
+    // bonus-damage rule — both genuinely registered.
+    expect(compoundTalentMissingComponents('harvester:dark-sliver:talent:1')).toEqual([]);
+    expect([...rangeModifierRuleScopes('harvester:dark-sliver:talent:1')!].sort()).toEqual(['attack', 'slay-placement', 'terrain-placement']);
+    const unit = findRuleSourceUnit('harvester:dark-sliver:talent:1')!;
+    expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
+  });
+
+  it('Dark Sliver talent 2 is complete only with BOTH Range 6 and the pre-use Sacrifice augmentation (p.187)', () => {
+    expect(compoundTalentMissingComponents('harvester:dark-sliver:talent:2')).toEqual([]);
+    const unit = findRuleSourceUnit('harvester:dark-sliver:talent:2')!;
+    expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
+  });
+
+  it('a compound talent with one missing component fails the audit (no range-registry membership inference)', () => {
+    // A registered range rule is NOT enough: the manifest requires the
+    // bonus-damage component too, and without it the compilation is
+    // incomplete — the old false-positive (any range rule ⇒ complete) is
+    // structurally impossible for manifest units.
+    registerCompoundTalentCompleteness('fixture:compound-missing-bonus', [
+      { kind: 'range-modifier' },
+      { kind: 'bonus-damage' },
+    ]);
+    registerRangeModifierRule({ sourceId: 'fixture:compound-missing-bonus', abilityId: 'fixture:ability', mode: 'override', value: 6 });
+    expect(compoundTalentMissingComponents('fixture:compound-missing-bonus')).toEqual(['bonus-damage']);
+    const compiled = compileManualRuleProgram(fixtureTalentUnit('fixture:compound-missing-bonus'))!;
+    expect(compiled.unsupportedClauses).toHaveLength(1);
+    expect(compiled.unsupportedClauses[0]!.complete).toBe(false);
+    expect(compiled.unsupportedClauses[0]!.unsupportedText).toContain('bonus-damage');
+
+    // A range rule that lost one of its declared scopes fails on that scope.
+    registerCompoundTalentCompleteness('fixture:compound-missing-scope', [
+      { kind: 'range-modifier', scopes: ['attack', 'slay-placement'] },
+    ]);
+    registerRangeModifierRule({ sourceId: 'fixture:compound-missing-scope', abilityId: 'fixture:ability', mode: 'add', value: 1, scopes: ['attack'] });
+    expect(compoundTalentMissingComponents('fixture:compound-missing-scope')).toEqual(['range-modifier:slay-placement']);
+  });
+
+  it('a compound talent with every component wired compiles complete through the manifest', () => {
+    registerCompoundTalentCompleteness('fixture:compound-wired', [
+      { kind: 'range-modifier', scopes: ['attack', 'terrain-placement'] },
+      { kind: 'bonus-damage' },
+      { kind: 'pre-use-augmentation' },
+    ]);
+    registerRangeModifierRule({ sourceId: 'fixture:compound-wired', abilityId: 'fixture:ability', mode: 'add', value: 1, scopes: ['attack', 'terrain-placement'] });
+    registerBonusDamageRule({ sourceId: 'fixture:compound-wired', abilityId: 'fixture:ability', gate: { kind: 'always' }, dice: 1 });
+    registerPreUseTalentAugmentation({ sourceId: 'fixture:compound-wired', abilityId: 'fixture:ability', talent: 1, requiresChoice: false, mechanic: 'fixture' });
+    expect(compoundTalentMissingComponents('fixture:compound-wired')).toEqual([]);
+    expect(compileManualRuleProgram(fixtureTalentUnit('fixture:compound-wired'))!.unsupportedClauses).toEqual([]);
+  });
+
+  it('a pure range-only talent still compiles complete through the simpler range-only path', () => {
+    // Valkyrie talent 1 is exclusively a listed-range change: it has no
+    // compound manifest and keeps the single-component range-only path.
+    expect(compoundTalentMissingComponents('colossus:valkyrie:talent:1')).toBeNull();
+    const unit = findRuleSourceUnit('colossus:valkyrie:talent:1')!;
+    expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
   });
 });

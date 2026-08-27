@@ -221,6 +221,38 @@ assumption here, document the evidence and update this list before proceeding.
    corrected to their extracted pages (p.208/p.210/p.191/p.184). 11 new
    tests (harvester + summons production-path), 1131 total.
 
+   **Corrective repair — scoped ranges, compound-talent completeness, and
+   replay compatibility (2026-08-28):** Dark Sliver talent 1's Comeback
+   "increase all ranges by +1" (p.185) now widens the attack range AND the
+   source-declared INTERNAL ranges (terrain-effect soul-space and Slay plant
+   placement, 3 → 4) through one scoped range rule
+   (`kernels/range.ts` `effectiveScopedRange`: named scope keys with the
+   default `attack` scope; the resolver queries the authority, never
+   duplicating the Comeback gate). Compound talents now register an explicit
+   completeness manifest (`kernels/talent-recipes.ts`
+   `registerCompoundTalentCompleteness`) naming EVERY required semantic
+   component — Dark Sliver t1 (range rule covering all three scopes + bonus
+   damage) and t2 (Range 6 + pre-use Sacrifice augmentation); the compiler
+   audits such a unit complete only when every component is genuinely wired,
+   so removing one component fails the audit (the old range-registry
+   membership false-positive is structurally impossible). Legacy
+   entity-mutation spatial fields (`creationOrigin`/`creationOriginSize`/
+   `creationMaxRange`) are rewritten to `creationSpatial` at the
+   `migrateEncounter` boundary (event history + held interrupt windows), and
+   the reducer fail-closed declines an un-migrated legacy-shaped mutation —
+   an old event can never replay as unrestricted creation; schema version
+   stays 7 (durable current-state shape unchanged). Combat-start companion
+   placement is now single-authority: lifecycle enumerates the ordered
+   candidate cells and `validateEntityCreation` picks the first legal cell
+   (full-footprint occupancy, LoS, terrain, range), so a Size>1 actor
+   cannot hide behind a non-anchor footprint cell and a LoS-blocked first
+   candidate falls through to the next legal cell. Sacrifice glossary
+   citations corrected from the Combat Glossary section start p.102 to the
+   actual Sacrifice X entry on p.103 (Dark Sliver t2 stays p.187); repaired
+   the merged-comment artifacts in types.ts. 22 new tests (harvester,
+   talents, summons), 1153 total; census regenerated twice byte-identical
+   at 423 unresolved.
+
 7. **Close one deliberately complex player-content vertical slice end to
    end:** persistent character → encounter → talents/masteries/interrupts/
    movement/status interactions → deterministic replay → settlement →

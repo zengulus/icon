@@ -13,6 +13,8 @@ import {
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
+import { effectiveScopedRange } from '../../../kernels/range.js';
+import { rangeStateView } from '../../../kernels/encounter-adapter.js';
 
 /**
  * Independently reviewed Harvester ability implementations (ICON p.182–188),
@@ -217,6 +219,26 @@ const spiritAwayEffects: RuleResolver = (context) => {
   return mutations;
 };
 
+/** The effective radius of one of Dark Sliver's source-declared INTERNAL
+ * placement ranges (terrain-placement / slay-placement) through the shared
+ * range authority — the same scoped rules the attack range reads, so Dark
+ * Sliver talent 1's Comeback "+1 to all ranges" widens the soul-space and
+ * Slay plant placement exactly like the attack (3 → 4). The gate logic lives
+ * only in range-recipes.ts; the resolver never re-implements Comeback. An
+ * isolated VM fixture without encounter state falls back to the source base
+ * radius (3). */
+const darkSliverPlacementRange = (context: RuleExecutionContext, scope: string): number => {
+  if (!context.encounterState) return 3;
+  return effectiveScopedRange(
+    rangeStateView(context.encounterState),
+    context.actorId,
+    context.sourceId,
+    3,
+    scope,
+    context.actionId,
+  );
+};
+
 /** ICON p.187 Dark Sliver: [D]+fray on hit (fray on miss), then cut away part
  * of the target's soul by choosing a free space in range 3 of the foe and
  * marking it. The end-of-next-turn check (2 piercing, pacified, plant) is a
@@ -231,15 +253,17 @@ const darkSliverEffects: RuleResolver = (context) => {
   // ICON p.185 Dark Sliver talent 1: "Comeback: Deal bonus damage, and
   // increase all ranges by +1." The bonus die folds at the USE_ABILITY
   // boundary while the user is bloodied (the comeback gate); the range half
-  // is the comeback-gated range rule in range-recipes.ts (range 2 → 3).
+  // is the comeback-gated scoped range rule in range-recipes.ts — the attack
+  // target range (2 → 3) at the USE_ABILITY gate and the placement ranges
+  // (3 → 4) through `darkSliverPlacementRange` below.
   mutations.push(roll.hit
     ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 1, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (context.triggers?.has('slay')) {
-    const plantCell = freeCellsInRange(context, target.position, 3)[0];
+    const plantCell = freeCellsInRange(context, target.position, darkSliverPlacementRange(context, 'slay-placement'))[0];
     if (plantCell) mutations.push(entityMutation(context, source.id, plantCell, 'plant', {}));
   } else {
-    const soulCell = freeCellsInRange(context, target.position, 3)[0];
+    const soulCell = freeCellsInRange(context, target.position, darkSliverPlacementRange(context, 'terrain-placement'))[0];
     if (soulCell) {
       mutations.push(markMutation(context, target.id, 'dark-sliver', { x: soulCell.x, y: soulCell.y }));
       mutations.push(entityMutation(context, source.id, soulCell, 'soul-space', {}));

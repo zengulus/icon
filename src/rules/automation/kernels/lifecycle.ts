@@ -119,6 +119,24 @@ const distance = (first: Position, second: Position) => Math.max(Math.abs(first.
 const positionWithinGrid = (position: Position, state: Pick<EncounterState, 'grid'>) =>
   position.x >= 0 && position.y >= 0 && position.x < state.grid.width && position.y < state.grid.height;
 
+/** The ORDERED in-grid candidate cells within Chebyshev `radius` of `center`
+ * (excluding the center), sorted by distance then coordinates so default
+ * placement is deterministic (mirrors job-kit's freeCellsInRange ordering).
+ * This is a pure geometric enumeration — it does NOT decide creation
+ * legality. The entity mutation carries the ordered list and the shared
+ * `validateEntityCreation` authority picks the first legal candidate
+ * (bounds, footprint occupancy, impassable terrain, LoS, range, cap), so
+ * lifecycle code never re-implements a legality check. */
+export function orderedFreeCellsNear(state: EncounterState, center: Position, radius: number, orthogonalOnly = false): Position[] {
+  const cells = orthogonalOnly ? orthogonalNeighbors(center) : squareArea(center, radius);
+  const candidates: Position[] = [];
+  for (const cell of cells) {
+    if (samePosition(cell, center) || !positionWithinGrid(cell, state)) continue;
+    candidates.push(cell);
+  }
+  return candidates.sort((a, b) => distance(center, a) - distance(center, b) || a.x - b.x || a.y - b.y);
+}
+
 /** First in-grid, unoccupied, non-impassable cell within Chebyshev `radius` of
  * `center` (orthogonal neighbors when `orthogonalOnly`), sorted by distance
  * then coordinates so default placement is deterministic (mirrors job-kit's
@@ -164,10 +182,18 @@ export function applyCombatStartTraitEffects(state: EncounterState) {
         }
       }
       if (recipe.summon && !Object.values(state.entities).some((entity) => entity.type === recipe.summon!.entityType && entity.ownerId === actor.id)) {
-        const cell = freeCellNear(state, actor.position, recipe.summon.range);
-        if (cell) {
+        // ONE legality authority: lifecycle only deterministically enumerates
+        // the ordered candidate cells; it never decides creation legality
+        // itself. The entity mutation carries the full ordered candidate list
+        // and `validateEntityCreation` (bounds, full-footprint occupancy,
+        // impassable terrain, LoS, range, cap) picks the FIRST legal
+        // candidate — so a Size>1 actor can never hide behind a non-anchor
+        // footprint cell, and a LoS-blocked first candidate falls through to
+        // the next legal cell instead of rejecting the whole summon.
+        const candidates = orderedFreeCellsNear(state, actor.position, recipe.summon.range);
+        if (candidates.length > 0) {
           applyRuleMutations(state, [{
-            kind: 'entity', sourceId: traitId, operation: 'create', entityType: recipe.summon.entityType, ownerId: actor.id, positions: [cell], count: 1, state: { companion: true },
+            kind: 'entity', sourceId: traitId, operation: 'create', entityType: recipe.summon.entityType, ownerId: actor.id, positions: candidates, count: 1, state: { companion: true },
             creationSpatial: { origin: actor.position, originSize: actor.size, maxRange: recipe.summon.range },
           }]);
         }

@@ -27,7 +27,7 @@ import { compileAreaModifierRecipe } from '../../kernels/area.js';
 import { EXECUTABLE_JOB_TRAIT_IDS } from '../jobs/job-trait-recipes.js';
 import { JOB_SUMMON_SUITES } from '../jobs/summon-recipes.js';
 import { documentedTalentDetail } from '../jobs/talent-recipes.js';
-import { isExecutableTalent } from '../../kernels/talent-recipes.js';
+import { compoundTalentMissingComponents, isExecutableTalent } from '../../kernels/talent-recipes.js';
 import { documentedMasteryDetail, isExecutableMastery } from '../../kernels/mastery.js';
 
 const coreUseCosts: Record<string, number> = {
@@ -413,6 +413,40 @@ export function compileManualRuleProgram(unit: RuleSourceUnit): RuleProgramCompi
   // talent audits as a complete program (allowlist + source fixture + replay
   // test); documented talents stay source-visible with their kernel need.
   if (unit.kind === 'talent') {
+    // A COMPOUND talent (Dark Sliver talent 1's "bonus damage + all ranges",
+    // Dark Sliver talent 2's "Sacrifice 2 + range 6") registers an explicit
+    // composite completeness manifest (content/jobs/range-recipes.ts) naming
+    // EVERY required semantic component. The manifest path is the ONLY way
+    // such a talent compiles complete: a single range rule may never mark a
+    // compound talent complete by itself (the old registry-membership
+    // false-positive), and removing any one component fails the audit.
+    const missingComponents = compoundTalentMissingComponents(unit.id);
+    if (missingComponents !== null) {
+      const complete = missingComponents.length === 0;
+      const clause: RuleClauseCompilation = {
+        id: `${unit.id}:clause:1`,
+        label: 'passive',
+        text: unit.rulesText,
+        effects: [],
+        complete,
+        unsupportedText: complete ? '' : `Compound talent is missing required semantic components: ${missingComponents.join(', ')}.`,
+      };
+      return {
+        program: {
+          schemaVersion: 1,
+          rulesVersion: '1.5',
+          id: `program:${unit.id}`,
+          sourceId: unit.id,
+          source: unit.source,
+          name: unit.name,
+          actions: [],
+          dependencies: unit.parentId ? [unit.parentId] : [],
+          classification: 'encounter',
+        },
+        clauses: [clause],
+        unsupportedClauses: complete ? [] : [clause],
+      };
+    }
     // A range-modifier talent (Valkyrie gains range 4, Incubus range 3/5,
     // Harvest range 2/5, Open the Gates range = round) is fully represented
     // by its reviewed range rule: the kernel compiles it complete, and the

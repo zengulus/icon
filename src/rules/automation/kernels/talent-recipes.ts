@@ -29,6 +29,8 @@
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { RuleMutation } from '../primitives/types.js';
 import { sacrificeMutation } from '../primitives/cost-payment.js';
+import { rangeModifierRuleScopes } from './range.js';
+import { hasBonusDamageRule } from './bonus-damage.js';
 
 /** ICON p.102: bloodied at or below half maximum HP (same formula as the
  * kernel's isBloodied — inlined here to keep the module graph acyclic: the
@@ -227,7 +229,7 @@ export function registerMarkModifierTalent(sourceId: string, mechanic: string): 
 }
 
 /** A pre-resolution cost a pre-use talent augmentation pays at the start of
- * the ability (ICON Combat Glossary Sacrifice p.102: "Sacrifice costs are
+ * the ability (ICON Combat Glossary Sacrifice p.103: "Sacrifice costs are
  * paid at the start of an ability"). Costs ride the shared cost-payment
  * authority — the same transaction gate the ability's own costs use — and
  * their durable mutations ride the ability's recorded event, so replay
@@ -237,7 +239,7 @@ export type PreUseTalentCost = { kind: 'sacrifice'; amount: number };
 /** Pre-use talent augmentations (F-family): a talent whose COMPLETE semantics
  * are a validated, pre-resolution augmentation of the ability being used —
  * e.g. Dark Sliver talent 2's "Sacrifice 2: Ability gains range 6"
- * (p.187 + Sacrifice p.102). One row binds the talent source ID to its
+ * (p.187 + Sacrifice p.103). One row binds the talent source ID to its
  * parent ability and required equipped rank, any pre-resolution costs, and
  * the declared-choice opt-in that gates the whole augmentation. Both command
  * surfaces (USE_ABILITY and EXECUTE_RULE) resolve the command's
@@ -315,6 +317,73 @@ export function resolvePreUseTalentAugmentations(
     }
   }
   return { validatedSourceIds, costMutations };
+}
+
+/** A required semantic component of a compound talent (kernels/range.ts and
+ * kernels/bonus-damage.ts registries + the pre-use augmentation table below
+ * are the authorities the compiler checks against — never prose). */
+export type TalentCompletenessComponent =
+  /** A registered range-modifier rule for the source unit. When `scopes` is
+   * given, every named scope must actually be declared on the registered
+   * rules (a compound talent whose "all ranges" rule loses one scope fails
+   * the audit). */
+  | { kind: 'range-modifier'; scopes?: readonly string[] }
+  /** A registered bonus-damage rule for the source unit (kernels/
+   * bonus-damage.ts). */
+  | { kind: 'bonus-damage' }
+  /** A registered pre-use talent augmentation for the source unit. */
+  | { kind: 'pre-use-augmentation' };
+
+/** Compound talent completeness manifest (F-audit): a talent whose COMPLETE
+ * semantics compose multiple reusable components — e.g. Dark Sliver talent
+ * 1's "Comeback: Deal bonus damage, and increase all ranges by +1" (range
+ * rule + bonus-damage rule) and Dark Sliver talent 2's "Sacrifice 2: Ability
+ * gains range 6" (range override + pre-use sacrifice augmentation) — must
+ * register here naming EVERY required component. The compiler audits the
+ * unit complete only when each component is genuinely wired, so removing
+ * one component fails the audit. A talent without a manifest may only
+ * compile complete through a single-component path (range-only,
+ * area-only, bonus-damage-only, wired fold, …) whose reviewed semantics
+ * are exclusively that one component. */
+const compoundTalentCompleteness: Record<string, readonly TalentCompletenessComponent[]> = {};
+
+/** Register a compound talent's required semantic components
+ * (content/jobs/range-recipes.ts). */
+export function registerCompoundTalentCompleteness(sourceId: string, components: readonly TalentCompletenessComponent[]): void {
+  compoundTalentCompleteness[sourceId] = components;
+}
+
+/** The missing required components of a compound talent, or null when the
+ * unit is not registered as compound. The audit is grounded in the real
+ * registries: the range rule registry (kernels/range.ts), the bonus-damage
+ * rule registry (kernels/bonus-damage.ts), and the pre-use augmentation
+ * table — never a source-ID allowlist. */
+export function compoundTalentMissingComponents(sourceId: string): string[] | null {
+  const components = compoundTalentCompleteness[sourceId];
+  if (!components) return null;
+  const missing: string[] = [];
+  for (const component of components) {
+    switch (component.kind) {
+      case 'range-modifier': {
+        const scopes = rangeModifierRuleScopes(sourceId);
+        if (!scopes) {
+          missing.push('range-modifier');
+          break;
+        }
+        for (const scope of component.scopes ?? []) {
+          if (!scopes.has(scope)) missing.push(`range-modifier:${scope}`);
+        }
+        break;
+      }
+      case 'bonus-damage':
+        if (!hasBonusDamageRule(sourceId)) missing.push('bonus-damage');
+        break;
+      case 'pre-use-augmentation':
+        if (!preUseTalentAugmentations[sourceId]) missing.push('pre-use-augmentation');
+        break;
+    }
+  }
+  return missing;
 }
 
 /** Area-modifier talents: the talent's COMPLETE semantics are a shape/size
