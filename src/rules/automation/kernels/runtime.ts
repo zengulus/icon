@@ -329,7 +329,14 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
         const owners = selectActors(effect.owner, context);
         const positions = effect.positionInput ? [...(context.input.positions?.[effect.positionInput] ?? [])] : [];
         const count = effect.count ? integer(effect.count, context) : Math.max(1, positions.length);
-        for (const owner of owners) output.push({ kind: 'entity', sourceId: context.sourceId, operation: effect.operation, entityType: effect.entityType, ownerId: owner.id, positions: positions.slice(0, count), count, state: effect.state ?? {}, ...(effect.duration ? { duration: effect.duration } : {}) });
+        // ICON general rule: creation requires free, unobstructed, and LoS.
+        // The origin and maxRange are source-declared on the effect; evaluated
+        // at command time and carried through to the reducer for authoritative
+        // replay-safe enforcement.
+        const originActor = effect.origin ? selectActors(effect.origin, context)[0] : undefined;
+        const creationOrigin = originActor?.position ?? undefined;
+        const creationMaxRange = effect.maxRange;
+        for (const owner of owners) output.push({ kind: 'entity', sourceId: context.sourceId, operation: effect.operation, entityType: effect.entityType, ownerId: owner.id, positions: positions.slice(0, count), count, state: effect.state ?? {}, ...(effect.duration ? { duration: effect.duration } : {}), ...(creationOrigin ? { creationOrigin } : {}), ...(creationMaxRange !== undefined ? { creationMaxRange } : {}) });
         break;
       }
       case 'mark': for (const target of targets) output.push({ kind: 'mark', sourceId: context.sourceId, ownerId: context.actorId, operation: effect.operation, actorId: target.id, markId: effect.markId, ...(effect.duration ? { duration: effect.duration } : {}), state: effect.state ?? {} }); break;

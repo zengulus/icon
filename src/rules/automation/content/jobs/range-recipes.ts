@@ -135,3 +135,21 @@ registerRangeModifierRule({
   talent: 1,
   gate: { kind: 'comeback' },
 });
+
+// ICON p.187 Harvester Dark Sliver talent 2: "Sacrifice 2: Ability gains
+// range 6." A sacrifice-gated range override: the player declares the
+// talent choice at command time (talentChoices input), and the range kernel
+// evaluates the choice gate against the selected source ID. The sacrifice
+// cost itself is a resource-management concern outside the range kernel.
+registerRangeModifierRule({
+  sourceId: 'harvester:dark-sliver:talent:2',
+  abilityId: 'harvester:dark-sliver',
+  mode: 'override',
+  value: 6,
+  talent: 2,
+  gate: { kind: 'choice', sourceId: 'harvester:dark-sliver:talent:2' },
+});
+registerRangeModifierTalent(
+  'harvester:dark-sliver:talent:2',
+  'Dark Sliver\'s listed range becomes 6 through the shared effective-range authority when the player declares the sacrifice talent choice at command time.',
+);

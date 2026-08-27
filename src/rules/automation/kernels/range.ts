@@ -51,6 +51,9 @@ export interface RangeStateView {
   }>>;
   /** The encounter condition set for an actor (the stealth gate). */
   conditionsFor(actorId: string): ReadonlySet<string>;
+  /** Player-declared talent-use source IDs at command time (Dark Sliver
+   * talent 2's sacrifice-gated range, etc.). Absent = no choices declared. */
+  selectedTalentSourceIds?: ReadonlySet<string>;
 }
 
 /** The canonical distance between two actors: the shared p.92 footprint
@@ -88,7 +91,12 @@ export type RangeModifierGate =
   /** The actor is bloodied (Harvest talent 2: "Comeback: Range 5"). */
   | { kind: 'comeback' }
   /** The actor has mastered the named parent ability (mastery rows). */
-  | { kind: 'mastery'; abilityId: string };
+  | { kind: 'mastery'; abilityId: string }
+  /** The player has declared a talent-use choice for this source unit at
+   * command time (Dark Sliver talent 2: "Sacrifice 2: Ability gains
+   * range 6"). The range modifier fires only when the player opted in.
+   * Replay carries the recorded choice. */
+  | { kind: 'choice'; sourceId: string };
 
 /** A registered range-modifier rule: how one content unit modifies its parent
  * ability's listed range. Deterministic: rules apply in registration order,
@@ -133,6 +141,8 @@ function ruleApplies(rule: RangeModifierRule, view: RangeStateView, actorId: str
     }
     case 'mastery':
       return hasMastery(actor, rule.gate.abilityId);
+    case 'choice':
+      return view.selectedTalentSourceIds?.has(rule.gate.sourceId) ?? false;
     default:
       return true;
   }

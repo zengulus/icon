@@ -230,6 +230,14 @@ status surface.
 
 Entity store with owner caps (six per type), companion exemption from owner
 cleanup, bomb/beast/shadow/underway/portal/mist consumers, thrown weapons.
+**Entity-creation authority** (`kernels/entity-creation.ts`): the generic
+`validateEntityCreation` enforces bounds, size-aware occupancy (no owner
+exemption — summoner occupies space like any character per the p.92 general
+rule), impassable terrain, and optionally line-of-sight and range from a
+declared origin (shared primitives LoS kernel). Origin/maxRange are
+source-declared on the `RuleMutation` entity kind and the VM `RuleEffect`
+tity type; the reducer threads them to the kernel at reducer authority.
+Mandatory vs optional creation remains a content-layer concern.
 Holes: entity actions (a summon taking its own turn) are not modeled; Mob
 members absent.
 

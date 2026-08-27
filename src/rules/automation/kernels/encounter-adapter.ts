@@ -100,7 +100,7 @@ export function registerOnDamageDealtHook(hook: OnDamageDealtHook): void {
  * positions/sizes/mastery the encounter authority carries, so the effective
  * ability range and the distance predicates are evaluated from authoritative
  * command-time state). */
-export function rangeStateView(state: EncounterState): RangeStateView {
+export function rangeStateView(state: EncounterState, selectedTalentSourceIds?: ReadonlySet<string>): RangeStateView {
   const actors: RangeStateView['actors'] = Object.fromEntries(
     Object.values(state.actors).map((actor): [string, RangeStateView['actors'][string]] => [actor.id, {
       id: actor.id,
@@ -116,7 +116,7 @@ export function rangeStateView(state: EncounterState): RangeStateView {
   return { round: state.round, actors, conditionsFor: (actorId) => {
     const actor = state.actors[actorId];
     return actor ? encounterConditionSet(actor, state) : new Set<string>();
-  } };
+  }, ...(selectedTalentSourceIds ? { selectedTalentSourceIds } : {}) };
 }
 
 /** Adapt the reducer state to the area kernel's read surface for one actor
@@ -1242,6 +1242,10 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
           count: mutation.count,
           state: mutation.state,
           duration: mutation.duration ?? null,
+          // ICON general rule: creation requires free, unobstructed, and LoS.
+          // The origin/range are source-declared and carried through the mutation.
+          ...(mutation.creationOrigin ? { origin: mutation.creationOrigin } : {}),
+          ...(mutation.creationMaxRange !== undefined ? { maxRange: mutation.creationMaxRange } : {}),
         });
         if (!validated) break;
         const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, 'entity'), type: mutation.entityType, ownerId: mutation.ownerId, positions: clone(validated.positions), state: { ...mutation.state }, duration: mutation.duration ?? null };

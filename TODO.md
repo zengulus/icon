@@ -142,6 +142,36 @@ assumption here, document the evidence and update this list before proceeding.
    `entity-create` blocker remains uncleared (task §7). Full test suite
    green (1104 tests), architecture + source-fidelity audits green.
 
+   **Entity-creation LoS/range centralization (2026-08-27):** Added
+   `creationOrigin` and `creationMaxRange` to `RuleMutation` entity kind and
+   `origin`/`maxRange` to the VM `RuleEffect` entity type. The reducer now
+   threads these through to `validateEntityCreation`, enforcing LoS (via the
+   shared primitives kernel), impassable terrain, and range at the reducer
+   authority. The origin is source-declared (not hardcoded to the summoner);
+   absent origin skips LoS/range checks for backward compatibility.
+   Lifecycle companion summons also thread origin/maxRange. 6 entity-creation
+   LoS/range regression tests added.
+
+   **Range-modifier tranche (2026-08-27):** Audited all 11 former singleton
+   `range-modifier` units against full source text. Only Dark Sliver t2
+   ("Sacrifice 2: Ability gains range 6") is a genuine listed-range change;
+   implemented via the range kernel with a new `choice` gate type (player-
+   declared talent-use opt-in at command time, replay-safe). The other 10
+   units were reclassified to their true missing families:
+   - entity-distance-selection (5): Meld, Umbra t2, Harrow t1, DB t2, Open
+     Gates t1 — entity/spatial distance predicates from arbitrary origins
+   - active-effect-range-modifier (1): Gates of Hell t2 — cross-ability
+     range modifier gated on a persistent effect
+   - spatial-state (1): Colossus limit break — original-location capture
+   - range-gated-teleport (1): Sealer limit break — pre-attack teleport gate
+   - multi-actor-teleport (1): Nocturne mastery — multi-char teleport
+   - resource-management (1): Conqueror's Edge — Infuse cost reduction
+   The `range-modifier` singleton family is gone (11 → 0 immediate).
+   Regenerated census: 423 unresolved, 0 residual.
+   New highest-immediate fold-shaped family: `entity-distance-selection` (5).
+   Next Step-6 family from the regenerated census: `entity-distance-selection`.
+   Full test suite green (1110 tests), all audits green.
+
 7. **Close one deliberately complex player-content vertical slice end to
    end:** persistent character → encounter → talents/masteries/interrupts/
    movement/status interactions → deterministic replay → settlement →

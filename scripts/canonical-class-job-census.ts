@@ -231,6 +231,53 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // Aetherwall) are executable and dropped out of the census entirely. The
   // remaining singletons were misclassified: `range-modifier` conflated
   // several genuinely different families, reclassified below.
+  //
+  // ── Range-modifier re-audit (Step-6 pass, 2026-08-27) ──
+  // The census heuristic adds `range-modifier` to any unit mentioning
+  // "range N". Of the 11 former singletons, only Dark Sliver t2 is a
+  // genuine listed-range change (sacrifice-gated override to 6). The rest
+  // are distance predicates, spatial constraints, cross-ability modifiers,
+  // or resource predicates that the regex conflated.
+  'demon-slayer:gates-of-hell:talent:2': ['active-effect-range-modifier'],
+  // "Vigilance's range increases by +1 while Gates of Hell is active" — a
+  // cross-ability range modifier gated on a persistent effect's presence;
+  // needs an active-effect-gated range modifier rule in the range kernel.
+  'colossus:limit-break': ['spatial-state', 'range-modifier'],
+  // "slamming that character into unoccupied space in range 3 of your
+  // original location" — the original-location spatial state must be
+  // captured before the battlefield remove and used as origin for the
+  // placement-range predicate (spatial-state); the range3 destination
+  // constraint is a distance predicate from that origin (range-modifier).
+  'shade:trait:meld': ['entity-distance-selection'],
+  // "swap places with any shadow in range 3" — entity-distance selection
+  // from the caster; needs a reusable entity-distance-in-range predicate.
+  'shade:umbra:talent:2': ['entity-distance-selection'],
+  // "consume a shadow in range 2 of yourself" — entity-distance selection
+  // from the caster; needs entity-distance-in-range predicate.
+  'shade:harrow:talent:1': ['entity-distance-selection'],
+  // "teleport to any space in range 2 of Harrow's marked target" —
+  // spatial selection with range validation from an arbitrary (marked-
+  // target) origin, not the caster.
+  'shade:death-blossom:talent:2': ['entity-distance-selection'],
+  // "throw knives, dealing 2 damage to up to three foes in range 3" —
+  // secondary target selection with range constraint from the caster
+  // after a teleport; the foe-distance selection is the blocker.
+  'shade:nocturne:mastery': ['entity-distance-selection', 'multi-actor-teleport'],
+  // "teleport any characters in range 2 of you into any free space inside
+  // the area" — multi-character selection with range validation from the
+  // caster plus a destination-area constraint.
+  'sealer:limit-break': ['range-gated-teleport', 'entity-distance-selection'],
+  // "teleport adjacent to the target before the attack if they're in range
+  // 3" (self), "every ally in range 3 of the target can also teleport" —
+  // range-gated pre-attack teleport (self) and target-relative ally
+  // distance selection.
+  'sealer:open-the-gates:talent:1': ['entity-distance-selection'],
+  // "teleport an ally in range 2 instead of yourself" — alternate teleport
+  // recipient with entity-distance eligibility from the caster.
+  'spellblade:trait:conqueror-s-edge': ['resource-management'],
+  // "Infuse costs are reduced by 1 if there's a foe in range 2" — a
+  // nearby-foe predicate feeding the Infuse resource-cost calculation;
+  // not a listed-range change at all.
   'knave:limit-break': ['condition-suppression'],
   // MOCK's "cannot gain or benefit from evasion, dodge, or stealth" needs a
   // general condition-suppression projection (mark suppressions exist, a

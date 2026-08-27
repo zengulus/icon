@@ -1278,7 +1278,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     const baseRange = abilityRange(ability.header, ability.range);
     const maximumRange = isLineShaped(ability.header)
       ? effectiveAreaFor(areaStateView(state, actor.id), actor.id, ability.id, 'line', baseRange).length
-      : effectiveAbilityRange(rangeStateView(state), actor.id, ability.id, baseRange);
+      : effectiveAbilityRange(rangeStateView(state, new Set(command.input?.talentChoices ?? [])), actor.id, ability.id, baseRange);
     assertDirectTarget(state, actor, attackTargetActor, {
       relation: 'foe',
       maximumRange,
@@ -1561,7 +1561,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         assertDirectTarget(state, actor, target, {
           relation: action.tags.includes('attack') ? 'foe' : 'any',
           maximumRange: effectiveAbilityRange(
-            rangeStateView(state),
+            rangeStateView(state, new Set(command.input?.talentChoices ?? [])),
             actor.id,
             unit.id,
             action.range?.kind === 'constant' ? action.range.value : 1,

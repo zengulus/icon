@@ -76,6 +76,78 @@ describe('F6 generic entity creation authority', () => {
   });
 });
 
+describe('F6 entity creation LoS and range enforcement', () => {
+  it('rejects a destination behind impassable terrain when LoS is required', () => {
+    const { state, hero } = summonEncounter([]);
+    // Place an impassable wall between the hero at (1,1) and position (3,1).
+    state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 0 });
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 3, y: 1 }],
+      state: {}, duration: null,
+      origin: { x: 1, y: 1 },
+    });
+    // The impassable terrain at (2,1) blocks LoS from (1,1) to (3,1).
+    expect(result).toBeNull();
+  });
+  it('accepts a destination within range and line of sight', () => {
+    const { state, hero } = summonEncounter([]);
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 3, y: 1 }],
+      state: {}, duration: null,
+      origin: { x: 1, y: 1 },
+      maxRange: 5,
+    });
+    expect(result).toEqual({ positions: [{ x: 3, y: 1 }], count: 1 });
+  });
+  it('rejects a destination beyond maximum range', () => {
+    const { state, hero } = summonEncounter([]);
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 8, y: 1 }],
+      state: {}, duration: null,
+      origin: { x: 1, y: 1 },
+      maxRange: 3,
+    });
+    expect(result).toBeNull();
+  });
+  it('accepts the exact maximum range boundary', () => {
+    const { state, hero } = summonEncounter([]);
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 4, y: 1 }],
+      state: {}, duration: null,
+      origin: { x: 1, y: 1 },
+      maxRange: 3,
+    });
+    expect(result).toEqual({ positions: [{ x: 4, y: 1 }], count: 1 });
+  });
+  it('uses Chebyshev (diagonal) distance for range validation', () => {
+    const { state, hero } = summonEncounter([]);
+    // Diagonal distance from (1,1) to (3,3) = max(|3-1|,|3-1|) = 2
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 3, y: 3 }],
+      state: {}, duration: null,
+      origin: { x: 1, y: 1 },
+      maxRange: 2,
+    });
+    expect(result).toEqual({ positions: [{ x: 3, y: 3 }], count: 1 });
+  });
+  it('rejects creation when no origin or maxRange are provided and positions are valid', () => {
+    // Without origin/maxRange the kernel skips LoS/range checks — this is the
+    // backward-compatible path for existing mutations.
+    const { state, hero } = summonEncounter([]);
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 3, y: 1 }],
+      state: {}, duration: null,
+    });
+    expect(result).toEqual({ positions: [{ x: 3, y: 1 }], count: 1 });
+  });
+});
+
 describe('F6 entity lifecycle', () => {
   it('a non-companion entity is removed when its owner falls', () => {
     const { state, hero } = summonEncounter([]);
