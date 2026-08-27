@@ -24,7 +24,7 @@ registerAbilityUseChoiceRecipe({
   ],
 });
 
-// ICON p.190 Sealer Blessing of War: "Yourself or allies can spend a blessing
+// ICON p.191 Sealer Blessing of War: "Yourself or allies can spend a blessing
 // when they use an ability to gain +1 boon on attacks and bonus damage with
 // that ability. If they consume 3 blessings, it additionally triggers all
 // exceed effects."

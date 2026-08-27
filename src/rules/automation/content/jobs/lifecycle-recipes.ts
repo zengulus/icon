@@ -1237,7 +1237,7 @@ registerLifecycleRecipe({
   },
 });
 
-/** ICON p.190 Enochian Phoenix Rage: from round 5, the owner gains a durable
+/** ICON p.208 Enochian Phoenix Rage: from round 5, the owner gains a durable
  * Defiance condition at the start of each of their turns (so it returns each
  * round after the damage kernel consumes it). The wound-gamble half is
  * documented. */

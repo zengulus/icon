@@ -391,7 +391,7 @@ import type { CombatStartTraitRecipe } from '../../kernels/lifecycle.js';
  * registered into the lifecycle kernel by `content/registry.ts`.
  */
 export const COMBAT_START_TRAIT_RECIPES: Readonly<Record<string, CombatStartTraitRecipe>> = {
-  // ICON p.190 Enochian Embersoul: "Start combat with regeneration and
+  // ICON p.208 Enochian Embersoul: "Start combat with regeneration and
   // defiance" - regeneration is a whole-combat projection, defiance is
   // durable here because the damage kernel consumes it.
   'enochian:trait:embersoul': { grantConditions: ['defiance'] },

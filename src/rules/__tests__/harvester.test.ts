@@ -416,10 +416,11 @@ describe('Harvester ability automation (p.182–188)', () => {
   });
 
   it('Dark Sliver talent 2: "Sacrifice 2: Ability gains range 6" (p.187)', () => {
-    // ICON p.187 + p.190 Sacrifice rule: "The HP cost is paid at the start
-    // of the ability." The sacrifice-2 is validated and paid through the
-    // cost-payment authority before any effect or RNG, and the range becomes
-    // 6 through the range kernel's choice gate.
+    // ICON p.187 + Combat Glossary Sacrifice (p.102): "Sacrifice costs are
+    // paid at the start of an ability". The sacrifice-2 is validated and
+    // paid through the cost-payment authority before any effect or RNG, and
+    // the range becomes 6 through the range kernel's choice gate — both
+    // halves resolved from the SAME validated pre-use augmentation.
     const fixture = harvesterEncounter({ second: null, foe: { x: 6, y: 1 } });
     fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 2 };
     fixture.state.actors[fixture.hero.id].hp = 12; // enough to sacrifice 2
@@ -432,25 +433,30 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(result.state.actors[fixture.hero.id].hp).toBe(10);
     // [D] 4 + fray 4 = 8 damage to foe: 32 - 8 = 24.
     expect(result.state.actors[fixture.foe.id].hp).toBe(24);
-    // The sacrifice event is recorded and replay produces the identical state.
+    // The nominal Sacrifice-2 mutation rides the recorded event.
+    const sacrifice = mutationsOf(result.events, 'harvester:dark-sliver').find((mutation) =>
+      mutation.kind === 'damage' && mutation.damageType === 'sacrifice' && mutation.actorId === fixture.hero.id);
+    expect(sacrifice).toMatchObject({ kind: 'damage', amount: 2, damageType: 'sacrifice' });
+    // The command-time decision and payment replay to the identical state.
     expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
   });
 
-  it('Dark Sliver talent 2: talent choice without sacrifice produces no extra cost', () => {
+  it('Dark Sliver talent 2: no declaration → base range and no sacrifice', () => {
     // Without declaring the talent choice, the sacrifice is not paid and
-    // the range stays at 2 (base range).
+    // the range stays at 2 (base range) — the range-6 target is rejected.
     const fixture = harvesterEncounter({ second: null, foe: { x: 6, y: 1 } });
     fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 2 };
-    // No talentChoices input: the range-6 gate does not fire.
+    fixture.state.actors[fixture.hero.id].hp = 12;
     expect(() => executeCommand(fixture.state, {
       type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver',
       targetIds: [fixture.foe.id],
     }, scriptedDice(12, 4))).toThrow(); // out of range 2
+    expect(fixture.state.actors[fixture.hero.id].hp).toBe(12); // nothing paid
   });
 
   it('Dark Sliver talent 2: sacrifice with insufficient HP still pays (floor 1)', () => {
-    // ICON p.190 Sacrifice: "may still be paid when the payer has less HP
-    // than the nominal amount" — floor 1 HP.
+    // ICON Sacrifice p.102: the cost "cannot bring your hp below 1, and you
+    // can pay them even if you don't have enough hp left" — floor 1 HP.
     const fixture = harvesterEncounter({ second: null, foe: { x: 6, y: 1 } });
     fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 2 };
     fixture.state.actors[fixture.hero.id].hp = 1; // only 1 HP, sacrifice 2
@@ -463,15 +469,97 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(result.state.actors[fixture.hero.id].hp).toBe(1);
     // The ability still resolves normally.
     expect(result.state.actors[fixture.foe.id].hp).toBe(24);
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Dark Sliver talent 2: talent choice without equipped talent is rejected', () => {
-    const fixture = harvesterEncounter({ second: null, foe: { x: 6, y: 1 } });
-    // No talent 2 equipped: the range-6 gate cannot fire.
-    expect(() => executeCommand(fixture.state, {
+  it('Dark Sliver talent 2: declared but not equipped — no sacrifice and no Range 6 when the target is otherwise in base range', () => {
+    // The augmentation authority ignores a declared choice the actor does
+    // not have equipped at the required rank: no sacrifice is paid and the
+    // range gate never fires, even though the command succeeded on base
+    // range — the choice created no mechanical state change.
+    const fixture = harvesterEncounter({ second: null, foe: { x: 2, y: 1 } });
+    fixture.state.actors[fixture.hero.id].talents = {}; // talent 2 NOT equipped
+    fixture.state.actors[fixture.hero.id].hp = 12;
+    const result = executeCommand(fixture.state, {
       type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver',
       targetIds: [fixture.foe.id],
       input: { talentChoices: ['harvester:dark-sliver:talent:2'] },
-    }, scriptedDice(12, 4))).toThrow(); // talent not equipped, out of range 2
+    }, scriptedDice(12, 4));
+    // Legal at base range 2, and NO sacrifice was paid.
+    expect(result.state.actors[fixture.hero.id].hp).toBe(12);
+    expect(result.state.actors[fixture.foe.id].hp).toBe(24); // 32 - (4 + 4)
+    expect(mutationsOf(result.events, 'harvester:dark-sliver').some((mutation) =>
+      mutation.kind === 'damage' && mutation.damageType === 'sacrifice')).toBe(false);
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Dark Sliver talent 2: declared while using a different legal ability — no sacrifice, no effect on that ability', () => {
+    // A talentChoices source ID unrelated to the ability being used is
+    // ignored by the augmentation authority: it cannot pay a cost or alter
+    // another ability's resolution.
+    const fixture = harvesterEncounter({ second: null, foe: { x: 2, y: 1 } });
+    fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 2 }; // equipped, but used with Sow
+    fixture.state.actors[fixture.hero.id].hp = 12;
+    const result = executeCommand(fixture.state, {
+      type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:sow',
+      targetIds: [fixture.foe.id],
+      input: { talentChoices: ['harvester:dark-sliver:talent:2'] },
+    }, scriptedDice());
+    // Sow resolves exactly as usual (auto-hit fray 4) with NO sacrifice paid.
+    expect(result.state.actors[fixture.hero.id].hp).toBe(12);
+    expect(result.state.actors[fixture.foe.id].hp).toBe(28); // 32 - fray 4
+    expect(mutationsOf(result.events, 'harvester:sow').some((mutation) =>
+      mutation.kind === 'damage' && mutation.damageType === 'sacrifice')).toBe(false);
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Dark Sliver talent 2: declared but not equipped — the range-6 gate cannot fire through a different legal ability either', () => {
+    // Even through a different ability, an unrelated declared choice never
+    // widens any range: the validated augmentation set for THIS ability is
+    // empty, so the range kernel's choice gate reads nothing.
+    const fixture = harvesterEncounter({ second: null, foe: { x: 6, y: 1 } });
+    fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 2 };
+    fixture.state.actors[fixture.hero.id].hp = 12;
+    // Sow's target is limited by its own base range 4 (target at range 5):
+    // the Dark Sliver declaration must not leak Range 6 into Sow.
+    expect(() => executeCommand(fixture.state, {
+      type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:sow',
+      targetIds: [fixture.foe.id],
+      input: { talentChoices: ['harvester:dark-sliver:talent:2'] },
+    }, scriptedDice())).toThrow(); // out of Sow's range
+    expect(fixture.state.actors[fixture.hero.id].hp).toBe(12); // nothing paid
+  });
+
+  it('Dark Sliver talent 2 through EXECUTE_RULE: same payment and range semantics as USE_ABILITY', () => {
+    // EXECUTE_RULE consumes the same validated pre-use augmentation: Range 6
+    // through the choice gate AND the Sacrifice-2 payment ride the event.
+    const fixture = harvesterEncounter({ second: null, foe: { x: 6, y: 1 } });
+    fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 2 };
+    fixture.state.actors[fixture.hero.id].hp = 12;
+    const result = executeCommand(fixture.state, {
+      type: 'EXECUTE_RULE', actorId: fixture.hero.id, sourceId: 'harvester:dark-sliver',
+      actionId: 'default', timing: 'use', attackTargetId: fixture.foe.id,
+      input: { talentChoices: ['harvester:dark-sliver:talent:2'] },
+    }, scriptedDice(12, 4));
+    // Sacrifice 2 HP: 12 → 10, exactly like USE_ABILITY.
+    expect(result.state.actors[fixture.hero.id].hp).toBe(10);
+    expect(result.state.actors[fixture.foe.id].hp).toBe(24);
+    const sacrifice = mutationsOf(result.events, 'harvester:dark-sliver').find((mutation) =>
+      mutation.kind === 'damage' && mutation.damageType === 'sacrifice' && mutation.actorId === fixture.hero.id);
+    expect(sacrifice).toMatchObject({ kind: 'damage', amount: 2, damageType: 'sacrifice' });
+    // Replay applies exactly what the command decided.
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Dark Sliver talent 2 through EXECUTE_RULE: no declaration stays at base range with no sacrifice', () => {
+    const fixture = harvesterEncounter({ second: null, foe: { x: 6, y: 1 } });
+    fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 2 };
+    fixture.state.actors[fixture.hero.id].hp = 12;
+    expect(() => executeCommand(fixture.state, {
+      type: 'EXECUTE_RULE', actorId: fixture.hero.id, sourceId: 'harvester:dark-sliver',
+      actionId: 'default', timing: 'use', attackTargetId: fixture.foe.id,
+      input: {},
+    }, scriptedDice(12, 4))).toThrow(); // out of base range 2
+    expect(fixture.state.actors[fixture.hero.id].hp).toBe(12); // nothing paid
   });
 });

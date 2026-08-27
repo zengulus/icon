@@ -331,26 +331,32 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
         const positions = effect.positionInput ? [...(context.input.positions?.[effect.positionInput] ?? [])] : [];
         const count = effect.count ? integer(effect.count, context) : Math.max(1, positions.length);
         // ICON general rule: creation requires free, unobstructed, and LoS.
-        // The origin and maxRange are source-declared on the effect; evaluated
-        // at command time and carried through to the reducer for authoritative
-        // replay-safe enforcement.
-        // Fail-closed: if an entity effect declares an origin selector, the
-        // selector must resolve to exactly one actor with a valid battlefield
-        // position. Zero actors or actors without positions mean the source
-        // rule cannot determine where to create — the engine must reject,
-        // not silently skip LoS/range enforcement.
-        let creationOrigin: Position | undefined;
-        let creationOriginSize: number | undefined;
-        if (effect.origin) {
-          const originActors = selectActors(effect.origin, context);
+        // The origin and maxRange are source-declared on the effect as ONE
+        // creation-spatial contract (origin/range are a paired invariant — a
+        // range without an origin is unrepresentable and rejected here even
+        // if it were supplied); evaluated at command time and carried through
+        // to the reducer for authoritative replay-safe enforcement.
+        // Fail-closed: a declared origin selector must resolve to EXACTLY ONE
+        // actor with a valid battlefield position. Zero actors, more than one
+        // actor, or an actor without a valid on-board position mean the source
+        // rule cannot determine where to create — the engine must reject, not
+        // silently skip LoS/range enforcement.
+        let creationSpatial: { origin: Position; originSize: number; maxRange?: number } | undefined;
+        if (effect.spatial) {
+          if (!effect.spatial.origin) {
+            throw new RuleProgramViolation('entity.origin-required', 'Entity creation declares a maximum range but no origin; creation origin/range must travel as a pair.');
+          }
+          const originActors = selectActors(effect.spatial.origin, context);
           if (originActors.length !== 1 || !originActors[0].position) {
             throw new RuleProgramViolation('entity.origin-invalid', `Entity creation origin selector resolved to ${originActors.length} actor(s); expected exactly one with a valid position.`);
           }
-          creationOrigin = originActors[0].position;
-          creationOriginSize = effect.originSize ? integer(effect.originSize, context) : originActors[0].size;
+          creationSpatial = {
+            origin: originActors[0].position,
+            originSize: effect.spatial.originSize ? integer(effect.spatial.originSize, context) : originActors[0].size,
+            ...(effect.spatial.maxRange !== undefined ? { maxRange: effect.spatial.maxRange } : {}),
+          };
         }
-        const creationMaxRange = effect.maxRange;
-        for (const owner of owners) output.push({ kind: 'entity', sourceId: context.sourceId, operation: effect.operation, entityType: effect.entityType, ownerId: owner.id, positions: positions.slice(0, count), count, state: effect.state ?? {}, ...(effect.duration ? { duration: effect.duration } : {}), ...(creationOrigin ? { creationOrigin } : {}), ...(creationOriginSize !== undefined ? { creationOriginSize } : {}), ...(creationMaxRange !== undefined ? { creationMaxRange } : {}) });
+        for (const owner of owners) output.push({ kind: 'entity', sourceId: context.sourceId, operation: effect.operation, entityType: effect.entityType, ownerId: owner.id, positions: positions.slice(0, count), count, state: effect.state ?? {}, ...(effect.duration ? { duration: effect.duration } : {}), ...(creationSpatial ? { creationSpatial } : {}) });
         break;
       }
       case 'mark': for (const target of targets) output.push({ kind: 'mark', sourceId: context.sourceId, ownerId: context.actorId, operation: effect.operation, actorId: target.id, markId: effect.markId, ...(effect.duration ? { duration: effect.duration } : {}), state: effect.state ?? {} }); break;

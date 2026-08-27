@@ -28,6 +28,7 @@
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { RuleMutation } from '../primitives/types.js';
+import { sacrificeMutation } from '../primitives/cost-payment.js';
 
 /** ICON p.102: bloodied at or below half maximum HP (same formula as the
  * kernel's isBloodied — inlined here to keep the module graph acyclic: the
@@ -225,25 +226,95 @@ export function registerMarkModifierTalent(sourceId: string, mechanic: string): 
   markModifierTalentRecipes[sourceId] = mechanic;
 }
 
-/** Sacrifice-cost talents: the talent's COMPLETE semantics include a
- * pre-resolution sacrifice HP cost (ICON Sacrifice p.190: "The HP cost is
- * paid at the start of the ability"). When the player declares the talent
- * choice at USE_ABILITY time, the sacrifice is validated and paid through
- * the same cost-payment authority the ability's own costs use — before any
- * effect or RNG. The range/effect half (if any) is wired separately
- * (e.g. through the range kernel). */
-const sacrificeCostTalentRecipes: Record<string, { sacrificeAmount: number; mechanic: string }> = {};
+/** A pre-resolution cost a pre-use talent augmentation pays at the start of
+ * the ability (ICON Combat Glossary Sacrifice p.102: "Sacrifice costs are
+ * paid at the start of an ability"). Costs ride the shared cost-payment
+ * authority — the same transaction gate the ability's own costs use — and
+ * their durable mutations ride the ability's recorded event, so replay
+ * applies exactly what the command boundary decided. */
+export type PreUseTalentCost = { kind: 'sacrifice'; amount: number };
 
-/** Register a sacrifice-cost talent: the player-chosen talent triggers a
- * sacrifice payment of `sacrificeAmount` HP at the start of the ability. */
-export function registerSacrificeCostTalent(sourceId: string, sacrificeAmount: number, mechanic: string): void {
-  sacrificeCostTalentRecipes[sourceId] = { sacrificeAmount, mechanic };
+/** Pre-use talent augmentations (F-family): a talent whose COMPLETE semantics
+ * are a validated, pre-resolution augmentation of the ability being used —
+ * e.g. Dark Sliver talent 2's "Sacrifice 2: Ability gains range 6"
+ * (p.187 + Sacrifice p.102). One row binds the talent source ID to its
+ * parent ability and required equipped rank, any pre-resolution costs, and
+ * the declared-choice opt-in that gates the whole augmentation. Both command
+ * surfaces (USE_ABILITY and EXECUTE_RULE) resolve the command's
+ * `talentChoices` through this single authority BEFORE target validation /
+ * effects / RNG, and feed the SAME validated result into every fold gate
+ * (the range kernel's `choice` gate reads the validated source-ID set), so
+ * a choice can never pay a cost without its range half or widen a range
+ * without paying its cost. This replaces the former global "string →
+ * sacrifice amount" lookup, which injected costs from arbitrary
+ * `talentChoices` without proving the choice belonged to the ability being
+ * used or that the actor had the talent equipped. */
+export interface PreUseTalentAugmentation {
+  /** The exact source unit id of the talent. */
+  sourceId: string;
+  /** The parent ability whose use this augmentation modifies. A declared
+   * choice for any other ability is ignored and can never create a
+   * mechanical state change. */
+  abilityId: string;
+  /** The equipped talent rank required for the augmentation to fire. */
+  talent: 1 | 2;
+  /** When true, the augmentation fires only when the player explicitly
+   * declared this source ID in the command's `talentChoices` input (the
+   * opt-in sacrifice-gated family). The engine never assumes "yes" merely
+   * because the effect is beneficial. */
+  requiresChoice: boolean;
+  /** Pre-resolution costs paid at the start of the ability, before any
+   * effect or RNG, through the shared cost-payment authority. */
+  costs?: readonly PreUseTalentCost[];
+  /** Audit mechanic text. */
+  mechanic: string;
 }
 
-/** Whether a talent choice source ID carries a pre-resolution sacrifice
- * cost that must be validated before the ability resolves. */
-export function getSacrificeCost(sourceId: string): number | undefined {
-  return sacrificeCostTalentRecipes[sourceId]?.sacrificeAmount;
+const preUseTalentAugmentations: Record<string, PreUseTalentAugmentation> = {};
+
+/** Register a pre-use talent augmentation (content/jobs/range-recipes.ts). */
+export function registerPreUseTalentAugmentation(row: PreUseTalentAugmentation): void {
+  preUseTalentAugmentations[row.sourceId] = row;
+}
+
+/** The validated result both command gates consume. `validatedSourceIds` is
+ * the exact set of talent source IDs whose augmentation is genuinely active
+ * for THIS ability use (declared where required, equipped at the required
+ * rank, parent-ability match, deduplicated) — the set the range kernel's
+ * `choice` gate reads. `costMutations` are the pre-resolution payment
+ * mutations that must ride the recorded event. */
+export interface ResolvedPreUseAugmentations {
+  validatedSourceIds: ReadonlySet<string>;
+  costMutations: RuleMutation[];
+}
+
+/** Resolve the command's declared talent choices against the registered
+ * pre-use augmentations for the ability being used. ONE explicit generic
+ * policy: a declared source ID that is not a registered augmentation, does
+ * not belong to the ability being used, is not equipped at the required
+ * rank, or is duplicated is IGNORED — it contributes nothing and can never
+ * create a mechanical state change (no cost, no range, no fold). The result
+ * is deterministic (registration order + declaration order, no ambient
+ * state), so both command surfaces and replay see the same augmentation. */
+export function resolvePreUseTalentAugmentations(
+  actor: Pick<EncounterActor, 'id' | 'talents'>,
+  abilityId: string,
+  talentChoices: readonly string[] | undefined,
+): ResolvedPreUseAugmentations {
+  const declared = new Set(talentChoices ?? []);
+  const validatedSourceIds = new Set<string>();
+  const costMutations: RuleMutation[] = [];
+  for (const row of Object.values(preUseTalentAugmentations)) {
+    if (row.abilityId !== abilityId) continue;
+    if (actor.talents?.[row.abilityId] !== row.talent) continue;
+    if (row.requiresChoice && !declared.has(row.sourceId)) continue;
+    if (validatedSourceIds.has(row.sourceId)) continue;
+    validatedSourceIds.add(row.sourceId);
+    for (const cost of row.costs ?? []) {
+      if (cost.kind === 'sacrifice') costMutations.push(sacrificeMutation(row.sourceId, actor.id, cost.amount));
+    }
+  }
+  return { validatedSourceIds, costMutations };
 }
 
 /** Area-modifier talents: the talent's COMPLETE semantics are a shape/size
@@ -277,7 +348,7 @@ export function getExecutableTalentIds(): ReadonlySet<string> {
     ...Object.keys(areaModifierTalentRecipes),
     ...Object.keys(bonusDamageTalentRecipes),
     ...Object.keys(markModifierTalentRecipes),
-    ...Object.keys(sacrificeCostTalentRecipes),
+    ...Object.keys(preUseTalentAugmentations),
   ]);
 }
 
@@ -289,7 +360,7 @@ export const isExecutableTalent = (sourceId: string): boolean =>
   || Object.prototype.hasOwnProperty.call(areaModifierTalentRecipes, sourceId)
   || Object.prototype.hasOwnProperty.call(bonusDamageTalentRecipes, sourceId)
   || Object.prototype.hasOwnProperty.call(markModifierTalentRecipes, sourceId)
-  || Object.prototype.hasOwnProperty.call(sacrificeCostTalentRecipes, sourceId);
+  || Object.prototype.hasOwnProperty.call(preUseTalentAugmentations, sourceId);
 
 /** The mechanic text of a program-level talent implementation, or undefined
  * for a fold-wired or documented talent. */

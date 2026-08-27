@@ -178,12 +178,15 @@ assumption here, document the evidence and update this list before proceeding.
 
    **Entity-creation source-fidelity repair (2026-08-27):** Range validation
    now uses the canonical p.92 footprint distance (L\u221e between occupied
-   footprints) instead of raw anchor-cell Chebyshev. creationOriginSize
-   threaded through RuleEffect \u2192 RuleMutation \u2192 reducer \u2192 kernel.
-   The VM origin selector rejects zero-actor origins before cost consumption.
-   End-to-end entity-creation regression tests added (RuleEffect \u2192
-   RuleMutation \u2192 reducer path with origin metadata and replay).
-   10 new tests added (summons + harvester), 1120 total.
+   footprints) instead of raw anchor-cell Chebyshev. Origin geometry
+   (including the origin actor's Size) threads through RuleEffect \u2192
+   RuleMutation \u2192 reducer \u2192 kernel. The VM origin selector rejects
+   zero-actor origins before cost consumption. End-to-end entity-creation
+   regression tests added (RuleEffect \u2192 RuleMutation \u2192 reducer path
+   with origin metadata and replay). 10 new tests added (summons +
+   harvester), 1120 total. (2026-08-27 corrective pass: origin/range are now
+   a single PAIRED creation-spatial contract — see the corrective-repair
+   entry below.)
 
    **Dark Sliver Talent II sacrifice cost (2026-08-27):** Added the
    `sacrifice-cost` talent registry (`kernels/talent-recipes.ts`) for
@@ -193,6 +196,30 @@ assumption here, document the evidence and update this list before proceeding.
    (before program resolution), recorded on the event for replay. 4 new
    tests: sacrifice paid at start, no-choice produces no cost, insufficient
    HP floors at 1, unequipped talent rejected.
+
+   **Corrective repair — pre-use talent augmentation + entity spatial
+   contract (2026-08-27):** Replaced the global "string → sacrifice amount"
+   seam with a generic pre-use talent augmentation authority
+   (`kernels/talent-recipes.ts` `resolvePreUseTalentAugmentations`): one row
+   binds the talent source ID, parent ability, required equipped rank,
+   declared-choice opt-in, and pre-resolution costs. BOTH command gates
+   (USE_ABILITY and EXECUTE_RULE) consume the same validated result before
+   target validation/effects/RNG, feeding the range kernel's `choice` gate
+   and the cost gate — so Range 6 and Sacrifice 2 always travel together.
+   A declared choice that is unrelated to the ability being used, not
+   equipped at the required rank, duplicated, or unknown is IGNORED (no
+   mechanical state change). Entity-creation origin/range became a PAIRED
+   creation-spatial contract (`RuleEffect.spatial` /
+   `RuleMutation.creationSpatial`), fail-closed at the runtime (zero/multi/
+   off-board origin actors and range-without-origin rejected) and the
+   reducer (out-of-grid or maxRange-only carried origin rejected). Size>1
+   LoS is documented as a remaining source-fidelity limitation (p.92 LoS
+   from "any edge of your space" needs a footprint-aware query through the
+   shared LoS authority; only the range half is footprint-correct today).
+   Sacrifice glossary citations corrected from the wrong "p.190" to the
+   canonical Combat Glossary p.102; Enochian/Sealer ability references
+   corrected to their extracted pages (p.208/p.210/p.191/p.184). 11 new
+   tests (harvester + summons production-path), 1131 total.
 
 7. **Close one deliberately complex player-content vertical slice end to
    end:** persistent character → encounter → talents/masteries/interrupts/
@@ -280,7 +307,7 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 | F5 | Mark-modifier family | **PARTIAL** (2026-08-27): landed subset = carrier-aware mark-condition projections with potency, the mark-keyed status-save policy seam, turn-boundary mark triggers; 3 promoted (Grand Seal t1/t2, Rot t2). The coarse `{mark-modifier}` label is RETIRED — all 22 compound records reclassified to precise families (mark-gated-modifier 11, mark-transfer 4, mark-defeat-trigger 5, mark-stacking 3, mark-detonation-window 2, mark-activation-gate 2; growing-season mastery + Rot t1 dropped it as supplied); **zero blocker sets carry `mark-modifier`** | 3 promoted (12 originally listed) | Census `{mark-modifier}` label cleared; F5 remainder = the not-yet-landed mark families (mark-gated-modifier: 0 immediate / 11 compound) |
 | F6 | Damage-modifier family | PARTIAL — bonus-damage dice grants landed (2026-08-27, F6a): `kernels/bonus-damage.ts` + 4 talent rows + Finesse; remaining subfamilies (round-gated dice, exceed auto-grant, suppression, damage-maximize, flat self-ratio) reclassified in the census | 6 promoted (13 originally listed) | Census `{damage-modifier}` cleared |
 | F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (modifier kernel K-P5 live; 4 wired — + Demon Claw RAGING DEMON 2026-08-27 — 132 unresolved) | 132 masteries | Biggest single content family |
-| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL — **53/288 talents wired through the F8 subfamilies** (resource-management, action-type-change, charge-state, shove-modifier). This is an F8-ONLY count, deliberately narrower than the 56/288 total executable talents, which also includes the F1 teleport rows (Strongarm t1, Nothung t2), the F5 mark rows (Grand Seal t1/t2, Rot t2), and the F6a bonus-damage rows (Low Blow t1, Nothung t1, Incubus t2, Dark Sliver t1) that ride other folds | ~180 talents | See census frequencies |
+| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL — **53/288 talents wired through the F8 subfamilies** (resource-management, action-type-change, charge-state, shove-modifier). This is an F8-ONLY count, deliberately narrower than the 57/288 total executable talents, which also includes the F1 teleport rows (Strongarm t1, Nothung t2), the F5 mark rows (Grand Seal t1/t2, Rot t2), the F6a bonus-damage rows (Low Blow t1, Nothung t1, Incubus t2, Dark Sliver t1), and the pre-use augmentation row (Dark Sliver t2) that ride other folds | ~180 talents | See census frequencies |
 | F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
 | F10 | Expedition scene flow (camp/interlude as playable steps around the sheet transitions) | PARTIAL (sheet transitions DONE) | cross-combat play UX | |
 
@@ -309,11 +336,12 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 - **Job traits** — `PARTIAL`: 27/65 wired across the five wiring homes;
   **38 documented** rows remain, each carrying its kernel need. Work the
   highest-frequency kernel first (see F1–F6), then harvest rows.
-- **Talents** — `PARTIAL`: 56/288 executable (fold, program-level
+- **Talents** — `PARTIAL`: 57/288 executable (fold, program-level
   incl. F1 Strongarm t1 / Nothung t2, aura projection, range/area
   modifiers, the F6a bonus-damage rows: Low Blow t1, Nothung t1,
-  Incubus t2, Dark Sliver t1, and the F5 mark-modifier rows: Grand Seal
-  t1, Grand Seal t2, Rot t2). **232 unresolved**. Do not bulk-enable;
+  Incubus t2, Dark Sliver t1, the F5 mark-modifier rows: Grand Seal
+  t1, Grand Seal t2, Rot t2, and the pre-use augmentation row: Dark
+  Sliver t2). **231 unresolved**. Do not bulk-enable;
   promote exact-ID slices per subfamily with replay fixtures.
 - **Masteries** — `PARTIAL`: equipped-mastery surface is validated and
   durable; the mastery-modifier fold (K-P5: interrupt-rank, damage-type

@@ -1,10 +1,12 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { defeatActor } from '../automation/kernels/encounter-adapter.js';
+import { defeatActor, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
 import { validateEntityCreation } from '../automation/kernels/entity-creation.js';
+import { executeRuleProgram, RuleProgramViolation } from '../automation/kernels/runtime.js';
+import type { RuleEffect, RuleExecutionContext, RuleMutation, RuleProgram, RuleSelector } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
-import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
-import { validCharacter, startEncounterTo } from './fixtures.js';
+import type { EncounterActor, EncounterEvent, EncounterState, Position } from '../types.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 interface SummonFixture { state: EncounterState; hero: EncounterActor; foe: EncounterActor; }
 
@@ -85,7 +87,7 @@ describe('F6 entity creation LoS and range enforcement', () => {
       ownerId: hero.id, entityType: 'bomb', count: 1,
       positions: [{ x: 3, y: 1 }],
       state: {}, duration: null,
-      origin: { x: 1, y: 1 },
+      spatial: { origin: { x: 1, y: 1 } },
     });
     // The impassable terrain at (2,1) blocks LoS from (1,1) to (3,1).
     expect(result).toBeNull();
@@ -96,8 +98,7 @@ describe('F6 entity creation LoS and range enforcement', () => {
       ownerId: hero.id, entityType: 'bomb', count: 1,
       positions: [{ x: 3, y: 1 }],
       state: {}, duration: null,
-      origin: { x: 1, y: 1 },
-      maxRange: 5,
+      spatial: { origin: { x: 1, y: 1 }, maxRange: 5 },
     });
     expect(result).toEqual({ positions: [{ x: 3, y: 1 }], count: 1 });
   });
@@ -107,8 +108,7 @@ describe('F6 entity creation LoS and range enforcement', () => {
       ownerId: hero.id, entityType: 'bomb', count: 1,
       positions: [{ x: 8, y: 1 }],
       state: {}, duration: null,
-      origin: { x: 1, y: 1 },
-      maxRange: 3,
+      spatial: { origin: { x: 1, y: 1 }, maxRange: 3 },
     });
     expect(result).toBeNull();
   });
@@ -118,8 +118,7 @@ describe('F6 entity creation LoS and range enforcement', () => {
       ownerId: hero.id, entityType: 'bomb', count: 1,
       positions: [{ x: 4, y: 1 }],
       state: {}, duration: null,
-      origin: { x: 1, y: 1 },
-      maxRange: 3,
+      spatial: { origin: { x: 1, y: 1 }, maxRange: 3 },
     });
     expect(result).toEqual({ positions: [{ x: 4, y: 1 }], count: 1 });
   });
@@ -130,8 +129,7 @@ describe('F6 entity creation LoS and range enforcement', () => {
       ownerId: hero.id, entityType: 'bomb', count: 1,
       positions: [{ x: 3, y: 3 }],
       state: {}, duration: null,
-      origin: { x: 1, y: 1 },
-      maxRange: 2,
+      spatial: { origin: { x: 1, y: 1 }, maxRange: 2 },
     });
     expect(result).toEqual({ positions: [{ x: 3, y: 3 }], count: 1 });
   });
@@ -156,8 +154,7 @@ describe('F6 entity creation LoS and range enforcement', () => {
       ownerId: hero.id, entityType: 'bomb', count: 1,
       positions: [{ x: 4, y: 1 }],
       state: {}, duration: null,
-      origin: hero.position, originSize: 2,
-      maxRange: 2,
+      spatial: { origin: hero.position, originSize: 2, maxRange: 2 },
     });
     expect(result).toEqual({ positions: [{ x: 4, y: 1 }], count: 1 });
   });
@@ -168,40 +165,134 @@ describe('F6 entity creation LoS and range enforcement', () => {
       ownerId: hero.id, entityType: 'bomb', count: 1,
       positions: [{ x: 5, y: 1 }],
       state: {}, duration: null,
-      origin: hero.position, originSize: 2,
-      maxRange: 2,
+      spatial: { origin: hero.position, originSize: 2, maxRange: 2 },
     });
     expect(result).toBeNull();
   });
 });
 
-describe('F6 entity creation origin fail-closed', () => {
-  it('VM runtime rejects entity creation when origin resolves to an off-board actor (no valid position)', () => {
-    // ICON general rule: creation origin must be a valid position. The
-    // VM fail-closed rule requires origin selectors to resolve to an
-    // actor with a valid battlefield position. A self-origin with the
-    // actor off-board is caught by the VM before the reducer runs.
-    // We test this indirectly: the kernel validates position, so an
-    // off-board origin with maxRange will reject all candidates (no
-    // position to measure from). The VM-level fail-closed (0 actors /
-    // no position → throw) is exercised through the runtime entity case;
-    // here we verify the kernel-level fallback behavior.
+describe('F6 entity creation origin fail-closed (production path: RuleEffect → runtime → mutation → reducer)', () => {
+  // The origin/range of entity creation is a source-declared PAIRED spatial
+  // contract. These tests exercise the real production chain: a VM RuleEffect
+  // carrying the contract resolves through the runtime's effectsToMutations
+  // (origin selector validated fail-closed), the emitted RuleMutation rides a
+  // RULE_MUTATIONS_APPLIED event, and the reducer's validateEntityCreation
+  // enforces LoS/range/occupancy on replay — never a hand-authored final
+  // mutation masquerading as VM coverage.
+  const createProgram = (spatial: { origin: RuleSelector; maxRange?: number }): RuleProgram => ({
+    schemaVersion: 1,
+    rulesVersion: '1.5',
+    id: 'program:fixture-create',
+    sourceId: 'fixture:create',
+    source: { page: 1, sectionId: 'test' },
+    name: 'Fixture Create',
+    classification: 'encounter',
+    dependencies: [],
+    actions: [{
+      id: 'use', name: 'Fixture Create', timing: 'use', costs: [], tags: [], range: null, area: null, choices: [],
+      steps: [{ id: 'create', timing: 'use', effects: [{
+        kind: 'entity', operation: 'create', entityType: 'bomb', owner: { kind: 'self' },
+        positionInput: 'cell', count: { kind: 'constant', value: 1 }, spatial,
+      }] }],
+    }],
+  });
+  const runtimeContext = (state: EncounterState, heroId: string, cell: Position, overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContext => ({
+    state: encounterRuleState(state),
+    actorId: heroId,
+    sourceId: 'fixture:create',
+    actionId: 'use',
+    timing: 'use',
+    input: { positions: { cell: [cell] } },
+    dice: scriptedDice(5),
+    triggers: new Set(),
+    ...overrides,
+  });
+  const eventFrom = (heroId: string, mutations: RuleMutation[]): EncounterEvent => ({
+    type: 'RULE_MUTATIONS_APPLIED', actorId: heroId, sourceId: 'fixture:create',
+    actionId: 'use', timing: 'use', tags: [], mutations,
+  });
+  const entityMutationOf = (result: ReturnType<typeof executeRuleProgram>): Extract<RuleMutation, { kind: 'entity' }> => {
+    const mutation = result.mutations.find((candidate): candidate is Extract<RuleMutation, { kind: 'entity' }> => candidate.kind === 'entity');
+    expect(mutation).toBeDefined();
+    return mutation!;
+  };
+
+  it('valid source-declared origin+range: runtime emits the paired contract and the reducer creates the entity', () => {
+    const { state, hero } = summonEncounter([]);
+    const result = executeRuleProgram(createProgram({ origin: { kind: 'self' }, maxRange: 5 }), runtimeContext(state, hero.id, { x: 3, y: 1 }));
+    const mutation = entityMutationOf(result);
+    // The runtime resolved the self-origin (hero at (1,1), size 1) into the
+    // replay-safe paired contract.
+    expect(mutation.creationSpatial).toEqual({ origin: { x: 1, y: 1 }, originSize: 1, maxRange: 5 });
+    const applied = applyEvents(state, [eventFrom(hero.id, [mutation])]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(1);
+    expect(entitiesOf(applied, 'bomb', hero.id)[0].positions).toEqual([{ x: 3, y: 1 }]);
+  });
+  it('zero-match origin selector is rejected before any mutation is emitted', () => {
+    const { state, hero } = summonEncounter([]);
+    expect(() => executeRuleProgram(
+      createProgram({ origin: { kind: 'input', key: 'origin', relation: 'any' }, maxRange: 5 }),
+      runtimeContext(state, hero.id, { x: 3, y: 1 }, { input: { positions: { cell: [{ x: 3, y: 1 }] }, actorIds: { origin: [] } } }),
+    )).toThrow(RuleProgramViolation);
+  });
+  it('multi-match origin selector is rejected when exactly one origin is required', () => {
+    const { state, hero } = summonEncounter([]);
+    expect(() => executeRuleProgram(
+      createProgram({ origin: { kind: 'all', relation: 'any' }, maxRange: 5 }),
+      runtimeContext(state, hero.id, { x: 3, y: 1 }),
+    )).toThrow(RuleProgramViolation);
+  });
+  it('off-board origin actor (no valid position) is rejected', () => {
     const { state, hero } = summonEncounter([]);
     state.actors[hero.id].onBattlefield = false;
-    // The kernel takes a raw Position, not an actor, so origin is
-    // still a valid coordinate even when the actor is off-board.
-    // The VM-level rejection happens when selectActors finds no actor
-    // with a valid position for the origin selector.
-    const result = validateEntityCreation(state, {
-      ownerId: hero.id, entityType: 'bomb', count: 1,
-      positions: [{ x: 3, y: 1 }],
-      state: {}, duration: null,
-      origin: { x: 1, y: 1 },
-      maxRange: 5,
-    });
-    expect(result).toEqual({ positions: [{ x: 3, y: 1 }], count: 1 });
+    expect(() => executeRuleProgram(
+      createProgram({ origin: { kind: 'self' }, maxRange: 5 }),
+      runtimeContext(state, hero.id, { x: 3, y: 1 }),
+    )).toThrow(RuleProgramViolation);
   });
-  it('reducer rejects entity creation when creationOrigin is present but unreachable (behind wall)', () => {
+  it('a declared maxRange without an origin is rejected by the runtime (unrepresentable pairing, defended anyway)', () => {
+    const { state, hero } = summonEncounter([]);
+    const malformed = createProgram({ origin: { kind: 'self' } });
+    malformed.actions[0].steps = [{
+      id: 'create', timing: 'use', effects: [{
+        kind: 'entity', operation: 'create', entityType: 'bomb', owner: { kind: 'self' },
+        positionInput: 'cell', count: { kind: 'constant', value: 1 },
+        spatial: { maxRange: 5 },
+      } as unknown as RuleEffect],
+    }];
+    expect(() => executeRuleProgram(malformed, runtimeContext(state, hero.id, { x: 3, y: 1 }))).toThrow('Entity creation declares a maximum range but no origin');
+  });
+  it('reducer rejects a malformed maxRange-only creationSpatial (no silent unlimited creation)', () => {
+    const { state, hero } = summonEncounter([]);
+    const event: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:summon',
+      actionId: 'default', timing: 'use', tags: [],
+      mutations: [{
+        kind: 'entity', sourceId: 'fixture:summon', ownerId: hero.id,
+        entityType: 'bomb', operation: 'create',
+        positions: [{ x: 3, y: 1 }], count: 1, state: {},
+        creationSpatial: { origin: undefined as unknown as Position, originSize: 1, maxRange: 5 },
+      }],
+    };
+    const applied = applyEvents(state, [event]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(0);
+  });
+  it('reducer rejects an off-board carried origin (out of the battlefield grid)', () => {
+    const { state, hero } = summonEncounter([]);
+    const event: EncounterEvent = {
+      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:summon',
+      actionId: 'default', timing: 'use', tags: [],
+      mutations: [{
+        kind: 'entity', sourceId: 'fixture:summon', ownerId: hero.id,
+        entityType: 'bomb', operation: 'create',
+        positions: [{ x: 3, y: 1 }], count: 1, state: {},
+        creationSpatial: { origin: { x: 50, y: 50 }, originSize: 1, maxRange: 5 },
+      }],
+    };
+    const applied = applyEvents(state, [event]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(0);
+  });
+  it('reducer rejects entity creation when the creation origin is present but unreachable (behind wall)', () => {
     const { state, hero } = summonEncounter([]);
     state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 0 });
     const event: EncounterEvent = {
@@ -211,39 +302,35 @@ describe('F6 entity creation origin fail-closed', () => {
         kind: 'entity', sourceId: 'fixture:summon', ownerId: hero.id,
         entityType: 'bomb', operation: 'create',
         positions: [{ x: 3, y: 1 }], count: 1, state: {},
-        creationOrigin: { x: 1, y: 1 }, creationMaxRange: 5,
+        creationSpatial: { origin: { x: 1, y: 1 }, originSize: 1, maxRange: 5 },
       }],
     };
     const applied = applyEvents(state, [event]);
     expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(0);
   });
-  it('reducer accepts entity creation with valid origin and range', () => {
+  it('Size-2 origin: the exact footprint-distance boundary is legal through the production path', () => {
     const { state, hero } = summonEncounter([]);
-    const event: EncounterEvent = {
-      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:summon',
-      actionId: 'default', timing: 'use', tags: [],
-      mutations: [{
-        kind: 'entity', sourceId: 'fixture:summon', ownerId: hero.id,
-        entityType: 'bomb', operation: 'create',
-        positions: [{ x: 3, y: 1 }], count: 1, state: {},
-        creationOrigin: { x: 1, y: 1 }, creationOriginSize: 2, creationMaxRange: 3,
-      }],
-    };
-    const applied = applyEvents(state, [event]);
+    // Size the ACTOR ON THE STATE (the runtime view projects from it); the
+    // local fixture handle is a pre-ADD_ACTOR copy.
+    state.actors[hero.id].size = 2; // occupies (1,1),(1,2),(2,1),(2,2)
+    const result = executeRuleProgram(createProgram({ origin: { kind: 'self' }, maxRange: 2 }), runtimeContext(state, hero.id, { x: 4, y: 1 }));
+    const mutation = entityMutationOf(result);
+    expect(mutation.creationSpatial).toEqual({ origin: { x: 1, y: 1 }, originSize: 2, maxRange: 2 });
+    const applied = applyEvents(state, [eventFrom(hero.id, [mutation])]);
     expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(1);
   });
-  it('replay reproduces entity creation with origin metadata exactly', () => {
+  it('Size-2 origin: one space beyond the footprint boundary is rejected through the production path', () => {
     const { state, hero } = summonEncounter([]);
-    const event: EncounterEvent = {
-      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'fixture:summon',
-      actionId: 'default', timing: 'use', tags: [],
-      mutations: [{
-        kind: 'entity', sourceId: 'fixture:summon', ownerId: hero.id,
-        entityType: 'bomb', operation: 'create',
-        positions: [{ x: 3, y: 1 }], count: 1, state: {},
-        creationOrigin: { x: 1, y: 1 }, creationMaxRange: 5,
-      }],
-    };
+    state.actors[hero.id].size = 2;
+    const result = executeRuleProgram(createProgram({ origin: { kind: 'self' }, maxRange: 2 }), runtimeContext(state, hero.id, { x: 5, y: 1 }));
+    const mutation = entityMutationOf(result);
+    const applied = applyEvents(state, [eventFrom(hero.id, [mutation])]);
+    expect(entitiesOf(applied, 'bomb', hero.id)).toHaveLength(0);
+  });
+  it('replay reproduces entity creation with the spatial contract exactly', () => {
+    const { state, hero } = summonEncounter([]);
+    const result = executeRuleProgram(createProgram({ origin: { kind: 'self' }, maxRange: 5 }), runtimeContext(state, hero.id, { x: 3, y: 1 }));
+    const event = eventFrom(hero.id, result.mutations);
     const first = applyEvents(state, [event]);
     const replay = applyEvents(state, [event]);
     const firstEntity = entitiesOf(first, 'bomb', hero.id)[0];

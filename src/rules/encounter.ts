@@ -17,7 +17,7 @@ import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
 import './automation/content/registry.js';
-import { talentReactiveTrigger, talentTriggerMutations, getSacrificeCost, type TalentReactiveTargets } from './automation/kernels/talent-recipes.js';
+import { resolvePreUseTalentAugmentations, talentReactiveTrigger, talentTriggerMutations, type TalentReactiveTargets } from './automation/kernels/talent-recipes.js';
 import { traitReactionMutations, traitReactionNeededTriggers } from './automation/kernels/trait-reactions.js';
 import { applyDeterminedDamageToVitals } from './automation/primitives/damage-resolution.js';
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
@@ -36,7 +36,6 @@ import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutati
 import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
 import { executeRuleProgram, integer, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
 import { assertRuleCostsPayable, costContextFromEncounter, effectiveRuleCosts, evaluateCosts, CostPaymentViolation } from './automation/kernels/cost-payment.js';
-import { sacrificeMutation } from './automation/primitives/cost-payment.js';
 import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
 import { hasLineOfSight as lineOfSightKernel } from './automation/primitives/line-of-sight.js';
 import { movementEntryTriggerMutations } from './automation/kernels/movement-triggers.js';
@@ -1262,6 +1261,14 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   const targets = targetIds.map((targetId) => state.actors[targetId]);
   if (targets.some((target) => !target || target.defeated)) throw new RuleViolation('ability.invalid-target', 'One or more ability targets are unavailable.');
 
+  // Pre-use talent augmentations: the validated declared choices for THIS
+  // ability (equipped rank, parent-ability match, deduplicated — an
+  // unrelated or unequipped declared choice is ignored and can never create
+  // a mechanical state change). Resolved here, BEFORE target validation, so
+  // the range gate below and the cost gate further down consume the SAME
+  // validated result (range override and sacrifice payment travel together).
+  const resolvedAugmentations = resolvePreUseTalentAugmentations(actor, ability.id, command.input?.talentChoices);
+
   // Independently executable abilities resolve through their hand-authored
   // typed RuleProgram and named deterministic resolvers; the generic
   // cost/attack approximation is never used. The typed program's selectors
@@ -1275,11 +1282,12 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     // widens target legality — it is never UI-only. A Line X ability's
     // target legality is its effective line length (p.97: the attack space
     // is any character in the area), so the area kernel's shape/size
-    // overrides feed the same gate.
+    // overrides feed the same gate. The range kernel's `choice` gate reads
+    // the VALIDATED augmentation set — never raw talentChoices input.
     const baseRange = abilityRange(ability.header, ability.range);
     const maximumRange = isLineShaped(ability.header)
       ? effectiveAreaFor(areaStateView(state, actor.id), actor.id, ability.id, 'line', baseRange).length
-      : effectiveAbilityRange(rangeStateView(state, new Set(command.input?.talentChoices ?? [])), actor.id, ability.id, baseRange);
+      : effectiveAbilityRange(rangeStateView(state, resolvedAugmentations.validatedSourceIds), actor.id, ability.id, baseRange);
     assertDirectTarget(state, actor, attackTargetActor, {
       relation: 'foe',
       maximumRange,
@@ -1325,7 +1333,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   if (attackAbility && !noAttackSpace && targets[0] && actor.ruleState['ace:armed'] === true) {
     abilityTriggers.add('exceed');
   }
-  // F10 ability-use choice fold (Blessing of War / Rebirth, p.190/p.183):
+  // F10 ability-use choice fold (Blessing of War / Rebirth, p.191/p.184):
   // optional source-backed choices the player made before this ability
   // resolves. The fold validates an eligible allied owner, the spend, and the
   // user's resource, emits the recorded resource-spend mutations, and feeds
@@ -1363,19 +1371,16 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     }
     throw error;
   }
-  // Sacrifice-cost talents: when the player declares a talent choice that
-  // carries a pre-resolution sacrifice (ICON Sacrifice p.190: "The HP cost
-  // is paid at the start of the ability"), the sacrifice is validated and
-  // paid through the same cost-payment path as the ability's own costs —
-  // before any effect or RNG. The sacrifice mutation rides the ability's
+  // Pre-use talent augmentations: the validated declared choices for THIS
+  // ability (equipped rank, parent-ability match, deduplicated) resolve once
+  // here, before any effect or RNG. The cost half rides the same
+  // cost-payment path as the ability's own costs (Sacrifice p.102: "paid at
+  // the start of an ability"), and the validated source-ID set is what the
+  // range kernel's choice gate reads — so the sacrifice mutation and the
+  // range override always travel together, and an unrelated or unequipped
+  // declared choice is ignored entirely. The mutations ride the ability's
   // recorded event so replay applies exactly what the command decided.
-  const talentChoiceSet = new Set(command.input?.talentChoices ?? []);
-  for (const talentChoice of talentChoiceSet) {
-    const sacrificeAmount = getSacrificeCost(talentChoice);
-    if (sacrificeAmount !== undefined) {
-      abilityUseCostMutations.push(sacrificeMutation(ability.id, actor.id, sacrificeAmount));
-    }
-  }
+  abilityUseCostMutations.push(...resolvedAugmentations.costMutations);
   const ruleContext: RuleExecutionContext = {
     state: ruleStateView,
     encounterState: state,
@@ -1574,13 +1579,20 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       if (!action) throw new RuleViolation('rule.action-unknown', 'That rule action is not available at this timing.');
       if (action.tags.includes('attack') && actor.attackedThisTurn) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
       if (action.tags.includes('attack') && actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
+      // Pre-use talent augmentations resolve BEFORE target validation/effects/
+      // RNG — the same authority USE_ABILITY consumes. The validated set feeds
+      // the range kernel's choice gate (so a declared choice for another
+      // ability, or without the talent equipped, can never widen range), and
+      // the validated cost mutations are paid through the same cost gate and
+      // ride the recorded event (so Range 6 always pays Sacrifice 2 here too).
+      const resolvedAugmentations = resolvePreUseTalentAugmentations(actor, unit.id, command.input?.talentChoices);
       if (command.attackTargetId) {
         const target = state.actors[command.attackTargetId];
         if (!target || target.defeated || !target.onBattlefield) throw new RuleViolation('attack.invalid-target', 'That rule target is unavailable.');
         assertDirectTarget(state, actor, target, {
           relation: action.tags.includes('attack') ? 'foe' : 'any',
           maximumRange: effectiveAbilityRange(
-            rangeStateView(state, new Set(command.input?.talentChoices ?? [])),
+            rangeStateView(state, resolvedAugmentations.validatedSourceIds),
             actor.id,
             unit.id,
             action.range?.kind === 'constant' ? action.range.value : 1,
@@ -1629,12 +1641,16 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         ...(command.triggerTargetIds ? { triggerTargetIds: command.triggerTargetIds } : {}),
         triggers,
       };
-      // Cost-payment transaction gate: the action's mandatory costs are
-      // validated at the beginning-of-action boundary before any effect
-      // resolves or RNG is consumed (the same gate USE_ABILITY runs). The
-      // post-execution spend loop below remains as a safety net for spends
-      // emitted by effect mutations rather than declared costs.
-      assertProgramCostsPayable(state, actor, unit.name, unit.id, action, ruleContext);
+      // Cost-payment transaction gate: the action's mandatory costs plus the
+      // validated pre-use augmentation costs (e.g. Dark Sliver t2's
+      // Sacrifice 2) are validated at the beginning-of-action boundary before
+      // any effect resolves or RNG is consumed — the same gate USE_ABILITY
+      // runs. The post-execution spend loop below remains as a safety net for
+      // spends emitted by effect mutations rather than declared costs.
+      const augmentationCosts = resolvedAugmentations.costMutations
+        .filter((cost): cost is Extract<RuleMutation, { kind: 'damage' }> => cost.kind === 'damage' && cost.damageType === 'sacrifice')
+        .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: cost.amount } }));
+      assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: [...action.costs, ...augmentationCosts] }, ruleContext);
       let result: RuleExecutionResult;
       try {
         result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
@@ -1664,7 +1680,10 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
           if (spent > available) throw new RuleViolation('resource.insufficient', `${unit.name} requires ${spent} ${mutation.resourceId}.`);
         }
       }
-      const eventMutations = [...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations];
+      // Pre-use augmentation payments ride the recorded event first (the same
+      // ordering USE_ABILITY uses), so replay applies exactly what the command
+      // decided — the validated sacrifice never re-decides and never drifts.
+      const eventMutations = [...resolvedAugmentations.costMutations, ...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations];
       // An action whose effect is an atomic spatial swap cannot be made when
       // the swap would be denied (Masquerade's interrupt-legality rule, p.151).
       assertLegalSpatialBatch(state, action, eventMutations);

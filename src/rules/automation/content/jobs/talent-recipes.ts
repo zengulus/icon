@@ -85,7 +85,7 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
       build: (actorId) => [{ kind: 'condition', sourceActorId: actorId, actorId, conditionId: 'evasion', operation: 'apply', potency: 'normal', duration: { kind: 'turn-start', actor: { kind: 'self' }, turns: 1 } }],
     },
   },
-  // ICON p.190 Blazing Bond talent 2: "Comeback: Grant both you and your
+  // ICON p.210 Blazing Bond talent 2: "Comeback: Grant both you and your
   // ally defiance when taking this action." The ally is the ability's target.
   'enochian:blazing-bond:talent:2': {
     mechanic: 'Comeback (user bloodied): grant the user and the bonded ally a durable defiance.',

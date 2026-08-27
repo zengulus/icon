@@ -234,13 +234,29 @@ cleanup, bomb/beast/shadow/underway/portal/mist consumers, thrown weapons.
 `validateEntityCreation` enforces bounds, size-aware occupancy (no owner
 exemption — summoner occupies space like any character per the p.92 general
 rule), impassable terrain, and optionally line-of-sight and range from a
-declared origin (shared primitives LoS kernel). Origin/maxRange are
-source-declared on the `RuleMutation` entity kind and the VM `RuleEffect`
-entity type; the reducer threads them to the kernel at reducer authority.
-Range validation uses the canonical p.92 footprint distance (L\u221e between
-occupied footprints), not raw anchor-cell Chebyshev. The VM origin
-selector rejects zero-actor origins before cost consumption. Mandatory vs
-optional creation remains a content-layer concern.
+declared origin (shared primitives LoS kernel). Origin and range are a
+SOURCE-DECLARED PAIRED creation-spatial contract — one optional
+`spatial: { origin, originSize, maxRange }` object on the VM `RuleEffect`
+entity type and the replay-safe `creationSpatial` on the `RuleMutation`
+entity kind — so "range without origin" is unrepresentable by construction.
+Fail-closed at both layers regardless of typing: the runtime rejects an
+origin selector that resolves to zero actors, more than one actor, or an
+actor without a valid on-board position, and rejects a range-without-origin
+contract; the reducer (and the kernel) reject a carried origin outside the
+battlefield grid or a malformed maxRange-only contract — a malformed input
+can never become unlimited creation. Range validation uses the canonical
+p.92 footprint distance (L\u221e between occupied footprints), not raw
+anchor-cell Chebyshev, and carries the origin actor's Size through the
+contract. Mandatory vs optional creation remains a content-layer concern.
+
+**Remaining source-fidelity limitation (Size>1 LoS):** creation LoS is
+evaluated through the shared primitives LoS kernel (`line-of-sight.ts`),
+which samples a straight segment from a single source space center. ICON
+p.92 defines LoS from "any edge of your character's space", so a Size>1
+origin's full footprint is not yet represented in LoS sampling; a generic
+footprint-aware LoS query through the shared authority is future work.
+Entity creation is therefore NOT described as fully Size>1 LoS-correct —
+only the range half is footprint-correct today.
 Holes: entity actions (a summon taking its own turn) are not modeled; Mob
 members absent.
 

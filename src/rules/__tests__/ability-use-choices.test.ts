@@ -7,8 +7,7 @@ import { resolveAbilityUseChoices } from '../automation/kernels/ability-use-choi
 import type { AbilityUseChoiceSource } from '../automation/primitives/ability-use-choices.js';
 
 /**
- * F10 ability-use choice seam (docs/rules-foundations.md §8) — the
- * Blessing-of-War / Blessing-of-Rebirth family (ICON p.190 / p.183). The
+ * F10 ability-use choice seam (docs/rules-foundations.md §8) — the  * Blessing-of-War / Blessing-of-Rebirth family (ICON p.191 / p.184). The
  * player names a narrow source-backed choice (trait id + spend); the engine
  * derives the resource spends, modifiers, and forced triggers. These tests
  * prove the fold at the kernel level and through the USE_ABILITY command.
@@ -166,7 +165,7 @@ describe('resolveAbilityUseChoices (kernel)', () => {
   });
 });
 
-describe('Blessing of War through USE_ABILITY (p.190)', () => {
+describe('Blessing of War through USE_ABILITY (p.191)', () => {
   it('spend 3: hero spends exactly 3 blessings, forces exceed, and replays exactly', () => {
     const { state, hero, fee } = encounter();
     state.actors[hero.id].traitIds = ['sealer:trait:blessing-of-war'];

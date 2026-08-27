@@ -22,7 +22,7 @@ export const JOB_TRAIT_CONDITION_RECIPES: Readonly<Record<string, readonly strin
   // granted durably at combat start — it is consumable, so it must never be
   // re-projected here; the bloodied Sturdy half is a lifecycle-gated row).
   'colossus:trait:furious-berserk': ['regeneration'],
-  // ICON p.190 Enochian embersoul: "Start combat with regeneration" (Defiance
+  // ICON p.208 Enochian embersoul: "Start combat with regeneration" (Defiance
   // is granted durably at combat start for the same consumable reason).
   'enochian:trait:embersoul': ['regeneration'],
 };

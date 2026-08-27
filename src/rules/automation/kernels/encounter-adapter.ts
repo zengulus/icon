@@ -1235,6 +1235,11 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
         // F6: the six Job summon suites cap active entities per owner (max six
         // bombs/shadows/beasts/thralls/salt-sprites — summon-recipes.ts). A
         // create beyond the cap is declined deterministically.
+        // ICON general rule: creation requires free, unobstructed, and LoS.
+        // The origin/range are a source-declared PAIRED creation-spatial
+        // contract carried through the mutation; the kernel rejects a range
+        // without a valid in-bounds origin (fail-closed — a malformed
+        // maxRange-only mutation can never become unlimited creation).
         const validated = validateEntityCreation(state, {
           ownerId: mutation.ownerId,
           entityType: mutation.entityType,
@@ -1242,11 +1247,7 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
           count: mutation.count,
           state: mutation.state,
           duration: mutation.duration ?? null,
-          // ICON general rule: creation requires free, unobstructed, and LoS.
-          // The origin/range are source-declared and carried through the mutation.
-          ...(mutation.creationOrigin ? { origin: mutation.creationOrigin } : {}),
-          ...(mutation.creationOriginSize !== undefined ? { originSize: mutation.creationOriginSize } : {}),
-          ...(mutation.creationMaxRange !== undefined ? { maxRange: mutation.creationMaxRange } : {}),
+          ...(mutation.creationSpatial ? { spatial: mutation.creationSpatial } : {}),
         });
         if (!validated) break;
         const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, 'entity'), type: mutation.entityType, ownerId: mutation.ownerId, positions: clone(validated.positions), state: { ...mutation.state }, duration: mutation.duration ?? null };

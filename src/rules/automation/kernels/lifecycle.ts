@@ -168,7 +168,7 @@ export function applyCombatStartTraitEffects(state: EncounterState) {
         if (cell) {
           applyRuleMutations(state, [{
             kind: 'entity', sourceId: traitId, operation: 'create', entityType: recipe.summon.entityType, ownerId: actor.id, positions: [cell], count: 1, state: { companion: true },
-            creationOrigin: actor.position, creationOriginSize: actor.size, creationMaxRange: recipe.summon.range,
+            creationSpatial: { origin: actor.position, originSize: actor.size, maxRange: recipe.summon.range },
           }]);
         }
       }

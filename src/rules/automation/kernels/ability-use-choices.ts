@@ -1,7 +1,6 @@
 /**
  * F10 ability-use choice fold (docs/rules-foundations.md §8).
- *
- * The Blessing-of-War / Blessing-of-Rebirth family (ICON p.190 / p.183) lets a
+ *  * The Blessing-of-War / Blessing-of-Rebirth family (ICON p.191 / p.184) lets a
  * character spend a resource *before an ability resolves* to modify that one
  * ability. This seam is the textual inverse of the core save window: the
  * player names a narrow source-backed choice (`traitId` + `spend`), and the

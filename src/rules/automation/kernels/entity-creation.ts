@@ -12,17 +12,12 @@ export interface EntityCreationRequest {
   count: number;
   state: Readonly<Record<string, string | number | boolean | null>>;
   duration: EncounterEntity['duration'];
-  /** The creation origin for LoS/range validation. If provided, the kernel
-   * checks line of sight from this position to each candidate cell and
-   * optionally validates range. */
-  origin?: Position;
-  /** The origin actor's size for canonical p.92 footprint-distance range
-   * validation. When absent, the origin is treated as Size 1 (point cell). */
-  originSize?: number;
-  /** Maximum distance from origin (p.92 footprint metric). Validated only
-   * when origin is provided. Source-specific; the kernel does not hardcode
-   * one range. */
-  maxRange?: number;
+  /** The creation spatial contract: origin (required for any LoS/range
+   * enforcement) plus an optional maximum footprint range. Origin and range
+   * are a PAIRED invariant: the kernel REJECTS a declared range without a
+   * valid origin and an origin that is not inside the battlefield grid — it
+   * never silently skips enforcement. */
+  spatial?: { origin: Position; originSize?: number; maxRange?: number };
 }
 
 export interface EntityCreationResult {
@@ -57,6 +52,15 @@ function hasObstruction(state: EncounterState, position: Position): boolean {
 export function validateEntityCreation(state: EncounterState, request: EntityCreationRequest): EntityCreationResult | null {
   const count = Math.max(0, Math.floor(request.count));
   if (count === 0 || request.positions.length < count) return null;
+  const spatial = request.spatial;
+  // Fail-closed pairing invariant: a declared range without a valid origin,
+  // or an origin outside the battlefield grid, rejects the whole creation —
+  // a malformed "range with no origin" can never become unlimited creation.
+  if (spatial) {
+    const origin = spatial.origin;
+    if (origin === undefined) return null;
+    if (origin.x < 0 || origin.y < 0 || origin.x >= state.grid.width || origin.y >= state.grid.height) return null;
+  }
   const cap = summonCap(request.entityType);
   const existing = Object.values(state.entities).filter((entity) => entity.type === request.entityType
     && entity.ownerId === request.ownerId && entity.state.companion !== true).length;
@@ -73,23 +77,23 @@ export function validateEntityCreation(state: EncounterState, request: EntityCre
     // ICON p.92: the space must be unobstructed (no impassable terrain).
     if (footprint.some((cell) => hasObstruction(state, cell))) continue;
     // ICON general rule: line of sight from the origin to the creation cell.
-    if (request.origin && footprint.some((cell) => !hasLineOfSight({ grid: state.grid, terrainAt: (pos) => {
+    if (spatial && footprint.some((cell) => !hasLineOfSight({ grid: state.grid, terrainAt: (pos) => {
       const values = new Set<string>();
       for (const t of state.grid.terrain) if (t.position.x === pos.x && t.position.y === pos.y) values.add(t.type);
       for (const e of state.terrainEffects) if (e.positions.some((p) => p.x === pos.x && p.y === pos.y)) values.add(e.terrain);
       return values;
-    }}, request.origin!, cell))) continue;
+    }}, spatial.origin!, cell))) continue;
     // ICON p.92: range validation using the canonical footprint metric (L∞
     // between occupied footprints) — the same distance authority targeting,
     // auras, and the attack modifiers use. For a Size-1 origin this
     // collapses to plain Chebyshev. For larger origins, the distance is
     // measured from the edge of the origin footprint, not the anchor cell.
-    if (request.origin && request.maxRange !== undefined) {
+    if (spatial && spatial.maxRange !== undefined) {
       const dist = footprintDistance(
-        { position: request.origin, size: request.originSize ?? 1 },
+        { position: spatial.origin, size: spatial.originSize ?? 1 },
         { position, size: 1 },
       );
-      if (dist > request.maxRange) continue;
+      if (dist > spatial.maxRange) continue;
     }
     if (selected.some((cell) => sameCell(cell, position))) continue;
     selected.push({ ...position });

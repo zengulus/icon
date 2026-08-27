@@ -114,6 +114,8 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'docs/rules-foundations.md', linePrefix: 'projection (Rot → Regeneration / defiance suppression). Closed-negative tests', reason: 'test-pattern name in wrapped sentence' },
   { file: 'docs/rules-foundations.md', linePrefix: '| K-P5 | Mastery fold |', reason: 'foundations ledger row; status vocabulary in notes column' },
   { file: 'docs/rules-foundations.md', linePrefix: 'closed-manifest pattern; the foe declarative recipe factories', reason: 'pattern reference in wrapped sentence' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'Fail-closed at both layers regardless of typing: the runtime rejects an', reason: 'implementation-pattern description (paired creation-spatial contract enforcement), not an authority claim' },
+  { file: 'TODO.md', linePrefix: '   `RuleMutation.creationSpatial`), fail-closed at the runtime (zero/multi/', reason: 'implementation-pattern description in the corrective-repair changelog, not an authority claim' },
   // --- ladder rung definition (coverage) -----------------------------------
   { file: 'docs/rules-coverage.md', linePrefix: '| 5 | Authoritative | Execution matches source semantics without hidden bypasses |', reason: 'capability-ladder vocabulary definition' },
   // --- gate/criterion definitions (roadmap) --------------------------------

@@ -1,5 +1,5 @@
 import { registerRangeModifierRule } from '../../kernels/range.js';
-import { registerRangeModifierTalent, registerSacrificeCostTalent } from '../../kernels/talent-recipes.js';
+import { registerPreUseTalentAugmentation, registerRangeModifierTalent } from '../../kernels/talent-recipes.js';
 
 /**
  * Range-modifier content rows (docs/rules-foundations.md §Range).
@@ -137,10 +137,13 @@ registerRangeModifierRule({
 });
 
 // ICON p.187 Harvester Dark Sliver talent 2: "Sacrifice 2: Ability gains
-// range 6." A sacrifice-gated range override: the player declares the
-// talent choice at command time (talentChoices input), and the range kernel
-// evaluates the choice gate against the selected source ID. The sacrifice
-// cost itself is a resource-management concern outside the range kernel.
+// range 6." The range half is a sacrifice-gated override folded at both
+// command gates by the shared range kernel (the `choice` gate reads the
+// VALIDATED augmentation set, never raw input); the sacrifice half is the
+// pre-use augmentation below, which binds the whole talent: parent ability,
+// required equipped rank, the declared-choice opt-in, and the pre-resolution
+// Sacrifice-2 cost paid through the cost-payment authority before any effect
+// or RNG.
 registerRangeModifierRule({
   sourceId: 'harvester:dark-sliver:talent:2',
   abilityId: 'harvester:dark-sliver',
@@ -153,11 +156,21 @@ registerRangeModifierTalent(
   'harvester:dark-sliver:talent:2',
   'Dark Sliver\'s listed range becomes 6 through the shared effective-range authority when the player declares the sacrifice talent choice at command time.',
 );
-// ICON p.187 Sacrifice rule (p.190): "The HP cost is paid at the start of
-// the ability." When the player declares the sacrifice talent choice, the
-// sacrifice-2 HP cost is validated and paid through the cost-payment
-// authority BEFORE the ability resolves, alongside the ability's own costs.
-registerSacrificeCostTalent(
-  'harvester:dark-sliver:talent:2', 2,
-  'Sacrifice 2 HP: Dark Sliver gains range 6. The sacrifice is paid at the start of the ability through the cost-payment authority.',
-);
+// ICON p.187 + Combat Glossary Sacrifice (p.102): "Sacrifice costs are paid
+// at the start of an ability, cannot be reduced, ignored, transferred, or
+// resisted, cannot bring your hp below 1, and you can pay them even if you
+// don\'t have enough hp left." The augmentation row is the COMPLETE-semantics
+// authority: both command surfaces resolve the declared choice through
+// `resolvePreUseTalentAugmentations` (equipped rank 2 on
+// `harvester:dark-sliver` required) and feed the SAME validated set into the
+// range kernel's choice gate, so Range 6 and Sacrifice 2 always travel
+// together — a declared choice for another ability, or without the talent
+// equipped, is ignored entirely.
+registerPreUseTalentAugmentation({
+  sourceId: 'harvester:dark-sliver:talent:2',
+  abilityId: 'harvester:dark-sliver',
+  talent: 2,
+  requiresChoice: true,
+  costs: [{ kind: 'sacrifice', amount: 2 }],
+  mechanic: 'Sacrifice 2 HP: Dark Sliver gains range 6. The sacrifice is paid at the start of the ability through the cost-payment authority; the range override is gated on the same validated choice.',
+});
