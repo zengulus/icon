@@ -23,6 +23,8 @@
  * This module contains no source IDs: `sourceId` is provenance only.
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
+import type { DiceSource } from '../../dice.js';
+import { rollDamageDice } from '../primitives/job-kit.js';
 import { isBloodied } from './hp-threshold.js';
 
 export { isBloodied };
@@ -185,4 +187,40 @@ export function recipientBonusDamageDice(
     total += Math.max(0, Math.floor(dice));
   }
   return total;
+}
+
+// ---------------------------------------------------------------------------
+// Named-resolver damage-roll authority
+// ---------------------------------------------------------------------------
+
+/**
+ * The single generic named-resolver damage-roll authority. Every named
+ * resolver that rolls source [D] damage must route through this helper so
+ * that both the use-level bonus-damage dice (Blessing of War, F6a talent
+ * grants) and the recipient-scoped bonus-damage dice (Vagabond Finesse /
+ * Gambit) fold into the roll automatically.
+ *
+ * ICON p.102: "Bonus damage means roll one more die than normal, then pick
+ * the highest." The helper computes the total bonus dice from both sources
+ * and delegates to the shared `rollDamageDice` keep-highest evaluation.
+ *
+ * Callers add `fray` or other flat bonuses AFTER this call.
+ */
+export function rollAbilityDamage(
+  dice: DiceSource,
+  damageDie: number,
+  baseDice: number,
+  recipientId: string,
+  context: {
+    abilityUseModifiers?: { bonusDamageDice?: number } | undefined;
+    encounterState?: EncounterState | undefined;
+    actorId: string;
+    sourceId: string;
+  },
+): number {
+  const useLevelBonus = context.abilityUseModifiers?.bonusDamageDice ?? 0;
+  const recipientBonus = context.encounterState
+    ? recipientBonusDamageDice(context.encounterState, context.actorId, context.sourceId, recipientId)
+    : 0;
+  return rollDamageDice(dice, damageDie, baseDice, useLevelBonus + recipientBonus);
 }

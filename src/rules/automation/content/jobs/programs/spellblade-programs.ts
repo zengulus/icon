@@ -13,7 +13,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { recipientBonusDamageDice } from '../../../kernels/bonus-damage.js';
+import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { convertedDamageType, masteryFoldRuleRuntimeView } from '../../../kernels/mastery-fold.js';
 import { chosenTeleportDestination as chooseTeleport, chosenTeleportPath } from '../../../kernels/teleport-choice.js';
 
@@ -150,7 +150,7 @@ const nothungEffects: RuleResolver = (context) => {
   // separate on-hit effect gated on the same source condition.
   const nothungHoldBonus = source.talents?.['spellblade:nothung'] === 1 && target.hp <= target.maxHp / 2;
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 2, (context.abilityUseModifiers?.bonusDamageDice ?? 0) + (context.encounterState ? recipientBonusDamageDice(context.encounterState, source.id, context.sourceId, target.id) : 0)) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 2, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (roll.hit && nothungHoldBonus) mutations.push(damageMutation(context, target.id, 1, 'hit', strikeType));
   const arc = squareArea(target.position, 1);
@@ -280,16 +280,21 @@ const bifrostEffects: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.227 Rampant Nail: impale a lightning spike in a space in range 3 with
- * aura 2. The damage-triggered die ticks, the charged detonation, and the
- * free-action explosion are documented summon windows. */
+/** ICON p.227 Rampant Nail: "Terrain Effect: You impale a fierce spike of
+ * lightning aether in a space in range 3." This is a SPACE choice, not an
+ * actor-target ability. The player chooses a legal free visible space in
+ * range 3; the spike is placed there. The damage-triggered die ticks, the
+ * charged detonation, and the free-action explosion are documented summon
+ * windows. */
 const rampantNailEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
-  const cell = target?.position ?? source.position;
-  if (distance(source.position, cell) > 3) throw new RuleProgramViolation('choice.actor-range', 'Rampant Nail requires a space in range 3.');
+  // ICON p.227: the player chooses a space in range 3 for the spike.
+  const chosen = context.input.positions?.['spike-position']?.[0];
+  const cell = chosen ?? source.position;
+  if (distance(source.position, cell) > 3) throw new RuleProgramViolation('choice.position-range', 'Rampant Nail requires a space in range 3.');
+  if (!withinGrid(cell, context)) throw new RuleProgramViolation('choice.position-range', 'Rampant Nail requires a space within the battlefield.');
+  if (occupied(cell, context, source.id)) throw new RuleProgramViolation('choice.position-unavailable', 'Rampant Nail requires a free space.');
   const mutations: RuleMutation[] = [
     { kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'lightning-spike', ownerId: source.id, positions: [cell], count: 1, state: { charged: false } },
     stateMutation(context, source.id, 'spellblade:rampant-nail:die', 0),

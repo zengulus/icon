@@ -333,12 +333,28 @@ describe('Spellblade ability automation (p.222–229)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Rampant Nail: impales a lightning spike in range 3 with a d6 power die at 0', () => {
+  it('Rampant Nail: impales a lightning spike at a player-chosen space in range 3', () => {
     const { state, hero, foe } = spellbladeEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:rampant-nail', targetIds: [foe.id] }, scriptedDice());
-    expect(Object.values(result.state.entities).some((entity) => entity.type === 'lightning-spike')).toBe(false); // target space is occupied; creation is declined
+    // Player chooses a free space in range 3 (hero at (1,1), foe at (3,1)):
+    // (2,2) is free and in range.
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:rampant-nail', targetIds: [],
+      input: { positions: { 'spike-position': [{ x: 2, y: 2 }] } },
+    }, scriptedDice());
+    const spikes = Object.values(result.state.entities).filter((entity) => entity.type === 'lightning-spike');
+    expect(spikes).toHaveLength(1);
+    expect(spikes[0].positions[0]).toEqual({ x: 2, y: 2 });
     expect(result.state.actors[hero.id].ruleState['spellblade:rampant-nail:die']).toBe(0);
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Rampant Nail: rejects an occupied space before consuming the ability', () => {
+    const { state, hero, foe } = spellbladeEncounter({ second: null });
+    // Try to place the spike on the foe's occupied space.
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:rampant-nail', targetIds: [],
+      input: { positions: { 'spike-position': [{ x: 3, y: 1 }] } },
+    }, scriptedDice())).toThrowError(expect.objectContaining({ code: 'choice.position-unavailable' }));
   });
 
   it('Sturmreiten: teleports to the end of a line 3 and pierces the characters in it', () => {

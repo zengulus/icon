@@ -124,6 +124,24 @@ assumption here, document the evidence and update this list before proceeding.
    range-modifier (11), then fly-grant/action-type-change/shove-modifier;
    within the mastery/talent folds, range-modifier (11 immediate) is the
    next fold-shaped family.
+
+   **Source-fidelity repair pass (2026-08-27):** Repaired three incorrect
+   mastery-attack attachments: removed the invented Apex mastery Unerring
+   (mastery LOADED QUIVER is about extra beasts + per-beast damage, NOT
+   unerring; the unerring grant belongs to Talent II at exactly range 3);
+   fixed Death Blossom to always be unerring per its base ability header
+   (removed wrong cross-ability Umbra-mastery gate); wired Umbra mastery
+   DEVIL FROG TECHNIQUE unerring derivation into the resolver. Created
+   `rollAbilityDamage` in `kernels/bonus-damage.ts` — the single generic
+   named-resolver damage-roll authority that folds use-level and
+   recipient-scoped (Finesse/Gambit) bonus dice; migrated warden, shade,
+   spellblade, and harvester resolvers. Fixed entity-creation occupancy:
+   removed the owner exemption (summoner occupies space like any character
+   per the general creation rule). Fixed Rampant Nail (p.227) to use a
+   player-chosen space in range 3 instead of the target actor's position.
+   `entity-create` blocker remains uncleared (task §7). Full test suite
+   green (1104 tests), architecture + source-fidelity audits green.
+
 7. **Close one deliberately complex player-content vertical slice end to
    end:** persistent character → encounter → talents/masteries/interrupts/
    movement/status interactions → deterministic replay → settlement →

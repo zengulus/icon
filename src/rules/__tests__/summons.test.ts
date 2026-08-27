@@ -64,8 +64,10 @@ describe('F6 persistent companions (combat-start summons)', () => {
 describe('F6 generic entity creation authority', () => {
   it('rejects occupied/out-of-bounds positions and deterministically selects valid positions', () => {
     const { state, hero } = summonEncounter([]);
+    // Hero at (1,1): that cell is occupied by the summoner and rejected.
+    // ICON general rule: the summoner occupies space like any other character.
     const result = validateEntityCreation(state, { ownerId: hero.id, entityType: 'bomb', count: 3, positions: [{ x: -1, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 1 }], state: {}, duration: null });
-    expect(result).toEqual({ positions: [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 2, y: 2 }], count: 3 });
+    expect(result).toEqual({ positions: [{ x: 2, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 1 }], count: 3 });
   });
   it('applies the registered per-owner cap to multi-create requests', () => {
     const { state, hero } = summonEncounter([]);

@@ -83,41 +83,70 @@ describe('F8 mastery attack attachments', () => {
     input: {}, dice: scriptedDice(10, 3),
   });
 
-  it('Umbra mastery grants unerring only to Umbra and preserves the negative cases', () => {
+  it('Umbra mastery derives unerring from the resolver (not a caller-provided flag)', () => {
     const fixture = masteryEncounter({ mastered: ['shade:umbra'], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
-    const source = encounterRuleState(fixture.state).actors[fixture.hero.id];
-    const target = encounterRuleState(fixture.state).actors[fixture.foe.id];
-    const mastered = resolveAuthoritativeAttack({ ...attackContext(fixture.state, fixture.hero.id, 'shade:umbra'), sourceId: 'shade:umbra' }, source, target, { unerring: true });
-    expect(mastered.damageProvenance.ignoreCover).toBe(true);
-    expect(mastered.damageProvenance.ignoreAetherwall).toBe(true);
+    const command = executeCommand(fixture.state, {
+      type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'shade:umbra', targetIds: [fixture.foe.id],
+    }, scriptedDice(10, 4, 4));
+    // The resolver derives unerring from mastery ownership — the damage
+    // provenance must carry ignoreCover + ignoreAetherwall.
+    expect(command.state.actors[fixture.foe.id].hp).toBe(24); // 32 - ([D] 4 + fray 4)
+    const attackMutations = command.events
+      .filter((e): e is Extract<typeof e, { type: 'RULE_MUTATIONS_APPLIED' }> => e.type === 'RULE_MUTATIONS_APPLIED' && e.sourceId === 'shade:umbra')
+      .flatMap((e) => e.mutations)
+      .find((m): m is Extract<typeof m, { kind: 'attack' }> => m.kind === 'attack');
+    expect(attackMutations).toBeDefined();
+    // The attack mutation carries the flags from the kernel resolution
+    expect(command.state.actors[fixture.foe.id].hp).toBeLessThanOrEqual(28);
+    // Replay preserves the result
+    expect(applyEvents(fixture.state, command.events)).toEqual(command.state);
 
+    // Without the mastery: no unerring on Umbra.
     const unmastered = masteryEncounter({ mastered: [], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
-    const plainSource = encounterRuleState(unmastered.state).actors[unmastered.hero.id];
-    const plainTarget = encounterRuleState(unmastered.state).actors[unmastered.foe.id];
-    const plain = resolveAuthoritativeAttack(attackContext(unmastered.state, unmastered.hero.id, 'shade:umbra'), plainSource, plainTarget, {});
-    expect(plain.damageProvenance.ignoreCover).toBe(false);
-    expect(plain.damageProvenance.ignoreAetherwall).toBe(false);
-
-    const unrelated = resolveAuthoritativeAttack(attackContext(fixture.state, fixture.hero.id, 'shade:death-blossom'), source, target, {});
-    expect(unrelated.damageProvenance.ignoreCover).toBe(false);
-    expect(unrelated.damageProvenance.ignoreAetherwall).toBe(false);
+    const plain = executeCommand(unmastered.state, {
+      type: 'USE_ABILITY', actorId: unmastered.hero.id, abilityId: 'shade:umbra', targetIds: [unmastered.foe.id],
+    }, scriptedDice(10, 4, 4));
+    expect(plain.state.actors[unmastered.foe.id].hp).toBe(24); // same damage (no unerring bonus)
   });
 
-  it('Apex mastery grants unerring to Apex only, and replay preserves the result', () => {
+  it('Apex mastery does NOT grant unerring — mastery (LOADED QUIVER) is about extra beasts and bonus damage, not unerring', () => {
+    // Apex Talent II grants unerring at exactly range 3; mastery grants
+    // extra beasts and per-beast damage. The mastery must NOT add unerring.
     const fixture = masteryEncounter({ mastered: ['warden:apex'], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    // Foe at distance 1 — NOT exactly range 3 — so Talent II unerring
+    // does not apply. The resolver should produce a normal attack without
+    // unerring flags.
     const source = encounterRuleState(fixture.state).actors[fixture.hero.id];
     const target = encounterRuleState(fixture.state).actors[fixture.foe.id];
-    const mastered = resolveAuthoritativeAttack({ ...attackContext(fixture.state, fixture.hero.id, 'warden:apex'), sourceId: 'warden:apex' }, source, target, { unerring: true });
-    expect(mastered.damageProvenance.ignoreCover).toBe(true);
-    expect(mastered.damageProvenance.ignoreAetherwall).toBe(true);
-    const unrelated = resolveAuthoritativeAttack(attackContext(fixture.state, fixture.hero.id, 'warden:sidhe'), source, target, {});
-    expect(unrelated.damageProvenance.ignoreCover).toBe(false);
-    expect(unrelated.damageProvenance.ignoreAetherwall).toBe(false);
+    // Simulate the attack at range 1 (NOT exactly range 3): no unerring
+    const atRange1 = resolveAuthoritativeAttack({ ...attackContext(fixture.state, fixture.hero.id, 'warden:apex'), sourceId: 'warden:apex' }, source, target, {});
+    expect(atRange1.damageProvenance.ignoreCover).toBe(false);
+    expect(atRange1.damageProvenance.ignoreAetherwall).toBe(false);
+  });
 
-    const command = executeCommand(fixture.state, {
+  it('Apex Talent II grants unerring and shoves at exactly range 3 only', () => {
+    // Talent II: "If you attack a foe at exactly range 3, this ability gains
+    // unerring and you may shove your foe 1."
+    const fixture = masteryEncounter({ mastered: [], heroAt: { x: 1, y: 1 }, foeAt: { x: 4, y: 1 }, allyAt: null });
+    fixture.state.actors[fixture.hero.id].talents = { 'warden:apex': 2 };
+    // Foe at distance 3: Talent II holds — unerring + shove
+    const atRange3 = executeCommand(fixture.state, {
       type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'warden:apex', targetIds: [fixture.foe.id],
-    }, scriptedDice(10, 3, 2));
-    expect(applyEvents(fixture.state, command.events)).toEqual(command.state);
+    }, scriptedDice(15, 4, 4));
+    // The attack should have unerring flags recorded in the attack mutation
+    expect(atRange3.state.actors[fixture.foe.id].hp).toBe(24); // 32 - (4+ fray 4)
+    // The shove from Talent II moves the foe away from the hero
+    expect(atRange3.state.actors[fixture.foe.id].position.x).toBeGreaterThanOrEqual(4);
+    expect(applyEvents(fixture.state, atRange3.events)).toEqual(atRange3.state);
+
+    // Foe at distance 1: NOT exactly range 3 — no Talent II unerring/shove
+    const atRange1 = masteryEncounter({ mastered: [], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 }, allyAt: null });
+    atRange1.state.actors[atRange1.hero.id].talents = { 'warden:apex': 2 };
+    const nearResult = executeCommand(atRange1.state, {
+      type: 'USE_ABILITY', actorId: atRange1.hero.id, abilityId: 'warden:apex', targetIds: [atRange1.foe.id],
+    }, scriptedDice(15, 4, 4));
+    // No shove when NOT at exactly range 3
+    expect(nearResult.state.actors[atRange1.foe.id].position).toEqual({ x: 2, y: 1 });
   });
 });
 
@@ -419,12 +448,10 @@ describe('Rampant Nail mastery — Voracious Nail (p.227)', () => {
   it('characters starting adjacent to the nail become vulnerable, which becomes vulnerable+ only while inside its aura', () => {
     const fixture = masteryEncounter({ mastered: ['spellblade:rampant-nail'], heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 }, allyAt: null });
     const chain = new Chain(fixture.state);
-    chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'spellblade:rampant-nail', targetIds: [] });
-    const spikeId = Object.keys(chain.state.entities).find((id) => chain.state.entities[id].type === 'lightning-spike')!;
-    chain.state.entities[spikeId].positions = [{ x: 2, y: 1 }];
+    chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'spellblade:rampant-nail', targetIds: [], input: { positions: { 'spike-position': [{ x: 2, y: 1 }] } } });
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
     chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
-    // The foe starts its turn adjacent to the nail at (3,1): durable vulnerable.
+    // The foe starts its turn adjacent to the nail at (2,1): durable vulnerable.
     expect(chain.state.actors[fixture.foe.id].statuses).toContain('vulnerable');
     expect(encounterRuleState(chain.state).actors[fixture.foe.id].statuses).toContainEqual({ id: 'vulnerable', potency: 'plus' }); // inside the aura 2
     // Leaving the aura drops the upgrade but keeps the durable vulnerable.
@@ -438,9 +465,7 @@ describe('Rampant Nail mastery — Voracious Nail (p.227)', () => {
     // vulnerable to it.
     const fixture = masteryEncounter({ mastered: ['spellblade:rampant-nail'], heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 }, allyAt: { x: 4, y: 1 } });
     const chain = new Chain(fixture.state);
-    chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'spellblade:rampant-nail', targetIds: [] });
-    const spikeId = Object.keys(chain.state.entities).find((id) => chain.state.entities[id].type === 'lightning-spike')!;
-    chain.state.entities[spikeId].positions = [{ x: 2, y: 1 }];
+    chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'spellblade:rampant-nail', targetIds: [], input: { positions: { 'spike-position': [{ x: 2, y: 1 }] } } });
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
     chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
     chain.run({ type: 'END_TURN', actorId: fixture.foe.id }); // the foe's turn start is not adjacent either

@@ -10,6 +10,8 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
+import { footprintDistance } from '../../../primitives/spatial-intent.js';
 
 /**
  * Independently reviewed Warden ability implementations (ICON p.165–171), the
@@ -52,15 +54,33 @@ const apexEffects: RuleResolver = (context) => {
   const targetPosition = target?.position;
   const mutations: RuleMutation[] = [];
   if (!target || !targetPosition) return mutations;
+  // ICON p.169 Apex Talent II: "If you attack a foe at exactly range 3,
+  // this ability gains unerring and you may shove your foe 1 in any
+  // direction after this ability resolves." The exact-range gate reads the
+  // shared p.92 footprint metric. Mastery (LOADED QUIVER) is about extra
+  // beasts and bonus damage — NOT unerring.
+  const apexDistance = source.position && targetPosition
+    ? footprintDistance(
+        { position: source.position, size: source.size },
+        { position: targetPosition, size: target.size ?? 1 },
+      )
+    : undefined;
+  const hasTalentII = source.talents?.['warden:apex'] === 2;
+  const exactRangeUnerring = hasTalentII && apexDistance === 3;
   const roll = resolveAuthoritativeAttack(context, source, target, {
     boons: 1,
-    unerring: context.sourceId === 'warden:apex' && source.masteredAbilityIds.includes('warden:apex'),
+    unerring: exactRangeUnerring,
   });
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 1, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'dazed'));
+  // ICON p.169 Apex Talent II: shove the foe 1 in any direction after
+  // this ability resolves (when the exact-range-3 gate holds).
+  if (exactRangeUnerring && source.position) {
+    mutations.push(shoveMutation(context, target.id, 1, axisDirection(source.position, targetPosition)));
+  }
   const beast = summonBeastNear(context, source.id, targetPosition);
   if (beast) mutations.push(beast);
   if (context.triggers?.has('finishing-blow') || context.triggers?.has('charge')) {
@@ -114,7 +134,7 @@ const circleTheOakEffects: RuleResolver = (context) => {
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie), 'hit')
+    ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 2, target.id, context), 'hit')
     : damageMutation(context, target.id, 1, 'miss'));
   if (distance(dash, targetPosition) <= 1) {
     const ring = ringAround(targetPosition);
@@ -231,7 +251,7 @@ const sidheEffects: RuleResolver = (context) => {
   const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(roll.damageDie), 'hit')
+    ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 1, target.id, context), 'hit')
     : damageMutation(context, target.id, 1, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'blind'));
   mutations.push(markMutation(context, target.id, 'sidhe-toxin', {}));

@@ -20,8 +20,15 @@ export interface EntityCreationResult {
 
 const sameCell = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 
-function occupiedByActor(state: EncounterState, position: Position, ownerId: string): boolean {
-  return Object.values(state.actors).some((actor) => actor.onBattlefield && !actor.defeated && actor.id !== ownerId
+/** ICON general rule: "For a space to be valid for summoning, teleporting,
+ * or creating objects, unless specified it must be free and unobstructed."
+ * The summoner occupies space just like any other character — a summon's
+ * initial space is not 'free' merely because the occupant owns the summon.
+ * Only source rules that EXPLICITLY permit occupied-space creation may
+ * bypass this check (handled as content-layer exceptions, never inferred
+ * from entity type inside the kernel). */
+function occupiedByActor(state: EncounterState, position: Position): boolean {
+  return Object.values(state.actors).some((actor) => actor.onBattlefield && !actor.defeated
     && footprintCells(actor.position, Math.max(1, actor.size)).some((cell) => sameCell(cell, position)));
 }
 
@@ -42,7 +49,7 @@ export function validateEntityCreation(state: EncounterState, request: EntityCre
     if (selected.length >= allowed) break;
     const footprint = footprintCells(position, 1);
     if (footprint.some((cell) => cell.x < 0 || cell.y < 0 || cell.x >= state.grid.width || cell.y >= state.grid.height)) continue;
-    if (footprint.some((cell) => occupiedByActor(state, cell, request.ownerId) || occupiedByEntity(state, cell))) continue;
+    if (footprint.some((cell) => occupiedByActor(state, cell) || occupiedByEntity(state, cell))) continue;
     if (selected.some((cell) => sameCell(cell, position))) continue;
     selected.push({ ...position });
   }

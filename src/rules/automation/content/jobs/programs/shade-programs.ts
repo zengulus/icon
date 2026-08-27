@@ -11,7 +11,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { recipientBonusDamageDice } from '../../../kernels/bonus-damage.js';
+import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
 
 /**
@@ -55,10 +55,14 @@ const umbraEffects: RuleResolver = (context) => {
     if (destination) mutations.push(teleportMutation(context, source.id, destination));
   }
   if (target) {
-    const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
+    // ICON p.162 Umbra mastery (DEVIL FROG TECHNIQUE): "Increase Umbra and
+    // Penumbra's range to 6 and it gains unerring." The unerring grant is
+    // derived from mastery ownership, not from any cross-ability attachment.
+    const umbraUnerring = source.masteredAbilityIds.includes('shade:umbra');
+    const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1, unerring: umbraUnerring });
     mutations.push(roll.attackMutation);
     mutations.push(roll.hit
-      ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
+      ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 1, target.id, context) + source.fray, 'hit')
       : damageMutation(context, target.id, source.fray, 'miss'));
     mutations.push(conditionMutation(context, target.id, 'blind'));
   }
@@ -92,10 +96,13 @@ const umbraComboEffects: RuleResolver = (context) => {
     const destination = walk(context, targetPosition, axisDirection(targetPosition, sourcePosition), 3, false, target.id);
     if (!sameCell(destination, targetPosition)) mutations.push(teleportMutation(context, target.id, destination));
   }
-  const attack = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
+  // ICON p.162 Umbra mastery (DEVIL FROG TECHNIQUE): Penumbra also gains
+  // unerring when Umbra is mastered.
+  const umbraUnerring = source.masteredAbilityIds.includes('shade:umbra');
+  const attack = resolveAuthoritativeAttack(context, source, target, { boons: 1, unerring: umbraUnerring });
   mutations.push(attack.attackMutation);
   mutations.push(attack.hit
-    ? damageMutation(context, target.id, context.dice.die(attack.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollAbilityDamage(context.dice, attack.damageDie, 1, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'blind'));
   return mutations;
@@ -129,12 +136,15 @@ const deathBlossomEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   const targetPosition = target?.position;
   if (!target || !targetPosition) return [];
+  // ICON p.162 Death Blossom is INHERENTLY unerring ("2 actions, Attack,
+  // Range 2, Burst 1, Unerring" — the base ability header). Not gated on
+  // any mastery or cross-ability attachment.
   const roll = resolveAuthoritativeAttack(context, source, target, {
-    unerring: context.sourceId === 'shade:umbra' && source.masteredAbilityIds.includes('shade:umbra'),
+    unerring: true,
   });
   const mutations: RuleMutation[] = [roll.attackMutation];
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 2, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   for (const foe of Object.values(context.state.actors)) {
     const foePosition = foe.position;
@@ -259,7 +269,7 @@ const incubusEffects: RuleResolver = (context) => {
   // the per-ally dice at the USE_ABILITY boundary; the shared keep-highest
   // roll applies them.
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 1, (context.abilityUseModifiers?.bonusDamageDice ?? 0) + (context.encounterState ? recipientBonusDamageDice(context.encounterState, source.id, context.sourceId, target.id) : 0)) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 1, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(markMutation(context, target.id, 'incubus', {}));
   if (context.triggers?.has('finishing-blow') && targetPosition) {
