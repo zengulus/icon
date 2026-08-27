@@ -67,12 +67,13 @@ const activeClassTraits: Record<string, { cost: number; range: number | null }> 
  */
 const independentlyExecutableManualPrograms = new Set([
   'vagabond:trait:skirmisher',
-  // ICON p.116 Finesse: "You deal bonus damage to bloodied foes." The
-  // `finesse` condition is projected from the trait
-  // (classes/trait-condition-recipes.ts) and the shared damage-roll
-  // authority adds one bonus die (ICON p.102 keep-highest) whenever the
-  // attack target is bloodied — a continuous roll-time projection, so the
-  // trait executes with no further resolver code.
+  // ICON p.116 Finesse: "You deal bonus damage to bloodied foes." The trait
+  // is a RECIPIENT-scoped bonus-damage rule (content/jobs/bonus-damage-
+  // recipes.ts through kernels/bonus-damage.ts): the shared damage-roll
+  // authority adds one bonus die (ICON p.102 keep-highest) per bloodied
+  // damage recipient at the roll query point, and the Vagabond Gambit
+  // (p.145) ownership gate extends it to non-Vagabond classes using
+  // Vagabond abilities — so the trait executes with no resolver code.
   'vagabond:trait:finesse',
   'vagabond:trait:prowl',
   'mendicant:trait:diaga',

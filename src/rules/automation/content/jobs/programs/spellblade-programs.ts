@@ -13,8 +13,9 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { recipientBonusDamageDice } from '../../../kernels/bonus-damage.js';
 import { convertedDamageType, masteryFoldRuleRuntimeView } from '../../../kernels/mastery-fold.js';
-import { chosenTeleportDestination as chooseTeleport } from '../../../kernels/teleport-choice.js';
+import { chosenTeleportDestination as chooseTeleport, chosenTeleportPath } from '../../../kernels/teleport-choice.js';
 
 /**
  * Independently reviewed Spellblade ability implementations (ICON p.222–229),
@@ -126,9 +127,19 @@ const nothungEffects: RuleResolver = (context) => {
   // equipped, both teleport distances widen from 1 to 4. The destinations
   // themselves stay independently player-selected.
   const teleportRange = source.talents?.['spellblade:nothung'] === 2 && context.triggers?.has('comeback') ? 4 : 1;
-  const firstDestination = chosenTeleportDestination(context, source.id, 'teleport-1', source.position, teleportRange, 'first');
+  // The two teleports are one PLANNED PATH: each destination is validated
+  // against the position the actor would ACTUALLY occupy when it resolves
+  // (kernels/teleport-choice.ts `chosenTeleportPath`) — the simulated
+  // position advances through the shared F1 spatial gateway only when a leg
+  // would apply, so a rampart/impassable denial of the first teleport means
+  // the second choice is validated against the actor's real (unmoved)
+  // position, never against a destination the actor never reached.
+  const [firstDestination, secondDestination] = chosenTeleportPath(context, source.id, [
+    { key: 'teleport-1', label: 'first', range: teleportRange },
+    { key: 'teleport-2', label: 'second', range: teleportRange },
+  ]);
   const mutations: RuleMutation[] = [];
-  if (!sameCell(firstDestination, source.position)) mutations.push(teleportMutation(context, source.id, firstDestination));
+  if (firstDestination && !sameCell(firstDestination, source.position)) mutations.push(teleportMutation(context, source.id, firstDestination));
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   // ICON p.225 Nothung talent 1: "When used against a bloodied foe, Nothung
@@ -139,7 +150,7 @@ const nothungEffects: RuleResolver = (context) => {
   // separate on-hit effect gated on the same source condition.
   const nothungHoldBonus = source.talents?.['spellblade:nothung'] === 1 && target.hp <= target.maxHp / 2;
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 2, context.abilityUseModifiers?.bonusDamageDice ?? 0) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 2, (context.abilityUseModifiers?.bonusDamageDice ?? 0) + (context.encounterState ? recipientBonusDamageDice(context.encounterState, source.id, context.sourceId, target.id) : 0)) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (roll.hit && nothungHoldBonus) mutations.push(damageMutation(context, target.id, 1, 'hit', strikeType));
   const arc = squareArea(target.position, 1);
@@ -148,12 +159,10 @@ const nothungEffects: RuleResolver = (context) => {
     if (character.id === target.id || character.id === source.id || !position || !arc.some((cell) => sameCell(cell, position))) continue;
     mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  // The second teleport is validated from the actor's position AFTER the
-  // first teleport: its destination must be within range of the first
-  // destination (the reducer applies mutations in order, so the F1 gateway
-  // sees the post-first position when the second leg resolves).
-  const secondDestination = chosenTeleportDestination(context, source.id, 'teleport-2', firstDestination, teleportRange, 'second');
-  if (!sameCell(secondDestination, firstDestination)) mutations.push(teleportMutation(context, source.id, secondDestination));
+  // The second teleport is emitted only when its choice was validated against
+  // the actual post-first position (chosenTeleportPath already applied the
+  // F1 gateway simulation); the reducer re-validates and applies in order.
+  if (secondDestination && firstDestination && !sameCell(secondDestination, firstDestination)) mutations.push(teleportMutation(context, source.id, secondDestination));
   const targetPosition = target.position;
   const adjacent = Object.values(context.state.actors).filter((character) => {
     const position = character.position;

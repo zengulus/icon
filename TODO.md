@@ -102,22 +102,26 @@ assumption here, document the evidence and update this list before proceeding.
    folds source-gated bonus dice at the USE_ABILITY boundary; 6 units
    promoted (Low Blow t1, Nothung t1, Incubus t2, Dark Sliver t1, Demon Claw
    mastery, Vagabond Finesse) and the coarse `{damage-modifier}` census
-   family was reclassified into precise subfamilies. F5 landed (2026-08-27):
-   the mark-modifier fold — carrier-aware mark-condition projections with
-   grant potency (`passive-projection.ts`), the mark-keyed status-save
-   policy seam, and turn-boundary mark triggers (lifecycle recipes), with
-   content rows in `content/jobs/mark-modifier-recipes.ts` +
-   `lifecycle-recipes.ts`. 3 units promoted (Grand Seal t1 save curse, Grand
-   Seal t2 pacified+, Rot t2 turn-start adjacency damage); the 9 remaining
-   former `{mark-modifier}` singletons were reclassified to precise
-   subfamilies (mark-detonation-window, mark-as-entity-follow,
-   mark-activation-gate, mark-stacking, attack-exceed-trigger, effect-count,
-   terrain-create, choice-input, delivery-immunity) — the singleton family
-   is gone (0 immediate; 22 units still carry it in compound sets). Per the
-   regenerated census the next in-scope Step-6 family is the
-   mark-adjacent subfamilies' cousins — the highest-immediate families are
-   now entity-create (15), fly-grant (14), terrain-create (13),
-   range-modifier (11), shove-modifier (10), action-type-change (10);
+   family was reclassified into precise subfamilies. F5 is **PARTIAL**
+   (2026-08-27): the landed mark-modifier fold — carrier-aware
+   mark-condition projections with grant potency (`passive-projection.ts`),
+   the mark-keyed status-save policy seam, and turn-boundary mark triggers
+   (lifecycle recipes), with content rows in
+   `content/jobs/mark-modifier-recipes.ts` +
+   `lifecycle-recipes.ts` — promoted 3 units (Grand Seal t1 save curse,
+   Grand Seal t2 pacified+, Rot t2 turn-start adjacency damage). The coarse
+   `{mark-modifier}` label is RETIRED: every one of the 22 census records
+   that carried it was re-read against its full source passage and
+   reclassified to the precise missing mark family (`mark-gated-modifier` 11,
+   `mark-transfer` 4, `mark-defeat-trigger` 5, `mark-stacking` 3,
+   `mark-detonation-window` 2, `mark-activation-gate` 2), while the rows
+   whose mark portion the landed fold already supplies (growing-season
+   mastery's pacified+ projection, Rot t1's turn-start trigger) dropped the
+   label entirely — **zero unresolved blocker sets carry `mark-modifier`**
+   (census regenerated, byte-stable). Per the regenerated census the next
+   in-scope Step-6 family is the highest-immediate fold-shaped family — the
+   highest-immediate families are entity-create (16), terrain-create (14),
+   range-modifier (11), then fly-grant/action-type-change/shove-modifier;
    within the mastery/talent folds, range-modifier (11 immediate) is the
    next fold-shaped family.
 7. **Close one deliberately complex player-content vertical slice end to
@@ -203,10 +207,10 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 | F2 | Interrupt-modifier family (rank change, extra uses, timing override) | PARTIAL | 13+ talents | Census `{interrupt-modifier}` |
 | F3 | Terrain-create / entity-create recipe primitives | PARTIAL (job-program-local today) | 13 + 13 talents/abilities | Generalize from existing resolvers |
 | F4 | Fly-grant / movement-modifier primitives | PARTIAL | 11+ | Census `{fly-grant}` |
-| F5 | Mark-modifier family | DONE (2026-08-27): carrier-aware mark-condition projections with potency, the mark-keyed status-save policy seam, and turn-boundary mark triggers; 3 promoted (Grand Seal t1/t2, Rot t2), 9 reclassified | 3 promoted (12 originally listed) | Census `{mark-modifier}` singleton cleared (22 units still carry it in compound sets) |
+| F5 | Mark-modifier family | **PARTIAL** (2026-08-27): landed subset = carrier-aware mark-condition projections with potency, the mark-keyed status-save policy seam, turn-boundary mark triggers; 3 promoted (Grand Seal t1/t2, Rot t2). The coarse `{mark-modifier}` label is RETIRED — all 22 compound records reclassified to precise families (mark-gated-modifier 11, mark-transfer 4, mark-defeat-trigger 5, mark-stacking 3, mark-detonation-window 2, mark-activation-gate 2; growing-season mastery + Rot t1 dropped it as supplied); **zero blocker sets carry `mark-modifier`** | 3 promoted (12 originally listed) | Census `{mark-modifier}` label cleared; F5 remainder = the not-yet-landed mark families (mark-gated-modifier: 0 immediate / 11 compound) |
 | F6 | Damage-modifier family | PARTIAL — bonus-damage dice grants landed (2026-08-27, F6a): `kernels/bonus-damage.ts` + 4 talent rows + Finesse; remaining subfamilies (round-gated dice, exceed auto-grant, suppression, damage-maximize, flat self-ratio) reclassified in the census | 6 promoted (13 originally listed) | Census `{damage-modifier}` cleared |
 | F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (modifier kernel K-P5 live; 4 wired — + Demon Claw RAGING DEMON 2026-08-27 — 132 unresolved) | 132 masteries | Biggest single content family |
-| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL (53/288 wired) | ~180 talents | See census frequencies |
+| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL — **53/288 talents wired through the F8 subfamilies** (resource-management, action-type-change, charge-state, shove-modifier). This is an F8-ONLY count, deliberately narrower than the 56/288 total executable talents, which also includes the F1 teleport rows (Strongarm t1, Nothung t2), the F5 mark rows (Grand Seal t1/t2, Rot t2), and the F6a bonus-damage rows (Low Blow t1, Nothung t1, Incubus t2, Dark Sliver t1) that ride other folds | ~180 talents | See census frequencies |
 | F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
 | F10 | Expedition scene flow (camp/interlude as playable steps around the sheet transitions) | PARTIAL (sheet transitions DONE) | cross-combat play UX | |
 

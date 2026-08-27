@@ -4,6 +4,7 @@ import { hasMastery } from '../automation/kernels/mastery.js';
 import { auraStateView, isInAura } from '../automation/kernels/aura.js';
 import { auraDefinitionFor } from '../automation/kernels/aura.js';
 import { determineEncounterDamage, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
+import { resolveAuthoritativeAttack } from '../automation/kernels/attack-resolution.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, migrateEncounter } from '../encounter.js';
 import type { DiceSource } from '../dice.js';
@@ -75,6 +76,50 @@ const mutationsOf = (events: EncounterEvent[], sourceId: string) => {
     candidate.type === 'RULE_MUTATIONS_APPLIED' && candidate.sourceId === sourceId);
   return matches.length > 0 ? matches[matches.length - 1].mutations : [];
 };
+
+describe('F8 mastery attack attachments', () => {
+  const attackContext = (state: EncounterState, actorId: string, sourceId: string) => ({
+    state: encounterRuleState(state), actorId, sourceId, actionId: 'default', timing: 'use' as const,
+    input: {}, dice: scriptedDice(10, 3),
+  });
+
+  it('Umbra mastery grants unerring only to Umbra and preserves the negative cases', () => {
+    const fixture = masteryEncounter({ mastered: ['shade:umbra'], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    const source = encounterRuleState(fixture.state).actors[fixture.hero.id];
+    const target = encounterRuleState(fixture.state).actors[fixture.foe.id];
+    const mastered = resolveAuthoritativeAttack({ ...attackContext(fixture.state, fixture.hero.id, 'shade:umbra'), sourceId: 'shade:umbra' }, source, target, { unerring: true });
+    expect(mastered.damageProvenance.ignoreCover).toBe(true);
+    expect(mastered.damageProvenance.ignoreAetherwall).toBe(true);
+
+    const unmastered = masteryEncounter({ mastered: [], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    const plainSource = encounterRuleState(unmastered.state).actors[unmastered.hero.id];
+    const plainTarget = encounterRuleState(unmastered.state).actors[unmastered.foe.id];
+    const plain = resolveAuthoritativeAttack(attackContext(unmastered.state, unmastered.hero.id, 'shade:umbra'), plainSource, plainTarget, {});
+    expect(plain.damageProvenance.ignoreCover).toBe(false);
+    expect(plain.damageProvenance.ignoreAetherwall).toBe(false);
+
+    const unrelated = resolveAuthoritativeAttack(attackContext(fixture.state, fixture.hero.id, 'shade:death-blossom'), source, target, {});
+    expect(unrelated.damageProvenance.ignoreCover).toBe(false);
+    expect(unrelated.damageProvenance.ignoreAetherwall).toBe(false);
+  });
+
+  it('Apex mastery grants unerring to Apex only, and replay preserves the result', () => {
+    const fixture = masteryEncounter({ mastered: ['warden:apex'], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    const source = encounterRuleState(fixture.state).actors[fixture.hero.id];
+    const target = encounterRuleState(fixture.state).actors[fixture.foe.id];
+    const mastered = resolveAuthoritativeAttack({ ...attackContext(fixture.state, fixture.hero.id, 'warden:apex'), sourceId: 'warden:apex' }, source, target, { unerring: true });
+    expect(mastered.damageProvenance.ignoreCover).toBe(true);
+    expect(mastered.damageProvenance.ignoreAetherwall).toBe(true);
+    const unrelated = resolveAuthoritativeAttack(attackContext(fixture.state, fixture.hero.id, 'warden:sidhe'), source, target, {});
+    expect(unrelated.damageProvenance.ignoreCover).toBe(false);
+    expect(unrelated.damageProvenance.ignoreAetherwall).toBe(false);
+
+    const command = executeCommand(fixture.state, {
+      type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'warden:apex', targetIds: [fixture.foe.id],
+    }, scriptedDice(10, 3, 2));
+    expect(applyEvents(fixture.state, command.events)).toEqual(command.state);
+  });
+});
 
 describe('F8 mastery attachment foundation', () => {
   it('the shared gate requires the parent ability to be BOTH equipped and mastered', () => {

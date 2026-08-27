@@ -3,6 +3,7 @@ import { consumeTraitAttackModifiers, consumedTraitModifier, effectiveDamageDie 
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import { rollDamageDice } from '../primitives/job-kit.js';
+import { recipientBonusDamageDice } from './bonus-damage.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
 import { eligibleTargets, isEligibleTarget } from '../primitives/targeting.js';
@@ -152,13 +153,20 @@ export function evaluateNumber(expression: RuleNumber, context: RuleExecutionCon
     case 'damage-roll': {
       const target = oneActor(expression.actor, context);
       const dice = Math.max(0, Math.floor(evaluateNumber(expression.dice, context)));
-      const attackTarget = context.attackTargetId ? context.state.actors[context.attackTargetId] : undefined;
-      const finesse = target.conditions.has('finesse') && attackTarget && attackTarget.hp <= attackTarget.maxHp / 2 ? 1 : 0;
+      // Recipient-scoped bonus-damage grants (Finesse p.116 / Vagabond Gambit
+      // p.145, content/jobs/bonus-damage-recipes.ts) are evaluated against the
+      // ACTUAL damage recipient at the roll query point — the VM threads the
+      // per-target recipient (`damageRecipientId`) through the damage effect,
+      // so a bloodied recipient gets its own bonus die and a healthy one does
+      // not, regardless of the primary attack target's state.
+      const recipientDice = context.damageRecipientId && context.encounterState
+        ? recipientBonusDamageDice(context.encounterState, context.actorId, context.sourceId, context.damageRecipientId)
+        : 0;
       // F6a bonus-damage grants (content/jobs/bonus-damage-recipes.ts) fold
       // their dice at the USE_ABILITY boundary into abilityUseModifiers, so
       // this roll carries exactly what the command decided. The roll itself
       // stays the shared keep-highest bonus-dice semantics (ICON p.102).
-      const bonusDice = (expression.bonusDice ? Math.max(0, Math.floor(evaluateNumber(expression.bonusDice, context))) : 0) + finesse + Math.max(0, target.resources['bonus-damage'] ?? 0) + Math.max(0, context.abilityUseModifiers?.bonusDamageDice ?? 0);
+      const bonusDice = (expression.bonusDice ? Math.max(0, Math.floor(evaluateNumber(expression.bonusDice, context))) : 0) + recipientDice + Math.max(0, target.resources['bonus-damage'] ?? 0) + Math.max(0, context.abilityUseModifiers?.bonusDamageDice ?? 0);
       // F6 Hissatsu: an armed next attack rolls its damage die as a d10.
       const die = effectiveDamageDie(target);
       return rollDamageDice(context.dice, die, dice, bonusDice) + (expression.flat ? evaluateNumber(expression.flat, context) : 0);
@@ -280,11 +288,15 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
           // through the existing piercing damage path instead of re-deriving
           // armor/vigor handling locally.
           const damageType = context.abilityUseModifiers?.pierce && effect.damageType === 'normal' ? 'piercing' : effect.damageType;
+          // The amount expression evaluates per target with the RECIPIENT
+          // threaded, so recipient-scoped bonus-damage rolls (Finesse, p.116)
+          // distinguish each target's live state at the roll query point.
+          const recipientContext = { ...context, damageRecipientId: target.id };
           output.push({
             kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id,
             // The attack's direct-target damage instance also carries trait flat
             // bonus damage (Pulverize +2), scoped by the recorded provenance.
-            amount: integer(effect.amount, context) + (attackDamage?.bonusFlat ?? 0), damageType, instance,
+            amount: integer(effect.amount, recipientContext) + (attackDamage?.bonusFlat ?? 0), damageType, instance,
             delivery: effect.delivery ?? context.delivery ?? 'effect', ignoreCover,
             ...(attackDamage?.ignoreDodge ? { ignoreDodge: true } : {}),
             ...(unerring ? { ignoreAetherwall: true } : {}),

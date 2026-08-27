@@ -180,6 +180,36 @@ describe('Spellblade ability automation (p.222–229)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Nothung: a rampart-denied first teleport re-anchors the second leg at the actor’s actual position', () => {
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    // A hostile rampart terrain effect covers exactly (2,1) — the first
+    // chosen destination passes the in-grid/range/occupancy pre-check but
+    // the F1 gateway denies the teleport (entering rampart differs from
+    // leaving, p.104). The second destination (3,0) is within Teleport 1 of
+    // the INTENDED first destination (2,1) but distance 2 from the actor’s
+    // ACTUAL position (1,1). With the first leg denied, the second choice is
+    // illegal from where the actor really stands, so the command is rejected
+    // (nothing consumed) rather than executing a 2-space teleport.
+    state.terrainEffects.push({ id: 'fixture:rampart', sourceId: 'fixture:rampart', ownerId: foe.id, terrain: 'rampart', positions: [{ x: 2, y: 1 }], height: null, duration: null });
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 2, y: 1 }, { x: 3, y: 0 }),
+    }, scriptedDice(12, 4, 5))).toThrowError(expect.objectContaining({ code: 'move.range' }));
+    expect(hero.actionsRemaining).toBe(2);
+    expect(hero.position).toEqual({ x: 1, y: 1 });
+    // Control: when the first leg is valid, the second leg is still measured
+    // from the POST-first position — (3,0) is distance 2 from the starting
+    // cell (1,1) but distance 1 from the first destination (0,1), and the
+    // path applies both legs in order.
+    const control = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    const moved = executeCommand(control.state, {
+      type: 'USE_ABILITY', actorId: control.hero.id, abilityId: 'spellblade:nothung', targetIds: [control.foe.id],
+      input: nothungTeleports({ x: 0, y: 1 }, { x: 1, y: 0 }),
+    }, scriptedDice(12, 4, 5));
+    expect(moved.state.actors[control.hero.id].position).toEqual({ x: 1, y: 0 });
+    expect(applyEvents(control.state, moved.events)).toEqual(moved.state);
+  });
+
   it('Nothung talent 2: comeback widens both player-selected teleports to 4', () => {
     const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 2 }, second: null });
     state.actors[hero.id].talents = { 'spellblade:nothung': 2 };

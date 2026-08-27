@@ -14,7 +14,8 @@
  * complete; the source fixtures and replay tests live in the per-job test
  * files.
  */
-import { registerBonusDamageRule } from '../../kernels/bonus-damage.js';
+import { findAbility } from '../../../catalog.js';
+import { isBloodied, registerBonusDamageRule, registerRecipientBonusDamageRule } from '../../kernels/bonus-damage.js';
 
 // ICON p.139 Knave Low Blow talent 1: "Deals bonus damage if your foe is
 // suffering from a status." Any status on the attack target qualifies.
@@ -70,5 +71,37 @@ registerBonusDamageRule({
   abilityId: 'harvester:dark-sliver',
   talent: 1,
   gate: { kind: 'self-bloodied' },
+  dice: 1,
+});
+
+// ICON p.116 Vagabond Finesse: "You deal bonus damage to bloodied foes." This
+// is a RECIPIENT-scoped grant (kernels/bonus-damage.ts §recipient): the die is
+// evaluated at the damage-roll query point against the actual damage
+// recipient, so an ability that damages several foes awards the die to each
+// bloodied recipient independently — a healthy recipient never inherits a
+// bonus from the primary attack target, and a bloodied secondary recipient
+// never loses it because the primary target is healthy.
+//
+// Vagabond Gambit (ICON p.145): "If you take a Vagabond Ability as a
+// non-Vagabond class, your vagabond abilities benefit from Finesse." The
+// engine's authoritative ownership surface decides which branch applies —
+// the character's durable `classId` (encounter construction) and the ability
+// catalog's `classId` — never a name match. Vagabond-class characters (whose
+// class traits include Finesse) gain it for every ability; a non-Vagabond
+// character gains it only for their Vagabond abilities (classId 'vagabond',
+// i.e. Fool/Freelancer/Shade/Warden job abilities).
+registerRecipientBonusDamageRule({
+  sourceId: 'vagabond:trait:finesse',
+  gate: ({ source, abilityId, recipient }) => {
+    if (recipient.side === source.side) return false;
+    if (!isBloodied(recipient)) return false;
+    // Finesse trait (the Vagabond class trait, projected onto Vagabond-class
+    // characters at encounter construction) covers every ability the
+    // character uses.
+    if (source.traitIds.includes('vagabond:trait:finesse')) return true;
+    // Vagabond Gambit: a non-Vagabond character benefits only when the ability
+    // itself is a Vagabond ability.
+    return source.classId !== 'vagabond' && findAbility(abilityId)?.classId === 'vagabond';
+  },
   dice: 1,
 });

@@ -47,6 +47,8 @@ export interface AuthoritativeAttackOptions {
   trueStrike?: boolean;
   /** Ability-declared auto-hit. */
   autoHit?: boolean;
+  /** Attachment-declared unerring (for a mastered parent ability). */
+  unerring?: boolean;
 }
 
 /** The resolved ordinary attack: the durable attack mutation plus every
@@ -111,7 +113,7 @@ export function resolveAuthoritativeAttack(
     autoHit: options.autoHit ?? false,
     bonusDamageFlat: traitModifier.bonusDamageFlat + (context.abilityUseModifiers?.bonusDamage ?? 0),
     exceedThreshold: traitModifier.exceedThreshold ?? undefined,
-    unerring: traitModifier.unerring,
+    unerring: Boolean(options.unerring) || traitModifier.unerring,
   }, context.dice);
   const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat, exceedThreshold } = attack;
   const damageProvenance = { ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat };

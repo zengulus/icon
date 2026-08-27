@@ -36,7 +36,9 @@ export const CLASS_RULE_RESOLVERS: RuleResolverRegistry = {
     if (foesInRange) mutations.unshift({ kind: 'actions', sourceId: context.sourceId, actorId: source.id, operation: 'spend', amount: 1 });
     return mutations;
   },
-  'vagabond:trait:finesse': applyCondition('finesse'),
+  // Finesse has no resolver: it is a recipient-scoped bonus-damage rule
+  // (content/jobs/bonus-damage-recipes.ts) read at the damage-roll query
+  // point against the actual damage recipient.
   'mendicant:trait:diaga': (context) => {
     // Diaga targets a character in range 4.  Requiring attackTargetId routes
     // that non-attack target through the generic range/line-of-sight gate.

@@ -514,30 +514,17 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // throw-as-mark and end-of-turn gamble detonation (the mine's blast +
   // stacking gamble effects, ending the mark) need a reusable
   // mark-detonation window, distinct from the terrain mine's entry trigger
-  'freelancer:exorcism:mastery': ['mark-modifier', 'range-modifier'],
-  // Exorcism's lifecycle + dice are wired; the mastery's mark-modifier
-  // and range-change effects are the remaining blockers
   'freelancer:exorcism:talent:1': ['power-die', 'attack-exceed-trigger'],
   // "While this mark is active, your attacks gain: Exceed: tick the die up
   // by 1." The Exorcism power die is placed on the mark but never ticks
   // (the end-of-turn tick/projectile window is documented); the talent's
   // attack-exceed trigger folding into the die tick needs both the power-die
   // tick seam and an attack-pipeline exceed trigger
-  'freelancer:warding-bolts:talent:2': ['mark-modifier', 'effect-count'],
-  // "Marked foes take 2 damage, twice, instead." The hover-zone strike path
-  // needs to distinguish marked foes and deliver two instances instead of
-  // the normal strike — a mark-modifier on the strike plus the effect-count
-  // fold for the "twice"
   'shade:incubus:mastery': ['mark-stacking', 'damage-dealt-trigger'],
   // Incubus's mark + turn-end detonation are wired; the mastery's "stacks
   // with other marks … may mark any number of characters … when a character
   // takes damage from an Incubus mark, you may also mark them" needs mark
   // stacking/multi-mark plus a damage-dealt re-mark trigger
-  'harvester:growing-season:mastery': ['mark-modifier', 'terrain-create'],
-  // The base only marks (the plant spawn after the marked character's turn
-  // is a documented turn-end window); the mastery's "pacified+ while in or
-  // adjacent to spaces occupied by plants" needs plant terrain creation plus
-  // a mark-condition projection that reads plant adjacency
   'sealer:divine-aegis:mastery': ['mark-activation-gate'],
   // The aegis mark's activation (a foe must save before targeting the ally,
   // fading on a failed save) is a documented save-window reducer hook; the
@@ -547,6 +534,96 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'seer:polaris:talent:1': ['mark-as-entity-follow'],
   // "You can cause one of your Polaris to follow a character as a mark
   // instead of a space" — a mark that carries the meteor entity and follows
+
+  // ── F5 mark-modifier reconciliation (2026-08-27) ──
+  // The coarse `{mark-modifier}` label is RETIRED: the F5 fold landed a
+  // SUBSET (carrier-side mark-condition projections with potency, mark-keyed
+  // status-save policies, mark turn-start lifecycle triggers — Grand Seal
+  // t1/t2, Rot t2), so F5 is PARTIAL. Every row below was re-read against
+  // its complete source passage and reclassified to the precise missing mark
+  // family: `mark-gated-modifier` (mark-state-keyed attack/damage/save/
+  // movement modifiers read at the authority's query point), `mark-transfer`
+  // (move a mark to another target), `mark-defeat-trigger` (defeated-while-
+  // marked triggers), `mark-stacking`, `mark-detonation-window`, and
+  // `mark-activation-gate` (which already existed). Rows whose mark portion
+  // the landed F5 machinery already supplies (growing-season mastery's
+  // pacified+ projection, Rot t1's turn-start trigger) drop the mark label
+  // entirely and keep only their genuinely missing capabilities. Zero
+  // unresolved blocker sets contain `mark-modifier`.
+  'fool:diablo:mastery': ['area-define', 'charge-state', 'entity-create'],
+  // "mark out the area effect" designates the Diablo blast area — the word
+  // is a verb, NOT the Mark mechanic — so no mark family applies; the
+  // delayed re-explosion (charge-state + area-define) plus the bomb summon
+  // (entity-create) are the complete residual
+  'freelancer:trait:astral-binding': ['action-type-change', 'mark-stacking'],
+  // "stack up to two marks" = mark-stacking; the free-action group teleport
+  // of marked characters rides the F1 teleport gateway (implemented) and the
+  // free-action cost (action-type-change)
+  'freelancer:exorcism:mastery': ['mark-defeat-trigger', 'mark-transfer', 'range-modifier'],
+  // "If exorcism's target is defeated … tracking a new target … transferring
+  // the mark" — the defeated-while-marked trigger plus mark-transfer
+  'freelancer:exorcism:talent:2': ['blast-template', 'charge-state', 'mark-defeat-trigger'],
+  // the defeated-while-marked projectile scatter (per-charge damage) needs
+  // the large-blast template, the charge tracking, and the defeat trigger
+  'freelancer:astral-chain:talent:1': ['mark-gated-modifier', 'range-modifier'],
+  // "While marked, gain evasion against your marked foe while they are in
+  // range 3" — an owner-side mark-gated defensive modifier (not a carrier
+  // status projection, which F5 supplies)
+  'freelancer:astral-chain:talent:2': ['damage-modifier', 'mark-gated-modifier'],
+  // "all attacks from you or allies against your marked foe may gain rebound
+  // and deal bonus damage if they are rebounded" — a mark-gated attack
+  // modifier plus the rebound bonus-damage delivery
+  'freelancer:astral-chain:mastery': ['mark-gated-modifier', 'range-modifier'],
+  // the marked foe's save-to-move-beyond-range-3 restriction (with combat-
+  // long immunity) is a mark-gated movement modifier
+  'freelancer:warding-bolts:talent:2': ['effect-count', 'mark-gated-modifier'],
+  // "Marked foes take 2 damage, twice, instead" — a mark-gated damage-value
+  // override on the hover-zone strike plus the effect-count fold
+  'warden:stampede:talent:1': ['action-type-change', 'mark-defeat-trigger', 'mark-transfer'],
+  // finishing-blow mark transfer as a free action
+  'harvester:trait:gardener-of-kin': ['entity-create', 'mark-gated-modifier', 'mark-stacking'],
+  // "stack 2 marks" plus "foes marked by you take +1 damage from summons"
+  // (a mark-gated damage-taken modifier)
+  'harvester:sow:talent:1': ['mark-defeat-trigger', 'mark-transfer', 'range-modifier'],
+  // the defeated-while-marked transfer to a foe in range 3
+  'harvester:growing-season:talent:1': ['mark-gated-modifier', 'terrain-create'],
+  // "Abilities used against a character marked by growing season gain slay:
+  // create an Eden vine …" — a mark-gated slay trigger plus terrain creation
+  'harvester:growing-season:talent:2': ['mark-gated-modifier', 'terrain-create'],
+  // same shape: mark-gated slay that creates the blood tree object
+  'harvester:growing-season:mastery': ['terrain-create'],
+  // "Foes marked by Growing Season are pacified+ while in or adjacent to
+  // spaces occupied by plants" — the F5 carrier-side projection with a
+  // live-state (plant adjacency) gate and pacified+ potency already supplies
+  // the mark portion (the Grand Seal t2 shape); only plant creation remains
+  'harvester:rot:talent:1': ['entity-create'],
+  // "Characters marked by regenerate gain comeback: summon a plant … at the
+  // start of their turn" — the F5 turn-start mark trigger already supplies
+  // the mark portion (the Rot t2 shape); only the plant summon remains
+  'harvester:rot:mastery': ['entity-create', 'mark-defeat-trigger', 'range-modifier'],
+  // REGROWTH's "if that character would be defeated … instantly rescued" is
+  // a defeat-rescue mark trigger, plus the plant summon and range 4
+  'sealer:grand-seal:mastery': ['mark-detonation-window', 'mark-transfer', 'range-modifier'],
+  // "When this mark ends … you may transfer it to [a new foe]" — the mark-
+  // end detonation window plus mark-transfer
+  'sealer:divine-aegis:talent:1': ['action-type-change', 'mark-activation-gate'],
+  // "If your ally is at 25% hp or lower when marked, marking them becomes a
+  // free action" — a mark-action cost gate (the aegis activation family)
+  'spellblade:fulminate:mastery': ['cover-mechanic', 'damage-modifier', 'mark-gated-modifier', 'range-modifier', 'unlimited-range'],
+  // the mark-gated attack-modifier set vs the marked target (pull, unlimited
+  // range, bonus damage, ignore cover on foes; no-crit/no-bonus-damage/+1
+  // curse on allies)
+  'stormbender:deepwrath:talent:1': ['mark-gated-modifier', 'terrain-create'],
+  // "Marked allies gain +1 boon on saves in pits …" — a mark-gated save
+  // modifier plus pit terrain
+  'stormbender:deepwrath:talent:2': ['damage-modifier', 'mark-gated-modifier', 'terrain-create'],
+  // "Marked foes take bonus damage from all sources" (a mark-gated damage-
+  // taken modifier) plus "are shattered+ while inside pits" (the F5 carrier-
+  // side projection is supplied; the damage-taken half is not)
+  'stormbender:deepwrath:mastery': ['mark-gated-modifier', 'terrain-create'],
+  // the marked character's vacate-leaves-dangerous-terrain trail and the
+  // mark-gated dangerous-terrain immunity/extra damage
+
   // its character
   'enochian:blazing-bond:talent:1': ['choice-input', 'distance-predicate'],
   // "While marked, you can teleport yourself or your ally 2 spaces at the
@@ -1193,7 +1270,15 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('stance-gate');
   }
 
-  // Mark modifier: mark, marked
+  // Mark-related first pass: mark, marked. The coarse `{mark-modifier}`
+  // family is RETIRED (F5 is PARTIAL — the landed fold covers carrier-side
+  // projections/potency, mark-keyed status-save policies, and mark turn-start
+  // triggers only). This heuristic only flags a unit for the precise
+  // reclassification pass below; every audit-verified row is reclassified to
+  // its exact mark family (mark-gated-modifier, mark-transfer,
+  // mark-defeat-trigger, mark-stacking, mark-detonation-window,
+  // mark-activation-gate, mark-as-entity-follow), so no resolved blocker set
+  // may contain `mark-modifier`.
   if (/\bmark(?:s|ed)?\b/.test(text) && !/\bmark(?:s|ed)?\s+that\b/.test(text)) {
     blockers.push('mark-modifier');
   }

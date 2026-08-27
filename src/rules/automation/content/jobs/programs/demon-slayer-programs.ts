@@ -223,12 +223,19 @@ const demonClaw: RuleResolver = (context) => {
   const special = !source.attacked;
   // ICON p.129 Demon Claw mastery (RAGING DEMON): "Demon Claw's damage
   // increases by 1 for every 25% of your maximum hp you are missing, up to a
-  // maximum of +3 damage." The flat bonus reads the mastered gate (parent
-  // equipped AND mastered through the shared hasMastery surface) and the
-  // wounds-adjusted maximum from current state at use time; it applies to
-  // every 2-damage instance this ability emits.
+  // maximum of +3 damage." The missing-HP percentage is a % HEALTH
+  // calculation, so p.107's rule applies: "Any ability that costs or damages
+  // a certain percent of health always considers maximum BASE hp, and not
+  // max hp based on wounds". The denominator (and the missing amount) is
+  // therefore the BASE class maximum — never the wounds-adjusted maximum the
+  // bloodied/quarter STATE thresholds use (hp-threshold kernel) — so a
+  // wound's temporary max reduction counts as missing hp for the bonus. The
+  // flat bonus reads the mastered gate (parent equipped AND mastered through
+  // the shared hasMastery surface) and applies to every 2-damage instance
+  // this ability emits.
+  const baseMaximum = context.encounterState ? context.encounterState.actors[source.id]?.baseMaxHp ?? source.maxHp : source.maxHp;
   const ragingBonus = hasMastery(source, 'demon-slayer:demon-claw')
-    ? Math.min(3, Math.floor((source.maxHp - source.hp) / (source.maxHp / 4)))
+    ? Math.min(3, Math.floor((baseMaximum - source.hp) / (baseMaximum / 4)))
     : 0;
   const mutations: RuleMutation[] = [];
   const damaged = new Set<string>();

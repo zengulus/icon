@@ -23,13 +23,9 @@
  * This module contains no source IDs: `sourceId` is provenance only.
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
+import { isBloodied } from './hp-threshold.js';
 
-/** ICON p.102: bloodied at or below half of the wounds-adjusted maximum
- * (same formula as the talent fold's inlined isBloodied — kept here to keep
- * the module graph acyclic). */
-function isBloodied(actor: EncounterActor): boolean {
-  return actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2;
-}
+export { isBloodied };
 
 /** The source-defined conditions under which a bonus-damage rule applies. */
 export type BonusDamageGate =
@@ -117,6 +113,75 @@ export function bonusDamageDiceForUse(
     if (rule.talent !== undefined && actor.talents?.[abilityId] !== rule.talent) continue;
     if (!gateHolds(rule.gate, state, actor.id, targetIds)) continue;
     const dice = typeof rule.dice === 'function' ? rule.dice({ state, actorId: actor.id, abilityId, targetIds }) : rule.dice;
+    total += Math.max(0, Math.floor(dice));
+  }
+  return total;
+}
+
+// ---------------------------------------------------------------------------
+// Recipient-scoped bonus damage (Finesse / Vagabond Gambit)
+// ---------------------------------------------------------------------------
+
+/** The deterministic fold view handed to a recipient-scoped rule. */
+export interface RecipientBonusDamageView {
+  state: EncounterState;
+  /** The damage source (attacker). */
+  source: EncounterActor;
+  /** The ability whose damage roll is being evaluated. */
+  abilityId: string;
+  /** The damage recipient. */
+  recipient: EncounterActor;
+}
+
+/**
+ * A recipient-scoped bonus-damage rule. Unlike the use-level fold above, this
+ * family is evaluated PER DAMAGE RECIPIENT at the actual damage-roll query
+ * point: a clause like ICON p.116 Finesse ("You deal bonus damage to bloodied
+ * foes") keys off the recipient's live state, so an ability that damages a
+ * bloodied and a healthy foe must award the die to exactly the bloodied one
+ * — never to every recipient because the primary attack target happens to be
+ * bloodied. `gate` is a deterministic function of the fold view (the same
+ * pure state-read pattern as `registerMarkConditionProjection.matches` and
+ * lifecycle `applies`), and the fold itself never rolls anything: it returns
+ * how many extra dice the roll carries. This module contains no source IDs:
+ * `sourceId` is provenance only.
+ */
+export interface RecipientBonusDamageRule {
+  /** Exact source id of the granting unit (trait / talent / mastery). */
+  sourceId: string;
+  /** Deterministic source+recipient gate (pure reads of the fold view). */
+  gate(view: RecipientBonusDamageView): boolean;
+  /** Bonus dice for this recipient (default 1). */
+  dice?: number | ((view: RecipientBonusDamageView) => number);
+}
+
+const recipientBonusDamageRules: RecipientBonusDamageRule[] = [];
+
+/** Register a recipient-scoped bonus-damage rule (content/jobs). */
+export function registerRecipientBonusDamageRule(rule: RecipientBonusDamageRule): void {
+  recipientBonusDamageRules.push(rule);
+}
+
+/**
+ * The total bonus dice a damage roll against `recipientId` carries, per every
+ * registered recipient-scoped rule whose source+recipient gate holds. Read at
+ * the roll query point (the declarative VM's `damage-roll` and the named
+ * resolvers' `rollDamageDice` calls), so the roll records exactly the dice
+ * the source rules award for THIS recipient and replay applies them.
+ */
+export function recipientBonusDamageDice(
+  state: EncounterState,
+  sourceId: string,
+  abilityId: string,
+  recipientId: string,
+): number {
+  const source = state.actors[sourceId];
+  const recipient = state.actors[recipientId];
+  if (!source || !recipient) return 0;
+  let total = 0;
+  for (const rule of recipientBonusDamageRules) {
+    if (!rule.gate({ state, source, abilityId, recipient })) continue;
+    const dice = typeof rule.dice === 'function' ? rule.dice({ state, source, abilityId, recipient }) : (rule.dice ?? 1);
     total += Math.max(0, Math.floor(dice));
   }
   return total;

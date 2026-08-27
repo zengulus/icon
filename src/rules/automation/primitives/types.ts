@@ -1,7 +1,7 @@
 import type { DiceSource } from '../../dice.js';
 import type { AttackDamageProvenance } from './attack-resolution.js';
 import type { SaveWindowBranch, SaveWindowKind, SaveWindowModifiers } from './save-window.js';
-import type { Position, SourceReference } from '../../types.js';
+import type { EncounterState, Position, SourceReference } from '../../types.js';
 
 export const RULE_PROGRAM_SCHEMA_VERSION = 1 as const;
 
@@ -225,13 +225,13 @@ export interface RuleActorView {
   /** Active job/class/foe trait ids — the trait-modifier kernels (attack
    * path, collide) read their armed state through this surface. */
   traitIds: readonly string[];
+  /** Parent abilities currently equipped and eligible for attachment folds. */
+  abilityIds: readonly string[];
   /** The equipped talent choice per ability (1 or 2), projected from the
    * actor's loadout so ability programs can gate behavior on the chosen
    * talent (e.g. Demon Cutter t2's pre-ability rush) exactly as the fold
    * reads the durable selection on command and replay. */
   talents: Readonly<Record<string, 1 | 2>>;
-  /** The equipped ability ids (the mastery gate's ownership read). */
-  abilityIds: readonly string[];
   /** The mastered ability ids projected into encounter authority — a mastery
    * attachment executes only when its parent ability is equipped (abilityIds)
    * and present here, never by querying the character sheet. */
@@ -333,6 +333,17 @@ export interface RuleExecutionContext {
   input: RuleExecutionInput;
   dice: DiceSource;
   attackTargetId?: string;
+  /** The recipient of the damage currently being rolled. The VM threads this
+   * per damage effect target so recipient-scoped bonus-damage grants (Finesse,
+   * p.116) are evaluated against the actual damage recipient at the roll
+   * query point — never against the primary attack target for every recipient. */
+  damageRecipientId?: string;
+  /** The authoritative encounter records behind the projected `state` view.
+   * Recipient-scoped bonus-damage folds (Finesse / Vagabond Gambit) read the
+   * source's durable class/trait ownership and the recipient's live HP from
+   * here at the roll query point. Optional: contexts without encounter state
+   * (isolated VM fixtures) simply skip recipient-scoped grants. */
+  encounterState?: EncounterState;
   triggerSourceId?: string;
   triggerTargetIds?: string[];
   triggers?: ReadonlySet<string>;

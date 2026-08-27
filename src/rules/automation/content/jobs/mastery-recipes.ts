@@ -120,7 +120,7 @@ registerMasteryRecipe({
   name: 'RAGING DEMON',
   status: 'implemented',
   attachment: 'program-level',
-  mechanic: 'Demon Claw\u2019s damage increases by 1 for every 25% of the user\u2019s maximum hp they are missing, up to a maximum of +3 — the resolver reads the mastered gate (the shared hasMastery surface) and the wounds-adjusted maximum from current state at use time and adds the flat bonus to each 2-damage instance, p.129.',
+  mechanic: 'Demon Claw\u2019s damage increases by 1 for every 25% of the user\u2019s maximum hp they are missing, up to a maximum of +3 — the resolver reads the mastered gate (the shared hasMastery surface) and the BASE class maximum from current state at use time (p.107 % HEALTH: percentage-of-health damage always considers maximum base hp, not the wounds-adjusted maximum) and adds the flat bonus to each 2-damage instance, p.129.',
   detail: '',
 });
 

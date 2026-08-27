@@ -11,6 +11,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { recipientBonusDamageDice } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
 
 /**
@@ -232,7 +233,7 @@ const darkSliverEffects: RuleResolver = (context) => {
   // boundary while the user is bloodied (the comeback gate); the range half
   // is the comeback-gated range rule in range-recipes.ts (range 2 → 3).
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 1, context.abilityUseModifiers?.bonusDamageDice ?? 0) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 1, (context.abilityUseModifiers?.bonusDamageDice ?? 0) + (context.encounterState ? recipientBonusDamageDice(context.encounterState, source.id, context.sourceId, target.id) : 0)) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (context.triggers?.has('slay')) {
     const plantCell = freeCellsInRange(context, target.position, 3)[0];

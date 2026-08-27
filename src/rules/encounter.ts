@@ -1364,6 +1364,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   }
   const ruleContext: RuleExecutionContext = {
     state: ruleStateView,
+    encounterState: state,
     actorId: actor.id,
     sourceId: ability.id,
     actionId: programAction.id,
@@ -1597,6 +1598,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       }
       const ruleContext: RuleExecutionContext = {
         state: ruleStateView,
+        encounterState: state,
         actorId: actor.id,
         sourceId: unit.id,
         actionId: command.actionId,

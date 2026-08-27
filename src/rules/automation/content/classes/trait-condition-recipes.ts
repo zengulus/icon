@@ -10,7 +10,12 @@ export const CHARACTER_TRAIT_CONDITION_RECIPES: Readonly<Record<string, readonly
   'stalwart:trait:fortify': ['fortify'],
   'vagabond:trait:skirmisher': ['skirmisher'],
   'vagabond:trait:dodge': ['dodge'],
-  'vagabond:trait:finesse': ['finesse'],
+  // Finesse (p.116 "You deal bonus damage to bloodied foes") is NOT a
+  // condition projection: it is a recipient-scoped bonus-damage rule
+  // (content/jobs/bonus-damage-recipes.ts) evaluated at the damage-roll
+  // query point, so the die keys off the actual damage recipient's bloodied
+  // state (plus the Vagabond Gambit ownership gate) rather than an actor-
+  // wide condition.
   'wright:trait:slip': ['slip'],
   'wright:trait:aetherwall': ['aetherwall'],
   'wright:trait:chain-reaction': ['chain-reaction'],

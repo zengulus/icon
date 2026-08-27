@@ -31,6 +31,8 @@ export interface TraitAttackModifier {
 export interface TraitModifierOwner {
   traitIds: readonly string[];
   state: Record<string, unknown>;
+  abilityIds?: readonly string[];
+  masteredAbilityIds?: readonly string[];
 }
 
 /** The minimal target read surface for target-threshold and distance-gated
@@ -56,6 +58,12 @@ export interface AttackModifierTarget {
 export interface AttackModifierRule {
   /** The exact source trait id that owns this rule. */
   traitId: string;
+  /** Optional parent ability gate for talent/mastery-owned attack modifiers.
+   * The caller supplies the active attachment ids; the kernel remains
+   * source-ID agnostic and only compares opaque ownership keys. */
+  abilityId?: string;
+  /** Optional active attachment key. */
+  attachmentKey?: string;
   /** One-shot armed rule-state key that must be true for the grant to apply. */
   armedKey?: string;
   boons?: number;
@@ -102,6 +110,9 @@ export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: nu
   };
   for (const rule of attackModifierRules) {
     if (!owner.traitIds.includes(rule.traitId)) continue;
+    if (rule.abilityId && !owner.abilityIds?.includes(rule.abilityId)) continue;
+    if (rule.attachmentKey && owner.state[rule.attachmentKey] !== true) continue;
+    if (rule.abilityId && rule.attachmentKey === undefined && owner.masteredAbilityIds && !owner.masteredAbilityIds.includes(rule.abilityId)) continue;
     if (rule.armedKey && owner.state[rule.armedKey] !== true) continue;
     if (rule.exactRange !== undefined && target?.distance !== rule.exactRange) continue;
     if (rule.boons) modifier.boons += rule.boons;

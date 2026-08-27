@@ -363,6 +363,24 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(fresh.state, fullHp.events)).toEqual(fullHp.state);
   });
 
+  it('Demon Claw mastery (RAGING DEMON): the missing-HP percentage uses the BASE maximum, not the wounds-adjusted maximum (p.107 % HEALTH)', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
+    state.actors[hero.id].masteredAbilityIds = ['demon-slayer:demon-claw'];
+    // One wound reduces the current maximum from 28 to 21 (VIT 7). At full
+    // current HP (21/21) the character is missing 7 of the BASE 28 — exactly
+    // 25% — so the p.107 base-max rule awards +1 damage, while a
+    // wounds-adjusted calculation (missing 0 of 21) would award nothing.
+    state.actors[hero.id].wounds = 1;
+    state.actors[hero.id].hp = 28 - 7;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    const clawDamages = mutationsOf(result.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
+    expect(clawDamages).toHaveLength(2);
+    for (const mutation of clawDamages) expect(mutation.amount).toBe(3); // 2 + 1
+    expect(result.state.actors[foe.id].hp).toBe(29); // 32 - 3
+    expect(result.state.actors[second.id].hp).toBe(29);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Gates of Hell: rush, vigilance, counter, and the once-per-turn vigilance rush', () => {
     const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 6, y: 1 }, second: { x: 8, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:gates-of-hell', targetIds: [] }, scriptedDice());

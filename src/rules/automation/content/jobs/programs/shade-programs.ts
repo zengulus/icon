@@ -11,6 +11,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { recipientBonusDamageDice } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
 
 /**
@@ -128,7 +129,9 @@ const deathBlossomEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   const targetPosition = target?.position;
   if (!target || !targetPosition) return [];
-  const roll = resolveAuthoritativeAttack(context, source, target);
+  const roll = resolveAuthoritativeAttack(context, source, target, {
+    unerring: context.sourceId === 'shade:umbra' && source.masteredAbilityIds.includes('shade:umbra'),
+  });
   const mutations: RuleMutation[] = [roll.attackMutation];
   mutations.push(roll.hit
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
@@ -256,7 +259,7 @@ const incubusEffects: RuleResolver = (context) => {
   // the per-ally dice at the USE_ABILITY boundary; the shared keep-highest
   // roll applies them.
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 1, context.abilityUseModifiers?.bonusDamageDice ?? 0) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 1, (context.abilityUseModifiers?.bonusDamageDice ?? 0) + (context.encounterState ? recipientBonusDamageDice(context.encounterState, source.id, context.sourceId, target.id) : 0)) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(markMutation(context, target.id, 'incubus', {}));
   if (context.triggers?.has('finishing-blow') && targetPosition) {

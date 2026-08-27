@@ -24,9 +24,11 @@
  * The kernel carries no source IDs: `actorId`/`key`/`label` are supplied by
  * the calling content resolver, and `key` names the command input slot.
  */
-import type { Position } from '../../types.js';
+import type { EncounterActor, Position } from '../../types.js';
 import type { RuleExecutionContext } from '../primitives/types.js';
 import { distance, occupied, withinGrid } from '../primitives/job-kit.js';
+import { validateSpatialIntent } from '../primitives/spatial-intent.js';
+import { rampartObstructs } from './encounter-adapter.js';
 import { RuleProgramViolation } from './runtime.js';
 
 export interface TeleportChoiceOptions {
@@ -67,4 +69,102 @@ export function chosenTeleportDestination(
     throw new RuleProgramViolation('choice.position-unavailable', `${label} teleport destination is occupied.`);
   }
   return destination;
+}
+
+/** One leg of an ordered "Teleport X … Teleport X" sequence (Nothung's two
+ * teleports, p.225). `range` is that leg's listed distance and `key` names
+ * the command input slot for its destination. */
+export interface PlannedTeleportLeg {
+  key: string;
+  label: string;
+  range: number;
+  /** Whether this leg may be declined ("may teleport X"). */
+  optional?: boolean;
+}
+
+/**
+ * Resolve an ordered sequence of unqualified "Teleport X" clauses as one
+ * PLANNED PATH, validating every destination against the actor's position
+ * AFTER the preceding legs were actually applied — never against a
+ * destination the actor never reached.
+ *
+ * Each leg's chosen destination passes the ordinary in-grid / range /
+ * occupancy pre-check from the current SIMULATED position, then the shared
+ * F1 spatial gateway (bounds, occupancy, impassable terrain, Rampart) is
+ * consulted the same way the reducer applies the emitted teleport mutation:
+ * a leg the gateway would deny leaves the simulated position UNCHANGED (that
+ * teleport simply fails at application, exactly as the reducer behaves), so
+ * the NEXT leg's choice is validated against the actor's true position. A
+ * later choice that was only legal from an unreached destination is therefore
+ * rejected at the command boundary (nothing consumed) instead of executing a
+ * teleport from the wrong origin.
+ *
+ * Returns one destination per leg in order (null for a declined optional
+ * leg); the caller emits the teleport mutations in the same order. When the
+ * context carries no encounter state (isolated VM fixtures), the gateway
+ * cannot be consulted and each leg falls back to validating against the
+ * intended previous destination — the historical behavior.
+ */
+export function chosenTeleportPath(
+  context: RuleExecutionContext,
+  actorId: string,
+  legs: PlannedTeleportLeg[],
+): Array<Position | null> {
+  const actor = context.encounterState?.actors[actorId];
+  if (!context.encounterState || !actor) {
+    // No authoritative state: validate each leg against the intended previous
+    // destination (the historical sequential behavior).
+    let intendedOrigin: Position | null = null;
+    const results: Array<Position | null> = [];
+    for (const leg of legs) {
+      const origin = intendedOrigin ?? currentActorPosition(context, actorId);
+      const destination = chosenTeleportDestination(context, actorId, leg.key, origin, leg.range, leg.label, { optional: leg.optional });
+      results.push(destination);
+      if (destination) intendedOrigin = destination;
+    }
+    return results;
+  }
+  // Planned-path simulation: the simulated position advances only when the
+  // preceding leg is actually valid through the shared spatial gateway.
+  const results: Array<Position | null> = [];
+  let simulated = actor.position;
+  if (!simulated) return legs.map(() => null);
+  for (const leg of legs) {
+    const destination = chosenTeleportDestination(context, actorId, leg.key, simulated, leg.range, leg.label, { optional: leg.optional });
+    results.push(destination);
+    if (!destination) continue;
+    if (teleportLegApplies(context.encounterState, actor, simulated, destination)) simulated = destination;
+  }
+  return results;
+}
+
+function currentActorPosition(context: RuleExecutionContext, actorId: string): Position {
+  const position = context.state.actors[actorId]?.position;
+  if (!position) throw new RuleProgramViolation('selector.actor-position', `${actorId} has no position.`);
+  return position;
+}
+
+/** True when the reducer's F1 gateway would actually apply a teleport leg
+ * from `from` to `to` (bounds, occupancy, impassable terrain, and Rampart —
+ * the exact `movementSpatialIntent` construction). The ordinary in-grid /
+ * range / occupancy pre-check has already passed. */
+function teleportLegApplies(
+  state: Parameters<typeof validateSpatialIntent>[0],
+  actor: EncounterActor,
+  from: Position,
+  to: Position,
+): boolean {
+  // p.104 Rampart blocks teleporting: a teleport is denied when entering or
+  // leaving rampart differs (the same formula movementSpatialIntent uses).
+  const rampartObstructed = rampartObstructs(state, actor, from) !== rampartObstructs(state, actor, to);
+  const validation = validateSpatialIntent(state, {
+    kind: 'teleport',
+    actorId: actor.id,
+    sourceActorId: actor.id,
+    sourceRuleId: 'teleport-choice',
+    from,
+    to,
+    rampartObstructed,
+  });
+  return validation.legal;
 }

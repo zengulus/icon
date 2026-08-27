@@ -52,7 +52,10 @@ const apexEffects: RuleResolver = (context) => {
   const targetPosition = target?.position;
   const mutations: RuleMutation[] = [];
   if (!target || !targetPosition) return mutations;
-  const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
+  const roll = resolveAuthoritativeAttack(context, source, target, {
+    boons: 1,
+    unerring: context.sourceId === 'warden:apex' && source.masteredAbilityIds.includes('warden:apex'),
+  });
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
