@@ -349,7 +349,7 @@ export interface RuleExecutionContext {
    * flag. The VM folds these into its ordinary attack/damage handling, so a
    * newly executable ability works with the traits automatically.
    */
-  abilityUseModifiers?: { boons?: number; bonusDamage?: number; pierce?: boolean };
+  abilityUseModifiers?: { boons?: number; bonusDamage?: number; bonusDamageDice?: number; pierce?: boolean };
 }
 
 export type RuleMutation =

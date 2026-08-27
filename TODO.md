@@ -97,7 +97,29 @@ assumption here, document the evidence and update this list before proceeding.
    (roadmap P3; F2/F5–F8): reusable high-fan-out modifier families first;
    each modifier's mechanical authority lives at the existing mechanic's own
    query point (e.g. the interrupt allowance reader, the damage pipeline),
-   never in a parallel mastery-specific subsystem.
+   never in a parallel mastery-specific subsystem. F6a landed (2026-08-27):
+   the bonus-damage grant kernel (`kernels/bonus-damage.ts` + content rows)
+   folds source-gated bonus dice at the USE_ABILITY boundary; 6 units
+   promoted (Low Blow t1, Nothung t1, Incubus t2, Dark Sliver t1, Demon Claw
+   mastery, Vagabond Finesse) and the coarse `{damage-modifier}` census
+   family was reclassified into precise subfamilies. F5 landed (2026-08-27):
+   the mark-modifier fold — carrier-aware mark-condition projections with
+   grant potency (`passive-projection.ts`), the mark-keyed status-save
+   policy seam, and turn-boundary mark triggers (lifecycle recipes), with
+   content rows in `content/jobs/mark-modifier-recipes.ts` +
+   `lifecycle-recipes.ts`. 3 units promoted (Grand Seal t1 save curse, Grand
+   Seal t2 pacified+, Rot t2 turn-start adjacency damage); the 9 remaining
+   former `{mark-modifier}` singletons were reclassified to precise
+   subfamilies (mark-detonation-window, mark-as-entity-follow,
+   mark-activation-gate, mark-stacking, attack-exceed-trigger, effect-count,
+   terrain-create, choice-input, delivery-immunity) — the singleton family
+   is gone (0 immediate; 22 units still carry it in compound sets). Per the
+   regenerated census the next in-scope Step-6 family is the
+   mark-adjacent subfamilies' cousins — the highest-immediate families are
+   now entity-create (15), fly-grant (14), terrain-create (13),
+   range-modifier (11), shove-modifier (10), action-type-change (10);
+   within the mastery/talent folds, range-modifier (11 immediate) is the
+   next fold-shaped family.
 7. **Close one deliberately complex player-content vertical slice end to
    end:** persistent character → encounter → talents/masteries/interrupts/
    movement/status interactions → deterministic replay → settlement →
@@ -181,10 +203,10 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 | F2 | Interrupt-modifier family (rank change, extra uses, timing override) | PARTIAL | 13+ talents | Census `{interrupt-modifier}` |
 | F3 | Terrain-create / entity-create recipe primitives | PARTIAL (job-program-local today) | 13 + 13 talents/abilities | Generalize from existing resolvers |
 | F4 | Fly-grant / movement-modifier primitives | PARTIAL | 11+ | Census `{fly-grant}` |
-| F5 | Mark-modifier family | PARTIAL | 11+ | |
-| F6 | Damage-modifier family beyond bonus dice | PARTIAL | 11+ | |
-| F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (modifier kernel K-P5 live; 3 wired, 133 unresolved) | 133 masteries | Biggest single content family |
-| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL (49/288 wired) | ~200 talents | See census frequencies |
+| F5 | Mark-modifier family | DONE (2026-08-27): carrier-aware mark-condition projections with potency, the mark-keyed status-save policy seam, and turn-boundary mark triggers; 3 promoted (Grand Seal t1/t2, Rot t2), 9 reclassified | 3 promoted (12 originally listed) | Census `{mark-modifier}` singleton cleared (22 units still carry it in compound sets) |
+| F6 | Damage-modifier family | PARTIAL — bonus-damage dice grants landed (2026-08-27, F6a): `kernels/bonus-damage.ts` + 4 talent rows + Finesse; remaining subfamilies (round-gated dice, exceed auto-grant, suppression, damage-maximize, flat self-ratio) reclassified in the census | 6 promoted (13 originally listed) | Census `{damage-modifier}` cleared |
+| F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (modifier kernel K-P5 live; 4 wired — + Demon Claw RAGING DEMON 2026-08-27 — 132 unresolved) | 132 masteries | Biggest single content family |
+| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL (53/288 wired) | ~180 talents | See census frequencies |
 | F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
 | F10 | Expedition scene flow (camp/interlude as playable steps around the sheet transitions) | PARTIAL (sheet transitions DONE) | cross-combat play UX | |
 
@@ -213,13 +235,16 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 - **Job traits** — `PARTIAL`: 27/65 wired across the five wiring homes;
   **38 documented** rows remain, each carrying its kernel need. Work the
   highest-frequency kernel first (see F1–F6), then harvest rows.
-- **Talents** — `PARTIAL`: 49/288 executable (fold, program-level
+- **Talents** — `PARTIAL`: 56/288 executable (fold, program-level
   incl. F1 Strongarm t1 / Nothung t2, aura projection, range/area
-  modifiers). **239 unresolved**. Do not bulk-enable;
+  modifiers, the F6a bonus-damage rows: Low Blow t1, Nothung t1,
+  Incubus t2, Dark Sliver t1, and the F5 mark-modifier rows: Grand Seal
+  t1, Grand Seal t2, Rot t2). **232 unresolved**. Do not bulk-enable;
   promote exact-ID slices per subfamily with replay fixtures.
 - **Masteries** — `PARTIAL`: equipped-mastery surface is validated and
   durable; the mastery-modifier fold (K-P5: interrupt-rank, damage-type
-  conversion, unlimited range) promotes 3 rows; **133 unresolved**. Broader
+  conversion, unlimited range) promotes 3 rows, plus the program-level
+  Demon Claw mastery RAGING DEMON (2026-08-27); **132 unresolved**. Broader
   promotion needs more modifier families added to the fold.
 - **Limit Breaks** — `SOURCE/ADJUDICATION NEEDED` + `PARTIAL`: costs parse and
   pay through the resolve pool; the 16 limit-break effect bodies are

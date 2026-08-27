@@ -1041,6 +1041,34 @@ registerLifecycleRecipe({
   },
 });
 
+/** ICON p.186 Rot talent 2: "Foes that start their turn adjacent to a
+ * character marked by Rot take 2 piercing damage." A turn-start trigger on
+ * the foe's own boundary (the opposite orientation of Astral Chain's
+ * owner-turn strike): the starting actor is a foe, and any character marked
+ * by Rot — the foe-mark or the REGENERATE ally-mark branch — adjacent to it
+ * triggers once. The gate reads the mark owner's equipped talent choice, so
+ * the talent's damage only fires for a harvester who actually chose it. */
+registerLifecycleRecipe({
+  sourceId: 'harvester:rot:talent:2',
+  phase: 'turn-start',
+  applies: (actor) => actor.side === 'foes' && Boolean(actor.position),
+  resolve: (state, actor) => {
+    if (actor.side !== 'foes' || !actor.position) return;
+    for (const marked of Object.values(state.actors)) {
+      if (marked.defeated || !marked.onBattlefield || !marked.position) continue;
+      const mark = marked.marks.find((candidate) => candidate.markId === 'rot');
+      if (!mark) continue;
+      const owner = state.actors[mark.ownerId];
+      if (!owner || owner.talents?.['harvester:rot'] !== 2) continue;
+      if (distance(actor.position, marked.position) > 1) continue;
+      applyRuleMutations(state, [{
+        kind: 'damage', sourceId: 'harvester:rot:talent:2', sourceActorId: owner.id, actorId: actor.id, amount: 2, damageType: 'piercing', instance: 1, delivery: 'effect', ignoreCover: false,
+      }]);
+      break;
+    }
+  },
+});
+
 /** ICON p.158 Warding Bolts: a foe that starts its turn inside the hover zone
  * records the owner so the turn-end hook can strike it if it leaves. Mastery
  * (Phantom Bolts): the aura hover form records the same way, through the

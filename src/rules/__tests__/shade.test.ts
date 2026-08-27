@@ -60,9 +60,9 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(shadeIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
   });
 
-  it('Umbra: teleports toward the target, attacks with a boon, and blinds', () => {
+  it('Umbra: player-selected Teleport 3, attacks with a boon, and blinds', () => {
     const { state, hero, foe } = shadeEncounter({ foe: { x: 4, y: 1 }, second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:umbra', targetIds: [foe.id] }, scriptedDice(15, 4, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:umbra', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 3, y: 1 }] } } }, scriptedDice(15, 4, 4));
     expect(result.state.actors[hero.id].position).toEqual({ x: 3, y: 1 });
     expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + 4)
     expect(result.state.actors[foe.id].statuses).toContain('blind');
@@ -270,7 +270,34 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(resolved.actors[hero.id].ruleState['incubus:triggered']).toBe(true);
   });
 
-  it('Incubus Combo (Succubus): deals 3 to every marked character and teleports them away', () => {
+  it('Incubus talent 2: "deals bonus damage for every ally of your target adjacent to your target" (p.164)', () => {
+    // The second foe (3,1) is an ally of the target foe (2,1) and adjacent to
+    // it → one bonus die on the [D] roll (ICON p.102 keep-highest).
+    const { state, hero, foe, second } = shadeEncounter({ foe: { x: 2, y: 1 }, second: { x: 3, y: 1 } });
+    state.actors[hero.id].talents = { 'shade:incubus': 2 };
+    // d20 15 hits (attack has +1 boon); the boon die rolls 1; damage dice
+    // roll 2 then 6 → keep the highest (6) + fray 4 = 10.
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:incubus', targetIds: [foe.id] }, scriptedDice(15, 1, 2, 6));
+    expect(result.state.actors[foe.id].hp).toBe(22); // 32 - 10
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+
+    // A hero ally adjacent to the target does NOT count (the source counts
+    // allies OF the target — the target's own side).
+    const allyFixture = shadeEncounter({ foe: { x: 2, y: 1 }, second: null, ally: { x: 3, y: 1 } });
+    allyFixture.state.actors[allyFixture.hero.id].talents = { 'shade:incubus': 2 };
+    const allyAdjacent = executeCommand(allyFixture.state, { type: 'USE_ABILITY', actorId: allyFixture.hero.id, abilityId: 'shade:incubus', targetIds: [allyFixture.foe.id] }, scriptedDice(15, 1, 5));
+    expect(allyAdjacent.state.actors[allyFixture.foe.id].hp).toBe(23); // 32 - (5 + 4), no bonus die
+    expect(applyEvents(allyFixture.state, allyAdjacent.events)).toEqual(allyAdjacent.state);
+
+    // No adjacent ally of the target → base [D]+fray even with the talent.
+    const alone = shadeEncounter({ foe: { x: 2, y: 1 }, second: null });
+    alone.state.actors[alone.hero.id].talents = { 'shade:incubus': 2 };
+    const noAlly = executeCommand(alone.state, { type: 'USE_ABILITY', actorId: alone.hero.id, abilityId: 'shade:incubus', targetIds: [alone.foe.id] }, scriptedDice(15, 1, 5));
+    expect(noAlly.state.actors[alone.foe.id].hp).toBe(23); // 32 - (5 + 4)
+    expect(applyEvents(alone.state, noAlly.events)).toEqual(noAlly.state);
+  });
+
+  it('Incubus Combo (Succubus): deals 3 to every marked character and player-selected teleports them', () => {
     const fixture = shadeEncounter({ foe: { x: 2, y: 1 }, second: null });
     fixture.state.actors[fixture.hero.id].resources.combo = 1;
     fixture.state.actors[fixture.foe.id].marks = [{
@@ -282,10 +309,10 @@ describe('Shade ability automation (p.159–164)', () => {
       sourceId: 'shade:incubus',
       actionId: 'combo',
       timing: 'use',
-      input: {},
+      input: { positions: { 'teleport-0': [{ x: 4, y: 1 }] } },
     }, scriptedDice());
     expect(result.state.actors[fixture.foe.id].hp).toBe(29); // 32 - 3
-    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 4, y: 1 }); // teleported 2 away
+    expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 4, y: 1 }); // teleported to player choice
     expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
   });
 });

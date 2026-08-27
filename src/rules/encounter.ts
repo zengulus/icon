@@ -11,6 +11,7 @@ import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, co
 import { applyDamageLedger } from './automation/kernels/damage-ledger.js';
 import { decideDamageWindow } from './automation/kernels/trigger-window.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
+import { bonusDamageDiceForUse } from './automation/kernels/bonus-damage.js';
 import { applyCombatStartTraitEffects, planTurnStartParticipants, planTurnTransition, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
 import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
 // Content registry: registers the lifecycle rows, passive projections, and
@@ -1337,13 +1338,23 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
       .map((candidate) => ({ id: candidate.id, side: candidate.side, defeated: candidate.defeated, onBattlefield: candidate.onBattlefield, traitIds: candidate.traitIds, resources: candidate.resources })),
   };
   let abilityUseCostMutations: RuleMutation[] = [];
-  let abilityUseModifiers: { boons?: number; bonusDamage?: number; pierce?: boolean } | undefined;
+  let abilityUseModifiers: { boons?: number; bonusDamage?: number; bonusDamageDice?: number; pierce?: boolean } | undefined;
   try {
     const resolved = resolveAbilityUseChoices(abilityUseSource, command.input?.abilityUseChoices);
     // Cost spends ride this ability's recorded event first (so replay applies
     // exactly what the command decided), before the program's own mutations.
     abilityUseCostMutations = resolved.costs;
-    abilityUseModifiers = { boons: resolved.boons, bonusDamage: resolved.bonusDamage, pierce: resolved.pierce };
+    // F6a bonus-damage grants (content/jobs/bonus-damage-recipes.ts): the
+    // registered rules' dice for this ability use are folded once here — the
+    // same command boundary that rolls the damage — so the recorded mutations
+    // carry exactly what was decided and replay never re-evaluates a gate.
+    const bonusDamageDice = bonusDamageDiceForUse(state, actor, ability.id, targetIds);
+    abilityUseModifiers = {
+      boons: resolved.boons,
+      bonusDamage: resolved.bonusDamage,
+      pierce: resolved.pierce,
+      ...(bonusDamageDice > 0 ? { bonusDamageDice } : {}),
+    };
     for (const trigger of resolved.triggers) abilityTriggers.add(trigger);
   } catch (error) {
     if (error instanceof AbilityUseChoiceViolation) {

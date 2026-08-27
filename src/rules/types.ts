@@ -648,7 +648,7 @@ export interface AbilityUseChoice {
  * and p.183/p.190 ability-use choices explicit without exposing the generic
  * RuleProgram input surface on ordinary encounter commands.
  */
-export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices'> & {
+export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices' | 'positions'> & {
   abilityUseChoices?: readonly AbilityUseChoice[];
   /** Optional post-resolution talent effects the player explicitly opted into
    * (source unit ids — see `RuleExecutionInput.talentChoices`). */

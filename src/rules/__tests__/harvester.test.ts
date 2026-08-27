@@ -225,6 +225,72 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Rot talent 2: a foe that starts its turn adjacent to a Rot-marked character takes 2 piercing (p.186)', () => {
+    const { state, hero, foe, ally } = harvesterEncounter({ second: null, ally: { x: 3, y: 1 } });
+    state.actors[hero.id].talents = { 'harvester:rot': 2 };
+    state.actors[hero.id].resources.combo = 1;
+    // A second foe sits adjacent to the ally that will carry the rot ally-mark.
+    state.actors[foe.id].position = { x: 4, y: 1 };
+    const marked = executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'harvester:rot',
+      actionId: 'combo',
+      timing: 'use',
+      input: { actorIds: { target: [ally!.id] } },
+    }, scriptedDice());
+    const mark = marked.state.actors[ally!.id].marks.find(({ markId }) => markId === 'rot');
+    expect(mark).toBeDefined();
+    expect(mark?.state.kind).toBe('ally');
+    expect(marked.state.actors[foe.id].hp).toBe(32);
+
+    // The foe's own turn-start boundary fires the trigger exactly once.
+    const ended = executeCommand(marked.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice());
+    const taken = executeCommand(ended.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice());
+    expect(taken.state.activeActorId).toBe(foe.id);
+    expect(taken.state.actors[foe.id].hp).toBe(30); // 32 - 2 piercing
+    // The turn boundary replays identically from its recorded intent.
+    expect(applyEvents(ended.state, taken.events)).toEqual(taken.state);
+  });
+
+  it('Rot talent 2: gated on adjacency and on the owner\u2019s equipped talent 2', () => {
+    // Not adjacent (distance 2 from the marked ally): the trigger stays silent.
+    const first = harvesterEncounter({ second: null, ally: { x: 3, y: 1 } });
+    first.state.actors[first.hero.id].talents = { 'harvester:rot': 2 };
+    first.state.actors[first.hero.id].resources.combo = 1;
+    first.state.actors[first.foe.id].position = { x: 5, y: 1 };
+    const marked = executeCommand(first.state, {
+      type: 'EXECUTE_RULE',
+      actorId: first.hero.id,
+      sourceId: 'harvester:rot',
+      actionId: 'combo',
+      timing: 'use',
+      input: { actorIds: { target: [first.ally!.id] } },
+    }, scriptedDice());
+    expect(marked.state.actors[first.ally!.id].marks.some(({ markId }) => markId === 'rot')).toBe(true);
+    const ended = executeCommand(marked.state, { type: 'END_TURN', actorId: first.hero.id }, scriptedDice());
+    const taken = executeCommand(ended.state, { type: 'TAKE_TURN', actorId: first.foe.id }, scriptedDice());
+    expect(taken.state.actors[first.foe.id].hp).toBe(32);
+
+    // Adjacent, but the harvester chose talent 1: no trigger either.
+    const second = harvesterEncounter({ second: null, ally: { x: 3, y: 1 } });
+    second.state.actors[second.hero.id].talents = { 'harvester:rot': 1 };
+    second.state.actors[second.hero.id].resources.combo = 1;
+    second.state.actors[second.foe.id].position = { x: 4, y: 1 };
+    const secondMarked = executeCommand(second.state, {
+      type: 'EXECUTE_RULE',
+      actorId: second.hero.id,
+      sourceId: 'harvester:rot',
+      actionId: 'combo',
+      timing: 'use',
+      input: { actorIds: { target: [second.ally!.id] } },
+    }, scriptedDice());
+    const secondEnded = executeCommand(secondMarked.state, { type: 'END_TURN', actorId: second.hero.id }, scriptedDice());
+    const secondTaken = executeCommand(secondEnded.state, { type: 'TAKE_TURN', actorId: second.foe.id }, scriptedDice());
+    expect(secondTaken.state.actors[second.foe.id].hp).toBe(32);
+    expect(applyEvents(secondEnded.state, secondTaken.events)).toEqual(secondTaken.state);
+  });
+
   it('Rot combo (REGENERATE): the ally-mark projects regeneration at turn end while bloodied (p.186)', () => {
     const { state, hero, foe, ally } = harvesterEncounter({ second: null, ally: { x: 3, y: 1 } });
     state.actors[hero.id].resources.combo = 1;
@@ -294,7 +360,7 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Spirit Away: teleports the entering foe 2 and seals them', () => {
+  it('Spirit Away: player-selected Teleport 2 for the entering foe and seals them', () => {
     const { state, hero, foe } = harvesterEncounter({ foe: { x: 3, y: 1 }, second: null });
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
@@ -302,11 +368,11 @@ describe('Harvester ability automation (p.182–188)', () => {
       sourceId: 'harvester:fairy-ring',
       actionId: 'spirit-away',
       timing: 'interrupt',
-      input: {},
+      input: { positions: { 'teleport': [{ x: 5, y: 1 }] } },
       triggerTargetIds: [foe.id],
     }, scriptedDice());
     expect(result.state.actors[foe.id].statuses).toContain('sealed');
-    expect(result.state.actors[foe.id].position).toEqual({ x: 5, y: 1 }); // teleported 2 east
+    expect(result.state.actors[foe.id].position).toEqual({ x: 5, y: 1 }); // teleported to player choice
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
@@ -317,5 +383,35 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(Object.values(result.state.entities).some((entity) => entity.type === 'soul-space')).toBe(true);
     expect(result.state.actors[foe.id].marks.some(({ markId }) => markId === 'dark-sliver')).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Dark Sliver talent 1: "Comeback: Deal bonus damage, and increase all ranges by +1" (p.185)', () => {
+    // F6a: the comeback-gated range rule (range 2 → 3) and the bonus-damage
+    // rule (one bonus die while the user is bloodied) both fire only under
+    // active Comeback — never on talent ownership alone.
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    state.actors[hero.id].talents = { 'harvester:dark-sliver': 1 };
+    state.actors[hero.id].hp = 1; // bloodied → the comeback clause holds
+    state.actors[foe.id].position = { x: 4, y: 1 }; // range 3
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id] }, scriptedDice(12, 2, 6));
+    // d20 12 hits; damage dice roll 2 then 6 → keep the highest (6) + fray 4.
+    expect(result.state.actors[foe.id].hp).toBe(22); // 32 - 10
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+
+    // Talent equipped but NOT bloodied: the range-3 target is rejected (no
+    // range override) — the range-2→3 rule is comeback-gated.
+    const healthy = harvesterEncounter({ second: null });
+    healthy.state.actors[healthy.hero.id].talents = { 'harvester:dark-sliver': 1 };
+    healthy.state.actors[healthy.foe.id].position = { x: 4, y: 1 };
+    expect(() => executeCommand(healthy.state, { type: 'USE_ABILITY', actorId: healthy.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [healthy.foe.id] }, scriptedDice(12, 5))).toThrow();
+
+    // Bloodied + talent at the base range 2: legal, and the roll gains the
+    // bonus die.
+    const comeback = harvesterEncounter({ second: null });
+    comeback.state.actors[comeback.hero.id].talents = { 'harvester:dark-sliver': 1 };
+    comeback.state.actors[comeback.hero.id].hp = 1;
+    const at2 = executeCommand(comeback.state, { type: 'USE_ABILITY', actorId: comeback.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [comeback.foe.id] }, scriptedDice(12, 2, 6));
+    expect(at2.state.actors[comeback.foe.id].hp).toBe(22); // 32 - (6 + 4)
+    expect(applyEvents(comeback.state, at2.events)).toEqual(at2.state);
   });
 });

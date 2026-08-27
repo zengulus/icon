@@ -205,12 +205,18 @@ const strongarmEffects: RuleResolver = (context) => {
   const target = targetId ? sourceActor(context, targetId) : undefined;
   // ICON p.143 Strongarm talent 1: "Comeback: this ability gains range 2.
   // Remove your target and place them into adjacency before activating this
-  // effect." The shared range kernel widens target legality to range 2 while
-  // the user is bloodied (the same flag deriveTriggers turns into the
-  // `comeback` trigger); the program mirrors that gate so the hold still
-  // starts from adjacency, and when the talent is equipped it emits the
-  // remove/place reposition — into the canonical first free adjacent cell —
-  // BEFORE the spin mutations, so the spin starts from the placed cell.
+  // effect." Comeback is active only while the user is bloodied, so the
+  // ENTIRE talent effect — the range-2 extension AND the remove/place
+  // reposition — is gated on the `comeback` trigger (the same flag
+  // deriveTriggers turns into the `comeback` trigger while bloodied), never
+  // on talent ownership alone. The shared range kernel widens target
+  // legality to range 2 while the user is bloodied; the program mirrors that
+  // gate so the hold starts from adjacency, and only under active Comeback
+  // does it emit the remove/place reposition — into the canonical first free
+  // adjacent cell — BEFORE the spin mutations, so the spin starts from the
+  // placed cell. With the talent equipped but the user NOT bloodied, the
+  // ability behaves exactly like base Strongarm (adjacent hold, no
+  // reposition, no range-2 extension).
   const strongarmHold = source.talents?.['knave:strongarm'] === 1;
   const comeback = strongarmHold && context.triggers?.has('comeback');
   if (!source || !source.position || !target || !target.position || distance(source.position, target.position) > (comeback ? 2 : 1)) {
@@ -220,7 +226,7 @@ const strongarmEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   const mutations: RuleMutation[] = [];
   let targetPosition = target.position;
-  if (strongarmHold) {
+  if (comeback) {
     const adjacency = freeCellsInRange(context, sourcePosition, 1)[0];
     if (!adjacency) throw new RuleProgramViolation('choice.position-range', 'Strongarm talent 1 requires a free adjacent space.');
     mutations.push(removeMutation(context, target.id));

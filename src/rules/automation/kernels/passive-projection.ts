@@ -1,5 +1,5 @@
 import { projectedFoeTraitConditions } from './foe-trait-recipes.js';
-import type { EncounterMark, FoeRoleId } from '../../types.js';
+import type { EncounterActor, EncounterMark, EncounterState, FoeRoleId } from '../../types.js';
 
 /**
  * Passive projection kernel (docs/rules-foundations.md §7).
@@ -35,14 +35,28 @@ export function registerFoeRoleBaselineRecipes(rows: Readonly<Record<FoeRoleId, 
 
 /** A reviewed mark-condition projection (ICON p.186). A mark becomes
  * mechanically active only through a registered entry keyed on the exact
- * mark `sourceId` and `markId` plus the specific state the source names. */
+ * mark `sourceId` and `markId` plus the specific state the source names.
+ *
+ * F5 (mark-modifier fold): `matches` receives the mark's carrier actor and
+ * the encounter state when the projection is evaluated with them, so a row
+ * can read live carrier state (bloodied, defeated) and the mark's owner
+ * (e.g. the owner's equipped talent choice) instead of snapshotting facts
+ * onto the mark. A row that only needs mark-time state keeps its one-arg
+ * predicate — it is invoked with the extra arguments ignored.
+ */
 export interface MarkConditionProjection {
   sourceId: string;
   markId: string;
-  /** The specific mark state the source names (e.g. the ally/foe branch). */
-  matches(mark: EncounterMark): boolean;
+  /** The specific mark state the source names (e.g. the ally/foe branch).
+   * `carrier`/`state` are supplied when the projection is evaluated with an
+   * encounter (live HP/owner reads); rows that predate F5 ignore them. */
+  matches(mark: EncounterMark, carrier: EncounterActor | undefined, state: EncounterState | undefined): boolean;
   /** Conditions this mark grants on its carrier while active. */
   grants?: readonly string[];
+  /** Potency for status grants keyed by condition id (e.g. `plus` for a
+   * pacified+ grant, p.192), so the projected status surface reports the
+   * ongoing potency the source names. */
+  grantPotencies?: Readonly<Record<string, 'normal' | 'plus'>>;
   /** Conditions this mark suppresses on its carrier while active. */
   suppresses?: readonly string[];
 }
@@ -62,14 +76,19 @@ export function projectedRoleConditions(roleId: FoeRoleId | null): ReadonlySet<s
 /**
  * Conditions a reviewed mark grants on its carrier. The projection is
  * ephemeral: the durable `marks` array is the record, and nothing here is
- * written back into it.
+ * written back into it. `carrier`/`state` are the encounter context the row
+ * may read (F5); pass them whenever they are available.
  */
-export function projectedMarkConditionGrants(marks: readonly EncounterMark[]): ReadonlySet<string> {
+export function projectedMarkConditionGrants(
+  marks: readonly EncounterMark[],
+  carrier?: EncounterActor,
+  state?: EncounterState,
+): ReadonlySet<string> {
   const granted = new Set<string>();
   for (const mark of marks) {
     for (const projection of markConditionProjections) {
       if (projection.markId !== mark.markId || projection.sourceId !== mark.sourceId) continue;
-      if (!projection.matches(mark)) continue;
+      if (!projection.matches(mark, carrier, state)) continue;
       for (const condition of projection.grants ?? []) granted.add(condition);
     }
   }
@@ -78,16 +97,42 @@ export function projectedMarkConditionGrants(marks: readonly EncounterMark[]): R
 
 /** Conditions a reviewed mark suppresses on its carrier — the source says the
  * carrier "loses" them while the mark is active. */
-export function projectedMarkConditionSuppressions(marks: readonly EncounterMark[]): ReadonlySet<string> {
+export function projectedMarkConditionSuppressions(
+  marks: readonly EncounterMark[],
+  carrier?: EncounterActor,
+  state?: EncounterState,
+): ReadonlySet<string> {
   const suppressed = new Set<string>();
   for (const mark of marks) {
     for (const projection of markConditionProjections) {
       if (projection.markId !== mark.markId || projection.sourceId !== mark.sourceId) continue;
-      if (!projection.matches(mark)) continue;
+      if (!projection.matches(mark, carrier, state)) continue;
       for (const condition of projection.suppresses ?? []) suppressed.add(condition);
     }
   }
   return suppressed;
+}
+
+/** Potencies the reviewed mark projections declare for their status grants
+ * (e.g. `pacified: 'plus'` for a pacified+ grant), keyed by condition id.
+ * The projected status surface folds these so a mark-granted ongoing status
+ * reports the potency the source names (F5). */
+export function projectedMarkConditionPotencies(
+  marks: readonly EncounterMark[],
+  carrier?: EncounterActor,
+  state?: EncounterState,
+): ReadonlyMap<string, 'normal' | 'plus'> {
+  const potencies = new Map<string, 'normal' | 'plus'>();
+  for (const mark of marks) {
+    for (const projection of markConditionProjections) {
+      if (projection.markId !== mark.markId || projection.sourceId !== mark.sourceId) continue;
+      if (!projection.matches(mark, carrier, state)) continue;
+      for (const [conditionId, potency] of Object.entries(projection.grantPotencies ?? {})) {
+        potencies.set(conditionId, potency);
+      }
+    }
+  }
+  return potencies;
 }
 
 /**

@@ -6,11 +6,12 @@ import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, comboCost,
   distance, sourceActor, walk, freeCellsInRange,
-  damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
+  damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation, rollDamageDice,
   placeMutation, teleportMutation, entityMutation, terrainMutation, swapMutations,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
 
 /**
  * Independently reviewed Shade ability implementations (ICON p.159–164), the
@@ -40,20 +41,17 @@ import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.j
  *   attack target (the target's damage is fully specified by the Attack
  *   clause); its Finishing Blow pit is a `pit` terrain effect (the shadow-cloud
  *   aspect is a tag for Underworld synergies).
- */
-
-/** ICON p.162: teleport up to 3 toward the target, +1-boon attack, blind, and
+ *//** ICON p.162: player-selected Teleport 3, +1-boon attack, blind, and
  * summon a shadow adjacent to the target on a Finishing Blow. */
 const umbraEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   const sourcePosition = source.position;
-  const targetPosition = target?.position;
+
   const mutations: RuleMutation[] = [];
   if (sourcePosition) {
-    const direction = targetPosition ? axisDirection(sourcePosition, targetPosition) : { x: 1, y: 0 };
-    const destination = walk(context, sourcePosition, direction, 3, false, source.id);
-    if (!sameCell(destination, sourcePosition)) mutations.push(teleportMutation(context, source.id, destination));
+    const destination = chosenTeleportDestination(context, source.id, 'teleport', sourcePosition, 3, 'Umbra', { optional: true });
+    if (destination) mutations.push(teleportMutation(context, source.id, destination));
   }
   if (target) {
     const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
@@ -63,8 +61,8 @@ const umbraEffects: RuleResolver = (context) => {
       : damageMutation(context, target.id, source.fray, 'miss'));
     mutations.push(conditionMutation(context, target.id, 'blind'));
   }
-  if (context.triggers?.has('finishing-blow') && targetPosition) {
-    const shadowCell = freeCellsInRange(context, targetPosition, 1)[0];
+  if (context.triggers?.has('finishing-blow') && target?.position) {
+    const shadowCell = freeCellsInRange(context, target.position, 1)[0];
     if (shadowCell) mutations.push(entityMutation(context, source.id, shadowCell, 'shadow', {}));
   }
   return mutations;
@@ -253,8 +251,12 @@ const incubusEffects: RuleResolver = (context) => {
   if (!target) return [];
   const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   const mutations: RuleMutation[] = [roll.attackMutation];
+  // ICON p.164 Incubus talent 2: "Incubus deals bonus damage for every ally
+  // of your target adjacent to your target" — the bonus-damage rule folds
+  // the per-ally dice at the USE_ABILITY boundary; the shared keep-highest
+  // roll applies them.
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 1, context.abilityUseModifiers?.bonusDamageDice ?? 0) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(markMutation(context, target.id, 'incubus', {}));
   if (context.triggers?.has('finishing-blow') && targetPosition) {
@@ -273,19 +275,21 @@ const incubusEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.164 Combo (Succubus): deal 3 damage to every character marked by
- * Incubus and teleport them 2 away from the user. */
+ * Incubus and player-selected Teleport 2 for each. */
 const incubusComboEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const sourcePosition = source.position;
   const mutations: RuleMutation[] = [];
+  let markedIndex = 0;
   for (const character of Object.values(context.state.actors)) {
     if (!character.marks.some(({ markId }) => markId === 'incubus')) continue;
     const characterPosition = character.position;
     mutations.push(damageMutation(context, character.id, 3, 'effect'));
     if (characterPosition && sourcePosition) {
-      const away = axisDirection(sourcePosition, characterPosition);
-      const destination = walk(context, characterPosition, away, 2, false, character.id);
-      if (!sameCell(destination, characterPosition)) mutations.push(teleportMutation(context, character.id, destination));
+      const key = `teleport-${markedIndex}`;
+      markedIndex += 1;
+      const destination = chosenTeleportDestination(context, character.id, key, characterPosition, 2, 'Succubus', { optional: true });
+      if (destination) mutations.push(teleportMutation(context, character.id, destination));
     }
   }
   return mutations;

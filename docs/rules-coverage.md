@@ -31,9 +31,9 @@ separately and are not counted as VM coverage.
 | --- | ---: |
 | Traceable source programs | 3,275 |
 | Traceable clauses | 4,700 |
-| Programs with no unsupported clause | 462 |
-| Clauses with no unsupported text | 1,602 |
-| Explicitly unsupported clauses | 3,098 |
+| Programs with no unsupported clause | 471 |
+| Clauses with no unsupported text | 1,611 |
+| Explicitly unsupported clauses | 3,089 |
 
 `audit --strict` intentionally fails while any clause remains unresolved; it
 is a release gate, not a CI threshold. A compiler result is never an
@@ -51,10 +51,10 @@ the family's *typical* ceiling.
 | Bonds / powers | 12 / 120 | ✔ | rolls only | — | 5–6 deterministic parts; outcomes 3 (table-facing) |
 | Jobs | 16 | ✔ | — | — | n/a (container) |
 | Job abilities | 144 | ✔ | **144** | 0 | 7 (source+replay fixtures per suite) |
-| Class traits | NEEDS RECOUNT | ✔ | Mendicant slice (Diaga, Bless, Succor) | 7 | mixed 3–6 |
+| Class traits | NEEDS RECOUNT | ✔ | Mendicant slice (Diaga, Bless, Succor) + Vagabond Finesse | 6 | mixed 3–6 |
 | Job traits | 65 | ✔ | 27 | 38 | wired rows 6–7; rest 3 with kernel need recorded |
-| Talents | 288 | ✔ | 49 | 239 | wired 6–7; rest 3 |
-| Masteries | 144 (assumed; NEEDS RECOUNT) | ✔ (validated surface) | 3 via the K-P5 modifier fold (2026-08-26) | 133 | wired 6–7; rest 3 pending further fold families |
+| Talents | 288 | ✔ | 56 | 232 | wired 6–7; rest 3 |
+| Masteries | 144 (assumed; NEEDS RECOUNT) | ✔ (validated surface) | 4 (3 via the K-P5 modifier fold + 1 program-level RAGING DEMON, 2026-08-27) | 132 | wired 6–7; rest 3 pending further fold families |
 | Limit Breaks | 16 | ✔ (costs pay) | 0 effect bodies | 16 | 3–4 (payment) |
 | Relics | 40 (+120 ranks, 40 aspects) | ✔ | 0 effects | 160 | 2–3; character-engine infusion/refocus transitions DONE |
 | Foe profiles | 449 | ✔ | construction works | — | 5 for construction |
@@ -90,13 +90,31 @@ the family's *typical* ceiling.
 The machine-generated dependency graph lives in
 [`blocker-census.md`](blocker-census.md) /
 [`blocker-census.json`](blocker-census.json) (**generated** by
-`npm run audit:class-job-census`; never hand-edit). Current shape: baseline 433 unresolved Class/Job units
-(7 class-trait, 38 job-trait, 239 talent, 133 mastery, 16 limit-break); top
-shared blockers are fly-grant (13), terrain-create (13), entity-create (13),
-damage-modifier (12), interrupt-modifier (12), choice-input (8). The former
+`npm run audit:class-job-census`; never hand-edit). Current shape: baseline 424 unresolved Class/Job units
+(6 class-trait, 38 job-trait, 232 talent, 132 mastery, 16 limit-break); top
+shared blockers are entity-create (15), fly-grant (14), terrain-create (13),
+range-modifier (11), shove-modifier (10), action-type-change (10), effect-count (8),
+charge-state (8), choice-input (8), resource-management (6). The former
 78-unit `{irreducible}` residual was fully decomposed into concrete
 implementable blocker families (2026-08-26) — the census no longer carries a
 non-implementable class. The `{teleport}` blocker family is gone (2026-08-27):
 the F1 foundation landed, 2 units were promoted onto content rows (Strongarm
 t1, Nothung t2), and the 13 remaining former `{teleport}` singletons were
-reclassified to their true residual blocker sets.
+reclassified to their true residual blocker sets. The `{damage-modifier}`
+families are also gone (2026-08-27, F6a): the bonus-damage grant kernel
+(`kernels/bonus-damage.ts` + `content/jobs/bonus-damage-recipes.ts`) landed,
+6 units were promoted (Low Blow t1, Nothung t1, Incubus t2, Dark Sliver t1,
+Demon Claw mastery RAGING DEMON, Vagabond Finesse), and the 7 remaining
+former `{damage-modifier}` singletons were reclassified to their precise
+residual blockers (bonus-damage-suppression, damage-maximize, save-or-stun,
+teleport-distance-modifier, exceed-grant, conditional area-modifier). The
+`{mark-modifier}` singleton family is gone (2026-08-27, F5): the mark-modifier
+fold landed at the engine's mark query points (carrier-aware condition
+projections with potency, the mark-keyed status-save policy seam, and turn-
+boundary triggers — `content/jobs/mark-modifier-recipes.ts` +
+`lifecycle-recipes.ts`), 3 units were promoted (Grand Seal t1, Grand Seal t2,
+Rot t2), and the 9 remaining former singletons were reclassified to their
+precise residual blockers (mark-detonation-window, mark-as-entity-follow,
+mark-activation-gate, mark-stacking, attack-exceed-trigger, effect-count,
+terrain-create, choice-input, delivery-immunity); 22 units still carry
+`mark-modifier` in compound blocker sets.

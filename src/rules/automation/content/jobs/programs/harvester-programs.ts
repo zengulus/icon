@@ -2,15 +2,16 @@ import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
-  axisDirection, sameCell, squareArea, withinGrid, occupied,
+  sameCell, squareArea, withinGrid, occupied,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, rushTowardFoes,
-  damageMutation, conditionMutation, stateMutation, vigorMutation,
+  distance, sourceActor, freeCellsInRange, rushTowardFoes,
+  damageMutation, conditionMutation, stateMutation, vigorMutation, rollDamageDice,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
 
 /**
  * Independently reviewed Harvester ability implementations (ICON p.182–188),
@@ -200,17 +201,17 @@ const fairyRingEffects: RuleResolver = (context) => {
   ];
 };
 
-/** ICON p.187 Spirit Away: teleport the foe that entered or exited the ring 2
- * and seal them. The movement that triggered the window is not ended. */
+/** ICON p.187 Spirit Away: player-selected Teleport 2 for the foe that entered
+ * or exited the ring, and seal them. The movement that triggered the window
+ * is not ended. */
 const spiritAwayEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const foeId = context.triggerTargetIds?.[0] ?? context.input.actorIds?.target?.[0];
   const foe = foeId ? sourceActor(context, foeId) : undefined;
   if (!source.position || !foe?.position) return [];
-  const direction = axisDirection(source.position, foe.position);
-  const landing = walk(context, foe.position, direction, 2, false, foe.id);
   const mutations: RuleMutation[] = [];
-  if (!sameCell(landing, foe.position)) mutations.push(teleportMutation(context, foe.id, landing));
+  const landing = chosenTeleportDestination(context, foe.id, 'teleport', foe.position, 2, 'Spirit Away');
+  if (landing) mutations.push(teleportMutation(context, foe.id, landing));
   mutations.push(conditionMutation(context, foe.id, 'sealed'));
   return mutations;
 };
@@ -226,8 +227,12 @@ const darkSliverEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
+  // ICON p.185 Dark Sliver talent 1: "Comeback: Deal bonus damage, and
+  // increase all ranges by +1." The bonus die folds at the USE_ABILITY
+  // boundary while the user is bloodied (the comeback gate); the range half
+  // is the comeback-gated range rule in range-recipes.ts (range 2 → 3).
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 1, context.abilityUseModifiers?.bonusDamageDice ?? 0) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (context.triggers?.has('slay')) {
     const plantCell = freeCellsInRange(context, target.position, 3)[0];

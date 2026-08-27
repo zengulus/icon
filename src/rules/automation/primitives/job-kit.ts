@@ -211,6 +211,23 @@ export function ringAround(center: Position): Position[] {
 export const untilNextTurnEnd: RuleDuration = { kind: 'turn-end', actor: self, turns: 2 };
 export const untilNextTurnStart: RuleDuration = { kind: 'turn-start', actor: self, turns: 1 };
 
+// ── Damage rolls ─────────────────────────────────────────────────────────────
+/**
+ * ICON p.102 bonus damage: "roll one more die than normal, then pick the
+ * highest." Rolls `count + bonusDice` dice of `die` sides and keeps the
+ * highest `count` rolls. This is the SAME evaluation the declarative VM's
+ * `damage-roll` performs (kernels/runtime.ts), so a named resolver that uses
+ * this helper and a VM-executed ability can never disagree about how a bonus
+ * die resolves. Deterministic: reads only the recorded dice source, so
+ * replay applies the recorded roll exactly.
+ */
+export const rollDamageDice = (dice: DiceSource, die: number, count: number, bonusDice: number): number => {
+  const safeCount = Math.max(0, Math.floor(count));
+  const safeBonus = Math.max(0, Math.floor(bonusDice));
+  const rolls = Array.from({ length: safeCount + safeBonus }, () => dice.die(die)).sort((first, second) => second - first);
+  return rolls.slice(0, safeCount).reduce((total, roll) => total + roll, 0);
+};
+
 // ── Mutation builders ────────────────────────────────────────────────────────
 /**
  * Exact source-specific damage exceptions. Do not substitute a broader damage

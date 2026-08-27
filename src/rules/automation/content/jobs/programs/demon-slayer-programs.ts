@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { hasMastery } from '../../../kernels/mastery.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { Position } from '../../../../types.js';
 import type { RuleDuration, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
@@ -220,6 +221,15 @@ const demonClaw: RuleResolver = (context) => {
   if (!source || !source.position) return [];
   const direction = context.input.directions?.['rush1'] ?? rushTowardFoes(context, source.position);
   const special = !source.attacked;
+  // ICON p.129 Demon Claw mastery (RAGING DEMON): "Demon Claw's damage
+  // increases by 1 for every 25% of your maximum hp you are missing, up to a
+  // maximum of +3 damage." The flat bonus reads the mastered gate (parent
+  // equipped AND mastered through the shared hasMastery surface) and the
+  // wounds-adjusted maximum from current state at use time; it applies to
+  // every 2-damage instance this ability emits.
+  const ragingBonus = hasMastery(source, 'demon-slayer:demon-claw')
+    ? Math.min(3, Math.floor((source.maxHp - source.hp) / (source.maxHp / 4)))
+    : 0;
   const mutations: RuleMutation[] = [];
   const damaged = new Set<string>();
   const weakened = new Set<string>();
@@ -234,7 +244,7 @@ const demonClaw: RuleResolver = (context) => {
       .sort((a, b) => a.id.localeCompare(b.id));
     const targets = special ? adjacentFoes : adjacentFoes.slice(0, 1);
     for (const foe of targets) {
-      mutations.push(damageMutation(context, foe.id, 2, 'effect'));
+      mutations.push(damageMutation(context, foe.id, 2 + ragingBonus, 'effect'));
       damaged.add(foe.id);
     }
     if (index === 0 && (context.triggers?.has('charge') || context.triggers?.has('heroic'))) {

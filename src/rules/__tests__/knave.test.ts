@@ -93,6 +93,34 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(applyEvents(dodging.state, missed.events)).toEqual(missed.state);
   });
 
+  it('Low Blow talent 1: "Deals bonus damage if your foe is suffering from a status" (p.139)', () => {
+    // F6a: the registered bonus-damage rule folds one bonus die at the
+    // USE_ABILITY boundary when the attack target already suffers a status;
+    // the [D] roll resolves keep-highest (ICON p.102).
+    const { state, hero, foe } = knaveEncounter({ second: null });
+    state.actors[hero.id].talents = { 'knave:low-blow': 1 };
+    state.actors[foe.id].conditions.push({ id: 'slashed', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    // Attack d20 12 (hit vs defense 8 under true strike); damage dice roll 2
+    // then 6 — bonus damage rolls one more die and keeps the highest → 6 + fray 4.
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:low-blow', targetIds: [foe.id] }, scriptedDice(12, 2, 6));
+    expect(result.state.actors[foe.id].hp).toBe(22); // 32 - (6 + 4)
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+
+    // Same talent, target with no status: base [D]+fray (one die, no bonus).
+    const clean = knaveEncounter({ second: null });
+    clean.state.actors[clean.hero.id].talents = { 'knave:low-blow': 1 };
+    const plain = executeCommand(clean.state, { type: 'USE_ABILITY', actorId: clean.hero.id, abilityId: 'knave:low-blow', targetIds: [clean.foe.id] }, scriptedDice(12, 5));
+    expect(plain.state.actors[clean.foe.id].hp).toBe(23); // 32 - (5 + 4)
+    expect(applyEvents(clean.state, plain.events)).toEqual(plain.state);
+
+    // Talent not equipped: identical base roll against a statused foe.
+    const bare = knaveEncounter({ second: null });
+    bare.state.actors[bare.foe.id].conditions.push({ id: 'slashed', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    const noTalent = executeCommand(bare.state, { type: 'USE_ABILITY', actorId: bare.hero.id, abilityId: 'knave:low-blow', targetIds: [bare.foe.id] }, scriptedDice(12, 5));
+    expect(noTalent.state.actors[bare.foe.id].hp).toBe(23); // 32 - (5 + 4)
+    expect(applyEvents(bare.state, noTalent.events)).toEqual(noTalent.state);
+  });
+
   it('Low Blow Combo (The Hook): spends combo, rushes, and slashes at range 2', () => {
     const { state, hero, foe } = knaveEncounter({ foe: { x: 3, y: 1 }, second: null });
     state.actors[hero.id].resources.combo = 1;
@@ -203,6 +231,26 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(moves.some((mutation) => mutation.movement === 'shove' && mutation.actorId === foe.id)).toBe(true);
     expect(result.state.actors[foe.id].position).not.toEqual({ x: 1, y: 1 });
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Strongarm talent 1: equipped but NOT bloodied — an adjacent target gets base Strongarm with NO remove/place (F1 gating regression)', () => {
+    // The talent text is "Comeback: …" — the ENTIRE talent effect is gated on
+    // active Comeback (user bloodied). A full-HP user with the talent
+    // equipped must resolve EXACTLY like base Strongarm: adjacent hold, the
+    // circular spin, the passed-through damage, the final shove — and no
+    // remove/place reposition mutation stream at all.
+    const { state, hero, foe } = knaveEncounter({ second: null });
+    state.actors[hero.id].talents = { 'knave:strongarm': 1 };
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', targetIds: [foe.id] }, scriptedDice());
+    // Same final position as the no-talent base fixture (the spin around
+    // (1,1) then the final shove): the talent changed nothing.
+    expect(result.state.actors[foe.id].position).toEqual({ x: 3, y: 1 });
+    const moves = mutationsOf(result.events, 'knave:strongarm').filter((mutation) => mutation.kind === 'move');
+    // No remove/place reposition: the first move mutation is the spin's
+    // place/shove, never a `remove`.
+    expect(moves.some((mutation) => mutation.movement === 'remove')).toBe(false);
+    expect(moves.some((mutation) => mutation.movement === 'place' && mutation.actorId === foe.id && mutation.positions[0] && mutation.positions[0].x === 0)).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
   it('Strongarm talent 1: without the comeback trigger (or the talent) the range-2 target stays denied', () => {

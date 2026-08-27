@@ -1,7 +1,7 @@
 import type { EncounterActor, EncounterEntity, EncounterHeldDamage, EncounterPendingInterrupt, EncounterState, EncounterTerrainEffect, Position, StatusId } from '../../types.js';
 import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
-import { projectedAuraSelfGrants, projectedMarkConditionGrants, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
+import { projectedAuraSelfGrants, projectedMarkConditionGrants, projectedMarkConditionPotencies, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
 import { auraEffectRadius, auraStateView, projectedAuraArmorBonus, projectedAuraConditions, projectedAuraConditionPotencies } from './aura.js';
 import { projectedHpThresholdConditions } from './hp-threshold.js';
 import type { RangeStateView } from './range.js';
@@ -172,8 +172,8 @@ export function encounterConditionSet(actor: EncounterActor, state?: EncounterSt
   const activeAuraSourceIds = actor.activeEffects.filter((effect) => effect.effectId === 'aura').map((effect) => effect.sourceId);
   for (const condition of projectedAuraSelfGrants(activeAuraSourceIds, actor.abilityIds, actor.talents)) conditions.add(condition);
   for (const condition of projectedRoleConditions(actor.roleId)) conditions.add(condition);
-  for (const condition of projectedMarkConditionGrants(actor.marks)) conditions.add(condition);
-  for (const condition of projectedMarkConditionSuppressions(actor.marks)) conditions.delete(condition);
+  for (const condition of projectedMarkConditionGrants(actor.marks, actor, state)) conditions.add(condition);
+  for (const condition of projectedMarkConditionSuppressions(actor.marks, actor, state)) conditions.delete(condition);
   // HP-threshold passives derive from the actor's own authoritative HP, so
   // they fold without a spatial state (unlike aura membership).
   for (const condition of projectedHpThresholdConditions(actor)) conditions.add(condition);
@@ -204,6 +204,17 @@ function projectedStatuses(actor: EncounterActor, state?: EncounterState): RuleA
       if (potency === 'plus') ongoing.add(conditionId);
       else ids.add(conditionId);
     }
+  }
+  // F5: a reviewed mark projection can grant a status with an ongoing potency
+  // (e.g. Grand Seal talent 2's pacified+ on a bloodied marked foe, p.192).
+  // Unlike the aura projection (an upgrade-only overlay on an existing
+  // status), the mark grant ADDS the status to the projected surface — the
+  // carrier may have no ordinary pacified at all — so the id joins the ids
+  // set in both potency branches and `plus` also marks it ongoing.
+  for (const [conditionId, potency] of projectedMarkConditionPotencies(actor.marks, actor, state)) {
+    if (!statusIds.has(conditionId as StatusId)) continue;
+    ids.add(conditionId);
+    if (potency === 'plus') ongoing.add(conditionId);
   }
   return [...ids].map((id) => ({ id, potency: ongoing.has(id) ? 'plus' : 'normal' }));
 }

@@ -37,7 +37,7 @@ The engine never automates table judgment without source justification.
   turn scheduler (explicit actor selection, Slow rounds, pending Delay) —
   authoritative with replay fixtures.
 - Content: all 144 Job abilities executable with replay fixtures; Mendicant
-  class traits; 47 talents; 27 Job traits; 22 foe ability recipes; 115 foe
+  class traits; 53 talents; 27 Job traits; 22 foe ability recipes; 115 foe
   trait keyword rows; foe role baselines; resource registry.
 - Verification: unit 993 tests green; e2e green; architecture +
   automation audits green; automation audit reports 3,103 explicitly
@@ -128,8 +128,10 @@ slice's needs.
 **Goal.** An equipped mastery can alter its parent ability's execution; the
 highest-frequency talent subfamilies promote in exact-ID slices.
 
-**Why now.** 136 masteries + 241 talents are the two largest unresolved
-player-content families; both funnel through one execution-time fold.
+**Why now.** 136 masteries + 235 talents are the two largest unresolved
+player-content families; both funnel through one execution-time fold (the
+bonus-damage grant family landed 2026-08-27 as F6a; the remaining talent
+subfamilies follow the regenerated census).
 
 **Depends on.** Existing talent fold (F7) and projected `talents`/
 `masteredAbilityIds` surfaces (both durable).

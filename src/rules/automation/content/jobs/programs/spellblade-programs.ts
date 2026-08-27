@@ -1,18 +1,20 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { effectiveAreaFor } from '../../../kernels/area.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
+import type { Position } from '../../../../types.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
   axisDirection, arcCells, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, nearestFoe, rushTowardFoes,
-  damageMutation, conditionMutation, stateMutation,
+  distance, sourceActor, freeCellsInRange, rushTowardFoes, occupied,
+  damageMutation, conditionMutation, stateMutation, rollDamageDice,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, shoveMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { convertedDamageType, masteryFoldRuleRuntimeView } from '../../../kernels/mastery-fold.js';
+import { chosenTeleportDestination as chooseTeleport } from '../../../kernels/teleport-choice.js';
 
 /**
  * Independently reviewed Spellblade ability implementations (ICON p.222–229),
@@ -46,9 +48,9 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
   d20: null, boon: 0, total: null, hit: true, critical: false, evasionRoll: null, trueStrike: true, autoHit: true,
 });
 
-/** ICON p.225 Blitz: [D] on hit (1 on miss), the foe is vulnerable, then teleport
- * 1 and deal 1 piercing to a foe in range 3, twice. Slay or Infuse 3 (GRAN
- * BLITZ) repeats the teleport-and-pierce effect. */
+/** ICON p.225 Blitz: [D] on hit (1 on miss), the foe is vulnerable, then
+ * player-selected Teleport 1 and deal 1 piercing to a foe in range 3, twice.
+ * Slay or Infuse 3 (GRAN BLITZ) repeats the teleport-and-pierce effect. */
 const blitzEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
@@ -62,8 +64,8 @@ const blitzEffects: RuleResolver = (context) => {
   mutations.push(conditionMutation(context, target.id, 'vulnerable'));
   const repeats = context.triggers?.has('slay') || context.actionTags?.has('infuse') ? 2 : 1;
   for (let i = 0; i < repeats; i += 1) {
-    const hop = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
-    if (!sameCell(hop, source.position)) mutations.push(teleportMutation(context, source.id, hop));
+    const hop = chosenTeleportDestination(context, source.id, `teleport-${i}`, source.position, 1, `Blitz ${i + 1}`);
+    if (hop) mutations.push(teleportMutation(context, source.id, hop));
     mutations.push(damageMutation(context, target.id, 1, 'effect', 'piercing'));
   }
   return mutations;
@@ -98,11 +100,21 @@ const odinforceBoltEffects: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.225 Nothung: teleport 1 toward the target, 2[D]+fray on hit (fray on
- * miss), fray to the other characters in the arc, teleport 1, then deal 1
- * piercing to the target for every foe or ally adjacent to them (max 4).
- * EXCALIBUR (p.225): every 1-piercing instance this ability lists delivers as
- * the mastery-fold's converted type (divine) when Nothung is mastered. */
+/** ICON p.225 Nothung: teleport 1, 2[D]+fray on hit (fray on miss), fray to
+ * the other characters in the arc, teleport 1, then deal 1 piercing to the
+ * target for every foe or ally adjacent to them (max 4). Both teleports are
+ * PLAYER-SELECTED: ICON's Teleport X is "move instantly to an unoccupied
+ * space within range X" (p.88), and the source lists "Effect: Teleport 1"
+ * twice with no direction — so each destination is a durable position choice
+ * (`context.input.positions`), validated here (in-grid, within range of the
+ * actor's position at that point, unoccupied) and re-validated by the F1
+ * spatial gateway (bounds/occupancy/rampart) on application. The second
+ * teleport's range and legality are measured from the position reached by
+ * the FIRST teleport, never from the ability's starting position. Talent 2
+ * ("Comeback: Increase teleport to 4") widens both distances while the user
+ * is bloodied. EXCALIBUR (p.225): every 1-piercing instance this ability
+ * lists delivers as the mastery-fold's converted type (divine) when Nothung
+ * is mastered. */
 const nothungEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const strikeType = convertedDamageType(masteryFoldRuleRuntimeView(context), source.id, 'spellblade:nothung', 'piercing');
@@ -111,24 +123,37 @@ const nothungEffects: RuleResolver = (context) => {
   // ICON p.225 Nothung talent 2: "Comeback: Increase teleport to 4." A
   // program-level comeback clause (the same flag deriveTriggers turns into
   // the `comeback` trigger): while the user is bloodied and the talent is
-  // equipped, both of the ability's teleport walks widen from 1 to 4.
+  // equipped, both teleport distances widen from 1 to 4. The destinations
+  // themselves stay independently player-selected.
   const teleportRange = source.talents?.['spellblade:nothung'] === 2 && context.triggers?.has('comeback') ? 4 : 1;
+  const firstDestination = chosenTeleportDestination(context, source.id, 'teleport-1', source.position, teleportRange, 'first');
   const mutations: RuleMutation[] = [];
-  const first = walk(context, source.position, axisDirection(source.position, target.position), teleportRange, false, source.id);
-  if (!sameCell(first, source.position)) mutations.push(teleportMutation(context, source.id, first));
+  if (!sameCell(firstDestination, source.position)) mutations.push(teleportMutation(context, source.id, firstDestination));
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
+  // ICON p.225 Nothung talent 1: "When used against a bloodied foe, Nothung
+  // deals bonus damage, and deals 1 piercing damage again to its target on
+  // hit." The bonus die folds at the USE_ABILITY boundary (the registered
+  // bonus-damage rule rides abilityUseModifiers) and resolves through the
+  // shared keep-highest bonus-die roll; the extra 1-piercing instance is a
+  // separate on-hit effect gated on the same source condition.
+  const nothungHoldBonus = source.talents?.['spellblade:nothung'] === 1 && target.hp <= target.maxHp / 2;
   mutations.push(roll.hit
-    ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
+    ? damageMutation(context, target.id, rollDamageDice(context.dice, roll.damageDie, 2, context.abilityUseModifiers?.bonusDamageDice ?? 0) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
+  if (roll.hit && nothungHoldBonus) mutations.push(damageMutation(context, target.id, 1, 'hit', strikeType));
   const arc = squareArea(target.position, 1);
   for (const character of Object.values(context.state.actors)) {
     const position = character.position;
     if (character.id === target.id || character.id === source.id || !position || !arc.some((cell) => sameCell(cell, position))) continue;
     mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  const second = walk(context, source.position, axisDirection(source.position, target.position), teleportRange, false, source.id);
-  if (!sameCell(second, source.position)) mutations.push(teleportMutation(context, source.id, second));
+  // The second teleport is validated from the actor's position AFTER the
+  // first teleport: its destination must be within range of the first
+  // destination (the reducer applies mutations in order, so the F1 gateway
+  // sees the post-first position when the second leg resolves).
+  const secondDestination = chosenTeleportDestination(context, source.id, 'teleport-2', firstDestination, teleportRange, 'second');
+  if (!sameCell(secondDestination, firstDestination)) mutations.push(teleportMutation(context, source.id, secondDestination));
   const targetPosition = target.position;
   const adjacent = Object.values(context.state.actors).filter((character) => {
     const position = character.position;
@@ -137,6 +162,30 @@ const nothungEffects: RuleResolver = (context) => {
   const strikes = Math.min(4, adjacent.length);
   if (strikes > 0) mutations.push(damageMutation(context, target.id, strikes, 'effect', strikeType));
   return mutations;
+};
+
+/** One player-selected Teleport destination for an ability whose source text
+ * says "Teleport X" without a direction (ICON p.88: "move instantly to an
+ * unoccupied space within range X"). The choice rides the generic durable
+ * position input (`RuleExecutionInput.positions`, the same mechanism
+ * Klingenkunst's `destination` key uses); a missing, out-of-grid,
+ * out-of-range, or occupied destination rejects the command (nothing
+ * consumed). The F1 spatial gateway re-validates bounds/occupancy/rampart on
+ * application. `origin` is the position the teleport is measured from — the
+ * actor's current position for the first teleport, the post-first position
+ * for the second. Shared implementation: kernels/teleport-choice.ts
+ * (required mode: an absent choice rejects the command). */
+const chosenTeleportDestination = (
+  context: RuleExecutionContext,
+  actorId: string,
+  key: string,
+  origin: Position,
+  range: number,
+  label: string,
+): Position => {
+  const destination = chooseTeleport(context, actorId, key, origin, range, label);
+  if (!destination) throw new RuleProgramViolation('choice.position-required', `${label} requires a chosen teleport destination.`);
+  return destination;
 };
 
 /** ICON p.225 Nothung slay/infuse (GRAM): after the ability resolves, release a
@@ -309,24 +358,22 @@ const driftingLeafEffects: RuleResolver = (context) => {
     const along = (dx === 0 || Math.sign(dx) === direction.x) && (dy === 0 || Math.sign(dy) === direction.y);
     if (along && Math.max(Math.abs(dx), Math.abs(dy)) <= 6) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  const away = nearestFoe(context, source.position, source.id)?.position ? axisDirection(nearestFoe(context, source.position, source.id)!.position!, source.position) : direction;
-  const hop = walk(context, source.position, away, 1, false, source.id);
-  if (!sameCell(hop, source.position)) mutations.push(teleportMutation(context, source.id, hop));
+  const hop = chosenTeleportDestination(context, source.id, 'teleport', source.position, 1, 'Drifting Leaf');
+  if (hop) mutations.push(teleportMutation(context, source.id, hop));
   mutations.push(stateMutation(context, source.id, 'spellblade:leaf-on-the-wind', true));
   return mutations;
 };
 
-/** ICON p.227 Leaf on the Wind: teleport 2 and deal 1 piercing to the foe that
- * entered a space adjacent to you. */
+/** ICON p.227 Leaf on the Wind: player-selected Teleport 2 and deal 1 piercing
+ * to the foe that entered a space adjacent to you. */
 const leafOnTheWindEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const foeId = context.triggerTargetIds?.[0] ?? context.input.actorIds?.target?.[0];
   const foe = foeId ? sourceActor(context, foeId) : undefined;
   if (!source.position || !foe?.position) return [];
-  const direction = axisDirection(foe.position, source.position);
-  const landing = walk(context, source.position, direction, 2, false, source.id);
   const mutations: RuleMutation[] = [];
-  if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
+  const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 2, 'Leaf on the Wind');
+  if (landing) mutations.push(teleportMutation(context, source.id, landing));
   mutations.push(damageMutation(context, foe.id, 1, 'effect', 'piercing'));
   return mutations;
 };

@@ -119,3 +119,19 @@ registerRangeModifierRule({
   talent: 1,
   gate: { kind: 'comeback' },
 });
+
+// ICON p.185 Harvester Dark Sliver talent 1: "Comeback: Deal bonus damage,
+// and increase all ranges by +1." Dark Sliver lists Range 2; under Comeback
+// (user bloodied) the attack target may be chosen at range 3. The bonus-
+// damage half of the talent is the bonus-damage rule in
+// bonus-damage-recipes.ts, so this rule is the range authority only and the
+// talent is NOT allowlisted as a range-modifier row (program-level bonus-
+// damage row instead).
+registerRangeModifierRule({
+  sourceId: 'harvester:dark-sliver:talent:1',
+  abilityId: 'harvester:dark-sliver',
+  mode: 'override',
+  value: 3,
+  talent: 1,
+  gate: { kind: 'comeback' },
+});

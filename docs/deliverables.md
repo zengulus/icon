@@ -20,7 +20,7 @@ What must exist for the product to be genuinely complete, translated from
 | Resource registry | COMPLETE | `core.ts` RESOURCE_RULES | All nine shared resources with source pages, caps, reset scopes; reducer-enforced |
 | Turn-order content wiring | PARTIAL | entitlement/slow-eligibility registries | Elite/Legend production entitlement rows DONE (`role:elite-template`, `role:legend-turns`; B1 2026-08-26); no slow-eligibility content rows yet |
 | Combat settlement | COMPLETE | `encounter.ts` settlement + `characterFromActor` projection | Personal Resolve +1 at END_ENCOUNTER; durable attrition handoff; combat1→settlement→combat2 regression (`settlement.test.ts`) |
-| Player content runtime | PARTIAL | job/trait/talent/mastery/relic programs & recipes | 144/144 abilities; 27/65 traits; 49/288 talents; 8?/? masteries; 0/16 Limit Break effects; Relic runtime NOT STARTED |
+| Player content runtime | PARTIAL | job/trait/talent/mastery/relic programs & recipes | 144/144 abilities; 27/65 traits; 53/288 talents; 4/136 masteries; 0/16 Limit Break effects; Relic runtime NOT STARTED |
 | Foe runtime | PARTIAL | `foes.ts`, foe recipes, trait projections | Profiles/roles/scaling construction + role turn entitlements done; 22 abilities executable; Mob BLOCKED; phases inert (B3) |
 | Local VTT (Lab) | COMPLETE (harness) | `BrowserVtt.tsx`, `vtt/*`, `vtt-room.ts` | Setup→selection→actions→persistence→replay in-browser; phase-exempt by design |
 | Realtime room authority | PARTIAL (preview) | `server/rooms.ts`, `index.ts` | Authz, redaction, revisions/CAS, checkpoints, reconnect basics, transport acceptance green; gated behind PHASE_THREE_READY |

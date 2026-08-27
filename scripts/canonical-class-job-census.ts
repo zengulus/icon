@@ -168,6 +168,12 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // with the use-ledger kernel landed (F14) it is now executable through
   // the talent fold and dropped out of the census entirely.
   'fool:chronotemper:talent:1': ['movement-modifier'],
+  'fool:chronotemper:mastery': ['use-count-override', 'interrupt-use-scaling'],
+  // "You can take this interrupt three times a round. The second time you use
+  // it, the dash becomes just 2 spaces, and the third time just 1 space." —
+  // a per-round use-count override (3) AND a use-index-dependent effect
+  // magnitude (the Nth use dashes 3/2/1): the allowance reader needs the
+  // count, and the Cheat Time program needs the current use index
   // "dash gains phasing and ignores movement penalties from terrain"
   'shade:shadow-play:talent:2': ['choice-input'],
   // "one of them CAN gain evasion" (condition-grant — implemented; player choice between swapped allies)
@@ -237,10 +243,12 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // singleton was re-read in full; the two whose COMPLETE semantics now ride
   // the shared F1 primitives plus existing kernels were promoted onto
   // content rows (knave:strongarm:talent:1 — program-level remove/place +
-  // range-kernel comeback range; spellblade:nothung:talent:2 — program-level
-  // comeback teleport width) and dropped out of the census entirely. The
-  // rest still need genuinely distinct missing capabilities and keep their
-  // corrected residual blocker sets below.
+  // range-kernel comeback range, gated on ACTIVE Comeback; spellblade:
+  // nothung:talent:2 — program-level comeback teleport width, both teleports
+  // player-selected through the generic positions input and the second
+  // measured from the post-first position) and dropped out of the census
+  // entirely. The rest still need genuinely distinct missing capabilities
+  // and keep their corrected residual blocker sets below.
   'demon-slayer:comet:mastery': ['object-distance', 'choice-input'],
   // "teleport to any space adjacent to your weapon at the start and end of
   // your turn" — the thrown-weapon OBJECT footprint (the object-distance
@@ -501,12 +509,55 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'seer:polaris:talent:2': ['terrain-create'],
   // Polaris marks a space for the meteor gamble (terrain entity);
   // the gamble itself is wired via the end-of-turn dice window
-  'fool:party-favor:mastery': ['mark-modifier'],
+  'fool:party-favor:mastery': ['mark-detonation-window'],
   // Party Favor's movement-trigger gamble is wired; the mastery's
-  // mark-modifier effect on detonation is the remaining blocker
+  // throw-as-mark and end-of-turn gamble detonation (the mine's blast +
+  // stacking gamble effects, ending the mark) need a reusable
+  // mark-detonation window, distinct from the terrain mine's entry trigger
   'freelancer:exorcism:mastery': ['mark-modifier', 'range-modifier'],
   // Exorcism's lifecycle + dice are wired; the mastery's mark-modifier
   // and range-change effects are the remaining blockers
+  'freelancer:exorcism:talent:1': ['power-die', 'attack-exceed-trigger'],
+  // "While this mark is active, your attacks gain: Exceed: tick the die up
+  // by 1." The Exorcism power die is placed on the mark but never ticks
+  // (the end-of-turn tick/projectile window is documented); the talent's
+  // attack-exceed trigger folding into the die tick needs both the power-die
+  // tick seam and an attack-pipeline exceed trigger
+  'freelancer:warding-bolts:talent:2': ['mark-modifier', 'effect-count'],
+  // "Marked foes take 2 damage, twice, instead." The hover-zone strike path
+  // needs to distinguish marked foes and deliver two instances instead of
+  // the normal strike — a mark-modifier on the strike plus the effect-count
+  // fold for the "twice"
+  'shade:incubus:mastery': ['mark-stacking', 'damage-dealt-trigger'],
+  // Incubus's mark + turn-end detonation are wired; the mastery's "stacks
+  // with other marks … may mark any number of characters … when a character
+  // takes damage from an Incubus mark, you may also mark them" needs mark
+  // stacking/multi-mark plus a damage-dealt re-mark trigger
+  'harvester:growing-season:mastery': ['mark-modifier', 'terrain-create'],
+  // The base only marks (the plant spawn after the marked character's turn
+  // is a documented turn-end window); the mastery's "pacified+ while in or
+  // adjacent to spaces occupied by plants" needs plant terrain creation plus
+  // a mark-condition projection that reads plant adjacency
+  'sealer:divine-aegis:mastery': ['mark-activation-gate'],
+  // The aegis mark's activation (a foe must save before targeting the ally,
+  // fading on a failed save) is a documented save-window reducer hook; the
+  // mastery's "can be activated twice before it fades" is a source-declared
+  // activation count on that same gate — one reusable capability, like the
+  // interrupt use-count-override family
+  'seer:polaris:talent:1': ['mark-as-entity-follow'],
+  // "You can cause one of your Polaris to follow a character as a mark
+  // instead of a space" — a mark that carries the meteor entity and follows
+  // its character
+  'enochian:blazing-bond:talent:1': ['choice-input', 'distance-predicate'],
+  // "While marked, you can teleport yourself or your ally 2 spaces at the
+  // end of your turn, as long as you end closer to each other" — an end-of-
+  // turn free-action choice (choice-input) with a comparative positioning
+  // predicate on the teleport destinations
+  'enochian:blazing-bond:mastery': ['choice-input', 'delivery-immunity'],
+  // "If one of the partners would take damage … the other can reduce
+  // themselves to 1 hp to grant that ally immunity to all damage from the
+  // triggering ability. The bond then snaps" — a reactive spend choice plus
+  // an ability-scoped damage-immunity grant (delivery-immunity) and mark end
   'chanter:holy:talent:1': ['blast-template', 'terrain-create'],
   // "gambles" in the source but the program is wired; the medium blast
   // geometry and terrain creation are the real blockers
@@ -595,6 +646,22 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // trigger folds; no such predicate exists today
 
   // ── Bastion ──
+  // Interrupt-modifier reclassification (D1, 2026-08-27): the syntactic
+  // `interrupt-modifier` label conflated five genuinely different reusable
+  // families — rank/use-count overrides, timing overrides, effect riders,
+  // interrupt grants, and use banking. Each row below was re-read against
+  // its exact source text and reclassified to its precise blocker set.
+  'bastion:catapult:talent:1': ['interrupt-rider', 'rebound', 'recipient-expansion'],
+  // "Your shield becomes a valid target for allied abilities. You can expend
+  // this interrupt to grant them rebound." — the interrupt gains an
+  // expend-for-rebound rider (rebound is the attack-bounce family shared
+  // with Trick Shot/Nightmare) and the shield becomes an allied-target
+  // recipient (recipient-expansion)
+  'bastion:perseus:mastery': ['interrupt-rider'],
+  // "When this interrupt triggers, after the triggering effect resolves, you
+  // may deal 2 damage to all affected foes from the triggering ability and
+  // shove them 1 in any direction." — an after-trigger effect rider
+  // (damage + shove to the triggering ability's affected foes)
   'bastion:heracule:talent:1': ['shove-modifier'],
   // "Heracule's shoves can be in any direction" — shove-direction override
   'bastion:heracule:talent:2': ['effect-count'],
@@ -648,6 +715,10 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // and deal 2 damage"
   'colossus:raging-wolf:talent:2': ['fly-grant'],
   // "While you're at 1 hp, increase flight to 3" — conditional fly grant
+  'colossus:raging-wolf:mastery': ['interrupt-timing'],
+  // "You can immediately use Raging Wolf as an interrupt before becoming
+  // defeated. This ignores the interrupt limit." — a before-defeat timing
+  // override plus an interrupt-limit exemption (window/timing authority)
   'colossus:boiling-blood:talent:1': ['ability-trigger-grant'],
   // "While Defy Death is active, all abilities also trigger all exceed
   // effects" — a durable state granting extra triggers to every ability
@@ -655,6 +726,16 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // ── Knave ──
   'knave:trait:martial-master': ['stance-capacity'],
   // "You can take two stances at once" — active-stance capacity override
+  'knave:sucker-punch:talent:1': ['use-count-override'],
+  // "You can sacrifice 2 after using this interrupt to immediately regain
+  // it." — a spent-use refund: the allowance ledger decrements on use; this
+  // restores it after an HP sacrifice (same ledger-allowance family as
+  // Riposte's banking; the sacrifice payment itself is implemented)
+  'knave:sucker-punch:talent:2': ['interrupt-rank'],
+  // "Comeback: This ability is interrupt 2." — a rank (= per-round uses)
+  // override gated on Comeback/bloodied; the mastery fold's interrupt-rank
+  // kernel covers mastered parents with always/round gates, but a
+  // talent-level comeback-gated rank rule is not yet registered there
   'knave:riposte:mastery': ['use-count-override'],
   // "Uses of Dire Parry stack up to 3, and you can bank these uses" — the
   // use-ledger counts DOWN from once-per-round; stacking/banking accumulates
@@ -687,8 +768,27 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
 
   // ── Freelancer / Shade ──
   'freelancer:strafe-shot:talent:2': ['effect-count'],
+  'freelancer:strafe-shot:mastery': ['interrupt-timing'],
+  // "Strafe shot can interrupt and break up any movement you make without
+  // halting it." — a timing/window override: the ability may be taken as an
+  // interrupt during the user's own movement without stopping it
+  'freelancer:deus-ex-machina:talent:2': ['interrupt-rider', 'choice-input'],
+  // "Using this interrupt on a foe dazes or blinds them (your choice)." — a
+  // trigger rider with a durable daze-vs-blind player choice
+  'freelancer:deus-ex-machina:mastery': ['use-count-override', 'condition-preserve'],
+  // "Whip of the Thrones: Gain stealth after marking your target. This
+  // interrupt does not break stealth, and while you have stealth, it can be
+  // used +1 more time a round." — a conditional +1 use while stealthed
+  // (allowance override) plus stealth preservation (same condition-preserve
+  // family as Assassinate t1; stealth-grant itself is condition-grant,
+  // implemented)
   // "Exceed: Dash 3 again" — exceed-triggered repeat of a movement instance
   'shade:harrow:mastery': ['use-count-override'],
+  'shade:umbral-echo:mastery': ['interrupt-grant', 'range-modifier', 'stance-gate'],
+  // "Gain the following interrupt while in this stance: Soul Proxy Interrupt
+  // 1…" — gains a new interrupt gated on the stance (interrupt-grant;
+  // range-modifier/stance-gate remain live from the shadow-consumption
+  // range-2 and stance-scoped trigger)
   // "can trigger twice a round by default instead" — ledger allowance
   // override (same family as Riposte's banking)
   'shade:umbral-echo:talent:2': ['movement-modifier'],
@@ -757,6 +857,30 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "All spaces of the area cost 0 movement for thralls to enter" — an
   // actor-kind-scoped terrain entry-cost override
   'harvester:fairy-ring:talent:2': ['recipient-expansion', 'condition-suppression'],
+  'harvester:fairy-ring:mastery': ['interrupt-rider', 'terrain-create'],
+  // "Whenever the rings' interrupt activates, create a height 1 Megamushroom
+  // object anywhere inside or adjacent to the area…" — an interrupt-trigger
+  // rider creating a terrain/object (terrain-create remains the live blocker)
+  'sealer:spirit-shrine:mastery': ['interrupt-grant', 'aura-user-gate', 'elevation-scaling', 'entity-consume'],
+  // "Gain the following interrupt Grace of the Spirits… Trigger: An ally in
+  // the aura is damaged… Destroy the shrine, then deal 2 divine damage, once,
+  // to the foe per height of the shrine. You cannot place shrines for the
+  // rest of combat." — the mastery GAINS a new interrupt (interrupt-grant)
+  // whose trigger reads the shrine aura (aura-user-gate), whose damage
+  // scales with shrine height (elevation-scaling), and whose effect destroys
+  // the shrine (entity-consume)
+  'sealer:justice:talent:1': ['interrupt-rider', 'resource-management', 'vigor-grant'],
+  // "Allies affected by either interrupt gain 2 vigor." — an effect rider on
+  // the interrupt's affected allies (resource-management/vigor-grant stay
+  // live: the interrupt-level vigor hook is not a reusable capability yet)
+  'sealer:justice:talent:2': ['interrupt-timing'],
+  // "You can teleport 1 space before and after triggering either interrupt."
+  // — pre/post-trigger movement around the interrupt window (teleport itself
+  // is F1-implemented; the pre/post trigger hook is the timing override)
+  'sealer:justice:mastery': ['interrupt-grant', 'resource-management', 'vigor-grant'],
+  // "Add an alternate combo action: Combo: GRAN JUDICATA Interrupt 1…" —
+  // gains an alternate interrupt combo action (interrupt-grant) with
+  // divine damage + blessed + vigor riders
   // "use Spirit Away on allies; if you do, it doesn't seal them" — recipient
   // expansion plus suppressing the ability's own condition application
   'sealer:sanctify:talent:1': ['entry-save-gate'],
@@ -768,6 +892,11 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // distance INCREASING from an anchor (proximity triggers decrease only)
 
   // ── Seer ──
+  'seer:wish:talent:1': ['interrupt-rider', 'movement-modifier'],
+  // "If your ally is bloodied, they are also blessed after this interrupt
+  // resolves and may dash 2" — an after-resolve rider (blessed is
+  // condition-grant, implemented) plus the pre/post-ability movement hook
+  // for the dash
   'seer:trait:the-wheel-of-fate': ['card-deck-system'],
   // 13-card deck, draw-to-5 at combat start, hand cap 7, discard pile,
   // reshuffle-on-empty persisting across combats — a dedicated persistent
@@ -800,9 +929,11 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // flag does not exist
 
   // ── Enochian / Geomancer ──
-  'enochian:lance:talent:2': ['damage-modifier'],
-  // "If you are at 1 hp or lower, deals maximum base damage" — max-damage
-  // variant of the damage-modifier seam
+  'enochian:lance:talent:2': ['damage-maximize'],
+  // "If you are at 1 hp or lower, deals maximum base damage (before critical
+  // hits)" — a damage-roll maximization gate (the at-or-under-1-hp
+  // threshold read is the shared hp-threshold machinery, but maximizing a
+  // roll is not a bonus-die or flat modifier)
   'enochian:implode:talent:1': ['area-effect-rider'],
   // "Any character in the center space is also shattered" — shatter
   // (implemented) attached to the created area's center cell
@@ -830,6 +961,30 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // to adjacent foes" — same enemy-ability-use reactive family as Chastise t1
 
   // ── Spellblade / Stormbender ──
+  'spellblade:trait:aether-deflection': ['interrupt-grant', 'enemy-ability-trigger', 'range-modifier', 'resource-management'],
+  // "Interrupt 1: Trigger: You are targeted by an ability from a character in
+  // range 2. Effect: Gain resistance against damage from that ability. You
+  // only have one use of this interrupt per combat. However, you can spend 2
+  // Aether any time to regain it." — the trait provides an interrupt gated on
+  // being targeted by an enemy ability in range 2 (interrupt-grant +
+  // enemy-ability-trigger + range predicate) and an aether-spend regain
+  // (resource-management); the once-per-combat gate rides the implemented
+  // use-ledger
+  'spellblade:bifrost:talent:1': ['interrupt-timing'],
+  // "The teleport from Bifröst can interrupt other actions and does not stop
+  // movement." — a teleport-as-interrupt timing override (teleport is
+  // F1-implemented; the interrupt-other-actions window is the override)
+  'spellblade:sturmreiten:talent:1': ['interrupt-rider', 'choice-input'],
+  // "You may teleport one adjacent ally with you to any free adjacent space
+  // after this interrupt resolves." — an after-resolve teleport rider with
+  // ally + destination choice
+  'spellblade:drifting-leaf:talent:1': ['damage-modifier', 'interrupt-rider'],
+  // "…its interrupt deals 1 piercing damage, twice to them instead." — a
+  // damage-magnitude rider on the interrupt (damage-modifier stays live)
+  'spellblade:drifting-leaf:talent:2': ['interrupt-rider', 'choice-input'],
+  // "You may teleport your foe to any space adjacent to you instead of
+  // teleporting yourself 1 instead when this interrupt triggers." — a
+  // teleport-target choice rider on the interrupt trigger
   'spellblade:atherwand:talent:1': ['area-extension'],
   // "doesn't replace the old area, but extends it, as long as at least one
   // space of the new area is adjacent" — adjacency-gated area growth
@@ -846,9 +1001,49 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'stormbender:cryo:talent:2': ['area-effect-rider'],
   // round-4+ shatter-all-in-area — shatter implemented, area scoping missing
   'stormbender:gust:mastery': ['area-persistence-override'],
+  'stormbender:heave-ho:talent:2': ['use-count-override'],
+  // "If you don't use this interrupt, stock up another use of it at the start
+  // of your turn. You can stock it up to interrupt 3." — banked/stored uses
+  // accruing at turn start up to a cap (same allowance-banking family as
+  // Riposte mastery)
   // "Gust's area is not replaced if used again, though you cannot have more
   // than three areas active" — replacement-policy override plus an active-
   // area cap; the engine assumes one live area per program
+
+  // ── F6a bonus-damage family reclassifications (2026-08-27) ──
+  // The coarse {damage-modifier} label (regex "bonus damage") covered
+  // genuinely different mechanics. The target/self-gated "deals bonus
+  // damage" dice rows are now implemented (bonus-damage kernel + content
+  // rows: low-blow t1, nothung t1, incubus t2, dark-sliver t1, and the
+  // finesse trait). The remaining rows are reclassified to their precise
+  // blocker families below.
+  'chanter:gentleness:talent:2': ['bonus-damage-suppression', 'crit-suppression'],
+  // "cannot critically hit … and also cannot gain, deal, or take bonus
+  // damage" inside the aura — a suppression projection, not a grant; needs a
+  // bonus-damage negation + crit negation read at the damage authorities
+  'freelancer:trait:aether-shot': ['damage-modifier', 'exceed-grant'],
+  // "Any attack made on the third and sixth round of combat deals bonus
+  // damage and triggers all exceed effects, hit or miss" — round-gated bonus
+  // damage (needs a round gate on the fold) plus an exceed auto-trigger grant
+  // for every attack
+  'sealer:matsuri:mastery': ['damage-modifier', 'teleport-distance-modifier', 'exceed-grant'],
+  // "Blood Festival … first time you use Matsuri in a combat, you may
+  // increase all its teleports by +2, it deals bonus damage, and it triggers
+  // all exceed effects" — once-per-combat teleport-distance override (a
+  // reusable F1-family modifier) + bonus dice + exceed grant
+  'sealer:matsuri:talent:2': ['damage-modifier', 'save-or-stun'],
+  // "Bloodied foes take bonus damage and must also save or be stunned" — the
+  // bonus die is now expressible, but the save-or-stun delivery needs the
+  // save-window rider authority in the parent program
+  'sealer:open-the-gates:mastery': ['damage-modifier', 'exceed-grant'],
+  // "Any version of this ability deals bonus damage and always triggers
+  // exceed effects at round 4 or later" — round-gated bonus damage + exceed
+  // grant
+  'seer:astra:talent:2': ['area-modifier', 'damage-modifier'],
+  // "If two or more allies are caught in the area of this ability, increase
+  // all medium blasts to large blasts, and this ability deals bonus damage"
+  // — a conditional (allies-in-area) blast-size override plus bonus dice;
+  // the area kernel's shape rules are static today
 };
 
 /** Classify a source unit's rules text into a blocker set.

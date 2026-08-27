@@ -329,6 +329,40 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Demon Claw mastery (RAGING DEMON): damage rises by 1 per missing 25% of max hp, capped at +3 (p.129)', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
+    state.actors[hero.id].masteredAbilityIds = ['demon-slayer:demon-claw'];
+    // Missing 50% of maximum hp → +2 damage on every 2-damage instance.
+    const maxHp = state.actors[hero.id].baseMaxHp;
+    state.actors[hero.id].hp = Math.floor(maxHp / 2);
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    const clawDamages = mutationsOf(result.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
+    expect(clawDamages).toHaveLength(2);
+    for (const mutation of clawDamages) expect(mutation.amount).toBe(4); // 2 + 2
+    expect(result.state.actors[foe.id].hp).toBe(28); // 32 - 4
+    expect(result.state.actors[second.id].hp).toBe(28); // 32 - 4
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+
+    // Not mastered: base 2 damage per instance.
+    const plain = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
+    const max = plain.state.actors[plain.hero.id].baseMaxHp;
+    plain.state.actors[plain.hero.id].hp = Math.floor(max / 2);
+    const base = executeCommand(plain.state, { type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    for (const mutation of mutationsOf(base.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage')) {
+      expect(mutation.amount).toBe(2);
+    }
+    expect(applyEvents(plain.state, base.events)).toEqual(base.state);
+
+    // Mastered at full hp: no missing quarters → base 2.
+    const fresh = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
+    fresh.state.actors[fresh.hero.id].masteredAbilityIds = ['demon-slayer:demon-claw'];
+    const fullHp = executeCommand(fresh.state, { type: 'USE_ABILITY', actorId: fresh.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    for (const mutation of mutationsOf(fullHp.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage')) {
+      expect(mutation.amount).toBe(2);
+    }
+    expect(applyEvents(fresh.state, fullHp.events)).toEqual(fullHp.state);
+  });
+
   it('Gates of Hell: rush, vigilance, counter, and the once-per-turn vigilance rush', () => {
     const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 6, y: 1 }, second: { x: 8, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:gates-of-hell', targetIds: [] }, scriptedDice());

@@ -85,7 +85,7 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 33 wired / 7 program-level / 3 passive-projection / 4 range-modifier / 1 area-modifier / 239 documented', () => {
+  it('covers exactly the 288 source talents with 33 wired / 7 program-level / 3 passive-projection / 4 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 232 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
@@ -100,9 +100,16 @@ describe('F7 closed talent inventory', () => {
     // program-level, and the four cost-payment proofs (Provoke t2 + Pyroclast
     // t2 optional sacrifices, Blackstar t1 aether gain, Masquerade t1's
     // turn-ledger evasion) are wired optional / conditional always rows.
+    // F6a: the four bonus-damage rows (Low Blow t1, Nothung t1, Incubus t2,
+    // Dark Sliver t1) execute through the bonus-damage grant kernel at the
+    // USE_ABILITY boundary (content/jobs/bonus-damage-recipes.ts).
+    // F5: the three mark-modifier rows (Grand Seal t1's save curse, Grand
+    // Seal t2's pacified+, Rot t2's turn-start adjacency damage) execute at
+    // the engine's mark query points (status-save policy, carrier-aware
+    // condition projection, turn-start lifecycle trigger).
     // None are fold triggers or program-emitted variants in the wrong home.
-    expect(getExecutableTalentIds().size).toBe(49);
-    expect(getDocumentedTalentIds(units).size).toBe(239);
+    expect(getExecutableTalentIds().size).toBe(56);
+    expect(getDocumentedTalentIds(units).size).toBe(232);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -120,6 +127,17 @@ describe('F7 closed talent inventory', () => {
     expect(recipes['sealer:divine-aegis:talent:2']?.status).toBe('program-level');
     expect(recipes['knave:strongarm:talent:1']?.status).toBe('program-level');
     expect(recipes['spellblade:nothung:talent:2']?.status).toBe('program-level');
+    // The four bonus-damage rows fold their dice at the USE_ABILITY boundary
+    // (no post-mutation fold trigger, no program-emitted variant).
+    expect(recipes['knave:low-blow:talent:1']?.status).toBe('bonus-damage');
+    expect(recipes['spellblade:nothung:talent:1']?.status).toBe('bonus-damage');
+    expect(recipes['shade:incubus:talent:2']?.status).toBe('bonus-damage');
+    expect(recipes['harvester:dark-sliver:talent:1']?.status).toBe('bonus-damage');
+    // The three mark-modifier rows change what an existing mark does at one of
+    // the engine's mark query points (no post-mutation fold, no program).
+    expect(recipes['sealer:grand-seal:talent:1']?.status).toBe('mark-modifier');
+    expect(recipes['sealer:grand-seal:talent:2']?.status).toBe('mark-modifier');
+    expect(recipes['harvester:rot:talent:2']?.status).toBe('mark-modifier');
   });
 
   it('a documented talent is never executable (closed negative)', () => {
@@ -470,14 +488,14 @@ describe('F7 comeback trigger — Intimidate talent 1', () => {
 describe('F7 exceed trigger — God-Hand talent 1', () => {
   it('Exceed: gain evasion until the end of your next turn', () => {
     const { state, hero, foe } = talentEncounter('sealer:god-hand', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
-    const exceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id] }, scriptedDice(20, 4));
+    const exceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 1, y: 2 }] } } }, scriptedDice(20, 4));
     const evasion = exceed.state.actors[hero.id].conditions.find(({ id }) => id === 'evasion');
     expect(evasion).toBeDefined();
     expect(evasion?.sourceId).toBe('sealer:god-hand:talent:1');
     expect(evasion?.duration?.kind).toBe('turn-end');
     expect(applyEvents(state, exceed.events)).toEqual(exceed.state); // replay
 
-    const noExceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id] }, scriptedDice(8, 4));
+    const noExceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 1, y: 2 }] } } }, scriptedDice(8, 4));
     expect(noExceed.state.actors[hero.id].conditions.some(({ id }) => id === 'evasion')).toBe(false);
   });
 });
@@ -516,7 +534,7 @@ describe('F7 terrain-create always trigger', () => {
 
   it('Blitz talent 1: creates 2 spaces of dangerous terrain near the foe', () => {
     const { state, hero, foe } = talentEncounter('spellblade:blitz', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:blitz', targetIds: [foe.id] }, scriptedDice(20, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:blitz', targetIds: [foe.id], input: { positions: { 'teleport-0': [{ x: 1, y: 2 }] } } }, scriptedDice(20, 4));
     const terrainMutations = talentMutationsOf(result, 'spellblade:blitz').filter((m) => m.kind === 'terrain');
     expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
     expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);

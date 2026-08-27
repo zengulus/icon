@@ -4,7 +4,7 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, nearestFoe,
+  distance, sourceActor, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation, shoveMutation,
@@ -12,6 +12,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
 
 /**
  * Independently reviewed Sealer ability implementations (ICON p.189–196),
@@ -42,7 +43,7 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
   d20: null, boon: 0, total: null, hit: true, critical: false, evasionRoll: null, trueStrike: true, autoHit: true,
 });
 
-/** ICON p.192 God Hand: teleport 1 toward the target, attack [D]+fray (fray on
+/** ICON p.192 God Hand: player-selected Teleport 1, attack [D]+fray (fray on
  * miss), seal the foe, then bless yourself or an ally in range 2 (deterministic:
  * the nearest eligible ally, self first). Exceed: you and allies in range 2
  * gain 3 vigor. */
@@ -51,8 +52,8 @@ const godHandEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const landing = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
-  if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
+  const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 1, 'God Hand');
+  if (landing) mutations.push(teleportMutation(context, source.id, landing));
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
@@ -67,16 +68,16 @@ const godHandEffects: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.192 God Hand combo (DEVIL HAND): +1 boon, teleport 1, attack [D]+fray,
- * then the foe explodes in a medium blast dealing 1 divine to all foes.
- * Exceed repeats the effect. */
+/** ICON p.192 God Hand combo (DEVIL HAND): +1 boon, player-selected Teleport 1,
+ * attack [D]+fray, then the foe explodes in a medium blast dealing 1 divine to
+ * all foes. Exceed repeats the effect. */
 const devilHandEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const landing = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
-  if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
+  const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 1, 'Devil Hand');
+  if (landing) mutations.push(teleportMutation(context, source.id, landing));
   const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
@@ -111,7 +112,7 @@ const grandSealEffects: RuleResolver = (context) => {
   ];
 };
 
-/** ICON p.192 Matsuri: teleport 2 toward the target, then attack 2[D]+fray
+/** ICON p.192 Matsuri: player-selected Teleport 2, then attack 2[D]+fray
  * (fray on miss). Exceed: a large blast explosion centered on the foe — allies
  * inside gain 3 vigor, foes take 2 divine. The optional ally teleports are a
  * documented free-action window. */
@@ -120,8 +121,8 @@ const matsuriEffects: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const landing = walk(context, source.position, axisDirection(source.position, target.position), 2, false, source.id);
-  if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
+  const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 2, 'Matsuri');
+  if (landing) mutations.push(teleportMutation(context, source.id, landing));
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit
@@ -187,9 +188,9 @@ const sanctifyEffects: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.193 Grand Banishment: teleport 1, end your turn, and mark a foe in
- * range 4. The 3 divine damage when the foe is moved closer is a documented
- * mark-trigger window. */
+/** ICON p.193 Grand Banishment: player-selected Teleport 1, end your turn, and
+ * mark a foe in range 4. The 3 divine damage when the foe is moved closer is a
+ * documented mark-trigger window. */
 const grandBanishmentEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
@@ -197,11 +198,8 @@ const grandBanishmentEffects: RuleResolver = (context) => {
   if (!source.position) return [];
   if (target && target.position && distance(source.position, target.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Grand Banishment requires a foe in range 4.');
   const mutations: RuleMutation[] = [];
-  const nearest = nearestFoe(context, source.position, source.id);
-  if (nearest?.position) {
-    const landing = walk(context, source.position, axisDirection(source.position, nearest.position), 1, false, source.id);
-    if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
-  }
+  const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 1, 'Grand Banishment');
+  if (landing) mutations.push(teleportMutation(context, source.id, landing));
   if (target && target.side !== source.side) mutations.push(markMutation(context, target.id, 'grand-banishment', {}));
   mutations.push(stateMutation(context, source.id, 'end-turn-requested', true));
   return mutations;
@@ -225,7 +223,7 @@ const divineAegisEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.194 Justice (interrupt): burst 2 (self) — foes take 1 divine and
- * allies are blessed, then teleport 2 away from the nearest foe. */
+ * allies are blessed, then player-selected Teleport 2. */
 const justiceEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source.position) return [];
@@ -237,53 +235,52 @@ const justiceEffects: RuleResolver = (context) => {
     if (character.side === source.side) mutations.push(resourceMutation(context, character.id, 'blessing', 'gain', 1));
     else mutations.push(damageMutation(context, character.id, 1, 'area', 'divine'));
   }
-  const nearest = nearestFoe(context, source.position, source.id);
-  if (nearest?.position) {
-    const away = axisDirection(nearest.position, source.position);
-    const landing = walk(context, source.position, away, 2, false, source.id);
-    if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
-  }
+  const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 2, 'Justice');
+  if (landing) mutations.push(teleportMutation(context, source.id, landing));
   return mutations;
 };
 
-/** ICON p.194 Justice combo (JUDGEMENT): gamble, then teleport yourself and each
- * character in range 2 half that far (deterministic: away from you for foes,
- * away from the nearest foe for yourself); foes are pacified. */
+/** ICON p.194 Justice combo (JUDGEMENT): gamble, then player-selected teleport
+ * for self and each foe in range 2 half that far; foes are pacified.
+ * Self-teleport is a player choice. Foe teleports use per-foe position keys
+ * (unqualified "teleport" in source). */
 const judgementEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source.position) return [];
   const { roll: gamble } = gambleD6(context.dice);
   const distanceMoved = Math.max(1, Math.floor(gamble / 2));
   const mutations: RuleMutation[] = [];
-  const nearest = nearestFoe(context, source.position, source.id);
-  if (nearest?.position) {
-    const landing = walk(context, source.position, axisDirection(nearest.position, source.position), distanceMoved, false, source.id);
-    if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
-  }
+  // Player-selected self-teleport
+  const selfLanding = chosenTeleportDestination(context, source.id, 'teleport', source.position, distanceMoved, 'JUDGEMENT');
+  if (selfLanding) mutations.push(teleportMutation(context, source.id, selfLanding));
+  // Foe teleports: each foe in range 2 is teleported half the gamble distance
+  let foeIndex = 0;
   for (const character of Object.values(context.state.actors)) {
     const position = character.position;
     if (character.id === source.id || !position) continue;
     if (distanceMoved > 2 && distance(source.position, position) > 2) continue;
     if (character.side === source.side) continue;
-    const away = axisDirection(source.position, position);
-    const landing = walk(context, position, away, distanceMoved, false, character.id);
-    if (!sameCell(landing, position)) mutations.push(teleportMutation(context, character.id, landing));
+    const key = `foe-${foeIndex}`;
+    foeIndex += 1;
+    const foeLanding = chosenTeleportDestination(context, character.id, key, position, distanceMoved, `JUDGEMENT foe`);
+    if (foeLanding) mutations.push(teleportMutation(context, character.id, foeLanding));
     mutations.push(conditionMutation(context, character.id, 'pacified'));
   }
   return mutations;
 };
 
-/** ICON p.194 Open The Gates: teleport 1 toward the target, attack with +1 boon
+/** ICON p.194 Open The Gates: player-selected Teleport 1, attack with +1 boon
  * that cannot miss ([D]+fray, pacify on hit, fray on a natural miss which is
- * turned into a hit). Exceed: shove the foe 1, teleport 1, shove the foe 1,
- * teleport 1. */
+ * turned into a hit). Exceed: shove the foe 1, player-selected teleport 1,
+ * shove the foe 1, player-selected teleport 1. */
 const openTheGatesEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
-  const landing = walk(context, source.position, axisDirection(source.position, target.position), 1, false, source.id);
-  if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
+  // Player-selected Teleport 1
+  const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 1, 'Open The Gates');
+  if (landing) mutations.push(teleportMutation(context, source.id, landing));
   const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
   const rolled = roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>;
   mutations.push({ ...rolled, hit: true, total: Math.max(rolled.total ?? 0, target.defense) });
@@ -291,18 +288,24 @@ const openTheGatesEffects: RuleResolver = (context) => {
   mutations.push(conditionMutation(context, target.id, 'pacified'));
   if (context.triggers?.has('exceed')) {
     const toward = axisDirection(source.position, target.position);
+    let hopOrigin = source.position;
     for (let i = 0; i < 2; i += 1) {
       const shoved = walk(context, target.position, toward, 1, false, target.id);
       if (!sameCell(shoved, target.position)) mutations.push(shoveMutation(context, target.id, 1, toward));
-      const hop = walk(context, source.position, toward, 1, false, source.id);
-      if (!sameCell(hop, source.position)) mutations.push(teleportMutation(context, source.id, hop));
+      // Player-selected teleport after each shove; origin advances to the
+      // previous teleport destination for the second hop.
+      const hop = chosenTeleportDestination(context, source.id, `teleport-exceed-${i + 1}`, hopOrigin, 1, `Open The Gates exceed ${i + 1}`);
+      if (hop) {
+        mutations.push(teleportMutation(context, source.id, hop));
+        hopOrigin = hop;
+      }
     }
   }
   return mutations;
 };
 
-/** ICON p.194 Open The Gates combo (CENTER THE TEMPLE): teleport spaces equal to
- * the round number toward the target, then attack [D]+fray (fray on miss).
+/** ICON p.194 Open The Gates combo (CENTER THE TEMPLE): player-selected teleport
+ * spaces equal to the round number, then attack [D]+fray (fray on miss).
  * Exceed: deal 1 damage again to the target (6 at round 4 or later). */
 const centerTheTempleEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
@@ -310,8 +313,8 @@ const centerTheTempleEffects: RuleResolver = (context) => {
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const steps = Math.min(context.state.round, Math.max(context.state.grid.width, context.state.grid.height));
-  const landing = walk(context, source.position, axisDirection(source.position, target.position), steps, false, source.id);
-  if (!sameCell(landing, source.position)) mutations.push(teleportMutation(context, source.id, landing));
+  const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, steps, 'Centre The Temple');
+  if (landing) mutations.push(teleportMutation(context, source.id, landing));
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
   mutations.push(roll.hit

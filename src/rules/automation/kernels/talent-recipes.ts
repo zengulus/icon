@@ -36,7 +36,7 @@ function isBloodied(actor: EncounterActor): boolean {
   return actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2;
 }
 
-export type TalentStatus = 'wired' | 'program-level' | 'passive-projection' | 'range-modifier' | 'area-modifier' | 'documented';
+export type TalentStatus = 'wired' | 'program-level' | 'passive-projection' | 'range-modifier' | 'area-modifier' | 'bonus-damage' | 'mark-modifier' | 'documented';
 
 /** The resolved mutation kinds a wired talent may emit (each without its
  * sourceId — the kernel fills the talent's source id at fold time).
@@ -187,10 +187,42 @@ export function registerPassiveProjectionTalent(sourceId: string, mechanic: stri
  * `content/jobs/range-recipes.ts`; this allowlist mirrors it for audit. */
 const rangeModifierTalentRecipes: Record<string, string> = {};
 
+/** Bonus-damage talents (F6a): the talent's COMPLETE semantics are "this
+ * ability deals bonus damage" under a source gate (self bloodied, target
+ * bloodied, target status, a scaled count), executed by the bonus-damage
+ * grant kernel (`kernels/bonus-damage.ts`) at the USE_ABILITY boundary — the
+ * folded dice ride the ability's recorded damage roll (ICON p.102 keep-
+ * highest), so there is no post-mutation fold to run and no program variant
+ * to emit. The rule itself lives in `content/jobs/bonus-damage-recipes.ts`;
+ * this allowlist mirrors it for audit. */
+const bonusDamageTalentRecipes: Record<string, string> = {};
+
 /** Register a range-modifier talent implementation (content/jobs/
  * talent-recipes.ts + range-recipes.ts). */
 export function registerRangeModifierTalent(sourceId: string, mechanic: string): void {
   rangeModifierTalentRecipes[sourceId] = mechanic;
+}
+
+/** Register a bonus-damage talent implementation (content/jobs/
+ * talent-recipes.ts + bonus-damage-recipes.ts). */
+export function registerBonusDamageTalent(sourceId: string, mechanic: string): void {
+  bonusDamageTalentRecipes[sourceId] = mechanic;
+}
+
+/** Mark-modifier talents (F5): the talent's COMPLETE semantics are a change
+ * to what an existing mark does at one of the engine's mark query points —
+ * a carrier-aware mark-condition projection (with potency, e.g. Grand Seal
+ * talent 2's pacified+), a mark-keyed status-save policy row (Grand Seal
+ * talent 1's save curse), or a mark-adjacency turn-boundary trigger (Rot
+ * talent 2's start-of-turn damage). The rows themselves live in
+ * `content/jobs/mark-modifier-recipes.ts` / `content/jobs/
+ * lifecycle-recipes.ts`; this allowlist mirrors them for audit. */
+const markModifierTalentRecipes: Record<string, string> = {};
+
+/** Register a mark-modifier talent implementation (content/jobs/
+ * talent-recipes.ts + mark-modifier-recipes.ts + lifecycle-recipes.ts). */
+export function registerMarkModifierTalent(sourceId: string, mechanic: string): void {
+  markModifierTalentRecipes[sourceId] = mechanic;
 }
 
 /** Area-modifier talents: the talent's COMPLETE semantics are a shape/size
@@ -222,6 +254,8 @@ export function getExecutableTalentIds(): ReadonlySet<string> {
     ...Object.keys(passiveProjectionTalentRecipes),
     ...Object.keys(rangeModifierTalentRecipes),
     ...Object.keys(areaModifierTalentRecipes),
+    ...Object.keys(bonusDamageTalentRecipes),
+    ...Object.keys(markModifierTalentRecipes),
   ]);
 }
 
@@ -230,7 +264,9 @@ export const isExecutableTalent = (sourceId: string): boolean =>
   || Object.prototype.hasOwnProperty.call(programLevelTalentRecipes, sourceId)
   || Object.prototype.hasOwnProperty.call(passiveProjectionTalentRecipes, sourceId)
   || Object.prototype.hasOwnProperty.call(rangeModifierTalentRecipes, sourceId)
-  || Object.prototype.hasOwnProperty.call(areaModifierTalentRecipes, sourceId);
+  || Object.prototype.hasOwnProperty.call(areaModifierTalentRecipes, sourceId)
+  || Object.prototype.hasOwnProperty.call(bonusDamageTalentRecipes, sourceId)
+  || Object.prototype.hasOwnProperty.call(markModifierTalentRecipes, sourceId);
 
 /** The mechanic text of a program-level talent implementation, or undefined
  * for a fold-wired or documented talent. */
@@ -246,6 +282,16 @@ export function getRangeModifierTalentMechanic(sourceId: string): string | undef
 /** The mechanic text of an area-modifier talent implementation, or undefined. */
 export function getAreaModifierTalentMechanic(sourceId: string): string | undefined {
   return areaModifierTalentRecipes[sourceId];
+}
+
+/** The mechanic text of a bonus-damage talent implementation, or undefined. */
+export function getBonusDamageTalentMechanic(sourceId: string): string | undefined {
+  return bonusDamageTalentRecipes[sourceId];
+}
+
+/** The mechanic text of a mark-modifier talent implementation, or undefined. */
+export function getMarkModifierTalentMechanic(sourceId: string): string | undefined {
+  return markModifierTalentRecipes[sourceId];
 }
 
 /** The post-application trigger targets a wired slay/collide talent needs.

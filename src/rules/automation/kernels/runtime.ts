@@ -2,6 +2,7 @@ import { costContextFromRuntime, effectiveRuleCosts, evaluateCosts, ruleCostMuta
 import { consumeTraitAttackModifiers, consumedTraitModifier, effectiveDamageDie } from './attack-modifiers.js';
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
+import { rollDamageDice } from '../primitives/job-kit.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
 import { eligibleTargets, isEligibleTarget } from '../primitives/targeting.js';
@@ -153,11 +154,14 @@ export function evaluateNumber(expression: RuleNumber, context: RuleExecutionCon
       const dice = Math.max(0, Math.floor(evaluateNumber(expression.dice, context)));
       const attackTarget = context.attackTargetId ? context.state.actors[context.attackTargetId] : undefined;
       const finesse = target.conditions.has('finesse') && attackTarget && attackTarget.hp <= attackTarget.maxHp / 2 ? 1 : 0;
-      const bonusDice = (expression.bonusDice ? Math.max(0, Math.floor(evaluateNumber(expression.bonusDice, context))) : 0) + finesse + Math.max(0, target.resources['bonus-damage'] ?? 0);
+      // F6a bonus-damage grants (content/jobs/bonus-damage-recipes.ts) fold
+      // their dice at the USE_ABILITY boundary into abilityUseModifiers, so
+      // this roll carries exactly what the command decided. The roll itself
+      // stays the shared keep-highest bonus-dice semantics (ICON p.102).
+      const bonusDice = (expression.bonusDice ? Math.max(0, Math.floor(evaluateNumber(expression.bonusDice, context))) : 0) + finesse + Math.max(0, target.resources['bonus-damage'] ?? 0) + Math.max(0, context.abilityUseModifiers?.bonusDamageDice ?? 0);
       // F6 Hissatsu: an armed next attack rolls its damage die as a d10.
       const die = effectiveDamageDie(target);
-      const rolls = Array.from({ length: dice + bonusDice }, () => context.dice.die(die)).sort((first, second) => second - first);
-      return rolls.slice(0, dice).reduce((total, roll) => total + roll, 0) + (expression.flat ? evaluateNumber(expression.flat, context) : 0);
+      return rollDamageDice(context.dice, die, dice, bonusDice) + (expression.flat ? evaluateNumber(expression.flat, context) : 0);
     }
     case 'if': return evaluateNumber(evaluatePredicate(expression.predicate, context) ? expression.then : expression.otherwise, context);
     case 'percent': {

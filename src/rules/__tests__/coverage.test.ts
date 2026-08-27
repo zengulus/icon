@@ -98,19 +98,22 @@ describe('rules automation coverage gate', () => {
     // compile complete through the shared area authority. F14 cost-payment:
     // the four wired proofs (Provoke t2, Pyroclast t2, Blackstar t1,
     // Masquerade t1's turn-ledger evasion) audit complete through the talent
-    // fold — 49 complete / 239 documented. F7 mastery-modifier fold: the
+    // fold. F5 mark-modifier fold: the three mark-modifier rows (Grand Seal
+    // t1's save curse, Grand Seal t2's pacified+, Rot t2's turn-start
+    // adjacency damage) audit complete at the engine's mark query points —
+    // 56 complete / 232 documented. F7 mastery-modifier fold: the
     // three promoted modifier-family masteries (Catapult t2's MANGONEL,
     // Nothung's EXCALIBUR conversion, Open the Gates' PERFECT BATTLEMENT)
     // audit complete through the registered kernel rows.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 462,
-      unsupportedPrograms: 2813,
-      completeClauses: 1602,
-      unsupportedClauses: 3098,
+      completePrograms: 471,
+      unsupportedPrograms: 2804,
+      completeClauses: 1611,
+      unsupportedClauses: 3089,
       unsupportedByKind: {
-        core: 70, 'class-trait': 7, 'job-trait': 38, 'limit-break': 16, 'talent': 239, 'mastery': 133,
+        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 232,      'mastery': 132,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

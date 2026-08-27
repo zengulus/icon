@@ -30,7 +30,7 @@ import type { EncounterActor, EncounterState } from '../../../types.js';
 import type { RuleSourceUnit } from '../../../source-units.js';
 import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
 import type { RuleMutation } from '../../primitives/types.js';
-import { affectedFoeIds, registerAreaModifierTalent, registerPassiveProjectionTalent, registerProgramLevelTalent, registerRangeModifierTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
+import { affectedFoeIds, registerAreaModifierTalent, registerBonusDamageTalent, registerMarkModifierTalent, registerPassiveProjectionTalent, registerProgramLevelTalent, registerRangeModifierTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
 import type { TalentEffect } from '../../kernels/talent-recipes.js';
 
 /** The party-favor mine's position from the ability's recorded terrain
@@ -818,9 +818,11 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   },
   // ICON p.225 Spellblade Nothung talent 2: "Comeback: Increase teleport to
   // 4." A program-level comeback clause: while the user is bloodied, both of
-  // the ability's teleport walks widen from 1 to 4 toward the target.
+  // the ability's player-selected teleports widen from 1 to 4 (destinations
+  // stay independently chosen through the generic durable position input;
+  // the second teleport is measured from the post-first position).
   'spellblade:nothung:talent:2': {
-    mechanic: 'Comeback (user bloodied): both Nothung teleports become 4 toward the target (the shared walk + teleportMutation primitives).',
+    mechanic: 'Comeback (user bloodied): both Nothung teleports widen to 4 (player-selected destinations via the generic positions input; the shared teleportMutation primitives through the F1 gateway).',
   },
 };
 
@@ -889,6 +891,78 @@ const RANGE_MODIFIER_TALENT_RECIPES: Readonly<Record<string, { mechanic: string 
 
 for (const [sourceId, row] of Object.entries(RANGE_MODIFIER_TALENT_RECIPES)) {
   registerRangeModifierTalent(sourceId, row.mechanic);
+}
+
+/** Bonus-damage talents (F6a): the talent's COMPLETE semantics are "this
+ * ability deals bonus damage" under a source gate, executed by the bonus-
+ * damage grant kernel (`kernels/bonus-damage.ts`) at the USE_ABILITY
+ * boundary — the folded dice ride the ability's recorded damage roll with
+ * the shared keep-highest semantics (ICON p.102). The reviewed rules live in
+ * `content/jobs/bonus-damage-recipes.ts`; each row audits as complete
+ * through `registerBonusDamageTalent` with its source fixture + replay test
+ * in the ability's own test file. */
+const BONUS_DAMAGE_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }>> = {
+  // ICON p.139 Low Blow talent 1: "Deals bonus damage if your foe is
+  // suffering from a status."
+  'knave:low-blow:talent:1': {
+    mechanic: 'Low Blow\u2019s [D] damage roll gains one bonus die (ICON p.102 keep-highest) when the attack target is suffering from any status.',
+  },
+  // ICON p.225 Nothung talent 1: "When used against a bloodied foe, Nothung
+  // deals bonus damage, and deals 1 piercing damage again to its target on
+  // hit." The bonus die folds at use time; the extra 1-piercing instance is
+  // emitted by the Nothung resolver under the same source condition.
+  'spellblade:nothung:talent:1': {
+    mechanic: 'Nothung\u2019s 2[D] attack roll gains one bonus die against a bloodied foe, and its target takes 1 piercing damage again on hit.',
+  },
+  // ICON p.164 Incubus talent 2: "Incubus deals bonus damage for every ally
+  // of your target adjacent to your target" (scaled: one die per such ally).
+  'shade:incubus:talent:2': {
+    mechanic: 'Incubus\u2019s [D] attack roll gains one bonus die for every living ally of the target adjacent to the target.',
+  },
+  // ICON p.185 Dark Sliver talent 1: "Comeback: Deal bonus damage, and
+  // increase all ranges by +1." The range half is the comeback-gated range
+  // rule (range-recipes.ts); the bonus die is the same Comeback gate.
+  'harvester:dark-sliver:talent:1': {
+    mechanic: 'Comeback (user bloodied): Dark Sliver\u2019s [D] attack roll gains one bonus die and its listed range becomes 3.',
+  },
+};
+
+for (const [sourceId, row] of Object.entries(BONUS_DAMAGE_TALENT_RECIPES)) {
+  registerBonusDamageTalent(sourceId, row.mechanic);
+}
+
+/** Mark-modifier talents (F5): the talent's COMPLETE semantics are a change
+ * to what an existing mark does at one of the engine's mark query points —
+ * the carrier-aware mark-condition projection (with potency), the status-
+ * save policy, or a turn-boundary trigger. The reviewed rows live in
+ * `content/jobs/mark-modifier-recipes.ts` and `content/jobs/
+ * lifecycle-recipes.ts`; each row audits as complete through
+ * `registerMarkModifierTalent` with its source fixture + replay test in the
+ * ability's own test file. */
+const MARK_MODIFIER_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }>> = {
+  // ICON p.192 Grand Seal talent 1: "Bloodied foes gain +1 curse on saves
+  // while marked." A mark-keyed status-save policy row (mark-modifier-
+  // recipes.ts): the marked foe's saves carry the curse while it is bloodied.
+  'sealer:grand-seal:talent:1': {
+    mechanic: 'A foe marked by Grand Seal gains +1 curse on saves while bloodied (the mark-keyed status-save policy row reads the sealer\u2019s equipped talent 1 and the live bloodied state).',
+  },
+  // ICON p.192 Grand Seal talent 2: "Bloodied foes are also pacified+ while
+  // marked." A carrier-aware mark-condition projection (mark-modifier-
+  // recipes.ts): the marked bloodied foe has pacified with ongoing potency.
+  'sealer:grand-seal:talent:2': {
+    mechanic: 'A bloodied foe marked by Grand Seal is pacified+ (potency plus) while marked, derived from the carrier-aware mark-condition projection.',
+  },
+  // ICON p.186 Rot talent 2: "Foes that start their turn adjacent to a
+  // character marked by Rot take 2 piercing damage." A turn-start lifecycle
+  // trigger (lifecycle-recipes.ts) on the foe's own boundary, gated on the
+  // harvester's equipped talent 2.
+  'harvester:rot:talent:2': {
+    mechanic: 'A foe that starts its turn adjacent to a character marked by Rot (foe-mark or REGENERATE ally-mark, owner chose talent 2) takes 2 piercing damage, once per boundary.',
+  },
+};
+
+for (const [sourceId, row] of Object.entries(MARK_MODIFIER_TALENT_RECIPES)) {
+  registerMarkModifierTalent(sourceId, row.mechanic);
 }
 
 /** Area-modifier talents: the talent's COMPLETE semantics are a shape/size
@@ -968,13 +1042,15 @@ export function getTalentRecipes(units: readonly RuleSourceUnit[]): Readonly<Rec
         const passive = PASSIVE_PROJECTION_TALENT_RECIPES[unit.id];
         const rangeModifier = RANGE_MODIFIER_TALENT_RECIPES[unit.id];
         const areaModifier = AREA_MODIFIER_TALENT_RECIPES[unit.id];
-        const executable = wired ?? programLevel ?? passive ?? rangeModifier ?? areaModifier;
+        const bonusDamage = BONUS_DAMAGE_TALENT_RECIPES[unit.id];
+        const markModifier = MARK_MODIFIER_TALENT_RECIPES[unit.id];
+        const executable = wired ?? programLevel ?? passive ?? rangeModifier ?? areaModifier ?? bonusDamage ?? markModifier;
         return [unit.id, {
           sourceId: unit.id,
           abilityId: unit.parentId ?? '',
           name: unit.name,
-          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : passive ? 'passive-projection' as const : rangeModifier ? 'range-modifier' as const : areaModifier ? 'area-modifier' as const : 'documented' as const,
-          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? passive?.mechanic ?? rangeModifier?.mechanic ?? areaModifier?.mechanic ?? '',
+          status: wired ? 'wired' as const : programLevel ? 'program-level' as const : passive ? 'passive-projection' as const : rangeModifier ? 'range-modifier' as const : areaModifier ? 'area-modifier' as const : bonusDamage ? 'bonus-damage' as const : markModifier ? 'mark-modifier' as const : 'documented' as const,
+          mechanic: wired?.mechanic ?? programLevel?.mechanic ?? passive?.mechanic ?? rangeModifier?.mechanic ?? areaModifier?.mechanic ?? bonusDamage?.mechanic ?? markModifier?.mechanic ?? '',
           detail: executable ? '' : documentedTalentDetail(unit),
           ...(wired ? { triggerEffect: wired.triggerEffect } : {}),
         }];

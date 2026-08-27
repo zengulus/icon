@@ -5,8 +5,15 @@ import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
-import type { EncounterActor, EncounterState, Position } from '../types.js';
+import type { EncounterActor, EncounterState, Position, StatusSaveCommandInput } from '../types.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+
+/** The two player-selected Teleport destinations Nothung's program reads from
+ * the generic durable position input (the same cast pattern Party Favor's
+ * mine placement uses — the USE_ABILITY surface exposes only Blessing
+ * choices on its `input`; the runtime spreads the full object through). */
+const nothungTeleports = (first: Position, second: Position): StatusSaveCommandInput =>
+  ({ positions: { 'teleport-1': [first], 'teleport-2': [second] } }) as unknown as StatusSaveCommandInput;
 
 /**
  * Source-derived golden fixtures for the independently executable Spellblade
@@ -57,12 +64,12 @@ describe('Spellblade ability automation (p.222–229)', () => {
     expect(spellbladeIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
   });
 
-  it('Blitz: attacks [D], makes the foe vulnerable, then teleports and pierces twice', () => {
+  it('Blitz: attacks [D], makes the foe vulnerable, then player-selected teleports and pierces twice', () => {
     const { state, hero, foe } = spellbladeEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:blitz', targetIds: [foe.id] }, scriptedDice(12, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:blitz', targetIds: [foe.id], input: { positions: { 'teleport-0': [{ x: 2, y: 1 }] } } }, scriptedDice(12, 4));
     expect(result.state.actors[foe.id].hp).toBe(26); // 32 - [D] 4 - 1 - 1
     expect(result.state.actors[foe.id].statuses).toContain('vulnerable');
-    expect(result.state.actors[hero.id].position).not.toEqual({ x: 1, y: 1 }); // teleported toward the foe
+    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 }); // teleported to player choice
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
@@ -91,33 +98,162 @@ describe('Spellblade ability automation (p.222–229)', () => {
     expect(applyEvents(replayed, bolt.events)).toEqual(bolt.state);
   });
 
-  it('Nothung: 2[D]+fray on hit, frays the arc, and pierces once per adjacent character', () => {
+  it('Nothung: both teleports are player-selected destinations (Teleport 1, p.88)', () => {
     const { state, hero, foe, second } = spellbladeEncounter({ foe: { x: 2, y: 1 }, second: { x: 2, y: 0 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    // ICON p.225 lists "Effect: Teleport 1" twice with no direction: each is
+    // a chosen unoccupied space within range 1. Choose a first destination
+    // NOT toward the target (west instead of east), then a second destination
+    // within 1 of the post-first position.
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 0, y: 1 }, { x: 0, y: 2 }),
+    }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[hero.id].position).toEqual({ x: 0, y: 2 }); // both chosen destinations applied in order
     expect(result.state.actors[foe.id].hp).toBe(18); // 32 - (4 + 5 + fray 4) - 1 piercing (adjacent second)
     expect(result.state.actors[second!.id].hp).toBe(28); // 32 - fray 4 (arc)
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Nothung talent 2: comeback widens both teleports toward the target to 4', () => {
-    // A diagonal target (range 2) makes the teleport distance observable: the
-    // walk along the dominant axis passes the target's column instead of
-    // stopping adjacent to it, so teleport 4 lands at (5,1) where teleport 1
-    // would land at (2,1).
-    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 2 }, second: null });
-    state.actors[hero.id].talents = { 'spellblade:nothung': 2 };
-    state.actors[hero.id].hp = 1; // bloodied → the comeback clause holds
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
-    expect(result.state.actors[hero.id].position).toEqual({ x: 5, y: 1 }); // walk 4 east
+  it('Nothung: the second teleport is measured from the post-first position, not the starting position', () => {
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    // First destination west to (0,1). The second destination (1,2) is
+    // within Teleport 1 of (0,1) (distance 1) but distance 2 from the
+    // starting cell (1,1): only the post-first origin makes it legal.
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 0, y: 1 }, { x: 1, y: 2 }),
+    }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+    // The same second destination chosen from the STARTING position (no
+    // first teleport) would be out of range: the legality is positional.
+  });
+
+  it('Nothung: an illegal first destination is rejected (nothing consumed)', () => {
+    const { state, hero, foe } = spellbladeEncounter({ second: null });
+    // Out of range (distance 2 > Teleport 1).
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 3, y: 1 }, { x: 0, y: 1 }),
+    }, scriptedDice(12, 4, 5))).toThrowError(expect.objectContaining({ code: 'move.range' }));
+    // Occupied (the target's adjacent cell).
+    const adjacent = spellbladeEncounter({ foe: { x: 2, y: 1 }, second: null });
+    expect(() => executeCommand(adjacent.state, {
+      type: 'USE_ABILITY', actorId: adjacent.hero.id, abilityId: 'spellblade:nothung', targetIds: [adjacent.foe.id],
+      input: nothungTeleports({ x: 2, y: 1 }, { x: 0, y: 1 }),
+    }, scriptedDice(12, 4, 5))).toThrowError(expect.objectContaining({ code: 'choice.position-unavailable' }));
+    // Missing destination.
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: { positions: { 'teleport-1': [{ x: 0, y: 1 }] } } as unknown as StatusSaveCommandInput,
+    }, scriptedDice(12, 4, 5))).toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+    // Nothing was consumed: the actions are intact and the hero never moved.
+    expect(hero.actionsRemaining).toBe(2);
+    expect(hero.position).toEqual({ x: 1, y: 1 });
+  });
+
+  it('Nothung: an illegal second destination is rejected (nothing consumed)', () => {
+    const { state, hero, foe } = spellbladeEncounter({ second: null });
+    // First leg legal; second destination out of range of the post-first
+    // position (distance 2 from (0,1)).
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 0, y: 1 }, { x: 0, y: 3 }),
+    }, scriptedDice(12, 4, 5))).toThrowError(expect.objectContaining({ code: 'move.range' }));
+    expect(hero.actionsRemaining).toBe(2);
+    expect(hero.position).toEqual({ x: 1, y: 1 });
+  });
+
+  it('Nothung: hostile rampart blocks a chosen teleport destination (p.104)', () => {
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    // A fortify foe projects rampart over its adjacent cells; a teleport
+    // into (2,1) (adjacent to the foe) enters rampart and is denied by the
+    // F1 gateway — even though the destination is in range and unoccupied.
+    state.actors[foe.id].conditions.push({ id: 'fortify', sourceId: 'fixture:fortify', ownerId: foe.id, potency: 'normal', duration: null });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 2, y: 1 }, { x: 2, y: 1 }),
+    }, scriptedDice(12, 4, 5));
+    // The first leg is rampart-denied (no move), so the hero stays at (1,1)
+    // and the second leg resolves from there — both landings denied.
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 });
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Nothung talent 2: without the comeback trigger the teleports stay 1', () => {
+  it('Nothung talent 2: comeback widens both player-selected teleports to 4', () => {
     const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 2 }, second: null });
     state.actors[hero.id].talents = { 'spellblade:nothung': 2 };
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
-    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 }); // walk 1 east
+    state.actors[hero.id].hp = 1; // bloodied → the comeback clause holds
+    // Each destination is independently chosen within Teleport 4: first
+    // west to (5,1) (distance 4), then north-west to (1,5) (distance 4 from
+    // the post-first position (5,1)).
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 5, y: 1 }, { x: 1, y: 5 }),
+    }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 5 });
     expect(applyEvents(state, result.events)).toEqual(result.state);
+    // A destination at distance 5 (beyond Teleport 4) is still rejected.
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 6, y: 1 }, { x: 1, y: 5 }),
+    }, scriptedDice(12, 4, 5))).toThrowError(expect.objectContaining({ code: 'move.range' }));
+  });
+
+  it('Nothung talent 2: equipped but Comeback inactive keeps both teleports at 1', () => {
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 2 }, second: null });
+    state.actors[hero.id].talents = { 'spellblade:nothung': 2 };
+    // Full HP → Comeback inactive → Teleport 1: a distance-4 first
+    // destination is rejected even though the talent is equipped.
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 5, y: 1 }, { x: 0, y: 1 }),
+    }, scriptedDice(12, 4, 5))).toThrowError(expect.objectContaining({ code: 'move.range' }));
+    // Legal Teleport-1 destinations still work.
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 0, y: 1 }, { x: 1, y: 0 }),
+    }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 0 });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Nothung talent 1: against a bloodied foe the 2[D] roll gains a bonus die and deals 1 piercing again on hit', () => {
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    state.actors[hero.id].talents = { 'spellblade:nothung': 1 };
+    state.actors[foe.id].hp = 16; // bloodied (Relict max 32 → at/below 16)
+    // d20 12 hits; the 2[D] roll carries one bonus die → three rolls 4, 3, 6
+    // keep the highest two (6 + 4 = 10) + fray 4 = 14, then the extra
+    // 1 piercing instance on hit (the p.102 keep-highest semantics).
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 0, y: 1 }, { x: 0, y: 1 }),
+    }, scriptedDice(12, 4, 3, 6));
+    expect(result.state.actors[foe.id].hp).toBe(16 - 14 - 1);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+
+    // Talent NOT equipped against the same bloodied foe: plain 2[D]+fray, no
+    // bonus die, no extra piercing instance.
+    const bare = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    bare.state.actors[bare.foe.id].hp = 16;
+    const noTalent = executeCommand(bare.state, {
+      type: 'USE_ABILITY', actorId: bare.hero.id, abilityId: 'spellblade:nothung', targetIds: [bare.foe.id],
+      input: nothungTeleports({ x: 0, y: 1 }, { x: 0, y: 1 }),
+    }, scriptedDice(12, 4, 3));
+    expect(noTalent.state.actors[bare.foe.id].hp).toBe(16 - (4 + 3 + 4));
+    expect(applyEvents(bare.state, noTalent.events)).toEqual(noTalent.state);
+
+    // Talent equipped against a NOT-bloodied foe: no bonus die, no extra
+    // piercing instance (Comeback/target gates must hold, not just the
+    // talent being equipped).
+    const healthy = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    healthy.state.actors[healthy.hero.id].talents = { 'spellblade:nothung': 1 };
+    const full = executeCommand(healthy.state, {
+      type: 'USE_ABILITY', actorId: healthy.hero.id, abilityId: 'spellblade:nothung', targetIds: [healthy.foe.id],
+      input: nothungTeleports({ x: 0, y: 1 }, { x: 0, y: 1 }),
+    }, scriptedDice(12, 4, 3));
+    expect(full.state.actors[healthy.foe.id].hp).toBe(32 - (4 + 3 + 4));
+    expect(applyEvents(healthy.state, full.events)).toEqual(full.state);
   });
 
   it('Nothung slay/infuse (GRAM): flurries 1 piercing twice to foes in a burst 2 (self)', () => {
@@ -192,11 +328,12 @@ describe('Spellblade ability automation (p.222–229)', () => {
 
   it('Drifting Leaf: 2[D]+fray on hit, shatters the foe, frays the line, and gains Leaf on the Wind', () => {
     const { state, hero, foe, second } = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: { x: 2, y: 1 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:drifting-leaf', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:drifting-leaf', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 1, y: 2 }] } } }, scriptedDice(12, 4, 5));
     expect(result.state.actors[foe.id].hp).toBe(19); // 32 - (4 + 5 + fray 4)
     expect(result.state.actors[foe.id].statuses).toContain('shattered');
     expect(result.state.actors[second!.id].hp).toBe(28); // 32 - fray 4 (line)
     expect(result.state.actors[hero.id].ruleState['spellblade:leaf-on-the-wind']).toBe(true);
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 }); // teleported to player choice
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 });

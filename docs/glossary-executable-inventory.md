@@ -32,7 +32,7 @@ Status legend:
 | Pierce | Ignore armor and Weakened (104) | `ignoreArmor` provenance flag | EXECUTABLE | — |
 | Divine | Unmitigable except immunity; bypass vigor (104) | `ignoreDefiance` + `bypassVigor` typed flags | EXECUTABLE | — |
 | Weakened / Vulnerable | −2 dealt / +1 taken per instance (104) | per-instance in `damage-resolution` | EXECUTABLE | — |
-| Bonus damage | +1[D] per instance, pick highest (102) | `bonus-damage` resource + `attack-modifiers` | EXECUTABLE | — |
+| Bonus damage | +1[D] per instance, pick highest (102) | `bonus-damage` resource + `attack-modifiers` + F6a `kernels/bonus-damage.ts` use-gated grant fold | EXECUTABLE | — |
 | [D] / Fray damage | class die / fixed fray (82, 92) | `job-kit`/`attack-resolution` | EXECUTABLE | — |
 | Critical Hit | total 20+, +[D], still a hit (94, 103) | `attack-resolution` | EXECUTABLE | — |
 | Exceed | total 15+, a triggered effect (95, 103) | VM attack roll threshold + F7 fold | EXECUTABLE | — |
@@ -94,7 +94,7 @@ Status legend:
 | Gamble | d6, effect on result-or-higher (103) | `gambleD6` in `job-kit` + `recordedDice` in `TurnDiceWindows` | **EXECUTABLE** | the trait-level dice-window consumers (Stack Dice, Bend Fate, Golden Mask) need a non-ability gamble hook |
 | Sacrifice X | cost at start, non-mitigable, floor 1, may overpay (102) | VM `sacrifice` cost | PARTIAL | a reusable **cost-override** seam (reduce/ignore a sacrifice cost — Crimson King, Conqueror's Edge Infuse) with the exact non-mitigable/floor-1 contract as a typed modifier |
 | Power Die | point-contact die, tick/discard-at-0 (103) | `kernels/power-die.ts` (`readPowerDie`/`tickPowerDie`/`setPowerDie`) | **PARTIAL → kernel landed** | soul-blade/gallows-humor/umbral-echo/mantra ticks consolidated; Gran Reversa t1 (start d6@6) audit-complete; consume/discard per-row + rampant-nail bloodied tick + mastery dice remain |
-| Mark | ongoing; one per ability per char; replace choice (103) | `mark` mutation + ownership | EXECUTABLE | mark **trigger** windows (turn-start/adjacency/etc.) remain reactive-window work |
+| Mark | ongoing; one per ability per char; replace choice (103) | `mark` mutation + ownership | EXECUTABLE | F5 (2026-08-27): mark modifiers at the engine's query points are wired (carrier-aware condition projections with potency — Grand Seal t2 pacified+; the mark-keyed save-curse policy — Grand Seal t1; a turn-start adjacency mark trigger — Rot t2). Remaining mark **trigger** windows (detonation, activation-gate, entity-follow, stacking, re-mark-on-damage) stay reactive-window work (census subfamilies) |
 | Stance | ongoing positive; one at a time; drop/refresh (103) | `stance` mutation | EXECUTABLE | multi-stance entry gate (Martial Master) |
 | Interrupt | off-turn, ranked, one per turn, refresh at turn start (91) | F4 trigger windows + `interruptUses` | EXECUTABLE | — |
 | Delay | next turn slow; activates at start (95, 103) | F3 lifecycle `delayed` phase | EXECUTABLE | — |
@@ -152,7 +152,7 @@ B. **Engine mechanisms genuinely missing (subsystems):**
    3. **Cost-override seam** — sacrifice/Infuse cost reduction (non-mitigable/floor-1).
    4. **Rebound seam** — origin re-placement + LoS/cover from the new origin.
    5. **Entity action seams + object-destroy model** — companions' suites; destructible objects.
-   6. **Mark-trigger windows** — turn-start/adjacency mark gates.
+   6. **Mark-trigger windows** — detonation/activation-gate/entity-follow/stacking/re-mark-on-damage (the turn-start adjacency gate is wired — Rot t2, F5 2026-08-27).
 
 None of the B items is safely completable mid-stream; each is a focused
 foundation-sized pass (the ontology build order already sequences them).
