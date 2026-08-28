@@ -31,6 +31,7 @@ import './jobs/range-recipes.js';
 import './jobs/bonus-damage-recipes.js';
 import './jobs/area-recipes.js';
 import './jobs/action-cost-override-recipes.js';
+import './jobs/shove-modifier-recipes.js';
 import './foes/role-baseline-recipes.js';
 import './foes/turn-entitlement-recipes.js';
 import './foes/mark-recipes.js';
