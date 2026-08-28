@@ -121,9 +121,9 @@ assumption here, document the evidence and update this list before proceeding.
    (census regenerated, byte-stable). Per the regenerated census the next
    in-scope Step-6 family is the highest-immediate fold-shaped family — the
    highest-immediate families are entity-create (16), terrain-create (14),
-   then fly-grant (14), action-type-change (10), shove-modifier (10);
+   then fly-grant (14), shove-modifier (10);
    within the mastery/talent folds, the next fold-shaped family is
-   action-type-change or shove-modifier (both 10 immediate).
+   shove-modifier (10 immediate); action-type-change (10) fold landed.
 
    **Source-fidelity repair pass (2026-08-27):** Repaired three incorrect
    mastery-attack attachments: removed the invented Apex mastery Unerring
@@ -339,7 +339,7 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 | F5 | Mark-modifier family | **PARTIAL** (2026-08-27): landed subset = carrier-aware mark-condition projections with potency, the mark-keyed status-save policy seam, turn-boundary mark triggers; 3 promoted (Grand Seal t1/t2, Rot t2). The coarse `{mark-modifier}` label is RETIRED — all 22 compound records reclassified to precise families (mark-gated-modifier 11, mark-transfer 4, mark-defeat-trigger 5, mark-stacking 3, mark-detonation-window 2, mark-activation-gate 2; growing-season mastery + Rot t1 dropped it as supplied); **zero blocker sets carry `mark-modifier`** | 3 promoted (12 originally listed) | Census `{mark-modifier}` label cleared; F5 remainder = the not-yet-landed mark families (mark-gated-modifier: 0 immediate / 11 compound) |
 | F6 | Damage-modifier family | PARTIAL — bonus-damage dice grants landed (2026-08-27, F6a): `kernels/bonus-damage.ts` + 4 talent rows + Finesse; remaining subfamilies (round-gated dice, exceed auto-grant, suppression, damage-maximize, flat self-ratio) reclassified in the census | 6 promoted (13 originally listed) | Census `{damage-modifier}` cleared |
 | F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (modifier kernel K-P5 live; 4 wired — + Demon Claw RAGING DEMON 2026-08-27 — 132 unresolved) | 132 masteries | Biggest single content family |
-| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL — **53/288 talents wired through the F8 subfamilies** (resource-management, action-type-change, charge-state, shove-modifier). This is an F8-ONLY count, deliberately narrower than the 57/288 total executable talents, which also includes the F1 teleport rows (Strongarm t1, Nothung t2), the F5 mark rows (Grand Seal t1/t2, Rot t2), the F6a bonus-damage rows (Low Blow t1, Nothung t1, Incubus t2, Dark Sliver t1), and the pre-use augmentation row (Dark Sliver t2) that ride other folds | ~180 talents | See census frequencies |
+| F8 | Talent subfamilies: resource-management, action-type-change, charge-state, shove-modifier | PARTIAL — action-type-change fold **landed (2026-08-28, F8a)**: `kernels/action-type.ts` with mastery rows (round >= 4 free action) and talent rows (terrain/condition-gated free action); 10 content rows registered. Census compilation audit unchanged (fold is runtime, not compilation). Remaining: resource-management, charge-state, shove-modifier | ~180 talents | See census frequencies |
 | F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
 | F10 | Expedition scene flow (camp/interlude as playable steps around the sheet transitions) | PARTIAL (sheet transitions DONE) | cross-combat play UX | |
 
