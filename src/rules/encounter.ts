@@ -27,6 +27,7 @@ import { resolveOrdinaryAttackMutations } from './automation/kernels/ordinary-at
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
 import { areaStateView, masteryFoldStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
 import { effectiveInterruptRank } from './automation/kernels/mastery-fold.js';
+import { effectiveAbilityActionCost } from './automation/kernels/action-type.js';
 import { effectiveAbilityRange } from './automation/kernels/range.js';
 import { effectiveAreaFor } from './automation/kernels/area.js';
 import { footprintCells, footprintDistance, footprintsOverlap } from './automation/primitives/spatial-intent.js';
@@ -1746,7 +1747,17 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const augmentationCosts = resolvedAugmentations.costMutations
         .filter((cost): cost is Extract<RuleMutation, { kind: 'damage' }> => cost.kind === 'damage' && cost.damageType === 'sacrifice')
         .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: cost.amount } }));
-      assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: [...action.costs, ...augmentationCosts] }, ruleContext);
+      // F8 action-type fold (EXECUTE_RULE path): same fold as USE_ABILITY.
+      // Override the program's action costs when the fold reduces them to free,
+      // so the cost-payment gate validates the effective cost rather than the
+      // base cost. Both command surfaces must use the SAME validated result.
+      const execEffectiveActionCost = unit.metadata.actionKind === 'action' && typeof unit.metadata.actionCost === 'number' && unit.metadata.actionCost > 0
+        ? effectiveAbilityActionCost(state, actor, unit.id, { kind: 'action', value: unit.metadata.actionCost })
+        : null;
+      const execFoldedCosts = execEffectiveActionCost && execEffectiveActionCost.kind === 'free'
+        ? [...action.costs.filter((c) => c.kind !== 'action'), ...augmentationCosts]
+        : [...action.costs, ...augmentationCosts];
+      assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: execFoldedCosts }, ruleContext);
       let result: RuleExecutionResult;
       try {
         result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
