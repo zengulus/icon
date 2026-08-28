@@ -804,27 +804,65 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // may deal 2 damage to all affected foes from the triggering ability and
   // shove them 1 in any direction." — an after-trigger effect rider
   // (damage + shove to the triggering ability's affected foes)
-  'bastion:heracule:talent:1': ['shove-modifier'],
-  // "Heracule's shoves can be in any direction" — shove-direction override
+  'bastion:heracule:talent:1': ['direction-override'],
+  // "Heracule's shoves can be in any direction" — modifies shove direction
+  // legality: the resolver must accept player-chosen direction for ALL shoves
+  // (target shove + second-foe shove), not just the primary target shove
   'bastion:heracule:talent:2': ['effect-count'],
   // "second effect triggers +1 more time" — repeat/effect-count modifier
   'bastion:battering-ram:talent:2': ['object-interaction', 'collide-rider'],
   // "shove objects … object triggers collide effects on the first character
   // it collides with" — objects as shove participants + an object-collide
   // effect rider
+  'bastion:land-waster:talent:1': ['conditional-distance-stun'],
+  // "If Land Waster's effect shockwave shoves 3 or more foes or allies,
+  // it shoves +1 and stuns your target" — conditional shove distance
+  // modifier (+1 when shockwave hits 3+) + stun on attack target; the
+  // resolver needs shockwave-shove count tracking and conditional mutation
+  'bastion:catapult:talent:2': ['foe-trigger-expansion', 'collide-rider'],
+  // "Catapult can also be triggered on foes. When triggered on foes, the
+  // effect becomes effect: shove 1. Collide: you may rush 1" — expands
+  // eligible triggers to foes + replaces foe effect with shove 1 + different
+  // collide rider
+  'bastion:great-giorgios:talent:1': ['new-shove-effect', 'player-choice'],
+  // "Foes you passed through take 2 damage after your movement resolves,
+  // and are shoved 1 to either side of your movement" — adds new shove
+  // effects with player-chosen direction (either side of movement)
+  'bastion:great-giorgios:talent:2': ['new-shove-effect', 'direction-override'],
+  // "Allies adjacent to you during any part of this rush are shoved 1 in
+  // any direction after this ability resolves" — adds new shove effects
+  // with any-direction legality
+  'bastion:limit-break': ['new-shove-effect', 'player-choice', 'repeat-mechanic'],
+  // "every character on the battlefield is shoved 1 space in a direction of
+  // your choice" — compound: new shoves on all characters + player-chosen
+  // directions + repeat mechanic (Ultimate: repeat once on allies or enemies)
+
+  // ── Warden ──
+  'warden:circle-the-oak:mastery': ['new-shove-effect', 'movement-modifier'],
+  // "Enemies no longer stop this move, and you may phase through their
+  // spaces. Enemies you pass through are shoved 1, take fray damage, and
+  // are dazed" — removes enemy collision + adds new shove/damage/daze
+
+  // ── Enochian ──
+  'enochian:soul-burn:talent:2': ['new-shove-effect', 'lifecycle-trigger'],
+  // "Foes that end their turn adjacent to you while Soul Burn is active
+  // take 1 piercing damage and are shoved 1" — new shove+damage at
+  // end-of-turn lifecycle trigger
 
   // ── Demon Slayer ──
   'demon-slayer:draken-cross:talent:1': ['effect-count'],
   // "Exceed: deal fray damage again to all characters in any area created by
   // this ability" — an exceed-triggered repeat instance (area-member
   // targeting itself is expressible)
-  'demon-slayer:righteous-disdain:talent:2': ['shove-modifier'],
-  // "Shove the triggering foe and ally each 1 space in any direction"
+  'demon-slayer:righteous-disdain:talent:2': ['new-shove-effect'],
+  // "Shove the triggering foe and ally each 1 space in any direction" —
+  // adds new shove effects after ability resolves, not a shove modifier
   'demon-slayer:righteous-disdain:mastery': ['damage-taken-modifier'],
   // "The damage from Righteous Disdain cannot reduce you past 1 hp" — an
   // incoming-damage floor, same damage-taken seam as armor-2
-  'demon-slayer:demon-claw:talent:2': ['shove-modifier'],
+  'demon-slayer:demon-claw:talent:2': ['new-shove-effect'],
   // "After the second rush, you can shove an adjacent character 2 spaces"
+  // — adds a new optional shove-2, not a modifier on existing shoves
   'demon-slayer:demon-claw:mastery': ['damage-modifier'],
   // "+1 damage per 25% max hp missing, max +3" — gated scaling damage bonus
   'demon-slayer:soul-blade:mastery': ['power-die', 'area-effect-rider'],

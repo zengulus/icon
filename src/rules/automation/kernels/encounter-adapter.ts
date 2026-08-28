@@ -11,7 +11,6 @@ import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverla
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { validateEntityCreation } from './entity-creation.js';
 import type { RuleActorView, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
-import { effectiveShoveMutation } from './shove-modifier.js';
 
 const statusIds = new Set<StatusId>(['slashed', 'blind', 'dazed', 'hatred', 'pacified', 'sealed', 'shattered', 'stunned', 'weakened', 'vulnerable']);
 const samePosition = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
@@ -1105,13 +1104,7 @@ function applyMovement(state: EncounterState, mutation: Extract<RuleMutation, { 
   // once (automation/spatial-intent.ts), never per resolver.
   const intent = movementSpatialIntent(state, mutation, coMovedActorIds);
   if (intent) return applySpatialIntent(state, intent).moved;
-  // F8b shove-modifier fold: modify shove properties (distance, direction)
-  // before resolution. The fold is the single reusable authority consulted
-  // at the shove-resolution pipeline boundary.
-  const effectiveMutation = mutation.movement === 'shove'
-    ? effectiveShoveMutation(mutation, state) as typeof mutation
-    : mutation;
-  const resolved = shoveResolution(state, effectiveMutation);
+  const resolved = shoveResolution(state, mutation);
   if (resolved) actor.position = resolved.position;
   return moved();
 }
@@ -1515,8 +1508,7 @@ export function collidingShoveTargets(state: EncounterState, mutations: readonly
     const mutation = mutations[index];
     if (denied.has(index)) continue;
     if (mutation.kind === 'move' && mutation.movement === 'shove' && mutation.positions.length === 0 && mutation.distance !== null) {
-      const effectiveMutation = effectiveShoveMutation(mutation, simulation) as typeof mutation;
-      if (shoveResolution(simulation, effectiveMutation)?.collided) targets.push(mutation.actorId);
+      if (shoveResolution(simulation, mutation)?.collided) targets.push(mutation.actorId);
     }
     applyRuleMutation(simulation, mutation, index, mutation.kind === 'move' ? coMovedActorIdsForMove(mutations, mutation) : undefined);
   }
