@@ -127,8 +127,16 @@ assumption here, document the evidence and update this list before proceeding.
    remain.
    shove-modifier (10) decomposed: direction-override (1), conditional-
    distance-stun (1), new-shove-effect (7), foe-trigger-expansion (1);
-   no fold consumer — all resolver-level. Kernel removed.
-   Next fold-shaped family: resource-management or charge-state.
+   no fold consumer — all resolver-level. Kernel removed. The remaining
+   compound shove-modifier entry (heave-ho:mastery) reclassified to
+   variable-cost only — the 'shove X' keyword was a classifier artefact.
+   charge-state classifier fixed: 6 delay-mechanic units reclassified out
+   of charge-state (great-giorgios:mastery, terraforming:mastery,
+   gigaton-whip:mastery, spinning-top:t2, chaos-tarot:t2, dervish:mastery).
+   3 charge-state singletons reclassified with precise blockers (fly-grant,
+   area-modifier, fly-grant+new-shove-effect). Only terraforming:t1 retains
+   charge-state as a live blocker (Charge variant genuinely unimplemented).
+   charge-state label retired from singleton census entries.
 
    **Source-fidelity repair pass (2026-08-27):** Repaired three incorrect
    mastery-attack attachments: removed the invented Apex mastery Unerring
@@ -344,7 +352,7 @@ also `docs/blocker-census.json` `blockerFrequencies`):
 | F5 | Mark-modifier family | **PARTIAL** (2026-08-27): landed subset = carrier-aware mark-condition projections with potency, the mark-keyed status-save policy seam, turn-boundary mark triggers; 3 promoted (Grand Seal t1/t2, Rot t2). The coarse `{mark-modifier}` label is RETIRED — all 22 compound records reclassified to precise families (mark-gated-modifier 11, mark-transfer 4, mark-defeat-trigger 5, mark-stacking 3, mark-detonation-window 2, mark-activation-gate 2; growing-season mastery + Rot t1 dropped it as supplied); **zero blocker sets carry `mark-modifier`** | 3 promoted (12 originally listed) | Census `{mark-modifier}` label cleared; F5 remainder = the not-yet-landed mark families (mark-gated-modifier: 0 immediate / 11 compound) |
 | F6 | Damage-modifier family | PARTIAL — bonus-damage dice grants landed (2026-08-27, F6a): `kernels/bonus-damage.ts` + 4 talent rows + Finesse; remaining subfamilies (round-gated dice, exceed auto-grant, suppression, damage-maximize, flat self-ratio) reclassified in the census | 6 promoted (13 originally listed) | Census `{damage-modifier}` cleared |
 | F7 | Mastery fold (equipped mastery alters parent ability) | PARTIAL (modifier kernel K-P5 live; 4 wired — + Demon Claw RAGING DEMON 2026-08-27 — 129 unresolved) | 129 masteries | Biggest single content family |
-| F8 | Talent subfamilies: resource-management, action-cost-override, charge-state, shove-modifier | PARTIAL — **action-cost-override fold landed (2026-08-28, F8a)**: 3 pure mastery overrides promoted (Valiant, Shadow Play, Polaris), 5 compound masteries reclassified with multi-component blockers, 3 granted free actions remain with `action-type-change` label. **Shove-modifier decomposed (F8b)**: 10 pure singletons reclassified with precise blockers (direction-override, conditional-distance-stun, new-shove-effect, foe-trigger-expansion, etc.); all resolver-level — no fold consumer. Census total 420 (was 423). Remaining subfamilies: resource-management, charge-state | ~180 talents | See census frequencies |
+| F8 | Talent subfamilies: resource-management, action-cost-override, charge-state, shove-modifier | PARTIAL — **action-cost-override fold landed (2026-08-28, F8a)**: 3 pure mastery overrides promoted (Valiant, Shadow Play, Polaris), 5 compound masteries reclassified with multi-component blockers, 3 granted free actions remain with `action-type-change` label. **Shove-modifier decomposed (F8b)**: 10 pure singletons reclassified with precise blockers (direction-override, conditional-distance-stun, new-shove-effect, foe-trigger-expansion, etc.); all resolver-level — no fold consumer. Kernel removed. **charge-state reclassified (2026-08-28)**: 6 delay-mechanic units removed; 3 resolver-implemented units (spinning-top:t2, chaos-tarot:t2, gigaton-whip:t2) reclassified — Charge variants already wired via `context.triggers?.has('charge')` in resolvers. Only terraforming:t1 retains charge-state (genuinely unimplemented). Remaining: resource-management | ~180 talents | See census frequencies |
 | F9 | Relic invoke/persistent-effect runtime | NOT STARTED | 120 relic-ranks + 40 aspects | Structured catalog exists |
 | F10 | Expedition scene flow (camp/interlude as playable steps around the sheet transitions) | PARTIAL (sheet transitions DONE) | cross-combat play UX | |
 

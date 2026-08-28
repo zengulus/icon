@@ -63,6 +63,18 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
     mechanic: 'Exceed (attack roll 15+): gain 6 vigor.',
     triggerEffect: { trigger: 'exceed', build: (actorId) => [{ kind: 'vigor', sourceActorId: actorId, actorId, amount: 6, uncapped: false }] },
   },
+  // ICON p.130 Wicked Sheath talent 1: "Also shove your foe 1 for every
+  // charge on the die. Collide: Your foe is stunned." The die-scaled shove
+  // is in the program's on-hit effects; the Collide stun fires when the
+  // shove collides the target.
+  'demon-slayer:wicked-sheath:talent:1': {
+    mechanic: 'Collide (shove hits obstacle): the shoved foe is stunned.',
+    triggerEffect: {
+      trigger: 'collide',
+      build: (actorId, _targetIds, collidedIds) =>
+        collidedIds.map((collidedId) => ({ kind: 'condition', sourceActorId: actorId, actorId: collidedId, conditionId: 'stunned', operation: 'apply' as const, potency: 'normal' as const })),
+    },
+  },
   // ICON p.139 Low Blow talent 2: "Comeback: Gain vigilance +1."
   'knave:low-blow:talent:2': {
     mechanic: 'Comeback (user bloodied): gain vigilance +1.',

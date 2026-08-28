@@ -97,7 +97,16 @@ const spinningTopEffects: RuleResolver = (context) => {
   const landed = walk(context, source.position, direction, spaces, false, source.id);
   const steps = Math.abs(landed.x - source.position.x) + Math.abs(landed.y - source.position.y);
   const mutations: RuleMutation[] = [];
-  if (steps > 0) mutations.push(rushMutation(context, source.id, landed));
+  // ICON p.150 Spinning Top talent 2: "Charge: Spinning top becomes fly
+  // instead." When charged, the rush becomes a fly (ignores obstacles).
+  const charged = context.triggers?.has('charge');
+  if (steps > 0) {
+    if (charged) {
+      mutations.push(flyMutation(context, source.id, landed));
+    } else {
+      mutations.push(rushMutation(context, source.id, landed));
+    }
+  }
   if (steps === spaces) mutations.push(conditionMutation(context, source.id, 'evasion', 'normal', untilNextTurnStart));
   return mutations;
 };

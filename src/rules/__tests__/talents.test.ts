@@ -92,7 +92,7 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 33 wired / 7 program-level / 3 passive-projection / 5 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 232 documented', () => {
+  it('covers exactly the 288 source talents with 35 wired / 7 program-level / 3 passive-projection / 5 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 231 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
@@ -115,8 +115,8 @@ describe('F7 closed talent inventory', () => {
     // the engine's mark query points (status-save policy, carrier-aware
     // condition projection, turn-start lifecycle trigger).
     // None are fold triggers or program-emitted variants in the wrong home.
-    expect(getExecutableTalentIds().size).toBe(57);
-    expect(getDocumentedTalentIds(units).size).toBe(232);
+    expect(getExecutableTalentIds().size).toBe(58);
+    expect(getDocumentedTalentIds(units).size).toBe(231);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();

@@ -482,10 +482,12 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'spellblade:drifting-leaf:mastery': ['infuse-permanence'],
   // "at round 4 or later, Drifting Leaf's infuse is always active" — a
   // round-gated always-active infuse effect is not a reusable capability
-  'stormbender:heave-ho:mastery': ['shove-modifier', 'variable-cost'],
+  'stormbender:heave-ho:mastery': ['variable-cost'],
   // "Infuse X: TIDAL SMASH — the shove spaces become shove X. Collide: foes
-  // are shattered" — a variable infuse cost X (and shove amount X), plus
-  // the collide-result change
+  // are shattered" — a variable infuse cost X that doubles as the shove
+  // distance; the shove modifier label was a classifier artefact of the
+  // "shove X" keyword, not a genuine shove-modifier mechanic.
+  // The collide-result change is expressible
   'geomancer:quaking-palm:mastery': ['object-distance'],
   // "triggers for each object in range 2 instead of adjacent" — object
   // footprints in range, not characters
@@ -571,9 +573,11 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // the dice-pool extension). "Charge: 2 more d6s" adds more dice via
   // the same seam. Distinct from result-override (Stack Dice) and
   // post-roll-reactive-choice (Bend Fate).
-  'seer:chaos-tarot:talent:2': ['charge-state'],
-  // chaosTarotEffects uses gambleD6 for the tarot roll; charge-state
-  // is the remaining blocker (card charge resource)
+  'seer:chaos-tarot:talent:2': ['area-modifier'],
+  // chaosTarotEffects uses gambleD6 for the tarot roll; the Charge: variant
+  // ("Charge: 4 spaces" = up-to-4 area movement distance) is already wired
+  // in the resolver via context.triggers?.has('charge'). The area-modifier
+  // for the up-to-2-spaces area movement is the remaining blocker.
   'seer:polaris:talent:2': ['terrain-create'],
   // Polaris marks a space for the meteor gamble (terrain entity);
   // the gamble itself is wired via the end-of-turn dice window
@@ -618,11 +622,16 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // pacified+ projection, Rot t1's turn-start trigger) drop the mark label
   // entirely and keep only their genuinely missing capabilities. Zero
   // unresolved blocker sets contain `mark-modifier`.
-  'fool:diablo:mastery': ['area-define', 'charge-state', 'entity-create'],
+  'fool:diablo:mastery': ['area-define', 'delay-mechanic', 'entity-create'],
   // "mark out the area effect" designates the Diablo blast area — the word
   // is a verb, NOT the Mark mechanic — so no mark family applies; the
-  // delayed re-explosion (charge-state + area-define) plus the bomb summon
+  // delayed re-explosion (delay-mechanic + area-define) plus the bomb summon
   // (entity-create) are the complete residual
+  'fool:spinning-top:talent:2': ['fly-grant'],
+  // "Charge: Spinning top becomes fly instead" — the Charge: variant
+  // (rush becomes fly) is already wired in the resolver via
+  // context.triggers?.has('charge') → flyMutation. fly-grant (the
+  // movement-type override) is the remaining blocker.
   'freelancer:trait:astral-binding': ['action-type-change', 'mark-stacking'],
   // "stack up to two marks" = mark-stacking; the free-action group teleport
   // of marked characters rides the F1 teleport gateway (implemented) and the
@@ -630,9 +639,10 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'freelancer:exorcism:mastery': ['mark-defeat-trigger', 'mark-transfer', 'range-modifier'],
   // "If exorcism's target is defeated … tracking a new target … transferring
   // the mark" — the defeated-while-marked trigger plus mark-transfer
-  'freelancer:exorcism:talent:2': ['blast-template', 'charge-state', 'mark-defeat-trigger'],
+  'freelancer:exorcism:talent:2': ['blast-template', 'mark-defeat-trigger'],
   // the defeated-while-marked projectile scatter (per-charge damage) needs
-  // the large-blast template, the charge tracking, and the defeat trigger
+  // the large-blast template and the defeat trigger (NOT charge-state;
+  // "per charge on the die" is a resource counter, not Charge: subtype)
   'freelancer:astral-chain:talent:1': ['mark-gated-modifier', 'range-modifier'],
   // "While marked, gain evasion against your marked foe while they are in
   // range 3" — an owner-side mark-gated defensive modifier (not a carrier
@@ -863,6 +873,10 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'demon-slayer:demon-claw:talent:2': ['new-shove-effect'],
   // "After the second rush, you can shove an adjacent character 2 spaces"
   // — adds a new optional shove-2, not a modifier on existing shoves
+  'demon-slayer:wicked-sheath:talent:1': ['new-shove-effect', 'collide-rider'],
+  // "shove your foe 1 for every charge on the die. Collide: Your foe is
+  // stunned" — charge-gated shove scaling + collide rider (NOT charge-state;
+  // "charge" here is a resource counter, not the "Charge:" ability subtype)
   'demon-slayer:demon-claw:mastery': ['damage-modifier'],
   // "+1 damage per 25% max hp missing, max +3" — gated scaling damage bonus
   'demon-slayer:soul-blade:mastery': ['power-die', 'area-effect-rider'],
@@ -882,7 +896,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // extracted text are extraction noise, not mechanics)
 
   // ── Colossus ──
-  'colossus:takedown:talent:2': ['shove-modifier', 'collide-rider'],
+  'colossus:takedown:talent:2': ['new-shove-effect', 'collide-rider'],
   // optional double shove (target then self) + "Collide: deal fray damage"
   'colossus:takedown:mastery': ['elevation-scaling'],
   // "2 damage once per difference in elevation … maximum three times" —
@@ -890,7 +904,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // consumer scales effects by elevation difference
   'colossus:great-suplex:mastery': ['target-count-override'],
   // "You can target two adjacent characters" — target-count override
-  'colossus:gigaton-whip:talent:1': ['collide-rider', 'shove-modifier'],
+  'colossus:gigaton-whip:talent:1': ['collide-rider', 'new-shove-effect'],
   // "If your target collides with another character, shove that character 1
   // and deal 2 damage"
   'colossus:raging-wolf:talent:2': ['fly-grant'],
@@ -1006,15 +1020,52 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // riding removes allies from the battlefield mid-movement, then places
   // them adjacent when it ends — removal + post-move placement primitives
 
+  // ── Remaining compound shove-modifier reclassifications ──
+  'bastion:land-waster:talent:2': ['cure-on-trigger'],
+  // "If Land Waster's effect shockwave shoves 2 or more foes or allies,
+  // cure yourself" — cure gated on shove count, not a shove modifier
+  'demon-slayer:six-hells-trigram:mastery': ['new-shove-effect'],
+  // "Dark Wind Chain: Deal 2 damage to any foe in range 4 and shove them
+  // 1 space towards you, then force them to save. On a failed save, they
+  // are shoved 2 more spaces towards you" — new shove effects with save-gated
+  // additional shove
+  'colossus:gigaton-whip:talent:2': ['fly-grant', 'new-shove-effect'],
+  // "Fly 2 instead. Charge: Shove 3 and fly 3" — the Charge: variant
+  // (shove 3 + fly 3) is already wired in the resolver via
+  // context.triggers?.has('charge'). The fly-grant (movement-type
+  // override) and new-shove-effect (additional shove) are the
+  // remaining blockers.
+  'knave:sucker-punch:mastery': ['pre-ability-movement', 'range-modifier', 'new-shove-effect'],
+  // "You can rush 2 before activating sucker punch, it triggers from
+  // within range 2, and you may give it shove 1" — pre-ability rush +
+  // range change + optional new shove
+  'geomancer:helix-heel:mastery': ['new-shove-effect', 'terrain-create'],
+  // "Characters that it bounces off are shoved 1 away from you after the
+  // ability resolves. Collide: Create a pit" — new shove + terrain creation
+  'stormbender:waterspout:talent:1': ['new-shove-effect', 'terrain-create'],
+  // "After characters are spit out, they are shoved 1 away from the
+  // waterspout" — new shove from terrain effect
+  'stormbender:waterspout:mastery': ['blast-template', 'terrain-create', 'new-shove-effect', 'direction-override'],
+  // "waterspouts grow to a small blast area... characters that start their
+  // turns adjacent... are shoved 1 in a direction of your choice" — area
+  // modifier + terrain + new shove with player-chosen direction
+  'chanter:limit-break': ['cover-mechanic', 'fly-grant', 'range-modifier', 'resource-management', 'new-shove-effect', 'stance-gate'],
+  // "Angrboda: An allied character gains sturdy, and their attacks gain
+  // true strike and shove 1" — the shove is a grant to allies' attacks
+  'geomancer:limit-break': ['blast-template', 'delay-mechanic', 'entity-create', 'new-shove-effect'],
+  // "End your turn. You dive into the earth... gain Delay: Your next turn
+  // must be slow. At the start of that turn... shoved 1 in the direction
+  // of the line" — delay mechanic + new shove effect
+
   // ── Chanter ──
-  'chanter:felicity:talent:1': ['movement-trigger', 'shove-modifier'],
+  'chanter:felicity:talent:1': ['movement-trigger', 'new-shove-effect'],
   // "When an ally ends any movement from this ability, they can shove all
   // adjacent characters 1"
   'chanter:dervish:talent:2': ['pre-ability-action'],
   // "Before you use this ability, you can cause a wind blast, shoving all
   // adjacent foes 1 and dealing 2 damage" — a declared pre-ability sub-action
   // (pre-ability-movement covers self-repositioning; this is an effect)
-  'chanter:symphony:talent:1': ['effect-count', 'shared-turn-ledger', 'shove-modifier'],
+  'chanter:symphony:talent:1': ['effect-count', 'shared-turn-ledger', 'new-shove-effect'],
   // motes explode again + shove IF at least one other mote already exploded
   // this turn — repeat, radial shove, and a cross-instance shared turn
   // counter (the use-ledger gates ONE actor's own events, not a shared
@@ -1027,6 +1078,17 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "your foe takes 1 divine damage after using any ability that damages
   // another character" — a reactive keyed to the ENEMY's ability use
   'chanter:chastise:talent:2': ['defeat-trigger', 'effect-count'],
+  'chanter:trait:songweave': ['charge-combo-activation'],
+  // "spend a combo token... activate all charge effects" — combo-token
+  // spend to bypass slow-turn requirement for charge effects; distinct from
+  // generic combo-spend (which IS implemented) because this specifically
+  // activates charge effects on a non-slow turn (NOT charge-state;
+  // "charge effects" is a reference to the Charge: subtype, not the
+  // subtype itself appearing in this unit's rules text)
+  'chanter:dervish:mastery': ['charge-combo-activation'],
+  // "empower... automatically activate charge effects" — auto-activate
+  // charge effects via combo-token spend (NOT charge-state; same as songweave)
+  // charge effects without combo-token spend
   // "if your foe defeats any character, they take 1 divine damage three times"
 
   // ── Harvester / Sealer ──
@@ -1125,6 +1187,13 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // pull a willing ally along (removing them), then place adjacent after
   'geomancer:helix-heel:talent:1': ['rebound', 'object-interaction'],
   // "when bouncing off an object, shove it 1 before extending the line"
+  'geomancer:terraforming:talent:1': ['charge-state', 'placement-modifier'],
+  // "Charge: effects can also be placed in any space adjacent to the area"
+  // — this is the ONE ability whose Charge variant genuinely lacks a
+  // resolver-level gate: the compiler's unsupportedClauses include 'charge',
+  // and the placement-flexibility seam (placing effects in adjacent-to-area
+  // cells) is a distinct missing primitive. charge-state remains a live
+  // blocker here because the Charge variant is not yet wired.
   'geomancer:obsidian-flesh:talent:1': ['duration-modifier'],
   // "if this ability ticks over, it doesn't end until the end of the current
   // turn" — expiry grace-period timing override
@@ -1411,9 +1480,18 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('cover-mechanic');
   }
 
-  // Charge state: charge, slow turn, must be slow
-  if (/\bcharge\b/.test(text) || /\bslow\b/.test(text)) {
+  // Charge state: "Charge:" ability subtype (p.95 slow-turn effects).
+  // The Charge: keyword requires a slow turn to activate an augmented
+  // effect variant. This classifier flags the keyword; the resolver-level
+  // gate (context.triggers?.has('charge')) handles most abilities already.
+  // Only abilities whose Charge variant has genuinely unimplemented
+  // semantics remain as charge-state blockers after reclassification.
+  if (/Charge:/.test(text)) {
     blockers.push('charge-state');
+  }
+  // Delay / slow-turn: ending your turn early; next turn must be slow.
+  if (/\bdelay\b/i.test(text) || /\bslow\b/.test(text)) {
+    blockers.push('delay-mechanic');
   }
 
   // Entity vacate: vacate

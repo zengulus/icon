@@ -217,9 +217,20 @@ const terraformingEffects: RuleResolver = (context) => {
   const area = squareArea(center, 2).filter((cell) => withinGrid(cell, context));
   const chosen = context.input.options?.effects ?? 'boulders,pits';
   const effects = chosen.split(',');
-  const count = context.triggers?.has('charge') ? 4 : 2;
+  const charged = context.triggers?.has('charge');
+  const count = charged ? 4 : 2;
   const mutations: RuleMutation[] = [];
-  const freeCells = area.filter((cell) => !Object.values(context.state.actors).some((character) => character.position && sameCell(character.position, cell)));
+  // ICON p.219 Terraforming talent 1: "Charge: effects can also be placed
+  // in any space adjacent to the area." When charged, the placement pool
+  // expands to include cells adjacent to the area.
+  const adjacentCells = charged
+    ? area.flatMap((cell) => [
+        { x: cell.x + 1, y: cell.y }, { x: cell.x - 1, y: cell.y },
+        { x: cell.x, y: cell.y + 1 }, { x: cell.x, y: cell.y - 1 },
+      ]).filter((cell) => withinGrid(cell, context) && !area.some((a) => sameCell(a, cell)))
+    : [];
+  const placementPool = [...area, ...adjacentCells];
+  const freeCells = placementPool.filter((cell) => !Object.values(context.state.actors).some((character) => character.position && sameCell(character.position, cell)));
   let used = 0;
   for (const name of [...effects, 'boulders', 'pits', 'difficult', 'remove'].slice(0, 8)) {
     if (used >= count) break;

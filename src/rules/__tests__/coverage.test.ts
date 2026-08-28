@@ -101,7 +101,7 @@ describe('rules automation coverage gate', () => {
     // fold. F5 mark-modifier fold: the three mark-modifier rows (Grand Seal
     // t1's save curse, Grand Seal t2's pacified+, Rot t2's turn-start
     // adjacency damage) audit complete at the engine's mark query points —
-    // 56 complete / 232 documented. F7 mastery-modifier fold: the
+    // 56 complete / 231 documented. F7 mastery-modifier fold: the
     // three promoted modifier-family masteries (Catapult t2's MANGONEL,
     // Nothung's EXCALIBUR conversion, Open the Gates' PERFECT BATTLEMENT)
     // audit complete through the registered kernel rows.
@@ -110,12 +110,12 @@ describe('rules automation coverage gate', () => {
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 475,
-      unsupportedPrograms: 2800,
-      completeClauses: 1615,
-      unsupportedClauses: 3085,
+      completePrograms: 476,
+      unsupportedPrograms: 2799,
+      completeClauses: 1616,
+      unsupportedClauses: 3084,
       unsupportedByKind: {
-        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 231,      'mastery': 129,
+        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 230, 'mastery': 129,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },
