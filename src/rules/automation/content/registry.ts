@@ -28,7 +28,6 @@ import './jobs/mastery-recipes.js';
 import './jobs/mastery-modifier-recipes.js';
 import './jobs/hp-threshold-recipes.js';
 import './jobs/range-recipes.js';
-import './jobs/action-type-recipes.js';
 import './jobs/bonus-damage-recipes.js';
 import './jobs/area-recipes.js';
 import './jobs/action-cost-override-recipes.js';

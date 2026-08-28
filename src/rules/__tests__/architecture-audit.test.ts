@@ -300,3 +300,35 @@ describe('auditArchitecture (violation detection)', () => {
     rmSync(tmpDir, { recursive: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression: single action-cost authority (F8a merge contamination guard)
+// ---------------------------------------------------------------------------
+
+describe('single action-cost authority', () => {
+  it('production code has no second action-cost fold outside cost-payment.ts', () => {
+    // The cost-payment kernel (kernels/cost-payment.ts) is the single
+    // reusable authority for action-cost overrides. A prior merge
+    // reintroduced kernels/action-type.ts as a parallel authority; this
+    // guard prevents that from landing again.
+    const { readdirSync, readFileSync, statSync } = require('node:fs');
+    const path = require('node:path');
+    const srcDir = path.resolve(import.meta.dirname ?? __dirname, '..', '..');
+    const kernelsDir = path.join(srcDir, 'rules', 'automation', 'kernels');
+    const violations: string[] = [];
+    function scanDir(dir: string) {
+      for (const entry of readdirSync(dir)) {
+        const fullPath = path.join(dir, entry);
+        if (statSync(fullPath).isDirectory()) { scanDir(fullPath); continue; }
+        if (!fullPath.endsWith('.ts') || fullPath.endsWith('.test.ts')) continue;
+        if (fullPath.endsWith('cost-payment.ts')) continue;
+        const content = readFileSync(fullPath, 'utf8');
+        if (/effectiveAbilityActionCost|registerActionTypeModifier|ActionTypeModifier/.test(content)) {
+          violations.push(`Parallel action-cost authority found in ${path.relative(srcDir, fullPath)}`);
+        }
+      }
+    }
+    scanDir(kernelsDir);
+    expect(violations).toEqual([]);
+  });
+});

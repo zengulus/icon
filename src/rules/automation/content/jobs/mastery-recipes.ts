@@ -135,7 +135,7 @@ registerMasteryRecipe({
 });
 
 // ── F8a action-cost override masteries: pure "at round 4+, ability
-//    becomes a free action" (cost-payment fold, p.129/p.168/p.222) ───
+//    becomes a free action" (cost-payment fold, p.122/p.163/p.202) ───
 
 registerMasteryRecipe({
   sourceId: 'bastion:valiant:mastery',
@@ -143,7 +143,7 @@ registerMasteryRecipe({
   name: 'Valiant Mastery',
   status: 'implemented',
   attachment: 'fold',
-  mechanic: 'At round 4 or higher in combat, Valiant becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.129.',
+  mechanic: 'At round 4 or higher in combat, Valiant becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.122.',
   detail: '',
 });
 
@@ -153,7 +153,7 @@ registerMasteryRecipe({
   name: 'Shadow Play Mastery',
   status: 'implemented',
   attachment: 'fold',
-  mechanic: 'At round 4 or later in combat, Shadow Play becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.168.',
+  mechanic: 'At round 4 or later in combat, Shadow Play becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.163.',
   detail: '',
 });
 
@@ -163,6 +163,6 @@ registerMasteryRecipe({
   name: 'Polaris Mastery',
   status: 'implemented',
   attachment: 'fold',
-  mechanic: 'At round 4 or higher, Polaris becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.222.',
+  mechanic: 'At round 4 or higher, Polaris becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.202.',
   detail: '',
 });

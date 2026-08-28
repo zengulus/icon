@@ -36,11 +36,11 @@ const MASTERY_OWNERS: Readonly<Record<string, string>> = {
   'seer:polaris': 'seer:polaris:mastery',
 };
 
-// ICON p.129 Bastion Valiant mastery: "At round 4 or higher in combat, valiant
+// ICON p.122 Bastion Valiant mastery: "At round 4 or higher in combat, valiant
 // becomes a free action."
-// ICON p.168 Shade Shadow Play mastery: "At round 4 or later in combat,
+// ICON p.163 Shade Shadow Play mastery: "At round 4 or later in combat,
 // Shadow Play becomes a free action."
-// ICON p.222 Seer Polaris mastery: "At round 4+, Polaris becomes a free action."
+// ICON p.202 Seer Polaris mastery: "At round 4+, Polaris becomes a free action."
 registerCostModifierRule({
   sourceId: 'action-cost-override:mastery:round-4',
   applies(context: CostPaymentContext): boolean {
