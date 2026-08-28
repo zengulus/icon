@@ -1332,7 +1332,20 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     if ((actor.interruptUses[ability.id] ?? 0) >= effectiveInterruptRank(masteryFoldStateView(state), actor.id, ability.id, ability.cost.value)) throw new RuleViolation('interrupt.uses', 'This interrupt has no uses remaining before the actor’s next turn.');
   } else {
     assertActive(state, actor.id);
-    if (ability.cost.kind === 'action' && actor.actionsRemaining < ability.cost.value) throw new RuleViolation('action.insufficient', `This ability costs ${ability.cost.value} action${ability.cost.value === 1 ? '' : 's'}.`);
+    // F8a action-cost override: the cost modifier fold may reduce the
+    // ability's nominal action cost to free (e.g. mastery round-gated).
+    // Compute the effective cost here so the early gate reflects the
+    // same fold the cost-payment gate will apply.
+    const effectiveCost = ability.cost.kind === 'action'
+      ? effectiveRuleCosts(
+          [{ kind: 'action', amount: { kind: 'constant', value: ability.cost.value } }],
+          costContextFromEncounter(state, actor.id, ability.id, ability.name),
+        )[0]
+      : ability.cost;
+    const effectiveActionValue = effectiveCost.kind === 'free' ? 0 : (effectiveCost.kind === 'action' ? ability.cost.value : 0);
+    if (effectiveActionValue > 0 && actor.actionsRemaining < effectiveActionValue) {
+      throw new RuleViolation('action.insufficient', `This ability costs ${effectiveActionValue} action${effectiveActionValue === 1 ? '' : 's'}.`);
+    }
   }
 
   const attackAbility = ability.tags.includes('attack');

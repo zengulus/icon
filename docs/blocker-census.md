@@ -1,6 +1,6 @@
 # Class/Job Blocker Census (Canonical, Machine-Checked)
 
-> Generated from 423 unresolved source units: 6 class-trait, 38 job-trait, 231 talent, 132 mastery, 16 limit-break.
+> Generated from 420 unresolved source units: 6 class-trait, 38 job-trait, 231 talent, 129 mastery, 16 limit-break.
 >
 > All counts are derived from the canonical census tool with machine-checked
 > assertions. Singleton blocker sets must be audit-verified separately.
@@ -77,19 +77,6 @@
 - `demon-slayer:demon-claw:talent:2`
 - `warden:circle-the-oak:mastery`
 - `enochian:soul-burn:talent:2`
-
-### `action-type-change` (10 units)
-
-- `bastion:valiant:mastery`
-- `colossus:massive-overhead:mastery`
-- `freelancer:ace:mastery`
-- `shade:shadow-play:mastery`
-- `shade:nocturne:talent:1`
-- `warden:strength-of-the-pack:mastery`
-- `warden:underway:talent:1`
-- `harvester:crimson-bloom:mastery`
-- `seer:polaris:mastery`
-- `enochian:elden-rune:talent:1`
 
 ### `effect-count` (8 units)
 
@@ -234,6 +221,12 @@
 - `shade:trait:darkside`
 - `geomancer:trait:stone-double`
 - `geomancer:midas:talent:2`
+
+### `action-type-change` (3 units)
+
+- `shade:nocturne:talent:1`
+- `warden:underway:talent:1`
+- `enochian:elden-rune:talent:1`
 
 ### `blast-template` (3 units)
 
@@ -482,7 +475,6 @@
 | {fly-grant} | 14 |
 | {terrain-create} | 14 |
 | {shove-modifier} | 10 |
-| {action-type-change} | 10 |
 | {resource-management, vigor-grant} | 9 |
 | {effect-count} | 8 |
 | {charge-state} | 8 |
@@ -510,6 +502,7 @@
 | {threshold-modifier} | 3 |
 | {choice-input, interrupt-rider} | 3 |
 | {entity-vacate} | 3 |
+| {action-type-change} | 3 |
 | {blast-template} | 3 |
 | {cure-on-trigger} | 3 |
 | {area-extension} | 3 |
@@ -560,6 +553,7 @@
 | {range-modifier, shove-modifier} | 1 |
 | {range-modifier, spatial-state} | 1 |
 | {blast-template, charge-state, terrain-create} | 1 |
+| {end-turn-suppress, vigor-grant} | 1 |
 | {fly-grant, pre-ability-movement, rush-modifier} | 1 |
 | {elevation-scaling} | 1 |
 | {target-count-override} | 1 |
@@ -603,6 +597,7 @@
 | {condition-preserve, use-count-override} | 1 |
 | {blast-template, distance-predicate, range-modifier} | 1 |
 | {distance-predicate, range-modifier} | 1 |
+| {action-cost-override, auto-refresh, first-use-gate, movement-modifier} | 1 |
 | {choice-input, damage-dealt-trigger} | 1 |
 | {blast-template, cover-mechanic, terrain-create} | 1 |
 | {action-type-change, distance-predicate, range-modifier} | 1 |
@@ -626,6 +621,7 @@
 | {area-exit-trigger, entity-create} | 1 |
 | {action-type-change, mark-defeat-trigger, mark-transfer} | 1 |
 | {path-count-predicate} | 1 |
+| {action-cost-override, aura-range-override} | 1 |
 | {choice-input, object-distance, shove-trigger} | 1 |
 | {blast-template, cover-mechanic, range-modifier, terrain-create} | 1 |
 | {charge-state, fly-grant, pre-ability-movement} | 1 |
@@ -648,6 +644,7 @@
 | {choice-input, entity-vacate} | 1 |
 | {action-type-change, cure-on-trigger, range-modifier} | 1 |
 | {entity-create, mark-defeat-trigger, range-modifier} | 1 |
+| {action-cost-override, power-die} | 1 |
 | {condition-suppression, recipient-expansion} | 1 |
 | {interrupt-rider, terrain-create} | 1 |
 | {attack-trigger-grant} | 1 |
@@ -657,7 +654,7 @@
 | {damage-modifier, exceed-grant, teleport-distance-modifier} | 1 |
 | {aura-user-gate, elevation-scaling, entity-consume, interrupt-grant} | 1 |
 | {entry-save-gate} | 1 |
-| {action-type-change, area-define} | 1 |
+| {action-cost-override, area-define} | 1 |
 | {cover-mechanic, range-modifier} | 1 |
 | {distance-change-trigger} | 1 |
 | {action-type-change, mark-activation-gate} | 1 |
@@ -726,14 +723,14 @@
 | entity-create | 16 | 12 | 9 | 37 |
 | fly-grant | 14 | 7 | 10 | 31 |
 | resource-management | 7 | 10 | 11 | 28 |
-| action-type-change | 10 | 8 | 9 | 27 |
 | charge-state | 8 | 8 | 9 | 25 |
 | area-define | 1 | 15 | 9 | 25 |
 | shove-modifier | 10 | 8 | 6 | 24 |
 | choice-input | 8 | 14 | 1 | 23 |
 | blast-template | 3 | 7 | 11 | 21 |
 | damage-modifier | 0 | 13 | 7 | 20 |
-| vigor-grant | 0 | 9 | 9 | 18 |
+| vigor-grant | 0 | 10 | 9 | 19 |
+| action-type-change | 3 | 7 | 9 | 19 |
 | cover-mechanic | 4 | 4 | 7 | 15 |
 | effect-count | 8 | 5 | 1 | 14 |
 | pre-ability-movement | 1 | 8 | 5 | 14 |
@@ -744,15 +741,15 @@
 | area-effect-rider | 3 | 5 | 0 | 8 |
 | distance-predicate | 1 | 4 | 3 | 8 |
 | cure-on-trigger | 3 | 1 | 3 | 7 |
+| movement-modifier | 4 | 2 | 1 | 7 |
 | entity-vacate | 3 | 4 | 0 | 7 |
 | entity-distance-selection | 5 | 2 | 0 | 7 |
+| power-die | 2 | 4 | 0 | 6 |
 | gamble-dice-pool-modifier | 4 | 2 | 0 | 6 |
 | use-count-override | 4 | 2 | 0 | 6 |
-| movement-modifier | 4 | 2 | 0 | 6 |
 | delivery-immunity | 2 | 3 | 0 | 5 |
 | heroics-economy | 5 | 0 | 0 | 5 |
 | rebound | 1 | 3 | 1 | 5 |
-| power-die | 2 | 3 | 0 | 5 |
 | mark-defeat-trigger | 0 | 0 | 5 | 5 |
 | enemy-ability-trigger | 2 | 2 | 1 | 5 |
 | object-distance | 2 | 1 | 1 | 4 |
@@ -762,6 +759,7 @@
 | passive | 4 | 0 | 0 | 4 |
 | threshold-modifier | 3 | 1 | 0 | 4 |
 | mark-transfer | 0 | 0 | 4 | 4 |
+| action-cost-override | 0 | 3 | 1 | 4 |
 | interrupt-grant | 0 | 0 | 4 | 4 |
 | area-extension | 3 | 1 | 0 | 4 |
 | damage-taken-modifier | 2 | 1 | 0 | 3 |
@@ -796,6 +794,7 @@
 | aura-trigger-grant | 1 | 0 | 0 | 1 |
 | active-effect-range-modifier | 1 | 0 | 0 | 1 |
 | spatial-state | 0 | 1 | 0 | 1 |
+| end-turn-suppress | 0 | 1 | 0 | 1 |
 | ability-trigger-grant | 1 | 0 | 0 | 1 |
 | effect-expiry-trigger | 0 | 1 | 0 | 1 |
 | wound-cost | 0 | 1 | 0 | 1 |
@@ -806,10 +805,13 @@
 | gamble-result-override | 1 | 0 | 0 | 1 |
 | interrupt-use-scaling | 0 | 1 | 0 | 1 |
 | attack-exceed-trigger | 0 | 1 | 0 | 1 |
+| auto-refresh | 0 | 0 | 1 | 1 |
+| first-use-gate | 0 | 0 | 1 | 1 |
 | held-ability-gate | 1 | 0 | 0 | 1 |
 | multi-actor-teleport | 0 | 1 | 0 | 1 |
 | area-exit-trigger | 0 | 1 | 0 | 1 |
 | path-count-predicate | 1 | 0 | 0 | 1 |
+| aura-range-override | 0 | 1 | 0 | 1 |
 | pre-ability-action | 1 | 0 | 0 | 1 |
 | shared-turn-ledger | 0 | 0 | 1 | 1 |
 | bonus-damage-suppression | 0 | 1 | 0 | 1 |
@@ -845,121 +847,124 @@
 
 | Step | Implement | Unlocks | Cumulative | Remaining |
 |---|---|---|---|---|
-| 1 | entity-create | 16 | 16 | 407 |
-| 2 | terrain-create | 15 | 31 | 392 |
-| 3 | fly-grant | 15 | 46 | 377 |
-| 4 | action-type-change | 12 | 58 | 365 |
-| 5 | shove-modifier | 12 | 70 | 353 |
-| 6 | charge-state | 15 | 85 | 338 |
-| 7 | choice-input | 8 | 93 | 330 |
-| 8 | effect-count | 8 | 101 | 322 |
-| 9 | resource-management | 7 | 108 | 315 |
-| 10 | entity-distance-selection | 5 | 113 | 310 |
-| 11 | heroics-economy | 5 | 118 | 305 |
-| 12 | cover-mechanic | 6 | 124 | 299 |
-| 13 | stance-gate | 5 | 129 | 294 |
-| 14 | gamble-dice-pool-modifier | 4 | 133 | 290 |
-| 15 | use-count-override | 4 | 137 | 286 |
-| 16 | movement-modifier | 4 | 141 | 282 |
-| 17 | interrupt-timing | 4 | 145 | 278 |
-| 18 | passive | 4 | 149 | 274 |
-| 19 | blast-template | 12 | 161 | 262 |
-| 20 | rush-modifier | 3 | 164 | 259 |
-| 21 | area-effect-rider | 3 | 167 | 256 |
-| 22 | cure-on-trigger | 4 | 171 | 252 |
-| 23 | entity-vacate | 4 | 175 | 248 |
-| 24 | movement-trigger | 4 | 179 | 244 |
-| 25 | threshold-modifier | 4 | 183 | 240 |
-| 26 | area-extension | 4 | 187 | 236 |
-| 27 | ability-attack-modifier | 3 | 190 | 233 |
-| 28 | delivery-immunity | 4 | 194 | 229 |
-| 29 | power-die | 3 | 197 | 226 |
-| 30 | enemy-ability-trigger | 4 | 201 | 222 |
-| 31 | object-distance | 3 | 204 | 219 |
-| 32 | damage-taken-modifier | 3 | 207 | 216 |
-| 33 | aura-user-gate | 2 | 209 | 214 |
-| 34 | damage-preview | 2 | 211 | 212 |
-| 35 | card-deck-system | 2 | 213 | 210 |
-| 36 | sacrifice-percent | 2 | 215 | 208 |
-| 37 | area-define | 16 | 231 | 192 |
-| 38 | pre-ability-movement | 11 | 242 | 181 |
-| 39 | interrupt-rider | 6 | 248 | 175 |
-| 40 | distance-predicate | 3 | 251 | 172 |
-| 41 | rebound | 2 | 253 | 170 |
-| 42 | attack-modifier | 3 | 256 | 167 |
-| 43 | object-interaction | 2 | 258 | 165 |
-| 44 | recipient-expansion | 2 | 260 | 163 |
-| 45 | defeat-trigger | 2 | 262 | 161 |
-| 46 | elevation-scaling | 1 | 263 | 160 |
-| 47 | target-count-override | 2 | 265 | 158 |
-| 48 | condition-suppression | 2 | 267 | 156 |
-| 49 | attack-result-modifier | 1 | 268 | 155 |
-| 50 | mark-detonation-window | 1 | 269 | 154 |
-| 51 | unlimited-range | 1 | 270 | 153 |
-| 52 | mark-activation-gate | 2 | 272 | 151 |
-| 53 | duration-modifier | 2 | 274 | 149 |
-| 54 | movement-trigger-suppression | 1 | 275 | 148 |
-| 55 | aura-to-area-conversion | 1 | 276 | 147 |
-| 56 | aura-trigger-grant | 1 | 277 | 146 |
-| 57 | active-effect-range-modifier | 1 | 278 | 145 |
-| 58 | ability-trigger-grant | 1 | 279 | 144 |
-| 59 | stance-capacity | 1 | 280 | 143 |
-| 60 | status-count-scaling | 1 | 281 | 142 |
-| 61 | interrupt-rank | 1 | 282 | 141 |
-| 62 | gamble-result-override | 1 | 283 | 140 |
-| 63 | held-ability-gate | 1 | 284 | 139 |
-| 64 | path-count-predicate | 1 | 285 | 138 |
-| 65 | pre-ability-action | 1 | 286 | 137 |
-| 66 | cross-ability-invoke | 1 | 287 | 136 |
-| 67 | attack-trigger-grant | 1 | 288 | 135 |
-| 68 | entry-save-gate | 1 | 289 | 134 |
-| 69 | distance-change-trigger | 1 | 290 | 133 |
-| 70 | post-roll-reactive-choice | 1 | 291 | 132 |
-| 71 | member-count-scaling | 1 | 292 | 131 |
-| 72 | mark-as-entity-follow | 1 | 293 | 130 |
-| 73 | trigger-threshold-override | 1 | 294 | 129 |
-| 74 | resource-cap-override | 1 | 295 | 128 |
-| 75 | damage-maximize | 1 | 296 | 127 |
-| 76 | pierce | 1 | 297 | 126 |
-| 77 | effect-redirect | 1 | 298 | 125 |
-| 78 | terrain-move-lifecycle | 1 | 299 | 124 |
-| 79 | infuse-permanence | 1 | 300 | 123 |
-| 80 | area-persistence-override | 1 | 301 | 122 |
-| 81 | range-modifier | 33 | 334 | 89 |
-| 82 | damage-modifier | 10 | 344 | 79 |
-| 83 | vigor-grant | 17 | 361 | 62 |
-| 84 | mark-gated-modifier | 10 | 371 | 52 |
-| 85 | mark-defeat-trigger | 2 | 373 | 50 |
-| 86 | save-modifier | 3 | 376 | 47 |
-| 87 | mark-transfer | 4 | 380 | 43 |
-| 88 | interrupt-grant | 3 | 383 | 40 |
-| 89 | collide-rider | 3 | 386 | 37 |
-| 90 | exceed-grant | 2 | 388 | 35 |
-| 91 | mark-stacking | 2 | 390 | 33 |
-| 92 | condition-preserve | 3 | 393 | 30 |
-| 93 | forced-placement | 3 | 396 | 27 |
-| 94 | shove-trigger | 2 | 398 | 25 |
-| 95 | gamble-result-selection | 2 | 400 | 23 |
-| 96 | damage-dealt-trigger | 2 | 402 | 21 |
-| 97 | entity-consume | 2 | 404 | 19 |
-| 98 | spatial-state | 1 | 405 | 18 |
-| 99 | attack-miss-trigger | 1 | 406 | 17 |
-| 100 | interrupt-use-scaling | 1 | 407 | 16 |
-| 101 | attack-exceed-trigger | 1 | 408 | 15 |
-| 102 | multi-actor-teleport | 1 | 409 | 14 |
-| 103 | area-exit-trigger | 1 | 410 | 13 |
-| 104 | shared-turn-ledger | 1 | 411 | 12 |
-| 105 | range-gated-teleport | 1 | 412 | 11 |
-| 106 | save-or-stun | 1 | 413 | 10 |
-| 107 | teleport-distance-modifier | 1 | 414 | 9 |
-| 108 | lifecycle-target-selection | 1 | 415 | 8 |
-| 109 | area-modifier | 1 | 416 | 7 |
-| 110 | defense-bypass | 1 | 417 | 6 |
-| 111 | target-selector-variant | 1 | 418 | 5 |
-| 112 | status-reapply | 1 | 419 | 4 |
-| 113 | variable-cost | 1 | 420 | 3 |
+| 1 | entity-create | 16 | 16 | 404 |
+| 2 | terrain-create | 15 | 31 | 389 |
+| 3 | fly-grant | 15 | 46 | 374 |
+| 4 | shove-modifier | 12 | 58 | 362 |
+| 5 | charge-state | 13 | 71 | 349 |
+| 6 | choice-input | 8 | 79 | 341 |
+| 7 | effect-count | 8 | 87 | 333 |
+| 8 | resource-management | 7 | 94 | 326 |
+| 9 | entity-distance-selection | 5 | 99 | 321 |
+| 10 | heroics-economy | 5 | 104 | 316 |
+| 11 | cover-mechanic | 5 | 109 | 311 |
+| 12 | stance-gate | 5 | 114 | 306 |
+| 13 | movement-modifier | 4 | 118 | 302 |
+| 14 | gamble-dice-pool-modifier | 4 | 122 | 298 |
+| 15 | use-count-override | 4 | 126 | 294 |
+| 16 | interrupt-timing | 4 | 130 | 290 |
+| 17 | passive | 4 | 134 | 286 |
+| 18 | blast-template | 12 | 146 | 274 |
+| 19 | action-type-change | 8 | 154 | 266 |
+| 20 | rush-modifier | 3 | 157 | 263 |
+| 21 | area-effect-rider | 3 | 160 | 260 |
+| 22 | cure-on-trigger | 4 | 164 | 256 |
+| 23 | entity-vacate | 4 | 168 | 252 |
+| 24 | movement-trigger | 4 | 172 | 248 |
+| 25 | threshold-modifier | 4 | 176 | 244 |
+| 26 | area-extension | 4 | 180 | 240 |
+| 27 | ability-attack-modifier | 3 | 183 | 237 |
+| 28 | power-die | 3 | 186 | 234 |
+| 29 | delivery-immunity | 4 | 190 | 230 |
+| 30 | enemy-ability-trigger | 4 | 194 | 226 |
+| 31 | object-distance | 3 | 197 | 223 |
+| 32 | damage-taken-modifier | 3 | 200 | 220 |
+| 33 | aura-user-gate | 2 | 202 | 218 |
+| 34 | damage-preview | 2 | 204 | 216 |
+| 35 | card-deck-system | 2 | 206 | 214 |
+| 36 | sacrifice-percent | 2 | 208 | 212 |
+| 37 | area-define | 15 | 223 | 197 |
+| 38 | pre-ability-movement | 11 | 234 | 186 |
+| 39 | interrupt-rider | 6 | 240 | 180 |
+| 40 | distance-predicate | 3 | 243 | 177 |
+| 41 | rebound | 2 | 245 | 175 |
+| 42 | attack-modifier | 3 | 248 | 172 |
+| 43 | object-interaction | 2 | 250 | 170 |
+| 44 | recipient-expansion | 2 | 252 | 168 |
+| 45 | defeat-trigger | 2 | 254 | 166 |
+| 46 | elevation-scaling | 1 | 255 | 165 |
+| 47 | target-count-override | 2 | 257 | 163 |
+| 48 | condition-suppression | 2 | 259 | 161 |
+| 49 | attack-result-modifier | 1 | 260 | 160 |
+| 50 | mark-detonation-window | 1 | 261 | 159 |
+| 51 | unlimited-range | 1 | 262 | 158 |
+| 52 | mark-activation-gate | 2 | 264 | 156 |
+| 53 | duration-modifier | 2 | 266 | 154 |
+| 54 | movement-trigger-suppression | 1 | 267 | 153 |
+| 55 | aura-to-area-conversion | 1 | 268 | 152 |
+| 56 | aura-trigger-grant | 1 | 269 | 151 |
+| 57 | active-effect-range-modifier | 1 | 270 | 150 |
+| 58 | ability-trigger-grant | 1 | 271 | 149 |
+| 59 | stance-capacity | 1 | 272 | 148 |
+| 60 | status-count-scaling | 1 | 273 | 147 |
+| 61 | interrupt-rank | 1 | 274 | 146 |
+| 62 | gamble-result-override | 1 | 275 | 145 |
+| 63 | held-ability-gate | 1 | 276 | 144 |
+| 64 | path-count-predicate | 1 | 277 | 143 |
+| 65 | pre-ability-action | 1 | 278 | 142 |
+| 66 | cross-ability-invoke | 1 | 279 | 141 |
+| 67 | attack-trigger-grant | 1 | 280 | 140 |
+| 68 | entry-save-gate | 1 | 281 | 139 |
+| 69 | distance-change-trigger | 1 | 282 | 138 |
+| 70 | post-roll-reactive-choice | 1 | 283 | 137 |
+| 71 | member-count-scaling | 1 | 284 | 136 |
+| 72 | mark-as-entity-follow | 1 | 285 | 135 |
+| 73 | trigger-threshold-override | 1 | 286 | 134 |
+| 74 | resource-cap-override | 1 | 287 | 133 |
+| 75 | damage-maximize | 1 | 288 | 132 |
+| 76 | pierce | 1 | 289 | 131 |
+| 77 | effect-redirect | 1 | 290 | 130 |
+| 78 | terrain-move-lifecycle | 1 | 291 | 129 |
+| 79 | infuse-permanence | 1 | 292 | 128 |
+| 80 | area-persistence-override | 1 | 293 | 127 |
+| 81 | range-modifier | 33 | 326 | 94 |
+| 82 | damage-modifier | 10 | 336 | 84 |
+| 83 | vigor-grant | 17 | 353 | 67 |
+| 84 | mark-gated-modifier | 10 | 363 | 57 |
+| 85 | mark-defeat-trigger | 2 | 365 | 55 |
+| 86 | save-modifier | 3 | 368 | 52 |
+| 87 | mark-transfer | 4 | 372 | 48 |
+| 88 | action-cost-override | 2 | 374 | 46 |
+| 89 | interrupt-grant | 3 | 377 | 43 |
+| 90 | collide-rider | 3 | 380 | 40 |
+| 91 | exceed-grant | 2 | 382 | 38 |
+| 92 | mark-stacking | 2 | 384 | 36 |
+| 93 | condition-preserve | 3 | 387 | 33 |
+| 94 | forced-placement | 3 | 390 | 30 |
+| 95 | shove-trigger | 2 | 392 | 28 |
+| 96 | gamble-result-selection | 2 | 394 | 26 |
+| 97 | damage-dealt-trigger | 2 | 396 | 24 |
+| 98 | entity-consume | 2 | 398 | 22 |
+| 99 | spatial-state | 1 | 399 | 21 |
+| 100 | end-turn-suppress | 1 | 400 | 20 |
+| 101 | attack-miss-trigger | 1 | 401 | 19 |
+| 102 | interrupt-use-scaling | 1 | 402 | 18 |
+| 103 | attack-exceed-trigger | 1 | 403 | 17 |
+| 104 | multi-actor-teleport | 1 | 404 | 16 |
+| 105 | area-exit-trigger | 1 | 405 | 15 |
+| 106 | aura-range-override | 1 | 406 | 14 |
+| 107 | shared-turn-ledger | 1 | 407 | 13 |
+| 108 | range-gated-teleport | 1 | 408 | 12 |
+| 109 | save-or-stun | 1 | 409 | 11 |
+| 110 | teleport-distance-modifier | 1 | 410 | 10 |
+| 111 | lifecycle-target-selection | 1 | 411 | 9 |
+| 112 | area-modifier | 1 | 412 | 8 |
+| 113 | defense-bypass | 1 | 413 | 7 |
+| 114 | target-selector-variant | 1 | 414 | 6 |
+| 115 | status-reapply | 1 | 415 | 5 |
+| 116 | variable-cost | 1 | 416 | 4 |
 
-After all implementable primitives: **420 unlocked, 3 remain** (0 residual units need non-implementable capabilities).
+After all implementable primitives: **416 unlocked, 4 remain** (0 residual units need non-implementable capabilities).
 
 ## Machine-checked invariants
 
@@ -967,11 +972,11 @@ After all implementable primitives: **420 unlocked, 3 remain** (0 residual units
 ✓ All source IDs are unique
 ✓ Every unresolved unit appears exactly once
 ✓ No executable unit appears in the unresolved census
-✓ Per-kind totals sum to unresolved total (423)
+✓ Per-kind totals sum to unresolved total (420)
 ✓ All blocker-set frequencies derive from per-unit records
 ✓ All marginal values derive from per-unit records
 ✓ Marginal assertion: immediate + oneCloser + multiCloser === totalContaining for every blocker
 ✓ Cumulative unlocked + remaining = baseline at every step
 ✓ No non-implementable classifications in greedy simulation
-✓ Final remaining: 3 (residual: 0 units need non-implementable capabilities)
+✓ Final remaining: 4 (residual: 0 units need non-implementable capabilities)
 ```

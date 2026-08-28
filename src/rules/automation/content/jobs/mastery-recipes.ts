@@ -133,3 +133,36 @@ registerMasteryRecipe({
   mechanic: 'At round 4 or higher: Endless Battlement has no maximum range (the mastery-fold unlimited-range rule collapses both the stance-enter ally-selection bound and the window-scan aura-range bound); Heroic Intervention deals 4 damage instead of 2 (the resolver\'s program-level value fold); and it becomes interrupt 2 (the kernel\'s round-gated interrupt-rank override consumed by the uses-ability window scan), p.122.',
   detail: '',
 });
+
+// ── F8a action-cost override masteries: pure "at round 4+, ability
+//    becomes a free action" (cost-payment fold, p.129/p.168/p.222) ───
+
+registerMasteryRecipe({
+  sourceId: 'bastion:valiant:mastery',
+  abilityId: 'bastion:valiant',
+  name: 'Valiant Mastery',
+  status: 'implemented',
+  attachment: 'fold',
+  mechanic: 'At round 4 or higher in combat, Valiant becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.129.',
+  detail: '',
+});
+
+registerMasteryRecipe({
+  sourceId: 'shade:shadow-play:mastery',
+  abilityId: 'shade:shadow-play',
+  name: 'Shadow Play Mastery',
+  status: 'implemented',
+  attachment: 'fold',
+  mechanic: 'At round 4 or later in combat, Shadow Play becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.168.',
+  detail: '',
+});
+
+registerMasteryRecipe({
+  sourceId: 'seer:polaris:mastery',
+  abilityId: 'seer:polaris',
+  name: 'Polaris Mastery',
+  status: 'implemented',
+  attachment: 'fold',
+  mechanic: 'At round 4 or higher, Polaris becomes a free action (the cost-payment fold replaces the action cost with free when mastery is equipped and round >= 4), p.222.',
+  detail: '',
+});

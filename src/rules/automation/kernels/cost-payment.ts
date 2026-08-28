@@ -61,6 +61,10 @@ export interface CostPaymentContext {
     defeated: boolean;
     onBattlefield: boolean;
     position: Position | null;
+    /** IDs of abilities equipped on this actor. */
+    abilityIds: readonly string[];
+    /** IDs of abilities this actor has mastered. */
+    masteredAbilityIds: readonly string[];
   };
   /** Every actor (cost modifiers may gate on allies / in-range characters). */
   actors: ReadonlyArray<{
@@ -159,6 +163,8 @@ export function costContextFromEncounter(
       defeated: actor?.defeated ?? true,
       onBattlefield: actor?.onBattlefield ?? false,
       position: actor?.position ?? null,
+      abilityIds: actor?.abilityIds ?? [],
+      masteredAbilityIds: actor?.masteredAbilityIds ?? [],
     },
     actors: Object.values(state.actors).map((candidate) => ({
       id: candidate.id,
@@ -195,6 +201,8 @@ export function costContextFromRuntime(
       defeated: view?.defeated ?? true,
       onBattlefield: Boolean(view?.position),
       position: view?.position ?? null,
+      abilityIds: view?.abilityIds ?? [],
+      masteredAbilityIds: view?.masteredAbilityIds ?? [],
     },
     actors: Object.values(state.actors).map((candidate) => ({
       id: candidate.id,

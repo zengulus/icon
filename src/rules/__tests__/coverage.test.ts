@@ -105,15 +105,17 @@ describe('rules automation coverage gate', () => {
     // three promoted modifier-family masteries (Catapult t2's MANGONEL,
     // Nothung's EXCALIBUR conversion, Open the Gates' PERFECT BATTLEMENT)
     // audit complete through the registered kernel rows.
+    // 2026-08-28: +3 action-cost-override masteries (Valiant, Shadow Play,
+    // Polaris) promoted through the cost-payment fold.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 472,
-      unsupportedPrograms: 2803,
-      completeClauses: 1612,
-      unsupportedClauses: 3088,
+      completePrograms: 475,
+      unsupportedPrograms: 2800,
+      completeClauses: 1615,
+      unsupportedClauses: 3085,
       unsupportedByKind: {
-        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 231,      'mastery': 132,
+        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 231,      'mastery': 129,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

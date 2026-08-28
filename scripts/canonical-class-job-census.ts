@@ -136,10 +136,12 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   //    blockers are their actual effect semantics ──
   'bastion:heracule:mastery': ['attack-modifier', 'effect-count'],
   // "gains rebound" — the attack-bounce modifier (same family as Trick Shot's armed rebound / skipjack rank 2, NOT a condition) + "second effect triggers +1 more time" (effect-count)
-  'colossus:massive-overhead:mastery': ['action-type-change'],
-  // "grants you 4 vigor" (the fixed-amount vigor grant is expressible via the
-  // F7 fold's 'vigor' mutation — demon-cutter:talent:1 is audit-complete) + "no
-  // longer ends your turn" (round-gated action-type change)
+  'colossus:massive-overhead:mastery': ['vigor-grant', 'end-turn-suppress'],
+  // "grants you 4 vigor" (fixed-amount vigor grant — the vigor-grant
+  // classifier catches this) + "no longer ends your turn" (end-turn
+  // suppression: the mastery removes the END_YOUR_TURN clause from
+  // Massive Overhead's program at round 4+; neither vigor-grant nor
+  // end-turn-suppress is implemented yet)
   'knave:revenge:mastery': ['damage-modifier', 'area-define'],
   // "deal 2 damage to all adjacent foes" after vigilance
   'shade:umbra:mastery': ['ability-attack-modifier'],
@@ -147,14 +149,33 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // range half is wired through the shared range kernel (range-recipes.ts),
   // but the per-ability unerring needs the attack-modifier attachment gate
   // for a mastery-owned ability (the kernel is trait-keyed today)
-  'sealer:sanctify:mastery': ['area-define', 'action-type-change'],
-  // "place two areas without replacing the first" + round-4+ 1-action
+  'sealer:sanctify:mastery': ['area-define', 'action-cost-override'],
+  // "place two areas without replacing the first" (area-define) +
+  // round-4+ 1-action (action-cost-override — handled by the fold;
+  // census classifier labels it action-type-change)
   'seer:wish:mastery': ['damage-preview'],
   // "gain defiance, then unstoppable" (condition-grant — implemented) on a damage-would-reduce-to-0 preview
   'enochian:aethershard:mastery': ['movement-modifier'],
   // "gain phasing" (condition-grant — implemented) + "objects cost a maximum of 0 spaces to enter"
   'spellblade:nothung:mastery': ['damage-modifier'],
   // "All 1 piercing damage listed by this ability becomes divine" (damage-type override)
+  'warden:strength-of-the-pack:mastery': ['action-cost-override', 'aura-range-override'],
+  // "becomes a free action at round 4 or later" (action-cost-override — now
+  // handled by the fold, but the census classifier labels it action-type-change
+  // so the reclassification must include it) + "aura affects the entire
+  // battlefield" (aura-range-override: the aura kernel's radius is range 2
+  // today; an entire-battlefield override needs a mastery-gated radius
+  // modifier)
+  'harvester:crimson-bloom:mastery': ['action-cost-override', 'power-die'],
+  // "becomes a free action" (action-cost-override) + "power die starts at 3
+  // ticks" (power-die: the power-die kernel tracks die state; a mastery-
+  // gated initial value needs a starting-tick override)
+  'freelancer:ace:mastery': ['action-cost-override', 'first-use-gate', 'auto-refresh', 'movement-modifier'],
+  // "becomes a free action to enter if you have not used it yet this combat"
+  // (action-cost-override gated on a first-use ledger) + "refreshes
+  // automatically at the start of your turn" (auto-refresh: per-turn
+  // lifecycle hook) + "dash increases to 3" (movement-modifier: dash
+  // override)
 
   // ── 16 talents / traits / abilities with non-condition mechanics ──
   'demon-slayer:soul-blade:talent:2': ['stance-gate', 'attack-modifier'],
@@ -685,9 +706,6 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'chanter:holy:talent:1': ['blast-template', 'terrain-create'],
   // "gambles" in the source but the program is wired; the medium blast
   // geometry and terrain creation are the real blockers
-  'harvester:crimson-bloom:mastery': ['action-type-change'],
-  // Crimson Bloom's mark + dice are wired; the mastery's action-type
-  // change is the remaining blocker
   'seer:sleight-of-hand:mastery': ['power-die', 'lifecycle-target-selection'],
   // "gain six spectral blades … using a d6 power die starting at 6 to
   // track them. At the end of your turn, gamble. If you roll under the
