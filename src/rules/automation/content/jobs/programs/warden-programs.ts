@@ -6,7 +6,7 @@ import {
   constant,
   distance, sourceActor, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
-  shoveMutation, rushMutation, entityMutation, terrainMutation,
+  shoveMutation, rushMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -41,10 +41,8 @@ import { footprintDistance } from '../../../primitives/spatial-intent.js';
  *   documented; Underway's portal teleport is a free-action table-facing effect.
  */
 
-const summonBeastNear = (context: Parameters<RuleResolver>[0], ownerId: string, center: { x: number; y: number }): RuleMutation | null => {
-  const cell = freeCellsInRange(context, center, 1)[0];
-  return cell ? entityMutation(context, ownerId, cell, 'beast', {}) : null;
-};
+const summonBeastNear = (context: Parameters<RuleResolver>[0], ownerId: string, center: { x: number; y: number }): RuleMutation | null =>
+  summonEntity(context, ownerId, 'beast', center, { radius: 1, count: 1 })[0] ?? null;
 
 /** ICON p.169: range-3 +1-boon attack, daze, summon a beast adjacent to the
  * target; Finishing Blow/Charge summons one more beast and grants stealth. */

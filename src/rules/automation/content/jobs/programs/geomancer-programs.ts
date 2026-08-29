@@ -203,10 +203,18 @@ const helixHeelEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.219 Terraforming: target a burst 2 (target) area in range 6 and
- * choose two terrain effects to create there (four on a Charge): two boulder
- * objects, two pits, raise an existing object's height by +1, a line 3 of
- * difficult terrain, or remove difficult/dangerous terrain. The choice is
- * passed as `effects` (an ordered list of effect names). */
+ * choose two terrain effects to create there (four on a Charge). Each BULLET
+ * is ONE chosen effect clause, and it produces its full count of
+ * objects/spaces by itself, so the choice budget counts clauses — never
+ * individual objects or spaces. Effect clauses (ICON p.219):
+ *   - boulders:  create two height 1 boulder objects
+ *   - pits:      create two pits
+ *   - raise:     destroy/raise owned objects in the area (+1 height)
+ *   - difficult: create a line 3 of difficult terrain
+ *   - remove:    remove difficult/dangerous terrain in the area
+ * The player's choice is passed as `effects` (an ordered list of effect
+ * names); it must contain exactly the chosen `count` distinct clauses, and a
+ * duplicate or unknown clause is a malformed choice (rejected, never padded). */
 const terraformingEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
@@ -215,17 +223,24 @@ const terraformingEffects: RuleResolver = (context) => {
   const center = target?.position ?? source.position;
   if (distance(source.position, center) > 6) throw new RuleProgramViolation('choice.actor-range', 'Terraforming requires its center in range 6.');
   const area = squareArea(center, 2).filter((cell) => withinGrid(cell, context));
-  const chosen = context.input.options?.effects ?? 'boulders,pits';
-  const effects = chosen.split(',');
   const charged = context.triggers?.has('charge');
-  // ICON p.219 base Charge: "Choose four effects" (not two) — this is the
-  // base ability's Charge variant, NOT talent I. Talent I adds the
-  // adjacent-placement expansion.
+  // ICON p.219 base "choose two", Charge "choose four" — the base ability's
+  // OWN Charge clause, NOT talent I (Talent I only adds the adjacent
+  // placement expansion).
   const count = charged ? 4 : 2;
+  const EFFECT_CLAUSES = ['boulders', 'pits', 'raise', 'difficult', 'remove'];
+  const raw = (context.input.options?.effects ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+  const selected: string[] = [];
+  for (const name of raw) {
+    if (!EFFECT_CLAUSES.includes(name)) throw new RuleProgramViolation('choice.effects', `Unknown Terraforming effect: ${name}`);
+    if (selected.includes(name)) throw new RuleProgramViolation('choice.effects', `Terraforming cannot select the same effect more than once: ${name}`);
+    selected.push(name);
+  }
+  if (selected.length !== count) throw new RuleProgramViolation('choice.effects', `Terraforming requires exactly ${count} distinct effects (got ${selected.length}).`);
   const mutations: RuleMutation[] = [];
-  // ICON p.219 Terraforming talent 1: "Charge: effects can also be placed
-  // in any space adjacent to the area." When charged AND TI is equipped,
-  // the placement pool expands to include cells adjacent to the area.
+  // ICON p.219 Terraforming talent 1: "Charge: effects can also be placed in
+  // any space adjacent to the area." When charged AND TI is equipped, the
+  // placement pool expands to include cells adjacent to the area.
   const hasTalentI = (source.talents?.['geomancer:terraforming'] ?? 0) >= 1;
   const adjacentCells = charged && hasTalentI
     ? area.flatMap((cell) => [
@@ -233,45 +248,23 @@ const terraformingEffects: RuleResolver = (context) => {
         { x: cell.x, y: cell.y + 1 }, { x: cell.x, y: cell.y - 1 },
       ]).filter((cell) => withinGrid(cell, context) && !area.some((a) => sameCell(a, cell)))
     : [];
-  const placementPool = [...area, ...adjacentCells];
-  const freeCells = placementPool.filter((cell) => !Object.values(context.state.actors).some((character) => character.position && sameCell(character.position, cell)));
-  let used = 0;
-  for (const name of [...effects, 'boulders', 'pits', 'difficult', 'remove'].slice(0, 8)) {
-    if (used >= count) break;
+  const freeCells = [...area, ...adjacentCells].filter((cell) => !Object.values(context.state.actors).some((character) => character.position && sameCell(character.position, cell)));
+  for (const name of selected) {
     if (name === 'boulders') {
       const cells = freeCells.filter((cell) => !Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, cell))).slice(0, 2);
-      for (const cell of cells) {
-        if (used >= count) break;
-        mutations.push(entityMutation(context, source.id, cell, 'boulder', { height: 1 }));
-        used += 1;
-      }
+      for (const cell of cells) mutations.push(entityMutation(context, source.id, cell, 'boulder', { height: 1 }));
     } else if (name === 'pits') {
       const cells = freeCells.slice(0, 2);
-      for (const cell of cells) {
-        if (used >= count) break;
-        mutations.push(terrainMutation(context, 'create', 'pit', [cell]));
-        used += 1;
-      }
+      for (const cell of cells) mutations.push(terrainMutation(context, 'create', 'pit', [cell]));
     } else if (name === 'raise') {
       const owned = Object.values(context.state.entities).filter((entity) => entity.ownerId === source.id && entity.position && area.some((cell) => sameCell(cell, entity.position!)));
-      for (const entity of owned) {
-        if (used >= count) break;
-        mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: entity.type, ownerId: source.id, positions: [entity.position!], count: 1, state: { height: Math.min(3, Number(entity.state.height ?? 1) + 1) } });
-        used += 1;
-      }
+      for (const entity of owned) mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: entity.type, ownerId: source.id, positions: [entity.position!], count: 1, state: { height: Math.min(3, Number(entity.state.height ?? 1) + 1) } });
     } else if (name === 'difficult') {
       const cells = area.filter((cell) => !context.state.terrainAt(cell).has('difficult') && !context.state.terrainAt(cell).has('dangerous')).slice(0, 3);
-      if (cells.length > 0) {
-        mutations.push(terrainMutation(context, 'create', 'difficult', cells));
-        used += 1;
-      }
+      if (cells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', cells));
     } else if (name === 'remove') {
       const removals = context.state.terrainEffects.filter((effect) => (effect.terrain === 'difficult' || effect.terrain === 'dangerous') && effect.positions.some((position) => area.some((cell) => sameCell(cell, position))));
-      for (const effect of removals.slice(0, 3)) {
-        if (used >= count) break;
-        mutations.push(terrainMutation(context, 'remove', effect.terrain, effect.positions.slice()));
-        used += 1;
-      }
+      for (const effect of removals) mutations.push(terrainMutation(context, 'remove', effect.terrain, effect.positions.slice()));
     }
   }
   return mutations;

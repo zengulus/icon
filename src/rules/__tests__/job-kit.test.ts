@@ -19,6 +19,7 @@ import {
   ringAround,
   sourceActor,
   stateMutation,
+  summonEntity,
   untilNextTurnEnd,
   walk,
 } from '../automation/primitives/job-kit.js';
@@ -56,6 +57,25 @@ describe('job-kit building blocks', () => {
     const ctx = kitContext(state, hero.id, scriptedDice());
     expect(walk(ctx, { x: 1, y: 1 }, { x: 1, y: 0 }, 5, false, hero.id)).toEqual({ x: 2, y: 1 });
     expect(walk(ctx, { x: 1, y: 1 }, { x: 1, y: 0 }, 5, true, hero.id)).toEqual({ x: 6, y: 1 });
+  });
+
+  it('summonEntity is the single summon seam: it places `count` owned entities into free in-range cells and never onto an occupied one', () => {
+    const { state, hero } = board();
+    const ctx = kitContext(state, hero.id, scriptedDice());
+    // Hero at (1,1), foe at (3,1). Summon two beasts within radius 1 of the foe.
+    const mutations = summonEntity(ctx, hero.id, 'beast', { x: 3, y: 1 }, { radius: 1, count: 2 });
+    expect(mutations).toHaveLength(2);
+    const cells = mutations.map((m) => (m.kind === 'entity' ? m.positions[0] : null));
+    // Never the occupied foe cell or the (distant) hero cell.
+    expect(cells.some((c) => c && c.x === 3 && c.y === 1)).toBe(false);
+    expect(cells.some((c) => c && c.x === 1 && c.y === 1)).toBe(false);
+    // Every target is a free radius-1 Chebyshev cell of the origin.
+    for (const cell of cells) {
+      expect(Math.max(Math.abs(cell!.x - 3), Math.abs(cell!.y - 1))).toBeLessThanOrEqual(1);
+    }
+    for (const mutation of mutations) {
+      expect(mutation).toMatchObject({ kind: 'entity', operation: 'create', entityType: 'beast', ownerId: hero.id, count: 1 });
+    }
   });
 
   it('walk stops at the grid edge', () => {

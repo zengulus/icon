@@ -608,7 +608,7 @@ describe('F7 terrain-create always trigger', () => {
 
   it('Terraforming talent 2: creates up to 3 dangerous terrain spaces in the area', () => {
     const { state, hero, foe } = talentEncounter('geomancer:terraforming', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id], input: { options: { effects: 'boulders,pits' } } as any }, scriptedDice());
     const terrainMutations = talentMutationsOf(result, 'geomancer:terraforming').filter((m) => m.kind === 'terrain');
     expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
     expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
@@ -878,24 +878,25 @@ describe('Charge-variant talent gating', () => {
   });
 
   // ── Terraforming TI ──────────────────────────────────────────────────
-  it('Terraforming TI: adjacent-placement requires TI and charge', () => {
+  it('Terraforming TI: four effect clauses are chosen and each still produces its full count when TI + Charge are active', () => {
     const { state, hero, foe } = talentEncounter('geomancer:terraforming', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
     state.actors[hero.id].ruleState['slow-turn'] = true; // charged
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
-      input: {},
+      input: { options: { effects: 'boulders,pits,difficult,remove' } } as any,
     }, scriptedDice());
-    // With TI and charged, 4 effects with adjacent placement are available.
-    // The resolver produces terrain mutations with the ability sourceId, not
-    // a talent sourceId, so check the full mutation stream.
+    // With TI and charged, four distinct effects are budgeted. The resolver
+    // produces terrain mutations with the ability sourceId, not a talent
+    // sourceId, so check the full mutation stream.
     const allMutations = abilityMutationsOf(result, 'geomancer:terraforming');
     const terrainMutations = allMutations.filter((m) => m.kind === 'terrain');
     expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
     expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
+    expect(Object.values(result.state.entities).filter((e) => e.type === 'boulder')).toHaveLength(2);
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Terraforming TI: without TI, the base charge gives 4 effects in-area but never adjacency', () => {
+  it('Terraforming TI: Charge without TI still budgets four effects but never places outside the burst', () => {
     // Rank 2 cannot stand in for "no TI" (ranks are cumulative: TII implies
     // TI is equipped), so clear the talent map entirely. The base ability's
     // OWN "Charge: Choose four effects" stays; only Talent I's adjacent-
@@ -905,7 +906,7 @@ describe('Charge-variant talent gating', () => {
     const noTI = { ...state, actors: { ...state.actors, [hero.id]: { ...state.actors[hero.id], talents: {} } } };
     const result = executeCommand(noTI, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
-      input: {},
+      input: { options: { effects: 'boulders,pits,difficult,remove' } } as any,
     }, scriptedDice());
     const allMutations = abilityMutationsOf(result, 'geomancer:terraforming');
     const createdCells = allMutations.flatMap((m) => ('positions' in m && Array.isArray(m.positions) ? m.positions : []) as { x: number; y: number }[]);
@@ -916,6 +917,35 @@ describe('Charge-variant talent gating', () => {
       expect(Math.abs(cell.y - 1)).toBeLessThanOrEqual(2);
     }
     expect(applyEvents(noTI, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming TI: with TI + Charge an occupied burst interior forces effects to spill into adjacent cells', () => {
+    // Center the burst at the corner (0,0): grid clipping shrinks it to the
+    // 3x3 block [0,2]×[0,2] (withinGrid). Occupy EVERY interior cell with a
+    // character so no in-area placement is free — each selected bullet must
+    // land in TI's adjacent-cell expansion (active only when TI + Charge).
+    const { state, hero, foe } = talentEncounter('geomancer:terraforming', 1, {
+      heroAt: { x: 0, y: 5 },
+      foeAt: { x: 0, y: 0 },
+      extraFoes: [
+        { at: { x: 0, y: 1 } }, { at: { x: 0, y: 2 } }, { at: { x: 1, y: 0 } },
+        { at: { x: 1, y: 1 } }, { at: { x: 1, y: 2 } }, { at: { x: 2, y: 0 } },
+        { at: { x: 2, y: 1 } }, { at: { x: 2, y: 2 } },
+      ],
+    });
+    state.actors[hero.id].ruleState['slow-turn'] = true; // charged
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
+      input: { options: { effects: 'boulders,pits,raise,remove' } } as any,
+    }, scriptedDice());
+    const allMutations = abilityMutationsOf(result, 'geomancer:terraforming');
+    const createdCells = allMutations.flatMap((m) => ('positions' in m && Array.isArray(m.positions) ? m.positions : []) as { x: number; y: number }[]);
+    expect(createdCells.length).toBeGreaterThan(0);
+    // Every effect landed OUTSIDE the burst — TI's adjacent expansion, Charge only.
+    for (const cell of createdCells) {
+      expect(cell.x >= 0 && cell.x <= 2 && cell.y >= 0 && cell.y <= 2).toBe(false);
+    }
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
   // ── Wicked Sheath TI ─────────────────────────────────────────────────

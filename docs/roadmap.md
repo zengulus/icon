@@ -161,9 +161,17 @@ replay; closed negative for unequipped mastery.
 census's top blockers stop forcing per-ability resolver code.The Teleport/Place/Remove/Swap half (F1) is DONE (2026-08-27) — shared gateway,
 source-declared atomic swap groups, group-scoped occupancy, and the
 `{teleport}` census family cleared — leaving Fly-grant, entity-create and
-terrain-create as the remaining high-fan-out blockers. The regenerated census
-currently reports `{entity-create}` 16, `{terrain-create}` 14, and
-`{fly-grant}` 14 singleton blockers.
+terrain-create as the remaining high-fan-out blockers. The F3 audit
+(2026-08-29) found the entity-creation AUTHORITY already exists
+(`kernels/entity-creation.ts` `validateEntityCreation`: bounds, footprint
+occupancy, impassable, LoS, footprint-distance range, summon caps) plus the
+`entityMutation` builder and the `freeCellsInRange` placement helper, so
+`entity-create` was NOT a missing primitive — the 16 `{entity-create}`
+singletons were coarse keyword residues and were reclassified to their real
+residual blockers, and a shared `summonEntity` seam was added. The regenerated
+census now reports `{entity-create}` 0 immediate (compound-only) and the next
+high-fan-out singleton families `{terrain-create}` 16 immediate (total 54) and
+`{fly-grant}` 16 immediate (total 30).
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

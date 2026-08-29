@@ -131,8 +131,10 @@ describe('Geomancer ability automation (p.215–221)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Terraforming: a Charge creates two boulders and two pits in the burst 2 area', () => {
+  it('Terraforming base: each bullet is one chosen effect, so boulders + pits each produce two (budget counts clauses, never objects)', () => {
     const { state, hero, foe } = geomancerEncounter({ second: null });
+    // Uncharged base "choose two": selecting the boulders bullet and the pits
+    // bullet budgets exactly two clauses aNd produces the full count of each.
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -140,11 +142,41 @@ describe('Geomancer ability automation (p.215–221)', () => {
       actionId: 'default',
       timing: 'use',
       input: { actorIds: { target: [foe.id] }, options: { effects: 'boulders,pits' } },
+    }, scriptedDice());
+    expect(Object.values(result.state.entities).filter((entity) => entity.type === 'boulder')).toHaveLength(2);
+    expect(result.state.terrainEffects.filter((effect) => effect.terrain === 'pit')).toHaveLength(2);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming Charge: four distinct effect clauses are budgeted; boulders + pits each still produce their full count', () => {
+    const { state, hero, foe } = geomancerEncounter({ second: null });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'geomancer:terraforming',
+      actionId: 'default',
+      timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'boulders,pits,difficult,remove' } },
       triggers: ['charge'],
     }, scriptedDice());
     expect(Object.values(result.state.entities).filter((entity) => entity.type === 'boulder')).toHaveLength(2);
     expect(result.state.terrainEffects.filter((effect) => effect.terrain === 'pit')).toHaveLength(2);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    expect(result.state.terrainEffects.filter((effect) => effect.terrain === 'difficult').length).toBeGreaterThanOrEqual(1);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming: a malformed/duplicate effect choice is rejected, never silently padded', () => {
+    const { state, hero, foe } = geomancerEncounter({ second: null });
+    const run = (effects: string) => executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects } },
+    }, scriptedDice());
+    // Two effects uncharged but the same bullet twice.
+    expect(() => run('pits,pits')).toThrow(/same effect/);
+    // One effect chosen when the base requires two.
+    expect(() => run('boulders')).toThrow(/exactly 2/);
+    // Unknown effect name.
+    expect(() => run('boulders,mudslide')).toThrow(/Unknown Terraforming effect/);
   });
 
   it('Obsidian Flesh: enters the stance with a d6 power die at 1', () => {

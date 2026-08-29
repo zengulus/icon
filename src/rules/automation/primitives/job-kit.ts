@@ -399,6 +399,29 @@ export const entityMutation = (
   kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType, ownerId, positions: [position], count: 1, state,
 });
 
+/** Summon `count` owned entities of `entityType` into free, in-grid cells
+ * within `radius` of `origin`. Placement delegates to the shared free-cell
+ * helper (`freeCellsInRange`), and each created cell rides a standard
+ * `entityMutation` that the reducer later enforces through the single
+ * `validateEntityCreation` authority (bounds, occupant, impassable, LoS,
+ * footprint range, per-owner summon caps). This is the ONE summon seam the
+ * ability resolvers share — they must not hand-roll their own free-space
+ * loop. Deliberately no parallel placement/LoS/occupancy system: resolver
+ * suggests cells, the shared kernel enforces them. */
+export function summonEntity(
+  context: RuleExecutionContext,
+  ownerId: string,
+  entityType: string,
+  origin: Position,
+  options: { radius?: number; count?: number; state?: Record<string, StateValue> } = {},
+): RuleMutation[] {
+  const radius = options.radius ?? 1;
+  const count = options.count ?? 1;
+  return freeCellsInRange(context, origin, radius)
+    .slice(0, count)
+    .map((cell) => entityMutation(context, ownerId, cell, entityType, options.state ?? {}));
+}
+
 export const terrainMutation = (
   context: RuleExecutionContext,
   operation: 'create' | 'remove',

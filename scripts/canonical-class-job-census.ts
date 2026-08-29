@@ -622,6 +622,63 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // is a verb, NOT the Mark mechanic — so no mark family applies; the
   // delayed re-explosion (delay-mechanic + area-define) plus the bomb summon
   // (entity-create) are the complete residual
+  // ── F3 (2026-08-29): entity-create singleton reclassification ──
+  // The entity-creation AUTHORITY already exists (kernels/entity-creation.ts
+  // `validateEntityCreation`: bounds, full-footprint occupancy, impassable
+  // obstruction, LoS, footprint-distance range, registered summon caps; the
+  // `entityMutation` builder; and the free-cell `freeCellsInRange`/`occupied`
+  // placement helper — resolver suggests, reducer enforces). So `entity-create`
+  // is NOT a missing reusable primitive; the 16 `{entity-create}` singletons
+  // were coarse-classified by the `summon/create` keyword heuristic. Each is
+  // reclassified to its true residual blocker. NONE is promoted because every
+  // candidate's COMPLETE semantics still hinge on their other clauses.
+  'fool:trait:tumbling': ['movement-entry-cost'],
+  // "You may phase through characters. Entering the space of any character,
+  // including summons, always costs a maximum of 1 movement." — a movement
+  // entry-cost / phasing override on the movement authority, NOT entity create.
+  'fool:diablo:talent:1': ['area-define', 'effect-count'],
+  // "If you catch 2 or more foes or allies in the end spaces of the cross,
+  // summon a bomb in the center if it is free" — the cross area template plus
+  // the ≥2-in-end-spaces count predicate; the bomb summon is already trivial.
+  'freelancer:trick-shot:talent:1': ['rebound', 'teleport'],
+  // "When Trick shot rebounds off an ally or summon, teleport them 2" — a
+  // rebound-triggered teleport, NOT entity create.
+  'freelancer:deus-ex-machina:talent:1': ['teleport-distance-modifier'],
+  // "Allies and summons can be teleported up to 4 spaces instead" — a
+  // teleport-distance modifier (type includes summons; no entity create).
+  'shade:limit-break': ['blast-template', 'shadow-summon'],
+  // ULTIMA ECSTASY: area blast statuses (stealth/blind) to allies + foes, and
+  // the ultimate summons shadows adjacent to all allies — compound, limit-break.
+  'warden:apex:talent:1': ['terrain-create'],
+  // "You can replace any beast you summon with a space of dangerous terrain
+  // instead" — a summon→terrain alternation (the beast summon itself is wired).
+  'warden:apex:mastery': ['turn-end-no-attack', 'summon-count-boost', 'damage-count-scaling'],
+  // "If you end your turn without attacking, the next time you use Apex,
+  // summon +1 more beasts, and deal 2 damage … for every beast you summon."
+  'warden:gwynt:talent:2': ['new-shove-effect'],
+  // "You and your ally or summon may each shove your target 1 space" — shoves.
+  'warden:gwynt:mastery': ['range-modifier', 'target-count-override'],
+  // "Increase dashes and ranges by +1, and the effect can be used on an
+  // additional ally or allied summon in range."
+  'warden:circle-the-oak:talent:2': ['traversal-count', 'condition-grant'],
+  // "If you passed through two or more allies or allied summons, also gain
+  // evasion …" — a pass-through-count-gated condition grant.
+  'warden:strength-of-the-pack:talent:2': ['aura-count-condition'],
+  // "While you have three or more summons in this aura, you have evasion" —
+  // an aura-membership-summon-count projection (aura kernel has no SUM-count
+  // seat; distinct from the implemented aura 'aura' membership primitive).
+  'harvester:gravebirth:talent:2': ['sacrifice-cost', 'turn-end-summon'],
+  // "At the end of your turn, you may sacrifice 2 to summon an additional
+  // thrall" — a turn-end optional-sacrifice summon.
+  'harvester:blood-grove:mastery': ['summon-triggered-area-growth'],
+  // "Each time you summon a thrall with blood grove, extend the area by 1
+  // space … placed adjacent to the area when the effect is triggered."
+  'harvester:dark-sliver:mastery': ['summon-alternation', 'terrain-conversion', 'zone-regeneration'],
+  // "Dark Sliver can summon a mote of life instead of any regular plant — a
+  // plant that becomes a terrain effect when its blessing is removed; inside,
+  // an ally gains regeneration" — entity/terrain alternation + standing-in
+  // regeneration zone.
+
   'freelancer:trait:astral-binding': ['action-type-change', 'mark-stacking'],
   // "stack up to two marks" = mark-stacking; the free-action group teleport
   // of marked characters rides the F1 teleport gateway (implemented) and the
@@ -664,10 +721,12 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // spaces occupied by plants" — the F5 carrier-side projection with a
   // live-state (plant adjacency) gate and pacified+ potency already supplies
   // the mark portion (the Grand Seal t2 shape); only plant creation remains
-  'harvester:rot:talent:1': ['entity-create'],
-  // "Characters marked by regenerate gain comeback: summon a plant … at the
-  // start of their turn" — the F5 turn-start mark trigger already supplies
-  // the mark portion (the Rot t2 shape); only the plant summon remains
+  'harvester:rot:talent:1': ['comeback-trigger', 'turn-start-summon'],
+  // "Characters marked by regenerate gain comeback: summon a plant in the
+  // adjacent space at the start of their turn" — F5's turn-start mark trigger
+  // supplies the mark portion (the Rot t2 shape); the residual is the
+  // comeback-triggered turn-start plant summon (entity creation itself is an
+  // already-implemented authority — see F3)
   'harvester:rot:mastery': ['entity-create', 'mark-defeat-trigger', 'range-modifier'],
   // REGROWTH's "if that character would be defeated … instantly rescued" is
   // a defeat-rescue mark trigger, plus the plant summon and range 4
@@ -714,8 +773,11 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // boundary target selection (the lifecycle recipe resolve() has no
   // player choice or foe-selection seam; it can only mutate state, not
   // present a target choice)
-  'seer:chaos-tarot:mastery': ['entity-create'],
-  // The mastery's entity-creation effect is the remaining blocker
+  'seer:chaos-tarot:mastery': ['entity-interaction', 'card-consumption'],
+  // "Summon a Master Card instead of a wild card … grants its gamble to any
+  // area ability that triggers it … consumed as normal, one at a time" — an
+  // interactive Master-Card entity (entity creation is implemented; the
+  // residual is the triggered-area interaction + consumption lifecycle)
   'spellblade:rampant-nail:talent:2': ['passive'],
   // Rampant Nail's die mechanic is wired through the mastery lifecycle;
   // the talent's passive component is the remaining blocker
