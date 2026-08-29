@@ -26,9 +26,9 @@
  */
 import type { EncounterActor, Position } from '../../types.js';
 import type { RuleExecutionContext } from '../primitives/types.js';
-import { distance, occupied, withinGrid } from '../primitives/job-kit.js';
 import { validateSpatialIntent } from '../primitives/spatial-intent.js';
 import { rampartObstructs } from './encounter-adapter.js';
+import { validatePositionLegality } from './evaluate-query.js';
 import { RuleProgramViolation } from './runtime.js';
 
 export interface TeleportChoiceOptions {
@@ -59,14 +59,20 @@ export function chosenTeleportDestination(
     if (options?.optional) return null;
     throw new RuleProgramViolation('choice.position-required', `${label} requires a chosen teleport destination.`);
   }
-  if (!withinGrid(destination, context)) {
-    throw new RuleProgramViolation('move.out-of-bounds', `${label} teleport destination is outside the battlefield.`);
-  }
-  if (distance(origin, destination) > range) {
-    throw new RuleProgramViolation('move.range', `${label} teleport is limited to ${range} space${range === 1 ? '' : 's'} (Teleport ${range}).`);
-  }
-  if (occupied(destination, context, actorId)) {
-    throw new RuleProgramViolation('choice.position-unavailable', `${label} teleport destination is occupied.`);
+  // Position legality (in-grid / range / occupied) routes through the U3
+  // position-domain predicates — the same authority the free-cell candidate
+  // scans use — mapped onto the teleport kernel's historical violation codes
+  // so the command boundary rejects the whole ability identically.
+  const legality = validatePositionLegality({ origin, range, excludeActorId: actorId }, destination, context);
+  if (!legality.legal) {
+    switch (legality.problem) {
+      case 'out-of-bounds':
+        throw new RuleProgramViolation('move.out-of-bounds', `${label} teleport destination is outside the battlefield.`);
+      case 'range':
+        throw new RuleProgramViolation('move.range', `${label} teleport is limited to ${range} space${range === 1 ? '' : 's'} (Teleport ${range}).`);
+      case 'occupied':
+        throw new RuleProgramViolation('choice.position-unavailable', `${label} teleport destination is occupied.`);
+    }
   }
   return destination;
 }

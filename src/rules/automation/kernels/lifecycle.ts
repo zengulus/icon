@@ -121,7 +121,8 @@ const positionWithinGrid = (position: Position, state: Pick<EncounterState, 'gri
 
 /** The ORDERED in-grid candidate cells within Chebyshev `radius` of `center`
  * (excluding the center), sorted by distance then coordinates so default
- * placement is deterministic (mirrors job-kit's freeCellsInRange ordering).
+ * placement is deterministic (mirrors the position-candidate ordering in
+ * `kernels/evaluate-query.ts` `evaluatePositionCandidates`).
  * This is a pure geometric enumeration — it does NOT decide creation
  * legality. The entity mutation carries the ordered list and the shared
  * `validateEntityCreation` authority picks the first legal candidate
@@ -139,8 +140,9 @@ export function orderedFreeCellsNear(state: EncounterState, center: Position, ra
 
 /** First in-grid, unoccupied, non-impassable cell within Chebyshev `radius` of
  * `center` (orthogonal neighbors when `orthogonalOnly`), sorted by distance
- * then coordinates so default placement is deterministic (mirrors job-kit's
- * freeCellsInRange ordering). */
+ * then coordinates so default placement is deterministic (mirrors the
+ * position-candidate ordering in `kernels/evaluate-query.ts`
+ * `evaluatePositionCandidates`). */
 export function freeCellNear(state: EncounterState, center: Position, radius: number, orthogonalOnly = false): Position | null {
   const occupiedCell = (cell: Position) => Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position && samePosition(candidate.position, cell))
     || Object.values(state.entities).some((entity) => entity.positions[0] && samePosition(entity.positions[0], cell));

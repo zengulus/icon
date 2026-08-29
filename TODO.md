@@ -100,6 +100,34 @@ assumption here, document the evidence and update this list before proceeding.
   census byte-stable. Residual (stays Phase T2): non-actor query domains
   and deterministic ordering operators. No source-unit promotion.
 
+- **U3 eligibility de-duplication — resolver sugar + position legality
+  (Phase T2) — LANDED (2026-08-30).** The last U3 duplicates route through
+  the one authority:
+  1. **Position-domain operators.** `kernels/evaluate-query.ts` gains the
+     position slice: `evaluatePositionCandidates` (in-grid, unoccupied
+     cells within radius, deterministic distance/x/y order — the
+     historical `freeCellsInRange` semantics), `validatePositionLegality`
+     (in-grid → range → occupied, structured), and `nearestCandidate`
+     (source-defined nearest ordering over an evaluated CandidateSet,
+     ties by id). Composed from the shared `primitives/job-kit.ts`
+     predicates (`withinGrid`/`occupied`/point distance).
+  2. **Migrated call sites.** `freeCellsInRange`/`nearestFoe` removed
+     from job-kit; every resolver call site (foe-recipes terrain, fool,
+     warden, knave, harvester, seer, chanter, enochian, stormbender)
+     routes through the query operators; the knave/stormbender
+     nearest-foe reads declare `includeDefeated: true` to preserve the
+     historical candidate set; `teleport-choice` maps
+     `validatePositionLegality` onto its existing violation codes
+     (`move.out-of-bounds` / `move.range` /
+     `choice.position-unavailable`); dead imports pruned (shade, sealer,
+     geomancer, seer, enochian, spellblade).
+  Parity: `evaluate-query.test.ts` +5 position/nearest cases (the
+  job-kit nearest/free-cell tests moved to the authority's home); full
+  suite green (1286 tests), zero fixture deltas, census byte-stable.
+  Residual (stays Phase T2): query domains beyond actors/positions
+  (terrain/entities/areas/instances) and ordering operators beyond
+  nearest. No source-unit promotion.
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

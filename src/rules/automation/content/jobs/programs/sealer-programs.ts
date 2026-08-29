@@ -4,7 +4,7 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange,
+  distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
   teleportMutation, entityMutation, summonEntity, terrainMutation, shoveMutation,

@@ -159,32 +159,12 @@ export function walk(
   return position;
 }
 
-/** All in-grid, unoccupied cells within Chebyshev radius of `center`, sorted by
- * distance then coordinates so default placement is stable. */
-export function freeCellsInRange(context: RuleExecutionContext, center: Position, radius: number): Position[] {
-  const cells: Position[] = [];
-  for (const cell of squareArea(center, radius)) {
-    if (!withinGrid(cell, context) || sameCell(cell, center)) continue;
-    if (occupied(cell, context, '')) continue;
-    cells.push(cell);
-  }
-  return cells.sort((a, b) => distance(center, a) - distance(center, b) || a.x - b.x || a.y - b.y);
-}
-
 /** The first in-grid, unoccupied cell from a candidate list, else null. */
 export function firstFreeCell(context: RuleExecutionContext, cells: Position[], excludeId: string): Position | null {
   return cells.find((cell) => withinGrid(cell, context) && !occupied(cell, context, excludeId)) ?? null;
 }
 
 // ── Selection ────────────────────────────────────────────────────────────────
-/** The nearest foe to `position`, ties broken by id for determinism. */
-export function nearestFoe(context: RuleExecutionContext, position: Position, selfId: string): RuleActorView | undefined {
-  const selfView = context.state.actors[selfId];
-  return Object.values(context.state.actors)
-    .filter((actor) => actor.id !== selfId && selfView && actor.side !== selfView.side && actor.position)
-    .sort((a, b) => distance(a.position!, position) - distance(b.position!, position) || a.id.localeCompare(b.id))[0];
-}
-
 /** Dominant-axis direction toward the nearest foe (context.actorId), else +x. */
 export function rushTowardFoes(context: RuleExecutionContext, position: Position): Position {
   const selfView = context.state.actors[context.actorId];
@@ -441,8 +421,9 @@ export function creationCandidateCells(context: RuleExecutionContext, region: Po
  * per-owner summon cap always bounds the result.
  *
  * MIGRATION NOTE: pre-existing ability resolvers that still hand-roll
- * `freeCellsInRange(...)[index]` + `entityMutation(...)` for ordinary
- * summons are tracked for migration onto this seam. A few are deliberate
+ * free-cell scans (`evaluatePositionCandidates(...)[index]`) +
+ * `entityMutation(...)` for ordinary summons are tracked for migration onto
+ * this seam. A few are deliberate
  * exceptions that are NOT ordinary intent-declaration summons — e.g. a
  * resolver that needs the exact resolved cell back to compute a follow-on
  * effect (the Seer meteor's proximity damage) or a mandatory in-place

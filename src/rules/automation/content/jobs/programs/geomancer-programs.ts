@@ -7,7 +7,7 @@ import { validateLine } from '../../../../area-geometry.js';
 import {
   axisDirection, sameCell, squareArea, withinGrid, occupied,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, nearestFoe,
+  distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   stanceMutation, markMutation,
   shoveMutation, flyMutation, placeMutation, removeMutation, entityMutation, terrainMutation,

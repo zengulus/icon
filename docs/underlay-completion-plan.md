@@ -55,15 +55,18 @@ state from the tranche documents (`tranche-1-choice.md`,
 its own `Current state` from the code at HEAD.
 
 **Implementation status (2026-08-30):** all five audit findings below are
-now routed through the one actor-domain authority — `primitives/anchor.ts`
-(U7 vocabulary) + real `rangeOrigin` anchor resolution; `selectActors`
+now routed through the one authority — `primitives/anchor.ts` (U7
+vocabulary) + real `rangeOrigin` anchor resolution; `selectActors`
 migrated onto `kernels/evaluate-query.ts` `evaluateActorQuery` as a thin
 adapter; the live direct-target gate's base eligibility through
-`kernels/candidate.ts::validateActorCandidate`; and actor inclusion in
-areas through the `insideArea` query operator over the spatial gateway's
-cells (see the TODO.md underlay task ledger; full suite green, census
+`kernels/candidate.ts::validateActorCandidate`; actor inclusion in areas
+through the `insideArea` query operator over the spatial gateway's cells;
+and the resolver sugar + position legality (nearest-foe ordering,
+free-cell candidates, teleport destinations) through the position-domain
+operators (see the TODO.md underlay task ledger; full suite green, census
 byte-stable, no source-unit wiring). The residual U3 contract remains:
-non-actor query domains and deterministic ordering operators.
+query domains beyond actors/positions (terrain/entities/areas/instances)
+and ordering operators beyond the source-defined nearest.
 
 Confirmed correction for **U3 QUERY**: `docs/tranche-2-query.md` says U3
 landed, but at current HEAD:
@@ -339,10 +342,14 @@ see §0): base CandidateSet (`kernels/candidate.ts`) + extended
 `evaluateActorQuery` (`kernels/evaluate-query.ts`) with real U7
 `rangeOrigin` anchor resolution; `selectActors` migrated onto it as a thin
 adapter; the direct-target gate's base eligibility routed through
-`validateActorCandidate`; and area actor-inclusion reads through the
-`insideArea` query operator (the spatial gateway keeps the cells).
-Residual: non-actor domains (positions/terrain/entities/areas/instances)
-and deterministic ordering operators.
+`validateActorCandidate`; area actor-inclusion reads through the
+`insideArea` query operator (the spatial gateway keeps the cells); and a
+position-domain slice (`evaluatePositionCandidates`,
+`validatePositionLegality`, `nearestCandidate`) carrying the free-cell
+scans, teleport-destination legality, and the source-defined nearest
+ordering that the `freeCellsInRange`/`nearestFoe` resolver sugar used to
+own. Residual: query domains beyond actors/positions
+(terrain/entities/areas/instances) and ordering operators beyond nearest.
 
 **Locations partially owning/duplicating.** Migrated (2026-08-30):
 `kernels/runtime.ts::selectActors` is a thin adapter over
@@ -350,13 +357,16 @@ and deterministic ordering operators.
 `encounter.ts::assertDirectTarget` routes base eligibility through
 `validateActorCandidate` (the direct-target specialist reads stay at the
 gate); `foe-recipes.ts` blast + the dash-on-the-rocks trait reaction read
-area actor inclusion through the `insideArea` operator.
-`primitives/targeting.ts::queryDirectTarget` now pins the direct-target
-problem vocabulary for fixtures, and `computeSpatialArea`'s
-`includedActorIds` remains a convenience projection (not the live
-routing). Remaining within scope: `primitives/job-kit.ts` (`nearestFoe`,
-`freeCellsInRange` resolver sugar); `kernels/teleport-choice.ts`
-(position-domain eligibility).
+area actor inclusion through the `insideArea` operator; every
+`freeCellsInRange`/`nearestFoe` resolver call site routes through
+`evaluatePositionCandidates`/`nearestCandidate` (job-kit sugar removed),
+and `teleport-choice` position legality routes through
+`validatePositionLegality`. `primitives/targeting.ts::queryDirectTarget`
+now pins the direct-target problem vocabulary for fixtures, and
+`computeSpatialArea`'s `includedActorIds` remains a convenience
+projection (not the live routing). Remaining within scope:
+`primitives/job-kit.ts::rushTowardFoes` (directional movement sugar over
+the same nearest-foe read — not an eligibility query).
 
 **Intended authority.** `kernels/evaluate-query.ts` (extracted from
 `runtime.ts`, re-exported by the barrel): `evaluateQuery(query, context)`
@@ -397,10 +407,14 @@ iteration order.
 (`runtime.ts`) route through `evaluateActorQuery`; the direct-target gate
 (`encounter.ts::assertDirectTarget`) routes base eligibility through
 `validateActorCandidate`; the blast/area-inclusion consumers read actor
-inclusion through the `insideArea` operator. Remaining (Phase T2):
-`nearestFoe`/`freeCellsInRange` resolver call sites (move to Query
-operators), `teleport-choice` position candidates where the generic row
-can express them (in-grid/unoccupied/Rampart stay specialist).
+inclusion through the `insideArea` operator; every `freeCellsInRange` /
+`nearestFoe` resolver call site routes through the position-domain
+operators / `nearestCandidate` (job-kit sugar removed), and
+`teleport-choice` maps `validatePositionLegality` onto its violation
+codes (Rampart stays the spatial gateway's application-time check).
+Remaining (Phase T2): nothing in the actor/position domains — the
+residual is the terrain/entity/area/instance query domains and ordering
+operators beyond nearest.
 
 **Blocker families enabled (information only).** choice-input,
 entity-distance-selection, object-distance, lifecycle-target-selection,

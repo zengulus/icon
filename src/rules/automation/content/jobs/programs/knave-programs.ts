@@ -8,13 +8,14 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, sameCell,
   constant, attackStep, comboCost,
-  distance, sourceActor, impassable, walk, nearestFoe, ringAround,
+  distance, sourceActor, impassable, walk, ringAround,
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
-  shoveMutation, rushMutation, placeMutation, removeMutation, freeCellsInRange,
+  shoveMutation, rushMutation, placeMutation, removeMutation,
   gambleD6,
   untilNextTurnEnd, action, compilation,
 } from '../../../primitives/job-kit.js';
+import { evaluateActorQuery, evaluatePositionCandidates, nearestCandidate } from '../../../kernels/evaluate-query.js';
 
 /**
  * Independently reviewed Knave ability implementations (ICON p.139–144).
@@ -187,7 +188,10 @@ const darkKnightEnter: RuleResolver = (context) => {
     stanceMutation(context, source.id, 'enter', 'dark-knight'),
     conditionMutation(context, source.id, 'sturdy'),
   ];
-  const closest = nearestFoe(context, source.position, source.id);
+  // The closest foe's candidate set comes from the U3 query authority
+  // (includeDefeated preserves the historical sugar's candidate set); the
+  // nearest ordering is the source-defined deterministic tie-break.
+  const closest = nearestCandidate(evaluateActorQuery({ relation: 'foe', includeDefeated: true }, context), source.position);
   if (closest) {
     mutations.push(conditionMutation(context, source.id, 'hatred', 'plus'));
     mutations.push(stateMutation(context, source.id, 'hatred-of', closest.id));
@@ -227,7 +231,7 @@ const strongarmEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   let targetPosition = target.position;
   if (comeback) {
-    const adjacency = freeCellsInRange(context, sourcePosition, 1)[0];
+    const adjacency = evaluatePositionCandidates({ origin: sourcePosition, radius: 1 }, context)[0];
     if (!adjacency) throw new RuleProgramViolation('choice.position-range', 'Strongarm talent 1 requires a free adjacent space.');
     mutations.push(removeMutation(context, target.id));
     mutations.push(placeMutation(context, target.id, adjacency));

@@ -4,12 +4,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, nearestFoe, rushTowardFoes,
+  distance, sourceActor, walk, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
   shoveMutation, teleportMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { evaluateActorQuery, evaluatePositionCandidates, nearestCandidate } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
@@ -141,7 +142,7 @@ const geyserEffects: RuleResolver = (context) => {
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
   if (distance(source.position, cell) > 4) throw new RuleProgramViolation('choice.actor-range', 'Geyser requires a space in range 4.');
-  const freeCell = freeCellsInRange(context, source.position, 4).find((candidate) => !Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, candidate))) ?? cell;
+  const freeCell = evaluatePositionCandidates({ origin: source.position, radius: 4 }, context).find((candidate) => !Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, candidate))) ?? cell;
   return [{
     kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'geyser', ownerId: source.id,
     positions: [freeCell], count: 1, state: { height: 1 },
@@ -213,7 +214,7 @@ const waterspoutEffects: RuleResolver = (context) => {
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
-  const freeCell = freeCellsInRange(context, source.position, Math.max(1, distance(source.position, cell)))[0] ?? cell;
+  const freeCell = evaluatePositionCandidates({ origin: source.position, radius: Math.max(1, distance(source.position, cell)) }, context)[0] ?? cell;
   const mutations: RuleMutation[] = [
     { kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'waterspout', ownerId: source.id, positions: [freeCell], count: 1, state: {} },
     terrainMutation(context, 'create', 'difficult', [freeCell]),
@@ -242,7 +243,12 @@ const eyeOfTheStormEffects: RuleResolver = (context) => {
   }
   if (centerActor) {
     if (centerActor.side === source.side) {
-      const away = nearestFoe(context, center, source.id)?.position ? axisDirection(nearestFoe(context, center, source.id)!.position!, center) : { x: 1, y: 0 };
+      // The nearest foe's candidate set comes from the U3 query authority
+      // (includeDefeated preserves the historical sugar's candidate set);
+      // the away direction is the source-defined nearest ordering applied
+      // to that set.
+      const nearest = nearestCandidate(evaluateActorQuery({ relation: 'foe', includeDefeated: true }, context), center);
+      const away = nearest?.position ? axisDirection(nearest.position, center) : { x: 1, y: 0 };
       const landing = walk(context, center, away, 4, true, centerActor.id);
       if (!sameCell(landing, center)) mutations.push({ kind: 'move', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: centerActor.id, movement: 'fly', distance: null, positions: [landing], direction: null, phasing: false });
     } else {

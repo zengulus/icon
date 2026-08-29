@@ -13,8 +13,6 @@ import {
   conditionMutation,
   constant,
   damageMutation,
-  freeCellsInRange,
-  nearestFoe,
   occupied,
   ringAround,
   sourceActor,
@@ -108,28 +106,11 @@ describe('job-kit building blocks', () => {
     expect(occupied({ x: 4, y: 1 }, withEntity, hero.id)).toBe(true);
   });
 
-  it('nearestFoe picks the closest foe', () => {
-    const { state, hero, foe } = board();
-    const ctx = kitContext(state, hero.id, scriptedDice());
-    expect(nearestFoe(ctx, { x: 1, y: 1 }, hero.id)?.id).toBe(foe.id);
-  });
-
   it('ringAround yields the eight neighbors clockwise from north', () => {
     expect(ringAround({ x: 2, y: 2 })).toEqual([
       { x: 2, y: 1 }, { x: 3, y: 1 }, { x: 3, y: 2 }, { x: 3, y: 3 },
       { x: 2, y: 3 }, { x: 1, y: 3 }, { x: 1, y: 2 }, { x: 1, y: 1 },
     ]);
-  });
-
-  it('freeCellsInRange excludes the center and occupied cells, sorted by distance', () => {
-    const { state, hero } = board();
-    const ctx = kitContext(state, hero.id, scriptedDice());
-    const cells = freeCellsInRange(ctx, { x: 1, y: 1 }, 2);
-    expect(cells).toHaveLength(14);
-    expect(cells[0]).toEqual({ x: 0, y: 0 });
-    expect(cells[cells.length - 1]).toEqual({ x: 3, y: 3 });
-    expect(cells).not.toContainEqual({ x: 1, y: 1 });
-    expect(cells).not.toContainEqual({ x: 3, y: 1 });
   });
 
   it('resolveAttack produces deterministic hits and misses against a known defense', () => {

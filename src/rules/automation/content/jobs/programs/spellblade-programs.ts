@@ -6,7 +6,7 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, arcCells, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, freeCellsInRange, rushTowardFoes, occupied,
+  distance, sourceActor, rushTowardFoes, occupied,
   damageMutation, conditionMutation, stateMutation, rollDamageDice,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, shoveMutation, terrainMutation,

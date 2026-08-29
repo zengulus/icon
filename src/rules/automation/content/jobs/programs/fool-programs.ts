@@ -7,12 +7,13 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, attackStep,
-  distance, sourceActor, occupied, impassable, walk, freeCellsInRange,
+  distance, sourceActor, occupied, impassable, walk,
   damageMutation, conditionMutation, stateMutation, resourceMutation, stanceMutation, markMutation,
   rushMutation, flyMutation, placeMutation, entityMutation, terrainMutation, swapMutations,
   gambleD6,
   untilNextTurnStart, action, compilation,
 } from '../../../primitives/job-kit.js';
+import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
@@ -63,7 +64,7 @@ const cavaliereEffects: RuleResolver = (context) => {
   if (target) {
     mutations.push(conditionMutation(context, target.id, 'dazed'));
     if (context.triggers?.has('finishing-blow') || context.triggers?.has('slay')) {
-      const bombCell = freeCellsInRange(context, final, 2)[0];
+      const bombCell = evaluatePositionCandidates({ origin: final, radius: 2 }, context)[0];
       if (bombCell) mutations.push(entityMutation(context, source.id, bombCell, 'bomb', {}));
     }
   }
@@ -76,7 +77,7 @@ const carnevaleEffects: RuleResolver = (context) => {
   if (!source?.position) return [];
   const mutations: RuleMutation[] = [];
   const chosen = context.input.positions?.['bomb-positions'] ?? [];
-  const cells = [...chosen, ...freeCellsInRange(context, source.position, 2)].slice(0, 2);
+  const cells = [...chosen, ...evaluatePositionCandidates({ origin: source.position, radius: 2 }, context)].slice(0, 2);
   for (const cell of cells) {
     if (distance(cell, source.position) > 2) throw new RuleProgramViolation('choice.position-range', 'Carnevale summons its bombs in range 2.');
   }
@@ -179,7 +180,7 @@ const partyFavorEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source?.position) return [];
   const chosen = context.input.positions?.['mine-position']?.[0];
-  const cell = chosen ?? freeCellsInRange(context, source.position, 3)[0];
+  const cell = chosen ?? evaluatePositionCandidates({ origin: source.position, radius: 3 }, context)[0];
   if (!cell) throw new RuleProgramViolation('choice.position-count', 'Party Favor requires a free space in range 3.');
   if (distance(cell, source.position) > 3) throw new RuleProgramViolation('choice.position-range', 'Party Favor mines are placed in range 3.');
   return [terrainMutation(context, 'create', 'party-favor', [cell])];

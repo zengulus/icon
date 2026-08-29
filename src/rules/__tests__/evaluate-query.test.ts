@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import type { RuleActorView, RuleExecutionContext, RuleSelector } from '../automation/primitives/types.js';
 import { RuleProgramViolation, selectActors } from '../automation/kernels/runtime.js';
 import { evaluateActorCandidates } from '../automation/kernels/candidate.js';
-import { evaluateActorQuery } from '../automation/kernels/evaluate-query.js';
+import { evaluateActorQuery, evaluatePositionCandidates, nearestCandidate, validatePositionLegality } from '../automation/kernels/evaluate-query.js';
 import { computeSpatialArea } from '../automation/primitives/spatial-intent.js';
 
 function actorView(
@@ -278,5 +278,76 @@ describe('insideArea — actor inclusion in areas routes through the query autho
     expect(area.legal).toBe(true);
     const viaQuery = evaluateActorQuery({ relation: 'any', insideArea: { cells: area.cells } }, context).map((a) => a.id).sort();
     expect(viaQuery).toEqual([...area.includedActorIds].sort());
+  });
+});
+
+describe('position domain — free-cell candidates, single-position legality, and the nearest ordering', () => {
+  it('evaluatePositionCandidates: in-grid, unoccupied cells within radius, excluding the origin, sorted by distance', () => {
+    const context = ctx(); // 24x24 grid; every actor sits at x >= 4.
+    const cells = evaluatePositionCandidates({ origin: { x: 1, y: 1 }, radius: 1 }, context);
+    // All eight radius-1 cells are free; distance-1 ties order by x then y.
+    expect(cells).toEqual([
+      { x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: 2 },
+      { x: 1, y: 0 }, { x: 1, y: 2 },
+      { x: 2, y: 0 }, { x: 2, y: 1 }, { x: 2, y: 2 },
+    ]);
+    // includeOrigin adds the origin first.
+    const withOrigin = evaluatePositionCandidates({ origin: { x: 1, y: 1 }, radius: 1, includeOrigin: true }, context);
+    expect(withOrigin).toHaveLength(9);
+    expect(withOrigin[0]).toEqual({ x: 1, y: 1 });
+  });
+
+  it('evaluatePositionCandidates excludes occupied cells (actor footprint or entity) unless the mover is excluded', () => {
+    const context = {
+      ...ctx(),
+      state: {
+        ...ctx().state,
+        entities: {
+          ...ctx().state.entities,
+          bomb: { id: 'bomb', type: 'bomb', ownerId: 'hero', position: { x: 4, y: 5 }, state: {} },
+        },
+      },
+    };
+    // hero(4,4) and near(5,4) occupy their cells; the entity occupies (4,5).
+    const cells = evaluatePositionCandidates({ origin: { x: 4, y: 4 }, radius: 1 }, context);
+    expect(cells).not.toContainEqual({ x: 4, y: 4 });
+    expect(cells).not.toContainEqual({ x: 5, y: 4 });
+    expect(cells).not.toContainEqual({ x: 4, y: 5 });
+    expect(cells).toContainEqual({ x: 3, y: 3 });
+    // The mover's own footprint passes when excluded (with the origin cell
+    // admitted); the entity still blocks.
+    const own = evaluatePositionCandidates({ origin: { x: 4, y: 4 }, radius: 1, includeOrigin: true, excludeActorId: 'hero' }, context);
+    expect(own).toContainEqual({ x: 4, y: 4 });
+    expect(own).not.toContainEqual({ x: 4, y: 5 });
+  });
+
+  it('validatePositionLegality: in-grid, range, and occupancy problems in order', () => {
+    const context = ctx();
+    const query = { origin: { x: 4, y: 4 }, range: 2, excludeActorId: 'hero' };
+    expect(validatePositionLegality(query, { x: 2, y: 4 }, context)).toEqual({ legal: true, problem: null });
+    expect(validatePositionLegality(query, { x: -1, y: 4 }, context)).toEqual({ legal: false, problem: 'out-of-bounds' });
+    // (7,4) is distance 3 (out of range) and occupied by summon1 — range wins.
+    expect(validatePositionLegality(query, { x: 7, y: 4 }, context)).toEqual({ legal: false, problem: 'range' });
+    // near occupies (5,4) within range — occupancy wins there.
+    expect(validatePositionLegality(query, { x: 5, y: 4 }, context)).toEqual({ legal: false, problem: 'occupied' });
+    // The mover's own cell is legal for its own teleport.
+    expect(validatePositionLegality(query, { x: 4, y: 4 }, context)).toEqual({ legal: true, problem: null });
+  });
+
+  it('nearestCandidate orders an evaluated CandidateSet (source-defined ties by id)', () => {
+    const context = ctx();
+    const foes = evaluateActorQuery({ relation: 'foe' }, context);
+    expect(nearestCandidate(foes, { x: 4, y: 4 })?.id).toBe('near');
+    // From (7,4): foe(8,4) and slashed(8,5) are both distance 1 — tie by id.
+    expect(nearestCandidate(foes, { x: 7, y: 4 })?.id).toBe('foe');
+  });
+
+  it('nearest with includeDefeated matches the historical nearest-foe candidate set', () => {
+    const context = ctx(); // gone is a defeated foe at (9,4).
+    const including = evaluateActorQuery({ relation: 'foe', includeDefeated: true }, context);
+    expect(nearestCandidate(including, { x: 9, y: 4 })?.id).toBe('gone');
+    // Without the flag, the query's default eligibility excludes defeated foes.
+    const living = evaluateActorQuery({ relation: 'foe' }, context);
+    expect(nearestCandidate(living, { x: 9, y: 4 })?.id).not.toBe('gone');
   });
 });

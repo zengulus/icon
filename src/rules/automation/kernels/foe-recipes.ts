@@ -1,7 +1,7 @@
 import { RuleProgramViolation } from './runtime.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import { computeSpatialArea } from '../primitives/spatial-intent.js';
-import { evaluateActorQuery } from './evaluate-query.js';
+import { evaluateActorQuery, evaluatePositionCandidates } from './evaluate-query.js';
 import type { Position } from '../../types.js';
 import type {
   RuleActorView,
@@ -15,7 +15,7 @@ import type {
 } from '../primitives/types.js';
 import {
   axisDirection, sameCell, squareArea,
-  constant, distance, sourceActor, walk, freeCellsInRange, rushTowardFoes,
+  constant, distance, sourceActor, walk, rushTowardFoes,
   conditionMutation, markMutation, rushMutation, shoveMutation, terrainMutation, vigorMutation, swapMutations,
   action, compilation,
 } from '../primitives/foe-kit.js';
@@ -499,7 +499,7 @@ function terrainResolver(recipe: FoeTerrainRecipe): RuleResolver {
   return (context) => {
     const source = sourceActor(context, context.actorId);
     if (!source?.position) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires a position.`);
-    const cell = freeCellsInRange(context, source.position, recipe.range)[0];
+    const cell = evaluatePositionCandidates({ origin: source.position, radius: recipe.range }, context)[0];
     if (!cell) throw new RuleProgramViolation('choice.no-space', `${context.sourceId} needs a free space in range.`);
     return [terrainMutation(context, 'create', recipe.terrain, [cell])];
   };

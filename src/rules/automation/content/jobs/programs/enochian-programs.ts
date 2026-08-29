@@ -4,12 +4,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, freeCellsInRange, nearestFoe,
+  distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation,
   resourceMutation, stanceMutation, markMutation,
   shoveMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
@@ -322,7 +323,7 @@ const blackstarEffects: RuleResolver = (context) => {
   if (context.triggers?.has('comeback') || context.triggers?.has('exceed')) {
     mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'effect'));
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
-    const difficultCells = freeCellsInRange(context, target.position, 3).slice(0, 3);
+    const difficultCells = evaluatePositionCandidates({ origin: target.position, radius: 3 }, context).slice(0, 3);
     if (difficultCells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', difficultCells));
   }
   return mutations;

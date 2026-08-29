@@ -5,7 +5,7 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, comboCost,
-  distance, sourceActor, walk, freeCellsInRange,
+  distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation, rollDamageDice,
   placeMutation, teleportMutation, entityMutation, summonEntity, terrainMutation, swapMutations,
   action, compilation,

@@ -92,7 +92,7 @@ WINDOW/CONTINUATION underlays; never supply it speculatively. Tests:
 `choice.test.ts` (23 semantic cases) + protocol fixtures. Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
-### Candidate sets (QUERY underlay) — PARTIAL: actor-domain query + direct-target/area-inclusion routing landed (2026-08-30)
+### Candidate sets (QUERY underlay) — PARTIAL: actor + position query with the eligibility duplicates routed (2026-08-30)
 
 One deterministic ACTOR-domain eligibility authority beneath both automatic
 targeting and player choices. `kernels/candidate.ts`
@@ -121,9 +121,20 @@ the gate, unchanged problem precedence), and area actor-inclusion reads
 route through the `insideArea` query operator over the spatial gateway's
 cells (the gateway keeps the geometry).
 
+The position slice landed with the last eligibility duplicates (2026-08-30):
+`kernels/evaluate-query.ts` owns `evaluatePositionCandidates` (free-cell
+candidates), `validatePositionLegality` (in-grid/range/occupied — consumed
+by the teleport kernel's violation mapping), and `nearestCandidate`
+(source-defined nearest ordering over an evaluated CandidateSet);
+`primitives/job-kit.ts` dropped the `freeCellsInRange`/`nearestFoe` sugar
+and every resolver call site routes through the query operators (the
+nearest-foe reads declare `includeDefeated: true` to preserve the
+historical candidate set).
+
 NOT yet the full U3 QUERY underlay (see `docs/underlay-completion-plan.md`
-§1 U3): the query remains actor-only (no positions/terrain/entities/areas/
-persistent instances) and deterministic ordering operators are absent. The
+§1 U3): the query covers the actor and position domains but still lacks
+the terrain/entity/area/instance domains, and only the source-defined
+`nearest` ordering exists (no general first/last/nth operators). The
 tracked completion task is TODO.md §"Underlay-phase task ledger" (U3 audit
 correction). Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).

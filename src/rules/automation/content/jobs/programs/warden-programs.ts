@@ -4,11 +4,12 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, ringAround, sameCell, squareArea,
   constant,
-  distance, sourceActor, walk, freeCellsInRange,
+  distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
   shoveMutation, rushMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { footprintDistance } from '../../../primitives/spatial-intent.js';
@@ -89,7 +90,7 @@ const apexEffects: RuleResolver = (context) => {
   if (context.triggers?.has('finishing-blow') || context.triggers?.has('charge')) {
     // PART 4: the triggered extra beast rides the SAME authoritative creation
     // intent (creator-LoS gated, target-adjacent region) — no hand-picked
-    // freeCellsInRange[index] fallback. The reducer applies the base beast
+    // free-cell-scan fallback. The reducer applies the base beast
     // first, then this second intent, and validateEntityCreation skips the
     // now-occupied first cell, so you get two beasts total (one base + one
     // triggered), never three.
@@ -180,7 +181,7 @@ const mistStriderEffects: RuleResolver = (context) => {
   }
   mutations.push(terrainMutation(context, 'create', 'mist-cloud', squareArea(center, 1)));
   if (context.triggers?.has('charge')) {
-    const second = freeCellsInRange(context, center, 3)[0];
+    const second = evaluatePositionCandidates({ origin: center, radius: 3 }, context)[0];
     if (second) mutations.push(terrainMutation(context, 'create', 'mist-cloud', squareArea(second, 1)));
   }
   return mutations;
@@ -230,7 +231,7 @@ const underwayEffects: RuleResolver = (context) => {
       break;
     }
   }
-  const portalCell = freeCellsInRange(context, sourcePosition, 1)[0];
+  const portalCell = evaluatePositionCandidates({ origin: sourcePosition, radius: 1 }, context)[0];
   if (!portalCell) throw new RuleProgramViolation('choice.position-range', 'Underway requires a free adjacent space.');
   mutations.push(entityMutation(context, source.id, portalCell, 'underway', {}));
   if (context.triggers?.has('charge')) {

@@ -173,12 +173,16 @@ gate (`encounter.ts::assertDirectTarget`) routes base eligibility through
 `kernels/candidate.ts` while `primitives/targeting.ts` pins the
 direct-target problem vocabulary (relation/range/stealth/LoS); actor
 inclusion in areas is a query read (the `insideArea` operator) over the
-spatial gateway's cells (`computeSpatialArea`); a mob member model does
-not exist yet (`createFoeFromProfile` rejects the mob role — TODO/roadmap
-B2). The specialists keep their spatial models; the eligibility
-authorities still to merge behind one Query type are `nearestFoe`/
-`freeCellsInRange` resolver sugar and position-domain candidate legality
-(`kernels/teleport-choice.ts`).
+spatial gateway's cells (`computeSpatialArea`); position candidates and
+teleport-destination legality are query reads
+(`evaluatePositionCandidates`/`validatePositionLegality`), and the
+nearest-foe ordering routes through `nearestCandidate` over an evaluated
+CandidateSet; a mob member model does not exist yet (`createFoeFromProfile`
+rejects the mob role — TODO/roadmap B2). The specialists keep their
+spatial models; the eligibility authorities still to merge behind one
+Query type are the terrain/entity/area/instance domains and the
+directional `rushTowardFoes` movement sugar (a movement-direction read,
+not an eligibility query).
 
 ## U4 Choice / Decision
 
