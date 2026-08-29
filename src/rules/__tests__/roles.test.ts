@@ -4,14 +4,20 @@
  * The underlay is the typed distinction of *relative to whom a clause is
  * interpreted*: source/owner/controller/chooser/payer/target/recipient/
  * carrier/creator/trigger roles/attacker/defender/original-user/current-
- * origin. Tests establish:
- *   - positive: TARGET_CONTROLLER resolves to the target's controller for a
- *     RuleChoice; mark OWNER ≠ mark CARRIER resolve distinctly;
- *   - negative: a chooser role that cannot be derived rejects (null), never
- *     guesses;
- *   - boundary: source == target == controller collapses to one id without
- *     breaking derivation; ROLE ≠ ANCHOR — the original-user role survives
- *     a rebound where the spatial origin moved;
+ * origin. Controller authority is SUBJECT-RELATIVE (corrective pass
+ * 2026-08-30): `controller-of(source)` and `controller-of(target)` resolve to
+ * two DIFFERENT players when the source and target are controlled by
+ * different connected players; a missing recorded controller for a valid
+ * subject returns null (never silently falls back to the source). Tests
+ * establish:
+ *   - positive: source-controller ≠ target-controller in the same resolution;
+ *     TARGET_CONTROLLER resolves to the target's controller; mark OWNER ≠
+ *     mark CARRIER can have different controllers;
+ *   - negative: a chooser role that cannot be derived rejects (null); a
+ *     missing controller for an otherwise valid subject returns null; a
+ *     missing subject returns null;
+ *   - boundary: source == target == controller collapses to one id;
+ *     ROLE ≠ ANCHOR — the original-user role survives a rebound;
  *   - replay: the same durable role frame derives the same map.
  */
 import { describe, expect, it } from 'vitest';
@@ -26,10 +32,10 @@ describe('U2 ROLE — deriveRoles maps the durable role frame', () => {
       ownerId: 'knave', // the marker owns the mark
       carrierId: 'foe', // the target carries it
     };
-    const roles = deriveRoles(frame);
-    expect(roles.owner).toBe('knave');
-    expect(roles.carrier).toBe('foe');
-    expect(roles.owner).not.toBe(roles.carrier);
+    const map = deriveRoles(frame);
+    expect(map.roles.owner).toBe('knave');
+    expect(map.roles.carrier).toBe('foe');
+    expect(map.roles.owner).not.toBe(map.roles.carrier);
   });
 
   it('positive: attacker/defender and original-user/current-origin derive from the frame', () => {
@@ -41,11 +47,11 @@ describe('U2 ROLE — deriveRoles maps the durable role frame', () => {
       originalUserId: 'hero',
       currentOriginId: 'rebounded-foe',
     };
-    const roles = deriveRoles(frame);
-    expect(roles.attacker).toBe('hero');
-    expect(roles.defender).toBe('foe');
-    expect(roles['original-user']).toBe('hero');
-    expect(roles['current-origin']).toBe('rebounded-foe');
+    const map = deriveRoles(frame);
+    expect(map.roles.attacker).toBe('hero');
+    expect(map.roles.defender).toBe('foe');
+    expect(map.roles['original-user']).toBe('hero');
+    expect(map.roles['current-origin']).toBe('rebounded-foe');
   });
 
   it('boundary: ROLE ≠ ANCHOR — the original-user role survives a rebound where the spatial origin moved', () => {
@@ -58,11 +64,11 @@ describe('U2 ROLE — deriveRoles maps the durable role frame', () => {
       originalUserId: 'hero',
       currentOriginId: 'rebounded-foe',
     };
-    const roles = deriveRoles(frame);
-    expect(roles['original-user']).toBe('hero');
-    expect(roles['current-origin']).toBe('rebounded-foe');
+    const map = deriveRoles(frame);
+    expect(map.roles['original-user']).toBe('hero');
+    expect(map.roles['current-origin']).toBe('rebounded-foe');
     // No spatial anchor field participates in role derivation.
-    expect(roles['original-user']).not.toBe(roles['current-origin']);
+    expect(map.roles['original-user']).not.toBe(map.roles['current-origin']);
   });
 
   it('replay: the same durable role frame derives the same map', () => {
@@ -78,10 +84,10 @@ describe('U2 ROLE — chooser/controller role carriage on RuleChoice', () => {
     const frame: RoleFrame = {
       sourceId: 'hero',
       targetId: 'foe',
-      controllerId: 'player-2',
+      controllers: { target: 'player-2' },
     };
-    const roles = deriveRoles(frame);
-    expect(resolveRoleSelector(targetController, roles)).toBe('player-2');
+    const map = deriveRoles(frame);
+    expect(resolveRoleSelector(targetController, map)).toBe('player-2');
   });
 
   it('positive: a RuleChoice row carries typed chooser/controller roles (behavior-neutral)', () => {
@@ -99,27 +105,83 @@ describe('U2 ROLE — chooser/controller role carriage on RuleChoice', () => {
   });
 
   it('negative: a chooser role that cannot be derived rejects (null), never guesses', () => {
-    // No controller facts recorded and no source fallback path for a
-    // controller-of target whose target is absent.
+    // No target recorded (subject missing) — controller-of target is null.
     const frame: RoleFrame = { sourceId: 'hero' };
-    const roles = deriveRoles(frame);
-    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'target' }, roles)).toBeNull();
+    const map = deriveRoles(frame);
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'target' }, map)).toBeNull();
   });
 
   it('negative: an unknown role in the map rejects', () => {
     const frame: RoleFrame = { sourceId: 'hero' }; // no carrier derived
-    const roles = deriveRoles(frame);
-    expect(resolveRoleSelector({ kind: 'role', role: 'carrier' }, roles)).toBeNull();
+    const map = deriveRoles(frame);
+    expect(resolveRoleSelector({ kind: 'role', role: 'carrier' }, map)).toBeNull();
   });
 
   it('boundary: source == target == controller collapses to one id without breaking derivation', () => {
-    const frame: RoleFrame = { sourceId: 'self', targetId: 'self', controllerId: 'self' };
-    const roles = deriveRoles(frame);
-    expect(roles.source).toBe('self');
-    expect(roles.target).toBe('self');
-    expect(roles.controller).toBe('self');
-    expect(resolveRoleSelector({ kind: 'role', role: 'source' }, roles)).toBe('self');
-    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'target' }, roles)).toBe('self');
+    const frame: RoleFrame = {
+      sourceId: 'self',
+      targetId: 'self',
+      controllers: { source: 'self', target: 'self' },
+    };
+    const map = deriveRoles(frame);
+    expect(map.roles.source).toBe('self');
+    expect(map.roles.target).toBe('self');
+    expect(resolveRoleSelector({ kind: 'role', role: 'source' }, map)).toBe('self');
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'target' }, map)).toBe('self');
+  });
+});
+
+describe('U2 ROLE — controller authority is SUBJECT-RELATIVE (corrective pass 2026-08-30)', () => {
+  it('positive: source and target have DIFFERENT controllers', () => {
+    const frame: RoleFrame = {
+      sourceId: 'hero',
+      targetId: 'foe',
+      controllers: { source: 'player-a', target: 'player-b' },
+    };
+    const map = deriveRoles(frame);
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'source' }, map)).toBe('player-a');
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'target' }, map)).toBe('player-b');
+    expect(map.controllers.source).not.toBe(map.controllers.target);
+  });
+
+  it('positive: mark OWNER and mark CARRIER can have different controllers', () => {
+    const frame: RoleFrame = {
+      sourceId: 'hero',
+      ownerId: 'hero',
+      carrierId: 'ally',
+      controllers: { owner: 'player-a', carrier: 'player-c' },
+    };
+    const map = deriveRoles(frame);
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'owner' }, map)).toBe('player-a');
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'carrier' }, map)).toBe('player-c');
+  });
+
+  it('negative: missing controller for an otherwise valid subject returns null — it must NOT silently return source', () => {
+    // The subject (target) is derivable, but no controller is recorded for it.
+    const frame: RoleFrame = {
+      sourceId: 'hero',
+      targetId: 'foe',
+      controllers: { source: 'player-a' }, // only the source has a recorded controller
+    };
+    const map = deriveRoles(frame);
+    expect(map.roles.target).toBe('foe'); // subject is valid…
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'target' }, map)).toBeNull(); // …but has no controller
+  });
+
+  it('negative: missing subject returns null', () => {
+    const frame: RoleFrame = { sourceId: 'hero', controllers: { target: 'player-b' } };
+    const map = deriveRoles(frame);
+    expect(map.roles.target).toBeUndefined();
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'target' }, map)).toBeNull();
+  });
+
+  it('replay: the same durable controller map derives the same subject-relative authority', () => {
+    const frame: RoleFrame = {
+      sourceId: 'hero',
+      targetId: 'foe',
+      controllers: { source: 'player-a', target: 'player-b' },
+    };
+    expect(deriveRoles(frame)).toEqual(deriveRoles(frame));
   });
 });
 
@@ -153,13 +215,20 @@ describe('U2 ROLE — the context seam derives the legacy slots', () => {
   }
 
   it('positive: the legacy slots map onto the semantic roles', () => {
-    const roles = deriveRoles(roleFrameFromContext(ctx()));
-    expect(roles.source).toBe('hero');
-    expect(roles.target).toBe('foe');
-    expect(roles.recipient).toBe('foe');
-    expect(roles['trigger-source']).toBe('trap');
-    expect(roles['trigger-recipient']).toBe('hero');
-    expect(roles.attacker).toBe('hero');
-    expect(roles.defender).toBe('foe');
+    const map = deriveRoles(roleFrameFromContext(ctx()));
+    expect(map.roles.source).toBe('hero');
+    expect(map.roles.target).toBe('foe');
+    expect(map.roles.recipient).toBe('foe');
+    expect(map.roles['trigger-source']).toBe('trap');
+    expect(map.roles['trigger-recipient']).toBe('hero');
+    expect(map.roles.attacker).toBe('hero');
+    expect(map.roles.defender).toBe('foe');
+  });
+
+  it('negative: the legacy seam records no controllers, so controller-of fails closed (never guesses source)', () => {
+    const map = deriveRoles(roleFrameFromContext(ctx()));
+    expect(map.controllers).toEqual({});
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'target' }, map)).toBeNull();
+    expect(resolveRoleSelector({ kind: 'controller-of', subject: 'source' }, map)).toBeNull();
   });
 });

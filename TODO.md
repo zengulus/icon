@@ -237,6 +237,70 @@ assumption here, document the evidence and update this list before proceeding.
   `docs/underlay-completion-plan.md` §3.2 — do NOT start T2 without the
   reviewer's go.
 
+- **T1 corrective pass — U1/U2/U8 vocabulary repair (2026-08-30) —
+  LANDED.** Three defects in the newly-landed T1 vocabulary repaired
+  BEFORE any later underlay depends on them. Full suite green (1340
+  tests, +22 over the T1 baseline), census unchanged and byte-stable at
+  427, all audits green.
+  No source wiring, no census sequencing change, no consumer migration;
+  the fixes are vocabulary-only so later consumers migrate without
+  semantic loss._
+  1. **U2 controller-of is SUBJECT-RELATIVE.** Previously
+     `resolveRoleSelector` returned ONE global `roles.controller` (with
+     a `roles.source` fallback) for every `controller-of` subject, so
+     `controller-of(source)` and `controller-of(target)` could not
+     differ — defeating U2's multiplayer authority model — and an
+     absent controller fell back to the source (contradicting the
+     underlay's fail-safe rule). Now `RoleFrame.controllers` records a
+     per-SUBJECT-
+     ROLE controller map and `RoleMap` is `{ roles, controllers }`;
+     `resolveRoleSelector({ controller-of, subject })` returns the
+     recorded controller OF THAT subject only, null when the subject is
+     missing OR has no recorded controller (never silently guessing
+     source); recorded durable state only, never ambient session
+     ownership. Tests: source−target different controllers, mark
+     owner−carrier different controllers, missing-controller-for-valid-
+     subject → null, missing subject → null, self-collapse, replay.
+  2. **U8 CLOCK/SCOPE keeps temporal semantics.** Previously
+     `clockForTiming` collapsed turn-start+turn-end→turn and round-
+     /combat-start+end→round/combat; `scopeForDuration` dropped the
+     turn-start/end actor; counted `n-boundary round n` was an ABSOLUTE
+     round counter (`state.round >= n`) so a round-5-created 3-round
+     effect looked pre-expired; `next-match` fired on broad kinds
+     without a recorded transition; `currentClock` reported a round
+     boundary for `use`. Now boundaries carry an EDGE (`start`/`end`,
+     never collapsed) plus an optional U1 `subject` (source's turn ≠
+     target's turn; `slow-turn` start ≠ ordinary turn start); COUNTED /
+     next forms are RELATIVE to a recorded epoch (an effect created on
+     round 5 for 3 rounds completes only after three matching round
+     boundaries from its origin); `boundaryReached`/`scopeSatisfied`
+     take an observed `ClockObservation` (+ optional epoch) and
+     reject relative reads with no recorded epoch (no invented
+     answers); `permanent` never satisfies; `currentClock`/
+     `clockForTiming` return null for non-boundary step timings. The scheduler/lifecycle/usage/duration
+     readers are NOT yet migrated (U8 stays PARTIAL). Tests: the 11
+     required temporal-fidelity cases plus edge/subject preservation in
+     `scopeForDuration`.
+  3. **U1 REFERENCE domain + collection type safety.** Previously
+     plural `trigger-targets` collapsed to the FIRST target
+     (`context.triggerTargetIds?.[0]`); a live bound actor ref could
+     silently resolve a bound position (`domain` was decoration); the
+     captured representation allowed domain/value pairs that disagree.
+     Now captured references are SELF-DESCRIBING discriminated kinds
+     (`captured-actor` carries only an actorId; `captured-position`
+     only a Position) so a captured actor structurally cannot hold a
+     position and vice versa; `Reference<D>` is a generic discriminated
+     union whose CAPTURED member narrows to `D`; `collection` preserves
+     its element domain (`Reference<D>[]`); `liveTriggerTargets()`
+     resolves an upheld ordered collection of EVERY target (empty slot
+     = legitimate empty collection, distinct from a missing singular
+     slot); bound-name resolution verifies `domainOf(boundRef) ===
+     declared domain` (bound actor → bound position is
+     `domain-mismatch`, reject). The Binder stays pure/immutable and
+     replay-deterministic. U1 stays PARTIAL (consumers not migrated).
+  U1/U2/U8 remain PARTIAL — vocabulary-only, consumers/migrations still
+  outstanding; no source unit became executable.
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

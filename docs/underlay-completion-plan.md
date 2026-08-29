@@ -270,18 +270,28 @@ Play; p.300 Redondo) captures a position; marks/stances/terrain effects
 terrain entry effects p.151/p.353). The proliferation of bespoke context
 fields is the warning this underlay removes.
 
-**Current state.** `PARTIAL` (T1 landed 2026-08-30):
-`primitives/reference.ts` defines the typed `Reference` union (LIVE refs
-named by legacy slot / direct id / bound name; CAPTURED actor/entity/
-position/value literals; `collection` refs), `Binder`/`bind`/
-`lookupBound`/`EMPTY_BINDER`, and the deterministic `resolveReference`
-surface (captured literals never re-read later state; bound names resolve
-the bound reference; missing actor/entity/slot/position reject
-fail-closed). `RuleExecutionContext.boundNames` carries the Binder
+**Current state.** `PARTIAL` (T1 landed 2026-08-30; corrected 2026-08-30):
+`primitives/reference.ts` defines the typed `Reference<D>` vocabulary —
+LIVE refs named by legacy slot / direct id / bound name; CAPTURED refs are
+SELF-DESCRIBING discriminated kinds (`captured-actor` carries only an
+actorId, `captured-position` only a Position, etc.) narrowed by the
+generic D, so a captured actor structurally cannot hold a position literal
+and a captured position cannot hold an actor id; `collection` refs preserve
+their element domain (`Reference<D>[]`); the plural `trigger-targets` slot
+(`liveTriggerTargets`) resolves to an ORDERED COLLECTION of every recorded
+target (never one member; an absent slot is a legitimate empty collection,
+distinct from a missing singular slot). `Binder`/`bind`/
+`lookupBound`/`EMPTY_BINDER`, the deterministic `resolveReference` surface
+(captured literals never re-read later state; bound names resolve the
+bound reference but are DOMAIN-CHECKED via `domainOf` — a bound actor ref
+resolving to a bound position is `domain-mismatch`, reject; missing actor/
+entity/slot/position reject fail-closed), plus `domainOf`/`referenceKey`.
+`RuleExecutionContext.boundNames` carries the Binder
 (optional, behavior-neutral). Tests: `reference.test.ts` (positive
-captured-exactness + live re-resolution, negative unbound/missing-slot,
-boundary empty-collection + defeated-actor-captured, replay
-identical-literal). The legacy slots (`context.actorId`/`attackTargetId`/
+captured-exactness + live re-resolution + binder/collection + ordered
+plural targets, negative unbound/missing-slot/domain-mismatch, boundary
+empty-collection + defeated-actor-captured, replay identical-literal +
+Binder purity). The legacy slots (`context.actorId`/`attackTargetId`/
 `triggerSourceId`/`triggerTargetIds`/`damageRecipientId`) remain the
 LIVE refs' resolution sources — migrating consumers onto typed refs is the
 T2+ de-dup work. `RuleContinuationState` still carries no refs across
@@ -367,20 +377,28 @@ the source/controller's position (Masquerade, p.151); the aura kernel's
 bearer-vs-member boundary (`kernels/aura.ts`) is a role the engine must
 derive, never string-match.
 
-**Current state.** `PARTIAL` (T1 landed 2026-08-30):
+**Current state.** `PARTIAL` (T1 landed 2026-08-30; corrected 2026-08-30):
 `primitives/roles.ts` defines the `Role` union (source/owner/controller/
 chooser/payer/target/recipient/carrier/creator/trigger-source/
 trigger-recipient/attacker/defender/original-user/current-origin),
-`RoleFrame` + deterministic `deriveRoles`, typed `RoleSelector`
-(`role` | `controller-of`) + `resolveRoleSelector` (null when
-underivable — reject, never guess), and the `roleFrameFromContext` seam
-over the legacy slots. `RuleChoice` gains typed optional `chooser`/
+`RoleFrame` + deterministic `deriveRoles` producing a SUBJECT-RELATIVE
+`RoleMap` (`{ roles, controllers }`), typed `RoleSelector`
+(`role` | `controller-of`) + `resolveRoleSelector`, and the
+`roleFrameFromContext` seam over the legacy slots.
+`RoleFrame.controllers` records who controls each subject ROLE (recorded
+durable state, never ambient session ownership); `controller-of(source)` and
+`controller-of(target)` resolve to DIFFERENT players in the same resolution
+when the source and target are controlled by different connected players;
+a missing recorded controller for an otherwise valid subject returns null
+(never silently falls back to the source); the command boundary rejects
+rather than guessing. `RuleChoice` gains typed optional `chooser`/
 `controller` role carriage (behavior-neutral until U4 consumes it);
 `RuleExecutionContext` role reads stay on the legacy slots pending
-consumer migration. Tests: `roles.test.ts` (positive owner≠carrier and
-TARGET_CONTROLLER resolution + rule-choice carriage, negative
-underivable-chooser/unknown-role, boundary self-collapse + ROLE≠ANCHOR
-rebound, replay same-frame-same-map). The aura kernel's bearer-vs-member
+consumer migration. Tests: `roles.test.ts` (positive owner≠carrier,
+TARGET_CONTROLLER, source−target and owner−carrier differing controllers;
+negative underivable-chooser/unknown-role, missing-controller-for-valid-
+subject, missing-subject; boundary self-collapse + ROLE≠ANCHOR rebound;
+replay same-frame-same-map). The aura kernel's bearer-vs-member
 and `targeting.ts`'s hard-coded relation reads still derive roles
 locally — the de-dup migration is T2+.
 
@@ -909,22 +927,36 @@ Special); Delay resolves at the start of the slow turn before ordinary
 activity (p.87 slow rounds; scheduler `delayed` phase); "at the end of your
 next turn" N-boundary forms; camp/expedition reset boundaries (p.56, p.113).
 
-**Current state.** `PARTIAL` (T1 landed 2026-08-30):
-`primitives/scope.ts` defines the ONE `Clock` union (boundary /
-n-boundary / next-match / event), the `RecurringBoundary` set (turn /
-round / combat / expedition / camp / interlude), `Scope` (until / for-n /
-until-next / permanent / until-event), and the boundary-read surface:
-`clockForTiming` (step timings → null, boundary timings → Clock),
-`scopeForDuration` (legacy `RuleDuration` → Scope, behavior-neutral),
-`currentClock(context)`, and pure `boundaryReached(clock, state)`.
-Tests: `scope.test.ts` (positive one-round-read-across-duration/timing/
-clock + counted/next-match/event forms, negative step-timings-null +
-out-of-scope-reject, boundary slow-vs-ordinary kinds, replay
-same-state-same-clock). The legacy surfaces remain the executing
+**Current state.** `PARTIAL` (T1 landed 2026-08-30; corrected 2026-08-30):
+`primitives/scope.ts` defines the ONE `Clock`/`Scope` vocabulary with FULL
+temporal fidelity: `BoundarySpan` + `BoundaryEdge` (`start`/`end` —
+turn-start ≠ turn-end, round-/combat-start ≠ end, slow-turn start ≠
+ordinary turn start) carrying an optional U1 `Reference` `subject` for
+actor-relative boundaries (end-of-YOUR-turn ≠ end-of-TARGET's-turn);
+counted (`n-boundary`/`for-n`) and `next`/`until-next` forms RELATIVE to a
+recorded epoch (`ClockObservation` + `boundaryKey` occurrence counters —
+an effect created on round 5 "for 3 rounds" completes only after three
+matching round boundaries from its origin, never because `round >= 3`);
+permanent / until-event extents. The boundary-read surface is
+`clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`/
+`scopeSatisfied`. `clockForTiming` maps step timings ('use', attack-*) to
+null and boundary timings to a BoundaryRef carrying its edge;
+`currentClock(context)` returns null for non-boundary timings (a `use`
+command is never "at the round boundary"); `scopeForDuration` maps the
+legacy `RuleDuration` onto Scopes PRESERVING edge + actor subject
+(turn-start/end durations keep their Reference; behavior-neutral);
+`boundaryReached`/`scopeSatisfied` require an observed boundary record and
+FAIL CLOSED (return false) on relative reads with no recorded epoch — they
+never invent absolute-round answers. Tests: `scope.test.ts` (17 tests: the
+11 required temporal-fidelity cases — turn-start≠end, round-start≠end,
+source≠target turn, relative-3-rounds-from-round-5-origin, next-target-not-
+on-source-turn, slow≠ordinary, non-boundary-null, permanent-never, named-
+event, replay, plus edge/subject preservation in `scopeForDuration`). The
+legacy surfaces remain the executing
 authority — `RuleDuration`/`RuleTiming`/`use-ledger`/lifecycle readers
 still re-key "round" separately; migrating them onto the Clock (the U8
 completion work, including the scheduler's turn record for turn-level
-`boundaryReached`) is a later phase, not T1.
+`boundaryReached` reads) is a later phase, not T1.
 
 **Locations partially owning/duplicating.** `RuleDuration`
 (`primitives/types.ts`); lifecycle phases (`kernels/lifecycle.ts`);

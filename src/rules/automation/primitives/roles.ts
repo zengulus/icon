@@ -17,9 +17,20 @@
  * the original user" even when the rebound character's space is the spatial
  * origin — the original-user role and the current-origin role can differ.
  *
+ * Controller authority is subject-relative (corrective pass 2026-08-30).
+ * `controller-of(source)` and `controller-of(target)` can resolve to TWO
+ * DIFFERENT players in the same resolution when the source and the target
+ * are controlled by different connected players. `RoleFrame.controllers`
+ * records a per-SUBJECT-ROLE map of who controls the actor filling that role
+ * (recorded durable state, never ambient websocket/session ownership, so
+ * replay derives the same authority). `resolveRoleSelector` look up the
+ * controller OF THE SUBJECT role only — it never falls back to the source
+ * when the recorded controller is absent (an underivable semantic role
+ * rejects rather than guesses, fail-closed).
+ *
  * Foundation: no source IDs, no kernel imports. `deriveRoles` produces the
- * semantic role map for a resolution; `RuleChoice` carries typed optional
- * chooser/controller roles (behavior-neutral until U4 consumes them).
+ * semantic role authority for a resolution; `RuleChoice` carries typed
+ * optional chooser/controller roles (behavior-neutral until U4 consumes them).
  */
 import type { RuleExecutionContext } from './types.js';
 
@@ -43,7 +54,7 @@ export type Role =
 
 /** The durable role facts a derivation reads. All optional except `sourceId`
  * (every resolution has a source). Recorded state + the durable choice rows
- * — never ambient connection state, so replay derives the same map. */
+ * — never ambient connection state, so replay derives the same authority. */
 export interface RoleFrame {
   /** The ability user / acting actor. */
   sourceId: string;
@@ -52,8 +63,6 @@ export interface RoleFrame {
   /** Owner of the effect/mark/stance being resolved (p.94 marks are owned
    * by the marker, carried by the target). */
   ownerId?: string;
-  /** Who answers for an actor at the network boundary (recorded). */
-  controllerId?: string;
   /** Who decides a choice (defaults to the controller, then the source). */
   chooserId?: string;
   /** Who pays a cost (p.102/103 Sacrifice is paid by the user). */
@@ -79,9 +88,30 @@ export interface RoleFrame {
    * rebound character's space is the anchor while the original user's role
    * is unchanged. */
   currentOriginId?: string;
+  /** Subject-relative controller authority (multiplayer/VTT): for a SUBJECT
+   * ROLE `r`, the connected player recorded as controlling the actor filling
+   * `r` (e.g. `{ target: 'player-b', 'trigger-source': 'player-a' }`). An
+   * ABSENT entry means no recorded controller for that subject — underivable,
+   * fail closed. Range is recorded durable state, never ambient
+   * websocket/session ownership, so replay derives the same map. */
+  controllers?: Partial<Record<Role, string>>;
 }
 
-export type RoleMap = Readonly<Partial<Record<Role, string>>>;
+/** The derived semantic role authority for a resolution. Two halves:
+ *
+ *  - `roles`: the plain role→identity derivation (source, owner, target, …).
+ *  - `controllers`: the subject-relative controller map — who controls each
+ *    subject ROLE. A dedicated map (NOT global scalar fields like
+ *    `targetControllerId`/`sourceControllerId`) so `controller-of(source)` and
+ *    `controller-of(target)` can differ in the same resolution.
+ *
+ * Both are pure functions of the durable `RoleFrame`. Absent facts stay
+ * absent — a caller that needs a role that cannot be derived must reject,
+ * never guess. */
+export interface RoleMap {
+  roles: Partial<Record<Role, string>>;
+  controllers: Partial<Record<Role, string>>;
+}
 
 /** Derive the semantic role map for a resolution. Deterministic: a pure
  * function of the durable role frame. Absent facts stay absent — a caller
@@ -92,7 +122,6 @@ export function deriveRoles(frame: RoleFrame): RoleMap {
   };
   if (frame.targetId !== undefined) roles.target = frame.targetId;
   if (frame.ownerId !== undefined) roles.owner = frame.ownerId;
-  if (frame.controllerId !== undefined) roles.controller = frame.controllerId;
   if (frame.chooserId !== undefined) roles.chooser = frame.chooserId;
   if (frame.payerId !== undefined) roles.payer = frame.payerId;
   if (frame.recipientId !== undefined) roles.recipient = frame.recipientId;
@@ -104,39 +133,48 @@ export function deriveRoles(frame: RoleFrame): RoleMap {
   if (frame.defenderId !== undefined) roles.defender = frame.defenderId;
   if (frame.originalUserId !== undefined) roles['original-user'] = frame.originalUserId;
   if (frame.currentOriginId !== undefined) roles['current-origin'] = frame.currentOriginId;
-  return roles;
+  return { roles, controllers: frame.controllers ?? {} };
 }
 
 /** A typed role selection for a choice row: who decides (chooser) and who
- * answers at the network boundary (controller). `controller-of` resolves
- * relative to another role (e.g. the TARGET_CONTROLLER of p.143's
- * "if multiple foes are equidistant, you may choose" is the controller of
- * the target). */
+ * answers at the network boundary (controller). `controller-of` resolves the
+ * controller OF THE SUBJECT role (e.g. the TARGET_CONTROLLER of p.143's
+ * "if multiple foes are equidistant, you may choose" is the controller of the
+ * target). */
 export type RoleSelector =
   | { kind: 'role'; role: Role }
   | { kind: 'controller-of'; subject: Role };
 
 /** Resolve a RoleSelector against a derived RoleMap. Returns null when the
- * role cannot be derived — the command boundary rejects rather than
- * guessing (a choice row whose chooser cannot be derived is malformed). */
-export function resolveRoleSelector(selector: RoleSelector, roles: RoleMap): string | null {
+ * role cannot be derived — the command boundary rejects rather than guessing
+ * (a choice row whose chooser cannot be derived is malformed).
+ *
+ * `controller-of(subject)` is SUBJECT-RELATIVE: it returns the recorded
+ * controller OF THAT SUBJECT role. It requires the subject to be derivable
+ * AND a controller to be recorded for that subject; a missing controller for
+ * an otherwise valid subject returns null (it does NOT silently fall back to
+ * the source), because an underivable semantic role must reject rather than
+ * guess. */
+export function resolveRoleSelector(selector: RoleSelector, map: RoleMap): string | null {
   switch (selector.kind) {
     case 'role':
-      return roles[selector.role] ?? null;
+      return map.roles[selector.role] ?? null;
     case 'controller-of': {
-      const subject = roles[selector.subject];
-      if (subject === undefined) return null;
-      // The controller is derived from the recorded role frame; absent
-      // controller facts fall back to the source (a solo/local table has no
-      // separate controller layer).
-      return roles.controller ?? roles.source ?? null;
+      const subjectId = map.roles[selector.subject];
+      if (subjectId === undefined) return null;
+      const controller = map.controllers[selector.subject];
+      if (controller === undefined) return null;
+      return controller;
     }
   }
 }
 
 /** Build a RoleFrame from the legacy context slots — the migration seam that
  * replaces ad hoc `context.actorId`/`attackTargetId`/`triggerSourceId`/
- * `damageRecipientId` reads with typed role derivation. */
+ * `damageRecipientId` reads with typed role derivation. The legacy context
+ * carries no recorded per-subject controller facts, so `controllers` stays
+ * empty here (every controller-of resolution fails closed until a real
+ * multiplayer/session authority records controllers). */
 export function roleFrameFromContext(context: RuleExecutionContext): RoleFrame {
   return {
     sourceId: context.actorId,

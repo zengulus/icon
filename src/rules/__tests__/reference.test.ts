@@ -1,26 +1,27 @@
 /**
- * reference.test.ts — the U1 REFERENCE underlay's (U1) semantic contract.
+ * reference.test.ts — the U1 REFERENCE underlay's semantic contract.
  *
  * The underlay is ONE typed way to name a thing a later rule clause refers
  * to, distinguishing LIVE refs (resolve against current state at use time)
  * from CAPTURED refs (durable literals determined earlier, never re-derived
- * from later state). Tests establish:
- *   - positive: a captured position resolves exactly (even after the actor
- *     moved); a live actor ref resolves its NEW position on a later turn;
- *     a bound name resolves through the Binder;
- *   - negative: an unbound name rejects; a captured ref never re-reads
- *     later state;
- *   - boundary: empty collection; a captured defeated-actor ref stays
- *     resolvable (identity was captured) while a live slot read of an
- *     absent slot rejects;
- *   - replay: resolving a captured position twice yields the identical
- *     literal regardless of intervening state changes.
+ * from later state). Corrective pass (2026-08-30):
+ *   - captured refs are SELF-DESCRIBING kinds: a captured actor structurally
+ *     cannot contain a position literal; a captured position cannot contain
+ *     an actor id;
+ *   - a bound name must resolve to the DECLARED domain — a bound actor ref
+ *     resolving to a bound position is domain-mismatch (reject/);
+ *   - the plural trigger-targets slot resolves as an ORDERED COLLECTION of
+ *     every target, never one arbitrary member; an absent slot is a
+ *     legitimate EMPTY collection, distinct from a missing singular slot;
+ *   - the Binder is pure/immutable and resolution is replay-deterministic;
+ *   - captured durability after movement, live re-read of current state, and
+ *     captured defeated-actor identity remain.
  */
 import { describe, expect, it } from 'vitest';
 import type { RuleExecutionContext } from '../automation/primitives/types.js';
 import {
-  bind, capturedActor, capturedPosition, EMPTY_BINDER, liveActorBound, liveActorSlot,
-  referenceCollection, resolveReference,
+  bind, capturedActor, capturedEntity, capturedPosition, capturedValue, EMPTY_BINDER, liveActorBound, liveActorSlot,
+  liveRef, liveTriggerTargets, referenceCollection, resolveReference,
 } from '../automation/primitives/reference.js';
 
 function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContext {
@@ -47,7 +48,7 @@ function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContex
   };
 }
 
-describe('U1 REFERENCE — CAPTURED refs are durable literals', () => {
+describe('U1 REFERENCE — captured refs are durable, self-describing literals', () => {
   it('positive: a captured position resolves exactly, even after the actor moved', () => {
     const context = ctx();
     const landing = capturedPosition({ x: 3, y: 2 });
@@ -55,7 +56,23 @@ describe('U1 REFERENCE — CAPTURED refs are durable literals', () => {
     context.state.actors.hero.position = { x: 9, y: 9 };
     const resolution = resolveReference(landing, context);
     expect(resolution.ok).toBe(true);
-    if (resolution.ok) expect(resolution.value).toEqual({ kind: 'position', position: { x: 3, y: 2 } });
+    if (resolution.ok && resolution.value.kind === 'position') expect(resolution.value.position).toEqual({ x: 3, y: 2 });
+  });
+
+  it('1, 2: a captured actor structurally cannot hold a position, and a captured position structurally cannot hold an actor id', () => {
+    // The captured literals are SELF-DESCRIBING kinds: the actor literal
+    // carries only an actorId; the position literal carries only a Position.
+    const actorRef = capturedActor('foe');
+    expect(actorRef).toEqual({ kind: 'captured-actor', actorId: 'foe' });
+    expect('position' in actorRef).toBe(false);
+
+    const positionRef = capturedPosition({ x: 3, y: 2 });
+    expect(positionRef).toEqual({ kind: 'captured-position', position: { x: 3, y: 2 } });
+    expect('actorId' in positionRef).toBe(false);
+
+    // Entity, value literals are the same discipline.
+    expect(capturedEntity('shrine')).toEqual({ kind: 'captured-entity', entityId: 'shrine' });
+    expect(capturedValue(7)).toEqual({ kind: 'captured-value', value: 7 });
   });
 
   it('negative: a captured ref never re-reads later state', () => {
@@ -65,9 +82,6 @@ describe('U1 REFERENCE — CAPTURED refs are durable literals', () => {
     context.state.actors.hero.position = { x: 9, y: 9 };
     const second = resolveReference(landing, context);
     expect(first).toEqual(second);
-    if (first.ok && second.ok && first.value.kind === 'position' && second.value.kind === 'position') {
-      expect(second.value.position).toEqual(first.value.position);
-    }
   });
 
   it('boundary: a captured defeated-actor ref stays resolvable (identity was captured)', () => {
@@ -82,9 +96,7 @@ describe('U1 REFERENCE — CAPTURED refs are durable literals', () => {
   it('replay: resolving the captured position twice yields the identical literal', () => {
     const context = ctx();
     const ref = capturedPosition({ x: 7, y: 1 });
-    const first = resolveReference(ref, context);
-    const second = resolveReference(ref, context);
-    expect(second).toEqual(first);
+    expect(resolveReference(ref, context)).toEqual(resolveReference(ref, context));
   });
 });
 
@@ -102,7 +114,7 @@ describe('U1 REFERENCE — LIVE refs re-resolve against current state', () => {
 
   it('positive: a live position read tracks the actor\'s current cell', () => {
     const context = ctx();
-    const ref = { kind: 'live' as const, domain: 'position' as const, name: { kind: 'id' as const, id: 'hero' } };
+    const ref = liveRef('position', { kind: 'id', id: 'hero' });
     context.state.actors.hero.position = { x: 2, y: 2 };
     const resolution = resolveReference(ref, context);
     expect(resolution.ok).toBe(true);
@@ -113,12 +125,12 @@ describe('U1 REFERENCE — LIVE refs re-resolve against current state', () => {
 
   it('negative: a live actor ref to a missing actor rejects', () => {
     const context = ctx();
-    const resolution = resolveReference({ kind: 'live', domain: 'actor', name: { kind: 'id', id: 'nobody' } }, context);
+    const resolution = resolveReference(liveRef('actor', { kind: 'id', id: 'nobody' }), context);
     expect(resolution.ok).toBe(false);
     if (!resolution.ok) expect(resolution.problem).toBe('missing-actor');
   });
 
-  it('negative: an absent legacy slot rejects (no silent default)', () => {
+  it('negative: an absent singular legacy slot rejects (no silent default)', () => {
     const context = ctx(); // no attackTargetId
     const resolution = resolveReference(liveActorSlot('attack-target'), context);
     expect(resolution.ok).toBe(false);
@@ -128,7 +140,7 @@ describe('U1 REFERENCE — LIVE refs re-resolve against current state', () => {
   it('boundary: a position-less actor rejects a live position read', () => {
     const context = ctx();
     context.state.actors.hero.position = null;
-    const resolution = resolveReference({ kind: 'live', domain: 'position', name: { kind: 'id', id: 'hero' } }, context);
+    const resolution = resolveReference(liveRef('position', { kind: 'id', id: 'hero' }), context);
     expect(resolution.ok).toBe(false);
     if (!resolution.ok) expect(resolution.problem).toBe('actor-without-position');
   });
@@ -139,11 +151,20 @@ describe('U1 REFERENCE — Binder and collections', () => {
     const context = ctx();
     const bound = bind(EMPTY_BINDER, 'landing', capturedPosition({ x: 5, y: 5 }));
     context.boundNames = bound;
-    const resolution = resolveReference({ kind: 'live', domain: 'position', name: { kind: 'bound', name: 'landing' } }, context);
+    const resolution = resolveReference(liveRef('position', { kind: 'bound', name: 'landing' }), context);
     expect(resolution.ok).toBe(true);
     if (resolution.ok && resolution.value.kind === 'position') {
       expect(resolution.value.position).toEqual({ x: 5, y: 5 });
     }
+  });
+
+  it('3: a bound ACTOR ref resolving to a bound POSITION rejects (domain-mismatch)', () => {
+    const context = ctx();
+    context.boundNames = bind(EMPTY_BINDER, 'landing', capturedPosition({ x: 5, y: 5 }));
+    // Declared domain 'actor' but the bound reference is a position.
+    const resolution = resolveReference(liveActorBound('landing'), context);
+    expect(resolution.ok).toBe(false);
+    if (!resolution.ok) expect(resolution.problem).toBe('domain-mismatch');
   });
 
   it('negative: an unbound name rejects (unknown-bound-name)', () => {
@@ -153,20 +174,68 @@ describe('U1 REFERENCE — Binder and collections', () => {
     if (!resolution.ok) expect(resolution.problem).toBe('unknown-bound-name');
   });
 
-  it('boundary: an empty collection resolves to an empty collection', () => {
+  it('positive: a bound actor name bound to a captured actor resolves', () => {
+    const context = ctx();
+    context.boundNames = bind(EMPTY_BINDER, 'slain', capturedActor('foe'));
+    const resolution = resolveReference(liveActorBound('slain'), context);
+    expect(resolution.ok).toBe(true);
+    if (resolution.ok && resolution.value.kind === 'actor') expect(resolution.value.actor.id).toBe('foe');
+  });
+
+  it('5: an empty collection resolves to a legitimate empty collection', () => {
     const context = ctx();
     const resolution = resolveReference(referenceCollection([]), context);
     expect(resolution.ok).toBe(true);
     if (resolution.ok && resolution.value.kind === 'collection') expect(resolution.value.items).toEqual([]);
   });
 
-  it('positive: a collection of refs resolves item-by-item (BIND slain actors AS slain)', () => {
+  it('6: a collection of refs resolves item-by-item, PRESERVING ORDER', () => {
     const context = ctx();
     const resolution = resolveReference(referenceCollection([capturedActor('hero'), capturedActor('foe')]), context);
     expect(resolution.ok).toBe(true);
     if (resolution.ok && resolution.value.kind === 'collection') {
-      expect(resolution.value.items.map((item) => (item.kind === 'actor' ? item.actor.id : '?')).sort())
-        .toEqual(['foe', 'hero']);
+      expect(resolution.value.items.map((item) => (item.kind === 'actor' ? item.actor.id : '?')))
+        .toEqual(['hero', 'foe']); // order preserved, no sorting
     }
+  });
+});
+
+describe('U1 REFERENCE — plural trigger-targets resolve as an ordered collection', () => {
+  it('4: every target is preserved as a collection, never the first element', () => {
+    const context = ctx({ triggerTargetIds: ['hero', 'foe'] });
+    const resolution = resolveReference(liveTriggerTargets(), context);
+    expect(resolution.ok).toBe(true);
+    if (resolution.ok && resolution.value.kind === 'collection') {
+      expect(resolution.value.items.map((item) => (item.kind === 'actor' ? item.actor.id : '?')))
+        .toEqual(['hero', 'foe']);
+    }
+  });
+
+  it('5: an absent trigger-target slot is a legitimate EMPTY collection, distinct from a missing singular slot', () => {
+    const noTargets = ctx(); // triggerTargetIds undefined
+    const plural = resolveReference(liveTriggerTargets(), noTargets);
+    expect(plural.ok).toBe(true);
+    if (plural.ok && plural.value.kind === 'collection') expect(plural.value.items).toEqual([]);
+
+    // The singular attack-target slot for the same context rejects instead.
+    const singular = resolveReference(liveActorSlot('attack-target'), noTargets);
+    expect(singular.ok).toBe(false);
+    if (!singular.ok) expect(singular.problem).toBe('missing-slot');
+  });
+});
+
+describe('U1 REFERENCE — the Binder is pure and replay-deterministic', () => {
+  it('10: bind returns a new Binder and never mutates the original', () => {
+    const original = EMPTY_BINDER;
+    const extended = bind(original, 'landing', capturedPosition({ x: 1, y: 1 }));
+    expect(original.names).toEqual({}); // original untouched
+    expect(extended).not.toBe(original);
+    expect(extended.names.landing).toEqual({ kind: 'captured-position', position: { x: 1, y: 1 } });
+  });
+
+  it('10: the same context + binder resolves the same collection under replay', () => {
+    const context = ctx({ triggerTargetIds: ['hero', 'foe'] });
+    expect(resolveReference(liveTriggerTargets(), context))
+      .toEqual(resolveReference(liveTriggerTargets(), context));
   });
 });

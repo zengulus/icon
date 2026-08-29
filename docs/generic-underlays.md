@@ -77,12 +77,21 @@ and notes (i) the owning authority today and (ii) the required extension.
 
 Question: *"What thing/value does this later rule clause refer to?"*
 
-Today (T1 landed 2026-08-30): `primitives/reference.ts` defines the typed
-`Reference` vocabulary (LIVE refs by legacy slot / direct id / bound name;
-CAPTURED actor/entity/position/value literals; `collection` refs),
-`Binder`/`bind`/`lookupBound` (`RuleExecutionContext.boundNames` carries
-it), and the deterministic `resolveReference` surface — captured literals
-never re-read later state; bound names resolve the bound reference;
+Today (T1 landed 2026-08-30; corrected 2026-08-30): `primitives/reference.ts`
+defines the typed `Reference<D>` vocabulary — LIVE refs by legacy slot /
+direct id / bound name; CAPTURED refs are SELF-DESCRIBING discriminated
+kinds (`captured-actor` carries only an actorId, `captured-position` only
+a Position, etc.), so a captured actor structurally cannot hold a position
+literal and vice versa; `collection` refs preserve their element domain
+(`Reference<D>[]`); the plural `trigger-targets` slot (`liveTriggerTargets`)
+resolves to an ordered COLLECTION of every recorded target, never one
+member (an absent slot is a legitimate empty collection, distinct from a
+missing singular slot). `Binder`/`bind`/`lookupBound`
+(`RuleExecutionContext.boundNames` carries it), the deterministic
+`resolveReference` surface, and `domainOf`/`referenceKey`. CAPTURED
+literals never re-read later state; bound names resolve the bound reference
+but are DOMAIN-CHECKED (`domainOf(boundRef) === declared domain`) so a
+bound actor ref resolving to a bound position is `domain-mismatch` (reject);
 missing actor/entity/slot/position reject fail-closed. The legacy
 implicit refs (`context.actorId`, `attackTargetId`, `triggerSourceId`,
 `triggerTargetIds`, `damageRecipientId`, input buckets, `resolutionFacts`,
@@ -140,14 +149,21 @@ original user, current origin. ICON repeatedly separates them.
 
 Not a stringly bag. Critical for multiplayer/VTT authority: the engine must
 derive WHICH connected player is entitled to answer a ChoiceSpec from
-semantic controller/chooser roles. Today (T1 landed 2026-08-30):
-`primitives/roles.ts` defines the `Role` union, `RoleFrame` +
-deterministic `deriveRoles`, typed `RoleSelector` (`role` |
-`controller-of`) + `resolveRoleSelector` (null when underivable — reject,
-never guess), and the `roleFrameFromContext` seam; `RuleChoice` carries
-typed optional `chooser`/`controller` roles (behavior-neutral until U4
-consumes them). ROLE ≠ REFERENCE ≠ ANCHOR is explicit (original-user role
-survives a rebound where the spatial origin moved). The aura
+semantic controller/chooser roles. Today (T1 landed 2026-08-30; corrected
+2026-08-30): `primitives/roles.ts` defines the `Role` union, `RoleFrame` +
+deterministic `deriveRoles` producing a SUBJECT-RELATIVE `RoleMap`
+(`{ roles, controllers }`), typed `RoleSelector` (`role` | `controller-of`)
++ `resolveRoleSelector`, and the `roleFrameFromContext` seam.
+`RoleFrame.controllers` records who controls each subject ROLE (recorded
+durable state, never ambient session ownership); `controller-of(source)`
+and `controller-of(target)` resolve to DIFFERENT players when the source
+and target are controlled by different connected players, and a missing
+recorded controller for an otherwise valid subject returns null — it never
+silently falls back to the source (underivable roles reject, never guess).
+`RuleChoice` carries typed optional `chooser`/`controller` roles
+(behavior-neutral until U4 consumes them). ROLE ≠ REFERENCE ≠ ANCHOR is
+explicit (original-user role survives a rebound where the spatial origin
+moved). The aura
 bearer-vs-member and `targeting.ts` relation reads still derive roles
 locally — the de-dup migration is T2+. The durable save-reroll window (Sucker
 Punch p.143) decides who owns a reroll; the when-damaged/defeated/uses-
@@ -324,16 +340,25 @@ interrupts, trigger de-duplication, delayed effects, resources, persistent
 instances. Do NOT let Duration/UsageLedger/Interrupt-refresh/Resource-reset/
 "once per round" each define their own "round".
 
-Today (T1 landed 2026-08-30): the lifecycle turn/round machinery
-(`kernels/lifecycle.ts`), `RuleDuration`, use-ledger periods, and
+Today (T1 landed 2026-08-30; corrected 2026-08-30): the lifecycle turn/round
+machinery (`kernels/lifecycle.ts`), `RuleDuration`, use-ledger periods, and
 `RuleTiming` remain the executing authorities, but `primitives/scope.ts`
-now defines the ONE `Clock` union (boundary / n-boundary / next-match /
-event), `RecurringBoundary`, `Scope` (until / for-n / until-next /
-permanent / until-event), and the boundary-read surface
-(`clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`).
-Missing: migrating the `RuleDuration`/`use-ledger`/lifecycle readers onto
-the Clock (the U8 completion work, including the scheduler's turn record
-for turn-level `boundaryReached`).
+defines the ONE `Clock`/`Scope` vocabulary with FULL temporal fidelity:
+`BoundaryRef` carries an EDGE (`start`/`end` — turn-start ≠ turn-end,
+round-/combat-start ≠ end, never collapsed) and an optional U1 `subject`
+(end-of-YOUR-turn ≠ end-of-TARGET's-turn; `slow-turn` start ≠ ordinary turn
+start); counted (`n-boundary`/`for-n`) and `next`/`until-next` forms are
+RELATIVE to a recorded epoch (`ClockObservation` + `boundaryKey` occurrence
+counters) — an effect created on round 5 "for 3 rounds" completes only
+after three matching round boundaries from its origin, never because `round
+>= 3`; `boundaryReached`/`scopeSatisfied` require the observed boundary
+record and FAIL CLOSED on relative reads with no epoch; `permanent` never
+satisfies; non-boundary step timings ('use', attack-*) return null from
+`clockForTiming`/`currentClock`. The boundary-read surface is
+`clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`/
+`scopeSatisfied`. Missing: migrating the `RuleDuration`/`use-ledger`/
+lifecycle readers onto the Clock (the U8 completion work, including the
+scheduler's turn record for turn-level `boundaryReached`).
 
 ## U9 Provenance / Cause
 
