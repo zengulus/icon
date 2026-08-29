@@ -35,6 +35,7 @@ import type {
   RuleExecutionContext,
 } from '../primitives/types.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
+import { validateActorCandidate } from './candidate.js';
 import { RuleProgramViolation, evaluateNumber } from './runtime.js';
 
 /** The validated value for one `RuleChoice`: what the player supplied,
@@ -85,24 +86,19 @@ function resolveActors(choice: RuleChoice, context: RuleExecutionContext): Chose
     if (!choice.required) return { kind: 'actors', ids: [] };
     throw choiceViolation('choice.actor-required', choice, 'requires a chosen target.');
   }
-  const source = context.state.actors[context.actorId];
+  // Candidate legality is delegated to the shared U3 authority (candidate.ts)
+  // — the SAME eligibility machinery automatic targeting uses. This kernel
+  // keeps only the choice-specific semantics: required/optional, cardinality,
+  // and distinctness.
+  const query = {
+    relation: choice.relation,
+    range: choice.range,
+  };
   const ids: string[] = [];
   for (const id of supplied) {
-    const target = context.state.actors[id];
-    if (!target) throw choiceViolation('choice.actor-missing', choice, `target ${id} does not exist.`);
-    if (target.defeated) throw choiceViolation('choice.actor-defeated', choice, `target ${id} is defeated.`);
-    if (choice.relation && choice.relation !== 'any') {
-      const ok =
-        choice.relation === 'self' ? target.id === source.id :
-        choice.relation === 'ally' ? target.side === source.side && target.id !== source.id :
-        target.side !== source.side;
-      if (!ok) throw choiceViolation('choice.actor-relation', choice, `target ${id} is not ${choice.relation}.`);
-    }
-    if (choice.range) {
-      const maximumRange = evaluateNumber(choice.range, context);
-      if (!source.position || !target.position || footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size }) > maximumRange) {
-        throw choiceViolation('choice.actor-range', choice, `target ${id} is outside range ${maximumRange}.`);
-      }
+    const result = validateActorCandidate(id, query, context);
+    if (!result.legal) {
+      throw choiceViolation(result.violation.code, choice, result.violation.message);
     }
     ids.push(id);
   }

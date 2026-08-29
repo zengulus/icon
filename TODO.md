@@ -138,6 +138,42 @@ assumption here, document the evidence and update this list before proceeding.
    charge-state as a live blocker (Charge variant genuinely unimplemented).
    charge-state label retired from singleton census entries.
 
+   **Underlay tranche 2 — U3 QUERY/CANDIDATE (2026-08-29):** landed the one
+   candidate-legality authority beneath both automatic targeting and the
+   U4 CHOOSE kernel (`kernels/candidate.ts`,
+   `evaluateActorCandidates`/`validateActorCandidate`; relation + defeated/
+   on-board + p.92 footprint range, composed from the existing
+   `primitives/targeting.ts` + `spatial-intent.ts` authorities).
+   `kernels/choice.ts` actor validation now consumes the shared CandidateSet
+   (the second copy of eligibility is gone); CHOOSE semantics unchanged and
+   re-proven by the unmodified 23-case `choice.test.ts`. All 8
+   `{choice-input}` singletons re-read against their passages: **0 promoted**
+   (honest) — each needs a durable per-ability choice WINDOW/CARRIAGE (U12
+   CONTINUATION / U13 WINDOW: post-swap teleport, swap-ally selection,
+   Slay-triggered gain-or-lose, aura-teleport window, post-explosion
+   re-damage, post-ability sacrifice), not candidate legality. Census
+   regenerated twice byte-stable at 426. Next tranche: U12/U13, then
+   re-derive the greedy order from the regenerated census. Details:
+   [`docs/tranche-2-query.md`](docs/tranche-2-query.md).
+
+   **Underlay tranche 2 — U3 QUERY/CANDIDATE (2026-08-29):** landed the one
+   candidate-legality authority beneath both automatic targeting and the
+   U4 CHOOSE kernel (`kernels/candidate.ts`,
+   `evaluateActorCandidates`/`validateActorCandidate`; relation + defeated/
+   on-board + p.92 footprint range, composed from the existing
+   `primitives/targeting.ts` + `spatial-intent.ts` authorities).
+   `kernels/choice.ts` actor validation now consumes the shared CandidateSet
+   (the second copy of eligibility is gone); CHOOSE semantics unchanged and
+   re-proven by the unmodified 23-case `choice.test.ts`. All 8
+   `{choice-input}` singletons re-read against their passages: **0 promoted**
+   (honest) — each needs a durable per-ability choice WINDOW/CARRIAGE (U12
+   CONTINUATION / U13 WINDOW: post-swap teleport, swap-ally selection,
+   Slay-triggered gain-or-lose, aura-teleport window, post-explosion
+   re-damage, post-ability sacrifice), not candidate legality. Census
+   regenerated twice byte-stable at 426. Next tranche: U12/U13, then
+   re-derive the greedy order from the regenerated census. Details:
+   [`docs/tranche-2-query.md`](docs/tranche-2-query.md).
+
    **Source-fidelity repair pass (2026-08-27):** Repaired three incorrect
    mastery-attack attachments: removed the invented Apex mastery Unerring
    (mastery LOADED QUIVER is about extra beasts + per-beast damage, NOT
@@ -387,7 +423,10 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
   Incubus t2, Dark Sliver t1, the F5 mark-modifier rows: Grand Seal
   t1, Grand Seal t2, Rot t2, and the pre-use augmentation row: Dark
   Sliver t2). **231 unresolved**. Do not bulk-enable;
-  promote exact-ID slices per subfamily with replay fixtures.
+  promote exact-ID slices per subfamily with replay fixtures. The U3
+  candidate authority (tranche 2) provides shared choice-candidate
+  legality but did not by itself promote any of the 8 `{choice-input}`
+  singletons — each needs the U12/U13 choice window/carriage.
 - **Masteries** — `PARTIAL`: equipped-mastery surface is validated and
   durable; the mastery-modifier fold (K-P5: interrupt-rank, damage-type
   conversion, unlimited range) promotes 3 rows, plus the program-level

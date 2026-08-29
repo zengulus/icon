@@ -79,14 +79,34 @@ before any cost/RNG (`choice.<kind>-required`), treats an optional missing
 choice as "decline" (never a default), and validates supplied values against
 the row's declared constraints (cardinality min/max/distinct, relation,
 p.92 footprint range, option membership, numeric bounds, direction non-zero,
-position in-grid). Domain refinements stay with their specialists
-(`kernels/teleport-choice.ts` owns unoccupied + Rampart). Network parity:
+position in-grid). Actor-candidate legality is delegated to the shared U3
+authority (`kernels/candidate.ts`, see below) — the kernel keeps only
+required/optional, cardinality, and distinctness. Domain refinements stay
+with their specialists (`kernels/teleport-choice.ts` owns unoccupied +
+Rampart). Network parity:
 `StatusSaveCommandInput` + the `USE_ABILITY` websocket schema carry all six
 buckets (non-ability commands carry only the Blessing surface). Pre/post
 boundary: a choice whose candidate set depends on a roll/movement/future
 state is NOT representable here — it belongs to the future
 WINDOW/CONTINUATION underlays; never supply it speculatively. Tests:
 `choice.test.ts` (23 semantic cases) + protocol fixtures. Sequencing owner:
+[`generic-underlays.md`](generic-underlays.md).
+
+### Candidate sets (QUERY underlay) — AUTHORITATIVE + SOURCE-TESTED (2026-08-29)
+
+One deterministic eligibility authority beneath both automatic targeting and
+player choices: `kernels/candidate.ts`
+(`evaluateActorCandidates`/`validateActorCandidate`). A query is relation
+(p.92) + optional dynamic range (p.92 footprint distance, evaluated through
+`evaluateNumber`) + defeated/on-battlefield filters; the result is the
+CandidateSet both consumers draw from. The kernel reuses
+`primitives/targeting.ts` relations and `primitives/spatial-intent.ts`
+`footprintDistance` — it composes existing authorities, it does not
+reimplement them. Violations reuse the legacy codes
+(`choice.actor-missing/-defeated/-relation/-range`) so the command boundary
+reads identically. `kernels/choice.ts` actor validation and every future
+automatic-targeting selector route through here; no source IDs. Tests:
+`candidate.test.ts` (18 cases incl. QUERY⇄CHOOSE parity). Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED

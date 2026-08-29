@@ -211,6 +211,20 @@ couldn't be represented; `colossus:raging-wolf:talent:2` remains unresolved on
 `choice-input` + `ordered-intermediate-state` + `fly-distance-modifier`, and
 the base ability is deliberately non-executable. The Phase-1 terrain re-audit (2026-08-29) then retracted seven source-inexact terrain talent folds (Morrigan t2, The Tower t2, Blitz t1, Eye of the Storm t1, Tsunami t1, Heave-Ho t1, Waterspout t2 — each needed delayed/moved-a-foe/occupancy/bloodied/blast-membership semantics the no-input fold can't express); the honest unresolved total rose to 426.
 
+**Underlay tranche 2 — U3 QUERY/CANDIDATE landed (2026-08-29, tranche-2-query):**
+one candidate-legality authority beneath both automatic targeting and the U4
+CHOOSE kernel (`kernels/candidate.ts`, composed from the existing
+`primitives/targeting.ts` + `spatial-intent.ts` authorities).
+`kernels/choice.ts` actor validation now consumes the shared CandidateSet (the
+second copy of eligibility is gone); CHOOSE semantics unchanged and re-proven
+by the unmodified 23-case `choice.test.ts`. All 8 `{choice-input}` singletons
+re-read against their passages: **0 promoted** (honest) — each needs a durable
+per-ability choice WINDOW/CARRIAGE (U12 CONTINUATION / U13 WINDOW:
+post-swap teleport, swap-ally selection, Slay-triggered gain-or-lose,
+aura-teleport window, post-explosion re-damage, post-ability sacrifice), not
+candidate legality. Census regenerated twice byte-stable at 426. Next
+tranche: U12/U13, then re-derive the greedy order from the regenerated census.
+
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.
 
