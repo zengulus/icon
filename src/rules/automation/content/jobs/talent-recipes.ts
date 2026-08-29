@@ -509,30 +509,6 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
   // The fold cannot read lifecycle-created terrain. Program-level or
   // lifecycle-level implementation needed.
 
-  // ICON p.219 Terraforming talent 2: "You can also create up to 3 spaces
-  // of dangerous terrain in the area as a choosable effect." The fold
-  // places dangerous terrain in free cells within the ability's burst 2 area.
-  'geomancer:terraforming:talent:2': {
-    mechanic: 'Always: create up to 3 spaces of dangerous terrain in the area.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
-        if (!target?.position) return [];
-        const area = squareArea(target.position, 2);
-        const free = area.filter((c) =>
-          c.x >= 0 && c.y >= 0 &&
-          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
-        );
-        return free.slice(0, 3).map((pos) => ({
-          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
-          terrain: 'dangerous', positions: [pos], height: null,
-        }));
-      },
-    },
-  },
-
   // ICON p.225 Blitz talent 1: "When used against a bloodied foe, blitz
   // creates two lightning dangerous terrain spaces in free space in range 2
   // of them." The fold fires only when the target is bloodied.
@@ -858,6 +834,14 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   // adjacent-placement expansion requires TI equipped and charged.
   'geomancer:terraforming:talent:1': {
     mechanic: 'Charged (slow turn) with TI equipped: Terraforming effects may also be placed in spaces adjacent to the area. The base charge\u2019s four-effect count applies with or without the talent.',
+  },
+  // ICON p.219 Terraforming talent 2: "You can also create up to 3 spaces of
+  // dangerous terrain in the area as a choosable effect." A SELECTABLE bullet,
+  // not an automatic always rider: the resolver adds \u201cdangerous\u201d to the
+  // effect palette only when TII is equipped, consumes one normal 2/Charge-4
+  // choice, and the player picks 0-3 in-area spaces.
+  'geomancer:terraforming:talent:2': {
+    mechanic: 'TII equipped: \u201cdangerous\u201d becomes a selectable Terraforming effect (budgets one choice; the player creates 0-3 spaces of dangerous terrain, placed in the area or TI\u2019s adjacent cells).',
   },
 };
 

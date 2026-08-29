@@ -399,27 +399,48 @@ export const entityMutation = (
   kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType, ownerId, positions: [position], count: 1, state,
 });
 
-/** Summon `count` owned entities of `entityType` into free, in-grid cells
- * within `radius` of `origin`. Placement delegates to the shared free-cell
- * helper (`freeCellsInRange`), and each created cell rides a standard
- * `entityMutation` that the reducer later enforces through the single
- * `validateEntityCreation` authority (bounds, occupant, impassable, LoS,
- * footprint range, per-owner summon caps). This is the ONE summon seam the
- * ability resolvers share — they must not hand-roll their own free-space
- * loop. Deliberately no parallel placement/LoS/occupancy system: resolver
- * suggests cells, the shared kernel enforces them. */
+/** Summon `count` owned entities of `entityType` near `origin`. This is the
+ * single-authority creation-intent seam NEW ordinary creation routes through:
+ * it declares INTENT only and never decides legality or selects the final
+ * cells itself. It emits a single creation mutation carrying an ordered
+ * candidate list (free, in-grid cells within `radius`, deterministically
+ * sorted nearest-first), the requested `count`, and an explicit PAIRED
+ * `creationSpatial` contract `{ origin, originSize, maxRange }` measured in
+ * canonical footprint distance. The shared `validateEntityCreation` kernel
+ * makes the final legality/selection decision: it skips any candidate that
+ * fails bounds, occupancy, impassable terrain, LoS, footprint range, or the
+ * per-owner summon cap, and returns the first `count` legal ones — so a
+ * blocked earliest candidate falls through to a later legal candidate
+ * instead of failing the summon, and an over-subscribed request yields only
+ * the legally permitted count. Resolvers must not hand-roll their own
+ * free-space/LoS/range decisions or bypass the paired creationSpatial
+ * contract.
+ *
+ * MIGRATION NOTE: pre-existing ability resolvers that still hand-roll
+ * `freeCellsInRange(...)[index]` + `entityMutation(...)` for ordinary
+ * summons are tracked for migration onto this seam. A few are deliberate
+ * exceptions that are NOT ordinary intent-declaration summons — e.g. a
+ * resolver that needs the exact resolved cell back to compute a follow-on
+ * effect (the Seer meteor's proximity damage) or a mandatory in-place
+ * object placement (the Warden's required portal) — because the
+ * intent-declaration contract does not expose the chosen cell to the
+ * resolver. */
 export function summonEntity(
   context: RuleExecutionContext,
   ownerId: string,
   entityType: string,
   origin: Position,
-  options: { radius?: number; count?: number; state?: Record<string, StateValue> } = {},
+  options: { radius?: number; count?: number; originSize?: number; maxRange?: number; state?: Record<string, StateValue> } = {},
 ): RuleMutation[] {
   const radius = options.radius ?? 1;
   const count = options.count ?? 1;
-  return freeCellsInRange(context, origin, radius)
-    .slice(0, count)
-    .map((cell) => entityMutation(context, ownerId, cell, entityType, options.state ?? {}));
+  return [{
+    kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType, ownerId,
+    positions: freeCellsInRange(context, origin, radius),
+    count,
+    state: options.state ?? {},
+    creationSpatial: { origin, originSize: options.originSize ?? 1, maxRange: options.maxRange ?? radius },
+  }];
 }
 
 export const terrainMutation = (

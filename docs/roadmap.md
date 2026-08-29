@@ -168,10 +168,18 @@ occupancy, impassable, LoS, footprint-distance range, summon caps) plus the
 `entityMutation` builder and the `freeCellsInRange` placement helper, so
 `entity-create` was NOT a missing primitive — the 16 `{entity-create}`
 singletons were coarse keyword residues and were reclassified to their real
-residual blockers, and a shared `summonEntity` seam was added. The regenerated
-census now reports `{entity-create}` 0 immediate (compound-only) and the next
-high-fan-out singleton families `{terrain-create}` 16 immediate (total 54) and
-`{fly-grant}` 16 immediate (total 30).
+residual blockers, and a shared `summonEntity` seam was added. A corrective
+pass (2026-08-29) rebuilt the seam to declare INTENT (single mutation with an
+ordered candidate list + count + paired `creationSpatial`) so
+`validateEntityCreation` remains the single selection authority, and fixed the
+reducer so a `count>1` creation emits distinct per-cell entity ids. The
+regenerated census now reports `{entity-create}` 0 immediate occurrences (the
+label is fully retired — it no longer appears in any unresolved blocker set or
+in the greedy simulation; compound records that carried it were re-audited and
+reclassified to their precise residual semantics, and the `summonEntity` seam
+was adopted by the warden/seer/geomancer ordinary summons). The next
+high-fan-out singleton family (regenerated 2026-08-29) is `{fly-grant}` 17
+immediate (17 unlocks), then `{terrain-create}` 16 immediate (total 54).
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

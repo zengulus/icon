@@ -329,7 +329,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // durably available for a post-use fold (the ability's areas are
   // instantaneous), plus the player-chosen space; the slashed status and
   // divine damage themselves are implemented
-  'fool:trait:cheap-trick': ['attack-miss-trigger', 'entity-create'],
+  'fool:trait:cheap-trick': ['attack-miss-trigger'],
   // "When an attack misses you, you may teleport 1 space, then leave a bomb
   // in an adjacent space" — a defensive attack-miss reactive on the owner
   // (no such trigger family exists) plus the bomb entity; the teleport and
@@ -617,7 +617,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // pacified+ projection, Rot t1's turn-start trigger) drop the mark label
   // entirely and keep only their genuinely missing capabilities. Zero
   // unresolved blocker sets contain `mark-modifier`.
-  'fool:diablo:mastery': ['area-define', 'delay-mechanic', 'entity-create'],
+  'fool:diablo:mastery': ['area-define', 'delay-mechanic'],
   // "mark out the area effect" designates the Diablo blast area — the word
   // is a verb, NOT the Mark mechanic — so no mark family applies; the
   // delayed re-explosion (delay-mechanic + area-define) plus the bomb summon
@@ -649,17 +649,23 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'shade:limit-break': ['blast-template', 'shadow-summon'],
   // ULTIMA ECSTASY: area blast statuses (stealth/blind) to allies + foes, and
   // the ultimate summons shadows adjacent to all allies — compound, limit-break.
-  'warden:apex:talent:1': ['terrain-create'],
+  'warden:apex:talent:1': ['summon-terrain-alternation'],
   // "You can replace any beast you summon with a space of dangerous terrain
-  // instead" — a summon→terrain alternation (the beast summon itself is wired).
+  // instead" — NOT plain terrain creation: an OPTIONAL player-chosen
+  // summon→dangerous-terrain substitution/alternation seam (the beast summon
+  // itself is wired; generic terrain creation is not the whole mechanic).
   'warden:apex:mastery': ['turn-end-no-attack', 'summon-count-boost', 'damage-count-scaling'],
   // "If you end your turn without attacking, the next time you use Apex,
   // summon +1 more beasts, and deal 2 damage … for every beast you summon."
-  'warden:gwynt:talent:2': ['new-shove-effect'],
-  // "You and your ally or summon may each shove your target 1 space" — shoves.
-  'warden:gwynt:mastery': ['range-modifier', 'target-count-override'],
-  // "Increase dashes and ranges by +1, and the effect can be used on an
-  // additional ally or allied summon in range."
+  'warden:gwynt:talent:2': ['new-shove-effect', 'summon-recipient-targeting'],
+  // "You and your ally or summon may each shove your target 1 space" — the
+  // new shove riders AND an ally-or-SUMMON recipient path (the ability must
+  // select an allied summon, not only actors, to shove).
+  'warden:gwynt:mastery': ['range-modifier', 'dash-modifier', 'target-count-override', 'summon-recipient-targeting'],
+  // "Increase dashes and ranges by +1 (range-modifier + a DASH/movement
+  // modifier omitted by the earlier pass), and the effect can be used on an
+  // additional ally or allied summon in range" (target-count-override + the
+  // allied-summon recipient path).
   'warden:circle-the-oak:talent:2': ['traversal-count', 'condition-grant'],
   // "If you passed through two or more allies or allied summons, also gain
   // evasion …" — a pass-through-count-gated condition grant.
@@ -706,7 +712,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // override on the hover-zone strike plus the effect-count fold
   'warden:stampede:talent:1': ['action-type-change', 'mark-defeat-trigger', 'mark-transfer'],
   // finishing-blow mark transfer as a free action
-  'harvester:trait:gardener-of-kin': ['entity-create', 'mark-gated-modifier', 'mark-stacking'],
+  'harvester:trait:gardener-of-kin': ['mark-gated-modifier', 'mark-stacking'],
   // "stack 2 marks" plus "foes marked by you take +1 damage from summons"
   // (a mark-gated damage-taken modifier)
   'harvester:sow:talent:1': ['mark-defeat-trigger', 'mark-transfer', 'range-modifier'],
@@ -727,7 +733,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // supplies the mark portion (the Rot t2 shape); the residual is the
   // comeback-triggered turn-start plant summon (entity creation itself is an
   // already-implemented authority — see F3)
-  'harvester:rot:mastery': ['entity-create', 'mark-defeat-trigger', 'range-modifier'],
+  'harvester:rot:mastery': ['mark-defeat-trigger', 'range-modifier'],
   // REGROWTH's "if that character would be defeated … instantly rescued" is
   // a defeat-rescue mark trigger, plus the plant summon and range 4
   'sealer:grand-seal:mastery': ['mark-detonation-window', 'mark-transfer', 'range-modifier'],
@@ -781,7 +787,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'spellblade:rampant-nail:talent:2': ['passive'],
   // Rampant Nail's die mechanic is wired through the mastery lifecycle;
   // the talent's passive component is the remaining blocker
-  'fool:limit-break': ['area-define', 'entity-create'],
+  'fool:limit-break': ['area-define'],
   // "gamble" is mentioned but the real blockers are area-define and
   // entity-create; the gamble itself is not the missing primitive
   'seer:limit-break': ['dice-result-modifier', 'attack-result-modifier', 'save-result-modifier'],
@@ -1061,7 +1067,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'warden:mist-strider:talent:2': ['area-effect-rider', 'delivery-immunity'],
   // "Foes in the area count all characters as having evasion" — area-scoped
   // delivery-immunity projection onto opposing members
-  'warden:mist-strider:mastery': ['entity-create', 'area-exit-trigger'],
+  'warden:mist-strider:mastery': ['area-exit-trigger'],
   // "creates a beast inside when an area is created" + foes that start their
   // turn inside and end outside take damage/dazed — creation plus an
   // end-of-turn inside→outside boundary transition trigger (enter triggers
@@ -1107,7 +1113,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'chanter:limit-break': ['cover-mechanic', 'fly-grant', 'range-modifier', 'resource-management', 'new-shove-effect', 'stance-gate'],
   // "Angrboda: An allied character gains sturdy, and their attacks gain
   // true strike and shove 1" — the shove is a grant to allies' attacks
-  'geomancer:limit-break': ['blast-template', 'delay-mechanic', 'entity-create', 'new-shove-effect'],
+  'geomancer:limit-break': ['blast-template', 'delay-mechanic', 'new-shove-effect'],
   // "End your turn. You dive into the earth... gain Delay: Your next turn
   // must be slow. At the start of that turn... shoved 1 in the direction
   // of the line" — delay mechanic + new shove effect
@@ -1250,7 +1256,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'geomancer:realignment:mastery': ['save-modifier', 'status-reapply'],
   // "must save or also be affected by every status that was just purged" —
   // capturing the purged-status set and reapplying it on a failed save
-  'geomancer:midas:talent:1': ['entity-create', 'forced-placement'],
+  'geomancer:midas:talent:1': ['forced-placement'],
   // returned character leaves a broken-shell statue OBJECT; place them
   // adjacent to it
   'geomancer:quaking-palm:talent:2': ['enemy-ability-trigger'],
@@ -1513,10 +1519,18 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('cure-on-trigger');
   }
 
-  // Entity create: summon, create entity
-  if (/\bsummon(?:s|ed)?\b/.test(text) || /\bcreate\s+(?:an?\s+)?(?:shadow|beast|thrall|plant|sprite|bomb|object|entity)\b/.test(text)) {
-    blockers.push('entity-create');
-  }
+  // Entity create: summon, create entity.
+  // RETIRED (F3 + corrective pass, 2026-08-29): the generic entity-creation
+  // capability is genuinely implemented (kernels/entity-creation.ts
+  // `validateEntityCreation` + the `summonEntity` intent seam + the reducer
+  // that picks the first `count` legal candidate cells). Ordinary creation is
+  // therefore never the missing capability, so we no longer flag units with
+  // `entity-create`. A unit that mentions summons/create is reclassified to
+  // the SPECIFIC residual semantics its creation is missing (e.g. a
+  // summon→terrain ALTERNATION, an allied-summon recipient path, a
+  // summon-count boost) — never the generic label. `entity-create` must stay
+  // absent from every unresolved blocker set and must never re-enter the
+  // greedy simulation.
 
   // Combo spend: combo token
   if (/\bcombo\s+token\b/.test(text)) {

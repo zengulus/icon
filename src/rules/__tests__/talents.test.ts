@@ -606,13 +606,22 @@ describe('F7 terrain-create always trigger', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Terraforming talent 2: creates up to 3 dangerous terrain spaces in the area', () => {
+  it('Terraforming talent 2: dangerous terrain is a selectable effect that spends one choice, not an automatic rider', () => {
+    // TII is equipped, so 'dangerous' becomes one of the choosable bullets.
     const { state, hero, foe } = talentEncounter('geomancer:terraforming', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id], input: { options: { effects: 'boulders,pits' } } as any }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'geomancer:terraforming').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    // Uncharged "choose two": boulders + dangerous. The dangerous bullet is
+    // a single choice producing the chosen cells (up to 3) inside the area.
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id], input: { options: { effects: 'boulders,dangerous' }, positions: { dangerous: [{ x: 4, y: 1 }, { x: 5, y: 2 }] } } as any }, scriptedDice());
+    expect(result.state.terrainEffects.filter((e) => e.terrain === 'dangerous')).toHaveLength(2);
+    expect(Object.values(result.state.entities).filter((e) => e.type === 'boulder')).toHaveLength(2);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming talent 2: dangerous is unselectable without TII (negative)', () => {
+    const { state, hero, foe } = talentEncounter('geomancer:terraforming', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    // Rank 1 (TI only): no TII means 'dangerous' is not a valid clause at all.
+    const run = () => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],      input: { options: { effects: 'boulders,dangerous' }, positions: { dangerous: [{ x: 5, y: 1 }] } } as any }, scriptedDice());
+    expect(run).toThrow(/Unknown Terraforming effect: dangerous/);
   });
 });
 
@@ -883,7 +892,8 @@ describe('Charge-variant talent gating', () => {
     state.actors[hero.id].ruleState['slow-turn'] = true; // charged
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
-      input: { options: { effects: 'boulders,pits,difficult,remove' } } as any,
+      input: { options: { effects: 'boulders,pits,difficult,remove' },
+        positions: { line: [{ x: 4, y: 1 }, { x: 5, y: 1 }, { x: 6, y: 1 }] } } as any,
     }, scriptedDice());
     // With TI and charged, four distinct effects are budgeted. The resolver
     // produces terrain mutations with the ability sourceId, not a talent
@@ -906,7 +916,8 @@ describe('Charge-variant talent gating', () => {
     const noTI = { ...state, actors: { ...state.actors, [hero.id]: { ...state.actors[hero.id], talents: {} } } };
     const result = executeCommand(noTI, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
-      input: { options: { effects: 'boulders,pits,difficult,remove' } } as any,
+      input: { options: { effects: 'boulders,pits,difficult,remove' },
+        positions: { line: [{ x: 4, y: 1 }, { x: 5, y: 1 }, { x: 6, y: 1 }] } } as any,
     }, scriptedDice());
     const allMutations = abilityMutationsOf(result, 'geomancer:terraforming');
     const createdCells = allMutations.flatMap((m) => ('positions' in m && Array.isArray(m.positions) ? m.positions : []) as { x: number; y: number }[]);
@@ -936,7 +947,7 @@ describe('Charge-variant talent gating', () => {
     state.actors[hero.id].ruleState['slow-turn'] = true; // charged
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
-      input: { options: { effects: 'boulders,pits,raise,remove' } } as any,
+      input: { options: { effects: 'boulders,pits,raise,remove', raiseBranch: 'raise' } } as any,
     }, scriptedDice());
     const allMutations = abilityMutationsOf(result, 'geomancer:terraforming');
     const createdCells = allMutations.flatMap((m) => ('positions' in m && Array.isArray(m.positions) ? m.positions : []) as { x: number; y: number }[]);

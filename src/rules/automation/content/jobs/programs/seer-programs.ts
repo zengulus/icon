@@ -8,6 +8,7 @@ import {
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, terrainMutation,
+  summonEntity,
   gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
@@ -56,8 +57,8 @@ const sleightOfHandEffects: RuleResolver = (context) => {
     if (character.id === target.id || !position) continue;
     if (area.some((cell) => sameCell(cell, position))) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  const cardCell = freeCellsInRange(context, target.position, 2)[0];
-  if (cardCell) mutations.push(entityMutation(context, source.id, cardCell, 'wild-card', {}));
+  const card = summonEntity(context, source.id, 'wild-card', target.position, { radius: 2, count: 1 })[0];
+  if (card) mutations.push(card);
   return mutations;
 };
 
@@ -120,8 +121,8 @@ const chaosTarotEffects: RuleResolver = (context) => {
   } else {
     apply(roll);
   }
-  const cardCell = freeCellsInRange(context, center, 1)[0];
-  if (cardCell) mutations.push(entityMutation(context, source.id, cardCell, 'wild-card', {}));
+  const card = summonEntity(context, source.id, 'wild-card', center, { radius: 1, count: 1 })[0];
+  if (card) mutations.push(card);
   return mutations;
 };
 
@@ -206,8 +207,8 @@ const fortunaEffects: RuleResolver = (context) => {
       mutations.push(damageMutation(context, character.id, source.fray, 'area'));
     }
   }
-  const cardCell = freeCellsInRange(context, target.position, 2)[0];
-  if (cardCell) mutations.push(entityMutation(context, source.id, cardCell, 'wild-card', {}));
+  const card = summonEntity(context, source.id, 'wild-card', target.position, { radius: 2, count: 1 })[0];
+  if (card) mutations.push(card);
   return mutations;
 };
 

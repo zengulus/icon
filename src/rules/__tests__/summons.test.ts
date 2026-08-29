@@ -557,3 +557,90 @@ describe('F6 companion placement uses one legality authority', () => {
     expect(entitiesOf(started.state, 'beast', hero.id)[0].positions[0]).toEqual({ x: 1, y: 3 });
   });
 });
+
+describe('F6 reducer-path candidate fall-through (a single intent mutation with an ordered candidate list + creationSpatial)', () => {
+  type EntityIntent = Extract<RuleMutation, { kind: 'entity' }>;
+  const intent = (ownerId: string, over: Partial<EntityIntent> = {}): EntityIntent => ({
+    kind: 'entity', sourceId: 'fixture:summon', operation: 'create', entityType: 'bomb', ownerId,
+    positions: [], count: 1, state: {},
+    creationSpatial: { origin: { x: 1, y: 1 }, originSize: 1, maxRange: 5 },
+    ...over,
+  });
+  const eventFrom = (actorId: string, mutations: RuleMutation[]): EncounterEvent => ({
+    type: 'RULE_MUTATIONS_APPLIED', actorId, sourceId: 'fixture:summon', actionId: 'default', timing: 'use', tags: [], mutations,
+  });
+
+  it('skips an LoS-blocked earliest candidate and falls through to a later legal one', () => {
+    const { state, hero } = summonEncounter([]);
+    // Impassable at (2,1) blocks line of sight from origin (1,1) to (3,1).
+    state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 0 });
+    const applied = applyEvents(state, [eventFrom(hero.id, [intent(hero.id, { positions: [{ x: 3, y: 1 }, { x: 3, y: 3 }] })])]);
+    const bombs = Object.values(applied.entities).filter((entity) => entity.type === 'bomb');
+    expect(bombs).toHaveLength(1);
+    expect(bombs[0].positions[0]).toEqual({ x: 3, y: 3 });
+  });
+
+  it('skips an impassable candidate and falls through to a later free cell', () => {
+    const { state, hero } = summonEncounter([]);
+    state.grid.terrain.push({ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 });
+    const applied = applyEvents(state, [eventFrom(hero.id, [intent(hero.id, { positions: [{ x: 3, y: 1 }, { x: 3, y: 2 }] })])]);
+    const bombs = Object.values(applied.entities).filter((entity) => entity.type === 'bomb');
+    expect(bombs).toHaveLength(1);
+    expect(bombs[0].positions[0]).toEqual({ x: 3, y: 2 });
+  });
+
+  it('skips an occupied candidate and falls through to a later free cell', () => {
+    const { state, hero } = summonEncounter([]);
+    state.entities.blocker = { id: 'blocker', type: 'boulder', ownerId: null, positions: [{ x: 3, y: 1 }], state: {}, duration: null };
+    const applied = applyEvents(state, [eventFrom(hero.id, [intent(hero.id, { positions: [{ x: 3, y: 1 }, { x: 3, y: 2 }] })])]);
+    const bombs = Object.values(applied.entities).filter((entity) => entity.type === 'bomb');
+    expect(bombs).toHaveLength(1);
+    expect(bombs[0].positions[0]).toEqual({ x: 3, y: 2 });
+    // The blocker boulder survives untouched.
+    expect(applied.entities.blocker).toBeDefined();
+  });
+
+  it('a Size>1 origin measures range from the footprint edge, so an anchor-close-but-footprint-far candidate is skipped and an edge-close one wins', () => {
+    const { state, hero } = summonEncounter([]);
+    // Origin footprint covers x 3-4, y 3-4, size 2, maxRange 2. Anchor-to-(7,3)
+    // is 4 but footprint-edge-to-(7,3) is 3 — still beyond. (6,3) is edge-dist
+    // 2, legal. The ordered list makes the reducer land on (6,3).
+    const applied = applyEvents(state, [eventFrom(hero.id, [intent(hero.id, {
+      creationSpatial: { origin: { x: 3, y: 3 }, originSize: 2, maxRange: 2 },
+      positions: [{ x: 7, y: 3 }, { x: 6, y: 3 }],
+    })])]);
+    const bombs = Object.values(applied.entities).filter((entity) => entity.type === 'bomb');
+    expect(bombs).toHaveLength(1);
+    expect(bombs[0].positions[0]).toEqual({ x: 6, y: 3 });
+  });
+
+  it('honors the registered per-owner summon cap on a multi-create request', () => {
+    const { state, hero } = summonEncounter([]);
+    // Five existing non-companion bombs leave exactly one slot under the cap (6).
+    for (let i = 0; i < 5; i += 1) {
+      state.entities[`b${i}`] = { id: `b${i}`, type: 'bomb', ownerId: hero.id, positions: [{ x: i, y: 7 }], state: {}, duration: null };
+    }
+    const applied = applyEvents(state, [eventFrom(hero.id, [intent(hero.id, { positions: [{ x: 3, y: 2 }, { x: 4, y: 2 }], count: 2 })])]);
+    const bombs = Object.values(applied.entities).filter((entity) => entity.type === 'bomb' && entity.ownerId === hero.id);
+    expect(bombs).toHaveLength(6); // only one extra, capped at six
+  });
+
+  it('an over-subscribed request yields only the legally permitted count', () => {
+    const { state, hero } = summonEncounter([]);
+    // One occupied candidate plus two free ones for a requested count of 3.
+    state.entities.blocker = { id: 'blocker', type: 'boulder', ownerId: null, positions: [{ x: 3, y: 1 }], state: {}, duration: null };
+    const applied = applyEvents(state, [eventFrom(hero.id, [intent(hero.id, { positions: [{ x: 3, y: 1 }, { x: 3, y: 2 }, { x: 4, y: 2 }], count: 3 })])]);
+    const bombs = Object.values(applied.entities).filter((entity) => entity.type === 'bomb');
+    expect(bombs).toHaveLength(2);
+  });
+
+  it('replays the candidate fall-through decision deterministically to the identical state', () => {
+    const base = summonEncounter([]);
+    base.state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 0 });
+    const events = [eventFrom(base.hero.id, [intent(base.hero.id, { positions: [{ x: 3, y: 1 }, { x: 3, y: 3 }] })])];
+    const first = applyEvents(structuredClone(base.state), events);
+    const second = applyEvents(structuredClone(base.state), events);
+    expect(second).toEqual(first);
+    expect(Object.values(first.entities).filter((entity) => entity.type === 'bomb')[0].positions[0]).toEqual({ x: 3, y: 3 });
+  });
+});

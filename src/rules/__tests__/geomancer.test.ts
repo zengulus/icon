@@ -156,7 +156,9 @@ describe('Geomancer ability automation (p.215–221)', () => {
       sourceId: 'geomancer:terraforming',
       actionId: 'default',
       timing: 'use',
-      input: { actorIds: { target: [foe.id] }, options: { effects: 'boulders,pits,difficult,remove' } },
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'boulders,pits,difficult,remove' },
+        // Line 3 fully inside the burst so the difficult bullet lands in-area.
+        positions: { line: [{ x: 4, y: 1 }, { x: 5, y: 1 }, { x: 6, y: 1 }] } },
       triggers: ['charge'],
     }, scriptedDice());
     expect(Object.values(result.state.entities).filter((entity) => entity.type === 'boulder')).toHaveLength(2);
@@ -177,6 +179,74 @@ describe('Geomancer ability automation (p.215–221)', () => {
     expect(() => run('boulders')).toThrow(/exactly 2/);
     // Unknown effect name.
     expect(() => run('boulders,mudslide')).toThrow(/Unknown Terraforming effect/);
+  });
+
+  it('Terraforming raise: the raise branch is one bullet WITH an internal player choice and lifts ANY object (raise over batch into row 2)', () => {
+    // A hero pre-placed boulder sits at (4,1) inside the burst around foe (5,1).
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
+    state.entities['pre-boulder'] = { id: 'pre-boulder', type: 'boulder', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: { height: 1 }, duration: null };
+    // Choose the raise/destroy bullet with the internal 'raise' branch selected.
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'raise' }, positions: { raise: [{ x: 4, y: 1 }] } },
+    }, scriptedDice());
+    const raised = Object.values(result.state.entities).find((entity) => entity.id === 'pre-boulder');
+    expect(raised).toBeTruthy();
+    expect(raised!.state.height).toBe(2); // +1: raise applies to ANY existing object
+    expect(result.state.terrainEffects.filter((effect) => effect.terrain === 'pit')).toHaveLength(2);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming destroy: the destroy branch removes only YOUR created objects, never a foe\u2019s (negative)', () => {
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
+    // One hero-owned boulder inside the burst, one foe-owned boulder inside too.
+    state.entities['mine'] = { id: 'mine', type: 'boulder', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: { height: 1 }, duration: null };
+    state.entities['theirs'] = { id: 'theirs', type: 'boulder', ownerId: 'foe-owner', positions: [{ x: 4, y: 2 }], state: { height: 1 }, duration: null };
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'destroy' }, positions: { destroy: [{ x: 4, y: 1 }, { x: 4, y: 2 }] } },
+    }, scriptedDice());
+    // Only the hero-owned rail-order boulder is destroyed; the foe-owned one survives.
+    expect(Object.values(result.state.entities).some((entity) => entity.id === 'mine')).toBe(false);
+    expect(Object.values(result.state.entities).some((entity) => entity.id === 'theirs')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming difficult: a Line 3 may extend OUTSIDE the burst with only one space inside (even without Talent I)', () => {
+    // No talent equipped. The uncharged base picks two bullets. The Line 3 runs
+    // from inside the burst (at 6,1 / 7,1) out beyond it (8,1): the source only
+    // requires at least one line space in the area, so the line may leave it.
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 4, y: 0 } });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: {
+        actorIds: { target: [foe.id] },
+        options: { effects: 'boulders,difficult' },
+        positions: { line: [{ x: 5, y: 0 }, { x: 6, y: 0 }, { x: 7, y: 0 }] },
+      },
+    }, scriptedDice());
+    const difficult = result.state.terrainEffects.filter((effect) => effect.terrain === 'difficult');
+    expect(difficult).toHaveLength(1);
+    // Burst around foe (4,0) covers x in [2,6], y in [0,2]. Cell (7,0) is outside.
+    expect(difficult[0]!.positions.some((cell) => cell.x === 7 && cell.y === 0)).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming remove: removes only the chosen in-area cells, keeping a multi-cell record\u2019s out-of-area cells', () => {
+    // A single difficult record spans both inside and outside the burst.
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
+    state.terrainEffects.push({ id: 'span-difficult', sourceId: 'fixture', ownerId: hero.id, terrain: 'difficult', positions: [{ x: 4, y: 0 }, { x: 9, y: 0 }], height: null, duration: null });
+    // Burst around foe (5,1) covers x in [3,7], y in [0,3]. (4,0) is inside,
+    // (9,0) is outside. Choose the remove bullet with only (4,0).
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'boulders,remove' }, positions: { remove: [{ x: 4, y: 0 }] } },
+    }, scriptedDice());
+    const difficult = result.state.terrainEffects.filter((effect) => effect.terrain === 'difficult');
+    // The in-area cell is gone; the shared record shrank to its out-of-area cell.
+    expect(difficult.some((effect) => effect.positions.some((cell) => cell.x === 4 && cell.y === 0))).toBe(false);
+    expect(difficult.some((effect) => effect.positions.some((cell) => cell.x === 9 && cell.y === 0))).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
   it('Obsidian Flesh: enters the stance with a d6 power die at 1', () => {

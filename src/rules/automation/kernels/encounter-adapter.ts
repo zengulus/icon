@@ -1221,8 +1221,18 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
       break;
     }
     case 'terrain': {
-      if (mutation.operation === 'remove') state.terrainEffects = state.terrainEffects.filter((effect) => effect.terrain !== mutation.terrain || !effect.positions.some((position) => mutation.positions.some((candidate) => samePosition(position, candidate))));
-      else {
+      if (mutation.operation === 'remove') {
+        // ICON "Remove any difficult or dangerous terrain of your choice in
+        // the area" — removal is scoped to the mutation's positions, never
+        // over-broad: a multi-cell terrain record keeps its un-removed cells.
+        const next: EncounterTerrainEffect[] = [];
+        for (const effect of state.terrainEffects) {
+          if (effect.terrain !== mutation.terrain) { next.push(effect); continue; }
+          const remaining = effect.positions.filter((position) => !mutation.positions.some((candidate) => samePosition(position, candidate)));
+          if (remaining.length > 0) next.push({ ...effect, positions: remaining });
+        }
+        state.terrainEffects = next;
+      } else {
         const effect: EncounterTerrainEffect = { id: generatedId(state, mutation.sourceId, mutationIndex, 'terrain'), sourceId: mutation.sourceId, ownerId: mutation.sourceActorId, terrain: mutation.terrain, positions: clone(mutation.positions), height: mutation.height, duration: mutation.duration ?? null };
         state.terrainEffects.push(effect);
       }
@@ -1230,7 +1240,24 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
     }
     case 'entity': {
       if (mutation.operation === 'remove') {
-        for (const [id, entity] of Object.entries(state.entities)) if (entity.type === mutation.entityType && entity.ownerId === mutation.ownerId) delete state.entities[id];
+        if (mutation.positions.length > 0) {
+          // ICON "Destroy any of your created objects in the area" — scoped
+          // removal of the user's objects at the chosen cells only.
+          for (const [id, entity] of Object.entries(state.entities)) {
+            if (entity.type === mutation.entityType && entity.ownerId === mutation.ownerId && entity.positions.some((cell) => mutation.positions.some((candidate) => samePosition(cell, candidate)))) delete state.entities[id];
+          }
+        } else {
+          for (const [id, entity] of Object.entries(state.entities)) if (entity.type === mutation.entityType && entity.ownerId === mutation.ownerId) delete state.entities[id];
+        }
+      } else if (mutation.operation === 'update') {
+        // Authoritative entity state update (e.g. raising an object's height
+        // by +1) at the mutation's target cells. Never a create-into-an-
+        // occupied-cell: the existing entity's state is merged in place.
+        for (const entity of Object.values(state.entities)) {
+          if (entity.type !== mutation.entityType) continue;
+          if (!mutation.positions.some((p) => entity.positions.some((cell) => samePosition(cell, p)))) continue;
+          entity.state = { ...entity.state, ...clone(mutation.state) };
+        }
       } else {
         // F6: the six Job summon suites cap active entities per owner (max six
         // bombs/shadows/beasts/thralls/salt-sprites — summon-recipes.ts). A
@@ -1240,13 +1267,17 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
         // contract carried through the mutation; the kernel rejects a range
         // without a valid in-bounds origin (fail-closed — a malformed
         // maxRange-only mutation can never become unlimited creation).
-        // Legacy spatial fields (creationOrigin/creationOriginSize/
+        // Legacy spatial fields (creationOrigin/creationOriginSize /
         // creationMaxRange from the pre-creationSpatial representation) are
         // never emitted by new command construction; the migration boundary
         // rewrites persisted events to creationSpatial. If one still reaches
-        // the reducer un-migrated, the creation is DECLINED — an old event
-        // with spatial restrictions can never silently become unrestricted
-        // creation because this code no longer reads the old fields.
+        // the reducer un-migrated, the creation is DECLINED.
+        // A single creation mutation may carry an ORDERED CANDIDATE LIST and a
+        // requested `count > 1`: validateEntityCreation is the single legality
+        // authority — it skips illegal candidates (bounds, occupied, impassable,
+        // LoS, footprint-range, cap) and returns the first `count` legal ones;
+        // count>1 produces `count` discrete single-cell objects (e.g. two
+        // boulders), while a count===1 creation yields one entity record.
         const legacyEntity = mutation as Extract<RuleMutation, { kind: 'entity' }> & { creationOrigin?: unknown; creationOriginSize?: unknown; creationMaxRange?: unknown };
         if (legacyEntity.creationOrigin !== undefined || legacyEntity.creationOriginSize !== undefined || legacyEntity.creationMaxRange !== undefined) break;
         const validated = validateEntityCreation(state, {
@@ -1259,8 +1290,20 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
           ...(mutation.creationSpatial ? { spatial: mutation.creationSpatial } : {}),
         });
         if (!validated) break;
-        const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, 'entity'), type: mutation.entityType, ownerId: mutation.ownerId, positions: clone(validated.positions), state: { ...mutation.state }, duration: mutation.duration ?? null };
-        state.entities[entity.id] = entity;
+        if (mutation.count > 1) {
+          // A single count>1 creation mutation becomes `count` discrete
+          // single-cell objects. generatedId alone is stable within a batch
+          // (same revision + mutationIndex), so each discrete object indexes
+          // its id or a later one would overwrite the earlier cell's record.
+          for (let i = 0; i < validated.positions.length; i += 1) {
+            const pos = validated.positions[i];
+            const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, `entity:${i}`), type: mutation.entityType, ownerId: mutation.ownerId, positions: [clone(pos)], state: { ...mutation.state }, duration: mutation.duration ?? null };
+            state.entities[entity.id] = entity;
+          }
+        } else {
+          const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, 'entity'), type: mutation.entityType, ownerId: mutation.ownerId, positions: clone(validated.positions), state: { ...mutation.state }, duration: mutation.duration ?? null };
+          state.entities[entity.id] = entity;
+        }
       }
       break;
     }

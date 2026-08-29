@@ -192,8 +192,8 @@ const strengthOfThePackEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'strength-of-the-pack')];
   if (sourcePosition) {
-    const beastCell = freeCellsInRange(context, sourcePosition, 2)[0];
-    if (beastCell) mutations.push(entityMutation(context, source.id, beastCell, 'beast', {}));
+    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1 })[0];
+    if (beast) mutations.push(beast);
     for (const character of Object.values(context.state.actors)) {
       const characterPosition = character.position;
       if (character.side !== source.side || !characterPosition) continue;
@@ -221,8 +221,8 @@ const underwayEffects: RuleResolver = (context) => {
   if (!portalCell) throw new RuleProgramViolation('choice.position-range', 'Underway requires a free adjacent space.');
   mutations.push(entityMutation(context, source.id, portalCell, 'underway', {}));
   if (context.triggers?.has('charge')) {
-    const beastCell = freeCellsInRange(context, sourcePosition, 2)[0];
-    if (beastCell) mutations.push(entityMutation(context, source.id, beastCell, 'beast', {}));
+    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1 })[0];
+    if (beast) mutations.push(beast);
   }
   return mutations;
 };
