@@ -322,6 +322,14 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
 
   // --- docs/rules-foundations.md maturity sections ---------------------------
   {
+    id: 'claim:foundations:player-choice',
+    file: 'docs/rules-foundations.md',
+    anchor: '### Player choice (CHOOSE underlay) — AUTHORITATIVE + SOURCE-TESTED (2026-08-29)',
+    strength: 'authoritative',
+    subject: 'Player choice (CHOOSE underlay)',
+    binding: legacy('choice.test.ts semantic contract + protocol parity fixtures; no fidelity scope'),
+  },
+  {
     id: 'claim:foundations:command-event-purity',
     file: 'docs/rules-foundations.md',
     anchor: '### Command/event purity — AUTHORITATIVE + REPLAY-TESTED',

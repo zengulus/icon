@@ -47,11 +47,23 @@ const modifier = z.object({
   value: z.union([z.string().max(2_048), z.boolean(), z.object({ kind: z.string().max(80) }).passthrough()]).optional(),
 }).strict();
 const statusSaveChoice = z.object({ spendBlessing: z.boolean().optional() }).strict();
-// Core commands expose only explicit p.102 Blessing decisions.  Their
-// tactical selector/cost input remains authoritative reducer state rather
-// than a client-controlled generic RuleProgram payload.
+// p.102 Blessing decisions ride every core command's save windows.
+const statusSaveChoiceOnly = z.object({
+  statusSaveChoices: boundedRecord(boundedRecord(statusSaveChoice, 20), 100).optional(),
+}).strict();
+// USE_ABILITY additionally carries the generic choice buckets its program's
+// RuleChoice rows declare (positions/actors/directions/options/numbers/
+// booleans). The engine validates every bucket entry against those rows at
+// the command boundary (kernels/choice.ts) — the client supplies only narrow
+// values, never the semantics.
 const statusSaveInput = z.object({
   statusSaveChoices: boundedRecord(boundedRecord(statusSaveChoice, 20), 100).optional(),
+  positions: boundedRecord(z.array(position).max(100), 100).optional(),
+  actorIds: boundedRecord(z.array(identifier).max(100), 100).optional(),
+  directions: boundedRecord(position, 100).optional(),
+  options: boundedRecord(z.string().max(500), 100).optional(),
+  numbers: boundedRecord(z.number().finite(), 100).optional(),
+  booleans: boundedRecord(z.boolean(), 100).optional(),
 }).strict();
 
 const actor = z.object({
@@ -120,8 +132,8 @@ const encounterCommand = z.discriminatedUnion('type', [
   z.object({ type: z.literal('REMOVE_ACTOR'), actorId: identifier }).strict(),
   z.object({ type: z.literal('SET_TERRAIN'), cell: z.object({ position, type: terrainType, elevation: z.number().int().min(-100).max(100) }).strict() }).strict(),
   z.object({ type: z.literal('START_ENCOUNTER') }).strict(),
-  z.object({ type: z.literal('MOVE'), actorId: identifier, path: z.array(position).min(1).max(1_000), mode: z.enum(['standard', 'dash']), input: statusSaveInput.optional() }).strict(),
-  z.object({ type: z.literal('BASIC_ATTACK'), actorId: identifier, targetId: identifier, weight: z.enum(['light', 'heavy']), input: statusSaveInput.optional() }).strict(),
+  z.object({ type: z.literal('MOVE'), actorId: identifier, path: z.array(position).min(1).max(1_000), mode: z.enum(['standard', 'dash']), input: statusSaveChoiceOnly.optional() }).strict(),
+  z.object({ type: z.literal('BASIC_ATTACK'), actorId: identifier, targetId: identifier, weight: z.enum(['light', 'heavy']), input: statusSaveChoiceOnly.optional() }).strict(),
   z.object({ type: z.literal('USE_ABILITY'), actorId: identifier, abilityId: identifier, targetIds: z.array(identifier).max(100), input: statusSaveInput.optional() }).strict(),
   z.object({
     type: z.literal('EXECUTE_RULE'),
@@ -143,11 +155,11 @@ const encounterCommand = z.discriminatedUnion('type', [
     triggerTargetIds: z.array(identifier).max(100).optional(),
     triggers: z.array(identifier).max(100).optional(),
   }).strict(),
-  z.object({ type: z.literal('INTERACT'), actorId: identifier, position, description: z.string().max(500), input: statusSaveInput.optional() }).strict(),
-  z.object({ type: z.literal('RESCUE'), actorId: identifier, targetId: identifier, input: statusSaveInput.optional() }).strict(),
-  z.object({ type: z.literal('RECOVER'), actorId: identifier, input: statusSaveInput.optional() }).strict(),
+  z.object({ type: z.literal('INTERACT'), actorId: identifier, position, description: z.string().max(500), input: statusSaveChoiceOnly.optional() }).strict(),
+  z.object({ type: z.literal('RESCUE'), actorId: identifier, targetId: identifier, input: statusSaveChoiceOnly.optional() }).strict(),
+  z.object({ type: z.literal('RECOVER'), actorId: identifier, input: statusSaveChoiceOnly.optional() }).strict(),
   z.object({ type: z.literal('SPEND_VIGILANCE'), actorId: identifier, targetId: identifier, use: z.enum(['guard', 'punish']), damage: z.number().finite().optional() }).strict(),
-  z.object({ type: z.literal('END_TURN'), actorId: identifier, input: statusSaveInput.optional() }).strict(),
+  z.object({ type: z.literal('END_TURN'), actorId: identifier, input: statusSaveChoiceOnly.optional() }).strict(),
   z.object({ type: z.literal('TAKE_TURN'), actorId: identifier }).strict(),
   z.object({ type: z.literal('GO_SLOW'), actorId: identifier }).strict(),
   z.object({ type: z.literal('END_ENCOUNTER') }).strict(),

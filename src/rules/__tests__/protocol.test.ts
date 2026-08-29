@@ -155,8 +155,54 @@ describe('realtime protocol validation', () => {
         ...recoverMessage.command,
         command: {
           ...recoverMessage.command.command,
-          // Core commands do not accept generic VM selectors or costs.
-          input: { actorIds: { target: ['spoofed'] } },
+          // RECOVER is not an ability: no choice buckets on non-ability commands.
+          input: { positions: { target: [{ x: 1, y: 2 }] } },
+        },
+      },
+    }))).toThrow(/Invalid websocket message/);
+  });
+
+  it('accepts generic choice buckets on USE_ABILITY and rejects malformed ones', () => {
+    const base = {
+      type: 'command',
+      encounterId: 'encounter-1',
+      expectedRevision: 0,
+      command: {
+        domain: 'encounter',
+        command: {
+          type: 'USE_ABILITY',
+          actorId: 'hero-1',
+          abilityId: 'spellblade:blitz',
+          targetIds: ['foe-1'],
+          input: {
+            positions: { teleport: [{ x: 2, y: 3 }] },
+            numbers: { sacrifice: 2 },
+            booleans: { optIn: true },
+            options: { branch: 'destroy' },
+            directions: { push: { x: 1, y: 0 } },
+            actorIds: { ally: ['ally-1'] },
+          },
+        },
+      },
+    };
+    const parsed = parseClientMessage(JSON.stringify(base));
+    expect(parsed).toMatchObject({
+      type: 'command',
+      command: { domain: 'encounter', command: { type: 'USE_ABILITY', input: { numbers: { sacrifice: 2 } } } },
+    });
+    // Unknown bucket keys are rejected (strict schema).
+    expect(() => parseClientMessage(JSON.stringify({
+      ...base,
+      command: { ...base.command, command: { ...base.command.command, input: { ...base.command.command.input, injected: true } } },
+    }))).toThrow(/Invalid websocket message/);
+    // Out-of-range position coordinates are rejected before state validation.
+    expect(() => parseClientMessage(JSON.stringify({
+      ...base,
+      command: {
+        ...base.command,
+        command: {
+          ...base.command.command,
+          input: { positions: { teleport: [{ x: 99_999, y: 0 }] } },
         },
       },
     }))).toThrow(/Invalid websocket message/);

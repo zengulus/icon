@@ -68,6 +68,27 @@ Key semantics:
 
 ## Foundation families
 
+### Player choice (CHOOSE underlay) — AUTHORITATIVE + SOURCE-TESTED (2026-08-29)
+
+One semantic choice authority over the typed command input buckets:
+`kernels/choice.ts` (`resolveChoice`/`resolveChoices`). Every player decision
+is a `RuleChoice` row (actors/positions/direction/option/number/boolean) on
+the source's `RuleAction`; the command carries narrow values in the
+`RuleExecutionInput` buckets. The kernel rejects a required missing choice
+before any cost/RNG (`choice.<kind>-required`), treats an optional missing
+choice as "decline" (never a default), and validates supplied values against
+the row's declared constraints (cardinality min/max/distinct, relation,
+p.92 footprint range, option membership, numeric bounds, direction non-zero,
+position in-grid). Domain refinements stay with their specialists
+(`kernels/teleport-choice.ts` owns unoccupied + Rampart). Network parity:
+`StatusSaveCommandInput` + the `USE_ABILITY` websocket schema carry all six
+buckets (non-ability commands carry only the Blessing surface). Pre/post
+boundary: a choice whose candidate set depends on a roll/movement/future
+state is NOT representable here — it belongs to the future
+WINDOW/CONTINUATION underlays; never supply it speculatively. Tests:
+`choice.test.ts` (23 semantic cases) + protocol fixtures. Sequencing owner:
+[`generic-underlays.md`](generic-underlays.md).
+
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED
 
 `executeCommand(input, command, dice)` never mutates input; it plans ordered

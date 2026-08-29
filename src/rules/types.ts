@@ -649,10 +649,21 @@ export interface AbilityUseChoice {
 /**
  * The player-declared input accepted by the core command save windows and the
  * pre-resolution ability-use choice fold. It keeps p.102 Blessing decisions
- * and p.184/p.191 ability-use choices explicit without exposing the generic
- * RuleProgram input surface on ordinary encounter commands.
+ * and p.184/p.191 ability-use choices explicit and carries the generic
+ * choice buckets (RuleChoice rows) an ability's program declares — the
+ * CHOOSE underlay (kernels/choice.ts) validates every bucket entry against
+ * those rows at the command boundary.
  */
-export type StatusSaveCommandInput = Pick<RuleExecutionInput, 'statusSaveChoices' | 'positions'> & {
+export type StatusSaveCommandInput = Pick<
+  RuleExecutionInput,
+  | 'statusSaveChoices'
+  | 'positions'
+  | 'actorIds'
+  | 'directions'
+  | 'options'
+  | 'numbers'
+  | 'booleans'
+> & {
   abilityUseChoices?: readonly AbilityUseChoice[];
   /** Optional post-resolution talent effects the player explicitly opted into
    * (source unit ids — see `RuleExecutionInput.talentChoices`). */
