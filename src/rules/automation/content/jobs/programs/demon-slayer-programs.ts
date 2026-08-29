@@ -7,7 +7,7 @@ import {
   axisDirection, lineCells, orthogonalNeighbors, sameCell, squareArea,
   self, attackTarget, constant, damageDie, fray, normalDamage,
   distance, withinGrid, sourceActor, rushTowardFoes,
-  damageMutation, conditionMutation, rushMutation, stateMutation,
+  damageMutation, conditionMutation, rushMutation, shoveMutation, stateMutation,
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
 
@@ -381,9 +381,15 @@ const wickedSheath: RuleResolver = (context) => {
     if (path.length > 0) mutations.push(rushMutation(context, source.id, path));
   }
   // The shove is part of the attack step's on-hit effects ("On hit: fray
-  // and shove 1"); the resolver only handles the charge/heroic rush and the
-  // post-attack charged-weapon state.
+  // and shove 1"); the resolver handles the charge/heroic rush, the
+  // post-attack charged-weapon state, and Talent I's extra shove.
   mutations.push(stateMutation(context, source.id, 'wicked-sheath:charged', true));
+  // ICON p.130 Wicked Sheath talent 1: "Also shove your foe 1 for every
+  // charge on the die." An additional shove gated on TI being equipped.
+  if ((source.talents?.['demon-slayer:wicked-sheath'] ?? 0) >= 1 && die > 0 && target?.position) {
+    const direction = axisDirection(source.position, target.position);
+    mutations.push(shoveMutation(context, target.id, die, direction));
+  }
   return mutations;
 };
 

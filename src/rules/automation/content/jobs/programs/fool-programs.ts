@@ -97,9 +97,13 @@ const spinningTopEffects: RuleResolver = (context) => {
   const landed = walk(context, source.position, direction, spaces, false, source.id);
   const steps = Math.abs(landed.x - source.position.x) + Math.abs(landed.y - source.position.y);
   const mutations: RuleMutation[] = [];
-  // ICON p.150 Spinning Top talent 2: "Charge: Spinning top becomes fly
-  // instead." When charged, the rush becomes a fly (ignores obstacles).
-  const charged = context.triggers?.has('charge');
+  // ICON p.150 Spinning Top has NO Charge clause in its base rules; only
+  // Talent 2 grants the "Charge: Spinning top becomes fly instead" variant.
+  // Treating the generic `charge` trigger alone as proof of the talent's
+  // Charge clause would let a plain slow turn fly the rush with no talent
+  // equipped, so the fly branch proves TII is equipped (source.p150 T2).
+  const hasTalentII = (source.talents?.['fool:spinning-top'] ?? 0) >= 2;
+  const charged = hasTalentII && context.triggers?.has('charge');
   if (steps > 0) {
     if (charged) {
       mutations.push(flyMutation(context, source.id, landed));

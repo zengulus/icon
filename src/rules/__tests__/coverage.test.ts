@@ -107,15 +107,19 @@ describe('rules automation coverage gate', () => {
     // audit complete through the registered kernel rows.
     // 2026-08-28: +3 action-cost-override masteries (Valiant, Shadow Play,
     // Polaris) promoted through the cost-payment fold.
+    // 2026-08-29: +3 program-level resolver-gated charge talents (Spinning
+    // Top t2, Chaos Tarot t2, Terraforming t1) promoted (gated on equipped
+    // talent rank), so the generic slow-turn `charge` trigger alone never
+    // grants a talent effect.
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 476,
-      unsupportedPrograms: 2799,
-      completeClauses: 1616,
-      unsupportedClauses: 3084,
+      completePrograms: 479,
+      unsupportedPrograms: 2796,
+      completeClauses: 1619,
+      unsupportedClauses: 3081,
       unsupportedByKind: {
-        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 230, 'mastery': 129,
+        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 227, 'mastery': 129,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

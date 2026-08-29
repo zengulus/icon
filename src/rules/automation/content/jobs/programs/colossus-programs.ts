@@ -182,9 +182,19 @@ const gigatonWhipEffects: RuleResolver = (context) => {
   if (!source || !source.position || !target || !target.position) return [];
   const mutations: RuleMutation[] = [];
   const direction = axisDirection(source.position, target.position);
+  // ICON p.135 Gigaton Whip talent 2: "Fly 2 instead. Charge: Shove 3 and
+  // fly 3." The base shove 2 is emitted here. The shove-3 Charge variant
+  // is a compound blocker (the resolver emits shove-2 unconditionally;
+  // retracting it from the program step is not possible). The fly distance
+  // IS resolver-controlled and gated below.
   mutations.push(shoveMutation(context, target.id, 2, direction));
+  const hasTalentII = (source.talents?.['colossus:gigaton-whip'] ?? 0) >= 2;
   if (context.triggers?.has('collide')) {
-    const landing = plannedFly(context, source.id, 1, direction) ?? source.position;
+    // ICON p.135 base: "fly 1". TII: "Fly 2 instead." Charge variant
+    // (with TII): "fly 3".
+    const flyDistance = hasTalentII && context.triggers?.has('charge') ? 3
+      : hasTalentII ? 2 : 1;
+    const landing = plannedFly(context, source.id, flyDistance, direction) ?? source.position;
     const dropCell = firstFreeCell(context, orthogonalNeighbors(landing), source.id);
     if (dropCell) {
       mutations.push(removeMutation(context, target.id));

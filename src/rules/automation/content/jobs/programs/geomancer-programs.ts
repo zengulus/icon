@@ -218,12 +218,16 @@ const terraformingEffects: RuleResolver = (context) => {
   const chosen = context.input.options?.effects ?? 'boulders,pits';
   const effects = chosen.split(',');
   const charged = context.triggers?.has('charge');
+  // ICON p.219 base Charge: "Choose four effects" (not two) — this is the
+  // base ability's Charge variant, NOT talent I. Talent I adds the
+  // adjacent-placement expansion.
   const count = charged ? 4 : 2;
   const mutations: RuleMutation[] = [];
   // ICON p.219 Terraforming talent 1: "Charge: effects can also be placed
-  // in any space adjacent to the area." When charged, the placement pool
-  // expands to include cells adjacent to the area.
-  const adjacentCells = charged
+  // in any space adjacent to the area." When charged AND TI is equipped,
+  // the placement pool expands to include cells adjacent to the area.
+  const hasTalentI = (source.talents?.['geomancer:terraforming'] ?? 0) >= 1;
+  const adjacentCells = charged && hasTalentI
     ? area.flatMap((cell) => [
         { x: cell.x + 1, y: cell.y }, { x: cell.x - 1, y: cell.y },
         { x: cell.x, y: cell.y + 1 }, { x: cell.x, y: cell.y - 1 },

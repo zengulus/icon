@@ -836,6 +836,29 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   'spellblade:nothung:talent:2': {
     mechanic: 'Comeback (user bloodied): both Nothung teleports widen to 4 (player-selected destinations via the generic positions input; the shared teleportMutation primitives through the F1 gateway).',
   },
+  // ICON p.150 Spinning Top talent 2: "Charge: Spinning top becomes fly
+  // instead." The base ability has NO Charge clause; the program reads the
+  // equipped choice and only turns the dash into a fly when TII is equipped
+  // AND the generic slow-turn `charge` trigger is active — a plain slow turn
+  // without the talent never flies.
+  'fool:spinning-top:talent:2': {
+    mechanic: 'Charged (slow turn) with TII equipped: Spinning Top\u2019s dash becomes a fly instead of a rush. Without TII the rush stays ground-based even when charged.',
+  },
+  // ICON p.201 Chaos Tarot talent 2: "You can move Chaos Tarot's area up to
+  // 2 spaces in any direction before applying the gamble effect. Charge: 4
+  // spaces." The base ability has no area movement; the resolver reads the
+  // equipped choice and only lets the area-center shift when TII is equipped
+  // (up to 4 when charged, else 2).
+  'seer:chaos-tarot:talent:2': {
+    mechanic: 'TII equipped: the Chaos Tarot area-center may be moved up to 2 spaces in any direction before the gamble (up to 4 on a charged/slow turn). With no TII the area stays put.',
+  },
+  // ICON p.219 Terraforming talent 1: "Charge: effects can also be placed
+  // in any space adjacent to the area." The base ability's OWN "Charge:
+  // Choose four effects" (up from two) stays talent-independent; only the
+  // adjacent-placement expansion requires TI equipped and charged.
+  'geomancer:terraforming:talent:1': {
+    mechanic: 'Charged (slow turn) with TI equipped: Terraforming effects may also be placed in spaces adjacent to the area. The base charge\u2019s four-effect count applies with or without the talent.',
+  },
 };
 
 for (const [sourceId, row] of Object.entries(PROGRAM_LEVEL_TALENT_RECIPES)) {

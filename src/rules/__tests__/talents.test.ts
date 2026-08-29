@@ -114,9 +114,13 @@ describe('F7 closed talent inventory', () => {
     // Seal t2's pacified+, Rot t2's turn-start adjacency damage) execute at
     // the engine's mark query points (status-save policy, carrier-aware
     // condition projection, turn-start lifecycle trigger).
+    // F15 (2026-08-29): +3 program-level resolver-gated charge talents
+    // (Spinning Top t2, Chaos Tarot t2, Terraforming t1) promoted — each
+    // gates its variant on the equipped talent rank, so the generic slow-turn
+    // `charge` trigger alone never grants a talent effect.
     // None are fold triggers or program-emitted variants in the wrong home.
-    expect(getExecutableTalentIds().size).toBe(58);
-    expect(getDocumentedTalentIds(units).size).toBe(231);
+    expect(getExecutableTalentIds().size).toBe(61);
+    expect(getDocumentedTalentIds(units).size).toBe(228);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -829,4 +833,183 @@ describe('compound talent completeness manifest (F-audit)', () => {
     const unit = findRuleSourceUnit('colossus:valkyrie:talent:1')!;
     expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
   });
+});/** All mutations emitted by a specific ability's RULE_MUTATIONS_APPLIED event. */
+const abilityMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId: string): RuleMutation[] =>
+  result.events.flatMap((event) => event.type === 'RULE_MUTATIONS_APPLIED' && event.sourceId === abilityId
+    ? event.mutations.filter((mutation): mutation is RuleMutation => true)
+    : []);
+
+describe('Charge-variant talent gating', () => {
+  // ── Chaos Tarot TII ──────────────────────────────────────────────────
+  it('Chaos Tarot TII: area movement exists only when TII is equipped', () => {
+    // Without TII, the base ability has NO area movement at all.
+    const { state, hero, foe } = talentEncounter('seer:chaos-tarot', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    // Do not send area-center positions — without TII, movementAllowance=0
+    // and any displacement would throw. The area must stay at the target.
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
+      input: {},
+    } as any, scriptedDice(3));
+    // The area stays at the original target (3,1).
+    expect(result.state.entities).toBeDefined();
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Chaos Tarot TII: charged area movement is 4 spaces when TII is equipped', () => {
+    const { state, hero, foe } = talentEncounter('seer:chaos-tarot', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    state.actors[hero.id].ruleState['slow-turn'] = true; // charged
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
+      input: { positions: { 'area-center': [{ x: 5, y: 1 }] } },
+    } as any, scriptedDice(3));
+    // The area moved from (3,1) to (5,1) = 2 spaces (within the 4-space charged allowance).
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Chaos Tarot TII: uncharged area movement is 2 spaces when TII is equipped', () => {
+    const { state, hero, foe } = talentEncounter('seer:chaos-tarot', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+    // Not charged — normal turn
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
+      input: { positions: { 'area-center': [{ x: 5, y: 1 }] } },
+    } as any, scriptedDice(3));
+    // 2 spaces from (3,1) to (5,1) is within the 2-space uncharged allowance.
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  // ── Terraforming TI ──────────────────────────────────────────────────
+  it('Terraforming TI: adjacent-placement requires TI and charge', () => {
+    const { state, hero, foe } = talentEncounter('geomancer:terraforming', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    state.actors[hero.id].ruleState['slow-turn'] = true; // charged
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
+      input: {},
+    }, scriptedDice());
+    // With TI and charged, 4 effects with adjacent placement are available.
+    // The resolver produces terrain mutations with the ability sourceId, not
+    // a talent sourceId, so check the full mutation stream.
+    const allMutations = abilityMutationsOf(result, 'geomancer:terraforming');
+    const terrainMutations = allMutations.filter((m) => m.kind === 'terrain');
+    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming TI: without TI, the base charge gives 4 effects in-area but never adjacency', () => {
+    // Rank 2 cannot stand in for "no TI" (ranks are cumulative: TII implies
+    // TI is equipped), so clear the talent map entirely. The base ability's
+    // OWN "Charge: Choose four effects" stays; only Talent I's adjacent-
+    // placement expansion may not apply.
+    const { state, hero, foe } = talentEncounter('geomancer:terraforming', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    state.actors[hero.id].ruleState['slow-turn'] = true; // charged
+    const noTI = { ...state, actors: { ...state.actors, [hero.id]: { ...state.actors[hero.id], talents: {} } } };
+    const result = executeCommand(noTI, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
+      input: {},
+    }, scriptedDice());
+    const allMutations = abilityMutationsOf(result, 'geomancer:terraforming');
+    const createdCells = allMutations.flatMap((m) => ('positions' in m && Array.isArray(m.positions) ? m.positions : []) as { x: number; y: number }[]);
+    // No effect may land outside the burst-2 area around the target (5,1).
+    expect(createdCells.length).toBeGreaterThanOrEqual(1);
+    for (const cell of createdCells) {
+      expect(Math.abs(cell.x - 5)).toBeLessThanOrEqual(2);
+      expect(Math.abs(cell.y - 1)).toBeLessThanOrEqual(2);
+    }
+    expect(applyEvents(noTI, result.events)).toEqual(result.state); // replay
+  });
+
+  // ── Wicked Sheath TI ─────────────────────────────────────────────────
+  it('Wicked Sheath TI: extra shove per die charge when TI is equipped', () => {
+    // Wicked Sheath is melee (range 1). Place foe adjacent.
+    const { state, hero, foe } = talentEncounter('demon-slayer:wicked-sheath', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    // Set the power die to 2 charges
+    state.actors[hero.id].resources['wicked-sheath-die'] = 2;
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:wicked-sheath', targetIds: [foe.id],
+    }, scriptedDice(12, 6));
+    // With TI and die=2: base shove (1+die=3) from the program step, plus
+    // TI extra shove (die=2) from the resolver = shove mutations present.
+    const allMutations = abilityMutationsOf(result, 'demon-slayer:wicked-sheath');
+    const shoveMutations = allMutations
+      .filter((m): m is Extract<RuleMutation, { kind: 'move' }> => m.kind === 'move' && m.movement === 'shove');
+    expect(shoveMutations.length).toBeGreaterThanOrEqual(2); // base shove + TI extra shove
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Wicked Sheath TI: without TI, only the base die-scaled shove fires', () => {
+    // Rank 2 includes TI (ranks are cumulative), so clear the talent map to
+    // test the true "no TI" control: the base attack's on-hit shove (1 + die)
+    // still fires; Talent I's per-charge extra shove must not.
+    const { state, hero, foe } = talentEncounter('demon-slayer:wicked-sheath', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    state.actors[hero.id].resources['wicked-sheath-die'] = 2;
+    const noTI = { ...state, actors: { ...state.actors, [hero.id]: { ...state.actors[hero.id], talents: {} } } };
+    const result = executeCommand(noTI, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:wicked-sheath', targetIds: [foe.id],
+    }, scriptedDice(12, 6));
+    const allMutations = abilityMutationsOf(result, 'demon-slayer:wicked-sheath');
+    const shoveMutations = allMutations
+      .filter((m): m is Extract<RuleMutation, { kind: 'move' }> => m.kind === 'move' && m.movement === 'shove');
+    // Exactly one shove mutation (the base on-hit shove of 1 + die = 3); the
+    // TI extra per-charge shove is absent.
+    expect(shoveMutations).toHaveLength(1);
+    expect(shoveMutations[0]).toMatchObject({ movement: 'shove', distance: 1 + 2 });
+    expect(applyEvents(noTI, result.events)).toEqual(result.state); // replay
+  });
+
+  // ── Gigaton Whip TII ─────────────────────────────────────────────────
+  it('Gigaton Whip TII: collide fly distance is 2 with TII (not 1)', () => {
+    const { state, hero, foe } = talentEncounter('colossus:gigaton-whip', 2, {
+      heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 },
+      terrainCells: [{ position: { x: 4, y: 1 }, type: 'impassable', elevation: 0 }],
+    });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'colossus:gigaton-whip',
+      actionId: 'default', timing: 'use', input: {},
+    }, scriptedDice(12, 4));
+    expect(result.state.actors[hero.id].position).toBeDefined();
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Gigaton Whip TII: without TII, collide fly distance is 1', () => {
+    const { state, hero, foe } = talentEncounter('colossus:gigaton-whip', 1, {
+      heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 },
+      terrainCells: [{ position: { x: 4, y: 1 }, type: 'impassable', elevation: 0 }],
+    });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'colossus:gigaton-whip',
+      actionId: 'default', timing: 'use', input: {},
+    }, scriptedDice(12, 4));
+    expect(result.state.actors[hero.id].position).toBeDefined();
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  // ── Spinning Top TII ─────────────────────────────────────────────────
+  it('Spinning Top TII: charged fly variant only fires with TII equipped', () => {
+    const { state, hero, foe } = talentEncounter('fool:spinning-top', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    state.actors[hero.id].ruleState['slow-turn'] = true; // charged
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:spinning-top', targetIds: [],
+      input: { directions: { 'direction': { x: 1, y: 0 } } },
+    } as any, scriptedDice(3));
+    // With TII and charged, the rush becomes a fly.
+    const allMutations = abilityMutationsOf(result, 'fool:spinning-top');
+    const moveMutations = allMutations.filter((m) => m.kind === 'move');
+    expect(moveMutations.some((m) => m.movement === 'fly')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Spinning Top TII: without TII, charged has no effect (base has no Charge clause)', () => {
+    const { state, hero, foe } = talentEncounter('fool:spinning-top', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    state.actors[hero.id].ruleState['slow-turn'] = true; // charged — but base has no Charge clause
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:spinning-top', targetIds: [],
+      input: { directions: { 'direction': { x: 1, y: 0 } } },
+    } as any, scriptedDice(3));
+    // Without TII, the charged fly never fires — it's a rush, not a fly.
+    const allMutations = abilityMutationsOf(result, 'fool:spinning-top');
+    const moveMutations = allMutations.filter((m) => m.kind === 'move');
+    expect(moveMutations.some((m) => m.movement === 'fly')).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
 });

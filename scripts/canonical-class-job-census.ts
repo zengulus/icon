@@ -573,11 +573,6 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // the dice-pool extension). "Charge: 2 more d6s" adds more dice via
   // the same seam. Distinct from result-override (Stack Dice) and
   // post-roll-reactive-choice (Bend Fate).
-  'seer:chaos-tarot:talent:2': ['area-modifier'],
-  // chaosTarotEffects uses gambleD6 for the tarot roll; the Charge: variant
-  // ("Charge: 4 spaces" = up-to-4 area movement distance) is already wired
-  // in the resolver via context.triggers?.has('charge'). The area-modifier
-  // for the up-to-2-spaces area movement is the remaining blocker.
   'seer:polaris:talent:2': ['terrain-create'],
   // Polaris marks a space for the meteor gamble (terrain entity);
   // the gamble itself is wired via the end-of-turn dice window
@@ -627,11 +622,6 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // is a verb, NOT the Mark mechanic — so no mark family applies; the
   // delayed re-explosion (delay-mechanic + area-define) plus the bomb summon
   // (entity-create) are the complete residual
-  'fool:spinning-top:talent:2': ['fly-grant'],
-  // "Charge: Spinning top becomes fly instead" — the Charge: variant
-  // (rush becomes fly) is already wired in the resolver via
-  // context.triggers?.has('charge') → flyMutation. fly-grant (the
-  // movement-type override) is the remaining blocker.
   'freelancer:trait:astral-binding': ['action-type-change', 'mark-stacking'],
   // "stack up to two marks" = mark-stacking; the free-action group teleport
   // of marked characters rides the F1 teleport gateway (implemented) and the
@@ -873,10 +863,12 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'demon-slayer:demon-claw:talent:2': ['new-shove-effect'],
   // "After the second rush, you can shove an adjacent character 2 spaces"
   // — adds a new optional shove-2, not a modifier on existing shoves
-  'demon-slayer:wicked-sheath:talent:1': ['new-shove-effect', 'collide-rider'],
+  'demon-slayer:wicked-sheath:talent:1': ['collide-rider'],
   // "shove your foe 1 for every charge on the die. Collide: Your foe is
-  // stunned" — charge-gated shove scaling + collide rider (NOT charge-state;
-  // "charge" here is a resource counter, not the "Charge:" ability subtype)
+  // stunned" — the per-charge extra shove is now wired (resolver emits an
+  // additional shove of `die` gated on TI equipped and die>0; the base attack
+  // step shove 1+die stays). The talent remains compound/unresolved: the
+  // "Collide: Your foe is stunned" collide-rider is still unwired.
   'demon-slayer:demon-claw:mastery': ['damage-modifier'],
   // "+1 damage per 25% max hp missing, max +3" — gated scaling damage bonus
   'demon-slayer:soul-blade:mastery': ['power-die', 'area-effect-rider'],
@@ -1029,12 +1021,13 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // 1 space towards you, then force them to save. On a failed save, they
   // are shoved 2 more spaces towards you" — new shove effects with save-gated
   // additional shove
-  'colossus:gigaton-whip:talent:2': ['fly-grant', 'new-shove-effect'],
-  // "Fly 2 instead. Charge: Shove 3 and fly 3" — the Charge: variant
-  // (shove 3 + fly 3) is already wired in the resolver via
-  // context.triggers?.has('charge'). The fly-grant (movement-type
-  // override) and new-shove-effect (additional shove) are the
-  // remaining blockers.
+  'colossus:gigaton-whip:talent:2': ['new-shove-effect'],
+  // "Fly 2 instead. Charge: Shove 3 and fly 3" — the resolver now gates the
+  // collide fly distance on TII (fly 2 instead of base 1) and on TII+charge
+  // (fly 3), so the fly-grant half is wired. The charge variant's "Shove 3"
+  // is NOT wired: the ability still emits the base shove 2 unconditionally, so
+  // the charge shove-3 stays a live new-shove-effect blocker. The talent
+  // remains compound/unresolved.
   'knave:sucker-punch:mastery': ['pre-ability-movement', 'range-modifier', 'new-shove-effect'],
   // "You can rush 2 before activating sucker punch, it triggers from
   // within range 2, and you may give it shove 1" — pre-ability rush +
@@ -1187,13 +1180,6 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // pull a willing ally along (removing them), then place adjacent after
   'geomancer:helix-heel:talent:1': ['rebound', 'object-interaction'],
   // "when bouncing off an object, shove it 1 before extending the line"
-  'geomancer:terraforming:talent:1': ['charge-state', 'placement-modifier'],
-  // "Charge: effects can also be placed in any space adjacent to the area"
-  // — this is the ONE ability whose Charge variant genuinely lacks a
-  // resolver-level gate: the compiler's unsupportedClauses include 'charge',
-  // and the placement-flexibility seam (placing effects in adjacent-to-area
-  // cells) is a distinct missing primitive. charge-state remains a live
-  // blocker here because the Charge variant is not yet wired.
   'geomancer:obsidian-flesh:talent:1': ['duration-modifier'],
   // "if this ability ticks over, it doesn't end until the end of the current
   // turn" — expiry grace-period timing override

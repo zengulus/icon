@@ -75,9 +75,11 @@ const chaosTarotEffects: RuleResolver = (context) => {
   if (distance(source.position, initialCenter) > 5) throw new RuleProgramViolation('choice.actor-range', 'Chaos Tarot requires its center in range 5.');
   // ICON p.201 Chaos Tarot talent 2: "You can move Chaos Tarot's area up to
   // 2 spaces in any direction before applying the gamble effect. Charge: 4
-  // spaces." The area-center repositioning is a player choice validated
-  // against the movement allowance.
-  const movementAllowance = context.triggers?.has('charge') ? 4 : 2;
+  // spaces." Both the base 2-space movement and the charged 4-space variant
+  // are TII-gated — the base ability has no area movement at all.
+  const hasTalentII = (source.talents?.['seer:chaos-tarot'] ?? 0) >= 2;
+  const movementAllowance = !hasTalentII ? 0
+    : context.triggers?.has('charge') ? 4 : 2;
   const rawCenter = context.input.positions?.['area-center'];
   const chosenCenter = Array.isArray(rawCenter) ? rawCenter[0] ?? initialCenter : rawCenter ?? initialCenter;
   if (distance(initialCenter, chosenCenter) > movementAllowance) {

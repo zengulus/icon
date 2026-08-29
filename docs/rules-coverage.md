@@ -90,11 +90,11 @@ the family's *typical* ceiling.
 The machine-generated dependency graph lives in
 [`blocker-census.md`](blocker-census.md) /
 [`blocker-census.json`](blocker-census.json) (**generated** by
-`npm run audit:class-job-census`; never hand-edit). Current shape: baseline 423 unresolved Class/Job units
-(6 class-trait, 38 job-trait, 231 talent, 132 mastery, 16 limit-break); top
-shared blockers are entity-create (16), terrain-create (14), fly-grant (14),
-shove-modifier (10), action-type-change (10), effect-count (8),
-charge-state (8), choice-input (8), resource-management (6), entity-distance-selection (5). The former
+`npm run audit:class-job-census`; never hand-edit). Current shape: baseline 416 unresolved Class/Job units
+(6 class-trait, 38 job-trait, 227 talent, 129 mastery, 16 limit-break); the
+highest-frequency shared blockers and the marginal table are in the generated
+`blocker-census.md` (see the "Marginal" tables there — this summary defers to
+that generated authority rather than hand-listing frequencies that drift). The former
 78-unit `{irreducible}` residual was fully decomposed into concrete
 implementable blocker families (2026-08-26) — the census no longer carries a
 non-implementable class. The `{teleport}` blocker family is gone (2026-08-27):
