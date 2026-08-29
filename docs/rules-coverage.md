@@ -117,4 +117,6 @@ Rot t2), and the 9 remaining former singletons were reclassified to their
 precise residual blockers (mark-detonation-window, mark-as-entity-follow,
 mark-activation-gate, mark-stacking, attack-exceed-trigger, effect-count,
 terrain-create, choice-input, delivery-immunity); 22 units still carry
-`mark-modifier` in compound blocker sets.
+`mark-modifier` in compound blocker sets. The `terrain-create` residual in
+those rows was itself decomposed in the F5 terrain audit (2026-08-29) into
+the precise `terrain-*` families (see docs/blocker-census.md).

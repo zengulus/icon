@@ -1,7 +1,7 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS, EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { findAbility, JOBS } from '../catalog.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
@@ -54,8 +54,10 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Demon Slayer ability automation (p.128–130)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    expect(EXECUTABLE_JOB_ABILITY_IDS.size).toBe(144); // all 16 jobs × 9 abilities
+  it('marks the reviewed abilities executable in the catalog and audit', () => {
+    // 143 of 144 catalogued job abilities are executable; colossus:raging-wolf
+    // is deliberately unresolved (Ultra Part 1), so the allowlist is 143.
+    expect(EXECUTABLE_JOB_ABILITY_IDS.size).toBe(144 - DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS.size);
     const demonSlayerIds = JOBS.find((job) => job.id === 'demon-slayer')!.abilities.map(({ id }) => id);
     expect(demonSlayerIds).toHaveLength(9);
     for (const abilityId of demonSlayerIds) {

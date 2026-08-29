@@ -341,6 +341,20 @@ export const EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
   'stormbender:eye-of-the-storm',
 ]);
 
+/** Deliberately non-executable job abilities (Ultra Part 1, 2026-08-29).
+ *
+ * `colossus:raging-wolf` is intentionally NOT in EXECUTABLE_JOB_ABILITY_IDS:
+ * its complete semantics — "become unstoppable and immune to all damage
+ * while using this ability" (Heroic) and "if you are defeated, your next
+ * use of this ability in the same combat becomes a free action" — have no
+ * source-faithful representation yet, so it stays correctly unresolved
+ * rather than being marked executable for its fly/quarter-flight half.
+ * Tests assert the allowlist + catalog lockstep against this documented
+ * set so a silent re-promotion is caught. */
+export const DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
+  'colossus:raging-wolf',
+]);
+
 /** The reviewed foe-ability slices have passed the same source-specific
  * resolver + replay-fixture bar as the job sets. Each entry is one
  * declarative FoeRecipe in foe-recipes.ts (Crusher p.301, Warrior p.300,

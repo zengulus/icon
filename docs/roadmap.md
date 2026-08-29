@@ -160,8 +160,10 @@ replay; closed negative for unequipped mastery.
 **Goal.** Teleport/Place/Remove/Swap/Fly-grant as shared primitives so the
 census's top blockers stop forcing per-ability resolver code.The Teleport/Place/Remove/Swap half (F1) is DONE (2026-08-27) — shared gateway,
 source-declared atomic swap groups, group-scoped occupancy, and the
-`{teleport}` census family cleared — leaving Fly-grant, entity-create and
-terrain-create as the remaining high-fan-out blockers. The F3 audit
+`{teleport}` census family cleared. Fly-grant, entity-create and
+terrain-create were later all decomposed as coarse keyword artifacts (F4
+fly-grant; F3 entity-create; F5 terrain-create), leaving choice-input as the
+regenerated highest-immediate family. The F3 audit
 (2026-08-29) found the entity-creation AUTHORITY already exists
 (`kernels/entity-creation.ts` `validateEntityCreation`: bounds, footprint
 occupancy, impassable, LoS, footprint-distance range, summon caps) plus the
@@ -201,11 +203,13 @@ the keyword family was re-audited unit-by-unit. All 30 records (17 singletons +
 `fly-multirecipient`, `fly-distance-modifier`, `fly-benefit-rider`,
 `fly-or-teleport-repeat`, `once-per-round-fly-grant`, `flying-targeting`), and`stormbender:tsunami:mastery` was removed from the family entirely (it is a
 non-fly action-cost + movement-distance + flying-foe-targeting mastery). The
-`{fly-grant}` label is retired (0 occurrences). The genuinely-homogeneous
-`fly-distance-modifier` subfamily was implemented at the existing fly authority
-and `colossus:raging-wolf:talent:2` promoted (416→415). The next high-fan-out
-singleton family (regenerated 2026-08-29) is now `{terrain-create}` 16
-immediate (total 54).
+`{fly-grant}` label is retired (0 occurrences). The `fly-distance-modifier`
+subfamily was NOT landed: the initial `colossus:raging-wolf:talent:2`
+promotion was retracted (Ultra Part 1) because Raging Wolf's full
+semantics (Heroic immunity while using, defeated-turns-next-use-free)
+couldn't be represented; `colossus:raging-wolf:talent:2` remains unresolved on
+`choice-input` + `ordered-intermediate-state` + `fly-distance-modifier`, and
+the base ability is deliberately non-executable. The census total stayed 419.
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

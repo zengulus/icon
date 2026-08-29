@@ -573,7 +573,18 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // the dice-pool extension). "Charge: 2 more d6s" adds more dice via
   // the same seam. Distinct from result-override (Stack Dice) and
   // post-roll-reactive-choice (Bend Fate).
-  'seer:polaris:talent:2': ['terrain-create'],
+  'seer:polaris:talent:2': ['delayed-terrain', 'terrain-object-substitution'], // terrain after each Polaris resolves; on gamble 4+ a meteor object OR pit (substitution)
+  'warden:sidhe:talent:1': ['delayed-terrain'], // dangerous adjacent to the foe AFTER the effect expires
+  'seer:eclipse:talent:1': ['delayed-terrain', 'terrain-transform'], // fiery + dangerous pit only if Eclipse explodes; seal-adjacent rider is the delayed fold
+  'enochian:implode:talent:2': ['delayed-terrain', 'terrain-transform'], // center of the delayed implode resolution becomes a pit
+  'colossus:upheaval:talent:2': ['selectable-terrain-placement'], // pit anywhere in FREE space in range (player-chosen cell)
+  'warden:underway:talent:2': ['selectable-terrain-placement', 'cover-mechanic'], // up-to-3 leafy difficult in adjacent spaces (0..3 player choice) + allied cover
+  'shade:nightmare:mastery': ['triggered-terrain-creation'], // when a shadow is consumed in the aura, optional pit in/adjacent
+  'geomancer:quaking-palm:talent:1': ['triggered-terrain-creation', 'selectable-terrain-placement'], // after they use a moving ability, difficult in ANY free adjacent
+  'fool:death:talent:2': ['triggered-terrain-creation', 'under-character-terrain', 'terrain-object-substitution'], // Slay: pit under target + summon a bomb in the pit
+  'chanter:pandaemonium:talent:2': ['triggered-terrain-creation', 'under-character-terrain'], // pits appear under EVERY pacified foe
+  'geomancer:geo:talent:1': ['triggered-terrain-creation', 'new-shove-effect'], // on boulder/pit creation shove adjacent; Collide creates difficult under
+  'geomancer:geo:talent:2': ['under-character-terrain', 'choice-input'], // boulders may be created UNDER characters + damage-immunity choice
   // Polaris marks a space for the meteor gamble (terrain entity);
   // the gamble itself is wired via the end-of-turn dice window
   'fool:party-favor:mastery': ['mark-detonation-window'],
@@ -773,7 +784,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'chanter:felicity:mastery': ['action-type-change', 'range-modifier', 'fly-move-timing'],
   // FANTASIA combo: remove/return an ally and "then they may fly 1" — a
   // post-return allied fly move (the other residuals stay).
-  'chanter:holy:mastery': ['blast-template', 'resource-management', 'terrain-create', 'vigor-grant', 'duration-fly-state'],
+  'chanter:holy:mastery': ['blast-template', 'resource-management', 'moving-area-terrain', 'vigor-grant', 'duration-fly-state'], // small blast area after resolving; only one at a time
   // "Allies have FLYING in the area" — an area-scoped flying STATE, not a move.
   'chanter:holy:talent:2': ['fly-move-timing'],
   // "fly 1 before using Holy, or 3 when charged" — a pre-ability self fly
@@ -812,13 +823,13 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'freelancer:soul-shot:mastery': ['resource-management', 'vigor-grant', 'fly-multirecipient'],
   // "Allies Soul Shot passes through gain 3 vigor and may fly 3" — a passed-
   // through-allies fly grant (vigor-grant / resource-management stay).
-  'stormbender:limit-break': ['action-type-change', 'cover-mechanic', 'terrain-create', 'duration-fly-state'],
+  'stormbender:limit-break': ['action-type-change', 'cover-mechanic', 'moving-area-terrain', 'duration-fly-state'], // aura that moves with you
   // "take on a fearsome elemental form… gain flying and phasing… for the rest of
   // combat" — a combat-long flying STATE plus the rest of the limit-break.
-  'stormbender:trait:pelagic-rage': ['cover-mechanic', 'terrain-create', 'duration-fly-state', 'fly-multirecipient'],
+  'stormbender:trait:pelagic-rage': ['cover-mechanic', 'moving-area-terrain', 'duration-fly-state', 'fly-multirecipient'], // aura moves with you; difficult/dangerous for foes
   // "Yourself and allies in the aura gain flying and cover… for the rest of
   // combat" — a combat-long allied flying state (area).
-  'stormbender:trait:sea-legs': ['damage-modifier', 'terrain-create', 'duration-fly-state'],
+  'stormbender:trait:sea-legs': ['damage-modifier', 'terrain-conditional-rider', 'duration-fly-state'], // bonus vs chars in terrain + flying in own terrain
   // "While inside any of your own terrain effects, you have flying" — a
   // conditional flying-state while inside owned terrain.
 
@@ -854,12 +865,12 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // (a mark-gated damage-taken modifier)
   'harvester:sow:talent:1': ['mark-defeat-trigger', 'mark-transfer', 'range-modifier'],
   // the defeated-while-marked transfer to a foe in range 3
-  'harvester:growing-season:talent:1': ['mark-gated-modifier', 'terrain-create'],
+  'harvester:growing-season:talent:1': ['mark-gated-modifier', 'triggered-terrain-creation'], // slay: Eden vine (difficult + pit + plant)
   // "Abilities used against a character marked by growing season gain slay:
   // create an Eden vine …" — a mark-gated slay trigger plus terrain creation
-  'harvester:growing-season:talent:2': ['mark-gated-modifier', 'terrain-create'],
+  'harvester:growing-season:talent:2': ['mark-gated-modifier', 'terrain-object-substitution'], // slay: blood tree object
   // same shape: mark-gated slay that creates the blood tree object
-  'harvester:growing-season:mastery': ['terrain-create'],
+  'harvester:growing-season:mastery': ['terrain-conditional-rider'], // pacified+ while in/adjacent to plants (no creation)
   // "Foes marked by Growing Season are pacified+ while in or adjacent to
   // spaces occupied by plants" — the F5 carrier-side projection with a
   // live-state (plant adjacency) gate and pacified+ potency already supplies
@@ -883,14 +894,14 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // the mark-gated attack-modifier set vs the marked target (pull, unlimited
   // range, bonus damage, ignore cover on foes; no-crit/no-bonus-damage/+1
   // curse on allies)
-  'stormbender:deepwrath:talent:1': ['mark-gated-modifier', 'terrain-create'],
+  'stormbender:deepwrath:talent:1': ['mark-gated-modifier', 'terrain-conditional-rider'], // +1 save boon for marked allies in pits
   // "Marked allies gain +1 boon on saves in pits …" — a mark-gated save
   // modifier plus pit terrain
-  'stormbender:deepwrath:talent:2': ['damage-modifier', 'mark-gated-modifier', 'terrain-create'],
+  'stormbender:deepwrath:talent:2': ['damage-modifier', 'mark-gated-modifier', 'terrain-conditional-rider'], // marked foes bonus dmg / shattered+ inside pits
   // "Marked foes take bonus damage from all sources" (a mark-gated damage-
   // taken modifier) plus "are shattered+ while inside pits" (the F5 carrier-
   // side projection is supplied; the damage-taken half is not)
-  'stormbender:deepwrath:mastery': ['mark-gated-modifier', 'terrain-create'],
+  'stormbender:deepwrath:mastery': ['mark-gated-modifier', 'triggered-terrain-creation', 'terrain-conditional-rider'], // vacate leaves dangerous behind; immunity/bonus in dangerous
   // the marked character's vacate-leaves-dangerous-terrain trail and the
   // mark-gated dangerous-terrain immunity/extra damage
 
@@ -905,7 +916,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // themselves to 1 hp to grant that ally immunity to all damage from the
   // triggering ability. The bond then snaps" — a reactive spend choice plus
   // an ability-scoped damage-immunity grant (delivery-immunity) and mark end
-  'chanter:holy:talent:1': ['blast-template', 'terrain-create'],
+  'chanter:holy:talent:1': ['blast-template'], // all existing pits explode (preexisting terrain; no creation)
   // "gambles" in the source but the program is wired; the medium blast
   // geometry and terrain creation are the real blockers
   'seer:sleight-of-hand:mastery': ['power-die', 'lifecycle-target-selection'],
@@ -1232,13 +1243,13 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "You can rush 2 before activating sucker punch, it triggers from
   // within range 2, and you may give it shove 1" — pre-ability rush +
   // range change + optional new shove
-  'geomancer:helix-heel:mastery': ['new-shove-effect', 'terrain-create'],
+  'geomancer:helix-heel:mastery': ['new-shove-effect', 'triggered-terrain-creation'], // Collide: pit under the colliding character
   // "Characters that it bounces off are shoved 1 away from you after the
   // ability resolves. Collide: Create a pit" — new shove + terrain creation
-  'stormbender:waterspout:talent:1': ['new-shove-effect', 'terrain-create'],
+  'stormbender:waterspout:talent:1': ['new-shove-effect'], // spit-out shove only; no terrain
   // "After characters are spit out, they are shoved 1 away from the
   // waterspout" — new shove from terrain effect
-  'stormbender:waterspout:mastery': ['blast-template', 'terrain-create', 'new-shove-effect', 'direction-override'],
+  'stormbender:waterspout:mastery': ['blast-template', 'terrain-transform', 'new-shove-effect', 'direction-override', 'triggered-terrain-creation'], // round-4+ dangerous area growth + shove-out
   // "waterspouts grow to a small blast area... characters that start their
   // turns adjacent... are shoved 1 in a direction of your choice" — area
   // modifier + terrain + new shove with player-chosen direction
@@ -1293,10 +1304,10 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "All spaces of the area cost 0 movement for thralls to enter" — an
   // actor-kind-scoped terrain entry-cost override
   'harvester:fairy-ring:talent:2': ['recipient-expansion', 'condition-suppression'],
-  'harvester:fairy-ring:mastery': ['interrupt-rider', 'terrain-create'],
+  'harvester:fairy-ring:mastery': ['interrupt-rider', 'terrain-object-substitution'], // interrupt summons a Megamushroom OBJECT
   // "Whenever the rings' interrupt activates, create a height 1 Megamushroom
   // object anywhere inside or adjacent to the area…" — an interrupt-trigger
-  // rider creating a terrain/object (terrain-create remains the live blocker)
+  // rider creating a terrain/object (precise terrain family is the live blocker)
   'sealer:spirit-shrine:mastery': ['interrupt-grant', 'aura-user-gate', 'elevation-scaling', 'entity-consume'],
   // "Gain the following interrupt Grace of the Spirits… Trigger: An ally in
   // the aura is damaged… Destroy the shrine, then deal 2 divine damage, once,
@@ -1480,6 +1491,49 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // all medium blasts to large blasts, and this ability deals bonus damage"
   // — a conditional (allies-in-area) blast-size override plus bonus dice;
   // the area kernel's shape rules are static today
+
+  // ── F5 (2026-08-29): `{terrain-create}` coarse-family decomposition ──
+  // The syntactic `terrain-create` blocker was a keyword artifact, NOT one
+  // reusable mechanic. Each row below is the exact residual blocker set after
+  // reading the full source passage; the coarse label no longer appears
+  // anywhere in the census. Precise terrain families:
+  //   terrain-transform             add/work a terrain property on existing feature
+  //   delayed-terrain               creation/transform gated on later resolution/expiry
+  //   triggered-terrain-creation    creation fired by an event (slay/collide/vacate/...)
+  //   selectable-terrain-placement  player-chosen cell/kind/count (anywhere/up-to/free-space)
+  //   under-character-terrain       creation explicitly permitted under characters
+  //   moving-area-terrain           persistent/drifting/following/one-at-a-time area
+  //   terrain-conditional-rider     a bonus/condition keyed to being in/adjacent to terrain
+  //   terrain-object-substitution   a created OBJECT vs/for terrain, or a terrain-vs-object option
+  'bastion:land-waster:mastery': ['range-modifier', 'terrain-object-substitution'], // height-1 boulder OBJECT in range 3 + before-trigger timing
+  'demon-slayer:gates-of-hell:mastery': ['action-type-change', 'terrain-transform'], // afterimage dangerous only-for-foes (ownership) + Flash Step removal/teleport
+  'colossus:upheaval:talent:1': ['blast-template'], // boulder bounce deals 2 damage in a blast (no terrain)
+  'colossus:upheaval:mastery': ['range-modifier', 'terrain-object-substitution'], // range 5 + Comeback: boulder as a height-2 pillar instead
+  'colossus:massive-overhead:talent:2': ['exceed-grant', 'terrain-transform'], // Attack gains Exceed: the pit ALSO becomes dangerous
+  'colossus:great-suplex:talent:1': ['damage-modifier', 'terrain-conditional-rider'], // bonus damage if target lands in a pit
+  'freelancer:showdown:mastery': ['blast-template', 'cover-mechanic', 'moving-area-terrain'], // smoke blast grants cover; lasts until recreated
+  'shade:trait:underworld': ['damage-modifier', 'terrain-conditional-rider'], // unerring + bonus vs foes in pits/difficult/dangerous
+  'shade:harrow:talent:2': ['range-modifier', 'triggered-terrain-creation', 'under-character-terrain'], // sacrifice/consume to create a pit under the marked foe
+  'warden:morrigan:mastery': ['blast-template', 'cover-mechanic', 'range-modifier', 'moving-area-terrain'], // redirect flock: dangerous blast area with allied cover, persists till repeated
+  'chanter:pandaemonium:mastery': ['area-define', 'damage-modifier'], // extends area/damage to all existing pits (no creation)
+  'seer:astra:talent:1': ['selectable-terrain-placement', 'terrain-object-substitution', 'damage-modifier'], // 2 difficult in area + Charge meteor OBJECT + landing damage
+  'enochian:pyroclast:mastery': ['blast-template', 'terrain-object-substitution', 'terrain-transform'], // spire OR magma pit (additionally dangerous) + eruption damage
+  'enochian:pyre:mastery': ['blast-template', 'range-modifier', 'under-character-terrain'], // create a pit UNDER your attack target + area re-explosion
+  'spellblade:blitz:mastery': ['blast-template', 'selectable-terrain-placement', 'moving-area-terrain'], // last teleport creates a dangerous blast area in free space adjacent; disappears if a new one is created
+  'geomancer:bio:talent:1': ['terrain-transform'], // make pits/objects/difficult caught in the area dangerous
+  'geomancer:bio:talent:2': ['area-define', 'terrain-transform'], // existing dangerous boil poison + area damage after resolves
+  'geomancer:bio:mastery': ['blast-template', 'range-modifier', 'moving-area-terrain', 'terrain-transform'], // toxic cloud area dangerous+shattered+, lasts until reused
+  'geomancer:geo:mastery': ['blast-template', 'terrain-object-substitution', 'under-character-terrain'], // crater + boulders every side + pit center, under characters
+  'geomancer:realignment:talent:2': ['selectable-terrain-placement', 'terrain-transform'], // dangerous OR difficult in area per effect purged
+  'spellblade:atherwand:mastery': ['area-define', 'terrain-transform'], // gale area becomes impassable (variable area; cannot extend/move)
+  'spellblade:bifrost:mastery': ['area-define', 'terrain-object-substitution'], // bounce if end space lands in an Object; second line 3 area
+  'spellblade:rampant-nail:talent:1': ['blast-template', 'terrain-transform'], // small blast centered on the nail becomes dangerous
+  'stormbender:rime:talent:1': ['area-define'], // bounce off an existing pit/object (geometry; no creation)
+  'stormbender:rime:talent:2': ['area-define', 'range-modifier', 'terrain-object-substitution'], // bounce summons a salt sprite adjacent to each struck character
+  'stormbender:rime:mastery': ['area-define', 'range-modifier', 'delayed-terrain'], // Infuse: summon a pit in the area after it resolves per 2 aether
+  'stormbender:eye-of-the-storm:mastery': ['terrain-object-substitution', 'moving-area-terrain'], // aethercloud OBJECT drifts; carries characters with it
+  'enochian:limit-break': ['range-modifier'], // "pits of despair" is flavor; range-2 exemption
+  'spellblade:limit-break': ['action-type-change', 'area-define'], // map split into sections; removes characters (no terrain)
 };
 
 /**
@@ -1534,6 +1588,12 @@ const FLY_LEXICAL_DISPOSITIONS: Readonly<Record<string, 'reclassified' | 'execut
 
 const FLY_LEXICAL_PATTERN = /\b(?:fly|flies|flying|flight|flights|flew)\b/i;
 
+// Retired `terrain-create` first-pass pattern (F5). The auto-push in
+// classifyBlockers is removed; this pattern is kept only for the fail-closed
+// audit that requires every terrain-creating census unit to be reviewed.
+const TERRAIN_CREATE_PATTERN = /create.*terrain|creates.*terrain|pit|difficult terrain|dangerous terrain|boulder|pillar|afterimage|terrain effect|creating a pit|create a height|create.*spaces of/i;
+const TERRAIN_FAMILIES = new Set(['terrain-transform', 'delayed-terrain', 'triggered-terrain-creation', 'selectable-terrain-placement', 'under-character-terrain', 'moving-area-terrain', 'terrain-conditional-rider', 'terrain-object-substitution']);
+
 /** Classify a source unit's rules text into a blocker set.
  *  The classification is purely syntactic (regex on the source text) and
  *  is used as a first-pass census. Singleton audit verification must be
@@ -1542,11 +1602,18 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
   const text = unit.rulesText.toLowerCase();
   const blockers: string[] = [];
 
-  // Terrain creation: creates terrain, pits, difficult/dangerous terrain, boulders, objects
-  if (/create.*terrain|creates.*terrain|pit|difficult terrain|dangerous terrain|boulder|pillar|afterimage|terrain effect|creating a pit|create a height|create.*spaces of/.test(text)
-    && !/summon.*(?:terrain|object)/.test(text)) {
-    blockers.push('terrain-create');
-  }
+  // NOTE: the syntactic `terrain-create` blocker family is retired (2026-08-29,
+  // F5 audit). ICON's terrain language is not one reusable mechanic: it spans
+  // direct placed cells, TRANSFORMING an existing feature to add/work a
+  // property, DELAYED creation gated on a later resolution/expiry, TRIGGERED
+  // creation fired by an event, player-SELECTABLE placement (anywhere / up-to-N
+  // / kind choice / free-space), UNDER-CHARACTER exceptions, MOVING/persistent
+  // areas, CONDITIONAL riders keyed to being in terrain, and terrain-vs-OBJECT
+  // substitutions. Every record that previously carried `terrain-create` has
+  // been re-read and reclassified to the precise family in
+  // RECLASSIFIED_BLOCKERS; the auto-push is removed so no new keyword-derived
+  // `terrain-create` singleton can reappear (see the F5 fail-closed audit in
+  // generateCensus).
 
   // Condition grant: grants or applies a condition/status
   if (/\b(?:become|becomes|gain|gains|grant|grants|apply|applied?|inflict|inflicts|sealed|immune|sturdy|defiance|dodge|evasion|flying|phasing|unstoppable|regeneration|stealth|counter|vulnerable|weakened|blinded?|dazed|stunned|shattered|slashed|pacified)\b/.test(text)
@@ -1843,6 +1910,22 @@ function generateCensus(): CensusResult {
     }
   }
 
+  // F5 fail-closed terrain audit: retiring the coarse `terrain-create`
+  // classifier must never let terrain-creation language silently disappear
+  // from blocker accounting. (1) No unresolved record may keep the retired
+  // label. (2) Every census unit whose rules text matches the retired
+  // terrain-creation pattern must be either executable (fully compiled) or
+  // an audited reclassification carrying a precise terrain family — a new
+  // or current terrain-creating unit that nobody reviewed aborts the census.
+  const unreviewedTerrainUnits = censusUnits.filter((unit) =>
+    TERRAIN_CREATE_PATTERN.test(unit.rulesText) &&
+    !(unit.id in RECLASSIFIED_BLOCKERS) &&
+    (compilationMap.get(unit.id)?.unsupportedClauses.length ?? 0) > 0
+  );
+  if (unreviewedTerrainUnits.length > 0) {
+    throw new Error(`Unreviewed terrain-creation lexical hits: ${unreviewedTerrainUnits.map((unit) => unit.id).join(', ')}`);
+  }
+
   // Determine complete vs unresolved
   const unresolved: CensusRecord[] = [];
   const complete: string[] = [];
@@ -1878,6 +1961,15 @@ function generateCensus(): CensusResult {
       blockers = ['irreducible'];
     }
     unresolved.push({ sourceId: unit.id, kind: unit.kind, blockers });
+  }
+
+  // After blockers are finalized, the coarse `terrain-create` label must not
+  // survive in any unresolved record (stale RECLASSIFIED rows would silently
+  // keep the retired family alive).
+  for (const record of unresolved) {
+    if (record.blockers.includes('terrain-create')) {
+      throw new Error(`terrain-create label survives on ${record.sourceId}; reaudit its blocker set`);
+    }
   }
 
   // Per-kind counts

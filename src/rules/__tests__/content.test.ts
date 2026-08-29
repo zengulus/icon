@@ -2,7 +2,7 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import sourcebook from '../../content/generated/icon-1.5.json';
 import { ABILITIES, BONDS, JOBS, PHASE_TWO_COVERAGE_READY, RELICS, RULES_COVERAGE } from '../catalog.js';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS, EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { FOE_ABILITIES, FOE_PROFILES, FOE_ROLES } from '../foes.js';
 import { CAMP_FIXTURES, GENERAL_TROPHIES, REWARD_RULES } from '../rewards.js';
 import { auditRuleSourceUnits } from '../source-units.js';
@@ -49,10 +49,16 @@ describe('ICON 1.5 content artifact', () => {
   });
 
   it('keeps the independently reviewed Job allowlist in lockstep with the source catalog', () => {
-    const catalogAbilityIds = new Set(ABILITIES.map(({ id }) => id));
-    expect(EXECUTABLE_JOB_ABILITY_IDS.size).toBe(ABILITIES.length);
+    // Ultra Part 1 deliberately took colossus:raging-wolf out of the
+    // executable set (its Heroic immunity + defeated-free-action semantics
+    // are not yet represented), so the allowlist is the catalog minus that
+    // documented exception.
+    const nonExecutable = DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS;
+    const catalogAbilityIds = new Set(ABILITIES.map(({ id }) => id).filter((id) => !nonExecutable.has(id)));
+    expect(EXECUTABLE_JOB_ABILITY_IDS.size).toBe(catalogAbilityIds.size);
     expect([...EXECUTABLE_JOB_ABILITY_IDS].sort()).toEqual([...catalogAbilityIds].sort());
-    expect(ABILITIES.every(({ automation }) => automation === 'executable')).toBe(true);
+    expect(ABILITIES.filter(({ id }) => !nonExecutable.has(id)).every(({ automation }) => automation === 'executable')).toBe(true);
+    expect(ABILITIES.filter(({ id }) => nonExecutable.has(id)).every(({ automation }) => automation != null && automation !== 'executable')).toBe(true);
   });
 
   it('structures every color-coded foe role, profile, variant, and legend component', () => {

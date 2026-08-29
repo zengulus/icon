@@ -369,89 +369,48 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
   },
 
   // ════════════════════════════════════════════════════════════════════════
-  // Terrain-create singleton talents (census {terrain-create} family)
+  // Terrain-create talent rows (census {terrain-create} family) — audited
   // ════════════════════════════════════════════════════════════════════════
-  // These 14 talents are verified terrain-create singletons whose entire
-  // mechanical effect is the creation of terrain after the ability resolves.
-  // They are wired through the F7 fold with an "always" trigger: the fold
-  // reads the ability's recorded mutations to determine placement, then
-  // appends the terrain-creation mutations onto the event.
+  // 2026-08-29 adversarial audit (ICON 1.5 as authority): the F7 fold has NO
+  // command-time player-input channel and fires at ability USE time, so it can
+  // only represent rows whose placement is mechanically fixed, non-delayed,
+  // and NOT left to a player choice. Rows whose source says "anywhere", "may",
+  // "up to N" + "choose", or "after the effect expires" are therefore NOT
+  // wired here — wiring them only approximated the source (about the observer
+  // auto-picked cells for player choices) and has been RETRACTED so the census
+  // reflects the true residual capability. Fixed-placement rows below remain
+  // wired. The census {terrain-create} family is itself decomposed into precise
+  // families (see scripts/canonical-class-job-census.ts).
   //
-  // The remaining 6 census terrain-create singletons (great-suplex:1,
-  // eclipse:1, bio:1, bio:2, realignment:2, quaking-palm:1) require
-  // terrain TRANSFORMATION or persistent-state mechanics that the fold
-  // cannot express; they are reclassified or need program-level
-  // implementation.
-  //
-  // Architectural invariant: no source IDs in the generic placement
-  // logic below. Each build function reads the fold context and the
-  // ability's own mutations to derive positions deterministically.
+  // Architectural invariant: no source IDs in the generic placement logic.
+  // Row placement uses the shared geometry (squareArea, sameCell, footprint
+  // helpers) — never ad-hoc Manhattan rings.
   // ════════════════════════════════════════════════════════════════════════
 
   // ICON p.135 Upheaval talent 2: "The boulder bounces before landing,
-  // creating a pit anywhere in free space in range." The fold reads the
-  // boulder entity's position from the ability's own entity-creation
-  // mutation and places a pit at that deterministic location.
-  'colossus:upheaval:talent:2': {
-    mechanic: 'Always: create a pit at the boulder\'s landing position.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, _targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const boulder = context.mutations.find((m) => m.kind === 'entity' && m.operation === 'create' && m.entityType === 'object' && m.ownerId === actorId) as Extract<RuleMutation, { kind: 'entity' }> | undefined;
-        if (!boulder || !boulder.positions[0]) return [];
-        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'pit', positions: [boulder.positions[0]], height: null }];
-      },
-    },
-  },
-
-  // ICON p.169 Underway talent 2: "When you create an underway, you may
-  // create up to three spaces of leafy difficult terrain in adjacent
-  // spaces." The fold reads the underway entity's position from the
-  // ability's mutations and places difficult terrain in free adjacent cells.
-  'warden:underway:talent:2': {
-    mechanic: 'Always: create up to 3 spaces of difficult terrain adjacent to the underway.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, _targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const underway = context.mutations.find((m) => m.kind === 'entity' && m.operation === 'create' && m.entityType === 'underway' && m.ownerId === actorId) as Extract<RuleMutation, { kind: 'entity' }> | undefined;
-        if (!underway || !underway.positions[0]) return [];
-        const { x, y } = underway.positions[0];
-        const adjacent = [{ x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 }];
-        const free = adjacent.filter((c) =>
-          c.x >= 0 && c.y >= 0 &&
-          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
-        );
-        return free.slice(0, 3).map((pos) => ({
-          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
-          terrain: 'difficult', positions: [pos], height: null,
-        }));
-      },
-    },
-  },
+  // creating a pit ANYWHERE IN FREE SPACE IN RANGE." "Anywhere" is a
+  // player-chosen space, not "at the boulder's landing position." The F7
+  // fold has no command-time player-input channel and cannot express a
+  // player-chosen free-space placement, so this row is NOT wired. It is
+  // reclassified (census {terrain-place-choice-in-range}) and awaits a
+  // program-level resolver that reads the chosen cell from the command input.
 
   // ICON p.169 Morrigan talent 2: "After Morrigan resolves, some of the
   // winged creatures linger, creating two spaces of dangerous terrain in
-  // range 2." The fold places dangerous terrain in free cells within range 2
-  // of the target (from the ability's recorded mutations or target ids).
+  // range 2." "In range 2" uses the canonical square (Chebyshev) radius-2
+  // area — the same p.92 range authority — NOT an ad-hoc Manhattan radius.
+  // The source imposes no free-space rule, so dangerous terrain is created
+  // deterministically (two spaces) across the square radius, and may land on
+  // a character's cell like other in-area terrain.
   'warden:morrigan:talent:2': {
-    mechanic: 'Always: create 2 spaces of dangerous terrain in range 2 of the target.',
+    mechanic: 'Always: create 2 spaces of dangerous terrain within square (Chebyshev) range 2 of the target.',
     triggerEffect: {
       trigger: 'always',
       build: (actorId, targetIds, _triggerTargetIds, context) => {
         if (!context) return [];
         const target = context.state.actors[targetIds[0] ?? ''];
         if (!target?.position) return [];
-        const { x, y } = target.position;
-        const candidates: { x: number; y: number }[] = [];
-        for (let dx = -2; dx <= 2; dx += 1) {
-          for (let dy = -2; dy <= 2; dy += 1) {
-            if (Math.abs(dx) + Math.abs(dy) > 2 || (dx === 0 && dy === 0)) continue;
-            const c = { x: x + dx, y: y + dy };
-            if (c.x >= 0 && c.y >= 0 && !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y)) candidates.push(c);
-          }
-        }
+        const candidates = squareArea(target.position, 2).filter((c) => !sameCell(c, target.position));
         return candidates.slice(0, 2).map((pos) => ({
           kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
           terrain: 'dangerous', positions: [pos], height: null,
@@ -461,27 +420,11 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
   },
 
   // ICON p.170 Sidhe talent 1: "Also create a space of dangerous terrain
-  // adjacent to your foe after the effect expires." The fold places a single
-  // dangerous terrain space in a free cell adjacent to the target.
-  'warden:sidhe:talent:1': {
-    mechanic: 'Always: create 1 space of dangerous terrain adjacent to the foe.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
-        if (!target?.position) return [];
-        const { x, y } = target.position;
-        const adjacent = [{ x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 }];
-        const free = adjacent.filter((c) =>
-          c.x >= 0 && c.y >= 0 &&
-          !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y),
-        );
-        if (free.length === 0) return [];
-        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'dangerous', positions: [free[0]], height: null }];
-      },
-    },
-  },
+  // adjacent to your foe AFTER THE EFFECT EXPIRES." The terrain is created on
+  // the toxin/effect's EXPIRY, not immediately at ability use. The F7 fold's
+  // always-trigger fires at USE time and cannot express a delayed lifecycle
+  // creation, so this row is NOT wired. It is reclassified (census
+  // {terrain-expiry-create}) and awaits a lifecycle-level implementation.
 
   // ICON p.202 The Tower talent 2: "The meteor scatters debris when
   // landing, creating two spaces of difficult terrain in the area, which

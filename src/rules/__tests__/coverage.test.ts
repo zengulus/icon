@@ -111,17 +111,26 @@ describe('rules automation coverage gate', () => {
     // Top t2, Chaos Tarot t2, Terraforming t1) promoted (gated on equipped
     // talent rank), so the generic slow-turn `charge` trigger alone never
     // grants a talent effect.
-    // 2026-08-29 (F4): +1 program-level `colossus:raging-wolf:talent:2`
-    // (flight 1→3 while at 1 hp, rank-gated in the Raging Wolf resolver).
+    // 2026-08-28: +3 action-cost-override masteries (Valiant, Shadow Play,
+    // Polaris) promoted through the cost-payment fold.
+    // 2026-08-29: +3 program-level resolver-gated charge talents (Spinning
+    // Top t2, Chaos Tarot t2, Terraforming t1) promoted (gated on equipped
+    // talent rank), so the generic slow-turn `charge` trigger alone never
+    // grants a talent effect.
+    // 2026-08-29 (F5): Ultra Part 1 retracted the falsely-promoted
+    // `colossus:raging-wolf:talent:2` (+1 program reverted to unresolved),
+    // and this corrective pass retracted three source-inexact terrain talent
+    // rows (upheaval:t2, underway:t2, sidhe:t1) that the no-input fold could
+    // not express (148→409-affected; completePrograms 480→475).
     expect(audit).toMatchObject({
       totalPrograms: 3275,
-      totalClauses: 4700,
-      completePrograms: 480,
-      unsupportedPrograms: 2795,
-      completeClauses: 1620,
-      unsupportedClauses: 3080,
+      totalClauses: 4701,
+      completePrograms: 475,
+      unsupportedPrograms: 2800,
+      completeClauses: 1612,
+      unsupportedClauses: 3089,
       unsupportedByKind: {
-        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 226, 'mastery': 129,
+        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 230, 'mastery': 129,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

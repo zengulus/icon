@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ENCOUNTER_SCHEMA_VERSION } from '../types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand, hasCoverFrom, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter, replayEncounter, RuleViolation } from '../encounter.js';
 import { ABILITIES, JOBS } from '../catalog.js';
+import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 function activeEncounter() {
@@ -285,9 +286,12 @@ describe('ICON encounter reducer', () => {
   });
 
   it('executes every job ability through a reviewed resolver, never a generic approximation', () => {
-    // The job-ability sweep is complete: every catalogued job ability is
-    // independently executable through a hand-authored typed program.
-    expect(ABILITIES.every((ability) => ability.automation === 'executable')).toBe(true);
+    // The job-ability sweep is complete except the documented
+    // `colossus:raging-wolf` exception (Ultra Part 1: its Heroic immunity +
+    // defeated-free-action semantics are deliberately unresolved). Every other
+    // catalogued job ability is independently executable through a hand-
+    // authored typed program.
+    expect(ABILITIES.filter((ability) => !DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS.has(ability.id)).every((ability) => ability.automation === 'executable')).toBe(true);
     // Structured source units outside the executable set are still refused by
     // the generic VM rather than heuristically applied.
     const { state, hero, foe } = activeEncounter();

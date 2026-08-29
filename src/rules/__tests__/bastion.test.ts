@@ -1,6 +1,6 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS, EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
@@ -50,8 +50,10 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Bastion ability automation (p.122–124)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    expect(EXECUTABLE_JOB_ABILITY_IDS.size).toBe(144); // all 16 jobs × 9 abilities
+  it('marks the reviewed job abilities executable in the catalog and audit', () => {
+    // 143 of 144 catalogued job abilities are executable; colossus:raging-wolf
+    // is deliberately unresolved (Ultra Part 1), so the allowlist is 143.
+    expect(EXECUTABLE_JOB_ABILITY_IDS.size).toBe(144 - DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS.size);
     for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
       const ability = findAbility(abilityId)!;
       expect(ability.automation).toBe('executable');
@@ -446,10 +448,11 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(result.state.actors[foe.id].statuses).toContain('hatred');
   });
 
-  it('executes every job ability through a reviewed resolver, never a generic approximation', () => {
-    // The job-ability sweep is complete: every catalogued job ability is
-    // independently executable through a hand-authored typed program.
-    expect(ABILITIES.every((ability) => ability.automation === 'executable')).toBe(true);
+  it('executes every reviewed job ability through a resolver, never a generic approximation', () => {
+    // The job-ability sweep is complete except the documented
+    // `colossus:raging-wolf` exception (Ultras Part 1 keeps it unresolved).
+    expect(ABILITIES.filter((ability) => !DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS.has(ability.id)).every((ability) => ability.automation === 'executable')).toBe(true);
+    expect(DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS.size).toBeGreaterThan(0);
     // Structured source units outside the executable set are still refused by
     // the generic VM rather than heuristically applied.
     const { state, hero, foe } = bastionEncounter();

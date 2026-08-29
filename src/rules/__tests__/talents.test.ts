@@ -92,7 +92,7 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 35 wired / 8 program-level / 3 passive-projection / 5 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 227 documented', () => {
+  it('covers exactly the 288 source talents with 31 wired / 11 program-level / 3 passive-projection / 4 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 231 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
@@ -121,8 +121,8 @@ describe('F7 closed talent inventory', () => {
     // F4 (2026-08-29): +1 program-level `colossus:raging-wolf:talent:2`
     // (flight 1→3 while at 1 hp, rank-gated inside the Raging Wolf resolver).
     // None are fold triggers or program-emitted variants in the wrong home.
-    expect(getExecutableTalentIds().size).toBe(62);
-    expect(getDocumentedTalentIds(units).size).toBe(227);
+    expect(getExecutableTalentIds().size).toBe(58);
+    expect(getDocumentedTalentIds(units).size).toBe(231);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -140,7 +140,10 @@ describe('F7 closed talent inventory', () => {
     expect(recipes['sealer:divine-aegis:talent:2']?.status).toBe('program-level');
     expect(recipes['knave:strongarm:talent:1']?.status).toBe('program-level');
     expect(recipes['spellblade:nothung:talent:2']?.status).toBe('program-level');
-    expect(recipes['colossus:raging-wolf:talent:2']?.status).toBe('program-level');
+    // colossus:raging-wolf:talent:2 was RETRACTED (Ultra F4 re-audit, 2026-08-29):
+    // it is a conditional fly-distance-modifier, unresolved — documented, never
+    // a program-level executable row.
+    expect(recipes['colossus:raging-wolf:talent:2']?.status).toBe('documented');
     // The four bonus-damage rows fold their dice at the USE_ABILITY boundary
     // (no post-mutation fold trigger, no program-emitted variant).
     expect(recipes['knave:low-blow:talent:1']?.status).toBe('bonus-damage');
@@ -514,22 +517,26 @@ describe('F7 exceed trigger — God-Hand talent 1', () => {
   });
 });
 
-describe('F7 terrain-create always trigger', () => {
-  it('Upheaval talent 2: creates a pit at the boulder position', () => {
-    const { state, hero, foe } = talentEncounter('colossus:upheaval', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
+describe('F7 terrain-create audited triggers', () => {
+  // ICON p.135: upheaval T2 "creates a pit ANYWHERE in free space in range"
+  // — a player choice the F7 fold cannot express. Retracted from wired
+  // (2026-08-29 audit) and reclassified; using the ability now creates NO pit
+  // because the talent is unresolved/documented, not approximated at the
+  // boulder landing cell.
+  it('Upheaval talent 2: retracted — creates NO pit (documented, player-choice pit placement unresolved)', () => {
+    const { state, hero } = talentEncounter('colossus:upheaval', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:upheaval', targetIds: [] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'colossus:upheaval').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(false);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Underway talent 2: creates up to 3 difficult terrain adjacent to the underway', () => {
-    const { state, hero, foe } = talentEncounter('warden:underway', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
+  // ICON p.169: underway T2 "you MAY create UP TO THREE spaces ... in
+  // adjacent spaces" — optional, player-chosen 0-3. Retracted (fold auto-
+  // creating three deterministic cells was source-inexact).
+  it('Underway talent 2: retracted — creates NO difficult terrain (documented, 0-3 player choice unresolved)', () => {
+    const { state, hero } = talentEncounter('warden:underway', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:underway', targetIds: [] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'warden:underway').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(true);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(false);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
@@ -555,31 +562,52 @@ describe('F7 terrain-create always trigger', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Morrigan talent 2: creates 2 dangerous terrain spaces in range 2 of the target', () => {
+  // ICON p.169 morrigan T2: "two spaces of dangerous terrain in RANGE 2" —
+  // canonical square (Chebyshev) radius 2, NOT Manhattan. The two created
+  // spaces must include a corner cell that Manhattan-2 would exclude, proving
+  // the canonical p.92 range geometry (not a hand-rolled L\u00e2\u0080\u0090ring).
+  it('Morrigan talent 2: creates 2 dangerous spaces using canonical square range 2 (not Manhattan)', () => {
     const { state, hero, foe } = talentEncounter('warden:morrigan', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 4, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:morrigan', targetIds: [foe.id] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'warden:morrigan').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    const created = result.state.terrainEffects
+      .filter((e) => e.terrain === 'dangerous')
+      .flatMap((e) => e.positions);
+    expect(created.length).toBeGreaterThanOrEqual(2);
+    const cheb = (p: { x: number; y: number }) => Math.max(Math.abs(p.x - foe.position.x), Math.abs(p.y - foe.position.y));
+    const manhattan = (p: { x: number; y: number }) => Math.abs(p.x - foe.position.x) + Math.abs(p.y - foe.position.y);
+    for (const cell of created) expect(cheb(cell)).toBeLessThanOrEqual(2);
+    // The deterministic first-two cells are (-2,-2),(-1,-2): a corner cell a
+    // Manhattan-geometry implementation could never reach → canonical square 2.
+    expect(created.some((cell) => manhattan(cell) > 2 && cheb(cell) === 2)).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Sidhe talent 1: creates 1 dangerous terrain adjacent to the foe', () => {
+  // ICON p.170 sidhe T1: dangerous terrain adjacent to the foe "AFTER THE
+  // EFFECT EXPIRES" — a delayed lifecycle creation, not immediate. Retracted
+  // from the always-fold (which fired at use time); the talent is now
+  // documented/unresolved, so USING the ability creates no terrain yet.
+  it('Sidhe talent 1: retracted — creates NO dangerous terrain at use (delayed expiry timing unresolved)', () => {
     const { state, hero, foe } = talentEncounter('warden:sidhe', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:sidhe', targetIds: [foe.id] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'warden:sidhe').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('The Tower talent 2: creates 2 difficult terrain spaces in the blast area', () => {
-    const { state, hero, foe } = talentEncounter('seer:the-tower', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
+  // ICON p.202 the-tower T2: two difficult spaces "in the area, which could
+  // ALSO be created under characters." The source explicitly EXEMPTS the
+  // general free-space rule, so terrain MUST be created on a character's cell
+  // (never occupancy-filtered). The deterministic first-two blast cells around
+  // the target at (5,2) are (3,0) and (3,1); an extraFoe sits on (3,0).
+  it('The Tower talent 2: 2 difficult spaces in the area, INCLUDING under a character (explicit exception)', () => {
+    const { state, hero, foe } = talentEncounter('seer:the-tower', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 2 }, extraFoes: [{ at: { x: 3, y: 0 } }] });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:the-tower', targetIds: [foe.id] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'seer:the-tower').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    const difficultCells = result.state.terrainEffects
+      .filter((e) => e.terrain === 'difficult')
+      .flatMap((e) => e.positions);
+    expect(difficultCells.length).toBeGreaterThanOrEqual(2);
+    expect(difficultCells.some((cell) => cell.x === 3 && cell.y === 0)).toBe(true); // under the extraFoe
+    for (const cell of difficultCells) expect(Math.max(Math.abs(cell.x - 5), Math.abs(cell.y - 2))).toBeLessThanOrEqual(2);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
   it('Tsunami talent 1: creates a pit in the tsunami center space', () => {
