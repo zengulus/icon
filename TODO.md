@@ -184,6 +184,59 @@ assumption here, document the evidence and update this list before proceeding.
      (U7's actor-selector anchors are documented compatibility
      scaffolding for the future U1 Reference vocabulary).
 
+- **Phase T1 — U1/U2/U8 vocabulary foundation (2026-08-30) — LANDED.**
+  The dependency plan's first tranche: typed vocabulary only, no
+  behavior change, no consumer migration, no source-unit wiring. Full
+  suite green (1318 tests, +31 new), census unchanged and byte-stable
+  at 427, all audits green:
+  1. **U1 REFERENCE (`primitives/reference.ts`)** — typed `Reference`
+     union (LIVE refs by legacy slot / direct id / bound name; CAPTURED
+     actor/entity/position/value literals; `collection` refs),
+     `Binder`/`bind`/`lookupBound`/`EMPTY_BINDER`, deterministic
+     `resolveReference` (captured literals never re-read later state;
+     bound names resolve the bound reference; missing actor/entity/slot/
+     position reject fail-closed); `RuleExecutionContext.boundNames`
+     carries the Binder (optional, behavior-neutral). Tests:
+     `reference.test.ts` (captured-exactness-after-move, live
+     re-resolution, unbound/missing rejects, empty collection, captured
+     defeated-actor stays resolvable, replay identical-literal).
+  2. **U2 ROLE (`primitives/roles.ts`)** — `Role` union (source/owner/
+     controller/chooser/payer/target/recipient/carrier/creator/
+     trigger-source/trigger-recipient/attacker/defender/original-user/
+     current-origin), `RoleFrame` + deterministic `deriveRoles`, typed
+     `RoleSelector` (`role` | `controller-of`) + `resolveRoleSelector`
+     (null when underivable — reject, never guess), and the
+     `roleFrameFromContext` seam; `RuleChoice` gains typed optional
+     `chooser`/`controller` role carriage (behavior-neutral until U4).
+     ROLE ≠ REFERENCE ≠ ANCHOR asserted (rebound fixture). Tests:
+     `roles.test.ts` (owner≠carrier, TARGET_CONTROLLER, underivable
+     chooser rejects, self-collapse, role≠anchor, replay).
+  3. **U8 SCOPE/CLOCK (`primitives/scope.ts`)** — ONE `Clock` union
+     (boundary / n-boundary / next-match / event), `RecurringBoundary`
+     (turn/round/combat/expedition/camp/interlude), `Scope` (until /
+     for-n / until-next / permanent / until-event), and the boundary-
+     read surface `clockForTiming`/`scopeForDuration`/`currentClock`/
+     `boundaryReached` (step timings → null; legacy `RuleDuration` →
+     Scope, behavior-neutral). Tests: `scope.test.ts` (one-round-read-
+     across duration/timing/clock, counted/next-match/event forms,
+     step-timing-null, out-of-scope reject, slow-vs-ordinary kinds,
+     replay).
+  4. **U3 pre-flight audit correction.** The docs at HEAD honestly
+     claimed U3 PARTIAL; the audit sharpened the residual: the ACTOR
+     domain itself lacks contract operators (LoS/LoE composition,
+     occupying-position, terrain predicate, owned/controlled,
+     union/intersection/difference, count, distinct-by-identity), and
+     the p.108 line-of-sight predicate is missing from
+     teleport/placement legality (`validatePositionLegality` is in-grid →
+     range → occupied only; entity-creation checks creator LoS, the
+     teleport path does not) — classified as a deliberate T2 boundary,
+     NOT silently enforced (it would change existing teleport behavior).
+     U1/U2 ABSENT → PARTIAL; U8 stays PARTIAL.
+  T1 exit criteria met (vocabulary types + unit tests; zero existing
+  test deltas). Next tranche: **T2** (U7/U3/U5/U6-core/U4) per
+  `docs/underlay-completion-plan.md` §3.2 — do NOT start T2 without the
+  reviewer's go.
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

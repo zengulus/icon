@@ -77,10 +77,19 @@ and notes (i) the owning authority today and (ii) the required extension.
 
 Question: *"What thing/value does this later rule clause refer to?"*
 
-Today reference is implicit across `context.actorId`, `attackTargetId`,
-`triggerSourceId`, `triggerTargetIds`, `damageRecipientId`, input buckets,
-`resolutionFacts`, `state` keys, entity ids, marks, terrain ids — a
-proliferation that is a warning, not a design.
+Today (T1 landed 2026-08-30): `primitives/reference.ts` defines the typed
+`Reference` vocabulary (LIVE refs by legacy slot / direct id / bound name;
+CAPTURED actor/entity/position/value literals; `collection` refs),
+`Binder`/`bind`/`lookupBound` (`RuleExecutionContext.boundNames` carries
+it), and the deterministic `resolveReference` surface — captured literals
+never re-read later state; bound names resolve the bound reference;
+missing actor/entity/slot/position reject fail-closed. The legacy
+implicit refs (`context.actorId`, `attackTargetId`, `triggerSourceId`,
+`triggerTargetIds`, `damageRecipientId`, input buckets, `resolutionFacts`,
+`state` keys, entity ids, marks, terrain ids) remain the LIVE refs'
+resolution sources and the ad hoc reads in consumers — migrating them onto
+typed refs is the T2+ de-dup work; `RuleContinuationState` still carries
+no refs across continuations.
 
 Required vocabulary: a typed reference capable of naming actor, entity/
 object/summon, battlefield position, area, terrain effect, persistent effect,
@@ -131,7 +140,16 @@ original user, current origin. ICON repeatedly separates them.
 
 Not a stringly bag. Critical for multiplayer/VTT authority: the engine must
 derive WHICH connected player is entitled to answer a ChoiceSpec from
-semantic controller/chooser roles. The durable save-reroll window (Sucker
+semantic controller/chooser roles. Today (T1 landed 2026-08-30):
+`primitives/roles.ts` defines the `Role` union, `RoleFrame` +
+deterministic `deriveRoles`, typed `RoleSelector` (`role` |
+`controller-of`) + `resolveRoleSelector` (null when underivable — reject,
+never guess), and the `roleFrameFromContext` seam; `RuleChoice` carries
+typed optional `chooser`/`controller` roles (behavior-neutral until U4
+consumes them). ROLE ≠ REFERENCE ≠ ANCHOR is explicit (original-user role
+survives a rebound where the spatial origin moved). The aura
+bearer-vs-member and `targeting.ts` relation reads still derive roles
+locally — the de-dup migration is T2+. The durable save-reroll window (Sucker
 Punch p.143) decides who owns a reroll; the when-damaged/defeated/uses-
 ability/area-inclusion/targeted windows (`kernels/trigger-window.ts` + the
 p.107 window rules in `core.ts`) decide who answers and against whom; and the
@@ -306,9 +324,16 @@ interrupts, trigger de-duplication, delayed effects, resources, persistent
 instances. Do NOT let Duration/UsageLedger/Interrupt-refresh/Resource-reset/
 "once per round" each define their own "round".
 
-Today: the lifecycle turn/round machinery (`kernels/lifecycle.ts`), `RuleDuration`,
-use-ledger periods, `RuleTiming`. Missing: named-event and N-boundary forms and
-an explicit shared Clock concept every user reads.
+Today (T1 landed 2026-08-30): the lifecycle turn/round machinery
+(`kernels/lifecycle.ts`), `RuleDuration`, use-ledger periods, and
+`RuleTiming` remain the executing authorities, but `primitives/scope.ts`
+now defines the ONE `Clock` union (boundary / n-boundary / next-match /
+event), `RecurringBoundary`, `Scope` (until / for-n / until-next /
+permanent / until-event), and the boundary-read surface
+(`clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`).
+Missing: migrating the `RuleDuration`/`use-ledger`/lifecycle readers onto
+the Clock (the U8 completion work, including the scheduler's turn record
+for turn-level `boundaryReached`).
 
 ## U9 Provenance / Cause
 

@@ -85,11 +85,22 @@ full minimum-distance set; per-unit tie policy is a unit decision, not
 an engine default), the position query domain separates generic space
 queries from explicit occupied/free policies, `selectActors` no longer owns
 a private p.92 actor-range algorithm, and the underlay completion plan's
-historical-vs-current claims are reconciled. The next implementation
-tranche is **T1 — U1 Reference/Binding, U2 Role/Perspective, U8
-Scope/Clock** (plan §3.2), NOT further U3 expansion: U3/U7 already borrow
-`RuleSelector`/`context.actorId` because U1/U2 do not exist, and those
-temporary dependencies must not be deepened.
+historical-vs-current claims are reconciled.
+
+**T1 landed (2026-08-30):** U1 Reference/Binding (`primitives/reference.ts`),
+U2 Role/Perspective (`primitives/roles.ts`), and U8 Scope/Clock
+(`primitives/scope.ts`) vocabulary foundation — typed vocabulary + unit
+tests only, zero existing test deltas, no consumer migration, no
+source-unit wiring (census unchanged at 427). The T1 pre-flight audit
+sharpened the U3 residual classification: the ACTOR query domain itself
+lacks contract operators (LoS/LoE composition, occupying-position, terrain
+predicate, owned/controlled, set ops, count, distinct), and the p.108
+line-of-sight predicate is missing from teleport/placement legality
+(classified as a deliberate T2 boundary). U1/U2 moved ABSENT → PARTIAL;
+U8 stays PARTIAL. The next implementation tranche is **T2 — U7/U3/U5/
+U6-core/U4** (plan §3.2), NOT further U3 expansion alone: U3/U7 still
+borrow `RuleSelector`/`context.actorId` because U1/U2 consumers are not yet
+migrated, and those temporary dependencies must not be deepened.
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

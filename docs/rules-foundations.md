@@ -155,10 +155,76 @@ slice — occupancy is an explicit query policy, not a property of a
 position candidate — but still lacks the terrain/entity/area/instance
 domains, ordering policies beyond the min-distance set, and the
 `rushTowardFoes` direction fallback remains a flagged player-choice
-approximation. U3 and U7 remain honestly PARTIAL. The tracked completion
-task is TODO.md §"Underlay-phase task ledger" (U3 audit correction).
-Sequencing owner:
+approximation. The pre-flight audit (T1 pass, 2026-08-30) sharpened the
+residual: the ACTOR domain itself lacks contract operators (LoS/LoE
+composition, occupying-position, terrain predicate, owned/controlled,
+union/intersection/difference, count, distinct-by-identity), and the
+p.108 line-of-sight predicate is missing from teleport/placement legality
+(classified as a deliberate T2 boundary — enforcing it would change
+existing teleport behavior). U3 and U7 remain honestly PARTIAL. The
+tracked completion task is TODO.md §"Underlay-phase task ledger" (U3
+audit correction). Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
+
+### Reference / Binding (U1 underlay) — PARTIAL: typed vocabulary landed (T1, 2026-08-30)
+
+`primitives/reference.ts` owns the typed `Reference` vocabulary: LIVE refs
+(named by legacy context slot, direct id, or bound name) re-resolve
+against current state at use time; CAPTURED refs (actor/entity/position/
+value literals) are durable once captured and never re-read later state;
+`collection` refs carry `refs[]`. `Binder` (`bind`/`lookupBound`/
+`EMPTY_BINDER`) maps earlier-operation names to references (`CHOOSE a
+position AS landing`, `BIND slain actors AS slain`), carried on
+`RuleExecutionContext.boundNames` (optional, behavior-neutral).
+`resolveReference(ref, context)` is the deterministic resolution surface:
+bound names resolve the bound reference; missing actor/entity/slot/
+position reject fail-closed; a captured defeated-actor ref stays
+resolvable (identity captured). The legacy context slots (`actorId`,
+`attackTargetId`, `triggerSourceId`, `triggerTargetIds`,
+`damageRecipientId`) remain the LIVE refs' resolution sources — migrating
+consumers onto typed refs is the T2+ de-dup work; `RuleContinuationState`
+still carries no refs across continuations (U12). Tests:
+`reference.test.ts` (positive captured-exactness + live re-resolution +
+binder/collection, negative unbound/missing, boundary empty-collection +
+defeated-actor-captured, replay identical-literal).
+
+### Role / Perspective (U2 underlay) — PARTIAL: typed vocabulary landed (T1, 2026-08-30)
+
+`primitives/roles.ts` owns the `Role` vocabulary: source/owner/controller/
+chooser/payer/target/recipient/carrier/creator/trigger-source/
+trigger-recipient/attacker/defender/original-user/current-origin.
+`deriveRoles(frame)` produces the semantic role map from a durable
+`RoleFrame` (deterministic, replay-safe); `RoleSelector` (`role` |
+`controller-of`) + `resolveRoleSelector` resolve who decides a choice
+(null when underivable — reject, never guess); `roleFrameFromContext` is
+the migration seam over the legacy context slots. `RuleChoice` gains typed
+optional `chooser`/`controller` role carriage (behavior-neutral until U4
+consumes it). ROLE ≠ REFERENCE (U1 names things) ≠ ANCHOR (U7 measures
+spaces): the original-user role survives a rebound where the spatial
+origin moved. The aura kernel's bearer-vs-member and `targeting.ts`'s
+hard-coded relation reads still derive roles locally — the de-dup
+migration is T2+. Tests: `roles.test.ts` (positive owner≠carrier +
+TARGET_CONTROLLER, negative underivable-chooser/unknown-role, boundary
+self-collapse + ROLE≠ANCHOR, replay same-frame-same-map).
+
+### Scope / Clock (U8 underlay) — PARTIAL: vocabulary + boundary-read surface landed (T1, 2026-08-30)
+
+`primitives/scope.ts` defines the ONE `Clock` union (boundary /
+n-boundary / next-match / event), `RecurringBoundary` (turn/round/combat/
+expedition/camp/interlude), `Scope` (until / for-n / until-next /
+permanent / until-event), and the boundary-read surface
+`clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`.
+`clockForTiming` maps step timings ('use', attack-*) to null (they name a
+moment inside a resolution, not a boundary) and boundary timings to the
+Clock; `scopeForDuration` maps the legacy `RuleDuration` onto Scopes
+(behavior-neutral). The legacy surfaces remain the executing authority —
+`RuleDuration`/`RuleTiming`/`use-ledger`/lifecycle readers still re-key
+"round" separately; migrating them onto the Clock (the U8 completion,
+including the scheduler's turn record for turn-level `boundaryReached`)
+is a later phase. Tests: `scope.test.ts` (positive one-round-read-across-
+duration/timing/clock + counted/next-match/event forms, negative
+step-timings-null + out-of-scope-reject, boundary slow-vs-ordinary kinds,
+replay same-state-same-clock).
 
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED
 

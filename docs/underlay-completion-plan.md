@@ -142,7 +142,49 @@ All four historical findings are routed through the one authority:
   (bomb-can't-share-with-bombs is a specialist constraint in the bomb
   placement resolver).
 
-### Remaining U3 contract (honestly PARTIAL)
+### T1 landed (2026-08-30): U1/U2/U8 vocabulary foundation
+
+Phase T1 delivered the typed vocabulary for U1 REFERENCE, U2 ROLE, and U8
+SCOPE/CLOCK (`primitives/reference.ts` / `roles.ts` / `scope.ts`, all
+re-exported through the `primitives/types.ts` barrel), behavior-preserving:
+zero existing test deltas, no consumer migration, no source-unit wiring,
+census unchanged at 427. The pre-flight audit also corrected the U3
+residual classification (see the next section): the ACTOR domain itself
+still lacks contract operators (LoS/LoE composition, occupying-position,
+terrain predicate, owned/controlled, union/intersection/difference, count,
+distinct-by-identity), and the p.108 line-of-sight predicate is missing
+from teleport/placement legality (classified as a deliberate T2 boundary,
+not silently enforced). U1/U2 moved ABSENT → PARTIAL; U8 stays PARTIAL
+(vocabulary + boundary-read surface landed; the RuleDuration/use-ledger/
+lifecycle reader migration is the remaining completion work).
+
+Pre-flight audit (2026-08-30, T1 pass): the docs at HEAD already claimed
+U3 PARTIAL with a residual list — that claim is TRUE, but the residual
+list understated two boundaries, now classified explicitly:
+
+- **The ACTOR domain itself lacks contract operators.** The U3 contract's
+  composable-operator list (LoS, LoE, occupying-position, terrain
+  predicate, flying/intangible, owned/controlled-by,
+  union/intersection/difference, exclude-prior-recipients, count,
+  distinct-by-identity) is only partly implemented in `evaluateActorQuery`
+  (relation/range/adjacency/within-origin/condition/mark/summon/
+  insideArea). LoS is still a specialist read at the direct-target gate
+  and the burst-center filter (`line-of-sight.ts`); it is NOT a query
+  operator. LoE defaults to true and is not query-composed at all. The
+  residual is therefore not merely "other domains" — the actor domain
+  itself remains partial.
+- **Teleport/placement legality omits the p.108 LoS predicate.** ICON
+  p.108: "For a space to be valid for summoning, teleporting, or creating
+  objects, unless specified it must be free and unobstructed, and you also
+  need line of sight." `validatePositionLegality` expresses only in-grid →
+  range → occupied, and neither the teleport-choice kernel nor the spatial
+  gateway adds LoS for teleport destinations (entity-creation checks
+  creator LoS; the teleport path does not). ENFORCING this would change
+  existing teleport behavior/fixtures (a destination behind an
+  LoS-blocking effect would now fail), so it is CLASSIFIED here as a
+  deliberate boundary for T2, not silently changed in this pass.
+
+Other residual U3 work:
 
 - Query domains beyond actors/positions: terrain cells, entities, areas,
   persistent instances, marks/stances, rule sources.
@@ -228,11 +270,22 @@ Play; p.300 Redondo) captures a position; marks/stances/terrain effects
 terrain entry effects p.151/p.353). The proliferation of bespoke context
 fields is the warning this underlay removes.
 
-**Current state.** `ABSENT`. No `Reference<T>` vocabulary; no binder; no
-LIVE/CAPTURED marker anywhere. `RuleSelector` is a query-domain language
-(U3's), not a reference vocabulary. `RuleContinuationState`
-(`executedStepIds`/`derivedTriggers`) and `RuleResolutionFacts` are the
-current homes but carry no refs across continuations.
+**Current state.** `PARTIAL` (T1 landed 2026-08-30):
+`primitives/reference.ts` defines the typed `Reference` union (LIVE refs
+named by legacy slot / direct id / bound name; CAPTURED actor/entity/
+position/value literals; `collection` refs), `Binder`/`bind`/
+`lookupBound`/`EMPTY_BINDER`, and the deterministic `resolveReference`
+surface (captured literals never re-read later state; bound names resolve
+the bound reference; missing actor/entity/slot/position reject
+fail-closed). `RuleExecutionContext.boundNames` carries the Binder
+(optional, behavior-neutral). Tests: `reference.test.ts` (positive
+captured-exactness + live re-resolution, negative unbound/missing-slot,
+boundary empty-collection + defeated-actor-captured, replay
+identical-literal). The legacy slots (`context.actorId`/`attackTargetId`/
+`triggerSourceId`/`triggerTargetIds`/`damageRecipientId`) remain the
+LIVE refs' resolution sources — migrating consumers onto typed refs is the
+T2+ de-dup work. `RuleContinuationState` still carries no refs across
+continuations (U12).
 
 **Locations partially owning/duplicating.** `context.actorId`,
 `context.attackTargetId`, `context.triggerSourceId`, `context.triggerTargetIds`,
@@ -314,11 +367,22 @@ the source/controller's position (Masquerade, p.151); the aura kernel's
 bearer-vs-member boundary (`kernels/aura.ts`) is a role the engine must
 derive, never string-match.
 
-**Current state.** `ABSENT`. Roles are implicit: `context.actorId` is source
-and acting actor simultaneously; `ownerId` on marks/stances/entities is
-ad hoc; aura bearer-vs-member is derived inside the aura kernel only;
-`RuleChoice` carries no chooser/controller role; the command layer cannot
-yet derive who answers a choice.
+**Current state.** `PARTIAL` (T1 landed 2026-08-30):
+`primitives/roles.ts` defines the `Role` union (source/owner/controller/
+chooser/payer/target/recipient/carrier/creator/trigger-source/
+trigger-recipient/attacker/defender/original-user/current-origin),
+`RoleFrame` + deterministic `deriveRoles`, typed `RoleSelector`
+(`role` | `controller-of`) + `resolveRoleSelector` (null when
+underivable — reject, never guess), and the `roleFrameFromContext` seam
+over the legacy slots. `RuleChoice` gains typed optional `chooser`/
+`controller` role carriage (behavior-neutral until U4 consumes it);
+`RuleExecutionContext` role reads stay on the legacy slots pending
+consumer migration. Tests: `roles.test.ts` (positive owner≠carrier and
+TARGET_CONTROLLER resolution + rule-choice carriage, negative
+underivable-chooser/unknown-role, boundary self-collapse + ROLE≠ANCHOR
+rebound, replay same-frame-same-map). The aura kernel's bearer-vs-member
+and `targeting.ts`'s hard-coded relation reads still derive roles
+locally — the de-dup migration is T2+.
 
 **Locations partially owning/duplicating.** `kernels/aura.ts`
 (bearer/member/origin derivation); `primitives/targeting.ts`
@@ -845,15 +909,22 @@ Special); Delay resolves at the start of the slow turn before ordinary
 activity (p.87 slow rounds; scheduler `delayed` phase); "at the end of your
 next turn" N-boundary forms; camp/expedition reset boundaries (p.56, p.113).
 
-**Current state.** `PARTIAL`. `RuleDuration` (`instant|turn-end|turn-start|
-round-end|round-start|combat|expedition|until`) in `primitives/types.ts`;
-lifecycle phases (`turn-start|turn-end|delayed|round-start|round-end`,
-`kernels/lifecycle.ts`); use-ledger periods (`turn|round|combat`,
-`kernels/use-ledger.ts`); `RuleTiming` union (a timing/event-name list).
-Missing: one explicit Clock concept; named-event and N-boundary forms;
-"next matching boundary"; "between-own-turns"; the "round" notion is
-re-keyed separately by `RuleDuration`, `ledger:round:*`, lifecycle phases,
-and `RuleTiming`.
+**Current state.** `PARTIAL` (T1 landed 2026-08-30):
+`primitives/scope.ts` defines the ONE `Clock` union (boundary /
+n-boundary / next-match / event), the `RecurringBoundary` set (turn /
+round / combat / expedition / camp / interlude), `Scope` (until / for-n /
+until-next / permanent / until-event), and the boundary-read surface:
+`clockForTiming` (step timings → null, boundary timings → Clock),
+`scopeForDuration` (legacy `RuleDuration` → Scope, behavior-neutral),
+`currentClock(context)`, and pure `boundaryReached(clock, state)`.
+Tests: `scope.test.ts` (positive one-round-read-across-duration/timing/
+clock + counted/next-match/event forms, negative step-timings-null +
+out-of-scope-reject, boundary slow-vs-ordinary kinds, replay
+same-state-same-clock). The legacy surfaces remain the executing
+authority — `RuleDuration`/`RuleTiming`/`use-ledger`/lifecycle readers
+still re-key "round" separately; migrating them onto the Clock (the U8
+completion work, including the scheduler's turn record for turn-level
+`boundaryReached`) is a later phase, not T1.
 
 **Locations partially owning/duplicating.** `RuleDuration`
 (`primitives/types.ts`); lifecycle phases (`kernels/lifecycle.ts`);
@@ -1713,13 +1784,21 @@ state rows and any affected generated docs; do NOT regenerate or promote
 from the blocker census (census work is post-gate). Existing wiring must
 pass unchanged at every phase boundary.
 
-**Phase T1 — Vocabulary foundation: U1, U2, U8.**
+**Phase T1 — Vocabulary foundation: U1, U2, U8.** — **LANDED (2026-08-30).**
 New typed modules (`primitives/reference.ts`, `primitives/roles.ts`,
 `primitives/scope.ts`) re-exported from the `primitives/types.ts` barrel;
-`RuleDuration`/`RuleTiming` boundary reads gain the Clock surface;
+`RuleDuration`/`RuleTiming` boundary reads gain the Clock surface
+(`clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`);
 `RuleChoice` gains chooser/controller role fields (typed, optional —
-behavior-neutral until U4 consumes them). No behavior change; full suite
-green. Exit: vocabulary types + unit tests; zero existing test deltas.
+behavior-neutral until U4 consumes them); `RuleExecutionContext.boundNames`
+carries the U1 Binder (optional, behavior-neutral). No behavior change,
+zero existing test deltas (1318 tests green, +31 new vocabulary tests:
+`reference.test.ts`/`roles.test.ts`/`scope.test.ts`), U3 residual
+classification corrected by the pre-flight audit (actor-domain operator
+gaps + the p.108 teleport-LoS boundary, see §0). U1/U2 moved ABSENT →
+PARTIAL; U8 stays PARTIAL (vocabulary + boundary-read surface landed;
+consumer migration remains). Exit met: vocabulary types + unit tests;
+zero existing test deltas.
 
 **Phase T2 — Query & expression algebra: U7, U3, U5, U6 (core), U4.**
 `primitives/anchor.ts` (SpatialAnchor, LIVE/CAPTURED) — landed;

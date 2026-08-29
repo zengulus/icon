@@ -136,6 +136,8 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'TODO.md', linePrefix: '     their resolvers fail closed on those clauses;', reason: 'implementation-pattern description (retraction fail-closed semantics), not an authority claim' },
   { file: 'docs/rules-foundations.md', linePrefix: '`evaluate-query.ts` and fails closed on equidistant ties.', reason: 'implementation-pattern description (nearest tie policy), not an authority claim' },
   { file: 'docs/rules-foundations.md', linePrefix: 'invented) are documented non-executable, their resolvers fail closed on', reason: 'implementation-pattern description (retraction fail-closed semantics), not an authority claim' },
+  { file: 'TODO.md', linePrefix: '     position reject fail-closed); `RuleExecutionContext.boundNames`', reason: 'implementation-pattern description (reference resolution fail-closed semantics), not an authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'position reject fail-closed; a captured defeated-actor ref stays', reason: 'implementation-pattern description (reference resolution fail-closed semantics), not an authority claim' },
 ];
 
 // ---------------------------------------------------------------------------

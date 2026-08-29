@@ -2,11 +2,17 @@ import type { DiceSource } from '../../dice.js';
 import type { AttackDamageProvenance } from './attack-resolution.js';
 import type { SaveWindowBranch, SaveWindowKind, SaveWindowModifiers } from './save-window.js';
 import type { EncounterState, Position, SourceReference } from '../../types.js';
+import type { Binder } from './reference.js';
+import type { RoleSelector } from './roles.js';
 
 // Compatibility barrel: incremental underlay extraction re-exports new
 // primitive vocabulary here so consumers can keep importing from the
-// canonical types surface (U7 anchor vocabulary, then U1/U2/… as they split).
+// canonical types surface (U7 anchor vocabulary, then U1/U2/U8 as they
+// split).
 export * from './anchor.js';
+export * from './reference.js';
+export * from './roles.js';
+export * from './scope.js';
 
 export const RULE_PROGRAM_SCHEMA_VERSION = 1 as const;
 
@@ -111,6 +117,13 @@ export interface RuleChoice {
   relation?: RuleRelation;
   range?: RuleNumber;
   options?: readonly string[];
+  /** U2 ROLE carriage (typed, optional — behavior-neutral until U4 consumes
+   * them): who DECIDES this choice (defaults to the controller, then the
+   * source). */
+  chooser?: RoleSelector;
+  /** U2 ROLE carriage (typed, optional — behavior-neutral until U4 consumes
+   * them): who ANSWERS at the network boundary. */
+  controller?: RoleSelector;
 }
 
 export type RuleDuration =
@@ -366,6 +379,11 @@ export interface RuleExecutionContext {
    * newly executable ability works with the traits automatically.
    */
   abilityUseModifiers?: { boons?: number; bonusDamage?: number; bonusDamageDice?: number; pierce?: boolean };
+  /** U1 REFERENCE carriage: names BOUND by earlier operations in this
+   * resolution (`CHOOSE a position AS landing`). Optional and behavior-
+   * neutral until U12 continuation records carry it across windows; when
+   * absent, reference resolution treats every bound name as unbound. */
+  boundNames?: Binder;
 }
 
 export type RuleMutation =
