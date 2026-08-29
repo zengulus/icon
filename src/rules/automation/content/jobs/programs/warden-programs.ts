@@ -9,7 +9,7 @@ import {
   shoveMutation, rushMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
+import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { footprintDistance } from '../../../primitives/spatial-intent.js';
@@ -181,7 +181,7 @@ const mistStriderEffects: RuleResolver = (context) => {
   }
   mutations.push(terrainMutation(context, 'create', 'mist-cloud', squareArea(center, 1)));
   if (context.triggers?.has('charge')) {
-    const second = evaluatePositionCandidates({ origin: center, radius: 3 }, context)[0];
+    const second = evaluatePositions({ origin: center, radius: 3, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
     if (second) mutations.push(terrainMutation(context, 'create', 'mist-cloud', squareArea(second, 1)));
   }
   return mutations;
@@ -231,7 +231,7 @@ const underwayEffects: RuleResolver = (context) => {
       break;
     }
   }
-  const portalCell = evaluatePositionCandidates({ origin: sourcePosition, radius: 1 }, context)[0];
+  const portalCell = evaluatePositions({ origin: sourcePosition, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
   if (!portalCell) throw new RuleProgramViolation('choice.position-range', 'Underway requires a free adjacent space.');
   mutations.push(entityMutation(context, source.id, portalCell, 'underway', {}));
   if (context.triggers?.has('charge')) {

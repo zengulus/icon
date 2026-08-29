@@ -128,8 +128,12 @@ describe('F7 closed talent inventory', () => {
     // Heave-Ho t1 only-one-foe-in-blast; Waterspout t2 predicate + movement
     // window). Wired 31→24; documented 231→238; executable 58→51. Each is
     // now a precise census blocker (terrain families).
-    expect(getExecutableTalentIds().size).toBe(51);
-    expect(getDocumentedTalentIds(units).size).toBe(238);
+    // Corrective pass (2026-08-30): Eye of the Storm t2 (piercing per area
+    // character) was retracted WITH its ability — the ability's ally-center
+    // fly-4 is a free player-chosen flight, so neither executes. Executable
+    // 51→50; documented 238→239.
+    expect(getExecutableTalentIds().size).toBe(50);
+    expect(getDocumentedTalentIds(units).size).toBe(239);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -558,11 +562,13 @@ describe('F7 terrain-create audited triggers', () => {
   // Each talent is now documented/unresolved: USING the ability emits no
   // talent terrain, and the census records the precise residual blocker.
 
-  it('Eye of the Storm talent 1: retracted — no pit at use (occupancy predicate + center unresolved)', () => {
+  it('Eye of the Storm talent 1: retracted — the whole ability is unresolved (ally-center fly-4 is a free player-chosen flight)', () => {
+    // The ability itself is now documented non-executable (ICON p.236 "If an
+    // ally is in the center space, they may fly 4" — a player-chosen
+    // flight), so neither the ability nor its talents execute.
     const { state, hero, foe } = talentEncounter('stormbender:eye-of-the-storm', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 4, y: 1 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:eye-of-the-storm', targetIds: [foe.id] }, scriptedDice());
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(false);
-    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:eye-of-the-storm', targetIds: [foe.id] }, scriptedDice()))
+      .toThrow('not an independently executable ICON rule yet');
   });
 
   it('Blitz talent 1: retracted — no dangerous terrain at use (bloodied gate + free-space geometry unresolved)', () => {

@@ -168,21 +168,31 @@ Characters, Others, Space, Object) are ONE target vocabulary, not separate
 selector engines.
 
 Today: `selectActors` (`kernels/runtime.ts`) is a thin adapter over
-`kernels/evaluate-query.ts` `evaluateActorQuery`; the direct-target command
-gate (`encounter.ts::assertDirectTarget`) routes base eligibility through
+`kernels/evaluate-query.ts` `evaluateActorQuery` (including the `input`
+selector's range legality, which routes through the same candidate
+authority); the direct-target command gate
+(`encounter.ts::assertDirectTarget`) routes base eligibility through
 `kernels/candidate.ts` while `primitives/targeting.ts` pins the
 direct-target problem vocabulary (relation/range/stealth/LoS); actor
 inclusion in areas is a query read (the `insideArea` operator) over the
 spatial gateway's cells (`computeSpatialArea`); position candidates and
-teleport-destination legality are query reads
-(`evaluatePositionCandidates`/`validatePositionLegality`), and the
-nearest-foe ordering routes through `nearestCandidate` over an evaluated
-CandidateSet; a mob member model does not exist yet (`createFoeFromProfile`
-rejects the mob role — TODO/roadmap B2). The specialists keep their
-spatial models; the eligibility authorities still to merge behind one
-Query type are the terrain/entity/area/instance domains and the
-directional `rushTowardFoes` movement sugar (a movement-direction read,
-not an eligibility query).
+teleport-destination legality are query reads (`evaluatePositions` with
+explicit space/ordering policies / `validatePositionLegality`), and the
+nearest read routes through `nearestCandidates` — the COMPLETE
+minimum-distance set with no invented tie-break (ordering/tie resolution
+happens only where the SOURCE defines it; e.g. ICON p.143 grants the
+player a choice among equidistant foes); a mob member model does not
+exist yet (`createFoeFromProfile` rejects the mob role — TODO/roadmap B2).
+Corrective pass (2026-08-30): `occupied` is an obstruction test
+(characters + objects; intangible summons do not obstruct, p.95), and the
+position slice is a free/unoccupied specialist — occupancy is an explicit
+query policy, not a property of a position candidate. The specialists
+keep their spatial models; the eligibility authorities still to merge
+behind one Query type are the terrain/entity/area/instance domains,
+ordering policies beyond the min-distance set, and the directional
+`rushTowardFoes` movement sugar (a movement-direction read, not an
+eligibility query), whose nearest-foe direction fallback remains a flagged
+player-choice approximation.
 
 ## U4 Choice / Decision
 

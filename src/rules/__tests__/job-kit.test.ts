@@ -89,21 +89,35 @@ describe('job-kit building blocks', () => {
     expect(walk(ctx, { x: 1, y: 1 }, { x: 1, y: 0 }, 50, true, hero.id)).toEqual({ x: 9, y: 1 });
   });
 
-  it('occupied detects characters (with exclusion) and entities', () => {
+  it('occupied detects characters (with exclusion) and OBJECT entities, but NOT intangible summons', () => {
     const { state, hero, foe } = board();
     const base = kitContext(state, hero.id, scriptedDice());
     expect(occupied({ x: 3, y: 1 }, base, hero.id)).toBe(true);
     expect(occupied({ x: 3, y: 1 }, base, foe.id)).toBe(false);
     expect(occupied({ x: 4, y: 1 }, base, hero.id)).toBe(false);
 
-    const withEntity: RuleExecutionContext = {
+    // A bomb is an intangible SUMMON (ICON p.95: summons "don't cause
+    // obstruction or engagement") — its cell is NOT occupied by this generic
+    // obstruction test.
+    const withSummon: RuleExecutionContext = {
       ...base,
       state: {
         ...base.state,
         entities: { ...base.state.entities, mine: { id: 'mine', type: 'bomb', ownerId: hero.id, position: { x: 4, y: 1 }, state: {} } },
       },
     };
-    expect(occupied({ x: 4, y: 1 }, withEntity, hero.id)).toBe(true);
+    expect(occupied({ x: 4, y: 1 }, withSummon, hero.id)).toBe(false);
+
+    // An OBJECT entity (ICON p.95: "Objects ... provide obstruction, cover,
+    // and can block line of sight") DOES obstruct.
+    const withObject: RuleExecutionContext = {
+      ...base,
+      state: {
+        ...base.state,
+        entities: { ...base.state.entities, boulder: { id: 'boulder', type: 'boulder', ownerId: hero.id, position: { x: 4, y: 1 }, state: {} } },
+      },
+    };
+    expect(occupied({ x: 4, y: 1 }, withObject, hero.id)).toBe(true);
   });
 
   it('ringAround yields the eight neighbors clockwise from north', () => {

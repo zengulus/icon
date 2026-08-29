@@ -1,6 +1,6 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS, EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
@@ -45,7 +45,7 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Stormbender ability automation (p.230–236)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
+  it('marks the eight executable abilities in the catalog and audit (Eye Of The Storm retracted)', () => {
     for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
       if (!abilityId.startsWith('stormbender:')) continue;
       const ability = findAbility(abilityId)!;
@@ -54,7 +54,10 @@ describe('Stormbender ability automation (p.230–236)', () => {
       expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
     }
     const stormbenderIds = JOBS.find((job) => job.id === 'stormbender')!.abilities.map(({ id }) => id);
-    expect(stormbenderIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
+    // Eye Of The Storm (p.236) is retracted: its ally-center fly-4 is a free
+    // player-chosen flight (corrective underlay pass 2026-08-30).
+    expect(stormbenderIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(8);
+    expect(stormbenderIds.filter((id) => DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS.has(id))).toEqual(['stormbender:eye-of-the-storm']);
   });
 
   it('Rime: 2[D]+fray in a line 6, shoves the line to the sides, shoves the target, and summons a salt sprite', () => {
@@ -135,12 +138,19 @@ describe('Stormbender ability automation (p.230–236)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Eye Of The Storm: the center is clear and exempt, foes in the medium blast take [D], and a foe center becomes vulnerable', () => {
-    const { state, hero, foe, second } = stormbenderEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:eye-of-the-storm', targetIds: [foe.id] }, scriptedDice(4));
-    expect(result.state.actors[foe.id].hp).toBe(32); // the center is clear and exempt
-    expect(result.state.actors[foe.id].statuses).toContain('vulnerable'); // an enemy in the center
-    expect(result.state.actors[second!.id].hp).toBe(28); // 32 - [D] 4
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+  it('Eye Of The Storm: retracted — the ally-center fly-4 is a free player-chosen flight (p.236)', () => {
+    // ICON p.236: "If an ally is in the center space, they may fly 4 after
+    // the ability resolves." The flight direction is a player choice the
+    // source never names; the old "away from the nearest foe" resolution
+    // invented a rule, so the ability is documented as non-executable until
+    // a movement-choice seam exists (see manual-programs.ts
+    // DOCUMENTED_NON_EXECUTABLE).
+    const { state, hero, foe } = stormbenderEncounter({ foe: { x: 4, y: 1 }, second: null });
+    // The fixture's loadout comes from EXECUTABLE_JOB_ABILITY_IDS; put the
+    // retracted ability back so the command reaches the executability gate
+    // (rather than failing earlier as not-equipped).
+    state.actors[hero.id].abilityIds = [...state.actors[hero.id].abilityIds, 'stormbender:eye-of-the-storm'];
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:eye-of-the-storm', targetIds: [foe.id] }, scriptedDice(4)))
+      .toThrow('not an independently executable ICON rule yet');
   });
 });

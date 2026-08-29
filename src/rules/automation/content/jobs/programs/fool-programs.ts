@@ -3,7 +3,7 @@ import { registerMovementEntryTrigger } from '../../../kernels/movement-triggers
 import { isBloodied } from '../../../kernels/encounter-adapter.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { Position } from '../../../../types.js';
-import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
+import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, attackStep,
@@ -13,8 +13,22 @@ import {
   gambleD6,
   untilNextTurnStart, action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
+import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+
+/** ICON p.150: a bomb can share a space with characters but NOT with other
+ * bombs. The generic unoccupied placement policy (no obstructing character
+ * or object — ICON p.95 summons are intangible) does not exclude an existing
+ * bomb, so the bomb placement scans apply this specialist constraint on top
+ * of the shared query. */
+function bombFreeCells(context: RuleExecutionContext, origin: Position, radius: number): Position[] {
+  return evaluatePositions({ origin, radius, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)
+    .filter((cell) => !Object.values(context.state.entities).some((entity) => entity.type === 'bomb' && entity.position && sameCell(entity.position, cell)));
+}
+
+function bombFreeCell(context: RuleExecutionContext, origin: Position, radius: number): Position | undefined {
+  return bombFreeCells(context, origin, radius)[0];
+}
 
 /**
  * Independently reviewed Fool ability implementations (ICON p.150–152), the
@@ -64,7 +78,7 @@ const cavaliereEffects: RuleResolver = (context) => {
   if (target) {
     mutations.push(conditionMutation(context, target.id, 'dazed'));
     if (context.triggers?.has('finishing-blow') || context.triggers?.has('slay')) {
-      const bombCell = evaluatePositionCandidates({ origin: final, radius: 2 }, context)[0];
+      const bombCell = bombFreeCell(context, final, 2);
       if (bombCell) mutations.push(entityMutation(context, source.id, bombCell, 'bomb', {}));
     }
   }
@@ -77,7 +91,7 @@ const carnevaleEffects: RuleResolver = (context) => {
   if (!source?.position) return [];
   const mutations: RuleMutation[] = [];
   const chosen = context.input.positions?.['bomb-positions'] ?? [];
-  const cells = [...chosen, ...evaluatePositionCandidates({ origin: source.position, radius: 2 }, context)].slice(0, 2);
+  const cells = [...chosen, ...bombFreeCells(context, source.position, 2)].slice(0, 2);
   for (const cell of cells) {
     if (distance(cell, source.position) > 2) throw new RuleProgramViolation('choice.position-range', 'Carnevale summons its bombs in range 2.');
   }
@@ -180,7 +194,7 @@ const partyFavorEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source?.position) return [];
   const chosen = context.input.positions?.['mine-position']?.[0];
-  const cell = chosen ?? evaluatePositionCandidates({ origin: source.position, radius: 3 }, context)[0];
+  const cell = chosen ?? evaluatePositions({ origin: source.position, radius: 3, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
   if (!cell) throw new RuleProgramViolation('choice.position-count', 'Party Favor requires a free space in range 3.');
   if (distance(cell, source.position) > 3) throw new RuleProgramViolation('choice.position-range', 'Party Favor mines are placed in range 3.');
   return [terrainMutation(context, 'create', 'party-favor', [cell])];

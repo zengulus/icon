@@ -130,7 +130,12 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'docs/roadmap.md', linePrefix: 'replay; closed negative for unequipped mastery.', reason: 'test-plan continuation fragment' },
   { file: 'docs/roadmap.md', linePrefix: '(P1–P2) does multiplayer have something authoritative to share.', reason: 'rhetorical phase-justification criterion' },
   { file: 'docs/roadmap.md', linePrefix: 'promoting any further source units, with its UNDERLAY PHASE COMPLETE gate', reason: 'phase-gate name reference (proper noun from underlay-completion-plan.md §4), not a status claim' },
+  { file: 'docs/roadmap.md', linePrefix: 'census regeneration resumes only after the UNDERLAY PHASE COMPLETE gate.', reason: 'phase-gate name reference (proper noun from underlay-completion-plan.md §4), not a status claim' },
   { file: 'TODO.md', linePrefix: '> resume only after the UNDERLAY PHASE COMPLETE gate', reason: 'phase-gate name reference (proper noun from underlay-completion-plan.md §4), not a status claim' },
+  { file: 'TODO.md', linePrefix: '     selection and fails closed on equidistant ties.', reason: 'implementation-pattern description (nearest tie policy), not an authority claim' },
+  { file: 'TODO.md', linePrefix: '     their resolvers fail closed on those clauses;', reason: 'implementation-pattern description (retraction fail-closed semantics), not an authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: '`evaluate-query.ts` and fails closed on equidistant ties.', reason: 'implementation-pattern description (nearest tie policy), not an authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'invented) are documented non-executable, their resolvers fail closed on', reason: 'implementation-pattern description (retraction fail-closed semantics), not an authority claim' },
 ];
 
 // ---------------------------------------------------------------------------

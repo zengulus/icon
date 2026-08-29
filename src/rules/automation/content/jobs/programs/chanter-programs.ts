@@ -7,13 +7,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, lineCells, sameCell, squareArea, withinGrid, occupied,
   constant, untilNextTurnEnd,
-  distance, sourceActor, walk, rushTowardFoes,
+  distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   flyMutation, removeMutation, placeMutation, terrainMutation, swapMutations,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
+import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
@@ -254,7 +254,7 @@ const dervishEffects: RuleResolver = (context) => {
     if (!ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Dervish requires an ally in range 4.');
     if (ally.side !== source.side || distance(sourcePosition, ally.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Dervish requires an ally in range 4.');
     mutations.push(removeMutation(context, ally.id));
-    const adjacentCell = evaluatePositionCandidates({ origin: flyDest, radius: 1 }, context)[0];
+    const adjacentCell = evaluatePositions({ origin: flyDest, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
     if (adjacentCell) mutations.push(placeMutation(context, ally.id, adjacentCell));
   }
   if (source.talents['chanter:dervish'] === 1) {

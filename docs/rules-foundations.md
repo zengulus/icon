@@ -121,22 +121,43 @@ the gate, unchanged problem precedence), and area actor-inclusion reads
 route through the `insideArea` query operator over the spatial gateway's
 cells (the gateway keeps the geometry).
 
-The position slice landed with the last eligibility duplicates (2026-08-30):
-`kernels/evaluate-query.ts` owns `evaluatePositionCandidates` (free-cell
-candidates), `validatePositionLegality` (in-grid/range/occupied — consumed
-by the teleport kernel's violation mapping), and `nearestCandidate`
-(source-defined nearest ordering over an evaluated CandidateSet);
-`primitives/job-kit.ts` dropped the `freeCellsInRange`/`nearestFoe` sugar
-and every resolver call site routes through the query operators (the
-nearest-foe reads declare `includeDefeated: true` to preserve the
-historical candidate set).
+The position slice landed with the eligibility-duplicate routing
+(2026-08-30) and was corrected by the corrective pass (same day):
+`kernels/evaluate-query.ts` owns `evaluatePositions` (generic in-grid
+query with an EXPLICIT space policy — `any` per p.92 "Space: Any space in
+range, and any characters or objects occupying it", or `unoccupied` — and
+an opt-in `distance-from-origin` ordering policy),
+`validatePositionLegality` (teleport specialist: in-grid/range/unoccupied
+— consumed by the teleport kernel's violation mapping), and
+`nearestCandidates` (the full minimum-distance set over an evaluated
+CandidateSet — NO invented tie-break; ordering/tie resolution happens only
+where the source defines it). `primitives/job-kit.ts` dropped the
+`freeCellsInRange`/`nearestFoe` sugar; every resolver call site routes
+through the query operators; `rushTowardFoes` moved into
+`evaluate-query.ts` and fails closed on equidistant ties.
+
+Corrective underlay pass (2026-08-30): the nearest reads are retracted
+where they resolved a player choice deterministically — `knave:dark-knight`
+(p.143 "If multiple foes are equidistant, you may choose") and
+`stormbender:eye-of-the-storm` (p.236 "they may fly 4" — a free
+player-chosen flight; the old "away from the nearest foe" direction was
+invented) are documented non-executable, their resolvers fail closed on
+those clauses, and the `includeDefeated: true` flags those call sites
+carried were dropped ("closest foe" cannot include defeated characters).
+`primitives/job-kit.ts::occupied` is now an OBSTRUCTION test (characters +
+OBJECT entities block, p.95; intangible summons do NOT obstruct — a bomb's
+cannot-share-with-bombs rule is a specialist constraint in the bomb
+placement resolver, never this predicate).
 
 NOT yet the full U3 QUERY underlay (see `docs/underlay-completion-plan.md`
-§1 U3): the query covers the actor and position domains but still lacks
-the terrain/entity/area/instance domains, and only the source-defined
-`nearest` ordering exists (no general first/last/nth operators). The
-tracked completion task is TODO.md §"Underlay-phase task ledger" (U3 audit
-correction). Sequencing owner:
+§1 U3): the query covers the actor domain and a FREE/UNOCCUPIED position
+slice — occupancy is an explicit query policy, not a property of a
+position candidate — but still lacks the terrain/entity/area/instance
+domains, ordering policies beyond the min-distance set, and the
+`rushTowardFoes` direction fallback remains a flagged player-choice
+approximation. U3 and U7 remain honestly PARTIAL. The tracked completion
+task is TODO.md §"Underlay-phase task ledger" (U3 audit correction).
+Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED

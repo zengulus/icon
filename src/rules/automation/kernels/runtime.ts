@@ -63,16 +63,21 @@ export function selectActors(selector: RuleSelector, context: RuleExecutionConte
       // p.92: `ally` means another ally; generic input selectors also reject
       // defeated/off-board actors before a resolver can mutate them — through
       // the same U3 eligibility authority automatic targeting uses.
-      const eligible = new Set(evaluateActorQuery({ relation: selector.relation ?? 'any' }, context).map((entry) => entry.id));
+      const relationQuery = { relation: selector.relation ?? 'any' };
+      const eligible = new Set(evaluateActorQuery(relationQuery, context).map((entry) => entry.id));
       selected = supplied.filter((target) => eligible.has(target.id));
       const minimum = selector.minimum ?? 0;
       const maximum = selector.maximum ?? Number.POSITIVE_INFINITY;
       if (selected.length < minimum || selected.length > maximum) throw new RuleProgramViolation('choice.actor-count', `${selector.key} requires ${minimum}–${maximum} actor targets.`);
       // The input selector's legacy contract ENFORCES its declared range
-      // (throws) rather than silently excluding — preserved verbatim.
+      // (throws) rather than silently excluding — preserved verbatim, but
+      // the legality question itself is the U3 candidate authority's answer:
+      // the range filter is the SAME p.92 footprint query automatic targeting
+      // uses, never a second actor-range algorithm in this adapter.
       if (selector.range) {
         const maximumRange = evaluateNumber(selector.range, context);
-        if (selected.some((target) => distance(source, target) > maximumRange)) throw new RuleProgramViolation('choice.actor-range', `${selector.key} contains a target outside range ${maximumRange}.`);
+        const inRange = new Set(evaluateActorQuery({ ...relationQuery, range: maximumRange }, context).map((entry) => entry.id));
+        if (selected.some((target) => !inRange.has(target.id))) throw new RuleProgramViolation('choice.actor-range', `${selector.key} contains a target outside range ${maximumRange}.`);
       }
       break;
     }

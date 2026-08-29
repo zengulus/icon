@@ -54,45 +54,106 @@ state from the tranche documents (`tranche-1-choice.md`,
 `tranche-2-query.md`) or from prose in TODO.md. Every U-number below states
 its own `Current state` from the code at HEAD.
 
-**Implementation status (2026-08-30):** all five audit findings below are
-now routed through the one authority — `primitives/anchor.ts` (U7
-vocabulary) + real `rangeOrigin` anchor resolution; `selectActors`
-migrated onto `kernels/evaluate-query.ts` `evaluateActorQuery` as a thin
-adapter; the live direct-target gate's base eligibility through
-`kernels/candidate.ts::validateActorCandidate`; actor inclusion in areas
-through the `insideArea` query operator over the spatial gateway's cells;
-and the resolver sugar + position legality (nearest-foe ordering,
-free-cell candidates, teleport destinations) through the position-domain
-operators (see the TODO.md underlay task ledger; full suite green, census
-byte-stable, no source-unit wiring). The residual U3 contract remains:
-query domains beyond actors/positions (terrain/entities/areas/instances)
-and ordering operators beyond the source-defined nearest.
+## 0. Audit correction: landed slice vs complete contract
 
-Confirmed correction for **U3 QUERY**: `docs/tranche-2-query.md` says U3
-landed, but at current HEAD:
+The audit in this document is **code-based**. Do not infer an underlay's
+state from the tranche documents (`tranche-1-choice.md`,
+`tranche-2-query.md`) or from prose in TODO.md. Every U-number below states
+its own `Current state` from the code at HEAD. This section separates the
+HISTORICAL audit finding from the CURRENT implementation — earlier versions
+of this document mixed both under "current HEAD", which this revision fixes.
 
-- `kernels/candidate.ts` implements an **actor-only** slice
-  (`evaluateActorCandidates` / `validateActorCandidate`). There is no
+### Historical audit finding (at the earlier HEAD, commit 7a000d…)
+
+`docs/tranche-2-query.md` claimed U3 landed, but the code at that HEAD did
+not support the claim:
+
+- `kernels/candidate.ts` implemented an **actor-only** slice
+  (`evaluateActorCandidates` / `validateActorCandidate`). There was no
   `Query<T>` over positions, terrain cells, entities, areas, persistent
   instances, marks/stances, or rule sources.
-- `ActorCandidateQuery.rangeOrigin` is declared but **never resolved from
-  its selector**: `resolveRangeOrigin` returns `context.state.actors[context.actorId]`
-  in both branches; the selector argument is dead weight. This is exactly
-  the U7 ANCHOR seam, left inert.
-- `kernels/runtime.ts::selectActors` **still implements independent
-  automatic-target eligibility** for every selector branch (`all`, `within`,
-  `adjacent`, `condition`, `marked`, `summons`, `input`) via
-  `primitives/targeting.ts` `eligibleTargets` plus inline range checks, with
-  its own `distance` helper — the second eligibility authority U3 was
-  supposed to merge. `choice.ts` actor validation routes through
-  `validateActorCandidate` (good), but `selectActors` does not.
+- `ActorCandidateQuery.rangeOrigin` was declared but **never resolved from
+  its selector** — it always fell back to `context.actorId`; the selector
+  argument was dead weight (the U7 ANCHOR seam, left inert).
+- `kernels/runtime.ts::selectActors` **independently implemented
+  automatic-target eligibility** for every selector branch via
+  `primitives/targeting.ts` `eligibleTargets` plus inline range checks with
+  its own `distance` helper — a second eligibility authority.
 - `primitives/targeting.ts::queryDirectTarget` was a third, parallel
-  direct-target authority (relation/range/Blind/Stealth/LoS) — the live
-  gate now routes its base eligibility through the candidate authority and
-  the primitive pins the direct-target problem vocabulary for fixtures.
-- `computeSpatialArea`'s `includedActorIds` was a fourth area-inclusion
-  authority — live resolvers now read actor inclusion through the
-  `insideArea` query operator while the spatial gateway keeps the cells.
+  direct-target authority (relation/range/Blind/Stealth/LoS), and
+  `computeSpatialArea`'s `includedActorIds` a fourth area-inclusion
+  authority.
+
+### Current implementation at HEAD (corrective pass 2026-08-30)
+
+All four historical findings are routed through the one authority:
+
+- `primitives/anchor.ts` (U7 vocabulary) + real `rangeOrigin` resolution in
+  `kernels/candidate.ts::resolveSpatialAnchor` (fail-closed on malformed
+  anchors; relation stays with the acting actor, range moves to the anchor).
+- `selectActors` is a thin adapter over `kernels/evaluate-query.ts`
+  `evaluateActorQuery` — including the `input` selector's range legality,
+  which now routes through the same U3 candidate authority (the legacy
+  `choice.actor-range` enforce-throw contract is preserved verbatim; no
+  second p.92 range algorithm remains in the adapter).
+- The direct-target gate's base eligibility routes through
+  `validateActorCandidate`; the direct-target specialist reads (Blind,
+  Stealth, True Strike, LoS) stay at the gate.
+- Area actor-inclusion reads through the `insideArea` query operator; the
+  spatial gateway keeps the cell geometry.
+- Resolver sugar (free-cell scans, teleport destinations, nearest reads)
+  routes through the position-domain operators
+  (`evaluatePositions` with explicit space/ordering policies,
+  `validatePositionLegality`, `nearestCandidates`).
+
+**Corrective-pass corrections (2026-08-30) beyond the historical list:**
+
+- **Nearest semantics.** `nearestCandidates` returns the COMPLETE
+  minimum-distance set with NO invented tie-break (the old
+  `nearestCandidate` sorted ties by actor id — not a valid ICON rule; e.g.
+  ICON p.143 Dark Knight grants the player the choice among equidistant
+  foes). `rushTowardFoes` answers through the same min-distance selection
+  and fails closed on equidistant ties. Two abilities were RETRACTED from
+  executable because their nearest reads resolved a player choice
+  deterministically: `knave:dark-knight` (p.143 "If multiple foes are
+  equidistant, you may choose") and `stormbender:eye-of-the-storm` (p.236
+  "If an ally is in the center space, they may fly 4" — a free
+  player-chosen flight; the old "away from the nearest foe" direction was
+  invented). Their resolvers now fail closed on the unrepresentable clause;
+  the eye-of-the-storm talent 2 (whose only execution path was the
+  retracted resolver) is retracted with them. The `includeDefeated: true`
+  flags those two call sites carried were unjustified ("closest foe to you"
+  cannot include defeated characters) and were dropped.
+- **Position domain honesty.** The position slice is a FREE/UNOCCUPIED
+  specialist, not the complete U3 position domain: `evaluatePositions`
+  takes an explicit SPACE policy (`any` — every in-grid space, per p.92
+  "Space: Any space in range, and any characters or objects occupying it` —
+  or `unoccupied`) and an explicit ORDERING policy (default `none`).
+  Occupancy is a query policy, never built into the definition of a
+  position candidate; teleport/placement legality remains a specialist
+  (`validatePositionLegality`).
+- **Occupancy audit.** `primitives/job-kit.ts::occupied` is an OBSTRUCTION
+  test: characters + OBJECT entities block (p.95 "Objects … provide
+  obstruction"), intangible summons do NOT (p.95 summons "don't cause
+  obstruction or engagement"). The old predicate treated every entity as a
+  blocker. Distinct concepts — a space containing something; unavailable
+  for a particular placement; an obstruction; teleport unoccupied;
+  object/summon placement rules — are NOT collapsed into one boolean
+  (bomb-can't-share-with-bombs is a specialist constraint in the bomb
+  placement resolver).
+
+### Remaining U3 contract (honestly PARTIAL)
+
+- Query domains beyond actors/positions: terrain cells, entities, areas,
+  persistent instances, marks/stances, rule sources.
+- Ordering policies beyond the min-distance set (`nearestCandidates`) —
+  first/last/nth only where the SOURCE defines them.
+- The position slice covers the in-grid space + unoccupied/any policies;
+  the movement/placement LEGALITY gateway (spatial gateway) stays the
+  movement authority; `rushTowardFoes`' direction fallback (a player
+  choice) remains an approximation flagged in the U3 row.
+
+### Landed-slice ≠ complete-underlay
 
 The same **landed-slice ≠ complete-underlay** distinction is applied to every
 U-number: e.g. `kernels/trigger-window.ts` + `save-window.ts` +
@@ -341,15 +402,24 @@ footprint space is hit (p.290).
 see §0): base CandidateSet (`kernels/candidate.ts`) + extended
 `evaluateActorQuery` (`kernels/evaluate-query.ts`) with real U7
 `rangeOrigin` anchor resolution; `selectActors` migrated onto it as a thin
-adapter; the direct-target gate's base eligibility routed through
-`validateActorCandidate`; area actor-inclusion reads through the
-`insideArea` query operator (the spatial gateway keeps the cells); and a
-position-domain slice (`evaluatePositionCandidates`,
-`validatePositionLegality`, `nearestCandidate`) carrying the free-cell
-scans, teleport-destination legality, and the source-defined nearest
-ordering that the `freeCellsInRange`/`nearestFoe` resolver sugar used to
-own. Residual: query domains beyond actors/positions
-(terrain/entities/areas/instances) and ordering operators beyond nearest.
+adapter (the `input` selector's range legality routes through the same U3
+candidate authority — no second p.92 range algorithm); the direct-target
+gate's base eligibility routed through `validateActorCandidate`; area
+actor-inclusion reads through the `insideArea` query operator (the spatial
+gateway keeps the cells); and a POSITION-DOMAIN SLICE
+(`evaluatePositions` with explicit space/ordering policies,
+`validatePositionLegality`, `nearestCandidates`) carrying the free-cell
+scans, teleport-destination legality, and the min-distance nearest set
+that the `freeCellsInRange`/`nearestFoe` resolver sugar used to own.
+`nearestCandidates` returns the COMPLETE minimum-distance set with NO
+invented tie-break; `rushTowardFoes` (moved into this kernel) answers
+through the same selection and fails closed on equidistant ties. The
+position slice is a FREE/UNOCCUPIED specialist, NOT the complete U3
+position domain: occupancy is an explicit query policy (`any` vs
+`unoccupied`), ordering is opt-in, and movement/placement legality stays
+with the spatial gateway. Residual: query domains beyond
+actors/positions (terrain/entities/areas/instances) and ordering policies
+beyond the min-distance set.
 
 **Locations partially owning/duplicating.** Migrated (2026-08-30):
 `kernels/runtime.ts::selectActors` is a thin adapter over
@@ -359,14 +429,21 @@ own. Residual: query domains beyond actors/positions
 gate); `foe-recipes.ts` blast + the dash-on-the-rocks trait reaction read
 area actor inclusion through the `insideArea` operator; every
 `freeCellsInRange`/`nearestFoe` resolver call site routes through
-`evaluatePositionCandidates`/`nearestCandidate` (job-kit sugar removed),
-and `teleport-choice` position legality routes through
+`evaluatePositions` (explicit unoccupied + distance-from-origin
+policies)/`nearestCandidates` (job-kit sugar removed), and
+`teleport-choice` position legality routes through
 `validatePositionLegality`. `primitives/targeting.ts::queryDirectTarget`
 now pins the direct-target problem vocabulary for fixtures, and
 `computeSpatialArea`'s `includedActorIds` remains a convenience
-projection (not the live routing). Remaining within scope:
-`primitives/job-kit.ts::rushTowardFoes` (directional movement sugar over
-the same nearest-foe read — not an eligibility query).
+projection (not the live routing). Corrective pass (2026-08-30):
+`primitives/job-kit.ts::occupied` is now an OBSTRUCTION test (characters +
+objects; intangible summons do not obstruct, p.95); the Dark Knight /
+Eye of the Storm nearest reads were RETRACTED (player-choice clauses, see
+§0) and `rushTowardFoes` moved into this kernel. Remaining within scope:
+`rushTowardFoes`' direction fallback is a player-choice approximation
+(flagged in §0) and `kernels/lifecycle.ts::freeCellNear` remains a
+lifecycle summon-placement specialist with its own conservative occupancy
+read (documented in that file).
 
 **Intended authority.** `kernels/evaluate-query.ts` (extracted from
 `runtime.ts`, re-exported by the barrel): `evaluateQuery(query, context)`
@@ -404,17 +481,26 @@ iteration order.
   resolves identically on replay.
 
 **Consumers to migrate.** DONE (2026-08-30): `selectActors` branches
-(`runtime.ts`) route through `evaluateActorQuery`; the direct-target gate
-(`encounter.ts::assertDirectTarget`) routes base eligibility through
+(`runtime.ts`) route through `evaluateActorQuery` (including the `input`
+selector's range legality — one p.92 range authority); the direct-target
+gate (`encounter.ts::assertDirectTarget`) routes base eligibility through
 `validateActorCandidate`; the blast/area-inclusion consumers read actor
 inclusion through the `insideArea` operator; every `freeCellsInRange` /
 `nearestFoe` resolver call site routes through the position-domain
-operators / `nearestCandidate` (job-kit sugar removed), and
-`teleport-choice` maps `validatePositionLegality` onto its violation
-codes (Rampart stays the spatial gateway's application-time check).
-Remaining (Phase T2): nothing in the actor/position domains — the
-residual is the terrain/entity/area/instance query domains and ordering
-operators beyond nearest.
+operators (`evaluatePositions` with explicit unoccupied +
+distance-from-origin policies) / `nearestCandidates` (job-kit sugar
+removed), and `teleport-choice` maps `validatePositionLegality` onto its
+violation codes (Rampart stays the spatial gateway's application-time
+check). Corrective pass (2026-08-30): the Dark Knight and Eye of the
+Storm nearest reads were retracted (player-choice clauses, §0), the
+`includeDefeated` flags they carried dropped, `rushTowardFoes` moved into
+this kernel, and `occupied` was corrected to an obstruction test.
+Remaining (Phase T2, honestly NOT "nothing"): the position slice covers
+in-grid space with explicit policies only — the generic `Query<T>` still
+lacks the terrain/entity/area/instance domains, ordering policies beyond
+the min-distance set, and `rushTowardFoes`' direction fallback remains a
+flagged player-choice approximation (a movement-direction read, not an
+eligibility query).
 
 **Blocker families enabled (information only).** choice-input,
 entity-distance-selection, object-distance, lifecycle-target-selection,
@@ -602,6 +688,11 @@ quarter/defeated/in-terrain/trigger/state/target-state. Missing: compound
 gates from query+count+number, markExists, in-stance, inside-aura,
 used-this-scope, effect-still-exists, has-not-acted-this-round.
 
+**Staged completion (DAG-consistent).** U6's core predicate algebra depends
+on U1/U3/U5/U8 only and lands in T2; the `effect-still-exists` predicate
+reads U10 facts/instances and completes U6 in T4. U6 is NOT described as
+complete before its declared U10 dependency exists.
+
 **Locations partially owning/duplicating.** `evaluatePredicate`
 (`kernels/runtime.ts`); `kernels/hp-threshold.ts`; inline predicate logic in
 resolvers (`content/jobs/programs/*` condition checks); `kernels/range.ts`
@@ -677,6 +768,16 @@ unified onto `SpatialAnchor`: `RuleArea.origin`
 `kernels/entity-creation.ts`); `teleport-choice` origin positions;
 `SpatialIntent.from`; aura origins (`kernels/aura.ts`); rebound origin
 absent.
+
+**PARTIAL / scaffolding (corrective pass 2026-08-30).** U7 remains
+PARTIAL and must not be extended as if it were U1 REFERENCE: the LIVE
+actor anchor currently identifies its actor via a reference-style
+`RuleSelector` — this is COMPATIBILITY SCAFFOLDING, not the anchor
+vocabulary's final identity model. Once U1 exists, live anchor identity
+should use the typed `Reference<T>` vocabulary; this pass does NOT
+pre-design that seam. U2 ROLE / PERSPECTIVE remains responsible for
+"relative to whom" entirely independently of U7 — relation stays with the
+acting actor while the anchor carries only the spatial frame.
 
 **Locations partially owning/duplicating.** `primitives/spatial-intent.ts`
 (footprint/anchor primitives + area gateway); `RuleArea.origin`;
@@ -1373,6 +1474,11 @@ once-per-ability registries. Missing: count-override caps, per-use magnitude
 reads, refresh hooks, and the shared de-dup identity for trigger families
 (still four separate de-dup mechanisms — see U10).
 
+**Staged completion (DAG-consistent).** The core usage ledger (gates/caps/
+reset) depends on U1+U8 only and lands in T3; the shared de-dup identity
+reads U10 facts and completes U16 in T4. U16 is NOT described as complete
+before its declared U10 dependency exists.
+
 **Locations partially owning/duplicating.** `kernels/use-ledger.ts`;
 `kernels/trait-reactions.ts` (`roundLedgerKey`, de-dup ledger);
 `RuleContinuationState.executedStepIds` + `derivedTriggers`
@@ -1615,34 +1721,42 @@ New typed modules (`primitives/reference.ts`, `primitives/roles.ts`,
 behavior-neutral until U4 consumes them). No behavior change; full suite
 green. Exit: vocabulary types + unit tests; zero existing test deltas.
 
-**Phase T2 — Query & expression algebra: U7, U3, U5, U6, U4.**
+**Phase T2 — Query & expression algebra: U7, U3, U5, U6 (core), U4.**
 `primitives/anchor.ts` (SpatialAnchor, LIVE/CAPTURED) — landed;
 `kernels/evaluate-query.ts` extracted from `selectActors` with real
-`rangeOrigin` resolution and all domains; `selectActors` migrated (landed),
-the direct-target gate's base eligibility routed through the candidate
-authority (landed), and area actor-inclusion routed through the
-`insideArea` operator (landed; all behavior-preserving parity suites);
-`kernels/evaluate-value.ts` + `kernels/evaluate-predicate.ts` extracted
-and extended; `choice.ts` completes (roles, all domains through U3).
-Exit: one eligibility authority; `rangeOrigin` resolved; expression/
-predicate algebra covers the §1 lists; choice legality = CandidateSet for
-every domain.
+`rangeOrigin` resolution and the actor/position domains; `selectActors`
+migrated (landed), the direct-target gate's base eligibility routed
+through the candidate authority (landed), and area actor-inclusion routed
+through the `insideArea` operator (landed; all behavior-preserving parity
+suites); `kernels/evaluate-value.ts` + `kernels/evaluate-predicate.ts`
+extracted and extended; `choice.ts` completes (roles, all domains through
+U3). **U6 lands in CORE form here** — the predicate algebra without the
+`effect-still-exists` read, which consumes U10 facts (see the U6 row);
+U6's U10-backed completion lands in T4. Exit: one eligibility authority;
+`rangeOrigin` resolved; expression/predicate core covers the §1 lists;
+choice legality = CandidateSet for every domain.
 
-**Phase T3 — Policy, state, ledger: U14, U16, U15, U17.**
+**Phase T3 — Policy, state, ledger: U14, U16 (core), U15, U17.**
 `primitives/modifiers.ts` (one recipe shape, typed permission query
 points, closed negatives); the six fold registries read it (content row
 rewrites, behavior-preserving); `primitives/usage.ts` (caps, magnitude,
-refresh, de-dup identity core); `primitives/transaction.ts` (atomic groups
-over cost/spatial/creation instances); `primitives/ordering.ts` (policies +
-policy→CHOICE seam). Exit: one ModifierRule shape folded everywhere; one
-usage ledger vocabulary; one commit seam; typed ordering policies.
+refresh; the de-dup identity CORE without the U10 fact read);
+`primitives/transaction.ts` (atomic groups over cost/spatial/creation
+instances); `primitives/ordering.ts` (policies + policy→CHOICE seam).
+**U16 lands in CORE-ledger form here** (gates/caps/reset need only U1+U8,
+per the DAG note); U16's U10-backed de-dup identity completes in T4. Exit:
+one ModifierRule shape folded everywhere; one usage ledger vocabulary; one
+commit seam; typed ordering policies.
 
-**Phase T4 — Time and outcome: U9, U10.**
+**Phase T4 — Time and outcome: U9, U10 (completes U6 and U16).**
 `primitives/provenance.ts` (dimension vocabulary, `DeliverySourceKind`);
-`primitives/facts.ts` (fact union; record at each resolve point); de-dup
-identity (U16) confirmed over facts; `resolution-triggers.ts` and the
-ledgers migrate to read provenance+facts. Exit: mutations/events carry
-enough provenance to answer source questions; facts are the only history.
+`primitives/facts.ts` (fact union; record at each resolve point); U6's
+`effect-still-exists` predicate reads U10 instances (U6 completion); U16's
+de-dup identity (U10-backed) is confirmed over facts (U16 completion);
+`resolution-triggers.ts` and the ledgers migrate to read provenance+facts.
+Exit: mutations/events carry enough provenance to answer source questions;
+facts are the only history; U6 and U16 are complete WITH their declared
+U10 dependencies.
 
 **Phase T5 — Execution: U11, U12, U13.**
 `kernels/execute-flow.ts` (simulated intermediate state, bind/for-each/

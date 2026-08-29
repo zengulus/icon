@@ -6,12 +6,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, arcCells, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, rushTowardFoes, occupied,
+  distance, sourceActor, occupied,
   damageMutation, conditionMutation, stateMutation, rollDamageDice,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, shoveMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { convertedDamageType, masteryFoldRuleRuntimeView } from '../../../kernels/mastery-fold.js';

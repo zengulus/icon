@@ -310,8 +310,11 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
   });
 
   it('Demon Claw: two rushes damage every adjacent foe when the user has not attacked', () => {
+    // The rush direction is the player's choice (ICON movement); the fixture
+    // supplies +x explicitly rather than relying on the nearest-foe default
+    // (the two foes here are equidistant, and the engine must not pick).
     const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
     const mutations = mutationsOf(result.events, 'demon-slayer:demon-claw');
     expect(mutations.slice(0, 3)).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
@@ -337,7 +340,7 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     // Missing 50% of maximum hp → +2 damage on every 2-damage instance.
     const maxHp = state.actors[hero.id].baseMaxHp;
     state.actors[hero.id].hp = Math.floor(maxHp / 2);
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
     const clawDamages = mutationsOf(result.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
     expect(clawDamages).toHaveLength(2);
     for (const mutation of clawDamages) expect(mutation.amount).toBe(4); // 2 + 2
@@ -349,7 +352,7 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     const plain = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
     const max = plain.state.actors[plain.hero.id].baseMaxHp;
     plain.state.actors[plain.hero.id].hp = Math.floor(max / 2);
-    const base = executeCommand(plain.state, { type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    const base = executeCommand(plain.state, { type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
     for (const mutation of mutationsOf(base.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage')) {
       expect(mutation.amount).toBe(2);
     }
@@ -358,7 +361,7 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     // Mastered at full hp: no missing quarters → base 2.
     const fresh = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 } });
     fresh.state.actors[fresh.hero.id].masteredAbilityIds = ['demon-slayer:demon-claw'];
-    const fullHp = executeCommand(fresh.state, { type: 'USE_ABILITY', actorId: fresh.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    const fullHp = executeCommand(fresh.state, { type: 'USE_ABILITY', actorId: fresh.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
     for (const mutation of mutationsOf(fullHp.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage')) {
       expect(mutation.amount).toBe(2);
     }
@@ -374,7 +377,7 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     // wounds-adjusted calculation (missing 0 of 21) would award nothing.
     state.actors[hero.id].wounds = 1;
     state.actors[hero.id].hp = 28 - 7;
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
     const clawDamages = mutationsOf(result.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
     expect(clawDamages).toHaveLength(2);
     for (const mutation of clawDamages) expect(mutation.amount).toBe(3); // 2 + 1

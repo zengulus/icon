@@ -11,11 +11,18 @@
  * within-origin, and inside-area.
  *
  * POSITION DOMAIN: the position-candidate operators the placement/teleport
- * resolvers use (`evaluatePositionCandidates`, `validatePositionLegality`)
- * and the source-defined nearest-ordering operator (`nearestCandidate`),
- * composed from the shared `primitives/job-kit.ts` predicates (withinGrid /
- * occupied / point distance), so resolvers stop re-implementing the same
- * free-cell scans and teleport legality.
+ * resolvers use (`evaluatePositions`, `validatePositionLegality`) and the
+ * nearest-ordering operator (`nearestCandidates`), composed from the shared
+ * `primitives/job-kit.ts` predicates (withinGrid / occupied / point
+ * distance), so resolvers stop re-implementing the same free-cell scans and
+ * teleport legality. Occupancy is an EXPLICIT query policy, never built into
+ * the definition of a position candidate: `evaluatePositions` can represent
+ * occupied OR unoccupied spaces (`space` policy), and deterministic ordering
+ * is applied only when the caller requests it (`ordering` policy).
+ * `rushTowardFoes` (the directional-movement default the movement resolvers
+ * use) lives here too — it is a nearest-foe read and must answer through the
+ * same min-distance selection; it fails closed when several foes are
+ * equidistant rather than inventing a tie-break.
  *
  * `origins` are PRE-RESOLVED actor views: the caller (the selector
  * authority) resolves origin selectors recursively, because an origin may
@@ -28,7 +35,7 @@
 import type { RuleActorView, RuleExecutionContext } from '../primitives/types.js';
 import type { Position } from '../../types.js';
 import { footprintDistance, footprintIntersectsCells } from '../primitives/spatial-intent.js';
-import { distance, occupied, sameCell, squareArea, withinGrid } from '../primitives/job-kit.js';
+import { axisDirection, distance, occupied, sameCell, squareArea, withinGrid } from '../primitives/job-kit.js';
 import { evaluateActorCandidates, type ActorCandidateQuery } from './candidate.js';
 import { RuleProgramViolation } from './violations.js';
 
@@ -137,14 +144,28 @@ function originDistance(origin: RuleActorView, target: RuleActorView): number {
 // Position domain (U3 position slice)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A position-domain candidate query: every in-grid, unoccupied cell within
- * Chebyshev `radius` of `origin`, deterministically ordered (origin-distance,
- * then x, then y — the ordering the placement resolvers have always used).
- * The bounds/occupancy predicates are the shared primitives
- * (`primitives/job-kit.ts` `withinGrid`/`occupied`); this operator owns the
- * CANDIDATE semantics so placement resolvers stop re-implementing the same
- * free-cell scan (the historical `freeCellsInRange` helper). */
-export interface PositionCandidateQuery {
+/** The SPACE POLICY for a position query — what makes a cell a candidate.
+ * `unoccupied` is the FREE/PLACEMENT reading: no OBSTRUCTING character or
+ * object footprint (ICON p.95: summons are intangible and do not cause
+ * obstruction, so a cell holding only an intangible summon is free). `any`
+ * represents every in-grid space regardless of contents — ICON p.92 "Space:
+ * Any space in range, and any characters or objects occupying it" means
+ * generic position querying must be able to represent occupied spaces too.
+ * A cell being "unavailable for a particular placement" (object stacking,
+ * teleport unoccupied, bomb-can't-share-with-bombs) is a SPECIALIST rule
+ * layered on top by the domain authority, never this policy. */
+export type PositionSpacePolicy =
+  | { kind: 'any' }
+  | { kind: 'unoccupied'; excludeActorId?: string };
+
+/** Optional deterministic ordering. The default (`none`) returns candidates
+ * in no guaranteed order; a caller that needs a source-defined or
+ * caller-requested order (the placement resolvers' "first available by
+ * distance" scan) requests it explicitly. */
+export type PositionOrderingPolicy = { kind: 'none' } | { kind: 'distance-from-origin' };
+
+/** A position-domain candidate query. */
+export interface PositionQuery {
   /** The center the radius is measured from. */
   origin: Position;
   /** Chebyshev radius. */
@@ -152,26 +173,40 @@ export interface PositionCandidateQuery {
   /** Whether the origin cell itself is a candidate. Default false — the
    * placement helpers exclude the center (a free cell adjacent to it). */
   includeOrigin?: boolean;
-  /** An actor whose own footprint does not obstruct a candidate (the mover).
-   * Default none. */
-  excludeActorId?: string;
+  /** The space policy (see `PositionSpacePolicy`). */
+  space: PositionSpacePolicy;
+  /** Optional deterministic ordering policy. Default `none`. */
+  ordering?: PositionOrderingPolicy;
 }
 
-export function evaluatePositionCandidates(query: PositionCandidateQuery, context: RuleExecutionContext): Position[] {
+/** Evaluate a position CandidateSet: every in-grid cell within Chebyshev
+ * `radius` of `origin` that passes the query's explicit SPACE POLICY,
+ * ordered only when the caller requests an ORDERING policy. The bounds /
+ * obstruction predicates are the shared primitives
+ * (`primitives/job-kit.ts` `withinGrid`/`occupied`); this operator owns the
+ * CANDIDATE semantics so placement resolvers stop re-implementing the same
+ * cell scans (the historical `freeCellsInRange` helper). */
+export function evaluatePositions(query: PositionQuery, context: RuleExecutionContext): Position[] {
   const cells: Position[] = [];
   for (const cell of squareArea(query.origin, query.radius)) {
     if (!withinGrid(cell, context)) continue;
     if (!query.includeOrigin && sameCell(cell, query.origin)) continue;
-    if (occupied(cell, context, query.excludeActorId ?? '')) continue;
+    if (query.space.kind === 'unoccupied' && occupied(cell, context, query.space.excludeActorId ?? '')) continue;
     cells.push(cell);
   }
-  return cells.sort((a, b) => distance(query.origin, a) - distance(query.origin, b) || a.x - b.x || a.y - b.y);
+  if (query.ordering?.kind === 'distance-from-origin') {
+    cells.sort((a, b) => distance(query.origin, a) - distance(query.origin, b) || a.x - b.x || a.y - b.y);
+  }
+  return cells;
 }
 
-/** Position-domain legality predicates: in-grid, within point-cell `range` of
- * `origin`, and unoccupied by another actor's footprint or an entity.
- * Structured so the teleport kernel maps each problem onto its existing
- * violation codes instead of re-implementing the same checks. */
+/** The TELEPORT/placement legality specialist: in-grid, within point-cell
+ * `range` of `origin`, and unoccupied (the teleport reading of free space —
+ * no obstructing character/object; ICON p.104 "instantly move to unoccupied
+ * space within range X"). Structured so the teleport kernel maps each
+ * problem onto its existing violation codes instead of re-implementing the
+ * same checks. This is a DOMAIN rule, not the generic position query: the
+ * in-grid → range → unoccupied order is teleport's own contract. */
 export interface PositionLegalityQuery {
   origin: Position;
   range: number;
@@ -192,12 +227,36 @@ export function validatePositionLegality(
   return { legal: true, problem: null };
 }
 
-/** The nearest actor to `position` from an already-evaluated CandidateSet,
- * under the source-defined deterministic ordering (point-cell distance, ties
- * by id). The query owns ELIGIBILITY — this only orders its answer, and
- * never invents an order the source did not define. */
-export function nearestCandidate(candidates: readonly RuleActorView[], position: Position): RuleActorView | undefined {
-  return [...candidates]
-    .filter((actor) => actor.position !== null)
-    .sort((a, b) => distance(a.position!, position) - distance(b.position!, position) || a.id.localeCompare(b.id))[0];
+/** The complete minimum-distance CandidateSet: every actor in `candidates`
+ * (already evaluated — the query owns eligibility) at the minimum point-cell
+ * distance from `position`, in the input's own order. NO tie-break is
+ * invented here: when the source grants a choice among equidistant
+ * candidates (ICON p.143 Dark Knight: "If multiple foes are equidistant,
+ * you may choose"), the caller routes that choice through U4 CHOOSE; when
+ * the source defines no ordering at all, the caller must not assume one. */
+export function nearestCandidates<T extends { position: Position | null }>(candidates: readonly T[], position: Position): T[] {
+  const positioned = candidates.filter((actor) => actor.position !== null);
+  if (positioned.length === 0) return [];
+  const minimum = Math.min(...positioned.map((actor) => distance(actor.position!, position)));
+  return positioned.filter((actor) => distance(actor.position!, position) === minimum);
+}
+
+/** Dominant-axis direction toward the nearest foe (context.actorId), else +x.
+ * The closest-foe set is the shared min-distance selection
+ * (`nearestCandidates`) — no invented actor-id or array-order tie-break.
+ * When several foes are EQUIDISTANT the direction is genuinely ambiguous (a
+ * player/GM choice the engine cannot make here, U4), so the helper fails
+ * closed instead of picking one; the +x default applies only to the
+ * degenerate no-foe case. */
+export function rushTowardFoes(context: RuleExecutionContext, position: Position): Position {
+  const selfView = context.state.actors[context.actorId];
+  const foes = Object.values(context.state.actors)
+    .filter((candidate) => selfView && candidate.side !== selfView.side && candidate.position);
+  const nearest = nearestCandidates(foes, position);
+  if (nearest.length === 0) return { x: 1, y: 0 };
+  if (nearest.length === 1) return axisDirection(position, nearest[0].position!);
+  throw new RuleProgramViolation(
+    'choice.direction-ambiguous',
+    'Several foes are equidistant; the movement direction requires a choice.',
+  );
 }

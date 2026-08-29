@@ -4,13 +4,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk, rushTowardFoes,
+  distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
   shoveMutation, teleportMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluateActorQuery, evaluatePositionCandidates, nearestCandidate } from '../../../kernels/evaluate-query.js';
+import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
@@ -142,7 +142,7 @@ const geyserEffects: RuleResolver = (context) => {
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
   if (distance(source.position, cell) > 4) throw new RuleProgramViolation('choice.actor-range', 'Geyser requires a space in range 4.');
-  const freeCell = evaluatePositionCandidates({ origin: source.position, radius: 4 }, context).find((candidate) => !Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, candidate))) ?? cell;
+  const freeCell = evaluatePositions({ origin: source.position, radius: 4, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).find((candidate) => !Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, candidate))) ?? cell;
   return [{
     kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'geyser', ownerId: source.id,
     positions: [freeCell], count: 1, state: { height: 1 },
@@ -214,7 +214,7 @@ const waterspoutEffects: RuleResolver = (context) => {
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
-  const freeCell = evaluatePositionCandidates({ origin: source.position, radius: Math.max(1, distance(source.position, cell)) }, context)[0] ?? cell;
+  const freeCell = evaluatePositions({ origin: source.position, radius: Math.max(1, distance(source.position, cell)), space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0] ?? cell;
   const mutations: RuleMutation[] = [
     { kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'waterspout', ownerId: source.id, positions: [freeCell], count: 1, state: {} },
     terrainMutation(context, 'create', 'difficult', [freeCell]),
@@ -223,9 +223,17 @@ const waterspoutEffects: RuleResolver = (context) => {
 };
 
 /** ICON p.236 Eye Of The Storm: the attack space is clear and exempt from the
- * area; the medium blast deals [D] to every other character in it. If an ally
- * is in the center space they may fly 4 after the ability resolves; if an
- * enemy is in the center space they become vulnerable. */
+ * area; the medium blast deals [D] to every other character in it; if an
+ * enemy is in the center space they become vulnerable.
+ * RETRACTED from executable (see manual-programs.ts DOCUMENTED_NON_EXECUTABLE):
+ * ICON p.236 "If an ally is in the center space, they may fly 4 after the
+ * ability resolves" is a free player-chosen flight — the source never names
+ * a direction, so the old "away from the nearest foe" resolution was an
+ * invented deterministic rule. The clause fails closed (the unit is
+ * unresolved) rather than guessing a flight path; the area-damage and
+ * enemy-center halves above remain exact. Talent 2 (piercing per area
+ * character) was retracted with the ability — its only execution path was
+ * this resolver. */
 const eyeOfTheStormEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const centerId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
@@ -243,31 +251,9 @@ const eyeOfTheStormEffects: RuleResolver = (context) => {
   }
   if (centerActor) {
     if (centerActor.side === source.side) {
-      // The nearest foe's candidate set comes from the U3 query authority
-      // (includeDefeated preserves the historical sugar's candidate set);
-      // the away direction is the source-defined nearest ordering applied
-      // to that set.
-      const nearest = nearestCandidate(evaluateActorQuery({ relation: 'foe', includeDefeated: true }, context), center);
-      const away = nearest?.position ? axisDirection(nearest.position, center) : { x: 1, y: 0 };
-      const landing = walk(context, center, away, 4, true, centerActor.id);
-      if (!sameCell(landing, center)) mutations.push({ kind: 'move', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: centerActor.id, movement: 'fly', distance: null, positions: [landing], direction: null, phasing: false });
-    } else {
-      mutations.push(conditionMutation(context, centerActor.id, 'vulnerable'));
+      throw new RuleProgramViolation('choice.movement-unresolved', 'An ally is in the center; the fly-4 direction is a player choice the engine cannot resolve yet.');
     }
-    // Talent 2 (p.236): "The center character may also take 1 piercing
-    // damage, once, for every foe or ally in the area effect, up to three
-    // times." Count the characters in the blast other than the center
-    // (capped at three) and deal that many piercing to the center.
-    if (source.talents?.['stormbender:eye-of-the-storm'] === 2) {
-      const count = Math.min(
-        3,
-        Object.values(context.state.actors).filter((character) => {
-          const position = character.position;
-          return position && !sameCell(position, center) && blast.some((cell) => sameCell(cell, position));
-        }).length,
-      );
-      if (count > 0) mutations.push(damageMutation(context, centerActor.id, count, 'effect', 'piercing'));
-    }
+    mutations.push(conditionMutation(context, centerActor.id, 'vulnerable'));
   }
   return mutations;
 };

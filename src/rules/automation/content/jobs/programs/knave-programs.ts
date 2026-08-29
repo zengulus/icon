@@ -15,7 +15,7 @@ import {
   gambleD6,
   untilNextTurnEnd, action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluateActorQuery, evaluatePositionCandidates, nearestCandidate } from '../../../kernels/evaluate-query.js';
+import { evaluateActorQuery, evaluatePositions, nearestCandidates } from '../../../kernels/evaluate-query.js';
 
 /**
  * Independently reviewed Knave ability implementations (ICON p.139–144).
@@ -180,7 +180,14 @@ const direParry: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.141: enter the Dark Knight stance, hatred+ of the closest foe, and sturdy. */
+/** ICON p.141: enter the Dark Knight stance, hatred+ of the closest foe, and sturdy.
+ * RETRACTED from executable (see manual-programs.ts DOCUMENTED_NON_EXECUTABLE):
+ * ICON p.143 grants the player a choice when multiple foes are equidistant
+ * ("If multiple foes are equidistant, you may choose"), and no player-choice
+ * seam exists at this timing yet. A UNIQUE closest foe applies hatred exactly;
+ * equidistant closest foes fail closed (the unit is unresolved) rather than
+ * inventing an id tie-break. Defeated foes are never candidates ("closest foe
+ * to you" — a defeated character is removed from the battlefield). */
 const darkKnightEnter: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source || !source.position) return [];
@@ -188,13 +195,13 @@ const darkKnightEnter: RuleResolver = (context) => {
     stanceMutation(context, source.id, 'enter', 'dark-knight'),
     conditionMutation(context, source.id, 'sturdy'),
   ];
-  // The closest foe's candidate set comes from the U3 query authority
-  // (includeDefeated preserves the historical sugar's candidate set); the
-  // nearest ordering is the source-defined deterministic tie-break.
-  const closest = nearestCandidate(evaluateActorQuery({ relation: 'foe', includeDefeated: true }, context), source.position);
-  if (closest) {
+  const closest = nearestCandidates(evaluateActorQuery({ relation: 'foe' }, context), source.position);
+  if (closest.length > 1) {
+    throw new RuleProgramViolation('choice.direction-ambiguous', 'Several foes are equidistant; Dark Knight requires a choice of whom to hate.');
+  }
+  if (closest.length === 1) {
     mutations.push(conditionMutation(context, source.id, 'hatred', 'plus'));
-    mutations.push(stateMutation(context, source.id, 'hatred-of', closest.id));
+    mutations.push(stateMutation(context, source.id, 'hatred-of', closest[0].id));
   }
   if (context.triggers?.has('heroic')) {
     mutations.push(vigorMutation(context, source.id, 2 * source.conditions.size));
@@ -231,7 +238,7 @@ const strongarmEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   let targetPosition = target.position;
   if (comeback) {
-    const adjacency = evaluatePositionCandidates({ origin: sourcePosition, radius: 1 }, context)[0];
+    const adjacency = evaluatePositions({ origin: sourcePosition, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
     if (!adjacency) throw new RuleProgramViolation('choice.position-range', 'Strongarm talent 1 requires a free adjacent space.');
     mutations.push(removeMutation(context, target.id));
     mutations.push(placeMutation(context, target.id, adjacency));

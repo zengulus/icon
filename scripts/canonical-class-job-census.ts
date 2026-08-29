@@ -755,6 +755,13 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // increase of the existing flight. The parent sequence cannot yet preserve
   // its optional Rush/Fly destinations and adjacent-foe selections as durable
   // command input, or evaluate each later tier from the actual prior landing.
+  // Retracted with its host (2026-08-30 corrective underlay pass): Eye of the
+  // Storm's ally-center fly-4 is a free player-chosen flight (ICON p.236), so
+  // the ability is unresolved and this talent — whose only execution path is
+  // the ability resolver — is unresolved with it. The minimal missing
+  // reusable capability is the movement-direction CHOICE the host clause
+  // needs (U4 CHOOSE); the talent's own area-member counting is representable.
+  'stormbender:eye-of-the-storm:talent:2': ['choice-input'],
   // ── Fool ──
   'fool:cavaliere:mastery': ['fly-move-timing'],
   // "After Cavaliere resolves, you may fly 4" — a post-resolution self fly.

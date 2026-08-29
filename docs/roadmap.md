@@ -79,6 +79,18 @@ promoting any further source units, with its UNDERLAY PHASE COMPLETE gate
 sequencing in this section is **superseded** until that gate closes; the
 priorities below resume afterwards.
 
+A corrective pass (2026-08-30) repaired the first U3/U7 tranche work: the
+`nearest` operator no longer invents actor-id tie-breaks (it returns the
+full minimum-distance set; per-unit tie policy is a unit decision, not
+an engine default), the position query domain separates generic space
+queries from explicit occupied/free policies, `selectActors` no longer owns
+a private p.92 actor-range algorithm, and the underlay completion plan's
+historical-vs-current claims are reconciled. The next implementation
+tranche is **T1 — U1 Reference/Binding, U2 Role/Perspective, U8
+Scope/Clock** (plan §3.2), NOT further U3 expansion: U3/U7 already borrow
+`RuleSelector`/`context.actorId` because U1/U2 do not exist, and those
+temporary dependencies must not be deepened.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the
@@ -175,7 +187,9 @@ regenerated highest-immediate family. The F3 audit
 (2026-08-29) found the entity-creation AUTHORITY already exists
 (`kernels/entity-creation.ts` `validateEntityCreation`: bounds, footprint
 occupancy, impassable, LoS, footprint-distance range, summon caps) plus the
-`entityMutation` builder and the `freeCellsInRange` placement helper, so
+`entityMutation` builder and the shared position-query placement helper
+(now `kernels/evaluate-query.ts` `evaluatePositions`/
+`validatePositionLegality`; the old `freeCellsInRange` helper is retired), so
 `entity-create` was NOT a missing primitive — the 16 `{entity-create}`
 singletons were coarse keyword residues and were reclassified to their real
 residual blockers, and a shared `summonEntity` seam was added. A corrective
@@ -230,8 +244,17 @@ re-read against their passages: **0 promoted** (honest) — each needs a durable
 per-ability choice WINDOW/CARRIAGE (U12 CONTINUATION / U13 WINDOW:
 post-swap teleport, swap-ally selection, Slay-triggered gain-or-lose,
 aura-teleport window, post-explosion re-damage, post-ability sacrifice), not
-candidate legality. Census regenerated twice byte-stable at 426. Next
-tranche: U12/U13, then re-derive the greedy order from the regenerated census.
+candidate legality. Census regenerated twice byte-stable at 426. A
+corrective pass (2026-08-30) then routed the remaining U3 duplicates
+(`nearestFoe`/`freeCellsInRange` resolver sugar, teleport-choice position
+legality) through the query authority, and a second corrective pass removed
+invented tie-break semantics, separated position-space from occupied/free
+policies, and routed `selectActors` range legality through the shared
+candidate authority (two retractions: `knave:dark-knight` and
+`stormbender:eye-of-the-storm`, whose source grants player choice among
+equidistant candidates — see `docs/underlay-completion-plan.md` §0). Next
+tranche per plan §3.2: **T1 — U1/U2/U8**, then the rest of T2 (U5/U6-core/U4);
+census regeneration resumes only after the UNDERLAY PHASE COMPLETE gate.
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

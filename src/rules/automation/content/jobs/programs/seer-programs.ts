@@ -12,7 +12,7 @@ import {
   gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
+import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
@@ -106,7 +106,7 @@ const chaosTarotEffects: RuleResolver = (context) => {
         if (!sameCell(landing, position)) mutations.push(teleportMutation(context, character.id, landing));
       }
     } else if (effect === 3) {
-      const cells = evaluatePositionCandidates({ origin: center, radius: 1 }, context).slice(0, 2);
+      const cells = evaluatePositions({ origin: center, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).slice(0, 2);
       if (cells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', cells));
     } else if (effect === 4) {
       const allies = inArea.filter((character) => character.side === source.side).slice(0, 2);
@@ -166,11 +166,11 @@ const astraEffects: RuleResolver = (context) => {
     mutations.push(damageMutation(context, character.id, gamble, 'effect'));
   }
   if (gamble >= 4) {
-    const cells = evaluatePositionCandidates({ origin: target.position, radius: 2 }, context).slice(0, 2);
+    const cells = evaluatePositions({ origin: target.position, radius: 2, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).slice(0, 2);
     if (cells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', cells));
   }
   if (gamble === 6) {
-    const meteorCell = evaluatePositionCandidates({ origin: target.position, radius: 2 }, context)[0];
+    const meteorCell = evaluatePositions({ origin: target.position, radius: 2, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
     if (meteorCell) {
       mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'meteor', ownerId: source.id, positions: [meteorCell], count: 1, state: { height: 1 } });
       for (const character of Object.values(context.state.actors)) {

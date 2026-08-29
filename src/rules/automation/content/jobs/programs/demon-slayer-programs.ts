@@ -6,10 +6,11 @@ import type { RuleDuration, RuleMutation, RuleProgramCompilation, RuleResolver, 
 import {
   axisDirection, lineCells, orthogonalNeighbors, sameCell, squareArea,
   self, attackTarget, constant, damageDie, fray, normalDamage,
-  distance, withinGrid, sourceActor, rushTowardFoes,
+  distance, withinGrid, sourceActor,
   damageMutation, conditionMutation, rushMutation, shoveMutation, stateMutation,
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
+import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
 
 /**
  * Independently reviewed Demon Slayer ability implementations (ICON p.128–130).

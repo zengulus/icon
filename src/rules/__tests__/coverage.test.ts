@@ -122,15 +122,20 @@ describe('rules automation coverage gate', () => {
     // and this corrective pass retracted three source-inexact terrain talent
     // rows (upheaval:t2, underway:t2, sidhe:t1) that the no-input fold could
     // not express (148→409-affected; completePrograms 480→475).
+    // 2026-08-30 (corrective underlay pass): retracted `knave:dark-knight`
+    // and `stormbender:eye-of-the-storm` (player-choice clauses at timings
+    // with no choice seam) plus the eye-of-the-storm talent 2 that only ran
+    // inside the retracted ability's resolver (completePrograms 468→467,
+    // completeClauses 1605→1604, talent unsupported 237→238).
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4701,
-      completePrograms: 468,
-      unsupportedPrograms: 2807,
-      completeClauses: 1605,
-      unsupportedClauses: 3096,
+      completePrograms: 467,
+      unsupportedPrograms: 2808,
+      completeClauses: 1604,
+      unsupportedClauses: 3097,
       unsupportedByKind: {
-        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 237, 'mastery': 129,
+        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 238, 'mastery': 129,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

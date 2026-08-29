@@ -4,13 +4,13 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   sameCell, squareArea, withinGrid, occupied,
   constant,
-  distance, sourceActor, rushTowardFoes,
+  distance, sourceActor,
   damageMutation, conditionMutation, stateMutation, vigorMutation, rollDamageDice,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
+import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
@@ -265,10 +265,10 @@ const darkSliverEffects: RuleResolver = (context) => {
     ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 1, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (context.triggers?.has('slay')) {
-    const plantCell = evaluatePositionCandidates({ origin: target.position, radius: darkSliverPlacementRange(context, 'slay-placement') }, context)[0];
+    const plantCell = evaluatePositions({ origin: target.position, radius: darkSliverPlacementRange(context, 'slay-placement'), space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
     if (plantCell) mutations.push(entityMutation(context, source.id, plantCell, 'plant', {}));
   } else {
-    const soulCell = evaluatePositionCandidates({ origin: target.position, radius: darkSliverPlacementRange(context, 'terrain-placement') }, context)[0];
+    const soulCell = evaluatePositions({ origin: target.position, radius: darkSliverPlacementRange(context, 'terrain-placement'), space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
     if (soulCell) {
       mutations.push(markMutation(context, target.id, 'dark-sliver', { x: soulCell.x, y: soulCell.y }));
       mutations.push(entityMutation(context, source.id, soulCell, 'soul-space', {}));

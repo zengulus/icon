@@ -110,12 +110,21 @@ export const withinGrid = (position: Position, context: RuleExecutionContext) =>
 export const sourceActor = (context: RuleExecutionContext, id: string): RuleActorView =>
   context.state.actors[id];
 
-/** True when a character (other than `excludeId`) or an entity occupies the cell.
- * ICON p.92: a Size-N actor occupies its whole N×N footprint, so any cell
- * inside a large actor's footprint is occupied — not only its anchor cell. */
+/** True when something OBSTRUCTS the cell: a character's footprint or an
+ * OBJECT entity. ICON p.92: a Size-N actor occupies its whole N×N footprint,
+ * so any cell inside a large actor's footprint is occupied — not only its
+ * anchor cell. ICON p.95: summons are Size 1 and intangible — they do not
+ * cause obstruction or engagement and may share a space with characters — so
+ * a cell holding ONLY an intangible summon is NOT occupied by this generic
+ * predicate (a bomb's own "can't share space with other bombs" rule is a
+ * specialist placement constraint applied by the bomb placement resolver,
+ * never this predicate). This is an OBSTRUCTION test; it does not answer
+ * "is this space unavailable for a particular placement" (object stacking,
+ * teleport unoccupied, summon placement each carry their own specialist
+ * rules on top of this predicate). */
 export const occupied = (position: Position, context: RuleExecutionContext, excludeId = '') =>
   Object.values(context.state.actors).some((actor) => actor.id !== excludeId && actor.position && footprintIntersectsCells({ position: actor.position, size: actor.size ?? 1 }, [position]))
-  || Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, position));
+  || Object.values(context.state.entities).some((entity) => entityKindOf(entity) === 'object' && entity.position && sameCell(entity.position, position));
 
 export const impassable = (position: Position, context: RuleExecutionContext) =>
   !withinGrid(position, context) || context.state.terrainAt(position).has('impassable');
@@ -151,7 +160,10 @@ export function walk(
       const blockedByActor = Object.values(context.state.actors).some(
         (actor) => actor.id !== moverId && !excludeIds.has(actor.id) && actor.position && footprintsOverlap({ position: next, size: moverSize }, { position: actor.position, size: actor.size ?? 1 }),
       );
-      const blockedByEntity = Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, next));
+      // ICON p.95: summons are intangible and do not cause obstruction, so
+      // only OBJECT entities stop non-phasing movement — a bomb or beast in
+      // the path is passed through, exactly as characters share their space.
+      const blockedByEntity = Object.values(context.state.entities).some((entity) => entityKindOf(entity) === 'object' && entity.position && sameCell(entity.position, next));
       if (blockedByActor || blockedByEntity) break;
     }
     position = next;
@@ -165,15 +177,6 @@ export function firstFreeCell(context: RuleExecutionContext, cells: Position[], 
 }
 
 // ── Selection ────────────────────────────────────────────────────────────────
-/** Dominant-axis direction toward the nearest foe (context.actorId), else +x. */
-export function rushTowardFoes(context: RuleExecutionContext, position: Position): Position {
-  const selfView = context.state.actors[context.actorId];
-  const foes = Object.values(context.state.actors)
-    .filter((candidate) => selfView && candidate.side !== selfView.side && candidate.position)
-    .sort((a, b) => distance(a.position!, position) - distance(b.position!, position) || a.id.localeCompare(b.id));
-  return foes[0]?.position ? axisDirection(position, foes[0].position) : { x: 1, y: 0 };
-}
-
 /** The eight surrounding cells in clockwise order, starting directly north. */
 export function ringAround(center: Position): Position[] {
   return [
@@ -421,9 +424,9 @@ export function creationCandidateCells(context: RuleExecutionContext, region: Po
  * per-owner summon cap always bounds the result.
  *
  * MIGRATION NOTE: pre-existing ability resolvers that still hand-roll
- * free-cell scans (`evaluatePositionCandidates(...)[index]`) +
- * `entityMutation(...)` for ordinary summons are tracked for migration onto
- * this seam. A few are deliberate
+ * free-cell scans (an `evaluatePositions(...)` candidate set indexed by
+ * position) + `entityMutation(...)` for ordinary summons are tracked for
+ * migration onto this seam. A few are deliberate
  * exceptions that are NOT ordinary intent-declaration summons — e.g. a
  * resolver that needs the exact resolved cell back to compute a follow-on
  * effect (the Seer meteor's proximity damage) or a mandatory in-place

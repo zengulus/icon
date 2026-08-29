@@ -128,6 +128,62 @@ assumption here, document the evidence and update this list before proceeding.
   (terrain/entities/areas/instances) and ordering operators beyond
   nearest. No source-unit promotion.
 
+- **Corrective underlay pass (2026-08-30) — LANDED.** Repairs introduced
+  or exposed by the first U3/U7 work; no new underlay tranche, no
+  promotion. Full suite green (1287 tests), census regenerated
+  byte-stable at 427 unresolved (was 426 — the count grew honestly), all
+  audits green:
+  1. **No invented id tie-breaks.** `nearestCandidate` (ties by actor id)
+     replaced by `nearestCandidates` — the full minimum-distance set,
+     no ordering invented. `rushTowardFoes` answers through the same
+     selection and fails closed on equidistant ties. The inline id
+     tie-breaks in the Dark Knight turn-start lifecycle recipe (removed)
+     and the Symphony fly read (routed through `nearestCandidates`, skips
+     on ties — declining is source-valid for "may fly 1") are gone.
+  2. **Retractions.** `knave:dark-knight` (p.143 "If multiple foes are
+     equidistant, you may choose" — a player choice with no seam at that
+     timing) and `stormbender:eye-of-the-storm` (p.236 "they may fly 4" —
+     a free player-chosen flight; the old "away from the nearest foe"
+     direction was invented) moved to `DOCUMENTED_NON_EXECUTABLE`;
+     their resolvers fail closed on those clauses; the eye-of-the-storm
+     talent 2 (only ran inside the retracted resolver) is retracted with
+     them (audited census blocker `choice-input`); the
+     `includeDefeated: true` flags those call sites carried were dropped
+     (a "closest foe" cannot include defeated characters). The Dark
+     Knight mastery (Infectious Hatred aura + turn-end save) stays
+     executable — its mechanics are exact and independent of the
+     closest-foe clause (tests enter the stance directly).
+  3. **Position domain honesty.** The position slice is a
+     FREE/UNOCCUPIED specialist, not the full U3 position domain:
+     `evaluatePositions` takes an explicit SPACE policy (`any` per p.92
+     "Space: Any space in range, and any characters or objects occupying
+     it" vs `unoccupied`) and an explicit ORDERING policy (default
+     `none`); teleport legality stays a specialist
+     (`validatePositionLegality`); movement/placement legality stays with
+     the spatial gateway.
+  4. **Occupancy audit.** `occupied` is an OBSTRUCTION test: characters
+     + OBJECT entities block (p.95 objects "provide obstruction"),
+     intangible SUMMONS do not (p.95 summons "don't cause obstruction or
+     engagement"); bomb-can't-share-with-bombs is a specialist
+     constraint in the bomb placement resolver; `walk` passes through
+     summons. Distinct concepts (presence vs obstruction vs placement
+     unavailability vs teleport unoccupied) are not collapsed into one
+     boolean.
+  5. **`selectActors` range de-duplication.** The `input` selector's
+     range legality now routes through the SAME U3 candidate authority
+     automatic targeting uses (the `choice.actor-range` enforce-throw
+     contract preserved); parity tests cover exact-range passes,
+     one-past fails, and a Size>1 mover's footprint distance through both
+     paths.
+  6. **Plan doc reconciliation.** `underlay-completion-plan.md` §0
+     separates the historical audit finding (7a000d…) from the current
+     implementation and the remaining contract (no contradictory
+     "current HEAD" claims); U6 and U16 are staged (core in T2/T3,
+     U10-backed completion in T4) so no underlay is described as done
+     before its declared dependencies; U3 and U7 remain honestly PARTIAL
+     (U7's actor-selector anchors are documented compatibility
+     scaffolding for the future U1 Reference vocabulary).
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

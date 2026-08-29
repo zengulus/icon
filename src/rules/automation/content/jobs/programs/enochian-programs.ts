@@ -10,7 +10,7 @@ import {
   shoveMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluatePositionCandidates } from '../../../kernels/evaluate-query.js';
+import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 
 /**
@@ -323,7 +323,7 @@ const blackstarEffects: RuleResolver = (context) => {
   if (context.triggers?.has('comeback') || context.triggers?.has('exceed')) {
     mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'effect'));
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
-    const difficultCells = evaluatePositionCandidates({ origin: target.position, radius: 3 }, context).slice(0, 3);
+    const difficultCells = evaluatePositions({ origin: target.position, radius: 3, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).slice(0, 3);
     if (difficultCells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', difficultCells));
   }
   return mutations;

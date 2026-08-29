@@ -1,6 +1,6 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
+import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS, EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
@@ -47,7 +47,7 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Knave ability automation (p.139–144)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
+  it('marks the eight executable abilities in the catalog and audit (Dark Knight retracted)', () => {
     for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
       if (!abilityId.startsWith('knave:')) continue;
       const ability = findAbility(abilityId)!;
@@ -56,7 +56,11 @@ describe('Knave ability automation (p.139–144)', () => {
       expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
     }
     const knaveIds = JOBS.find((job) => job.id === 'knave')!.abilities.map(({ id }) => id);
-    expect(knaveIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
+    // Dark Knight (p.143) is retracted: its hatred+ clause grants a player
+    // choice among equidistant closest foes (corrective underlay pass
+    // 2026-08-30).
+    expect(knaveIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(8);
+    expect(knaveIds.filter((id) => DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS.has(id))).toEqual(['knave:dark-knight']);
   });
 
   it('Low Blow: true-strike attack slashes the target, and an already-slashed target gains hatred', () => {
@@ -193,14 +197,19 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(parry.state.actors[hero.id].interruptUses['knave:riposte']).toBe(1);
   });
 
-  it('Dark Knight: enters the stance with hatred+ of the closest foe and sturdy', () => {
-    const { state, hero, foe } = knaveEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:dark-knight', targetIds: [] }, scriptedDice());
-    const heroAfter = result.state.actors[hero.id];
-    expect(heroAfter.stance).toMatchObject({ stanceId: 'dark-knight' });
-    expect(heroAfter.conditions.some(({ id }) => id === 'sturdy')).toBe(true);
-    expect(heroAfter.statuses).toContain('hatred');
-    expect(heroAfter.ruleState['hatred-of']).toBe(foe.id);
+  it('Dark Knight: retracted — hatred+ of the closest foe grants a player choice on equidistant ties (p.143)', () => {
+    // ICON p.143: "You gain hatred+ of the closest foe to you at the start of
+    // your turn or when you enter this stance. If multiple foes are
+    // equidistant, you may choose." No player-choice seam exists at that
+    // timing (U4 CHOOSE is not built), so the ability is documented as
+    // non-executable rather than silently picking an actor by id tie-break.
+    const { state, hero } = knaveEncounter({ second: null });
+    // The fixture loadout comes from EXECUTABLE_JOB_ABILITY_IDS; put the
+    // retracted ability back so the command reaches the executability gate
+    // (rather than failing earlier as not-equipped).
+    state.actors[hero.id].abilityIds = [...state.actors[hero.id].abilityIds, 'knave:dark-knight'];
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:dark-knight', targetIds: [] }, scriptedDice()))
+      .toThrow('not an independently executable ICON rule yet');
   });
 
   it('Strongarm: shoves an adjacent foe around the user, then shoves 1 more', () => {

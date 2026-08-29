@@ -626,14 +626,6 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   'sealer:divine-aegis:talent:2': {
     mechanic: 'Marking an ally at 25% hp or lower with Divine Aegis also grants them defiance (the threshold read is the shared quarter predicate).',
   },
-  // ICON p.236 Eye of the Storm talent 2: "The center character may also
-  // take 1 piercing damage, once, for every foe or ally in the area effect,
-  // up to three times." The resolver counts the characters in the storm's
-  // blast (other than the center), capped at three, and deals that many
-  // piercing to the center character when the talent is equipped.
-  'stormbender:eye-of-the-storm:talent:2': {
-    mechanic: 'The center character takes 1 piercing damage for every other character in the area effect (foe or ally), up to three times.',
-  },
   // ICON p.143 Knave Strongarm talent 1: "Comeback: this ability gains range
   // 2. Remove your target and place them into adjacency before activating
   // this effect." The comeback range-2 half is wired through the shared

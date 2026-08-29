@@ -243,10 +243,27 @@ describe('Rook mastery — Implacable Fortress (p.123)', () => {
 });
 
 describe('Dark Knight mastery — Infectious Hatred (p.143)', () => {
+  /** The Dark Knight ABILITY is retracted (p.143 grants the player a choice
+   * among equidistant closest foes, and no player-choice seam exists at that
+   * timing yet — see manual-programs.ts DOCUMENTED_NON_EXECUTABLE). The
+   * mastery's own semantics (Aura 1 while in the stance + turn-end save) are
+   * exact and independent of the closest-foe clause, so these fixtures enter
+   * the stance directly instead of through USE_ABILITY. */
+  function enterDarkKnightStance(fixture: MasteryFixture): void {
+    const hero = fixture.state.actors[fixture.hero.id];
+    // The fixture loadout comes from EXECUTABLE_JOB_ABILITY_IDS; the mastery's
+    // `hasMastery` gate reads abilityIds AND masteredAbilityIds, so the
+    // retracted ability must be equipped for the aura gate to pass.
+    hero.abilityIds = [...hero.abilityIds, 'knave:dark-knight'];
+    hero.stance = {
+      id: 'dark-knight', sourceId: 'knave:dark-knight', ownerId: fixture.hero.id, stanceId: 'dark-knight', state: {},
+    };
+  }
+
   it('a mastered dark knight emanates Aura 1; a foe ending its turn inside fails its save and gains hatred', () => {
     const fixture = masteryEncounter({ mastered: ['knave:dark-knight'], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    enterDarkKnightStance(fixture);
     const chain = new Chain(fixture.state);
-    chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'knave:dark-knight', targetIds: [] });
     expect(chain.state.actors[fixture.hero.id].stance?.stanceId).toBe('dark-knight');
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
     // The GM selects the foe (the scheduler never auto-selects, ICON p.87).
@@ -261,8 +278,8 @@ describe('Dark Knight mastery — Infectious Hatred (p.143)', () => {
 
   it('a successful save grants nothing, and an unmastered dark knight has no aura at all', () => {
     const fixture = masteryEncounter({ mastered: ['knave:dark-knight'], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
+    enterDarkKnightStance(fixture);
     const chain = new Chain(fixture.state);
-    chain.run({ type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'knave:dark-knight', targetIds: [] });
     chain.run({ type: 'END_TURN', actorId: fixture.hero.id });
     chain.run({ type: 'TAKE_TURN', actorId: fixture.foe.id });
     chain.run({ type: 'END_TURN', actorId: fixture.foe.id }, scriptedDice(12)); // d20 12 ≥ 10
@@ -273,7 +290,7 @@ describe('Dark Knight mastery — Infectious Hatred (p.143)', () => {
     // end has no save window and no hatred.
     const plain = masteryEncounter({ mastered: [], heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
     const plainChain = new Chain(plain.state);
-    plainChain.run({ type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'knave:dark-knight', targetIds: [] });
+    expect(plainChain.state.actors[plain.hero.id].stance).toBeNull();
     plainChain.run({ type: 'END_TURN', actorId: plain.hero.id });
     plainChain.run({ type: 'TAKE_TURN', actorId: plain.foe.id });
     plainChain.run({ type: 'END_TURN', actorId: plain.foe.id });

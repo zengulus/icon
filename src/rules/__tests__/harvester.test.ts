@@ -67,8 +67,11 @@ function blockCellsNear(state: EncounterState, center: Position, radius: number)
       cells.push(cell);
     }
   }
+  // Blockers are OBJECT entities: ICON p.95 objects "provide obstruction"
+  // while summons are intangible — a blocker must actually block the free-cell
+  // scan for these range-boundary fixtures to mean anything.
   const mutations: RuleMutation[] = cells.map((position, index) => ({
-    kind: 'entity', sourceId: 'fixture:blocker', operation: 'create', entityType: 'blocker',
+    kind: 'entity', sourceId: 'fixture:blocker', operation: 'create', entityType: 'boulder',
     ownerId: hero.id, positions: [position], count: 1, state: {},
   }));
   return applyEvents(state, [{

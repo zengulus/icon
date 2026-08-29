@@ -8,6 +8,7 @@ import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, regis
 import { tickPowerDie } from '../../kernels/power-die.js';
 import { resolveGamble } from '../../primitives/gamble-window.js';
 import { registerMovementEntryTrigger } from '../../kernels/movement-triggers.js';
+import { nearestCandidates } from '../../kernels/evaluate-query.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-geometry.js';
 import type { DiceSource } from '../../../dice.js';
 import type { EncounterActor, EncounterMark, EncounterState, Position } from '../../../types.js';
@@ -68,15 +69,25 @@ export function symphonyMoteDetonationMutations(
   }
   if (actor.side === ownerSide) {
     mutations.push({ kind: 'resource', sourceId: 'chanter:symphony', actorId: actor.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null });
-    // May fly 1: deterministic — one step toward the nearest foe (or +x).
-    const foes = Object.values(state.actors).filter((candidate) =>
-      candidate.side !== actor.side && candidate.onBattlefield && !candidate.defeated && candidate.position,
+    // "May fly 1" — the blessed character's 1-space destination is a player
+    // choice. The historical "one step toward the nearest foe" default is an
+    // approximation (pre-existing; the direction itself is not source-named).
+    // The closest-foe selection is the shared min-distance operator — NO
+    // invented actor-id tie-break: when several foes are equidistant the
+    // direction is genuinely ambiguous and the optional "may fly 1" is
+    // declined instead (declining is always source-valid for "may").
+    const nearest = nearestCandidates(
+      Object.values(state.actors).filter((candidate) =>
+        candidate.side !== actor.side && candidate.onBattlefield && !candidate.defeated && candidate.position,
+      ),
+      position,
     );
-    const direction = foes.length > 0
-      ? axisDirection(position, foes.sort((a, b) =>
-        distance(a.position!, position!) - distance(b.position!, position!) || a.id.localeCompare(b.id),
-      )[0].position!)
-      : { x: 1, y: 0 };
+    const direction = nearest.length === 1
+      ? axisDirection(position, nearest[0].position!)
+      : nearest.length === 0
+        ? { x: 1, y: 0 }
+        : null;
+    if (direction === null) return mutations;
     const next = { x: center.x + Math.sign(direction.x), y: center.y + Math.sign(direction.y) };
     const free = next.x >= 0 && next.y >= 0 && next.x < state.grid.width && next.y < state.grid.height
       && !Object.values(state.actors).some((candidate) =>
@@ -935,23 +946,14 @@ registerLifecycleRecipe({
   },
 });
 
-/** ICON p.141 Dark Knight: at the start of the user's turn the hatred+ target
- * refreshes to the currently closest foe. */
-registerLifecycleRecipe({
-  sourceId: 'knave:dark-knight',
-  phase: 'turn-start',
-  applies: (actor) => actor.stance?.stanceId === 'dark-knight' && Boolean(actor.position),
-  resolve: (state, actor) => {
-    if (actor.stance?.stanceId !== 'dark-knight' || !actor.position) return;
-    const closest = Object.values(state.actors)
-      .filter((foe) => foe.side !== actor.side && !foe.defeated && foe.onBattlefield && foe.position)
-      .sort((a, b) => distance(a.position, actor.position) - distance(b.position, actor.position) || a.id.localeCompare(b.id))[0];
-    if (closest) {
-      actor.ruleState['hatred-of'] = closest.id;
-      actor.ruleStateOwners['hatred-of'] = actor.id;
-    }
-  },
-});
+/** The Dark Knight turn-start hatred refresh is REMOVED (corrective underlay
+ * pass 2026-08-30): ICON p.143 grants the player a choice among equidistant
+ * closest foes at this timing, the engine has no player-choice seam there
+ * yet, and the old inline sort invented an actor-id tie-break. The whole
+ * hatred+ clause is retracted with the ability (see
+ * manual-programs.ts DOCUMENTED_NON_EXECUTABLE); the stance itself can no
+ * longer be entered through the command layer. The mastery's Infectious
+ * Hatred aura + turn-end save (below) are separate, exact, and unchanged. */
 
 /** ICON p.142 Intimidate: starting your turn adjacent to the marked foe deals
  * fray damage, stuns them, and ends the mark. Mastery (Iron Skull, p.143):

@@ -122,7 +122,8 @@ const positionWithinGrid = (position: Position, state: Pick<EncounterState, 'gri
 /** The ORDERED in-grid candidate cells within Chebyshev `radius` of `center`
  * (excluding the center), sorted by distance then coordinates so default
  * placement is deterministic (mirrors the position-candidate ordering in
- * `kernels/evaluate-query.ts` `evaluatePositionCandidates`).
+ * `kernels/evaluate-query.ts` `evaluatePositions` with the
+ * distance-from-origin ordering policy).
  * This is a pure geometric enumeration — it does NOT decide creation
  * legality. The entity mutation carries the ordered list and the shared
  * `validateEntityCreation` authority picks the first legal candidate
@@ -142,7 +143,13 @@ export function orderedFreeCellsNear(state: EncounterState, center: Position, ra
  * `center` (orthogonal neighbors when `orthogonalOnly`), sorted by distance
  * then coordinates so default placement is deterministic (mirrors the
  * position-candidate ordering in `kernels/evaluate-query.ts`
- * `evaluatePositionCandidates`). */
+ * `evaluatePositions` with the distance-from-origin ordering policy).
+ * This is the LIFECYCLE summon-placement specialist: its occupancy read
+ * (any on-battlefield character or entity record, summons included) is
+ * intentionally conservative for the beast/portal summon actions that pin
+ * it in `__tests__/summons.test.ts` — it is NOT the generic obstruction
+ * predicate (`primitives/job-kit.ts` `occupied`), which per ICON p.95
+ * ignores intangible summons. */
 export function freeCellNear(state: EncounterState, center: Position, radius: number, orthogonalOnly = false): Position | null {
   const occupiedCell = (cell: Position) => Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position && samePosition(candidate.position, cell))
     || Object.values(state.entities).some((entity) => entity.positions[0] && samePosition(entity.positions[0], cell));

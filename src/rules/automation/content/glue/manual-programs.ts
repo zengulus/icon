@@ -226,7 +226,6 @@ export const EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
   'knave:provoke',
   'knave:revenge',
   'knave:riposte',
-  'knave:dark-knight',
   'knave:strongarm',
   'knave:intimidate',
   'knave:sucker-punch',
@@ -338,10 +337,10 @@ export const EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
   'stormbender:heave-ho',
   'stormbender:deepwrath',
   'stormbender:waterspout',
-  'stormbender:eye-of-the-storm',
 ]);
 
-/** Deliberately non-executable job abilities (Ultra Part 1, 2026-08-29).
+/** Deliberately non-executable job abilities (Ultra Part 1, 2026-08-29;
+ * corrective underlay pass 2026-08-30).
  *
  * `colossus:raging-wolf` is intentionally NOT in EXECUTABLE_JOB_ABILITY_IDS:
  * its complete semantics — "become unstoppable and immune to all damage
@@ -349,10 +348,33 @@ export const EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
  * use of this ability in the same combat becomes a free action" — have no
  * source-faithful representation yet, so it stays correctly unresolved
  * rather than being marked executable for its fly/quarter-flight half.
+ *
+ * Corrective pass retractions (2026-08-30): two abilities were previously
+ * listed as executable while resolving a player choice deterministically.
+ *
+ * `knave:dark-knight` (ICON p.143): "You gain hatred+ of the closest foe to
+ * you at the start of your turn or when you enter this stance. If multiple
+ * foes are equidistant, YOU MAY CHOOSE." The engine has no player-choice
+ * seam at that timing (U4 CHOOSE is not yet built), so picking an actor by
+ * id tie-break would invent a rule. The stance/sturdy/heroic halves are
+ * exact, but the hatred clause is not representable yet — the ability is
+ * retracted and its resolver fails closed on equidistant foes.
+ *
+ * `stormbender:eye-of-the-storm` (ICON p.236): "If an ally is in the center
+ * space, they may fly 4 after the ability resolves." The flight is a free
+ * player-chosen movement — the source never names a direction, let alone
+ * "away from the nearest foe". The resolver's nearest-foe flight direction
+ * was an invented deterministic rule; the clause is retracted (fails
+ * closed when an ally is in the center) and the ability is unresolved.
+ * Its talent 2 (piercing per area character) is likewise retracted, since
+ * its only execution path is the retracted ability resolver.
+ *
  * Tests assert the allowlist + catalog lockstep against this documented
  * set so a silent re-promotion is caught. */
 export const DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
   'colossus:raging-wolf',
+  'knave:dark-knight',
+  'stormbender:eye-of-the-storm',
 ]);
 
 /** The reviewed foe-ability slices have passed the same source-specific

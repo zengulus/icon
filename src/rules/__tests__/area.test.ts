@@ -358,78 +358,31 @@ describe('Pyre talent 2 — Exceed shoves the blast area (p.209)', () => {
   });
 });
 
-function stormbenderAreaEncounter(options: { heroAt?: Position; centerAt?: Position; extras?: Position[]; talents?: Record<string, 1 | 2> } = {}): AreaFixture {
-  let state = createEncounter('Eye Of The Storm fixture');
-  const hero = actorFromCharacter(validCharacter('Stormbinder'), options.heroAt ?? { x: 1, y: 4 });
-  hero.abilityIds = ['stormbender:eye-of-the-storm'];
-  hero.chapter = 3;
-  hero.talents = { ...(options.talents ?? {}) };
-  const center = createFoe('Relict', options.centerAt ?? { x: 3, y: 1 });
-  state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
-  state = executeCommand(state, { type: 'ADD_ACTOR', actor: center }).state;
-  const extraActors: EncounterActor[] = [];
-  for (const position of options.extras ?? []) {
-    const extra = createFoe('Grim', position);
-    extraActors.push(extra);
-    state = executeCommand(state, { type: 'ADD_ACTOR', actor: extra }).state;
-  }
-  state = startEncounterTo(state, hero.id);
-  return { state, hero, foe: center, second: extraActors[0] ?? null };
-}
-
-describe('Eye Of The Storm talent 2 — center character damage per area character (p.236)', () => {
-  it('without the talent, the center takes no piercing (regression)', () => {
-    const { state, hero, foe } = stormbenderAreaEncounter({
-      extras: [{ x: 2, y: 1 }, { x: 3, y: 2 }, { x: 4, y: 1 }],
-    });
-    const result = executeCommand(state, {
+describe('Eye Of The Storm — retracted with its talent 2 (p.236)', () => {
+  it('the ability and talent 2 are unresolved: the ally-center fly-4 is a free player-chosen flight', () => {
+    // ICON p.236: "If an ally is in the center space, they may fly 4 after
+    // the ability resolves" — a player-chosen flight the engine cannot
+    // represent yet (the old "away from the nearest foe" direction invented
+    // a rule). The ability and its program-level talent 2 (piercing per area
+    // character) are retracted together (manual-programs.ts
+    // DOCUMENTED_NON_EXECUTABLE), so neither USE_ABILITY nor EXECUTE_RULE
+    // may run the program.
+    let state = createEncounter('Eye Of The Storm retraction fixture');
+    const hero = actorFromCharacter(validCharacter('Stormbinder'), { x: 1, y: 4 });
+    hero.abilityIds = ['stormbender:eye-of-the-storm'];
+    hero.chapter = 3;
+    hero.talents = { 'stormbender:eye-of-the-storm': 2 };
+    const center = createFoe('Relict', { x: 3, y: 1 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: center }).state;
+    state = startEncounterTo(state, hero.id);
+    expect(() => executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
       sourceId: 'stormbender:eye-of-the-storm',
       actionId: 'default',
       timing: 'use',
-      input: { actorIds: { target: [foe.id] } },
-    }, scriptedDice(4, 4, 4)); // [D] to each other character in the blast
-    expect(result.state.actors[foe.id].hp).toBe(32); // center takes no piercing
-    expect(applyEvents(state, result.events)).toEqual(result.state);
-  });
-
-  it('with talent 2, the center takes 1 piercing per other character in the area, capped at three', () => {
-    // Four other characters in the blast (2,1), (3,2), (4,1), (2,2): the
-    // count is capped at 3, so the center takes exactly 3 piercing — plus 1
-    // from the vulnerable status the foe center gains (vulnerable adds 1 to
-    // each damage instance, p.104), for 4 total (32 → 28).
-    const { state, hero, foe } = stormbenderAreaEncounter({
-      extras: [{ x: 2, y: 1 }, { x: 3, y: 2 }, { x: 4, y: 1 }, { x: 2, y: 2 }],
-      talents: { 'stormbender:eye-of-the-storm': 2 },
-    });
-    const result = executeCommand(state, {
-      type: 'EXECUTE_RULE',
-      actorId: hero.id,
-      sourceId: 'stormbender:eye-of-the-storm',
-      actionId: 'default',
-      timing: 'use',
-      input: { actorIds: { target: [foe.id] } },
-    }, scriptedDice(4, 4, 4, 4));
-    expect(result.state.actors[foe.id].hp).toBe(28); // 32 - (3 piercing + 1 vulnerable)
-    expect(result.state.actors[foe.id].statuses).toContain('vulnerable');
-    expect(applyEvents(state, result.events)).toEqual(result.state);
-  });
-
-  it('with only one other character in the area, the center takes exactly 1 piercing (+1 vulnerable)', () => {
-    const { state, hero, foe } = stormbenderAreaEncounter({
-      extras: [{ x: 2, y: 1 }],
-      talents: { 'stormbender:eye-of-the-storm': 2 },
-    });
-    const result = executeCommand(state, {
-      type: 'EXECUTE_RULE',
-      actorId: hero.id,
-      sourceId: 'stormbender:eye-of-the-storm',
-      actionId: 'default',
-      timing: 'use',
-      input: { actorIds: { target: [foe.id] } },
-    }, scriptedDice(4));
-    expect(result.state.actors[foe.id].hp).toBe(30); // 32 - (1 piercing + 1 vulnerable)
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+      input: { actorIds: { target: [center.id] } },
+    }, scriptedDice(4))).toThrow('does not have an independently verified RuleProgram implementation');
   });
 });
