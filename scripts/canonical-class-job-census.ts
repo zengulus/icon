@@ -685,6 +685,133 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // an ally gains regeneration" — entity/terrain alternation + standing-in
   // regeneration zone.
 
+  // ── F4 (2026-08-29): `{fly-grant}` coarse-family decomposition ──
+  // The syntactic `fly-grant` blocker was a keyword artifact, NOT one reusable
+  // missing mechanic. The engine already HAS a one-shot Fly movement mode
+  // (`movement: 'fly'` + `flyMutation`, resolved by the move reducer and the
+  // canonical `plannedFly` placement helper). Reading every source passage that
+  // mentions flying (ICON 1.5 pp.131–236; general rules p.92 for footprint
+  // terrain costs) shows the units fall into genuinely distinct families below,
+  // each a real missing reusable capability:
+  //   duration-fly-state      — the FLYING STATE (not a move) for a duration /
+  //                             area / conditional window ("flying until the end
+  //                             of their next turn", "for the duration of that
+  //                             movement", "have flying in the area").
+  //   fly-move-timing         — grant the self a one-shot Fly move at a source
+  //                             timing (before an ability, after resolve, on a
+  //                             trigger), gated on equipped talent where held.
+  //   fly-move-substitution   — REPLACE another granted movement (dash, shove)
+  //                             with a Fly move.
+  //   fly-multirecipient      — grant a fly move/state to ALLIED/area recipients,
+  //                             not just the self.
+  //   fly-distance-modifier   — INCREASE an existing Fly's distance to N (often
+  //                             conditional: at 1 hp).
+  //   fly-benefit-rider       — a benefit that applies WHILE flying (unstoppable,
+  //                             damage immunity) on top of the flight itself.
+  //   fly-or-teleport-repeat  — a per-bounce choice of fly OR teleport, repeatable.
+  //   once-per-round-fly-grant
+  //                         — an allied fly grant capped once per round by a gate.
+  //   flying-targeting        — a mechanic that merely AFFECTS flying characters.
+  // Every record that carried `fly-grant` (17 singletons + 13 compounds) is
+  // re-audited below against its COMPLETE passage. NONE is bulk-promoted just
+  // because the keyword label disappeared; each keeps its precise residual.
+  // (colossus:raging-wolf:talent:2 is separately promoted once wired as a
+  // source-exact fly-distance-modifier consumer in the Raging Wolf resolver.)
+  // ── Colossus ──
+  'colossus:trait:great-leap': ['duration-fly-state'],
+  // "When you would end any movement on a lower elevation than you started,
+  // you may gain flying FOR THE DURATION OF THAT MOVEMENT" — a timed flying
+  // state, not a one-shot fly move.
+  'colossus:valkyrie:talent:2': ['fly-distance-modifier', 'fly-benefit-rider'],
+  // "unstoppable and immune to all damage while flying with Valkyrie. Charge:
+  // You may fly 3 instead" — a charge-gated distance INCREASE (1→3) plus the
+  // while-flying benefit rider (unstoppable + damage immunity).
+  'colossus:valkyrie:mastery': ['fly-multirecipient', 'duration-fly-state'],
+  // "When you use Valkyrie, all ALLIES may fly 1. If they end this flight on a
+  // lower elevation… they may fly 1 again" — allied fly grant + a conditional
+  // descent re-fly (timed flying on movement).
+  'colossus:raging-wolf:talent:2': ['fly-distance-modifier'],
+  // "While you're at 1 hp, increase flight to 3" — a conditional distance
+  // increase of the existing flight. PROMOTED (2026-08-29) once wired into the
+  // Raging Wolf resolver with the equipped-rank + 1-hp gate.
+  // ── Fool ──
+  'fool:cavaliere:mastery': ['fly-move-timing'],
+  // "After Cavaliere resolves, you may fly 4" — a post-resolution self fly.
+  'fool:carnevale:talent:1': ['fly-move-substitution'],
+  // "Fly 1 after summoning each bomb instead. Charge: Fly 2 instead" — REPLACES
+  // the after-summon dash with a Fly move (charge-varied distance).
+  'fool:party-favor:talent:1': ['fly-distance-modifier'],
+  // "Increase flight on yourself to 3" — a self distance increase (base
+  // Party Favor does not currently grant itself flight, so it stays unresolved).
+  'fool:masquerade:talent:2': ['fly-move-timing'],
+  // "Fly 1, then summon a bomb after swapping" — a post-swap self fly (the
+  // bomb summon itself is already expressible via the entity seam).
+  'fool:diablo:talent:2': ['fly-multirecipient', 'fly-distance-modifier'],
+  // "Allies in the area can fly 1. Charge: Allies in the area can fly 3" — an
+  // allied, area-scoped fly grant with a charge-varied distance.
+  'fool:chronotemper:talent:2': ['fly-move-timing'],
+  // "Before and after the dash, fly 1" — a pre-AND-post-move fly timing pair.
+  // ── Chanter ──
+  'chanter:trait:uplift': ['fly-multirecipient', 'once-per-round-fly-grant'],
+  // "The first time a round you use any ability that allows you to fly, all
+  // allies can fly 1" — an allied fly grant gated once per round.
+  'chanter:felicity:talent:2': ['fly-move-timing'],
+  // "You can fly 1, then shove an adjacent character 1 when granting movement
+  // from this ability" — a self fly move at the movement-grant edge.
+  'chanter:aria:talent:1': ['fly-move-timing'],
+  // "You may fly 1 when Aria's special effect triggers" — a trigger-gated self fly.
+  'chanter:felicity:mastery': ['action-type-change', 'range-modifier', 'fly-move-timing'],
+  // FANTASIA combo: remove/return an ally and "then they may fly 1" — a
+  // post-return allied fly move (the other residuals stay).
+  'chanter:holy:mastery': ['blast-template', 'resource-management', 'terrain-create', 'vigor-grant', 'duration-fly-state'],
+  // "Allies have FLYING in the area" — an area-scoped flying STATE, not a move.
+  'chanter:holy:talent:2': ['fly-move-timing'],
+  // "fly 1 before using Holy, or 3 when charged" — a pre-ability self fly
+  // (charge-varied distance).
+  'chanter:trait:blessing-of-faith': ['fly-move-timing'],
+  // "gain True Strike on that ability and fly 2 before using it" — a pre-ability
+  // self fly gated on spending a blessing token.
+  'chanter:trait:divine-grace': ['range-modifier', 'fly-move-timing', 'once-per-round-fly-grant'],
+  // "Once a round, when you gain or spend a combo token, you may fly 2, then
+  // Bless yourself or an ally in range 3" — once-per-round fly + a post-fly
+  // bless in range (the range-modifier remains).
+  // ── Geomancer ──
+  'geomancer:helix-heel:talent:2': ['fly-or-teleport-repeat'],
+  // "fly 1 or teleport 1 space for each bounce (up to three times)" — a
+  // per-bounce fly-or-teleport choice, repeatable up to 3.
+  'geomancer:dragon-dive:talent:2': ['delay-mechanic', 'fly-move-timing'],
+  // "fly 3 after Dragon Dive's delay effect resolves" — a post-delay self fly.
+  // ── Stormbender ──
+  'stormbender:tsunami:mastery': ['action-type-change', 'movement-distance-modifier', 'flying-targeting'],
+  // LEGENDARY STORM does NOT grant flight: "Tsunami becomes 1 action, moves
+  // anywhere from 1 to 4 spaces instead of a flat 4, and also affects flying
+  // foes" — an action-cost change, a movement-distance modifier, and
+  // flying-foe targeting. Reclassified out of fly-grant entirely.
+  'stormbender:geyser:mastery': ['fly-multirecipient', 'duration-fly-state'],
+  // "Allies can be placed up to three spaces away by a geyser and after landing
+  // gain flying UNTIL THE END OF THEIR NEXT TURN" — an allied, timed flying STATE.
+  'stormbender:gust:talent:2': ['fly-move-substitution', 'fly-multirecipient'],
+  // "Yourself and allies that are shoved by gust can fly 2 after stopping
+  // INSTEAD of being shoved" — a shove→fly substitution for self+allies.
+  // ── Compound records whose `fly-grant` component is now precise ──
+  'colossus:boiling-blood:talent:2': ['fly-move-timing'],
+  // "You can rush or fly 1 before using any ability while Defy Death is active"
+  // — a pre-ability movement fly choice gated on the Defy Death state.
+  'colossus:takedown:talent:1': ['rush-modifier', 'fly-move-timing'],
+  // "You may rush 2 or fly 2 before using Takedown" — a pre-ability rush-or-fly.
+  'freelancer:soul-shot:mastery': ['resource-management', 'vigor-grant', 'fly-multirecipient'],
+  // "Allies Soul Shot passes through gain 3 vigor and may fly 3" — a passed-
+  // through-allies fly grant (vigor-grant / resource-management stay).
+  'stormbender:limit-break': ['action-type-change', 'cover-mechanic', 'terrain-create', 'duration-fly-state'],
+  // "take on a fearsome elemental form… gain flying and phasing… for the rest of
+  // combat" — a combat-long flying STATE plus the rest of the limit-break.
+  'stormbender:trait:pelagic-rage': ['cover-mechanic', 'terrain-create', 'duration-fly-state', 'fly-multirecipient'],
+  // "Yourself and allies in the aura gain flying and cover… for the rest of
+  // combat" — a combat-long allied flying state (area).
+  'stormbender:trait:sea-legs': ['damage-modifier', 'terrain-create', 'duration-fly-state'],
+  // "While inside any of your own terrain effects, you have flying" — a
+  // conditional flying-state while inside owned terrain.
+
   'freelancer:trait:astral-binding': ['action-type-change', 'mark-stacking'],
   // "stack up to two marks" = mark-stacking; the free-action group teleport
   // of marked characters rides the F1 teleport gateway (implemented) and the
@@ -967,8 +1094,6 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'colossus:gigaton-whip:talent:1': ['collide-rider', 'new-shove-effect'],
   // "If your target collides with another character, shove that character 1
   // and deal 2 damage"
-  'colossus:raging-wolf:talent:2': ['fly-grant'],
-  // "While you're at 1 hp, increase flight to 3" — conditional fly grant
   'colossus:raging-wolf:mastery': ['interrupt-timing'],
   // "You can immediately use Raging Wolf as an interrupt before becoming
   // defeated. This ignores the interrupt limit." — a before-defeat timing
@@ -1017,9 +1142,6 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'fool:gallows-humor:talent:1': ['defeat-trigger'],
   // "instantly ticks up to maximum if an ally is defeated anywhere" — the
   // ticker exists (lifecycle recipe); the on-any-defeat reactive is missing
-  'fool:party-favor:talent:1': ['fly-grant'],
-  // "Increase flight on yourself to 3"
-
   // ── Freelancer / Shade ──
   'freelancer:strafe-shot:talent:2': ['effect-count'],
   'freelancer:strafe-shot:mastery': ['interrupt-timing'],
@@ -1110,9 +1232,10 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "waterspouts grow to a small blast area... characters that start their
   // turns adjacent... are shoved 1 in a direction of your choice" — area
   // modifier + terrain + new shove with player-chosen direction
-  'chanter:limit-break': ['cover-mechanic', 'fly-grant', 'range-modifier', 'resource-management', 'new-shove-effect', 'stance-gate'],
+  'chanter:limit-break': ['cover-mechanic', 'duration-fly-state', 'range-modifier', 'resource-management', 'new-shove-effect', 'stance-gate'],
   // "Angrboda: An allied character gains sturdy, and their attacks gain
-  // true strike and shove 1" — the shove is a grant to allies' attacks
+  // true strike and shove 1" — the shove is a grant to allies' attacks; the
+  // Parzival saint grants the FLYING STATE (timed/area), not a one-shot move
   'geomancer:limit-break': ['blast-template', 'delay-mechanic', 'new-shove-effect'],
   // "End your turn. You dive into the earth... gain Delay: Your next turn
   // must be slow. At the start of that turn... shoved 1 in the direction
@@ -1394,10 +1517,16 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('action-type-change');
   }
 
-  // Fly grant: flying, fly N
-  if (/\bfly(?:ing|\s+\d|\s+n|\s+to)/.test(text)) {
-    blockers.push('fly-grant');
-  }
+  // NOTE: the syntactic `fly-grant` blocker family is retired (2026-08-29,
+  // F4 audit). A keyword mention of "fly N / flying" is NOT one reusable
+  // mechanic: ICON uses flying both as a one-shot movement ("Fly 1"), as a
+  // timed/area STATE ("flying until the end of their next turn"), as a
+  // distance INCREASE of an existing flight, as a SUBSTITUTION for another
+  // granted move, and as a multi-recipient allied grant. Every record that
+  // previously carried `fly-grant` is re-audited against its complete source
+  // passage and reclassified to the precise family in
+  // RECLASSIFIED_BLOCKERS. The auto-push is removed so no new keyword-derived
+  // `fly-grant` singletons can reappear.
 
   // Damage modifier: bonus damage, deal extra damage, extra damage
   if (/\b(?:bonus damage|extra damage|deals?\s+(?:\d+\s+)?(?:additional|bonus|extra)\s+damage|deal\s+(?:\d+\s+)?(?:additional|bonus|extra)\s+damage|additional\s+\d+\s+damage)\b/.test(text)) {

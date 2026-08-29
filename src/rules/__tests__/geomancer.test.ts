@@ -274,6 +274,38 @@ describe('Geomancer ability automation (p.215–221)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
+  it('Terraforming create: rejects a Size>1 character\u2019s NON-ANCHOR footprint cells (ICON p.92)', () => {
+    // A Size-2 foe anchored at (2,1) occupies footprint cells (3,1)/(3,2) — both
+    // inside the burst around the target (5,1) — while its anchor sits outside it.
+    // Character occupancy must be footprint-aware, never anchor-only.
+    const { state, hero, foe, second } = geomancerEncounter({ second: { x: 2, y: 1 } });
+    state.actors[second!.id].size = 2;
+    // A geometric Line 3 running through the Size-2 footprint cell (3,2) is
+    // rejected fail-closed: the only blocking occupancy is that footprint cell.
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: {
+        actorIds: { target: [foe.id] },
+        options: { effects: 'boulders,difficult' },
+        positions: { line: [{ x: 3, y: 1 }, { x: 3, y: 2 }, { x: 3, y: 3 }] },
+      },
+    }, scriptedDice())).toThrow(/character-occupied/);
+    // boulders and pits also shun the whole footprint: none land on (3,1)/(3,2).
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'boulders,pits' } },
+    }, scriptedDice());
+    for (const b of Object.values(result.state.entities).filter((e) => e.type === 'boulder')) {
+      expect([b.positions[0]!.x, b.positions[0]!.y]).not.toEqual([3, 1]);
+      expect([b.positions[0]!.x, b.positions[0]!.y]).not.toEqual([3, 2]);
+    }
+    for (const p of result.state.terrainEffects.filter((e) => e.terrain === 'pit').flatMap((e) => e.positions)) {
+      expect([p.x, p.y]).not.toEqual([3, 1]);
+      expect([p.x, p.y]).not.toEqual([3, 2]);
+    }
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
   it('Terraforming difficult: a Line 3 running through a character-occupied space is rejected fail-closed', () => {
     const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
     // A geometrically valid Line 3 that passes through the foe (5,1): forbidden.

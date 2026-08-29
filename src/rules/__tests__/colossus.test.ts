@@ -329,4 +329,54 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(blown.pendingInterrupts.some((window) => window.actorId === hero.id && window.trigger === 'defeated')).toBe(false);
     expect(blown.pendingInterrupts.every((window) => !window.heldDamage)).toBe(true);
   });
+
+  // ICON p.135 Raging Wolf talent 2: "While you're at 1 hp, increase flight
+  // to 3." The quarter-hp FLIGHT widens to 3 only when the equipped-talent
+  // gate AND the exactly-1-hp gate both hold; otherwise it stays 1.
+  // columnWolf predicate: hero at (1,1), a single foe at (5,1), so the fly
+  // direction is +x — distance 3 → (4,1), distance 1 → (2,1).
+  describe('Raging Wolf talent 2 (flight 3 while at 1 hp)', () => {
+    const flyDestinations = (state: EncounterState, heroId: string) => {
+      const result = executeCommand(state, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'colossus:raging-wolf', targetIds: [] }, scriptedDice());
+      const flies = mutationsOf(result.events, 'colossus:raging-wolf').filter((m) => m.kind === 'move' && (m as { movement?: string }).movement === 'fly');
+      return { destinations: flies.flatMap((m) => ('positions' in m && Array.isArray((m as { positions: Position[] }).positions) ? m.positions : [])), result };
+    };
+
+    it('rank 2 + at 1 hp: the quarter-hp flight becomes 3 spaces (positive)', () => {
+      const { state, hero, foe } = colossusEncounter({ second: null, foe: { x: 5, y: 1 } });
+      state.actors[hero.id].hp = 1;
+      state.actors[hero.id].talents['colossus:raging-wolf'] = 2;
+      const { destinations, result } = flyDestinations(state, hero.id);
+      expect(destinations.length).toBeGreaterThan(0);
+      // Hero at (1,1): every fly move is toward the +x foe at distance 3.
+      for (const cell of destinations) expect(cell.x - 1).toBe(3);
+      expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+    });
+
+    it('rank 2 but hp 8 (quarter but not 1): flight stays 1 (hp gate negative)', () => {
+      const { state, hero, foe } = colossusEncounter({ second: null, foe: { x: 5, y: 1 } });
+      state.actors[hero.id].hp = 8;
+      state.actors[hero.id].talents['colossus:raging-wolf'] = 2;
+      const { destinations } = flyDestinations(state, hero.id);
+      expect(destinations.length).toBeGreaterThan(0);
+      for (const cell of destinations) expect(cell.x - 1).toBe(1);
+    });
+
+    it('at 1 hp but rank 1 (talent 1 only): flight stays 1 (rank gate negative)', () => {
+      const { state, hero, foe } = colossusEncounter({ second: null, foe: { x: 5, y: 1 } });
+      state.actors[hero.id].hp = 1;
+      state.actors[hero.id].talents['colossus:raging-wolf'] = 1;
+      const { destinations } = flyDestinations(state, hero.id);
+      expect(destinations.length).toBeGreaterThan(0);
+      for (const cell of destinations) expect(cell.x - 1).toBe(1);
+    });
+
+    it('at 1 hp but no talent: flight stays 1 (unequipped negative)', () => {
+      const { state, hero, foe } = colossusEncounter({ second: null, foe: { x: 5, y: 1 } });
+      state.actors[hero.id].hp = 1;
+      const { destinations } = flyDestinations(state, hero.id);
+      expect(destinations.length).toBeGreaterThan(0);
+      for (const cell of destinations) expect(cell.x - 1).toBe(1);
+    });
+  });
 });

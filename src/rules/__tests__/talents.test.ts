@@ -92,7 +92,7 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 35 wired / 7 program-level / 3 passive-projection / 5 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 231 documented', () => {
+  it('covers exactly the 288 source talents with 35 wired / 8 program-level / 3 passive-projection / 5 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 227 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
@@ -118,9 +118,11 @@ describe('F7 closed talent inventory', () => {
     // (Spinning Top t2, Chaos Tarot t2, Terraforming t1) promoted — each
     // gates its variant on the equipped talent rank, so the generic slow-turn
     // `charge` trigger alone never grants a talent effect.
+    // F4 (2026-08-29): +1 program-level `colossus:raging-wolf:talent:2`
+    // (flight 1→3 while at 1 hp, rank-gated inside the Raging Wolf resolver).
     // None are fold triggers or program-emitted variants in the wrong home.
-    expect(getExecutableTalentIds().size).toBe(61);
-    expect(getDocumentedTalentIds(units).size).toBe(228);
+    expect(getExecutableTalentIds().size).toBe(62);
+    expect(getDocumentedTalentIds(units).size).toBe(227);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -138,6 +140,7 @@ describe('F7 closed talent inventory', () => {
     expect(recipes['sealer:divine-aegis:talent:2']?.status).toBe('program-level');
     expect(recipes['knave:strongarm:talent:1']?.status).toBe('program-level');
     expect(recipes['spellblade:nothung:talent:2']?.status).toBe('program-level');
+    expect(recipes['colossus:raging-wolf:talent:2']?.status).toBe('program-level');
     // The four bonus-damage rows fold their dice at the USE_ABILITY boundary
     // (no post-mutation fold trigger, no program-emitted variant).
     expect(recipes['knave:low-blow:talent:1']?.status).toBe('bonus-damage');

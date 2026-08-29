@@ -774,3 +774,26 @@ describe('F3 creation-intent split: placement region vs creator LoS origin', () 
     expect(r).toEqual({ positions: [{ x: 1, y: 2 }], count: 1 });
   });
 });
+
+describe('F6 creation obstruction uses the dynamic terrain view', () => {
+  it('a dynamic impassable TERRAIN EFFECT blocks a creation cell and skips it', () => {
+    const { state, hero } = summonEncounter([]);
+    // An impassable overlay created during play occupies (2,1) and (3,1), so
+    // the ordinary `state.grid.terrain` view (empty) must NOT be trusted: the
+    // canonical combined terrain union decides obstruction. The first candidate
+    // (2,1) is obstructed; (4,1) is legal and selected.
+    state.terrainEffects.push({ id: 'wallfx', sourceId: 'fixture', ownerId: 'o', terrain: 'impassable', positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }], height: null, duration: null });
+    const result = validateEntityCreation(state, {
+      ownerId: hero.id, entityType: 'bomb', count: 1,
+      positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }],
+      state: {}, duration: null,
+      spatial: { origin: { x: 1, y: 1 }, maxRange: 6 },
+    });
+    expect(result).toEqual({ positions: [{ x: 4, y: 1 }], count: 1 });
+    // Note (source fidelity): LoS itself blocks only on grid impassable terrain
+    // or an explicitly registered LoS-blocking effect — a dynamic impassable
+    // overlay OBSTRUCTS creation cells but does NOT by itself block the
+    // creator's line of sight (line-of-sight.ts). That closed separation is
+    // preserved rather than conflated here.
+  });
+});

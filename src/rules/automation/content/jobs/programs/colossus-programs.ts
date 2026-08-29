@@ -219,6 +219,10 @@ const ragingWolfEffects: RuleResolver = (context) => {
   if (source.hp > maxHp / 2) {
     throw new RuleProgramViolation('raging-wolf.bloodied', 'Raging Wolf has no effect unless you are bloodied.');
   }
+  // ICON p.135 Raging Wolf talent 2: "While you're at 1 hp, increase flight
+  // to 3." The equipped talent (rank ≥ 2) widens the quarter-hp FLIGHT (not
+  // the rush) from 1 to 3 exactly while the user is at 1 hp.
+  const flyDistanceTalent = (source.talents?.['colossus:raging-wolf'] ?? 0) >= 2;
   const mutations: RuleMutation[] = [];
   if (context.triggers?.has('heroic')) {
     mutations.push(conditionMutation(context, source.id, 'unstoppable'));
@@ -243,7 +247,9 @@ const ragingWolfEffects: RuleResolver = (context) => {
   const quarterChain = () => {
     const foe = nearestFoe(context, position, source.id);
     const direction = foe?.position ? axisDirection(position, foe.position) : { x: 1, y: 0 };
-    const fly = plannedFly(context, source.id, 1, direction);
+    // Talent 2: while at exactly 1 hp the flight becomes 3 spaces (ICON p.135).
+    const flySteps = source.hp <= 1 && flyDistanceTalent ? 3 : 1;
+    const fly = plannedFly(context, source.id, flySteps, direction);
     if (fly) mutations.push(flyMutation(context, source.id, fly));
     const landed = fly ?? position;
     for (const adjacent of Object.values(context.state.actors)) {

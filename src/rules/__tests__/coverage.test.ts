@@ -111,15 +111,17 @@ describe('rules automation coverage gate', () => {
     // Top t2, Chaos Tarot t2, Terraforming t1) promoted (gated on equipped
     // talent rank), so the generic slow-turn `charge` trigger alone never
     // grants a talent effect.
+    // 2026-08-29 (F4): +1 program-level `colossus:raging-wolf:talent:2`
+    // (flight 1→3 while at 1 hp, rank-gated in the Raging Wolf resolver).
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4700,
-      completePrograms: 479,
-      unsupportedPrograms: 2796,
-      completeClauses: 1619,
-      unsupportedClauses: 3081,
+      completePrograms: 480,
+      unsupportedPrograms: 2795,
+      completeClauses: 1620,
+      unsupportedClauses: 3080,
       unsupportedByKind: {
-        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 227, 'mastery': 129,
+        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 226, 'mastery': 129,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

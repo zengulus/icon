@@ -68,11 +68,24 @@ function entitiesAt(state: EncounterState, position: Position): EncounterEntity[
   return Object.values(state.entities).filter((entity) => entity.positions.some((cell) => sameCell(cell, position)));
 }
 
+/** The per-cell union of base grid terrain and overlay terrain effects, the
+ * SAME unified view the movement planner and line-of-sight use — so a dynamic
+ * impassable effect created during play (not merely a base grid cell) can block
+ * a later creation cell. An undriven effect blocks only when i's terrain name
+ * is impassable, matching the canonical `terrainAt` union in encounter.ts. */
+function terrainTypesAt(state: EncounterState, position: Position): ReadonlySet<string> {
+  const types = new Set<string>();
+  for (const cell of state.grid.terrain) if (sameCell(cell.position, position)) types.add(cell.type);
+  for (const effect of state.terrainEffects) if (effect.positions.some((p) => sameCell(p, position))) types.add(effect.terrain);
+  return types;
+}
+
 /** ICON general rule: creation spaces must be free AND unobstructed. Impassable
  * terrain (p.89/p.92) blocks creation unless the source explicitly says
- * otherwise. */
+ * otherwise — including a dynamic impassable terrain effect, not merely a base
+ * `state.grid.terrain` cell. */
 function hasObstruction(state: EncounterState, position: Position): boolean {
-  return state.grid.terrain.some((cell) => sameCell(cell.position, position) && cell.type === 'impassable');
+  return terrainTypesAt(state, position).has('impassable');
 }
 
 /** A creation occupies a cell legally when it is free of characters and of a
@@ -137,13 +150,9 @@ export function validateEntityCreation(state: EncounterState, request: EntityCre
     // total stacked object height isn't past 3; over-stacking is rejected.
     if (objectStackTooHigh(state, kind, position, newHeight)) continue;
     // ICON general rule: line of sight from the CREATOR (spatial origin) to
-    // the creation cell — not from the placement region center.
-    if (spatial && footprint.some((cell) => !hasLineOfSight({ grid: state.grid, terrainAt: (pos) => {
-      const values = new Set<string>();
-      for (const t of state.grid.terrain) if (t.position.x === pos.x && t.position.y === pos.y) values.add(t.type);
-      for (const e of state.terrainEffects) if (e.positions.some((p) => p.x === pos.x && p.y === pos.y)) values.add(e.terrain);
-      return values;
-    }}, spatial.origin!, cell))) continue;
+    // the creation cell — not from the placement region center — using the same
+    // combined terrain view as the obstruction check above.
+    if (spatial && footprint.some((cell) => !hasLineOfSight({ grid: state.grid, terrainAt: (pos) => terrainTypesAt(state, pos) }, spatial.origin!, cell))) continue;
     // ICON p.92: range validation using the canonical footprint metric (L∞
     // between occupied footprints) — the same distance authority targeting,
     // auras, and the attack modifiers use. For a Size-1 creator this

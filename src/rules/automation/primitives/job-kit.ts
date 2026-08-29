@@ -5,7 +5,7 @@ import { footprintCells, footprintIntersectsCells, footprintsOverlap } from './s
 import type { Position } from '../../types.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import type { DiceSource } from '../../dice.js';
-import { entityKindOf } from './entity-kind.js';
+import { entityKind, entityKindOf } from './entity-kind.js';
 import type {
   RuleAction,
   RuleActorView,
@@ -469,7 +469,11 @@ export function summonEntity(
 ): RuleMutation[] {
   const radius = options.radius ?? 1;
   const count = options.count ?? 1;
-  const category = options.category ?? 'summon';
+  // The category is derived from the CENTRAL registry by default so ordinary
+  // objects (boulder/shrine/geyser/…) need no redundant explicit `category`;
+  // an explicit override is reserved for source semantics the registry cannot
+  // express (e.g. a persistent companion summon).
+  const category = options.category ?? entityKind(entityType);
   // Creator LoS authority only by default: placement region bounds the cells;
   // an explicit source range (footprint distance from the creator) is added
   // when the source defines one. The placement radius is NEVER converted into

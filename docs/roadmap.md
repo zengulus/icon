@@ -193,9 +193,19 @@ cell-dependent exceptions (Seer Astra meteor adjacency damage, Warden Underway
 portal, Fool bombs, Harvester dark-sliver, Stormbender geyser/waterspout
 fallback placement) stay explicit and documented.
 
-The next high-fan-out singleton family (regenerated 2026-08-29) is
-`{fly-grant}` 17 immediate (17 unlocks), then `{terrain-create}` 16 immediate
-(total 54).
+The F4 audit (2026-08-29) then DECOMPOSED the crowd-sourced `{fly-grant}`
+label: the one-shot Fly move already exists (`flyMutation` + `plannedFly`), so
+the keyword family was re-audited unit-by-unit. All 30 records (17 singletons +
+13 compounds) were reclassified to precise missing-mechanics families
+(`duration-fly-state`, `fly-move-timing`, `fly-move-substitution`,
+`fly-multirecipient`, `fly-distance-modifier`, `fly-benefit-rider`,
+`fly-or-teleport-repeat`, `once-per-round-fly-grant`, `flying-targeting`), and`stormbender:tsunami:mastery` was removed from the family entirely (it is a
+non-fly action-cost + movement-distance + flying-foe-targeting mastery). The
+`{fly-grant}` label is retired (0 occurrences). The genuinely-homogeneous
+`fly-distance-modifier` subfamily was implemented at the existing fly authority
+and `colossus:raging-wolf:talent:2` promoted (416→415). The next high-fan-out
+singleton family (regenerated 2026-08-29) is now `{terrain-create}` 16
+immediate (total 54).
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

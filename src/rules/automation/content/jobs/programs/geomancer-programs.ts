@@ -2,6 +2,7 @@ import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import { entityKindOf } from '../../../primitives/entity-kind.js';
+import { footprintCells } from '../../../primitives/spatial-intent.js';
 import { validateLine } from '../../../../area-geometry.js';
 import {
   axisDirection, sameCell, squareArea, withinGrid, occupied,
@@ -136,7 +137,7 @@ const geoEffects: RuleResolver = (context) => {
     mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
   const boulder = source.position
-    ? summonEntity(context, source.id, 'boulder', target.position, { radius: 1, count: 1, state: { height: 1 }, category: 'object', losOrigin: source.position })[0]
+    ? summonEntity(context, source.id, 'boulder', target.position, { radius: 1, count: 1, state: { height: 1 }, losOrigin: source.position })[0]
     : undefined;
   if (boulder) mutations.push(boulder);
   if (context.triggers?.has('charge')) {
@@ -274,8 +275,13 @@ const terraformingEffects: RuleResolver = (context) => {
   // the REMOVE bullet (removal may target area terrain regardless of who
   // occupies the cell). Objects may still stack onto other objects (the
   // reducer enforces the ≤3 ceiling); terrain may overlap other terrain.
+  // ICON Size N characters occupy an N×N footprint (p.92), so a cell is
+  // character-occupied when it lies in ANY living actor's footprint — not just
+  // its anchor cell. Reuses the canonical `footprintCells` authority (the same
+  // helper validateEntityCreation uses); no second geometry implementation.
   const characterOccupiedAt = (cell: { x: number; y: number }): boolean =>
-    Object.values(context.state.actors).some((actor) => !actor.defeated && actor.position !== null && sameCell(actor.position, cell));
+    Object.values(context.state.actors).some((actor) => !actor.defeated && actor.position !== null
+      && footprintCells(actor.position, Math.max(1, actor.size)).some((foot) => sameCell(foot, cell)));
   const objectsAt = (cell: { x: number; y: number }) =>
     Object.values(context.state.entities).filter((entity) => entity.position !== null && sameCell(entity.position, cell) && entityKindOf(entity) === 'object');
   const mutations: RuleMutation[] = [];
