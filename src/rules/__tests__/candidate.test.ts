@@ -19,6 +19,21 @@ import type { RuleChoice, RuleExecutionContext } from '../automation/primitives/
 import { evaluateActorCandidates, validateActorCandidate } from '../automation/kernels/candidate.js';
 import { resolveChoice } from '../automation/kernels/choice.js';
 import { RuleProgramViolation } from '../automation/kernels/runtime.js';
+import { anchorFromPosition } from '../automation/primitives/anchor.js';
+
+/** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
+function expectViolationCode(fn: () => unknown, code: string): void {
+  try {
+    fn();
+  } catch (error) {
+    if (error instanceof RuleProgramViolation) {
+      expect(error.code).toBe(code);
+      return;
+    }
+    throw error;
+  }
+  throw new Error('expected a RuleProgramViolation');
+}
 
 function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContext {
   return {
@@ -91,9 +106,9 @@ describe('QUERY underlay — evaluateActorCandidates', () => {
 
   it('range filters: at-range passes, one-past fails', () => {
     // hero(4,4) → ally(6,4) is distance 2; allyFar(10,4) is distance 6.
-    const atRange = evaluateActorCandidates({ relation: 'ally', range: { kind: 'constant', value: 2 } }, ctx()).map((a) => a.id);
+    const atRange = evaluateActorCandidates({ relation: 'ally', range: 2 }, ctx()).map((a) => a.id);
     expect(atRange).toEqual(['ally']);
-    const onePast = evaluateActorCandidates({ relation: 'ally', range: { kind: 'constant', value: 1 } }, ctx()).map((a) => a.id);
+    const onePast = evaluateActorCandidates({ relation: 'ally', range: 1 }, ctx()).map((a) => a.id);
     expect(onePast).toEqual([]);
   });
 });
@@ -123,13 +138,13 @@ describe('QUERY underlay — validateActorCandidate', () => {
   });
 
   it('rejects an out-of-range actor with choice.actor-range', () => {
-    const result = validateActorCandidate('allyFar', { relation: 'ally', range: { kind: 'constant', value: 2 } }, ctx());
+    const result = validateActorCandidate('allyFar', { relation: 'ally', range: 2 }, ctx());
     expect(result.legal).toBe(false);
     if (!result.legal) expect(result.violation.code).toBe('choice.actor-range');
   });
 
   it('an actor exactly at range is legal', () => {
-    const result = validateActorCandidate('ally', { relation: 'ally', range: { kind: 'constant', value: 2 } }, ctx());
+    const result = validateActorCandidate('ally', { relation: 'ally', range: 2 }, ctx());
     expect(result).toEqual({ legal: true, value: 'ally' });
   });
 });
@@ -170,5 +185,75 @@ describe('QUERY ⇄ CHOOSE parity — one legality machinery, two consumers', ()
       }
       expect(validation.legal).toBe(choiceOk);
     }
+  });
+});
+
+describe('QUERY underlay — rangeOrigin anchors (U7)', () => {
+  it('measures range from a CAPTURED position anchor', () => {
+    // From (6,4): ally is distance 0, hero 2, foe 2, allyFar 4.
+    const ids = evaluateActorCandidates({ relation: 'foe', range: 2, rangeOrigin: anchorFromPosition({ x: 6, y: 4 }) }, ctx()).map((a) => a.id);
+    expect(ids).toEqual(['foe']);
+  });
+
+  it('keeps relation relative to the acting actor while the range moves to the anchor', () => {
+    // relation 'ally' is read from hero; range 1 from the ally(6,4) anchor
+    // reaches only the ally itself (hero is distance 2, allyFar 4).
+    const ids = evaluateActorCandidates({ relation: 'ally', range: 1, rangeOrigin: anchorFromPosition({ x: 6, y: 4 }) }, ctx()).map((a) => a.id);
+    expect(ids).toEqual(['ally']);
+  });
+
+  it('resolves a LIVE actor anchor via attack-target (range moves to the anchor)', () => {
+    // From hero, range 4 reaches ally (d2) but not allyFar (d6). From the
+    // attack-target anchor (ally, d0), range 4 reaches allyFar (d4) too.
+    const fromSelf = evaluateActorCandidates({ relation: 'ally', range: 4 }, ctx()).map((a) => a.id);
+    expect(fromSelf).toEqual(['ally']);
+    const fromAlly = evaluateActorCandidates(
+      { relation: 'ally', range: 4, rangeOrigin: { kind: 'actor', selector: { kind: 'attack-target' } } },
+      { ...ctx(), attackTargetId: 'ally' },
+    ).map((a) => a.id).sort();
+    expect(fromAlly).toEqual(['ally', 'allyFar']);
+  });
+
+  it('resolves a LIVE actor anchor via input', () => {
+    const ids = evaluateActorCandidates(
+      { relation: 'ally', range: 1, rangeOrigin: { kind: 'actor', selector: { kind: 'input', key: 'origin' } } },
+      { ...ctx(), input: { actorIds: { origin: ['ally'] } } },
+    ).map((a) => a.id);
+    expect(ids).toEqual(['ally']);
+  });
+
+  it('rejects a query-shaped selector as an anchor (fail closed)', () => {
+    expectViolationCode(() => evaluateActorCandidates(
+      { relation: 'foe', range: 3, rangeOrigin: { kind: 'actor', selector: { kind: 'all', relation: 'any' } } },
+      ctx(),
+    ), 'selector.origin-invalid');
+  });
+
+  it('rejects an anchor resolving to zero actors (fail closed)', () => {
+    expectViolationCode(() => evaluateActorCandidates(
+      { relation: 'foe', range: 3, rangeOrigin: { kind: 'actor', selector: { kind: 'trigger-targets' } } },
+      ctx(),
+    ), 'selector.origin-invalid');
+  });
+
+  it('rejects an anchor actor without a position (fail closed)', () => {
+    // ghost has position null.
+    expectViolationCode(() => evaluateActorCandidates(
+      { relation: 'foe', range: 3, rangeOrigin: { kind: 'actor', selector: { kind: 'input', key: 'origin' } } },
+      { ...ctx(), input: { actorIds: { origin: ['ghost'] } } },
+    ), 'selector.origin-invalid');
+  });
+
+  it('validateActorCandidate uses the same anchor', () => {
+    const rejected = validateActorCandidate('allyFar', { relation: 'ally', range: 2, rangeOrigin: anchorFromPosition({ x: 6, y: 4 }) }, ctx());
+    expect(rejected.legal).toBe(false);
+    if (!rejected.legal) expect(rejected.violation.code).toBe('choice.actor-range');
+    const accepted = validateActorCandidate('ally', { relation: 'ally', range: 2, rangeOrigin: anchorFromPosition({ x: 6, y: 4 }) }, ctx());
+    expect(accepted).toEqual({ legal: true, value: 'ally' });
+  });
+
+  it('default origin stays the acting actor when no rangeOrigin is declared', () => {
+    const ids = evaluateActorCandidates({ relation: 'ally', range: 2 }, ctx()).map((a) => a.id);
+    expect(ids).toEqual(['ally']);
   });
 });

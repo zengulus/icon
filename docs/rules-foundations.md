@@ -92,21 +92,40 @@ WINDOW/CONTINUATION underlays; never supply it speculatively. Tests:
 `choice.test.ts` (23 semantic cases) + protocol fixtures. Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
-### Candidate sets (QUERY underlay) — AUTHORITATIVE + SOURCE-TESTED (2026-08-29)
+### Candidate sets (QUERY underlay) — PARTIAL: actor-domain query + direct-target/area-inclusion routing landed (2026-08-30)
 
-One deterministic eligibility authority beneath both automatic targeting and
-player choices: `kernels/candidate.ts`
-(`evaluateActorCandidates`/`validateActorCandidate`). A query is relation
-(p.92) + optional dynamic range (p.92 footprint distance, evaluated through
-`evaluateNumber`) + defeated/on-battlefield filters; the result is the
-CandidateSet both consumers draw from. The kernel reuses
-`primitives/targeting.ts` relations and `primitives/spatial-intent.ts`
-`footprintDistance` — it composes existing authorities, it does not
-reimplement them. Violations reuse the legacy codes
-(`choice.actor-missing/-defeated/-relation/-range`) so the command boundary
-reads identically. `kernels/choice.ts` actor validation and every future
-automatic-targeting selector route through here; no source IDs. Tests:
-`candidate.test.ts` (18 cases incl. QUERY⇄CHOOSE parity). Sequencing owner:
+One deterministic ACTOR-domain eligibility authority beneath both automatic
+targeting and player choices. `kernels/candidate.ts`
+(`evaluateActorCandidates`/`validateActorCandidate`) owns the base
+CandidateSet (relation p.92, defeated/on-battlefield filters, range from a
+U7 `SpatialAnchor`); `kernels/evaluate-query.ts` (`evaluateActorQuery`)
+adds the selector domain operators (adjacency, within-origin, condition,
+mark, summon) and is the engine behind `selectActors` (`kernels/runtime.ts`),
+now a thin adapter — one eligibility machinery, no second copy. Range
+values are resolved scalars evaluated through U5 `evaluateNumber` at the
+query point. The U7 anchor vocabulary lives in `primitives/anchor.ts`
+(LIVE actor selector | CAPTURED position) and rejects malformed anchors
+(`selector.origin-invalid` for query-shaped selectors, zero/multi actors,
+position-less anchors); relation stays relative to the acting actor while
+range moves to the anchor. Violations reuse the legacy codes
+(`choice.actor-missing/-defeated/-relation/-range`); no source IDs. Tests:
+`candidate.test.ts` (27 cases incl. QUERY⇄CHOOSE parity + anchor fixtures),
+`evaluate-query.test.ts` (18 cases: 13 selector-migration + 5
+area-inclusion); the legacy `input` selector's count/range enforcement
+throws preserved verbatim.
+
+The direct-target and area-inclusion routing landed 2026-08-30:
+`assertDirectTarget` (`encounter.ts`) routes base eligibility through
+`validateActorCandidate` (Blind/Stealth/True Strike/LoS stay specialist at
+the gate, unchanged problem precedence), and area actor-inclusion reads
+route through the `insideArea` query operator over the spatial gateway's
+cells (the gateway keeps the geometry).
+
+NOT yet the full U3 QUERY underlay (see `docs/underlay-completion-plan.md`
+§1 U3): the query remains actor-only (no positions/terrain/entities/areas/
+persistent instances) and deterministic ordering operators are absent. The
+tracked completion task is TODO.md §"Underlay-phase task ledger" (U3 audit
+correction). Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED

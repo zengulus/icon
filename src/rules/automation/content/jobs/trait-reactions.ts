@@ -9,6 +9,8 @@
  * exact; mechanics must never leak source IDs into the kernel.
  */
 import { computeSpatialArea } from '../../primitives/spatial-intent.js';
+import { evaluateActorQuery } from '../../kernels/evaluate-query.js';
+import { encounterQueryContext } from '../../kernels/encounter-adapter.js';
 import { registerTraitReaction, type TraitReactionMutation } from '../../kernels/trait-reactions.js';
 
 // stormbender/dash-on-the-rocks — p.230
@@ -35,10 +37,15 @@ registerTraitReaction('stormbender:trait:dash-on-the-rocks', {
           requireCenterInBounds: true,
         });
         if (!area.legal) continue;
-        for (const targetId of area.includedActorIds) {
+        // The burst's CELLS come from the shared spatial gateway; which
+        // ACTORS are inside is a U3 query read (defeated/off-battlefield
+        // excluded, p.290 footprint inclusion) — the same eligibility
+        // authority automatic targeting uses.
+        const queryContext = encounterQueryContext(state, actorId, 'stormbender:trait:dash-on-the-rocks');
+        for (const target of evaluateActorQuery({ relation: 'any', insideArea: { cells: area.cells } }, queryContext)) {
           // ICON p.97 Burst does not affect the ability user unless specified.
-          if (targetId === actorId) continue;
-          out.push({ kind: 'damage', sourceActorId: actorId, actorId: targetId, amount: 1, damageType: 'piercing', instance: 1, delivery: 'area', ignoreCover: false });
+          if (target.id === actorId) continue;
+          out.push({ kind: 'damage', sourceActorId: actorId, actorId: target.id, amount: 1, damageType: 'piercing', instance: 1, delivery: 'area', ignoreCover: false });
         }
       }
       return out;

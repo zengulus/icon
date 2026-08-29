@@ -91,10 +91,17 @@ export interface DirectTargetResult {
 }
 
 /**
- * Validate a one-target direct nomination. Range uses the shared p.92
- * footprint distance ("a target must have at least 1 space of its area within
- * the listed range"), which for Size-1 actors is exactly the point-cell
- * Chebyshev metric the reducer historically used.
+ * Validate a one-target direct nomination. The live command gate
+ * (`src/rules/encounter.ts` `assertDirectTarget`) now routes base
+ * eligibility — relation, defeated/off-battlefield exclusion, and the p.92
+ * footprint range from the source — through the U3 candidate authority
+ * (`kernels/candidate.ts::validateActorCandidate`); this primitive pins the
+ * direct-target problem vocabulary (including the Blind/True Strike/
+ * Stealth/LoS specialist reads) as the reducer-facing spec fixture and the
+ * seed of the eventual TargetQuery gateway. Range uses the shared p.92
+ * footprint distance ("a target must have at least 1 space of its area
+ * within the listed range"), which for Size-1 actors is exactly the
+ * point-cell Chebyshev metric the reducer historically used.
  */
 export function queryDirectTarget(
   source: Pick<TargetCandidate, 'id' | 'side' | 'position' | 'size'>,

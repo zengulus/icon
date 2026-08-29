@@ -90,9 +90,12 @@ function resolveActors(choice: RuleChoice, context: RuleExecutionContext): Chose
   // — the SAME eligibility machinery automatic targeting uses. This kernel
   // keeps only the choice-specific semantics: required/optional, cardinality,
   // and distinctness.
+  // The U3 query carries RESOLVED scalars: the dynamic range is evaluated
+  // here through the U5 VALUE authority (`evaluateNumber`) at the query
+  // point, exactly once for every supplied id.
   const query = {
     relation: choice.relation,
-    range: choice.range,
+    range: choice.range === undefined ? undefined : evaluateNumber(choice.range, context),
   };
   const ids: string[] = [];
   for (const id of supplied) {

@@ -32,6 +32,74 @@ generator says is affected, and updated documentation recording the actual
 resulting state. If evidence discovered during a step contradicts an order
 assumption here, document the evidence and update this list before proceeding.
 
+> **Active phase — UNDERLAY COMPLETION (2026-08-30).** Per the user phase
+> directive and [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md),
+> the greedy blocker-census sequencing below is **superseded** for this
+> phase: finish the U1–U17 generic substrate (dependency order T1–T6 in
+> that document) before wiring or promoting any further ICON source units.
+> New work is generic substrate and behavior-preserving migration only.
+> Steps 1–6 below are the historical record of landed work; steps 7–11
+> resume only after the UNDERLAY PHASE COMPLETE gate
+> (`docs/underlay-completion-plan.md` §4). Per-task tracking lives in the
+> ledger below; the plan document owns contracts, DAG, and gates.
+
+**Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
+[`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U3 audit correction — QUERY is PARTIAL, not landed (Phase T2 entry) —
+  LANDED for the actor domain (2026-08-30).**
+  [`docs/tranche-2-query.md`](docs/tranche-2-query.md) claimed U3 landed;
+  at HEAD only the actor slice existed (`kernels/candidate.ts`),
+  `rangeOrigin` was inert, and `selectActors` owned independent
+  eligibility (`docs/underlay-completion-plan.md` §0). Landed deliverables:
+  1. **`rangeOrigin` through a `SpatialAnchor` (U7 seam) — DONE.**
+     `primitives/anchor.ts` owns the anchor vocabulary (LIVE actor
+     selector | CAPTURED position + `SpatialOrigin`); `kernels/candidate.ts`
+     `resolveSpatialAnchor` resolves it, rejecting malformed anchors
+     (`selector.origin-invalid` for query-shaped selectors, zero/multi
+     actors, position-less anchors); relation stays relative to the acting
+     actor while the range moves to the anchor. Fixtures in
+     `candidate.test.ts` (9 new cases: captured-position, attack-target,
+     input, invalid-anchor rejects, default-origin preserved).
+  2. **`selectActors` onto `evaluateQuery` (U3 authority) — DONE (actor
+     domain).** `kernels/evaluate-query.ts` `evaluateActorQuery` owns every
+     selector filter (relation/defeated/off-board/range/adjacency/within/
+     condition/mark/summon); `selectActors` is a thin adapter; the legacy
+     `input` count/range enforcement throws are preserved verbatim.
+     Enabling moves: `RuleProgramViolation` moved to
+     `kernels/violations.ts` (runtime re-exports — breaks the kernel↔kernel
+     cycle); `range` became a resolved scalar evaluated through U5
+     `evaluateNumber` at the query point. Parity: `evaluate-query.test.ts`
+     (13 cases); full suite green (1278 tests), zero fixture deltas,
+     census byte-stable.
+  Residual (stays Phase T2 — NOT claimed): non-actor query domains
+  (positions/terrain/entities/areas/instances) and deterministic ordering
+  operators. No source-unit promotion; blocker census untouched (426).
+
+- **U3 eligibility de-duplication — `queryDirectTarget` + area-inclusion
+  routing (Phase T2) — LANDED (2026-08-30).** The remaining U3 eligibility
+  duplicates now route through the one authority:
+  1. **Direct-target gate routes through the candidate authority.** The
+     live command gate (`encounter.ts::assertDirectTarget`, the only
+     `queryDirectTarget` caller) resolves base eligibility — relation,
+     defeated/off-battlefield, p.92 footprint range — via
+     `kernels/candidate.ts::validateActorCandidate` on the shared VM view
+     (`encounter-adapter.ts::encounterQueryContext`); the direct-target
+     specialist reads (Blind's range cap, Stealth's adjacency clause, True
+     Strike, LoS) stay at the gate with unchanged problem precedence and
+     violation codes. `queryDirectTarget` remains the reducer-facing spec
+     fixture pinning the direct-target problem vocabulary.
+  2. **Area inclusion routes through the query.** New `insideArea`
+     operator on `evaluateActorQuery` (p.290 footprint inclusion over the
+     gateway's cells); the foe-recipe blast resolver and the
+     dash-on-the-rocks trait reaction read WHO is inside through the query
+     authority while the spatial gateway keeps the CELL geometry.
+  Parity: `evaluate-query.test.ts` +5 area cases (positive, defeated /
+  off-board exclusion, large-foe footprint, one-past boundary,
+  gateway-parity); full suite green (1283 tests), zero fixture deltas,
+  census byte-stable. Residual (stays Phase T2): non-actor query domains
+  and deterministic ordering operators. No source-unit promotion.
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

@@ -7,6 +7,7 @@ import './content/registry.js';
 // primitives — content-agnostic vocabulary and pure computation
 // ---------------------------------------------------------------------------
 export * from './primitives/types.js';
+export * from './primitives/anchor.js';
 export * from './primitives/job-kit.js';
 export * from './primitives/foe-kit.js';
 export * from './primitives/targeting.js';
@@ -20,6 +21,7 @@ export * from './primitives/status-saves.js';
 // kernels — shared mechanics + registry machinery (no source IDs)
 // ---------------------------------------------------------------------------
 export * from './kernels/runtime.js';
+export * from './kernels/evaluate-query.js';
 export * from './kernels/encounter-adapter.js';
 export * from './kernels/damage-ledger.js';
 export * from './kernels/trigger-window.js';

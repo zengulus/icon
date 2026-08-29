@@ -167,14 +167,18 @@ legality machinery. The PDF's targeting categories (Self, Ally, Foe, Summon,
 Characters, Others, Space, Object) are ONE target vocabulary, not separate
 selector engines.
 
-Today: `selectActors` (`kernels/runtime.ts`) owns actor eligibility;
-`primitives/targeting.ts` owns direct-target rules (relation/range/stealth/
-LoS); area inclusion is computed by the shared spatial gateway's
-`computeSpatialArea`→`SpatialAreaResult.includedActorIds` and consumed by
-resolvers; a mob member model does not exist yet (`createFoeFromProfile`
-rejects the mob role — TODO/roadmap B2). These are the eligibility
-authorities U3 will merge behind one Query type while the specialists keep
-their spatial models.
+Today: `selectActors` (`kernels/runtime.ts`) is a thin adapter over
+`kernels/evaluate-query.ts` `evaluateActorQuery`; the direct-target command
+gate (`encounter.ts::assertDirectTarget`) routes base eligibility through
+`kernels/candidate.ts` while `primitives/targeting.ts` pins the
+direct-target problem vocabulary (relation/range/stealth/LoS); actor
+inclusion in areas is a query read (the `insideArea` operator) over the
+spatial gateway's cells (`computeSpatialArea`); a mob member model does
+not exist yet (`createFoeFromProfile` rejects the mob role — TODO/roadmap
+B2). The specialists keep their spatial models; the eligibility
+authorities still to merge behind one Query type are `nearestFoe`/
+`freeCellsInRange` resolver sugar and position-domain candidate legality
+(`kernels/teleport-choice.ts`).
 
 ## U4 Choice / Decision
 

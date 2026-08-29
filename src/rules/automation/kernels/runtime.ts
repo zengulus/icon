@@ -6,7 +6,8 @@ import { rollDamageDice } from '../primitives/job-kit.js';
 import { recipientBonusDamageDice } from './bonus-damage.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
-import { eligibleTargets, isEligibleTarget } from '../primitives/targeting.js';
+import { evaluateActorQuery } from './evaluate-query.js';
+import { RuleProgramViolation } from './violations.js';
 import type {
   RuleAction,
   RuleActorView,
@@ -23,12 +24,7 @@ import type {
 } from '../primitives/types.js';
 import type { Position } from '../../types.js';
 
-export class RuleProgramViolation extends Error {
-  constructor(public readonly code: string, message: string) {
-    super(message);
-    this.name = 'RuleProgramViolation';
-  }
-}
+export { RuleProgramViolation };
 
 const distance = (a: RuleActorView, b: RuleActorView) => {
   if (!a.position || !b.position) return Number.POSITIVE_INFINITY;
@@ -49,59 +45,59 @@ export function selectActors(selector: RuleSelector, context: RuleExecutionConte
   const source = actor(context, context.actorId);
   let selected: RuleActorView[];
   switch (selector.kind) {
+    // Reference selectors — a named referent, not a candidate query. The
+    // `attack-target` referent is still gated by the shared U3 eligibility
+    // (alive + on-battlefield) so a defeated/removed target yields nothing.
     case 'self': selected = [source]; break;
     case 'attack-target': {
       const target = context.attackTargetId ? actor(context, context.attackTargetId) : undefined;
-      selected = target && isEligibleTarget(source, target, { relation: 'any' }) ? [target] : [];
+      if (!target) { selected = []; break; }
+      const eligible = new Set(evaluateActorQuery({ relation: 'any' }, context).map((entry) => entry.id));
+      selected = eligible.has(target.id) ? [target] : [];
       break;
     }
     case 'trigger-source': selected = context.triggerSourceId ? [actor(context, context.triggerSourceId)] : []; break;
     case 'trigger-targets': selected = (context.triggerTargetIds ?? []).map((id) => actor(context, id)); break;
     case 'input': {
-      selected = (context.input.actorIds?.[selector.key] ?? []).map((id) => actor(context, id));
+      const supplied = (context.input.actorIds?.[selector.key] ?? []).map((id) => actor(context, id));
       // p.92: `ally` means another ally; generic input selectors also reject
-      // defeated/off-board actors before a resolver can mutate them.
-      selected = eligibleTargets(source, selected, { relation: selector.relation ?? 'any' });
+      // defeated/off-board actors before a resolver can mutate them — through
+      // the same U3 eligibility authority automatic targeting uses.
+      const eligible = new Set(evaluateActorQuery({ relation: selector.relation ?? 'any' }, context).map((entry) => entry.id));
+      selected = supplied.filter((target) => eligible.has(target.id));
       const minimum = selector.minimum ?? 0;
       const maximum = selector.maximum ?? Number.POSITIVE_INFINITY;
       if (selected.length < minimum || selected.length > maximum) throw new RuleProgramViolation('choice.actor-count', `${selector.key} requires ${minimum}–${maximum} actor targets.`);
+      // The input selector's legacy contract ENFORCES its declared range
+      // (throws) rather than silently excluding — preserved verbatim.
       if (selector.range) {
         const maximumRange = evaluateNumber(selector.range, context);
         if (selected.some((target) => distance(source, target) > maximumRange)) throw new RuleProgramViolation('choice.actor-range', `${selector.key} contains a target outside range ${maximumRange}.`);
       }
       break;
     }
-    case 'all': selected = eligibleTargets(source, Object.values(context.state.actors), { relation: selector.relation }); break;
+    // Query selectors — eligibility and every domain filter live in the
+    // shared U3 authority; this adapter only maps selector → query.
+    case 'all': selected = evaluateActorQuery({ relation: selector.relation }, context); break;
     case 'adjacent': {
       const origins = selectActors(selector.origin, context);
-      selected = eligibleTargets(source, Object.values(context.state.actors), { relation: selector.relation })
-        .filter((target) => origins.some((origin) => distance(origin, target) <= 1));
+      selected = evaluateActorQuery({ relation: selector.relation, origins, originDistance: 1 }, context);
       break;
     }
     case 'within': {
       const origins = selectActors(selector.origin, context);
       const maximumRange = evaluateNumber(selector.range, context);
-      selected = eligibleTargets(source, Object.values(context.state.actors), { relation: selector.relation })
-        .filter((target) => origins.some((origin) => distance(origin, target) <= maximumRange));
+      selected = evaluateActorQuery({ relation: selector.relation, origins, originDistance: maximumRange }, context);
       break;
     }
-    case 'condition': selected = eligibleTargets(source, Object.values(context.state.actors), { relation: selector.relation })
-      .filter((target) => target.conditions.has(selector.conditionId)); break;
-    case 'marked': selected = eligibleTargets(source, Object.values(context.state.actors), { relation: 'any' })
-      .filter((target) => Boolean(target.state[`mark:${selector.markId ?? context.sourceId}`])); break;
-    case 'summons': {
-      const ownerId = selector.owner === 'self' ? source.id : null;
-      const ids = Object.values(context.state.entities)
-        .filter((entity) => entity.ownerId && (!ownerId || entity.ownerId === ownerId) && (!selector.summonType || entity.type === selector.summonType))
-        .map(({ state }) => typeof state.actorId === 'string' ? state.actorId : '')
-        .filter(Boolean);
-      selected = eligibleTargets(source, ids.map((id) => actor(context, id)), { relation: 'any' });
-      break;
-    }
+    case 'condition': selected = evaluateActorQuery({ relation: selector.relation, conditionId: selector.conditionId }, context); break;
+    case 'marked': selected = evaluateActorQuery({ mark: { markId: selector.markId } }, context); break;
+    case 'summons': selected = evaluateActorQuery({ summon: { owner: selector.owner, summonType: selector.summonType } }, context); break;
   }
-  // TODO(ICON-rules, pp.87–92, 94, 107): selection eligibility is shared
-  // here, but line of sight/effect, Blind, Stealth, areas, footprint distance,
-  // and movement destinations must move into the planned TargetQuery gateway.
+  // TODO(ICON-rules, pp.87–92, 94, 107): eligibility is now ONE shared
+  // authority (kernels/candidate.ts + kernels/evaluate-query.ts); line of
+  // sight/effect, Blind, Stealth, areas, and movement destinations still
+  // await the planned TargetQuery gateway (U3 Phase T2).
   return [...new Map(selected.map((target) => [target.id, target])).values()];
 }
 

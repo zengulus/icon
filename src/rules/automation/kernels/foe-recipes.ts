@@ -1,6 +1,7 @@
 import { RuleProgramViolation } from './runtime.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import { computeSpatialArea } from '../primitives/spatial-intent.js';
+import { evaluateActorQuery } from './evaluate-query.js';
 import type { Position } from '../../types.js';
 import type {
   RuleActorView,
@@ -469,9 +470,12 @@ function blastResolver(recipe: FoeBlastRecipe): RuleResolver {
       requireCenterInBounds: true,
     });
     if (!area.legal) throw new RuleProgramViolation('choice.area-illegal', `${context.sourceId} cannot center its blast there.`);
-    // F1: inclusion comes from the shared gateway (p.290: a large foe counts
-    // as inside the area when any of its footprint spaces is hit).
-    const included = new Set(area.includedActorIds);
+    // F1: the area's CELLS come from the shared spatial gateway; which
+    // ACTORS are inside is a U3 query read (p.290: a large foe counts as
+    // inside when any of its footprint spaces is hit) — the same eligibility
+    // authority automatic targeting uses, so defeated/off-battlefield actors
+    // never enter the blast set.
+    const included = new Set(evaluateActorQuery({ relation: 'any', insideArea: { cells: area.cells } }, context).map((actor) => actor.id));
     const mutations: RuleMutation[] = [];
     const foeSide = source.side === 'heroes' ? 'foes' : 'heroes';
     for (const actor of sortedActors(context)) {

@@ -1,4 +1,5 @@
 import type { EncounterActor, EncounterEntity, EncounterHeldDamage, EncounterPendingInterrupt, EncounterState, EncounterTerrainEffect, Position, StatusId } from '../../types.js';
+import { seededDice } from '../../dice.js';
 import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
 import { projectedAuraSelfGrants, projectedMarkConditionGrants, projectedMarkConditionPotencies, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
@@ -10,7 +11,7 @@ import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, t
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { entityKind, entityKindOf, validateEntityCreation } from './entity-creation.js';
-import type { RuleActorView, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
+import type { RuleActorView, RuleExecutionContext, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
 
 const statusIds = new Set<StatusId>(['slashed', 'blind', 'dazed', 'hatred', 'pacified', 'sealed', 'shattered', 'stunned', 'weakened', 'vulnerable']);
 const samePosition = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
@@ -301,6 +302,24 @@ export function encounterRuleState(state: EncounterState): RuleRuntimeState {
       const terrain = state.grid.terrain.find((cell) => samePosition(cell.position, position));
       return (terrain?.elevation ?? 0) - (terrain?.type === 'pit' ? 1 : 0);
     },
+  };
+}
+
+/** Build the minimal U3 query/validation context over the encounter state
+ * for one acting actor. The candidate authority (`kernels/candidate.ts`)
+ * reads only `state.actors` and `context.actorId`, so the remaining fields
+ * are inert placeholders and the seeded dice source is never consumed by
+ * querying. One construction seam so command gates and content folds do not
+ * hand-roll contexts for the same eligibility authority. */
+export function encounterQueryContext(state: EncounterState, actorId: string, sourceId: string): RuleExecutionContext {
+  return {
+    state: encounterRuleState(state),
+    actorId,
+    sourceId,
+    actionId: 'query',
+    timing: 'use',
+    input: {},
+    dice: seededDice(0),
   };
 }
 

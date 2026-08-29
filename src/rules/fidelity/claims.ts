@@ -129,6 +129,8 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'docs/roadmap.md', linePrefix: '## P2 — Foe role entitlements and the first closed foe-complexity slice', reason: 'phase heading naming a GOAL, not a status claim' },
   { file: 'docs/roadmap.md', linePrefix: 'replay; closed negative for unequipped mastery.', reason: 'test-plan continuation fragment' },
   { file: 'docs/roadmap.md', linePrefix: '(P1–P2) does multiplayer have something authoritative to share.', reason: 'rhetorical phase-justification criterion' },
+  { file: 'docs/roadmap.md', linePrefix: 'promoting any further source units, with its UNDERLAY PHASE COMPLETE gate', reason: 'phase-gate name reference (proper noun from underlay-completion-plan.md §4), not a status claim' },
+  { file: 'TODO.md', linePrefix: '> resume only after the UNDERLAY PHASE COMPLETE gate', reason: 'phase-gate name reference (proper noun from underlay-completion-plan.md §4), not a status claim' },
 ];
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,11 @@ import type { AttackDamageProvenance } from './attack-resolution.js';
 import type { SaveWindowBranch, SaveWindowKind, SaveWindowModifiers } from './save-window.js';
 import type { EncounterState, Position, SourceReference } from '../../types.js';
 
+// Compatibility barrel: incremental underlay extraction re-exports new
+// primitive vocabulary here so consumers can keep importing from the
+// canonical types surface (U7 anchor vocabulary, then U1/U2/… as they split).
+export * from './anchor.js';
+
 export const RULE_PROGRAM_SCHEMA_VERSION = 1 as const;
 
 export type RuleTiming =

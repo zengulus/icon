@@ -71,6 +71,14 @@ in [`TODO.md`](../TODO.md) §Current execution plan; this document owns phase
 definitions and gates, TODO.md owns live sequencing. On conflict, update both
 together — never let them assert different orders.
 
+**Active phase — UNDERLAY COMPLETION.** Per the user phase directive,
+[`underlay-completion-plan.md`](underlay-completion-plan.md) owns the
+current phase: finish the U1–U17 generic substrate before wiring or
+promoting any further source units, with its UNDERLAY PHASE COMPLETE gate
+(that document §4) as this phase's gate. The greedy blocker-census
+sequencing in this section is **superseded** until that gate closes; the
+priorities below resume afterwards.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

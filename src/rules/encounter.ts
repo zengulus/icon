@@ -7,8 +7,9 @@ import { compileRuleSourceUnit } from './automation/content/glue/compiler.js';
 import type { RuleAction, RuleExecutionContext, RuleExecutionResult, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
-import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
+import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
 import { applyDamageLedger } from './automation/kernels/damage-ledger.js';
+import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { decideDamageWindow } from './automation/kernels/trigger-window.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
 import { bonusDamageDiceForUse } from './automation/kernels/bonus-damage.js';
@@ -33,7 +34,7 @@ import { footprintCells, footprintDistance, footprintsOverlap } from './automati
 import { auraStateView, projectedAuraAttackModifiers } from './automation/kernels/aura.js';
 import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
-import { queryDirectTarget, type DirectTargetQuery } from './automation/primitives/targeting.js';
+import { type DirectTargetProblem, type DirectTargetQuery } from './automation/primitives/targeting.js';
 import { executeRuleProgram, integer, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
 import { assertRuleCostsPayable, costContextFromEncounter, effectiveRuleCosts, evaluateCosts, CostPaymentViolation } from './automation/kernels/cost-payment.js';
 import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
@@ -1169,9 +1170,15 @@ export function hasLineOfSight(state: EncounterState, from: Position, to: Positi
 
 /**
  * Current one-target command gate shared by basic attacks, reviewed ability
- * commands, and reviewed raw rule commands. It intentionally uses the
- * point-cell range metric that the existing reducer used; p.92 footprint and
- * p.107 line-of-effect belong to the next TargetQuery tranche.
+ * commands, and reviewed raw rule commands. Base eligibility — relation,
+ * defeated/off-battlefield exclusion, and the p.92 footprint range from the
+ * acting actor — routes through the U3 candidate authority
+ * (`kernels/candidate.ts::validateActorCandidate`) on the same VM view the
+ * rule engine evaluates, so the gate never re-implements targeting
+ * eligibility. The direct-target specialist reads stay at the gate: Blind's
+ * range cap (p.104), Stealth's adjacency-only direct targeting, True
+ * Strike's overrides, and the p.92 line-of-sight requirement. Line of
+ * effect (p.107) belongs to the next TargetQuery tranche.
  */
 function assertDirectTarget(
   state: EncounterState,
@@ -1180,14 +1187,9 @@ function assertDirectTarget(
   query: Omit<DirectTargetQuery, 'sourceBlind' | 'hasLineOfSight'>,
   family: 'attack' | 'ability',
 ) {
-  const result = queryDirectTarget(source, target, {
-    ...query,
-    sourceBlind: encounterConditionSet(source, state).has('blind'),
-    targetStealth: query.targetStealth ?? encounterConditionSet(target, state).has('stealth'),
-    hasLineOfSight: query.requireLineOfSight ? hasLineOfSight(state, source.position, target.position) : true,
-  });
-  if (result.legal) return;
-  switch (result.problem) {
+  const problem = directTargetProblem(state, source, target, query);
+  if (!problem) return;
+  switch (problem) {
     case 'unavailable':
       throw new RuleViolation(family === 'attack' ? 'attack.invalid-target' : 'ability.invalid-target', family === 'attack' ? 'Basic attacks require a living foe.' : 'That ability target is unavailable.');
     case 'relation':
@@ -1201,6 +1203,50 @@ function assertDirectTarget(
     default:
       throw new RuleViolation('ability.invalid-target', 'That ability target is unavailable.');
   }
+}
+
+/** Resolve the direct-target gate against the current state. Precedence is
+ * preserved from the pre-U3 gate: unavailable → relation → Stealth → range
+ * → line of sight (a stealthy target beyond adjacency reports the stealth
+ * problem even when it is also out of range). Base eligibility routes
+ * through `validateActorCandidate`, the single-actor API of the ONE U3
+ * candidate authority automatic targeting consumes. */
+function directTargetProblem(
+  state: EncounterState,
+  source: EncounterActor,
+  target: EncounterActor,
+  query: Omit<DirectTargetQuery, 'sourceBlind' | 'hasLineOfSight'>,
+): DirectTargetProblem | null {
+  // The gate's callers always assert the source is active and on-field, so
+  // a position-less source is rejected defensively before the candidate
+  // authority (which would fail closed on an unresolvable anchor).
+  if (!source.position) return 'unavailable';
+  // Direct-target specialist reads (p.104): True Strike overrides both
+  // Blind and Stealth; Blind otherwise caps a blind attacker's direct range
+  // at 2.
+  const sourceBlind = encounterConditionSet(source, state).has('blind');
+  const targetStealth = query.targetStealth ?? encounterConditionSet(target, state).has('stealth');
+  const trueStrike = query.trueStrike ?? false;
+  const maximumRange = query.maximumRange === null
+    ? null
+    : Math.max(0, Math.floor(sourceBlind && !trueStrike ? Math.min(2, query.maximumRange) : query.maximumRange));
+  // U3: base eligibility (relation, defeated, off-battlefield) — the same
+  // VM view the rule engine evaluates against.
+  const queryContext = encounterQueryContext(state, source.id, 'core:direct-target');
+  const base = validateActorCandidate(target.id, { relation: query.relation }, queryContext);
+  if (!base.legal) return base.violation.code === 'choice.actor-relation' ? 'relation' : 'unavailable';
+  // Stealth (p.104): a stealthy character can only be directly targeted from
+  // adjacency — checked before range, unchanged.
+  const distance = footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size });
+  if (targetStealth && !trueStrike && distance > 1) return 'stealth';
+  // Range through the same authority (the relation cannot newly fail on a
+  // target that already passed the base check).
+  if (maximumRange !== null) {
+    const ranged = validateActorCandidate(target.id, { relation: query.relation, range: maximumRange }, queryContext);
+    if (!ranged.legal && ranged.violation.code === 'choice.actor-range') return 'range';
+  }
+  if (query.requireLineOfSight && !hasLineOfSight(state, source.position, target.position)) return 'line-of-sight';
+  return null;
 }
 
 function lineIntersectsCellInterior(from: Position, to: Position, cell: Position) {

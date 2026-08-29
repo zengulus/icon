@@ -2,30 +2,36 @@
  * candidate.ts — the QUERY / CANDIDATE underlay (U3).
  *
  * One deterministic eligibility authority beneath both automatic targeting
- * and player choices. Before this kernel, "who is a legal target" was
- * answered in at least three different places: `selectActors`'s `input`
- * branch, `choice.ts`'s `resolveActors`, and `queryDirectTarget`. Each had
- * its own inline relation check and its own range gate — three copies of the
- * same question, drifting apart over time.
+ * and player choices, for the actor domain: Query<T> → CandidateSet<T>. It
+ * answers a single question: "What actors currently qualify?" The answer is
+ * derived by composing the existing, source-tested authorities —
+ * `matchesTargetRelation` for p.92 relations, `footprintDistance` for the
+ * canonical p.92 footprint metric — and the U7 ANCHOR vocabulary
+ * (`primitives/anchor.ts`) for the frame a range is measured from.
  *
- * This kernel is the ONE seam they all go through:
+ * RANGE ORIGIN (U7): a query's `rangeOrigin` is a `SpatialAnchor` — either a
+ * LIVE actor footprint (named by a reference-style RuleSelector; default the
+ * acting actor) or a CAPTURED position (a chosen/bound space). The anchor is
+ * resolved here (`resolveSpatialAnchor`) and is INDEPENDENT of the relation
+ * source: relation ("ally of the user") is always read from the acting
+ * actor, while range is measured from the anchor. The inert precursor that
+ * ignored its selector and always fell back to `context.actorId` is gone —
+ * a query measured from an ally's position now actually measures from that
+ * ally, and a malformed anchor fails closed.
  *
- *   Query<T> → CandidateSet<T>
- *
- * It answers a single question: "What things currently qualify?" The answer
- * is derived by composing the existing, source-tested authorities —
- * `matchesTargetRelation` for p.92 relations, `isEligibleTarget` for
- * defeated/off-battlefield filtering, `footprintDistance` for the canonical
- * p.92 footprint metric, and `evaluateNumber` for dynamic range values.
+ * RANGE VALUES (U5): `range` is a RESOLVED SCALAR. The caller evaluates a
+ * dynamic `RuleNumber` through the U5 VALUE authority (`evaluateNumber`) at
+ * the query point, so this kernel never re-implements value evaluation and
+ * never imports the VM barrel (`kernels/runtime.ts`).
  *
  * The kernel carries no source IDs. It never branches on an ability name,
- * a talent id, or a job class. It only knows relations, ranges, and state.
+ * a talent id, or a job class. It only knows relations, ranges, anchors, and
+ * state.
  */
 
 import type {
   RuleActorView,
   RuleExecutionContext,
-  RuleNumber,
   RuleSelector,
 } from '../primitives/types.js';
 import {
@@ -33,7 +39,12 @@ import {
   type TargetRelation,
 } from '../primitives/targeting.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
-import { evaluateNumber, RuleProgramViolation } from './runtime.js';
+import {
+  anchorFromActorSelector,
+  type SpatialAnchor,
+  type SpatialOrigin,
+} from '../primitives/anchor.js';
+import { RuleProgramViolation } from './violations.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -44,11 +55,13 @@ import { evaluateNumber, RuleProgramViolation } from './runtime.js';
 export interface ActorCandidateQuery {
   /** p.92 relation filter: 'self' | 'ally' | 'foe' | 'any'. Default 'any'. */
   relation?: TargetRelation;
-  /** Optional maximum range (p.92 footprint distance). Evaluated via
-   * `evaluateNumber` against the current context. */
-  range?: RuleNumber;
-  /** Who the range is measured from. Defaults to `context.actorId`. */
-  rangeOrigin?: RuleSelector;
+  /** Optional maximum range (p.92 footprint distance). A RESOLVED SCALAR:
+   * the caller evaluates a dynamic `RuleNumber` through the U5 VALUE
+   * authority (`evaluateNumber`) at the query point. */
+  range?: number;
+  /** Who the range is measured from (U7 SpatialAnchor). Defaults to the
+   * acting actor — a LIVE `actor` anchor with no selector. */
+  rangeOrigin?: SpatialAnchor;
   /** Whether defeated actors may appear in the CandidateSet. Default false. */
   includeDefeated?: boolean;
   /** Whether off-battlefield actors may appear. Default false. */
@@ -68,26 +81,65 @@ export type CandidateResult<T> =
   | { legal: false; violation: CandidateViolation };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Anchor resolution (U7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Resolve a SpatialAnchor to a concrete origin (position + footprint size)
+ * against the current context. Fail-closed: a malformed anchor (a selector
+ * kind that cannot name one origin, a selector resolving to zero or several
+ * actors, or an actor without a battlefield position) rejects with a
+ * `RuleProgramViolation` — it never silently degrades to the acting actor. */
+export function resolveSpatialAnchor(
+  anchor: SpatialAnchor,
+  context: RuleExecutionContext,
+): SpatialOrigin {
+  switch (anchor.kind) {
+    case 'captured-position':
+      return { position: { ...anchor.position }, size: Math.max(1, Math.floor(anchor.size ?? 1)) };
+    case 'actor': {
+      const ids = anchorSelectorIds(anchor.selector, context);
+      if (ids.length !== 1) {
+        throw new RuleProgramViolation('selector.origin-invalid', `SpatialAnchor resolved to ${ids.length} actor(s); expected exactly one.`);
+      }
+      const view = context.state.actors[ids[0]];
+      if (!view) {
+        throw new RuleProgramViolation('selector.actor-missing', `Anchor actor ${ids[0]} does not exist.`);
+      }
+      if (!view.position) {
+        throw new RuleProgramViolation('selector.origin-invalid', `Anchor actor ${ids[0]} has no battlefield position.`);
+      }
+      return { position: view.position, size: view.size };
+    }
+  }
+}
+
+/** The actor ids a reference-style selector names. Query selectors (`all`,
+ * `within`, `adjacent`, `condition`, `marked`, `summons`) cannot name a
+ * single spatial origin and are rejected — the anchor vocabulary is
+ * REFERENCE-shaped, not QUERY-shaped (U1 vs U3). */
+function anchorSelectorIds(
+  selector: RuleSelector | undefined,
+  context: RuleExecutionContext,
+): string[] {
+  if (!selector) return [context.actorId];
+  switch (selector.kind) {
+    case 'self': return [context.actorId];
+    case 'attack-target': return context.attackTargetId ? [context.attackTargetId] : [];
+    case 'trigger-source': return context.triggerSourceId ? [context.triggerSourceId] : [];
+    case 'trigger-targets': return [...(context.triggerTargetIds ?? [])];
+    case 'input': return [...(context.input.actorIds?.[selector.key] ?? [])];
+    default:
+      throw new RuleProgramViolation('selector.origin-invalid', `Selector kind "${selector.kind}" cannot name a single spatial origin.`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Resolve the range-origin actor from a selector, falling back to the
- * context's acting actor. Delegates to `selectActors`-like logic but only
- * needs the first match. */
-function resolveRangeOrigin(
-  selector: RuleSelector | undefined,
-  context: RuleExecutionContext,
-): RuleActorView {
-  if (!selector) {
-    const source = context.state.actors[context.actorId];
-    if (!source) {
-      throw new RuleProgramViolation('selector.actor-missing', `Actor ${context.actorId} does not exist.`);
-    }
-    return source;
-  }
-  // For now we only need the simplest case: a single actor. The full
-  // selector evaluation lives in `selectActors` (runtime.ts) and is out of
-  // scope for this narrow slice.
+/** The acting actor — the relation source ("ally of the user"). Distinct
+ * from the range origin: relation never moves with the anchor. */
+function actingActor(context: RuleExecutionContext): RuleActorView {
   const source = context.state.actors[context.actorId];
   if (!source) {
     throw new RuleProgramViolation('selector.actor-missing', `Actor ${context.actorId} does not exist.`);
@@ -95,13 +147,13 @@ function resolveRangeOrigin(
   return source;
 }
 
-/** Canonical p.92 footprint distance between two actor views. Returns
- * `Number.POSITIVE_INFINITY` if either lacks a position. */
-function actorDistance(a: RuleActorView, b: RuleActorView): number {
-  if (!a.position || !b.position) return Number.POSITIVE_INFINITY;
+/** Canonical p.92 footprint distance between a resolved origin and an actor
+ * view. Returns `Number.POSITIVE_INFINITY` if the actor lacks a position. */
+function distanceFrom(origin: SpatialOrigin, actor: RuleActorView): number {
+  if (actor.position === null) return Number.POSITIVE_INFINITY;
   return footprintDistance(
-    { position: a.position, size: a.size },
-    { position: b.position, size: b.size },
+    { position: origin.position, size: origin.size },
+    { position: actor.position, size: actor.size },
   );
 }
 
@@ -114,12 +166,15 @@ function actorDistance(a: RuleActorView, b: RuleActorView): number {
  * Returns every actor that satisfies the query's relation, defeated,
  * off-battlefield, and range constraints, in no guaranteed order. This is
  * the "what things currently qualify" answer — the same set that automatic
- * targeting and player choices both draw from. */
+ * targeting and player choices both draw from. Relation is always read from
+ * the acting actor; range is measured from the query's `rangeOrigin` anchor
+ * (default the acting actor). */
 export function evaluateActorCandidates(
   query: ActorCandidateQuery,
   context: RuleExecutionContext,
 ): RuleActorView[] {
-  const source = resolveRangeOrigin(query.rangeOrigin, context);
+  const acting = actingActor(context);
+  const origin = resolveSpatialAnchor(query.rangeOrigin ?? anchorFromActorSelector(), context);
   const relation = query.relation ?? 'any';
   const includeDefeated = query.includeDefeated ?? false;
   const includeOffBattlefield = query.includeOffBattlefield ?? false;
@@ -130,16 +185,16 @@ export function evaluateActorCandidates(
   // their last cell after leaving, so only the reducer knows the difference;
   // the VM view conservatively treats position-less actors as off-board).
   let candidates = Object.values(context.state.actors).filter((actor) => {
-    if (!matchesTargetRelation(source, actor, relation)) return false;
+    if (!matchesTargetRelation(acting, actor, relation)) return false;
     if (!includeDefeated && actor.defeated) return false;
     if (!includeOffBattlefield && actor.position === null) return false;
     return true;
   });
 
-  // Step 2: filter by range, if a range is declared.
-  if (query.range) {
-    const maxRange = evaluateNumber(query.range, context);
-    candidates = candidates.filter((actor) => actorDistance(source, actor) <= maxRange);
+  // Step 2: filter by range from the anchor, if a range is declared.
+  if (query.range !== undefined) {
+    const maxRange = query.range;
+    candidates = candidates.filter((actor) => distanceFrom(origin, actor) <= maxRange);
   }
 
   return candidates;
@@ -165,7 +220,10 @@ export function validateActorCandidate(
     };
   }
 
-  const source = resolveRangeOrigin(query.rangeOrigin, context);
+  // The relation source (acting actor) and the range origin (anchor) resolve
+  // before any eligibility check — a malformed anchor fails closed.
+  const acting = actingActor(context);
+  const origin = resolveSpatialAnchor(query.rangeOrigin ?? anchorFromActorSelector(), context);
 
   // Defeated?
   if (!(query.includeDefeated ?? false) && actor.defeated) {
@@ -185,21 +243,20 @@ export function validateActorCandidate(
 
   // Relation?
   const relation = query.relation ?? 'any';
-  if (relation !== 'any' && !matchesTargetRelation(source, actor, relation)) {
+  if (relation !== 'any' && !matchesTargetRelation(acting, actor, relation)) {
     return {
       legal: false,
       violation: { code: 'choice.actor-relation', message: `target ${actorId} is not ${relation}.` },
     };
   }
 
-  // Range?
-  if (query.range) {
-    const maxRange = evaluateNumber(query.range, context);
-    const dist = actorDistance(source, actor);
-    if (dist > maxRange) {
+  // Range from the anchor?
+  if (query.range !== undefined) {
+    const dist = distanceFrom(origin, actor);
+    if (dist > query.range) {
       return {
         legal: false,
-        violation: { code: 'choice.actor-range', message: `target ${actorId} is outside range ${maxRange}.` },
+        violation: { code: 'choice.actor-range', message: `target ${actorId} is outside range ${query.range}.` },
       };
     }
   }
