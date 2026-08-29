@@ -7,7 +7,7 @@ import {
   distance, sourceActor, walk, freeCellsInRange, nearestFoe,
   damageMutation, conditionMutation, stateMutation,
   resourceMutation, stanceMutation, markMutation,
-  shoveMutation, entityMutation, terrainMutation,
+  shoveMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -256,8 +256,9 @@ const aethershardEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [
     damageMutation(context, source.id, context.triggers?.has('comeback') ? 1 : 3, 'effect', 'sacrifice'),
   ];
-  const cell = freeCellsInRange(context, source.position, 6)[0];
-  if (cell) mutations.push(entityMutation(context, source.id, cell, 'aethershard', { height: 1 }));
+  mutations.push(...summonEntity(context, source.id, 'aethershard', source.position, {
+    radius: 6, count: 1, losOrigin: source.position, category: 'object', state: { height: 1 },
+  }));
   return mutations;
 };
 

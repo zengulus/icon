@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
+import { RuleProgramViolation } from '../automation/kernels/runtime.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
@@ -197,19 +198,26 @@ describe('Geomancer ability automation (p.215–221)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Terraforming destroy: the destroy branch removes only YOUR created objects, never a foe\u2019s (negative)', () => {
+  it('Terraforming destroy: the destroy branch removes only YOUR created objects, never a foe\u2019s (fail-closed)', () => {
     const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
     // One hero-owned boulder inside the burst, one foe-owned boulder inside too.
     state.entities['mine'] = { id: 'mine', type: 'boulder', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: { height: 1 }, duration: null };
     state.entities['theirs'] = { id: 'theirs', type: 'boulder', ownerId: 'foe-owner', positions: [{ x: 4, y: 2 }], state: { height: 1 }, duration: null };
+    // Selecting your own object destroys it; the foe's object — never in the
+    // chosen set — survives.
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
-      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'destroy' }, positions: { destroy: [{ x: 4, y: 1 }, { x: 4, y: 2 }] } },
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'destroy' }, positions: { destroy: [{ x: 4, y: 1 }] } },
     }, scriptedDice());
-    // Only the hero-owned rail-order boulder is destroyed; the foe-owned one survives.
     expect(Object.values(result.state.entities).some((entity) => entity.id === 'mine')).toBe(false);
     expect(Object.values(result.state.entities).some((entity) => entity.id === 'theirs')).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+    // Selecting a cell holding only a foe's object is an illegal target for your
+    // own-object destruction -> fail-closed, never silently ignored.
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'destroy' }, positions: { destroy: [{ x: 4, y: 2 }] } },
+    }, scriptedDice())).toThrow(RuleProgramViolation);
   });
 
   it('Terraforming difficult: a Line 3 may extend OUTSIDE the burst with only one space inside (even without Talent I)', () => {
@@ -246,6 +254,76 @@ describe('Geomancer ability automation (p.215–221)', () => {
     // The in-area cell is gone; the shared record shrank to its out-of-area cell.
     expect(difficult.some((effect) => effect.positions.some((cell) => cell.x === 4 && cell.y === 0))).toBe(false);
     expect(difficult.some((effect) => effect.positions.some((cell) => cell.x === 9 && cell.y === 0))).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming create: no boulder or pit is ever placed in a character-occupied space', () => {
+    // Foe at (4,0); the burst around it is [2,6]×[0,2] (which the four-adjacent
+    // pool expansion can widen only with Talent I + Charge — none here).
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 4, y: 0 } });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'boulders,pits' } },
+    }, scriptedDice());
+    const boulders = Object.values(result.state.entities).filter((entity) => entity.type === 'boulder');
+    const pits = result.state.terrainEffects.filter((effect) => effect.terrain === 'pit');
+    expect(boulders).toHaveLength(2);
+    expect(pits).toHaveLength(2);
+    for (const b of boulders) expect([b.positions[0]!.x, b.positions[0]!.y]).not.toEqual([4, 0]);
+    for (const p of pits.flatMap((e) => e.positions)) expect([p.x, p.y]).not.toEqual([4, 0]);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
+  });
+
+  it('Terraforming difficult: a Line 3 running through a character-occupied space is rejected fail-closed', () => {
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
+    // A geometrically valid Line 3 that passes through the foe (5,1): forbidden.
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: {
+        actorIds: { target: [foe.id] },
+        options: { effects: 'boulders,difficult' },
+        positions: { line: [{ x: 5, y: 0 }, { x: 5, y: 1 }, { x: 5, y: 2 }] },
+      },
+    }, scriptedDice())).toThrow(/character-occupied/);
+  });
+
+  it('Terraforming raise: raises ANY existing object, including a foe-owned one, but respects the height ceiling of 3', () => {
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
+    // A foe-owned boulder (raise applies to any object) and a hero-owned one
+    // already at ceiling height.
+    state.entities['foe-obj'] = { id: 'foe-obj', type: 'boulder', ownerId: 'foe-owner', positions: [{ x: 4, y: 1 }], state: { height: 1 }, duration: null };
+    state.entities['at-ceiling'] = { id: 'at-ceiling', type: 'boulder', ownerId: hero.id, positions: [{ x: 4, y: 2 }], state: { height: 3 }, duration: null };
+    // Raise the foe-owned object: 1 -> 2.
+    const raised = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'raise' }, positions: { raise: [{ x: 4, y: 1 }] } },
+    }, scriptedDice());
+    expect(raised.state.entities['foe-obj']!.state.height).toBe(2);
+    expect(applyEvents(state, raised.events)).toEqual(raised.state); // replay
+    // Trying to push an object at ceiling height 3 to 4 is rejected fail-closed.
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'raise' }, positions: { raise: [{ x: 4, y: 2 }] } },
+    }, scriptedDice())).toThrow(/height ceiling/);
+  });
+
+  it('Terraforming raise: a summon can never be raised (only objects)', () => {
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
+    state.entities['my-summon'] = { id: 'my-summon', type: 'wyrm', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: {}, duration: null };
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'raise' }, positions: { raise: [{ x: 4, y: 1 }] } },
+    }, scriptedDice())).toThrow(/No object to raise/);
+  });
+
+  it('Terraforming destroy: can destroy ANY object you created in the area, not merely boulders', () => {
+    const { state, hero, foe } = geomancerEncounter({ second: null, foe: { x: 5, y: 1 } });
+    state.entities['my-statue'] = { id: 'my-statue', type: 'statue', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: { held: null }, duration: null };
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'geomancer:terraforming', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] }, options: { effects: 'pits,raise', raiseBranch: 'destroy' }, positions: { destroy: [{ x: 4, y: 1 }] } },
+    }, scriptedDice());
+    expect(Object.values(result.state.entities).some((entity) => entity.id === 'my-statue')).toBe(false);
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 

@@ -121,7 +121,12 @@ describe('Harvester ability automation (p.182–188)', () => {
     }, scriptedDice(12, 4, 4));
     expect(result.state.actors[hero.id].resources.combo).toBe(0);
     expect(result.state.actors[foe.id].hp).toBe(16); // 32 - 8 (hit) - 8 (slay repeat)
-    expect(thrallsOf(result.state)).toHaveLength(1); // the generic creation authority declines the second occupied placement
+    // Slay fired (confirmed below), and the creation seam lands the slay bonus
+    // Thrall in a DISTINCT free adjacent cell — two Thralls total (base + slay),
+    // the source-correct outcome rather than the old duplicate-cell collapse to 1.
+    expect(thrallsOf(result.state)).toHaveLength(2);
+    const cells = thrallsOf(result.state).map((t) => t.positions[0]);
+    expect(new Set(cells.map((c) => `${c.x},${c.y}`)).size).toBe(2);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

@@ -5,6 +5,7 @@ import { footprintCells, footprintIntersectsCells, footprintsOverlap } from './s
 import type { Position } from '../../types.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import type { DiceSource } from '../../dice.js';
+import { entityKindOf } from './entity-kind.js';
 import type {
   RuleAction,
   RuleActorView,
@@ -396,25 +397,48 @@ export const entityMutation = (
   entityType: string,
   state: Record<string, StateValue>,
 ): RuleMutation => ({
-  kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType, ownerId, positions: [position], count: 1, state,
+  kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType, ownerId, positions: [position], count: 1, state, category: entityKindOf({ type: entityType, state }),
 });
 
-/** Summon `count` owned entities of `entityType` near `origin`. This is the
- * single-authority creation-intent seam NEW ordinary creation routes through:
- * it declares INTENT only and never decides legality or selects the final
+/** Non-authoritative candidate DOMAIN for a creation intent: every in-grid
+ * cell within the placement region (Chebyshev `radius` of `region`),
+ * deterministically ordered nearest-first (region distance, then x, then y).
+ * It deliberately filters NOTHING but grid bounds — no occupancy, no
+ * impassable, no line of sight, no footprint/range — because ALL of those
+ * final legality decisions belong to `validateEntityCreation` (the single
+ * authority). Placement region is a source-declared AREA, not an
+ * anchor-distance legality filter. */
+export function creationCandidateCells(context: RuleExecutionContext, region: Position, radius: number): Position[] {
+  const cells: Position[] = [];
+  for (const cell of squareArea(region, radius)) {
+    if (!withinGrid(cell, context)) continue;
+    cells.push(cell);
+  }
+  return cells.sort((a, b) => distance(region, a) - distance(region, b) || a.x - b.x || a.y - b.y);
+}
+
+/** The single-authority creation-INTENT seam ordinary creation routes through.
+ * It declares INTENT only and never decides legality or selects the final
  * cells itself. It emits a single creation mutation carrying an ordered
- * candidate list (free, in-grid cells within `radius`, deterministically
- * sorted nearest-first), the requested `count`, and an explicit PAIRED
- * `creationSpatial` contract `{ origin, originSize, maxRange }` measured in
- * canonical footprint distance. The shared `validateEntityCreation` kernel
- * makes the final legality/selection decision: it skips any candidate that
- * fails bounds, occupancy, impassable terrain, LoS, footprint range, or the
- * per-owner summon cap, and returns the first `count` legal ones — so a
- * blocked earliest candidate falls through to a later legal candidate
- * instead of failing the summon, and an over-subscribed request yields only
- * the legally permitted count. Resolvers must not hand-roll their own
- * free-space/LoS/range decisions or bypass the paired creationSpatial
- * contract.
+ * candidate list (the placement REGION: every in-grid cell within `radius` of
+ * `region`, un-filtered — bounds/occupancy/impassable/LoS/footprint-range/cap
+ * all remain with the validator), the requested `count`, and an explicit
+ * PAIRED `creationSpatial` contract.
+ *
+ * The contract SEPARATES placement region from the creator's LoS authority:
+ * `region`/`radius` say WHERE the summon/object may appear (often centered on
+ * a target or area, e.g. Warden Apex's beast adjacent to its target);
+ * `losOrigin`/`originSize`/`maxRange` are the CREATOR/SOURCE authority
+ * (ICON p.108: summoning/creating always needs the USER's line of sight
+ * unless explicitly overridden) and are measured in canonical footprint
+ * distance. These are deliberately independent — a target-placed creature is
+ * validated for LoS from the creator, never from the target. `maxRange`
+ * defaults to the placement `radius` from the Los origin; pass an explicit
+ * value when the source defines a different reach.
+ *
+ * `countMode`: 'up-to' (default) creates as many legal cells as exist;
+ * 'exact' fails the whole creation unless it can land exactly `count`. The
+ * per-owner summon cap always bounds the result.
  *
  * MIGRATION NOTE: pre-existing ability resolvers that still hand-roll
  * `freeCellsInRange(...)[index]` + `entityMutation(...)` for ordinary
@@ -429,17 +453,40 @@ export function summonEntity(
   context: RuleExecutionContext,
   ownerId: string,
   entityType: string,
-  origin: Position,
-  options: { radius?: number; count?: number; originSize?: number; maxRange?: number; state?: Record<string, StateValue> } = {},
+  region: Position,
+  options: {
+    radius?: number;
+    count?: number;
+    countMode?: 'exact' | 'up-to';
+    /** The creator/source actor's LoS origin. REQUIRED — the placement region's
+     * center is NOT the LoS authority unless the creator is there. */
+    losOrigin: Position;
+    originSize?: number;
+    maxRange?: number;
+    category?: 'summon' | 'object';
+    state?: Record<string, StateValue>;
+  },
 ): RuleMutation[] {
   const radius = options.radius ?? 1;
   const count = options.count ?? 1;
+  const category = options.category ?? 'summon';
+  // Creator LoS authority only by default: placement region bounds the cells;
+  // an explicit source range (footprint distance from the creator) is added
+  // when the source defines one. The placement radius is NEVER converted into
+  // a creator range — the two are independent (PART 2).
+  const creationSpatial = {
+    origin: options.losOrigin,
+    originSize: options.originSize ?? 1,
+    ...(options.maxRange !== undefined ? { maxRange: options.maxRange } : {}),
+  };
   return [{
     kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType, ownerId,
-    positions: freeCellsInRange(context, origin, radius),
+    positions: creationCandidateCells(context, region, radius),
     count,
+    category,
+    countMode: options.countMode ?? 'up-to',
     state: options.state ?? {},
-    creationSpatial: { origin, originSize: options.originSize ?? 1, maxRange: options.maxRange ?? radius },
+    creationSpatial,
   }];
 }
 

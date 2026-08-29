@@ -57,7 +57,7 @@ const sleightOfHandEffects: RuleResolver = (context) => {
     if (character.id === target.id || !position) continue;
     if (area.some((cell) => sameCell(cell, position))) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  const card = summonEntity(context, source.id, 'wild-card', target.position, { radius: 2, count: 1 })[0];
+  const card = source.position ? summonEntity(context, source.id, 'wild-card', target.position, { radius: 2, count: 1, losOrigin: source.position })[0] : undefined;
   if (card) mutations.push(card);
   return mutations;
 };
@@ -121,7 +121,7 @@ const chaosTarotEffects: RuleResolver = (context) => {
   } else {
     apply(roll);
   }
-  const card = summonEntity(context, source.id, 'wild-card', center, { radius: 1, count: 1 })[0];
+  const card = summonEntity(context, source.id, 'wild-card', center, { radius: 1, count: 1, losOrigin: source.position })[0];
   if (card) mutations.push(card);
   return mutations;
 };
@@ -207,7 +207,7 @@ const fortunaEffects: RuleResolver = (context) => {
       mutations.push(damageMutation(context, character.id, source.fray, 'area'));
     }
   }
-  const card = summonEntity(context, source.id, 'wild-card', target.position, { radius: 2, count: 1 })[0];
+  const card = source.position ? summonEntity(context, source.id, 'wild-card', target.position, { radius: 2, count: 1, losOrigin: source.position })[0] : undefined;
   if (card) mutations.push(card);
   return mutations;
 };

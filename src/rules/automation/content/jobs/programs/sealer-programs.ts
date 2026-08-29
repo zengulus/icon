@@ -7,7 +7,7 @@ import {
   distance, sourceActor, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
-  teleportMutation, entityMutation, terrainMutation, shoveMutation,
+  teleportMutation, entityMutation, summonEntity, terrainMutation, shoveMutation,
   gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
@@ -160,12 +160,9 @@ const spiritShrineEffects: RuleResolver = (context) => {
     ];
     return mutations;
   }
-  const cell = freeCellsInRange(context, source.position, 1)[0];
-  if (!cell) return [];
-  return [{
-    kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'shrine', ownerId: source.id,
-    positions: [cell], count: 1, state: { height: 1 },
-  }];
+  return summonEntity(context, source.id, 'shrine', source.position, {
+    radius: 1, count: 1, losOrigin: source.position, category: 'object', state: { height: 1 },
+  });
 };
 
 /** ICON p.193 Sanctify: scatter salt in a medium blast in range 2, dealing 1

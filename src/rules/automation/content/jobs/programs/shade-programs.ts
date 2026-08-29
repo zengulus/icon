@@ -7,7 +7,7 @@ import {
   constant, comboCost,
   distance, sourceActor, walk, freeCellsInRange,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation, rollDamageDice,
-  placeMutation, teleportMutation, entityMutation, terrainMutation, swapMutations,
+  placeMutation, teleportMutation, entityMutation, summonEntity, terrainMutation, swapMutations,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -66,9 +66,10 @@ const umbraEffects: RuleResolver = (context) => {
       : damageMutation(context, target.id, source.fray, 'miss'));
     mutations.push(conditionMutation(context, target.id, 'blind'));
   }
-  if (context.triggers?.has('finishing-blow') && target?.position) {
-    const shadowCell = freeCellsInRange(context, target.position, 1)[0];
-    if (shadowCell) mutations.push(entityMutation(context, source.id, shadowCell, 'shadow', {}));
+  if (context.triggers?.has('finishing-blow') && target?.position && source.position) {
+    mutations.push(...summonEntity(context, source.id, 'shadow', target.position, {
+      radius: 1, count: 1, losOrigin: source.position,
+    }));
   }
   return mutations;
 };
@@ -179,11 +180,12 @@ const nightmareEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   const sourcePosition = source.position;
   if (!sourcePosition) return [];
-  const cells = freeCellsInRange(context, sourcePosition, 2).slice(0, 2);
   const mutations: RuleMutation[] = [
     stateMutation(context, source.id, 'nightmare:aura', true),
   ];
-  for (const cell of cells) mutations.push(entityMutation(context, source.id, cell, 'shadow', {}));
+  mutations.push(...summonEntity(context, source.id, 'shadow', sourcePosition, {
+    radius: 2, count: 2, losOrigin: sourcePosition,
+  }));
   return mutations;
 };
 

@@ -176,10 +176,26 @@ reducer so a `count>1` creation emits distinct per-cell entity ids. The
 regenerated census now reports `{entity-create}` 0 immediate occurrences (the
 label is fully retired — it no longer appears in any unresolved blocker set or
 in the greedy simulation; compound records that carried it were re-audited and
-reclassified to their precise residual semantics, and the `summonEntity` seam
-was adopted by the warden/seer/geomancer ordinary summons). The next
-high-fan-out singleton family (regenerated 2026-08-29) is `{fly-grant}` 17
-immediate (17 unlocks), then `{terrain-create}` 16 immediate (total 54).
+reclassified to their precise residual semantics). A further corrective pass
+(2026-08-29) rebuilt the foundation under the source's Summons/Objects/Line
+rules (pp.95–108): an entity-kind registry (`summon` | `object`, never
+string-name heuristics) drives summons-removed-on-owner-defeat vs
+objects-survive lifecycle and object stacking under the ≤3 height ceiling
+during creation validation; the seam splits placement REGION from the creator's
+LoS/range authority; candidate generation is fully subordinate to
+`validateEntityCreation` (no pre-filtering, no anchor-distance legality), and
+the `countMode` contract ('exact' | 'up-to', cap-bounded) is explicit. All
+ordinary summons now route through this seam — the warden beasts (incl. the
+Apex Finishing-Blow/Charge extra beast, no more `freeCellsInRange[index]`
+bypass), seer wild-cards, geomancer boulder, enochian aethershard, sealer
+shrine, shade shadows, stormbender salt-sprites, and harvester thralls — while
+cell-dependent exceptions (Seer Astra meteor adjacency damage, Warden Underway
+portal, Fool bombs, Harvester dark-sliver, Stormbender geyser/waterspout
+fallback placement) stay explicit and documented.
+
+The next high-fan-out singleton family (regenerated 2026-08-29) is
+`{fly-grant}` 17 immediate (17 unlocks), then `{terrain-create}` 16 immediate
+(total 54).
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

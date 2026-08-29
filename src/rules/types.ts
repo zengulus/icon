@@ -613,6 +613,10 @@ export interface EncounterEntity {
   positions: Position[];
   state: Record<string, string | number | boolean | null>;
   duration: RuleDuration | null;
+  /** The source category: 'summon' (removed on controller defeat, intangible)
+   * or 'object' (Size stacked ≤ 3, survives defeat). Inferred through the
+   * central entity-kind registry when absent (ICON p.95). */
+  kind?: 'summon' | 'object';
 }
 
 export interface EncounterTerrainEffect {

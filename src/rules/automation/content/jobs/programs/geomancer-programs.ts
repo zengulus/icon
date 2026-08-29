@@ -1,6 +1,8 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
+import { entityKindOf } from '../../../primitives/entity-kind.js';
+import { validateLine } from '../../../../area-geometry.js';
 import {
   axisDirection, sameCell, squareArea, withinGrid, occupied,
   constant,
@@ -133,7 +135,9 @@ const geoEffects: RuleResolver = (context) => {
     if (character.id === target.id || !position || !area.some((cell) => sameCell(cell, position))) continue;
     mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  const boulder = summonEntity(context, source.id, 'boulder', target.position, { radius: 1, count: 1, state: { height: 1 } })[0];
+  const boulder = source.position
+    ? summonEntity(context, source.id, 'boulder', target.position, { radius: 1, count: 1, state: { height: 1 }, category: 'object', losOrigin: source.position })[0]
+    : undefined;
   if (boulder) mutations.push(boulder);
   if (context.triggers?.has('charge')) {
     const blast = squareArea(target.position, 2);
@@ -264,54 +268,78 @@ const terraformingEffects: RuleResolver = (context) => {
     const value = context.input.positions?.[key];
     return Array.isArray(value) ? (value as { x: number; y: number }[]) : [];
   };
-  const entityAt = (cell: { x: number; y: number }) =>
-    Object.values(context.state.entities).find((entity) => entity.position && sameCell(entity.position, cell));
+  // ICON p.219: "Effects cannot be created in spaces occupied by characters."
+  // Character occupancy is the explicit forbidden case for EVERY creation
+  // bullet (boulders, pits, difficult line, dangerous). It does NOT apply to
+  // the REMOVE bullet (removal may target area terrain regardless of who
+  // occupies the cell). Objects may still stack onto other objects (the
+  // reducer enforces the ≤3 ceiling); terrain may overlap other terrain.
+  const characterOccupiedAt = (cell: { x: number; y: number }): boolean =>
+    Object.values(context.state.actors).some((actor) => !actor.defeated && actor.position !== null && sameCell(actor.position, cell));
+  const objectsAt = (cell: { x: number; y: number }) =>
+    Object.values(context.state.entities).filter((entity) => entity.position !== null && sameCell(entity.position, cell) && entityKindOf(entity) === 'object');
   const mutations: RuleMutation[] = [];
 
   for (const name of selected) {
     if (name === 'boulders') {
-      // One chosen effect producing two boulders into free pool cells.
-      const cells = poolCells.filter((cell) => createFree(cell)).slice(0, 2);
+      // One chosen effect producing exactly two height-1 boulders into free
+      // (non-character) pool cells; the reducer stacks onto objects ≤3 and
+      // rejects summons/characters.
+      const cells = poolCells.filter((cell) => inPool(cell) && !characterOccupiedAt(cell)).slice(0, 2);
+      if (cells.length !== 2) throw new RuleProgramViolation('choice.placement', 'Terraforming\u2019s boulders effect requires two free spaces.');
       for (const cell of cells) mutations.push(entityMutation(context, source.id, cell, 'boulder', { height: 1 }));
     } else if (name === 'pits') {
-      // One chosen effect producing two pits into free pool cells.
-      const cells = poolCells.filter((cell) => createFree(cell)).slice(0, 2);
+      // Exactly two pits into free (non-character) pool cells.
+      const cells = poolCells.filter((cell) => inPool(cell) && !characterOccupiedAt(cell)).slice(0, 2);
+      if (cells.length !== 2) throw new RuleProgramViolation('choice.placement', 'Terraforming\u2019s pits effect requires two free spaces.');
       for (const cell of cells) mutations.push(terrainMutation(context, 'create', 'pit', [cell]));
     } else if (name === 'raise') {
       // One bullet with an internal player choice: destroy your created
-      // objects OR raise the height of ANY existing object by +1.
+      // OBJECTS OR raise the height of ANY existing OBJECT by +1. Only objects
+      // are affected (never summons), and a raise that pushes a cell's total
+      // object height past 3 is illegal (ICON p.107) and rejected fail-closed.
       const branch = context.input.options?.raiseBranch;
       if (branch !== 'destroy' && branch !== 'raise') throw new RuleProgramViolation('choice.raise', 'Terraforming\u2019s raise/destroy effect requires options.raiseBranch of \u201cdestroy\u201d or \u201craise\u201d.');
       const chosen = pos(branch).filter(inArea);
       if (branch === 'raise') {
         for (const cell of chosen) {
-          const entity = entityAt(cell);
-          if (!entity) continue;
-          const nextHeight = Number(entity.state.height ?? 1) + 1;
-          mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'update', entityType: entity.type, ownerId: source.id, positions: [cell], count: 1, state: { height: nextHeight } });
+          const objects = objectsAt(cell);
+          if (objects.length === 0) throw new RuleProgramViolation('choice.raise', `No object to raise at (${cell.x},${cell.y}).`);
+          const raiseTarget = objects[0];
+          const currentTotal = objects.reduce((total, entity) => total + (Number(entity.state.height ?? 1)), 0);
+          const nextHeight = Number(raiseTarget.state.height ?? 1) + 1;
+          if (currentTotal + 1 > 3) throw new RuleProgramViolation('choice.raise', 'Raising this object would exceed the height ceiling of 3 (ICON p.107).');
+          mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'update', entityType: raiseTarget.type, ownerId: source.id, positions: [cell], count: 1, state: { height: nextHeight } });
         }
       } else {
-        const destroyCells = chosen.filter((cell) => {
-          const entity = entityAt(cell);
-          return entity && entity.ownerId === source.id;
-        });
-        if (destroyCells.length > 0) {
-          mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'remove', entityType: 'boulder', ownerId: source.id, positions: destroyCells, count: destroyCells.length, state: {} });
+        // Destroy ANY object created by you in the area (not merely boulders,
+        // and never summons): group the chosen cells by the object type there.
+        const byType = new Map<string, { x: number; y: number }[]>();
+        for (const cell of chosen) {
+          const object = objectsAt(cell).find((entity) => entity.ownerId === source.id);
+          if (!object) throw new RuleProgramViolation('choice.destroy', `No object you created at (${cell.x},${cell.y}).`);
+          const list = byType.get(object.type) ?? [];
+          list.push(cell);
+          byType.set(object.type, list);
+        }
+        for (const [type, cells] of byType) {
+          mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'remove', entityType: type, ownerId: source.id, positions: cells, count: cells.length, state: {} });
         }
       }
     } else if (name === 'difficult') {
-      // A true Line 3 chosen by the player: 3 ordered orthogonal-contiguous
-      // spaces, at least one inside the burst (the line may extend outside the
-      // burst even without Talent I).
+      // A TRUE Line 3 (ICON p.97): orthogonal, each space strictly further
+      // from the line's origin (its first space), no L-turn/backtrack/dup —
+      // canonical `validateLine`, not a second validator. At least one space
+      // in the burst (the line may extend outside it even without Talent I),
+      // all in-grid, and none in a character-occupied space.
       const line = pos('line');
-      if (line.length !== 3) throw new RuleProgramViolation('choice.line', 'Terraforming\u2019s difficult effect requires a Line 3 via positions.line.');
-      const cardinal = (a: { x: number; y: number }, b: { x: number; y: number }): boolean => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1;
-      const legal = line.every(gridValid)
-        && line.every((cell, index, arr) => index === 0 || cardinal(arr[index - 1], cell))
-        && new Set(line.map((c) => `${c.x},${c.y}`)).size === 3
-        && line.some(inArea);
-      if (!legal) throw new RuleProgramViolation('choice.line', 'Terraforming\u2019s difficult effect must be an orthogonal-contiguous Line 3 with at least one space in the area.');
-      mutations.push(terrainMutation(context, 'create', 'difficult', line));
+      const cells = validateLine(line, 3);
+      const legal = cells !== null
+        && cells.every(gridValid)
+        && cells.some(inArea)
+        && !cells.some(characterOccupiedAt);
+      if (!legal) throw new RuleProgramViolation('choice.line', 'Terraforming\u2019s difficult effect must be a legal Line 3 (orthogonal, strictly further from its origin, no overlap) with at least one space in the area and none in a character-occupied space.');
+      mutations.push(terrainMutation(context, 'create', 'difficult', cells!));
     } else if (name === 'remove') {
       // Remove ONLY the player-chosen difficult/dangerous cells in the area;
       // the reducer keeps out-of-area cells of the same multi-cell record.
@@ -328,9 +356,13 @@ const terraformingEffects: RuleResolver = (context) => {
       }
     } else if (name === 'dangerous') {
       // Talent II: "create up to 3 spaces of dangerous terrain in the area as a
-      // choosable effect" — a selectable bullet, not an automatic always rider.
-      const danger = pos('dangerous').filter((cell) => createFree(cell));
+      // choosable effect" — a selectable bullet. Up-to-3 legal spaces; every
+      // chosen space must be a legal, non-character-occupied placement or the
+      // choice is rejected fail-closed (an illegal choice is never silently
+      // dropped).
+      const danger = pos('dangerous');
       if (danger.length > 3) throw new RuleProgramViolation('choice.dangerous', 'Terraforming\u2019s dangerous effect allows at most 3 spaces.');
+      if (danger.some((cell) => !inPool(cell) || characterOccupiedAt(cell))) throw new RuleProgramViolation('choice.placement', 'Terraforming cannot create dangerous terrain in a character-occupied or out-of-pool space.');
       for (const cell of danger) mutations.push(terrainMutation(context, 'create', 'dangerous', [cell]));
     }
   }

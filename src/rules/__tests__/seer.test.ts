@@ -70,6 +70,18 @@ describe('Seer ability automation (p.197–203)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Sleight Of Hand wild card: placement region is the FOE but the LoS authority is the CREATOR (hero)', () => {
+    const { state, hero, foe } = seerEncounter({ foe: { x: 3, y: 1 }, second: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:sleight-of-hand', targetIds: [foe.id] }, scriptedDice());
+    const card = mutationsOf(result.events, 'seer:sleight-of-hand').find((m) => m.kind === 'entity' && m.entityType === 'wild-card');
+    expect(card).toBeDefined();
+    if (card && card.kind === 'entity') {
+      // PART 2: region candidates are the foe's vicinity, but creationSpatial
+      // carries the CREATOR origin (hero at (1,1)), never the foe/target.
+      expect(card.creationSpatial?.origin).toEqual({ x: 1, y: 1 });
+    }
+  });
+
   it('Chaos Tarot: a gamble of 1 explodes the card for fray damage', () => {
     const { state, hero, foe, second } = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id] }, scriptedDice(1));

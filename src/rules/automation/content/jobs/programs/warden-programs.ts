@@ -41,8 +41,13 @@ import { footprintDistance } from '../../../primitives/spatial-intent.js';
  *   documented; Underway's portal teleport is a free-action table-facing effect.
  */
 
-const summonBeastNear = (context: Parameters<RuleResolver>[0], ownerId: string, center: { x: number; y: number }): RuleMutation | null =>
-  summonEntity(context, ownerId, 'beast', center, { radius: 1, count: 1 })[0] ?? null;
+/** Place a beast near `region` (its target/area) while the CREATOR (`losOrigin`)
+ * is the line-of-sight authority (ICON p.108) — the placement region and the
+ * creator LoS origin are deliberately separate points. */
+const summonBeastNear = (
+  context: Parameters<RuleResolver>[0], ownerId: string, region: { x: number; y: number }, losOrigin: { x: number; y: number },
+): RuleMutation | null =>
+  summonEntity(context, ownerId, 'beast', region, { radius: 1, count: 1, losOrigin })[0] ?? null;
 
 /** ICON p.169: range-3 +1-boon attack, daze, summon a beast adjacent to the
  * target; Finishing Blow/Charge summons one more beast and grants stealth. */
@@ -79,11 +84,19 @@ const apexEffects: RuleResolver = (context) => {
   if (exactRangeUnerring && source.position) {
     mutations.push(shoveMutation(context, target.id, 1, axisDirection(source.position, targetPosition)));
   }
-  const beast = summonBeastNear(context, source.id, targetPosition);
+  const beast = source.position ? summonBeastNear(context, source.id, targetPosition, source.position) : null;
   if (beast) mutations.push(beast);
   if (context.triggers?.has('finishing-blow') || context.triggers?.has('charge')) {
-    const second = freeCellsInRange(context, targetPosition, 1)[1];
-    if (second) mutations.push(entityMutation(context, source.id, second, 'beast', {}));
+    // PART 4: the triggered extra beast rides the SAME authoritative creation
+    // intent (creator-LoS gated, target-adjacent region) — no hand-picked
+    // freeCellsInRange[index] fallback. The reducer applies the base beast
+    // first, then this second intent, and validateEntityCreation skips the
+    // now-occupied first cell, so you get two beasts total (one base + one
+    // triggered), never three.
+    const extra = source.position
+      ? summonEntity(context, source.id, 'beast', targetPosition, { radius: 1, count: 1, losOrigin: source.position })[0]
+      : undefined;
+    if (extra) mutations.push(extra);
     mutations.push(conditionMutation(context, source.id, 'stealth'));
   }
   return mutations;
@@ -192,7 +205,7 @@ const strengthOfThePackEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'strength-of-the-pack')];
   if (sourcePosition) {
-    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1 })[0];
+    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1, losOrigin: sourcePosition })[0];
     if (beast) mutations.push(beast);
     for (const character of Object.values(context.state.actors)) {
       const characterPosition = character.position;
@@ -221,7 +234,7 @@ const underwayEffects: RuleResolver = (context) => {
   if (!portalCell) throw new RuleProgramViolation('choice.position-range', 'Underway requires a free adjacent space.');
   mutations.push(entityMutation(context, source.id, portalCell, 'underway', {}));
   if (context.triggers?.has('charge')) {
-    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1 })[0];
+    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1, losOrigin: sourcePosition })[0];
     if (beast) mutations.push(beast);
   }
   return mutations;

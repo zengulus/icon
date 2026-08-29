@@ -7,7 +7,7 @@ import {
   distance, sourceActor, walk, freeCellsInRange, nearestFoe, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
-  shoveMutation, teleportMutation, entityMutation, terrainMutation,
+  shoveMutation, teleportMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -74,8 +74,9 @@ const rimeEffects: RuleResolver = (context) => {
     }
   }
   mutations.push(shoveMutation(context, target.id, 1, axisDirection(target.position, source.position)));
-  const spriteCell = freeCellsInRange(context, target.position, 2)[0];
-  if (spriteCell) mutations.push(entityMutation(context, source.id, spriteCell, 'salt-sprite', {}));
+  mutations.push(...summonEntity(context, source.id, 'salt-sprite', target.position, {
+    radius: 2, count: 1, losOrigin: source.position,
+  }));
   if (context.actionTags?.has('infuse') && context.triggers?.has('collide')) {
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
   }
@@ -185,8 +186,9 @@ const heaveHoEffects: RuleResolver = (context) => {
     mutations.push(shoveMutation(context, character.id, 1, away));
     if (character.side !== source.side) mutations.push(conditionMutation(context, character.id, 'vulnerable'));
   }
-  const spriteCell = freeCellsInRange(context, origin, 2)[0];
-  if (spriteCell) mutations.push(entityMutation(context, source.id, spriteCell, 'salt-sprite', {}));
+  mutations.push(...summonEntity(context, source.id, 'salt-sprite', origin, {
+    radius: 2, count: 1, losOrigin: source.position,
+  }));
   return mutations;
 };
 

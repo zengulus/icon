@@ -644,3 +644,133 @@ describe('F6 reducer-path candidate fall-through (a single intent mutation with 
     expect(Object.values(first.entities).filter((entity) => entity.type === 'bomb')[0].positions[0]).toEqual({ x: 3, y: 3 });
   });
 });
+
+describe('F3 entity kind: summons vs objects (ICON p.95 lifecycle/staking)', () => {
+  it('an ordinary summon is removed when its controller is defeated; an object survives', () => {
+    const { state, hero } = summonEncounter([]);
+    state.entities.summon = { id: 'summon', type: 'beast', ownerId: hero.id, positions: [{ x: 3, y: 2 }], state: {}, duration: null, kind: 'summon' };
+    state.entities.object = { id: 'object', type: 'boulder', ownerId: hero.id, positions: [{ x: 4, y: 2 }], state: { height: 1 }, duration: null, kind: 'object' };
+    defeatActor(state, state.actors[hero.id]);
+    expect(state.entities.summon).toBeUndefined();
+    expect(state.entities.object).toBeDefined();
+  });
+
+  it('a persistent companion survives its owner defeat', () => {
+    const { state, hero } = summonEncounter([]);
+    state.entities.companion = { id: 'c', type: 'beast', ownerId: hero.id, positions: [{ x: 3, y: 2 }], state: { companion: true }, duration: null, kind: 'summon' };
+    defeatActor(state, state.actors[hero.id]);
+    expect(state.entities.companion).toBeDefined();
+  });
+
+  it('objects may be created on other objects as long as total height <= 3', () => {
+    const state = createEncounter('stack');
+    state.entities.b0 = { id: 'b0', type: 'boulder', ownerId: 'o', positions: [{ x: 4, y: 1 }], state: { height: 2 }, duration: null, kind: 'object' };
+    const ok = validateEntityCreation(state, { ownerId: 'o', entityType: 'boulder', kind: 'object', positions: [{ x: 4, y: 1 }], count: 1, state: { height: 1 }, duration: null });
+    expect(ok).not.toBeNull();
+  });
+
+  it('stacking above total object height 3 is rejected', () => {
+    const state = createEncounter('stack');
+    state.entities.b0 = { id: 'b0', type: 'boulder', ownerId: 'o', positions: [{ x: 4, y: 1 }], state: { height: 3 }, duration: null, kind: 'object' };
+    const over = validateEntityCreation(state, { ownerId: 'o', entityType: 'boulder', kind: 'object', positions: [{ x: 4, y: 1 }], count: 1, state: { height: 1 }, duration: null });
+    expect(over).toBeNull();
+  });
+
+  it('a stack at exactly total height 3 (2+1) accepts a height-1 object but a height-2 object is rejected', () => {
+    const state = createEncounter('stack');
+    state.entities.b0 = { id: 'b0', type: 'boulder', ownerId: 'o', positions: [{ x: 4, y: 1 }], state: { height: 2 }, duration: null, kind: 'object' };
+    expect(validateEntityCreation(state, { ownerId: 'o', entityType: 'boulder', kind: 'object', positions: [{ x: 4, y: 1 }], count: 1, state: { height: 1 }, duration: null })).not.toBeNull();
+    expect(validateEntityCreation(state, { ownerId: 'o', entityType: 'boulder', kind: 'object', positions: [{ x: 4, y: 1 }], count: 1, state: { height: 2 }, duration: null })).toBeNull();
+  });
+
+  it('a summon cannot occupy an existing object\u2019s space', () => {
+    const state = createEncounter('occ');
+    state.entities.b0 = { id: 'b0', type: 'boulder', ownerId: 'o', positions: [{ x: 4, y: 1 }], state: { height: 1 }, duration: null, kind: 'object' };
+    expect(validateEntityCreation(state, { ownerId: 'o', entityType: 'beast', kind: 'summon', positions: [{ x: 4, y: 1 }], count: 1, state: {}, duration: null })).toBeNull();
+  });
+
+  it('replay is deterministic for lifecycle and stacking decisions', () => {
+    const base = summonEncounter([]);
+    base.state.entities.b0 = { id: 'b0', type: 'boulder', ownerId: base.hero.id, positions: [{ x: 4, y: 1 }], state: { height: 2 }, duration: null, kind: 'object' };
+    const mut: Extract<RuleMutation, { kind: 'entity' }> = {
+      kind: 'entity', sourceId: 'fixture:summon', operation: 'create', entityType: 'boulder', ownerId: base.hero.id, category: 'object',
+      positions: [{ x: 4, y: 1 }], count: 1, state: { height: 1 },
+    };
+    const events: EncounterEvent[] = [{ type: 'RULE_MUTATIONS_APPLIED', actorId: base.hero.id, sourceId: 'fixture:summon', actionId: 'default', timing: 'use', tags: [], mutations: [mut] }];
+    const first = applyEvents(structuredClone(base.state), events);
+    const second = applyEvents(structuredClone(base.state), events);
+    expect(second).toEqual(first);
+    // The stack now totals 3 (two objects shared the cell).
+    expect(Object.values(first.entities).filter((e) => e.type === 'boulder')).toHaveLength(2);
+  });
+});
+
+describe('F3 count/range semantics (exact vs up-to; creator footprint range)', () => {
+  it('a Size-2 creator may place at a cell outside anchor-radius but inside footprint range', () => {
+    // Origin (3,3) size 2 (footprint x3-4, y3-4); footprint-distance to (6,3) is 2
+    // and legal, while the anchor Chebyshev distance would be 3.
+    const state = createEncounter('range');
+    const r = validateEntityCreation(state, { ownerId: 'o', entityType: 'beast', kind: 'summon', positions: [{ x: 6, y: 3 }], count: 1, state: {}, duration: null, spatial: { origin: { x: 3, y: 3 }, originSize: 2, maxRange: 2 } });
+    expect(r).not.toBeNull();
+  });
+
+  it('exact-N fails (nothing created) when fewer legal cells than N', () => {
+    const state = createEncounter('exact');
+    state.entities.occ = { id: 'occ', type: 'boulder', ownerId: 'o', positions: [{ x: 3, y: 1 }], state: { height: 1 }, duration: null, kind: 'object' };
+    const r = validateEntityCreation(state, { ownerId: 'o', entityType: 'beast', kind: 'summon', positions: [{ x: 3, y: 1 }, { x: 3, y: 2 }, { x: 4, y: 2 }], count: 3, countMode: 'exact', state: {}, duration: null });
+    expect(r).toBeNull();
+  });
+
+  it('up-to creates the legal subset above an occupied candidate', () => {
+    const state = createEncounter('up-to');
+    state.entities.occ = { id: 'occ', type: 'boulder', ownerId: 'o', positions: [{ x: 3, y: 1 }], state: { height: 1 }, duration: null, kind: 'object' };
+    const r = validateEntityCreation(state, { ownerId: 'o', entityType: 'beast', kind: 'summon', positions: [{ x: 3, y: 1 }, { x: 3, y: 2 }, { x: 4, y: 2 }], count: 3, state: {}, duration: null });
+    expect(r).toEqual({ positions: [{ x: 3, y: 2 }, { x: 4, y: 2 }], count: 2 });
+  });
+
+  it('the summon cap yields partial success even under an exact request', () => {
+    const state = createEncounter('cap');
+    for (let i = 0; i < 5; i += 1) state.entities[`b${i}`] = { id: `b${i}`, type: 'bomb', ownerId: 'o', positions: [{ x: i, y: 7 }], state: {}, duration: null, kind: 'summon' };
+    // Five existing bombs leave one slot under the cap (6): exact count 2 → one.
+    const r = validateEntityCreation(state, { ownerId: 'o', entityType: 'bomb', kind: 'summon', positions: [{ x: 3, y: 2 }, { x: 4, y: 2 }], count: 2, countMode: 'exact', state: {}, duration: null });
+    expect(r).toEqual({ positions: [{ x: 3, y: 2 }], count: 1 });
+  });
+
+  it('deterministic ordering and replay for count-limited partial creation', () => {
+    const base = createEncounter('order');
+    base.entities.occ = { id: 'occ', type: 'boulder', ownerId: 'o', positions: [{ x: 3, y: 1 }], state: { height: 1 }, duration: null, kind: 'object' };
+    base.entities.occ2 = { id: 'occ2', type: 'boulder', ownerId: 'o', positions: [{ x: 4, y: 2 }], state: { height: 1 }, duration: null, kind: 'object' };
+    const candidates = [{ x: 3, y: 1 }, { x: 3, y: 2 }, { x: 4, y: 2 }, { x: 5, y: 2 }];
+    const req = { ownerId: 'o' as const, entityType: 'beast' as const, kind: 'summon' as const, positions: candidates, count: 3, state: {} as Record<string, string | number | boolean | null>, duration: null as null, spatial: { origin: { x: 1, y: 1 } as Position, originSize: 1 as number } };
+    const first = validateEntityCreation(structuredClone(base), req);
+    const second = validateEntityCreation(structuredClone(base), req);
+    expect(second).toEqual(first);
+    expect(first).toEqual({ positions: [{ x: 3, y: 2 }, { x: 5, y: 2 }], count: 2 });
+  });
+});
+
+describe('F3 creation-intent split: placement region vs creator LoS origin', () => {
+  it('LoS is measured from the CREATOR origin (a wall between the creator and a candidate skips it for a visible one), even when candidates are centered on a target region', () => {
+    const state = createEncounter('los');
+    state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 0 });
+    // Region is target-centered (candidates near (3,1)); LoS origin is the
+    // CREATOR (1,1). (3,1) sits behind the wall at (2,1); (3,2) is also
+    // behind it, but (3,3) is visible from the creator — so the creation
+    // falls through to the visible cell.
+    const r = validateEntityCreation(state, { ownerId: 'o', entityType: 'beast', kind: 'summon', positions: [{ x: 3, y: 1 }, { x: 3, y: 2 }, { x: 3, y: 3 }], count: 1, state: {}, duration: null, spatial: { origin: { x: 1, y: 1 } } });
+    expect(r).toEqual({ positions: [{ x: 3, y: 3 }], count: 1 });
+  });
+
+  it('with a clear creator path the target-centered placement succeeds', () => {
+    const state = createEncounter('los');
+    const r = validateEntityCreation(state, { ownerId: 'o', entityType: 'beast', kind: 'summon', positions: [{ x: 3, y: 1 }], count: 1, state: {}, duration: null, spatial: { origin: { x: 1, y: 1 } } });
+    expect(r).toEqual({ positions: [{ x: 3, y: 1 }], count: 1 });
+  });
+
+  it('a source-centered summon still behaves normally', () => {
+    const state = createEncounter('los');
+    // Region and LoS origin both at the source (1,1).
+    const r = validateEntityCreation(state, { ownerId: 'o', entityType: 'beast', kind: 'summon', positions: [{ x: 1, y: 2 }], count: 1, state: {}, duration: null, spatial: { origin: { x: 1, y: 1 } } });
+    expect(r).toEqual({ positions: [{ x: 1, y: 2 }], count: 1 });
+  });
+});

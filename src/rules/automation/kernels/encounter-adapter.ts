@@ -9,7 +9,7 @@ import type { AreaStateView } from './area.js';
 import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, type MasteryFoldStateView } from './mastery-fold.js';
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
-import { validateEntityCreation } from './entity-creation.js';
+import { entityKind, entityKindOf, validateEntityCreation } from './entity-creation.js';
 import type { RuleActorView, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
 
 const statusIds = new Set<StatusId>(['slashed', 'blind', 'dazed', 'hatred', 'pacified', 'sealed', 'shattered', 'stunned', 'weakened', 'vulnerable']);
@@ -310,10 +310,16 @@ function generatedId(state: EncounterState, sourceId: string, mutationIndex: num
 
 function removeOwnedEphemera(state: EncounterState, ownerId: string) {
   for (const [id, entity] of Object.entries(state.entities)) {
-    // F6: persistent companions (Beast Master's great beast, Bound Spirit's
-    // seraph, Selkie's elemental — state.companion) survive their owner's
-    // defeat: "This summon persists even if you're defeated."
-    if (entity.ownerId === ownerId && entity.type !== 'object' && entity.state['companion'] !== true) delete state.entities[id];
+    // ICON p.95/p.104: SUMMONS are removed when their controller is defeated;
+    // OBJECTS survive ("Objects are not removed when you are defeated").
+    // Persistent companions (Beast Master's great beast, Bound Spirit's
+    // seraph, Selkie's elemental — state.companion) are source-exempt and
+    // survive: "This summon persists even if you're defeated." The category
+    // always comes from the single entity-kind registry, never a type string.
+    if (entity.ownerId !== ownerId) continue;
+    if (entityKindOf(entity) !== 'summon') continue;
+    if (entity.state['companion'] === true) continue;
+    delete state.entities[id];
   }
   for (const actor of Object.values(state.actors)) {
     actor.marks = actor.marks.filter((mark) => mark.ownerId !== ownerId);
@@ -1280,9 +1286,12 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
         // boulders), while a count===1 creation yields one entity record.
         const legacyEntity = mutation as Extract<RuleMutation, { kind: 'entity' }> & { creationOrigin?: unknown; creationOriginSize?: unknown; creationMaxRange?: unknown };
         if (legacyEntity.creationOrigin !== undefined || legacyEntity.creationOriginSize !== undefined || legacyEntity.creationMaxRange !== undefined) break;
+        const category = mutation.category ?? entityKind(mutation.entityType);
         const validated = validateEntityCreation(state, {
           ownerId: mutation.ownerId,
           entityType: mutation.entityType,
+          kind: category,
+          countMode: mutation.countMode,
           positions: mutation.positions,
           count: mutation.count,
           state: mutation.state,
@@ -1297,11 +1306,11 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
           // its id or a later one would overwrite the earlier cell's record.
           for (let i = 0; i < validated.positions.length; i += 1) {
             const pos = validated.positions[i];
-            const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, `entity:${i}`), type: mutation.entityType, ownerId: mutation.ownerId, positions: [clone(pos)], state: { ...mutation.state }, duration: mutation.duration ?? null };
+            const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, `entity:${i}`), type: mutation.entityType, ownerId: mutation.ownerId, kind: category, positions: [clone(pos)], state: { ...mutation.state }, duration: mutation.duration ?? null };
             state.entities[entity.id] = entity;
           }
         } else {
-          const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, 'entity'), type: mutation.entityType, ownerId: mutation.ownerId, positions: clone(validated.positions), state: { ...mutation.state }, duration: mutation.duration ?? null };
+          const entity: EncounterEntity = { id: generatedId(state, mutation.sourceId, mutationIndex, 'entity'), type: mutation.entityType, ownerId: mutation.ownerId, kind: category, positions: clone(validated.positions), state: { ...mutation.state }, duration: mutation.duration ?? null };
           state.entities[entity.id] = entity;
         }
       }

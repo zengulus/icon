@@ -28,6 +28,34 @@ export function lineCells(from: Position, direction: Position, length: number): 
   return cells;
 }
 
+/** Validate a player-chosen Line `X` path (ICON p.97): it must be exactly
+ * `length` spaces, orthogonally contiguous (no diagonal step), drawn with each
+ * successive space STRICTLY further away from the line's origin point than the
+ * previous one (so no L-shaped turns or backtracking), and contain no
+ * duplicate/self-overlapping spaces. When the ability has a range, the origin
+ * point is the FIRST space of the line (the chosen path's first cell). Returns
+ * the cells on success, or null when the chosen path is not a legal Line — a
+ * chosen path is never approximated or auto-shaped. This is the single Line
+ * geometry authority; resolvers must not implement a second Line validator. */
+export function validateLine(path: readonly Position[], length: number): Position[] | null {
+  if (length === 0 || path.length !== length) return null;
+  if (length === 1) return [{ ...path[0] }];
+  const seen = new Set<string>([cellKey(path[0])]);
+  // The line origin point is its FIRST space (ICON p.97: the first space of
+  // the line when the ability has a range). Each later space must be one
+  // orthogonal step and strictly further (Chebyshev) from that origin.
+  for (let i = 1; i < path.length; i += 1) {
+    const key = cellKey(path[i]);
+    if (seen.has(key)) return null; // duplicate / self-overlap
+    const step = Math.abs(path[i].x - path[i - 1].x) + Math.abs(path[i].y - path[i - 1].y);
+    if (step !== 1) return null; // must be orthogonally contiguous (no diagonal)
+    const originDist = (cell: Position) => Math.max(Math.abs(cell.x - path[0].x), Math.abs(cell.y - path[0].y));
+    if (originDist(path[i]) <= originDist(path[i - 1])) return null; // must be strictly further from origin
+    seen.add(key);
+  }
+  return path.map((cell) => ({ ...cell }));
+}
+
 /** All spaces within square (Chebyshev) radius of a central space. */
 export function squareArea(center: Position, radius: number): Position[] {
   const cells: Position[] = [];

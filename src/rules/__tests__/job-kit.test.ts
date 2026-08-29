@@ -59,23 +59,27 @@ describe('job-kit building blocks', () => {
     expect(walk(ctx, { x: 1, y: 1 }, { x: 1, y: 0 }, 5, true, hero.id)).toEqual({ x: 6, y: 1 });
   });
 
-  it('summonEntity is the single summon seam: it emits ONE intent mutation with an ordered candidate list, requested count, and a paired creationSpatial (the kernel decides)', () => {
+  it('summonEntity is the single summon seam: one INTENT mutation with placement region + creator LoS split, count, category', () => {
     const { state, hero } = board();
     const ctx = kitContext(state, hero.id, scriptedDice());
-    // Hero at (1,1), foe at (3,1). Summon two beasts within radius 1 of the foe.
-    const mutations = summonEntity(ctx, hero.id, 'beast', { x: 3, y: 1 }, { radius: 1, count: 2 });
+    // Hero (creator) at (1,1), foe at (3,1). Place two beasts around the FOE
+    // (region = target) whose line of sight comes from the HERO (losOrigin),
+    // not from the region center — the intent split PART 2 requires.
+    const mutations = summonEntity(ctx, hero.id, 'beast', { x: 3, y: 1 }, { radius: 1, count: 2, losOrigin: { x: 1, y: 1 } });
     expect(mutations).toHaveLength(1);
     const mutation = mutations[0]!;
     expect(mutation).toMatchObject({
       kind: 'entity', operation: 'create', entityType: 'beast', ownerId: hero.id, count: 2,
-      creationSpatial: { origin: { x: 3, y: 1 }, originSize: 1, maxRange: 1 },
+      category: 'summon', countMode: 'up-to',
+      creationSpatial: { origin: { x: 1, y: 1 }, originSize: 1 },
     });
     const cells = mutation.kind === 'entity' ? mutation.positions : [];
-    expect(cells.length).toBeGreaterThanOrEqual(2);
-    // Never the occupied foe center cell or the (distant) hero cell.
-    expect(cells.some((c) => c.x === 3 && c.y === 1)).toBe(false);
+    // The candidate DOMAIN is the full placement region around the foe — no
+    // pre-filtering of occupancy/LoS — so it includes the occupied foe center
+    // cell (the validator rejects it) but not the (distant) hero cell.
+    expect(cells.some((c) => c.x === 3 && c.y === 1)).toBe(true);
     expect(cells.some((c) => c.x === 1 && c.y === 1)).toBe(false);
-    // Every candidate is a free radius-1 Chebyshev cell of the origin.
+    // Every candidate is within the Chebyshev region of the placement center.
     for (const cell of cells) {
       expect(Math.max(Math.abs(cell.x - 3), Math.abs(cell.y - 1))).toBeLessThanOrEqual(1);
     }

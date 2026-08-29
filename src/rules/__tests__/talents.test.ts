@@ -623,6 +623,17 @@ describe('F7 terrain-create always trigger', () => {
     const run = () => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],      input: { options: { effects: 'boulders,dangerous' }, positions: { dangerous: [{ x: 5, y: 1 }] } } as any }, scriptedDice());
     expect(run).toThrow(/Unknown Terraforming effect: dangerous/);
   });
+
+  it('Terraforming talent 2: dangerous terrain cannot be created in a character-occupied space', () => {
+    const { state, hero, foe } = talentEncounter('geomancer:terraforming', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
+    // The foe occupies (5,1); choosing it for Talent-II dangerous is rejected
+    // fail-closed (ICON p.219 "effects cannot be created in occupied spaces").
+    const run = () => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
+      input: { options: { effects: 'boulders,dangerous' }, positions: { dangerous: [{ x: 5, y: 1 }] } } as any,
+    }, scriptedDice());
+    expect(run).toThrow(/character-occupied/);
+  });
 });
 
 describe('F14 cost-payment foundation proofs (optional sacrifice + resource-gain talents)', () => {
@@ -893,7 +904,7 @@ describe('Charge-variant talent gating', () => {
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
       input: { options: { effects: 'boulders,pits,difficult,remove' },
-        positions: { line: [{ x: 4, y: 1 }, { x: 5, y: 1 }, { x: 6, y: 1 }] } } as any,
+        positions: { line: [{ x: 5, y: 0 }, { x: 6, y: 0 }, { x: 7, y: 0 }] } } as any,
     }, scriptedDice());
     // With TI and charged, four distinct effects are budgeted. The resolver
     // produces terrain mutations with the ability sourceId, not a talent
@@ -917,7 +928,7 @@ describe('Charge-variant talent gating', () => {
     const result = executeCommand(noTI, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:terraforming', targetIds: [foe.id],
       input: { options: { effects: 'boulders,pits,difficult,remove' },
-        positions: { line: [{ x: 4, y: 1 }, { x: 5, y: 1 }, { x: 6, y: 1 }] } } as any,
+        positions: { line: [{ x: 5, y: 0 }, { x: 6, y: 0 }, { x: 7, y: 0 }] } } as any,
     }, scriptedDice());
     const allMutations = abilityMutationsOf(result, 'geomancer:terraforming');
     const createdCells = allMutations.flatMap((m) => ('positions' in m && Array.isArray(m.positions) ? m.positions : []) as { x: number; y: number }[]);

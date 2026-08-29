@@ -7,7 +7,7 @@ import {
   distance, sourceActor, freeCellsInRange, rushTowardFoes,
   damageMutation, conditionMutation, stateMutation, vigorMutation, rollDamageDice,
   resourceMutation, stanceMutation, markMutation,
-  teleportMutation, entityMutation, terrainMutation,
+  teleportMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -70,11 +70,13 @@ const reapEffects: RuleResolver = (context) => {
   mutations.push(roll.hit
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
-  const thrallCell = freeCellsInRange(context, target.position, 1)[0];
-  if (thrallCell) mutations.push(entityMutation(context, source.id, thrallCell, 'thrall', {}));
+  mutations.push(...summonEntity(context, source.id, 'thrall', target.position, {
+    radius: 1, count: 1, losOrigin: source.position,
+  }));
   if (context.triggers?.has('slay')) {
-    const second = freeCellsInRange(context, target.position, 1)[0];
-    if (second) mutations.push(entityMutation(context, source.id, second, 'thrall', {}));
+    mutations.push(...summonEntity(context, source.id, 'thrall', target.position, {
+      radius: 1, count: 1, losOrigin: source.position,
+    }));
     mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'effect'));
   }
 
@@ -100,8 +102,9 @@ const gravebirthEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'gravebirth')];
-  const thrallCell = freeCellsInRange(context, source.position, 2)[0];
-  if (thrallCell) mutations.push(entityMutation(context, source.id, thrallCell, 'thrall', {}));
+  mutations.push(...summonEntity(context, source.id, 'thrall', source.position, {
+    radius: 2, count: 1, losOrigin: source.position,
+  }));
   return mutations;
 };
 
@@ -133,8 +136,9 @@ const harvestEffects: RuleResolver = (context) => {
   if (context.triggers?.has('slay')) {
     for (const foe of [...foesInArea, target]) {
       if (!foe.position) continue;
-      const thrallCell = freeCellsInRange(context, foe.position, 1)[0];
-      if (thrallCell) mutations.push(entityMutation(context, source.id, thrallCell, 'thrall', {}));
+      mutations.push(...summonEntity(context, source.id, 'thrall', foe.position, {
+        radius: 1, count: 1, losOrigin: source.position,
+      }));
       mutations.push(damageMutation(context, foe.id, 2, 'area', 'piercing'));
     }
   }
