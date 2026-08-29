@@ -397,27 +397,10 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
 
   // ICON p.169 Morrigan talent 2: "After Morrigan resolves, some of the
   // winged creatures linger, creating two spaces of dangerous terrain in
-  // range 2." "In range 2" uses the canonical square (Chebyshev) radius-2
-  // area — the same p.92 range authority — NOT an ad-hoc Manhattan radius.
-  // The source imposes no free-space rule, so dangerous terrain is created
-  // deterministically (two spaces) across the square radius, and may land on
-  // a character's cell like other in-area terrain.
-  'warden:morrigan:talent:2': {
-    mechanic: 'Always: create 2 spaces of dangerous terrain within square (Chebyshev) range 2 of the target.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
-        if (!target?.position) return [];
-        const candidates = squareArea(target.position, 2).filter((c) => !sameCell(c, target.position));
-        return candidates.slice(0, 2).map((pos) => ({
-          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
-          terrain: 'dangerous', positions: [pos], height: null,
-        }));
-      },
-    },
-  },
+  // range 2." The terrain is created at Morrigan's DELAYED resolution (the
+  // start of the user's slow next turn), not at use time. The F7 fold's
+  // always-trigger fires at USE and cannot express the delayed-resolve
+  // timing, so this row is NOT wired (reclassified `triggered-terrain-creation`).
 
   // ICON p.170 Sidhe talent 1: "Also create a space of dangerous terrain
   // adjacent to your foe AFTER THE EFFECT EXPIRES." The terrain is created on
@@ -428,122 +411,46 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
 
   // ICON p.202 The Tower talent 2: "The meteor scatters debris when
   // landing, creating two spaces of difficult terrain in the area, which
-  // could also be created under characters." The fold places difficult
-  // terrain in the ability's medium blast area centered on the target.
-  'seer:the-tower:talent:2': {
-    mechanic: 'Always: create 2 spaces of difficult terrain in the blast area.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
-        if (!target?.position) return [];
-        const area = squareArea(target.position, 2);
-        return area.slice(0, 2).map((pos) => ({
-          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
-          terrain: 'difficult', positions: [pos], height: null,
-        }));
-      },
-    },
-  },
+  // could also be created under characters." The debris is created when the
+  // END-OF-FOE-TURN meteor lands (the tower's large blast), not at use time,
+  // and the area is the blast area, not a square radius. The F7 fold fires
+  // at use and cannot express the landing lifecycle or the blast area, so
+  // this row is NOT wired (reclassified `selectable-terrain-placement` +
+  // `under-character-terrain` + `delayed-terrain`).
 
   // enochian:implode:talent:2 — reclassified: the pit is created by the
   // delay detonation lifecycle hook, not the ability's own mutation stream.
   // The fold cannot read lifecycle-created terrain. Program-level or
   // lifecycle-level implementation needed.
 
-  // ICON p.225 Blitz talent 1: "When used against a bloodied foe, blitz
-  // creates two lightning dangerous terrain spaces in free space in range 2
-  // of them." The fold fires only when the target is bloodied.
-  'spellblade:blitz:talent:1': {
-    mechanic: 'Always: create 2 spaces of dangerous terrain in range 2 of the foe.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
-        if (!target?.position) return [];
-        const { x, y } = target.position;
-        const candidates: { x: number; y: number }[] = [];
-        for (let dx = -2; dx <= 2; dx += 1) {
-          for (let dy = -2; dy <= 2; dy += 1) {
-            if (Math.abs(dx) + Math.abs(dy) > 2 || (dx === 0 && dy === 0)) continue;
-            const c = { x: x + dx, y: y + dy };
-            if (c.x >= 0 && c.y >= 0 && !Object.values(context.state.actors).some((a) => a.position && a.position.x === c.x && a.position.y === c.y)) candidates.push(c);
-          }
-        }
-        return candidates.slice(0, 2).map((pos) => ({
-          kind: 'terrain' as const, sourceActorId: actorId, operation: 'create' as const,
-          terrain: 'dangerous', positions: [pos], height: null,
-        }));
-      },
-    },
-  },
+  // ICON p.225 Blitz talent 1: "When used against a BLOODIED foe, blitz
+  // creates two lightning dangerous terrain spaces in FREE SPACE in range 2
+  // of them." Source-exact execution requires the bloodied predicate, the
+  // canonical square (Chebyshev) range 2, and a free-space (unoccupied plus
+  // unimpassable) scan — none of which the no-input F7 fold can express
+  // (the prior row used Manhattan radius, omitted the bloodied gate, and
+  // approximated occupancy). NOT wired (reclassified `selectable-terrain-placement`).
 
-  // ICON p.232 Tsunami talent 1: "Tsunami creates a pit in its center
-  // space after completing its movement. The pit remains even if Tsunami
-  // moves on." The fold reads the tsunami entity's position from the
-  // ability's mutations and places a pit there.
-  'stormbender:tsunami:talent:1': {
-    mechanic: 'Always: create a pit in the tsunami\'s center space.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, _targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const tsunami = context.mutations.find((m) => m.kind === 'terrain' && m.terrain === 'tsunami' && m.sourceActorId === actorId) as Extract<RuleMutation, { kind: 'terrain' }> | undefined;
-        if (!tsunami || !tsunami.positions[0]) return [];
-        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'pit', positions: [tsunami.positions[0]], height: null }];
-      },
-    },
-  },
+  // ICON p.232 Tsunami talent 1: "Tsunami creates a pit in ITS CENTER SPACE
+  // AFTER COMPLETING ITS MOVEMENT. The pit remains even if Tsunami moves on."
+  // The prior fold read the first cell of the tsunami area (a 5x5 corner),
+  // not the center, and fired at use rather than post-movement. Program-level
+  // or lifecycle-level implementation needed. NOT wired (reclassified
+  // `selectable-terrain-placement` + `under-character-terrain`).
 
-  // ICON p.233 Heave-Ho talent 1: "If only one foe is caught in the area
-  // of wave, also create a pit underneath them." The fold fires only when
-  // exactly one foe is in the ability's area.
-  'stormbender:heave-ho:talent:1': {
-    mechanic: 'Always: create a pit under the first foe in the ability area.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        // The ability's shove mutations record the origin; find foes in the blast.
-        const sourceSide = context.state.actors[actorId]?.side;
-        const foe = Object.values(context.state.actors).find((actor) => {
-          return actor.side !== sourceSide && !actor.defeated && actor.position && actor.id !== actorId;
-        });
-        if (!foe?.position) return [];
-        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'pit', positions: [{ ...foe.position }], height: null }];
-      },
-    },
-  },
+  // ICON p.233 Heave-Ho talent 1: "If ONLY ONE foe is caught in the area of
+  // wave, also create a pit underneath them." The prior fold picked the
+  // first opponent anywhere on the map, never checking that exactly one foe
+  // is in the ability's blast. The no-input fold cannot express the area
+  // membership predicate, so this row is NOT wired (reclassified
+  // `triggered-terrain-creation`).
 
-  // ICON p.235 Waterspout talent 2: "If only one foe or ally is inside the
-  // waterspout, it can move 3 space instead, and leaves a space of difficult
-  // terrain in one space that it vacates." The fold reads the waterspout
-  // entity's position from the ability's mutations and creates difficult
-  // terrain at the vacated space (the original position).
-  // NOTE: the ability program already implements this talent — the terrain
-  // is created as part of the waterspout entity's movement in the resolver.
-  // This fold is a supplementary safety net; the program-level implementation
-  // is authoritative.
-
-  // ICON p.235 Waterspout talent 2: "If only one foe or ally is inside the
-  // waterspout, it can move 3 space instead, and leaves a space of difficult
-  // terrain in one space that it vacates." The fold reads the waterspout
-  // entity's position from the ability's mutations and creates difficult
-  // terrain at the vacated space (the original position).
-  'stormbender:waterspout:talent:2': {
-    mechanic: 'Always: leave a space of difficult terrain at the waterspout\'s vacated space.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, _targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const creation = context.mutations.find((m) => m.kind === 'entity' && m.operation === 'create' && m.entityType === 'waterspout' && m.ownerId === actorId) as Extract<RuleMutation, { kind: 'entity' }> | undefined;
-        if (!creation || !creation.positions[0]) return [];
-        return [{ kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'difficult', positions: [creation.positions[0]], height: null }];
-      },
-    },
-  },
+  // ICON p.235 Waterspout talent 2: "If ONLY ONE foe or ally is inside the
+  // waterspout, it can move 3 spaces instead, and leaves a space of difficult
+  // terrain in a space it vacates." The prior fold always created difficult
+  // terrain at the summon position, and the "move 3 instead" half depends on
+  // the waterspout's (documented, unimplemented) movement window. NOT wired
+  // (reclassified `triggered-terrain-creation`).
 
   // ICON p.210 Enochian Pyre talent 2: "Exceed: You may shove all characters
   // in the area 2 spaces." The exceed trigger rides the ability's attack
@@ -575,25 +482,14 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
     },
   },
 
-  // ICON p.236 Eye of the Storm talent 1: "If there is no character in the
+  // ICON p.236 Eye of the Storm talent 1: "If there is NO CHARACTER in the
   // center space, create a pit there. The pit is also dangerous terrain."
-  // The fold fires only when the center is unoccupied. The ability's own
-  // terrain creation mutation marks the center position.
-  'stormbender:eye-of-the-storm:talent:1': {
-    mechanic: 'Always: create a pit and dangerous terrain at the target position.',
-    triggerEffect: {
-      trigger: 'always',
-      build: (actorId, targetIds, _triggerTargetIds, context) => {
-        if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
-        if (!target?.position) return [];
-        return [
-          { kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'pit', positions: [{ ...target.position }], height: null },
-          { kind: 'terrain', sourceActorId: actorId, operation: 'create', terrain: 'dangerous', positions: [{ ...target.position }], height: null },
-        ];
-      },
-    },
-  },
+  // The prior fold always created the pit at the target's cell and never
+  // checked the explicit "no character in the center space" occupancy
+  // predicate. The no-input F7 fold cannot express the occupancy check at
+  // the ability's true center, so this row is NOT wired. Program-level
+  // resolver implementation (gated on the equipped talent + a center
+  // occupancy scan) is needed (reclassified `under-character-terrain`).
 
   // ── Cost-payment foundation proofs (F14, docs/rules-foundations.md §10) ──
 

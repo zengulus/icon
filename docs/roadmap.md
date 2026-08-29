@@ -209,7 +209,7 @@ promotion was retracted (Ultra Part 1) because Raging Wolf's full
 semantics (Heroic immunity while using, defeated-turns-next-use-free)
 couldn't be represented; `colossus:raging-wolf:talent:2` remains unresolved on
 `choice-input` + `ordered-intermediate-state` + `fly-distance-modifier`, and
-the base ability is deliberately non-executable. The census total stayed 419.
+the base ability is deliberately non-executable. The Phase-1 terrain re-audit (2026-08-29) then retracted seven source-inexact terrain talent folds (Morrigan t2, The Tower t2, Blitz t1, Eye of the Storm t1, Tsunami t1, Heave-Ho t1, Waterspout t2 — each needed delayed/moved-a-foe/occupancy/bloodied/blast-membership semantics the no-input fold can't express); the honest unresolved total rose to 426.
 
 **Why now.** Highest fan-out after P3; converts hand-rolled resolvers into
 data rows.

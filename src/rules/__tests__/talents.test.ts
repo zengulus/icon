@@ -92,7 +92,7 @@ const talentMutationsOf = (result: ReturnType<typeof executeCommand>, abilityId:
     : []);
 
 describe('F7 closed talent inventory', () => {
-  it('covers exactly the 288 source talents with 31 wired / 11 program-level / 3 passive-projection / 4 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 231 documented', () => {
+  it('covers exactly the 288 source talents with 24 wired / 11 program-level / 3 passive-projection / 4 range-modifier / 1 area-modifier / 4 bonus-damage / 3 mark-modifier / 238 documented', () => {
     const units = collectRuleSourceUnits();
     const sourceIds = units.filter((unit) => unit.kind === 'talent').map((unit) => unit.id);
     const recipes = getTalentRecipes(units);
@@ -121,8 +121,15 @@ describe('F7 closed talent inventory', () => {
     // F4 (2026-08-29): +1 program-level `colossus:raging-wolf:talent:2`
     // (flight 1→3 while at 1 hp, rank-gated inside the Raging Wolf resolver).
     // None are fold triggers or program-emitted variants in the wrong home.
-    expect(getExecutableTalentIds().size).toBe(58);
-    expect(getDocumentedTalentIds(units).size).toBe(231);
+    // Phase-1 terrain re-audit (2026-08-29): RETRACTED the seven source-
+    // inexact terrain talent folds (Morrigan t2 delayed-resolve; The Tower
+    // t2 landing lifecycle; Blitz t1 bloodied+free-space gate; Eye of the
+    // Storm t1 center-occupancy; Tsunami t1 true-center/post-movement;
+    // Heave-Ho t1 only-one-foe-in-blast; Waterspout t2 predicate + movement
+    // window). Wired 31→24; documented 231→238; executable 58→51. Each is
+    // now a precise census blocker (terrain families).
+    expect(getExecutableTalentIds().size).toBe(51);
+    expect(getDocumentedTalentIds(units).size).toBe(238);
     for (const recipe of Object.values(recipes)) {
       expect(recipe.abilityId).toBeTruthy();
       if (recipe.status === 'wired') expect(recipe.triggerEffect).toBeDefined();
@@ -543,42 +550,35 @@ describe('F7 terrain-create audited triggers', () => {
   // enochian:implode:talent:2 is reclassified — the pit is created by the
   // delay detonation lifecycle hook, not the fold.
 
-  it('Eye of the Storm talent 1: creates pit and dangerous terrain at the target position', () => {
+  // Phase-1 re-audit (2026-08-29): the six source-inexact terrain talent
+  // rows below were RETRACTED from the no-input fold because none could
+  // represent its full source semantics at use time (delayed-resolve timing,
+  // the real blast/range geometry, missing bloodied / occupancy / area-
+  // membership predicates, or a required-but-unimplemented movement window).
+  // Each talent is now documented/unresolved: USING the ability emits no
+  // talent terrain, and the census records the precise residual blocker.
+
+  it('Eye of the Storm talent 1: retracted — no pit at use (occupancy predicate + center unresolved)', () => {
     const { state, hero, foe } = talentEncounter('stormbender:eye-of-the-storm', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 4, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:eye-of-the-storm', targetIds: [foe.id] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'stormbender:eye-of-the-storm').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(2); // pit + dangerous
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Blitz talent 1: creates 2 spaces of dangerous terrain near the foe', () => {
+  it('Blitz talent 1: retracted — no dangerous terrain at use (bloodied gate + free-space geometry unresolved)', () => {
     const { state, hero, foe } = talentEncounter('spellblade:blitz', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:blitz', targetIds: [foe.id], input: { positions: { 'teleport-0': [{ x: 1, y: 2 }] } } }, scriptedDice(20, 4));
-    const terrainMutations = talentMutationsOf(result, 'spellblade:blitz').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  // ICON p.169 morrigan T2: "two spaces of dangerous terrain in RANGE 2" —
-  // canonical square (Chebyshev) radius 2, NOT Manhattan. The two created
-  // spaces must include a corner cell that Manhattan-2 would exclude, proving
-  // the canonical p.92 range geometry (not a hand-rolled L\u00e2\u0080\u0090ring).
-  it('Morrigan talent 2: creates 2 dangerous spaces using canonical square range 2 (not Manhattan)', () => {
+  // ICON p.169 morrigan T2: dangerous terrain created at Morrigan's DELAYED
+  // resolution (start of the user's slow next turn), not at use. The prior
+  // always-fold fired at use; retracted.
+  it('Morrigan talent 2: retracted — no dangerous terrain at use (delayed-resolve timing unresolved)', () => {
     const { state, hero, foe } = talentEncounter('warden:morrigan', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 4, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:morrigan', targetIds: [foe.id] }, scriptedDice());
-    const created = result.state.terrainEffects
-      .filter((e) => e.terrain === 'dangerous')
-      .flatMap((e) => e.positions);
-    expect(created.length).toBeGreaterThanOrEqual(2);
-    const cheb = (p: { x: number; y: number }) => Math.max(Math.abs(p.x - foe.position.x), Math.abs(p.y - foe.position.y));
-    const manhattan = (p: { x: number; y: number }) => Math.abs(p.x - foe.position.x) + Math.abs(p.y - foe.position.y);
-    for (const cell of created) expect(cheb(cell)).toBeLessThanOrEqual(2);
-    // The deterministic first-two cells are (-2,-2),(-1,-2): a corner cell a
-    // Manhattan-geometry implementation could never reach → canonical square 2.
-    expect(created.some((cell) => manhattan(cell) > 2 && cheb(cell) === 2)).toBe(true);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'dangerous')).toBe(false);
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
@@ -593,48 +593,37 @@ describe('F7 terrain-create audited triggers', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  // ICON p.202 the-tower T2: two difficult spaces "in the area, which could
-  // ALSO be created under characters." The source explicitly EXEMPTS the
-  // general free-space rule, so terrain MUST be created on a character's cell
-  // (never occupancy-filtered). The deterministic first-two blast cells around
-  // the target at (5,2) are (3,0) and (3,1); an extraFoe sits on (3,0).
-  it('The Tower talent 2: 2 difficult spaces in the area, INCLUDING under a character (explicit exception)', () => {
-    const { state, hero, foe } = talentEncounter('seer:the-tower', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 2 }, extraFoes: [{ at: { x: 3, y: 0 } }] });
+  // ICON p.202 the-tower T2: debris created when the END-OF-FOE-TURN meteor
+  // lands (large blast), not at use; the prior always-fold used a square
+  // radius-2 at use time instead of the blast area. Retracted.
+  it('The Tower talent 2: retracted — no difficult debris at use (landing lifecycle + blast area unresolved)', () => {
+    const { state, hero, foe } = talentEncounter('seer:the-tower', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 2 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:the-tower', targetIds: [foe.id] }, scriptedDice());
-    const difficultCells = result.state.terrainEffects
-      .filter((e) => e.terrain === 'difficult')
-      .flatMap((e) => e.positions);
-    expect(difficultCells.length).toBeGreaterThanOrEqual(2);
-    expect(difficultCells.some((cell) => cell.x === 3 && cell.y === 0)).toBe(true); // under the extraFoe
-    for (const cell of difficultCells) expect(Math.max(Math.abs(cell.x - 5), Math.abs(cell.y - 2))).toBeLessThanOrEqual(2);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(false);
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Tsunami talent 1: creates a pit in the tsunami center space', () => {
+  it('Tsunami talent 1: retracted — no pit at use (needs true center + post-movement timing)', () => {
     const { state, hero, foe } = talentEncounter('stormbender:tsunami', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 5, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:tsunami', targetIds: [] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'stormbender:tsunami').filter((m) => m.kind === 'terrain' && m.operation === 'create');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Heave-Ho talent 1: creates pit under a foe', () => {
+  it('Heave-Ho talent 1: retracted — no pit at use (only-one-foe-in-blast predicate unresolved)', () => {
     const { state, hero, foe } = talentEncounter('stormbender:heave-ho', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 3, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:heave-ho', targetIds: [] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'stormbender:heave-ho').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    expect(result.state.terrainEffects.some((e) => e.terrain === 'pit')).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Waterspout talent 2: leaves difficult terrain at the vacated space', () => {
+  it('Waterspout talent 2: retracted — no additional difficult terrain beyond the base waterspout (predicate + movement unresolved)', () => {
     const { state, hero, foe } = talentEncounter('stormbender:waterspout', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:waterspout', targetIds: [] }, scriptedDice());
-    const terrainMutations = talentMutationsOf(result, 'stormbender:waterspout').filter((m) => m.kind === 'terrain');
-    expect(terrainMutations.length).toBeGreaterThanOrEqual(1);
-    expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(true);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    // The base ability itself summons a waterspout that is difficult terrain;
+    // the trait-2 fold no longer adds a second, separate difficult effect.
+    expect(result.state.terrainEffects.filter((e) => e.terrain === 'difficult')).toHaveLength(1);
+    expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
   it('Terraforming talent 2: dangerous terrain is a selectable effect that spends one choice, not an automatic rider', () => {

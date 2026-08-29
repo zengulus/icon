@@ -1532,6 +1532,17 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'stormbender:rime:talent:2': ['area-define', 'range-modifier', 'terrain-object-substitution'], // bounce summons a salt sprite adjacent to each struck character
   'stormbender:rime:mastery': ['area-define', 'range-modifier', 'delayed-terrain'], // Infuse: summon a pit in the area after it resolves per 2 aether
   'stormbender:eye-of-the-storm:mastery': ['terrain-object-substitution', 'moving-area-terrain'], // aethercloud OBJECT drifts; carries characters with it
+
+  // ── Phase-1 terrain re-audit (2026-08-29): retracted the source-inexact
+  // terrain talent folds. Each row below is the precise residual blocker
+  // after reading the full passage; the abilities themselves stay executable.
+  'warden:morrigan:talent:2': ['triggered-terrain-creation'], // 2 dangerous created at Morrigan's delayed resolve, not use
+  'seer:the-tower:talent:2': ['selectable-terrain-placement', 'under-character-terrain', 'delayed-terrain'], // 2 difficult debris when the end-of-foe-turn meteor lands, in its blast area
+  'spellblade:blitz:talent:1': ['selectable-terrain-placement'], // 2 dangerous in free space in range 2 only vs a bloodied foe
+  'stormbender:eye-of-the-storm:talent:1': ['under-character-terrain'], // pit (also dangerous) ONLY when the center is unoccupied
+  'stormbender:tsunami:talent:1': ['selectable-terrain-placement', 'under-character-terrain'], // pit at the tsunami's true center after movement
+  'stormbender:heave-ho:talent:1': ['triggered-terrain-creation'], // pit under the sole foe actually caught in the wave blast
+  'stormbender:waterspout:talent:2': ['triggered-terrain-creation'], // difficult on a vacated space only when one character is inside; depends on waterspout movement
   'enochian:limit-break': ['range-modifier'], // "pits of despair" is flavor; range-2 exemption
   'spellblade:limit-break': ['action-type-change', 'area-define'], // map split into sections; removes characters (no terrain)
 };
