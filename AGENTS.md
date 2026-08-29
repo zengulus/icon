@@ -1,553 +1,427 @@
-# AGENTS.md
-
 # ICON Repository Agent Instructions
 
 This repository implements the ICON 1.5 rules engine, character-management
-surface, and rules-driven VTT.
+surface, source compendium, rules-driven VTT, and authoritative multiplayer
+service.
 
-The rules engine is the authority. UI/VTT code consumes the engine; it must not
-reimplement game rules independently.
+This file is the repository constitution: stable authority rules, architectural
+boundaries, specialization routing, and completion standards. Task procedures
+belong in `SKILLS.md`. Current blocker counts, temporary implementation gaps,
+and tranche-specific facts belong in the live docs and generated audits, not
+here.
 
 Read this file before making changes.
 
 ---
 
-## 0. Commit Directive
-
-After every change, propose a detailed commit message, up to a paragraph.
-
----
-
-## 1. Project Direction
-
-The project is rules-first.
-
-Phase 1 is complete only when the rules engine can represent and validate the
-ICON content required for encounters. Completing the character-sheet UI alone
-is not sufficient.
-
-The VTT is a consumer and test harness for the rules engine, not an independent
-rules implementation.
-
-Broad architecture:
-
-    source content
-        ↓
-      content
-        ↓
-      kernels
-        ↓
-    primitives
-
-Preserve this direction.
-
-Do not introduce reverse dependencies.
-
----
-
-## 2. Architecture Boundary
-
-The intended dependency direction is:
-
-    content → kernels → primitives
-
-### primitives/
-
-Primitives contain:
-
-- source-ID-free vocabulary;
-- pure calculations;
-- generic builders;
-- generic state-transition structures.
-
-Primitives must not know about named ICON abilities, Jobs, Classes, foes,
-relics, trophies, or source IDs.
-
-### kernels/
-
-Kernels contain:
-
-- shared reusable mechanics;
-- reusable registries;
-- common execution folds;
-- generic timing/lifecycle machinery.
-
-Kernels must remain source-ID-free in their behavior.
-
-A content-owned provenance/source string may be carried opaquely where required
-for audit/replay, but kernels must never branch on or interpret source IDs.
-
-### content/
-
-Content contains:
-
-- exact source-ID keyed recipes;
-- source-specific declarative rows;
-- registration glue;
-- source-backed parameterization of generic mechanics.
-
-Source-specific knowledge belongs here.
-
-Do not move generic mechanics into content merely because only one current
-source unit uses them.
-
----
-
-## 3. Rules Authority
-
-ICON source text is semantic authority.
-
-Implementation code is execution authority.
-
-Automation audits are coverage authority.
-
-Documentation is not execution authority.
-
-Never change implementation merely to make stale documentation correct.
-Update the documentation instead.
-
-Never mark a source unit executable because part of its rules text works.
-
-A source unit is executable only when its COMPLETE mechanical semantics that
-the engine claims to automate are represented.
-
-If exact semantics cannot currently be expressed:
-
-- leave the source unit unresolved;
-- identify the minimum missing reusable capability;
-- document the blocker;
-- do not approximate the source rule merely to improve coverage.
-
----
-
-## 4. Source IDs and Bespoke Logic
-
-Do not put source-ID branches into primitives or kernels.
-
-Bad:
-
-    if (sourceId === "some-job:some-ability:talent:1") ...
-
-Bad:
-
-    switch (abilityName) ...
-
-Prefer:
-
-    content row
-        → typed reusable recipe
-        → generic kernel
-        → primitive mutations
-
-Do not create a per-content resolver solely to increase audit coverage.
-
-A source-specific resolver is a last resort, not the default solution.
-
-Before declaring a rule irreducibly source-specific, look for reusable modifier
-families such as:
-
-- timing override;
-- range override;
-- area/shape override;
-- target-count override;
-- damage modifier;
-- repeat/effect-count modifier;
-- movement modifier;
-- interrupt-rank override;
-- action-cost/type override;
-- duration modifier;
-- condition modifier;
-- resource-cost modifier;
-- trigger-threshold modifier.
-
-Treat "irreducible" as:
-
-    not yet decomposed into the current reusable vocabulary
-
-unless genuinely demonstrated otherwise.
-
----
-
-## 5. Existing Recipe Builders
-
-Existing content recipe systems may use bounded `build` functions that emit
-typed `RuleMutation[]`.
-
-The existence of a build callback is not itself an architectural violation.
-
-However, do not use `build` as a generic escape hatch.
-
-Content builders should primarily:
-
-- select source-defined targets;
-- supply source-defined constants;
-- construct existing typed mutations;
-- perform trivial parameterization.
-
-If multiple rows repeat meaningful rules algorithms such as:
-
-- spatial selection;
-- free-cell calculation;
-- area geometry;
-- placement rules;
-- state-machine logic;
-- lifecycle calculations;
-- targeting authority;
-
-prefer extracting the repeated source-independent logic into a shared helper,
-kernel, or primitive.
-
-Do not duplicate rules authority across content rows.
-
----
-
-## 6. Determinism and Replay
-
-Encounter execution must remain deterministic under replay.
-
-Random results must be recorded once and replayed, not rerolled.
-
-Player choices that affect execution must be represented durably where required.
-
-Do not create:
-
-- hidden second RNG paths;
-- replay-only rule implementations;
-- callbacks that rerun random decisions;
-- state transitions dependent on unrecorded ambient state.
-
-When adding a mechanic with randomness or meaningful branching, test replay.
-
----
-
-## 7. Encounter Semantics
-
-Shared encounter authority must be reused rather than bypassed.
-
-In particular, use existing shared systems for:
-
-- targeting;
-- range;
-- line of sight / line of effect;
-- areas;
-- movement;
-- damage;
-- conditions;
-- saves;
-- resources;
-- lifecycle;
-- triggers;
-- defeat;
-- replay.
-
-Do not reproduce these calculations locally in an ability unless the existing
-shared abstraction genuinely cannot represent the source rule.
-
-`src/rules/encounter.ts` is already a major architectural hotspot.
-
-Do not refactor it merely because it is large.
-
-Extract code only along real reusable mechanic seams.
-
----
-
-## 8. Movement Entry
-
-Movement-entry triggers currently cover voluntary MOVE/DASH entry.
-
-The source text for Party Favor and Symphony uses unqualified "enters", so
-forced-movement entry remains an incomplete semantic boundary unless/until the
-generic forced-movement fold is implemented.
-
-Do not describe this boundary as source-complete.
-
-One-shot movement-entry triggers must not fire twice when the same consumed
-trigger cell is re-entered during one movement.
-
-Distinct trigger sources must remain independently capable of firing.
-
----
-
-## 9. Coverage and Blocker Census
-
-The Class/Job blocker census is a live dependency graph.
-
-Do not treat a previous census report as permanent truth after implementation
-changes.
-
-For unresolved source units, use conjunctive blocker sets:
-
-    {
-      sourceId,
-      kind,
-      blockers: [...]
-    }
-
-A blocker set represents the complete MINIMAL SET of missing reusable
-capabilities required before that source unit can become executable.
-
-Do not say a primitive "unlocks" a unit merely because the unit mentions that
-mechanic.
-
-A unit becomes executable only when its entire blocker set is empty.
-
-After implementing a reusable Class/Job primitive:
-
-1. promote exact source units whose complete semantics are now representable;
-2. harvest compound units whose last blocker was removed;
-3. run verification;
-4. regenerate the canonical blocker census from the updated repository;
-5. recompute marginal unlocks and greedy ordering;
-6. choose the next primitive from the NEW census.
-
-Never blindly follow a stale greedy order.
-
----
-
-## 10. Coverage Accounting
-
-Coverage must remain conservative.
-
-Do not count:
-
-- parser recognition;
-- prose extraction;
-- manual/table-facing documentation;
-- partial implementations;
-- unsupported clauses hidden behind generic programs;
-
-as executable automation.
-
-The automation audit is authoritative for current executable coverage.
-
-Any expected audit delta must be reconciled with exact source IDs.
-
-If a task expects +20 but only +14 source units are genuinely complete, +14 is
-the correct result.
-
-Never distort semantics to hit the expected number.
-
----
-
-## 11. Tests
-
-For newly executable source-backed mechanics, prefer:
-
-- exact source fixture;
-- positive execution test;
-- meaningful negative/boundary case;
-- replay test when state/randomness/timing is involved.
-
-Regression tests should establish the actual semantic claim being made.
-
-Tests must not merely assert that a recipe exists.
-
-Where a source unit becomes audit-complete, ensure the tests justify that
-authority.
-
----
-
-## 12. Architecture Audit
-
-The repository has an architecture audit enforcing dependency direction.
-
-Do not bypass it.
-
-Run after architectural changes:
-
-    npm run audit:architecture
-
-If the audit rejects a dependency, first assume the dependency is wrong rather
-than weakening the audit.
-
----
-
-## 13. Standard Verification
-
-Unless the task is explicitly documentation-only, finish with:
-
-    npm run audit:architecture
-    npm run audit:automation
-    npm run audit:source-fidelity -- --strict
-    npm run typecheck
-    npm test
-    npm run build
-    git diff --check
-
-If the canonical Class/Job census command exists, also run:
-
-    npm run audit:class-job-census
-
-Do not report success while relevant introduced failures remain.
-
-### Source-fidelity audit (strict)
-
-The strict semantic audit (`npm run audit:source-fidelity -- --strict`)
-derives capability/closure status from an evidence graph in
-`src/rules/fidelity/`: atomic source obligations (stable IDs + SHA-256
-passage fingerprints) → explicit disposition → typed consumer registration →
-independent semantic contract → statically verified proof records → computed
-status. Its rules:
-
-- Passing implementation tests are NOT evidence of source fidelity on their
-  own; a claim of deterministic execution requires a registered consumer,
-  an independent contract, and the proof kinds its contract class demands.
-- `unclassified` never counts as supported. A newly relevant obligation must
-  be classified before any scope containing it can close.
-- Source conflicts are executable only through an ADOPTED adjudication in
-  `src/rules/source-adjudications.ts`, linked from the obligation.
-- Strong status labels are COMPUTED, never asserted. Documentation may not
-  claim CLOSED/COMPLETE/AUTHORITATIVE for a registered scope beyond the
-  computed status; `docs/source-fidelity.md` is GENERATED and must be
-  regenerated (`npm run audit:source-fidelity -- --write`) whenever evidence
-  changes.
-- Legitimate incompleteness lowers status; it does not fail the build.
-  INCONSISTENT CLAIMS OF COMPLETENESS (executable without consumer, proven
-  without required proof, conflict without adjudication, dangling references,
-  doc/status mismatch) DO fail strict mode.
-- To promote content: decompose source text into curated obligations in
-  `src/rules/fidelity/world.ts`, classify them, register the consumer, write
-  the independent contract, and record real proof. Never auto-promote from
-  allowlists or compilation results.
-
----
-
-## 14. Worktree Discipline
+## 0. Working Protocol
 
 Before editing:
 
-    git status
-    git diff
+1. Read this file.
+2. Classify the task using **Specializations** below.
+3. Select the matching procedure(s) from `SKILLS.md`.
+4. Run `git status` and `git diff`.
+5. If game semantics are involved, inspect the exact ICON source passage before
+   designing the change.
+6. Inspect the current implementation and the live foundation/coverage docs;
+   do not reason from stale task notes.
 
-Preserve unrelated user or agent changes.
+After every change:
 
-Do not reset, discard, or rewrite unrelated worktree changes.
+- run the verification required by the task class;
+- reconcile any coverage/status delta with exact source units;
+- update non-generated documentation when the current state changed;
+- propose a detailed commit message, up to a paragraph.
 
-Avoid opportunistic refactors unrelated to the task.
-
-Keep diffs narrowly aligned with the requested mechanic.
+Preserve unrelated user or agent changes. Never reset, discard, or rewrite
+unrelated worktree state.
 
 ---
 
-## 15. Documentation
+## 1. Authority Hierarchy
 
-Update documentation when behavior, coverage, blocker state, or architectural
-boundaries change.
+When sources disagree, use this order:
+
+1. **`ICON 1.5.pdf` — semantic authority.**
+2. **Adopted source adjudications — authority only for genuine source
+   contradictions.**
+3. **Implementation — execution authority.**
+4. **Automation/fidelity audits — coverage authority.**
+5. **Documentation — explanation and planning authority only.**
+
+Consequences:
+
+- Never change implementation merely to make stale prose correct.
+- Never change source semantics to improve audit counts.
+- Never infer a rule from an ability name when source text exists.
+- Never promote a partially represented source unit as executable.
+- If exact semantics are not representable, leave the unit unresolved and
+  identify the smallest missing reusable capability.
+
+ICON has distinct narrative and tactical modes. Do not transfer mechanics from
+one mode into the other by analogy unless the source explicitly connects them.
+
+---
+
+## 2. Core Architecture
+
+The rules project is rules-first. UI, VTT, transport, and persistence consume
+rules authority; they do not independently implement it.
+
+The intended rules dependency direction is:
+
+    source-backed content
+            ↓
+          content
+            ↓
+          kernels
+            ↓
+        primitives
+
+### `src/rules/automation/primitives/`
+
+Owns source-ID-free semantic vocabulary, pure calculations, typed values,
+generic builders, and generic state-transition structures.
+
+Primitives must not know named ICON Jobs, abilities, talents, masteries,
+Relics, foes, source IDs, or display names.
+
+### `src/rules/automation/kernels/`
+
+Owns reusable ICON mechanics, query/evaluation authorities, execution folds,
+registries, timing/lifecycle machinery, and composition over primitives.
+
+Kernels must remain source-ID-free in behavior. Source provenance may pass
+through opaquely for audit/replay, but kernels must never branch on it.
+
+### `src/rules/automation/content/`
+
+Owns exact source-ID keyed recipes, source-defined constants, declarative rows,
+and registration glue.
+
+Content may select source-defined targets and parameters and compose existing
+typed mechanics. It must not become a second rules engine.
+
+### Shared rules/domain authorities
+
+Targeting, range, LoS/LoE, areas, movement, placement, attack resolution,
+damage, saves, resources, statuses, entities, terrain, lifecycle, triggers,
+defeat, and replay must each have one shared execution authority for their
+scope. Do not create local parallel implementations to unblock one source
+unit.
+
+### Consumer layers
+
+`src/vtt/`, React UI, `server/`, Supabase adapters, and presentation code may
+project, validate, transport, persist, or display rules state. They must not
+recalculate game semantics independently when the engine already owns them.
+
+---
+
+## 3. Genericity Rule
+
+A source rule should normally compile through:
+
+    content row
+      → typed reusable recipe/operation
+      → generic kernel/domain authority
+      → primitive values/mutations
+
+Before creating a new primitive, kernel, callback, or resolver family, consult
+`docs/generic-underlays.md` and apply its design test. Prefer composition over
+new semantic authorities.
+
+A source-specific resolver is a last resort. "Irreducible" means demonstrated
+non-decomposability, not merely "not yet represented by the current
+vocabulary".
+
+Existing content `build` functions may emit typed `RuleMutation[]`, but `build`
+is not an escape hatch for algorithms that belong in shared mechanics.
+
+---
+
+## 4. Determinism, Choice, and Replay
+
+Encounter execution must be deterministic under replay.
+
+- Random outcomes are decided once, recorded, then replayed.
+- Player/GM choices that affect execution are explicit and durable where the
+  continuation requires them.
+- Optional source language must remain optional; never silently choose a
+  default for a player.
+- Do not invent deterministic tie-breaks where the source grants a choice.
+- Do not derive later execution from unrecorded ambient UI/session state.
+- `applyEvents` must apply recorded authority, not rerun rules decisions.
+
+Any mechanic involving randomness, timing, delayed effects, branching,
+interrupts, or persisted choice requires replay-oriented testing.
+
+---
+
+## 5. Specializations
+
+Specializations are engineering hats, not silos. Every task has one **lead**
+specialization and may require one or more secondary specializations. Use the
+lead to decide where authority belongs; use `SKILLS.md` for the procedure.
+
+| Specialization | Owns | Does not own |
+| --- | --- | --- |
+| **S1 — Source & Fidelity** | Exact source interpretation, obligation decomposition, provenance, conflicts/adjudications, semantic contracts, proof requirements | Inventing engine semantics or promoting unsupported behavior |
+| **S2 — Rules Substrate** | Underlays, primitives, kernels, domain authorities, reusable query points, architecture de-duplication | Named-source shortcuts, coverage inflation |
+| **S3 — Content Automation** | Jobs, Classes, abilities, talents, masteries, Relics, foe recipes, source-ID keyed parameterization | Generic algorithms that belong in S2/S4 |
+| **S4 — Encounter Runtime & Replay** | Reducer semantics, lifecycle, scheduler, triggers, windows, continuations, ordering, event recording/replay, encounter adapters | UI-owned state or transport-specific rule forks |
+| **S5 — Character & Narrative** | Character identity/schema rules, creation/advancement, Bonds/actions, narrative rolls/resources, expedition/interlude rules represented by the app | Tactical semantics by analogy |
+| **S6 — Extraction & Catalogs** | PDF identity, reproducible extraction, generated catalogs, source IDs, parsing, byte-for-byte evidence | Declaring parsed prose executable |
+| **S7 — Multiplayer & Persistence** | Protocol schemas, authority/authentication, room ownership, revisions, redaction, checkpoints, Supabase migrations/adapters | Reimplementing encounter rules on server or database |
+| **S8 — Frontend & VTT UX** | React surfaces, interaction flows, read models, presentation, local lab UX, tactical viewport | Independent targeting/damage/movement/rules calculations |
+| **S9 — Verification & Documentation** | Audits, generated status docs, blocker census, phase gates, CI/release checks, current-state documentation | Overriding source or implementation to satisfy documentation |
+
+### Dispatch rules
+
+- **Exact rule meaning unclear:** S1 leads.
+- **Missing reusable capability:** S2 leads; S4 joins when timing/state/replay is
+  involved.
+- **Named source unit can already be expressed exactly:** S3 leads, with S1
+  checking source fidelity.
+- **Encounter ordering/lifecycle/event semantics change:** S4 leads.
+- **Character creation/advancement/narrative behavior changes:** S5 leads.
+- **PDF extraction/catalog/source identity changes:** S6 leads.
+- **WebSocket/server/checkpoint/database authority changes:** S7 leads; S4 joins
+  if encounter semantics cross the boundary.
+- **Presentation or interaction only:** S8 leads.
+- **Audit/status/phase-gate/generated-doc work:** S9 leads, with the affected
+  domain specialization responsible for the underlying claim.
+
+If a task crosses several boundaries, do not solve it in the first layer that
+can technically host code. Put each semantic responsibility in its owning
+specialization.
+
+---
+
+## 6. Mandatory Handoffs and Stop Conditions
+
+### Content → substrate handoff
+
+If a named source unit needs a mechanic the shared engine cannot express:
+
+1. stop source-unit wiring;
+2. identify the minimum reusable capability;
+3. record/update the blocker;
+4. implement the shared capability under S2/S4 if the task permits it;
+5. only then return to S3 promotion.
+
+Do not bury the missing capability in a source-specific callback.
+
+### UI/server → rules handoff
+
+If UI or transport needs a value that is semantically derived by the game:
+expose/project it from rules authority. Do not recompute it independently.
+
+### Source conflict handoff
+
+If two authoritative passages genuinely conflict, do not silently pick one.
+Create or update an adopted adjudication and link the affected fidelity
+obligation before executable use.
+
+### Phase/tranche restrictions
+
+Current planning documents may intentionally forbid source-unit promotion while
+substrate work is underway. Honor the live gate in `docs/roadmap.md`,
+`docs/underlay-completion-plan.md`, and `TODO.md`. Do not copy temporary gate
+facts into this file.
+
+---
+
+## 7. Source IDs and Persistent Identity
+
+Source IDs are content identity, not behavior switches.
+
+Never put source-ID/name branches in primitives or kernels:
+
+```ts
+// forbidden
+if (sourceId === "some-job:some-ability:talent:1") { ... }
+```
+
+Persisted player-selectable IDs are compatibility contracts. Display labels are
+not identities. Renaming/removing/reusing a released ID requires an explicit
+schema migration; do not guess legacy values during migration.
+
+Parser recognition, catalog presence, and selectable identity do not imply
+executable automation.
+
+---
+
+## 8. Coverage and Fidelity
+
+Coverage is conservative and computed.
+
+Do not count as executable:
+
+- parser recognition;
+- prose extraction;
+- documentation/table-facing handling;
+- recipe registration without complete semantics;
+- positive tests that omit known clauses;
+- unsupported clauses hidden behind generic programs.
+
+A source unit is executable only when every mechanical clause the engine claims
+to automate is represented.
+
+The blocker census is a live dependency graph. Treat blocker sets as conjunctive
+minimal sets. After a reusable capability lands, regenerate the census before
+using any old marginal-unlock or greedy ordering.
+
+Strong source-fidelity labels are computed from the evidence graph in
+`src/rules/fidelity/`. Never assert them manually.
+
+---
+
+## 9. Testing Standard
+
+Tests should prove semantic claims, not file existence.
+
+For newly executable source-backed behavior, prefer:
+
+1. exact source-backed fixture;
+2. positive execution case;
+3. meaningful negative/boundary case;
+4. choice/tie case where applicable;
+5. replay case when state, randomness, timing, or continuation is involved;
+6. integration case when authority crosses engine/transport/persistence.
+
+A regression test should fail for the semantic bug it claims to prevent.
+
+---
+
+## 10. Verification Matrix
+
+Use the matching `SKILLS.md` procedure for targeted checks. For cross-boundary
+rules work, default to the full suite:
+
+```sh
+npm run audit:architecture
+npm run audit:automation
+npm run audit:source-fidelity -- --strict
+npm run typecheck
+npm test
+npm run build
+git diff --check
+```
+
+When Class/Job executable coverage may change, also run:
+
+```sh
+npm run audit:class-job-census
+```
+
+Additional task-class checks:
+
+- source extraction/regeneration: `npm run verify:source-artifacts` and, with
+  the source PDF available, `npm run verify:extraction`;
+- server/protocol changes: `npm run test:e2e:transport`;
+- shared VTT/client-server changes: `npm run test:e2e:browser` or
+  `npm run test:e2e` as appropriate.
+
+Documentation-only work does not require pretending to have verified runtime
+semantics, but generated docs must be regenerated by their owning command and
+`git diff --check` must pass.
+
+Do not report success while relevant introduced failures remain.
+
+---
+
+## 11. Documentation Discipline
 
 Prefer current-state documentation over implementation diaries.
 
-Delete stale claims rather than accumulating contradictory historical prose.
+Key live documents include:
 
-Important documentation includes:
+- `TODO.md` — actionable backlog;
+- `docs/roadmap.md` — sequencing and phase gates;
+- `docs/deliverables.md` — concrete closure slices;
+- `docs/rules-foundations.md` — foundation maturity and architecture debt;
+- `docs/generic-underlays.md` — reusable semantic ontology/design test;
+- `docs/underlay-completion-plan.md` — current substrate execution plan;
+- `docs/rules-coverage.md` — capability/content coverage;
+- `docs/blocker-census.md` — generated Class/Job blocker census;
+- `docs/source-fidelity.md` — generated fidelity status;
+- `docs/source-adjudications.md` — genuine source contradictions;
+- `docs/glossary-executable-inventory.md` — combat glossary status.
 
-- TODO.md — currently actionable backlog
-- docs/roadmap.md — phase sequencing, priorities, and gate definitions
-- docs/deliverables.md — concrete artifacts and encounter-closure slices
-- docs/rules-foundations.md — foundation maturity, missing kernels/primitives,
-  architecture-debt ledger
-- docs/rules-coverage.md — content coverage by capability ladder
-- docs/blocker-census.md — GENERATED Class/Job census
-  (`npm run audit:class-job-census`; never hand-edit)
-- docs/source-fidelity.md — GENERATED canonical source-fidelity status
-  (`npm run audit:source-fidelity -- --write`; never hand-edit)
-- docs/source-adjudications.md — genuine source contradictions only
-- docs/glossary-executable-inventory.md — per-term combat-glossary status
+Never hand-edit generated status files when a generator owns them.
 
-Do not change phase gates, schemas, or implementation solely to make a document
-easier to update.
+Delete stale claims instead of accumulating contradictory prose.
 
 ---
 
-## 16. Phase Gates
+## 12. Phase Gates and Infrastructure
 
-`#/lab` is deliberately a local/public human-test surface and is phase-exempt.
+`#/lab` is deliberately a browser-local/public human-test surface and is
+phase-exempt.
 
 `#/vtt/:encounterId` is the authoritative/shared VTT and remains phase-gated.
+Do not weaken production gates to make development easier; use lab/test
+surfaces.
 
-Do not weaken production VTT gates to make testing easier.
+Current infrastructure responsibility remains:
 
-Use the lab/test surfaces instead.
+- GitHub Pages — static client;
+- Supabase — auth and durable/versioned application data;
+- Render — authoritative realtime room/server authority.
 
----
-
-## 17. Infrastructure Direction
-
-Current intended deployment responsibilities:
-
-- GitHub Pages: static TypeScript frontend;
-- Supabase: persistent/versioned character and checkpoint data;
-- Render: live tabletop/server authority and save breakpoints.
-
-Persistence rule: VTT/Supabase checkpoints store only the current authoritative
-room state. They must not include the encounter replay/event log or duplicate
-replay archive; replay remains a runtime/transport concern and is never part of
-the durable checkpoint payload. Any future persistence adapter must apply the
-same current-state projection before serialization.
-
-Do not casually collapse these responsibilities into a different architecture.
+Durable VTT checkpoints store the current authoritative room-state projection,
+not a second replay/event-log archive. Replay remains runtime/transport
+concern unless the architecture is deliberately changed.
 
 ---
 
-## 18. Agent Task Strategy
+## 13. Hotspots and Refactoring
 
-Prefer:
+Large files are not automatically architectural defects.
 
-    one reusable primitive
-    → exact consumer harvest
-    → adversarial review
-    → full verification
-    → census regeneration
+In particular, do not refactor a hotspot merely because it is large. Extract
+only along a demonstrated reusable semantic seam, with behavior-preserving
+tests before and after.
 
-over:
-
-    large batch of unrelated mechanics
-
-For bulk conversion tasks:
-
-- use existing architecture;
-- stop when the architecture no longer expresses exact semantics;
-- report the missing reusable capability rather than inventing a local workaround.
-
-For foundational mechanics:
-
-- inspect exact source first;
-- design the smallest general representation;
-- implement one or a few representative consumers;
-- verify replay/boundaries;
-- only then harvest broadly.
+Avoid opportunistic refactors unrelated to the requested task.
 
 ---
 
-## 19. Things Agents Must Not Do
+## 14. Prohibited Patterns
 
 Do not:
 
 - approximate ICON rules to improve coverage;
-- infer rules from names when source text is available;
-- create source-ID switches in generic code;
-- introduce arbitrary callback escape hatches;
-- create parallel damage/targeting/movement/condition systems;
-- mark partially supported source units complete;
-- reroll during replay;
-- silently weaken phase gates;
-- rewrite unrelated architecture;
-- treat documentation counts as more authoritative than audits;
-- treat old blocker censuses as current after code changes;
-- implement hundreds of bespoke resolvers because a census says
-  "irreducible";
-- claim completion without running the relevant verification suite.
+- infer tactical rules from narrative rules, or vice versa, without source
+  authority;
+- branch on source IDs/names in generic code;
+- add arbitrary callbacks as a rules escape hatch;
+- create parallel targeting, movement, damage, save, condition, lifecycle, or
+  replay systems;
+- invent a tie-break or default where the source grants a choice;
+- mark partially supported units complete;
+- reroll or re-decide during replay;
+- make UI/server/database code a second rules authority;
+- weaken phase gates silently;
+- hand-edit generated coverage/fidelity documents;
+- follow a stale blocker census after implementation changes;
+- mass-produce bespoke resolvers because a blocker label looks unique;
+- claim completion without running the relevant verification.
 
 ---
 
-## 20. When Uncertain
+## 15. When Uncertain
 
-If exact source semantics and current engine capability disagree:
+When exact source semantics and current engine capability disagree:
 
 1. preserve source semantics;
 2. preserve architectural invariants;
-3. leave the source unit unresolved;
-4. identify the smallest missing reusable capability;
-5. add or update the blocker classification;
-6. report the boundary clearly.
+3. fail closed rather than guess;
+4. leave the source unit unresolved;
+5. identify the smallest missing reusable capability;
+6. update the blocker/fidelity classification as appropriate;
+7. report the boundary clearly.
 
-Correctly unresolved is better than incorrectly executable.
+**Correctly unresolved is better than incorrectly executable.**
