@@ -775,25 +775,20 @@ describe('F3 creation-intent split: placement region vs creator LoS origin', () 
   });
 });
 
-describe('F6 creation obstruction uses the dynamic terrain view', () => {
-  it('a dynamic impassable TERRAIN EFFECT blocks a creation cell and skips it', () => {
+describe('F3 creation obstruction and LoS use the dynamic terrain view', () => {
+  it('a runtime impassable terrain effect obstructs its cell and blocks creator LoS behind it', () => {
     const { state, hero } = summonEncounter([]);
-    // An impassable overlay created during play occupies (2,1) and (3,1), so
-    // the ordinary `state.grid.terrain` view (empty) must NOT be trusted: the
-    // canonical combined terrain union decides obstruction. The first candidate
-    // (2,1) is obstructed; (4,1) is legal and selected.
-    state.terrainEffects.push({ id: 'wallfx', sourceId: 'fixture', ownerId: 'o', terrain: 'impassable', positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }], height: null, duration: null });
+    // A Hellerwind-style impassable overlay occupies (2,1), while base grid
+    // terrain is empty. Candidate (2,1) is directly obstructed; (3,1) is free
+    // but out of the creator's LoS behind that terrain; the visible (1,2)
+    // candidate is therefore selected.
+    state.terrainEffects.push({ id: 'wallfx', sourceId: 'fixture:runtime-impassable', ownerId: 'o', terrain: 'impassable', positions: [{ x: 2, y: 1 }], height: null, duration: null });
     const result = validateEntityCreation(state, {
       ownerId: hero.id, entityType: 'bomb', count: 1,
-      positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }],
+      positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 1, y: 2 }],
       state: {}, duration: null,
       spatial: { origin: { x: 1, y: 1 }, maxRange: 6 },
     });
-    expect(result).toEqual({ positions: [{ x: 4, y: 1 }], count: 1 });
-    // Note (source fidelity): LoS itself blocks only on grid impassable terrain
-    // or an explicitly registered LoS-blocking effect — a dynamic impassable
-    // overlay OBSTRUCTS creation cells but does NOT by itself block the
-    // creator's line of sight (line-of-sight.ts). That closed separation is
-    // preserved rather than conflated here.
+    expect(result).toEqual({ positions: [{ x: 1, y: 2 }], count: 1 });
   });
 });

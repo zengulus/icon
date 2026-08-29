@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createEncounter, createFoe, executeCommand, hasLineOfSight } from '../encounter.js';
 import { hasLineOfEffect, hasLineOfSight as kernelLineOfSight, lineOfSightCells, type SpatialLineView } from '../automation/primitives/line-of-sight.js';
 import { computeSpatialArea, footprintCells, footprintsAdjacent, footprintDistance, footprintIntersectsCells } from '../automation/primitives/spatial-intent.js';
-import { applyRuleMutations } from '../automation/kernels/encounter-adapter.js';
+import { applyRuleMutations, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
 import { queryDirectTarget } from '../automation/primitives/targeting.js';
 import type { Position } from '../types.js';
 
@@ -58,6 +58,13 @@ describe('shared line of sight (ICON p.92)', () => {
     expect(kernelLineOfSight(view, { x: 0, y: 0 }, { x: 4, y: 0 })).toBe(false);
   });
 
+  it('runtime-created impassable terrain blocks line of sight without explicit-blocker registration', () => {
+    // Hellerwind-style terrain is a live terrain effect, not a map-authored
+    // grid cell. Its semantic `impassable` property is sufficient under p.92.
+    const view = effectView([{ type: 'impassable', positions: [{ x: 2, y: 0 }] }]);
+    expect(kernelLineOfSight(view, { x: 0, y: 0 }, { x: 4, y: 0 })).toBe(false);
+  });
+
   it('terrain away from the straight line does not block', () => {
     const view = terrainView([
       { position: { x: 2, y: 1 }, type: 'impassable' },
@@ -65,17 +72,26 @@ describe('shared line of sight (ICON p.92)', () => {
     expect(kernelLineOfSight(view, { x: 0, y: 0 }, { x: 4, y: 0 })).toBe(true);
   });
 
-  it('non-impassable terrain and characters do not block by default (p.92)', () => {
+  it('ordinary base and live terrain do not block by default (p.92)', () => {
     const view = terrainView([
       { position: { x: 2, y: 0 }, type: 'difficult' },
       { position: { x: 3, y: 0 }, type: 'dangerous' },
     ]);
     expect(kernelLineOfSight(view, { x: 0, y: 0 }, { x: 5, y: 0 })).toBe(true);
+
+    const liveView = effectView([
+      { type: 'basic', positions: [{ x: 2, y: 0 }] },
+      { type: 'difficult', positions: [{ x: 2, y: 0 }] },
+      { type: 'dangerous', positions: [{ x: 2, y: 0 }] },
+      { type: 'pit', positions: [{ x: 2, y: 0 }] },
+      { type: 'slope', positions: [{ x: 2, y: 0 }] },
+    ]);
+    expect(kernelLineOfSight(liveView, { x: 0, y: 0 }, { x: 4, y: 0 })).toBe(true);
   });
 
   it('an overlay effect blocks line of sight only when its type is explicitly registered (p.92 smog/poison clouds)', () => {
     const smog = effectView([{ type: 'smog', positions: [{ x: 2, y: 0 }] }]);
-    // Unregistered: the reviewed reducer behavior (grid impassable only).
+    // Non-impassable effects remain transparent unless explicitly registered.
     expect(kernelLineOfSight(smog, { x: 0, y: 0 }, { x: 4, y: 0 })).toBe(true);
     const view: SpatialLineView = { ...smog, lineOfSightBlockingEffectTypes: new Set(['smog']) };
     expect(kernelLineOfSight(view, { x: 0, y: 0 }, { x: 4, y: 0 })).toBe(false);
@@ -243,6 +259,25 @@ describe('computeSpatialArea — inclusion and center authority', () => {
     expect(plain.cells.some((cell) => cell.x === 6 && cell.y === 2)).toBe(true);
   });
 
+  it('filters AoE cells through runtime-created impassable terrain using the encounter semantic view', () => {
+    let state = createEncounter('Runtime terrain AoE fixture');
+    const caster = createFoe('Caster', { x: 0, y: 0 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: caster }).state;
+    state.terrainEffects.push({
+      id: 'runtime-wall', sourceId: 'fixture:runtime-impassable', ownerId: caster.id,
+      terrain: 'impassable', positions: [{ x: 2, y: 0 }], height: null, duration: null,
+    });
+
+    const area = computeSpatialArea(encounterRuleState(state), {
+      kind: 'area', sourceActorId: caster.id, sourceRuleId: 'fixture:area', shape: 'burst',
+      center: caster.position, radius: 3, requireCenterInBounds: true,
+      cellsRequireLineOfSightFromCenter: true,
+    });
+    const has = (position: Position) => area.cells.some((cell) => cell.x === position.x && cell.y === position.y);
+    expect(has({ x: 2, y: 0 })).toBe(true); // the blocking terrain's own cell is visible
+    expect(has({ x: 3, y: 0 })).toBe(false); // its far side is shadowed
+  });
+
   it('measures the center range from the edge of a large caster footprint (p.92)', () => {
     const giant = { id: 'giant', position: { x: 0, y: 0 }, size: 2, onBattlefield: true, defeated: false };
     const area = computeSpatialArea({
@@ -382,7 +417,7 @@ describe('queryDirectTarget — footprint-aware range (p.92)', () => {
 });
 
 describe('reducer routing — one line-of-sight truth', () => {
-  it('encounter hasLineOfSight delegates to the shared kernel with the same blockers', () => {
+  it('encounter hasLineOfSight delegates base and runtime impassable terrain to the shared kernel', () => {
     let state = createEncounter('LoS routing fixture');
     const hero = createFoe('Sight witness', { x: 0, y: 0 });
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
@@ -392,6 +427,13 @@ describe('reducer routing — one line-of-sight truth', () => {
       ...state,
       grid: { ...state.grid, terrain: [{ position: { x: 2, y: 0 }, type: 'impassable', elevation: 0 }] },
     };
+    expect(hasLineOfSight(state, { x: 0, y: 0 }, { x: 3, y: 0 })).toBe(false);
+
+    state = { ...state, grid: { ...state.grid, terrain: [] } };
+    state.terrainEffects.push({
+      id: 'runtime-wall', sourceId: 'fixture:runtime-impassable', ownerId: null,
+      terrain: 'impassable', positions: [{ x: 2, y: 0 }], height: null, duration: null,
+    });
     expect(hasLineOfSight(state, { x: 0, y: 0 }, { x: 3, y: 0 })).toBe(false);
   });
 });

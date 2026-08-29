@@ -257,6 +257,13 @@ describe('ICON encounter reducer', () => {
     const blocked = activeEncounter();
     blocked.state.grid.terrain.push({ position: { x: 2, y: 1 }, type: 'impassable', elevation: 1 });
     expect(() => executeCommand(blocked.state, { type: 'BASIC_ATTACK', actorId: blocked.hero.id, targetId: blocked.foe.id, weight: 'light' })).toThrow(/line of sight/);
+
+    const runtimeBlocked = activeEncounter();
+    runtimeBlocked.state.terrainEffects.push({
+      id: 'runtime-wall', sourceId: 'fixture:runtime-impassable', ownerId: null,
+      terrain: 'impassable', positions: [{ x: 2, y: 1 }], height: null, duration: null,
+    });
+    expect(() => executeCommand(runtimeBlocked.state, { type: 'BASIC_ATTACK', actorId: runtimeBlocked.hero.id, targetId: runtimeBlocked.foe.id, weight: 'light' })).toThrow(/line of sight/);
   });
 
   it('enforces one attack ability per turn', () => {

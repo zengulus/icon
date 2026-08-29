@@ -1157,9 +1157,9 @@ export function executeRuleProgramWithReactiveTriggers(
 }
 
 /** F1: the reducer's line of sight is the shared kernel (primitives/
- * line-of-sight.ts, ICON p.92) — grid impassable terrain blocks, and overlay
- * effects block only when an explicit LoS-blocking type is registered
- * (none exist in the current catalog, so reducer behavior is unchanged). */
+ * line-of-sight.ts, ICON p.92) — semantic impassable terrain blocks whether
+ * map-authored or supplied by a live terrain effect. Non-impassable effects
+ * block only when their type is explicitly registered as a LoS blocker. */
 export function hasLineOfSight(state: EncounterState, from: Position, to: Position) {
   return lineOfSightKernel({
     grid: state.grid,

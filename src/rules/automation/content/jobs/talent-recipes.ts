@@ -843,15 +843,6 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
   'geomancer:terraforming:talent:2': {
     mechanic: 'TII equipped: \u201cdangerous\u201d becomes a selectable Terraforming effect (budgets one choice; the player creates 0-3 spaces of dangerous terrain, placed in the area or TI\u2019s adjacent cells).',
   },
-  // ICON p.135 Colossus Raging Wolf talent 2: "While you're at 1 hp,
-  // increase flight to 3." The Raging Wolf program reads the equipped
-  // choice (rank \u2265 2) and widens the quarter-hp FLIGHT from 1 to 3
-  // exactly while the user is at 1 hp. Program-level: the boost is emitted
-  // inside the ability\u2019s own mutation stream (fly-distance-modifier at
-  // the existing fly authority), never a post-mutation fold.
-  'colossus:raging-wolf:talent:2': {
-    mechanic: 'Raging Wolf (rank 2 equipped + user at exactly 1 hp): the quarter-hp flight increases from 1 to 3 spaces.',
-  },
 };
 
 for (const [sourceId, row] of Object.entries(PROGRAM_LEVEL_TALENT_RECIPES)) {
@@ -1093,4 +1084,3 @@ export function getDocumentedTalentIds(units: readonly RuleSourceUnit[]): Readon
     Object.values(getTalentRecipes(units)).filter((recipe) => recipe.status === 'documented').map((recipe) => recipe.sourceId),
   );
 }
-

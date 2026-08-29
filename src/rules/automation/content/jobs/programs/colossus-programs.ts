@@ -5,7 +5,7 @@ import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRe
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, damageDie, fray, normalDamage, attackTarget,
-  distance, withinGrid, sourceActor, walk, firstFreeCell, nearestFoe,
+  distance, withinGrid, sourceActor, walk, firstFreeCell,
   damageMutation, conditionMutation, stateMutation,
   shoveMutation, flyMutation, rushMutation, removeMutation, placeMutation,
   terrainMutation, entityMutation,
@@ -28,9 +28,11 @@ import {
  *   difficult terrain) consume the durable trigger set supplied by the
  *   command boundary. Ordinary attack Exceed is derived before the resolver
  *   runs, so these branches observe the same recorded trigger as the attack.
- * - Raging Wolf's tiered Comeback effects resolve in listed order from the
- *   current hp; the 25%-and-1hp tiers are deterministic (first adjacent foe /
- *   nearest foe).
+ * - Raging Wolf is deliberately absent from the executable registry. Its
+ *   stacked Comeback sequence needs durable command-time optional movement /
+ *   adjacent-target choices and an intermediate-state fold so every later
+ *   tier sees the actual preceding landing. Deterministic nearest/first-foe
+ *   guesses are not source semantics.
  * - Massive Overhead's next-attack bonus damage applies to resolver-based
  *   attacks via `bonus-damage` and to basic attacks via an extra damage die;
  *   its pit and small-blast trigger on the ability-attack path.
@@ -210,62 +212,6 @@ const gigatonWhipEffects: RuleResolver = (context) => {
   return mutations;
 };
 
-/** ICON p.135: bloodied-gated tiered rush/fly/shove chain; Heroic grants unstoppable and damage immunity. */
-const ragingWolfEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  if (!source || !source.position) return [];
-  const position = source.position;
-  const maxHp = Math.max(1, source.maxHp);
-  if (source.hp > maxHp / 2) {
-    throw new RuleProgramViolation('raging-wolf.bloodied', 'Raging Wolf has no effect unless you are bloodied.');
-  }
-  // ICON p.135 Raging Wolf talent 2: "While you're at 1 hp, increase flight
-  // to 3." The equipped talent (rank ≥ 2) widens the quarter-hp FLIGHT (not
-  // the rush) from 1 to 3 exactly while the user is at 1 hp.
-  const flyDistanceTalent = (source.talents?.['colossus:raging-wolf'] ?? 0) >= 2;
-  const mutations: RuleMutation[] = [];
-  if (context.triggers?.has('heroic')) {
-    mutations.push(conditionMutation(context, source.id, 'unstoppable'));
-    mutations.push(stateMutation(context, source.id, 'damage-immune', true));
-  }
-  const bloodiedChain = () => {
-    const foe = nearestFoe(context, position, source.id);
-    if (foe?.position) {
-      const direction = axisDirection(position, foe.position);
-      const rush = plannedFly(context, source.id, 1, direction);
-      if (rush) mutations.push(rushMutation(context, source.id, rush));
-      const landed = rush ?? position;
-      const adjacent = Object.values(context.state.actors)
-        .filter((actor) => actor.id !== source.id && actor.side !== source.side && actor.position && distance(actor.position, landed) <= 1)
-        .sort((a, b) => a.id.localeCompare(b.id))[0];
-      if (adjacent) {
-        mutations.push(damageMutation(context, adjacent.id, source.fray, 'effect'));
-        mutations.push(conditionMutation(context, adjacent.id, 'slashed'));
-      }
-    }
-  };
-  const quarterChain = () => {
-    const foe = nearestFoe(context, position, source.id);
-    const direction = foe?.position ? axisDirection(position, foe.position) : { x: 1, y: 0 };
-    // Talent 2: while at exactly 1 hp the flight becomes 3 spaces (ICON p.135).
-    const flySteps = source.hp <= 1 && flyDistanceTalent ? 3 : 1;
-    const fly = plannedFly(context, source.id, flySteps, direction);
-    if (fly) mutations.push(flyMutation(context, source.id, fly));
-    const landed = fly ?? position;
-    for (const adjacent of Object.values(context.state.actors)) {
-      if (adjacent.id === source.id || adjacent.side === source.side || !adjacent.position || distance(adjacent.position, landed) > 1) continue;
-      mutations.push(shoveMutation(context, adjacent.id, 1, axisDirection(landed, adjacent.position)));
-    }
-  };
-  bloodiedChain();
-  if (source.hp <= maxHp / 4) quarterChain();
-  if (source.hp <= 1) {
-    bloodiedChain();
-    quarterChain();
-  }
-  return mutations;
-};
-
 /** ICON p.138: Defy Death — remain standing at 1 hp until the end of your next turn and deal bonus damage. */
 const boilingBloodEffects: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
@@ -292,7 +238,6 @@ export const COLOSSUS_RULE_RESOLVERS: RuleResolverRegistry = {
   'colossus:takedown:effects': takedownEffects,
   'colossus:great-suplex': greatSuplexEffects,
   'colossus:gigaton-whip:effects': gigatonWhipEffects,
-  'colossus:raging-wolf': ragingWolfEffects,
   'colossus:boiling-blood': boilingBloodEffects,
 };
 
@@ -394,15 +339,6 @@ export const COLOSSUS_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourc
       }],
     }],
   })], ['on hit', 'miss', 'effect', 'collide', 'exceed or heroic']),
-
-  'colossus:raging-wolf': (unit) => compilation(unit, [action({
-    name: unit.name,
-    timing: 'use',
-    costs: [{ kind: 'action', amount: constant(1) }],
-    tags: ['true strike'],
-    resolverId: 'colossus:raging-wolf',
-    steps: [],
-  })], ['special', 'comeback', 'heroic', 'special']),
 
   'colossus:boiling-blood': (unit) => compilation(unit, [action({
     name: unit.name,

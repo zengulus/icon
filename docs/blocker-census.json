@@ -1,9 +1,9 @@
 {
-  "baseline": 415,
+  "baseline": 416,
   "byKind": {
     "class-trait": 6,
     "job-trait": 38,
-    "talent": 226,
+    "talent": 227,
     "mastery": 129,
     "limit-break": 16
   },
@@ -410,7 +410,9 @@
       "sourceId": "colossus:trait:wolfheart",
       "kind": "job-trait",
       "blockers": [
-        "heroics-economy"
+        "fly-distance-modifier",
+        "heroics-economy",
+        "movement-distance-modifier"
       ]
     },
     {
@@ -440,7 +442,7 @@
       "sourceId": "colossus:valkyrie:mastery",
       "kind": "mastery",
       "blockers": [
-        "duration-fly-state",
+        "conditional-fly-repeat",
         "fly-multirecipient"
       ]
     },
@@ -559,6 +561,15 @@
       ]
     },
     {
+      "sourceId": "colossus:raging-wolf:talent:2",
+      "kind": "talent",
+      "blockers": [
+        "choice-input",
+        "fly-distance-modifier",
+        "ordered-intermediate-state"
+      ]
+    },
+    {
       "sourceId": "colossus:raging-wolf:mastery",
       "kind": "mastery",
       "blockers": [
@@ -576,7 +587,8 @@
       "sourceId": "colossus:boiling-blood:talent:2",
       "kind": "talent",
       "blockers": [
-        "fly-move-timing"
+        "fly-move-timing",
+        "rush-modifier"
       ]
     },
     {
@@ -1638,7 +1650,8 @@
       "sourceId": "chanter:felicity:talent:2",
       "kind": "talent",
       "blockers": [
-        "fly-move-timing"
+        "fly-move-timing",
+        "new-shove-effect"
       ]
     },
     {
@@ -3191,7 +3204,7 @@
     "{resource-management}": 7,
     "{delivery-immunity}": 2,
     "{movement-trigger-suppression}": 1,
-    "{heroics-economy}": 5,
+    "{heroics-economy}": 4,
     "{rush-modifier, shove-trigger}": 1,
     "{new-shove-effect, player-choice, repeat-mechanic}": 1,
     "{direction-override}": 1,
@@ -3225,15 +3238,16 @@
     "{area-effect-rider, damage-taken-modifier}": 1,
     "{area-define}": 3,
     "{power-die}": 2,
+    "{fly-distance-modifier, heroics-economy, movement-distance-modifier}": 1,
     "{duration-fly-state}": 1,
     "{range-modifier, spatial-state}": 1,
     "{fly-benefit-rider, fly-distance-modifier}": 1,
-    "{duration-fly-state, fly-multirecipient}": 2,
+    "{conditional-fly-repeat, fly-multirecipient}": 1,
     "{blast-template, terrain-create}": 6,
     "{ability-attack-modifier}": 3,
     "{terrain-create}": 16,
     "{end-turn-suppress, vigor-grant}": 1,
-    "{fly-move-timing, rush-modifier}": 1,
+    "{fly-move-timing, rush-modifier}": 2,
     "{collide-rider, new-shove-effect}": 2,
     "{elevation-scaling}": 1,
     "{damage-modifier, terrain-create}": 2,
@@ -3241,9 +3255,9 @@
     "{target-count-override}": 1,
     "{delay-mechanic, range-modifier, rush-modifier}": 1,
     "{pre-ability-movement}": 1,
+    "{choice-input, fly-distance-modifier, ordered-intermediate-state}": 1,
     "{interrupt-timing}": 4,
     "{ability-trigger-grant}": 1,
-    "{fly-move-timing}": 8,
     "{effect-expiry-trigger, wound-cost}": 1,
     "{stance-capacity}": 1,
     "{condition-suppression}": 1,
@@ -3266,6 +3280,7 @@
     "{gamble-result-override}": 1,
     "{damage-modifier}": 1,
     "{movement-trigger}": 3,
+    "{fly-move-timing}": 6,
     "{fly-move-substitution}": 1,
     "{pre-ability-movement, range-modifier}": 1,
     "{range-modifier}": 4,
@@ -3341,6 +3356,7 @@
     "{cover-mechanic, duration-fly-state, new-shove-effect, range-modifier, resource-management, stance-gate}": 1,
     "{blast-template, duration-fly-state, resource-management, terrain-create, vigor-grant}": 1,
     "{movement-trigger, new-shove-effect}": 1,
+    "{fly-move-timing, new-shove-effect}": 1,
     "{action-type-change, fly-move-timing, range-modifier}": 1,
     "{area-define, damage-modifier, terrain-create}": 1,
     "{pre-ability-action}": 1,
@@ -3439,6 +3455,7 @@
     "{area-define, range-modifier, terrain-create}": 2,
     "{area-effect-rider, save-modifier}": 1,
     "{action-type-change, flying-targeting, movement-distance-modifier}": 1,
+    "{duration-fly-state, fly-multirecipient}": 1,
     "{fly-move-substitution, fly-multirecipient}": 1,
     "{area-persistence-override}": 1,
     "{variable-cost}": 1,
@@ -3470,7 +3487,6 @@
       "bastion:trait:strive",
       "bastion:battering-ram:mastery",
       "demon-slayer:trait:demon-strength",
-      "colossus:trait:wolfheart",
       "knave:trait:spite"
     ],
     "direction-override": [
@@ -3584,16 +3600,6 @@
     "ability-trigger-grant": [
       "colossus:boiling-blood:talent:1"
     ],
-    "fly-move-timing": [
-      "colossus:boiling-blood:talent:2",
-      "fool:cavaliere:mastery",
-      "fool:masquerade:talent:2",
-      "fool:chronotemper:talent:2",
-      "chanter:trait:blessing-of-faith",
-      "chanter:holy:talent:2",
-      "chanter:felicity:talent:2",
-      "chanter:aria:talent:1"
-    ],
     "stance-capacity": [
       "knave:trait:martial-master"
     ],
@@ -3657,6 +3663,14 @@
       "fool:cavaliere:talent:2",
       "warden:circle-the-oak:talent:1",
       "warden:mist-strider:talent:1"
+    ],
+    "fly-move-timing": [
+      "fool:cavaliere:mastery",
+      "fool:masquerade:talent:2",
+      "fool:chronotemper:talent:2",
+      "chanter:trait:blessing-of-faith",
+      "chanter:holy:talent:2",
+      "chanter:aria:talent:1"
     ],
     "fly-move-substitution": [
       "fool:carnevale:talent:1"
@@ -3886,16 +3900,16 @@
       "totalContaining": 1
     },
     "heroics-economy": {
-      "immediate": 5,
+      "immediate": 4,
       "oneCloser": 0,
-      "multiCloser": 0,
+      "multiCloser": 1,
       "totalContaining": 5
     },
     "rush-modifier": {
       "immediate": 3,
-      "oneCloser": 5,
+      "oneCloser": 6,
       "multiCloser": 4,
-      "totalContaining": 12
+      "totalContaining": 13
     },
     "shove-trigger": {
       "immediate": 0,
@@ -3905,9 +3919,9 @@
     },
     "new-shove-effect": {
       "immediate": 4,
-      "oneCloser": 10,
+      "oneCloser": 11,
       "multiCloser": 6,
-      "totalContaining": 20
+      "totalContaining": 21
     },
     "player-choice": {
       "immediate": 0,
@@ -4044,8 +4058,8 @@
     "choice-input": {
       "immediate": 8,
       "oneCloser": 14,
-      "multiCloser": 1,
-      "totalContaining": 23
+      "multiCloser": 2,
+      "totalContaining": 24
     },
     "object-distance": {
       "immediate": 2,
@@ -4083,11 +4097,23 @@
       "multiCloser": 0,
       "totalContaining": 6
     },
-    "duration-fly-state": {
+    "fly-distance-modifier": {
       "immediate": 1,
       "oneCloser": 2,
+      "multiCloser": 2,
+      "totalContaining": 5
+    },
+    "movement-distance-modifier": {
+      "immediate": 0,
+      "oneCloser": 0,
+      "multiCloser": 2,
+      "totalContaining": 2
+    },
+    "duration-fly-state": {
+      "immediate": 1,
+      "oneCloser": 1,
       "multiCloser": 5,
-      "totalContaining": 8
+      "totalContaining": 7
     },
     "spatial-state": {
       "immediate": 0,
@@ -4101,11 +4127,11 @@
       "multiCloser": 0,
       "totalContaining": 1
     },
-    "fly-distance-modifier": {
-      "immediate": 1,
-      "oneCloser": 2,
+    "conditional-fly-repeat": {
+      "immediate": 0,
+      "oneCloser": 1,
       "multiCloser": 0,
-      "totalContaining": 3
+      "totalContaining": 1
     },
     "fly-multirecipient": {
       "immediate": 0,
@@ -4132,8 +4158,8 @@
       "totalContaining": 1
     },
     "fly-move-timing": {
-      "immediate": 8,
-      "oneCloser": 2,
+      "immediate": 6,
+      "oneCloser": 4,
       "multiCloser": 2,
       "totalContaining": 12
     },
@@ -4154,6 +4180,12 @@
       "oneCloser": 1,
       "multiCloser": 1,
       "totalContaining": 3
+    },
+    "ordered-intermediate-state": {
+      "immediate": 0,
+      "oneCloser": 0,
+      "multiCloser": 1,
+      "totalContaining": 1
     },
     "interrupt-timing": {
       "immediate": 4,
@@ -4791,12 +4823,6 @@
       "multiCloser": 1,
       "totalContaining": 1
     },
-    "movement-distance-modifier": {
-      "immediate": 0,
-      "oneCloser": 0,
-      "multiCloser": 1,
-      "totalContaining": 1
-    },
     "area-persistence-override": {
       "immediate": 1,
       "oneCloser": 0,
@@ -4838,8 +4864,8 @@
     "choice-input": {
       "immediate": 8,
       "oneCloser": 14,
-      "multiCloser": 1,
-      "totalContaining": 23
+      "multiCloser": 2,
+      "totalContaining": 24
     },
     "blast-template": {
       "immediate": 3,
@@ -4849,9 +4875,9 @@
     },
     "new-shove-effect": {
       "immediate": 4,
-      "oneCloser": 10,
+      "oneCloser": 11,
       "multiCloser": 6,
-      "totalContaining": 20
+      "totalContaining": 21
     },
     "action-type-change": {
       "immediate": 6,
@@ -4885,13 +4911,13 @@
     },
     "rush-modifier": {
       "immediate": 3,
-      "oneCloser": 5,
+      "oneCloser": 6,
       "multiCloser": 4,
-      "totalContaining": 12
+      "totalContaining": 13
     },
     "fly-move-timing": {
-      "immediate": 8,
-      "oneCloser": 2,
+      "immediate": 6,
+      "oneCloser": 4,
       "multiCloser": 2,
       "totalContaining": 12
     },
@@ -4931,12 +4957,6 @@
       "multiCloser": 0,
       "totalContaining": 8
     },
-    "duration-fly-state": {
-      "immediate": 1,
-      "oneCloser": 2,
-      "multiCloser": 5,
-      "totalContaining": 8
-    },
     "distance-predicate": {
       "immediate": 1,
       "oneCloser": 4,
@@ -4953,6 +4973,12 @@
       "immediate": 4,
       "oneCloser": 0,
       "multiCloser": 3,
+      "totalContaining": 7
+    },
+    "duration-fly-state": {
+      "immediate": 1,
+      "oneCloser": 1,
+      "multiCloser": 5,
       "totalContaining": 7
     },
     "fly-multirecipient": {
@@ -5004,9 +5030,15 @@
       "totalContaining": 5
     },
     "heroics-economy": {
-      "immediate": 5,
+      "immediate": 4,
       "oneCloser": 0,
-      "multiCloser": 0,
+      "multiCloser": 1,
+      "totalContaining": 5
+    },
+    "fly-distance-modifier": {
+      "immediate": 1,
+      "oneCloser": 2,
+      "multiCloser": 2,
       "totalContaining": 5
     },
     "mark-defeat-trigger": {
@@ -5123,12 +5155,6 @@
       "multiCloser": 1,
       "totalContaining": 3
     },
-    "fly-distance-modifier": {
-      "immediate": 1,
-      "oneCloser": 2,
-      "multiCloser": 0,
-      "totalContaining": 3
-    },
     "ability-attack-modifier": {
       "immediate": 3,
       "oneCloser": 0,
@@ -5181,6 +5207,12 @@
       "immediate": 0,
       "oneCloser": 1,
       "multiCloser": 1,
+      "totalContaining": 2
+    },
+    "movement-distance-modifier": {
+      "immediate": 0,
+      "oneCloser": 0,
+      "multiCloser": 2,
       "totalContaining": 2
     },
     "elevation-scaling": {
@@ -5345,10 +5377,22 @@
       "multiCloser": 0,
       "totalContaining": 1
     },
+    "conditional-fly-repeat": {
+      "immediate": 0,
+      "oneCloser": 1,
+      "multiCloser": 0,
+      "totalContaining": 1
+    },
     "end-turn-suppress": {
       "immediate": 0,
       "oneCloser": 1,
       "multiCloser": 0,
+      "totalContaining": 1
+    },
+    "ordered-intermediate-state": {
+      "immediate": 0,
+      "oneCloser": 0,
+      "multiCloser": 1,
       "totalContaining": 1
     },
     "ability-trigger-grant": {
@@ -5741,12 +5785,6 @@
       "multiCloser": 1,
       "totalContaining": 1
     },
-    "movement-distance-modifier": {
-      "immediate": 0,
-      "oneCloser": 0,
-      "multiCloser": 1,
-      "totalContaining": 1
-    },
     "area-persistence-override": {
       "immediate": 1,
       "oneCloser": 0,
@@ -5767,978 +5805,1007 @@
       "implement": "terrain-create",
       "unlocks": 16,
       "cumulative": 16,
-      "remaining": 399
+      "remaining": 400
     },
     {
       "step": 2,
       "implement": "choice-input",
       "unlocks": 8,
       "cumulative": 24,
-      "remaining": 391
+      "remaining": 392
     },
     {
       "step": 3,
       "implement": "effect-count",
       "unlocks": 8,
       "cumulative": 32,
-      "remaining": 383
+      "remaining": 384
     },
     {
       "step": 4,
-      "implement": "fly-move-timing",
-      "unlocks": 8,
-      "cumulative": 40,
-      "remaining": 375
+      "implement": "resource-management",
+      "unlocks": 7,
+      "cumulative": 39,
+      "remaining": 377
     },
     {
       "step": 5,
-      "implement": "resource-management",
+      "implement": "action-type-change",
       "unlocks": 7,
-      "cumulative": 47,
-      "remaining": 368
+      "cumulative": 46,
+      "remaining": 370
     },
     {
       "step": 6,
-      "implement": "action-type-change",
-      "unlocks": 7,
-      "cumulative": 54,
-      "remaining": 361
+      "implement": "fly-move-timing",
+      "unlocks": 6,
+      "cumulative": 52,
+      "remaining": 364
     },
     {
       "step": 7,
       "implement": "stance-gate",
       "unlocks": 5,
-      "cumulative": 59,
-      "remaining": 356
+      "cumulative": 57,
+      "remaining": 359
     },
     {
       "step": 8,
       "implement": "entity-distance-selection",
       "unlocks": 5,
-      "cumulative": 64,
-      "remaining": 351
+      "cumulative": 62,
+      "remaining": 354
     },
     {
       "step": 9,
-      "implement": "heroics-economy",
-      "unlocks": 5,
-      "cumulative": 69,
-      "remaining": 346
+      "implement": "range-modifier",
+      "unlocks": 11,
+      "cumulative": 73,
+      "remaining": 343
     },
     {
       "step": 10,
-      "implement": "range-modifier",
-      "unlocks": 11,
+      "implement": "new-shove-effect",
+      "unlocks": 7,
       "cumulative": 80,
-      "remaining": 335
+      "remaining": 336
     },
     {
       "step": 11,
-      "implement": "new-shove-effect",
+      "implement": "cover-mechanic",
       "unlocks": 6,
       "cumulative": 86,
-      "remaining": 329
+      "remaining": 330
     },
     {
       "step": 12,
-      "implement": "cover-mechanic",
+      "implement": "movement-modifier",
       "unlocks": 6,
       "cumulative": 92,
-      "remaining": 323
+      "remaining": 324
     },
     {
       "step": 13,
-      "implement": "movement-modifier",
-      "unlocks": 6,
-      "cumulative": 98,
-      "remaining": 317
+      "implement": "cure-on-trigger",
+      "unlocks": 5,
+      "cumulative": 97,
+      "remaining": 319
     },
     {
       "step": 14,
-      "implement": "cure-on-trigger",
-      "unlocks": 5,
-      "cumulative": 103,
-      "remaining": 312
+      "implement": "gamble-dice-pool-modifier",
+      "unlocks": 4,
+      "cumulative": 101,
+      "remaining": 315
     },
     {
       "step": 15,
-      "implement": "gamble-dice-pool-modifier",
+      "implement": "use-count-override",
       "unlocks": 4,
-      "cumulative": 107,
-      "remaining": 308
+      "cumulative": 105,
+      "remaining": 311
     },
     {
       "step": 16,
-      "implement": "use-count-override",
+      "implement": "heroics-economy",
       "unlocks": 4,
-      "cumulative": 111,
-      "remaining": 304
+      "cumulative": 109,
+      "remaining": 307
     },
     {
       "step": 17,
       "implement": "interrupt-timing",
       "unlocks": 4,
-      "cumulative": 115,
-      "remaining": 300
+      "cumulative": 113,
+      "remaining": 303
     },
     {
       "step": 18,
       "implement": "passive",
       "unlocks": 4,
-      "cumulative": 119,
-      "remaining": 296
+      "cumulative": 117,
+      "remaining": 299
     },
     {
       "step": 19,
       "implement": "area-define",
       "unlocks": 16,
-      "cumulative": 135,
-      "remaining": 280
+      "cumulative": 133,
+      "remaining": 283
     },
     {
       "step": 20,
       "implement": "blast-template",
       "unlocks": 15,
-      "cumulative": 150,
-      "remaining": 265
+      "cumulative": 148,
+      "remaining": 268
     },
     {
       "step": 21,
       "implement": "rush-modifier",
-      "unlocks": 4,
-      "cumulative": 154,
-      "remaining": 261
+      "unlocks": 5,
+      "cumulative": 153,
+      "remaining": 263
     },
     {
       "step": 22,
       "implement": "area-effect-rider",
       "unlocks": 3,
-      "cumulative": 157,
-      "remaining": 258
+      "cumulative": 156,
+      "remaining": 260
     },
     {
       "step": 23,
       "implement": "entity-vacate",
       "unlocks": 4,
-      "cumulative": 161,
-      "remaining": 254
+      "cumulative": 160,
+      "remaining": 256
     },
     {
       "step": 24,
       "implement": "movement-trigger",
       "unlocks": 4,
-      "cumulative": 165,
-      "remaining": 250
+      "cumulative": 164,
+      "remaining": 252
     },
     {
       "step": 25,
       "implement": "threshold-modifier",
       "unlocks": 4,
-      "cumulative": 169,
-      "remaining": 246
+      "cumulative": 168,
+      "remaining": 248
     },
     {
       "step": 26,
       "implement": "area-extension",
       "unlocks": 4,
-      "cumulative": 173,
-      "remaining": 242
+      "cumulative": 172,
+      "remaining": 244
     },
     {
       "step": 27,
       "implement": "ability-attack-modifier",
       "unlocks": 3,
-      "cumulative": 176,
-      "remaining": 239
+      "cumulative": 175,
+      "remaining": 241
     },
     {
       "step": 28,
       "implement": "delay-mechanic",
       "unlocks": 8,
-      "cumulative": 184,
-      "remaining": 231
+      "cumulative": 183,
+      "remaining": 233
     },
     {
       "step": 29,
       "implement": "rebound",
       "unlocks": 2,
-      "cumulative": 186,
-      "remaining": 229
+      "cumulative": 185,
+      "remaining": 231
     },
     {
       "step": 30,
       "implement": "power-die",
       "unlocks": 3,
-      "cumulative": 189,
-      "remaining": 226
+      "cumulative": 188,
+      "remaining": 228
     },
     {
       "step": 31,
       "implement": "delivery-immunity",
       "unlocks": 4,
-      "cumulative": 193,
-      "remaining": 222
+      "cumulative": 192,
+      "remaining": 224
     },
     {
       "step": 32,
       "implement": "enemy-ability-trigger",
       "unlocks": 4,
-      "cumulative": 197,
-      "remaining": 218
+      "cumulative": 196,
+      "remaining": 220
     },
     {
       "step": 33,
       "implement": "object-distance",
       "unlocks": 3,
-      "cumulative": 200,
-      "remaining": 215
+      "cumulative": 199,
+      "remaining": 217
     },
     {
       "step": 34,
       "implement": "damage-taken-modifier",
       "unlocks": 3,
-      "cumulative": 203,
-      "remaining": 212
+      "cumulative": 202,
+      "remaining": 214
     },
     {
       "step": 35,
       "implement": "aura-user-gate",
       "unlocks": 2,
-      "cumulative": 205,
-      "remaining": 210
+      "cumulative": 204,
+      "remaining": 212
     },
     {
       "step": 36,
       "implement": "charge-combo-activation",
       "unlocks": 2,
-      "cumulative": 207,
-      "remaining": 208
+      "cumulative": 206,
+      "remaining": 210
     },
     {
       "step": 37,
       "implement": "damage-preview",
       "unlocks": 2,
-      "cumulative": 209,
-      "remaining": 206
+      "cumulative": 208,
+      "remaining": 208
     },
     {
       "step": 38,
       "implement": "card-deck-system",
       "unlocks": 2,
-      "cumulative": 211,
-      "remaining": 204
+      "cumulative": 210,
+      "remaining": 206
     },
     {
       "step": 39,
       "implement": "sacrifice-percent",
       "unlocks": 2,
-      "cumulative": 213,
-      "remaining": 202
+      "cumulative": 212,
+      "remaining": 204
     },
     {
       "step": 40,
       "implement": "damage-modifier",
       "unlocks": 8,
-      "cumulative": 221,
-      "remaining": 194
+      "cumulative": 220,
+      "remaining": 196
     },
     {
       "step": 41,
       "implement": "pre-ability-movement",
       "unlocks": 10,
-      "cumulative": 231,
-      "remaining": 184
+      "cumulative": 230,
+      "remaining": 186
     },
     {
       "step": 42,
       "implement": "interrupt-rider",
       "unlocks": 7,
-      "cumulative": 238,
-      "remaining": 177
+      "cumulative": 237,
+      "remaining": 179
     },
     {
       "step": 43,
-      "implement": "duration-fly-state",
-      "unlocks": 4,
-      "cumulative": 242,
-      "remaining": 173
+      "implement": "distance-predicate",
+      "unlocks": 7,
+      "cumulative": 244,
+      "remaining": 172
     },
     {
       "step": 44,
-      "implement": "distance-predicate",
-      "unlocks": 7,
-      "cumulative": 249,
-      "remaining": 166
+      "implement": "duration-fly-state",
+      "unlocks": 4,
+      "cumulative": 248,
+      "remaining": 168
     },
     {
       "step": 45,
-      "implement": "direction-override",
-      "unlocks": 3,
-      "cumulative": 252,
-      "remaining": 163
+      "implement": "fly-distance-modifier",
+      "unlocks": 1,
+      "cumulative": 249,
+      "remaining": 167
     },
     {
       "step": 46,
-      "implement": "attack-modifier",
+      "implement": "direction-override",
       "unlocks": 3,
-      "cumulative": 255,
-      "remaining": 160
+      "cumulative": 252,
+      "remaining": 164
     },
     {
       "step": 47,
-      "implement": "object-interaction",
-      "unlocks": 2,
-      "cumulative": 257,
-      "remaining": 158
+      "implement": "attack-modifier",
+      "unlocks": 3,
+      "cumulative": 255,
+      "remaining": 161
     },
     {
       "step": 48,
-      "implement": "recipient-expansion",
+      "implement": "object-interaction",
       "unlocks": 2,
-      "cumulative": 259,
-      "remaining": 156
+      "cumulative": 257,
+      "remaining": 159
     },
     {
       "step": 49,
-      "implement": "fly-distance-modifier",
-      "unlocks": 1,
-      "cumulative": 260,
-      "remaining": 155
+      "implement": "recipient-expansion",
+      "unlocks": 2,
+      "cumulative": 259,
+      "remaining": 157
     },
     {
       "step": 50,
       "implement": "target-count-override",
       "unlocks": 2,
-      "cumulative": 262,
-      "remaining": 153
+      "cumulative": 261,
+      "remaining": 155
     },
     {
       "step": 51,
       "implement": "defeat-trigger",
       "unlocks": 2,
-      "cumulative": 264,
-      "remaining": 151
+      "cumulative": 263,
+      "remaining": 153
     },
     {
       "step": 52,
       "implement": "forced-placement",
       "unlocks": 3,
-      "cumulative": 267,
-      "remaining": 148
+      "cumulative": 266,
+      "remaining": 150
     },
     {
       "step": 53,
       "implement": "elevation-scaling",
       "unlocks": 1,
-      "cumulative": 268,
-      "remaining": 147
+      "cumulative": 267,
+      "remaining": 149
     },
     {
       "step": 54,
       "implement": "condition-suppression",
       "unlocks": 2,
-      "cumulative": 270,
-      "remaining": 145
+      "cumulative": 269,
+      "remaining": 147
     },
     {
       "step": 55,
       "implement": "attack-result-modifier",
       "unlocks": 1,
-      "cumulative": 271,
-      "remaining": 144
+      "cumulative": 270,
+      "remaining": 146
     },
     {
       "step": 56,
       "implement": "fly-move-substitution",
       "unlocks": 1,
-      "cumulative": 272,
-      "remaining": 143
+      "cumulative": 271,
+      "remaining": 145
     },
     {
       "step": 57,
       "implement": "mark-detonation-window",
       "unlocks": 1,
-      "cumulative": 273,
-      "remaining": 142
+      "cumulative": 272,
+      "remaining": 144
     },
     {
       "step": 58,
       "implement": "unlimited-range",
       "unlocks": 1,
-      "cumulative": 274,
-      "remaining": 141
+      "cumulative": 273,
+      "remaining": 143
     },
     {
       "step": 59,
       "implement": "teleport-distance-modifier",
       "unlocks": 1,
-      "cumulative": 275,
-      "remaining": 140
+      "cumulative": 274,
+      "remaining": 142
     },
     {
       "step": 60,
       "implement": "mark-activation-gate",
       "unlocks": 2,
-      "cumulative": 277,
-      "remaining": 138
+      "cumulative": 276,
+      "remaining": 140
     },
     {
       "step": 61,
       "implement": "duration-modifier",
       "unlocks": 2,
-      "cumulative": 279,
-      "remaining": 136
+      "cumulative": 278,
+      "remaining": 138
     },
     {
       "step": 62,
       "implement": "movement-trigger-suppression",
       "unlocks": 1,
-      "cumulative": 280,
-      "remaining": 135
+      "cumulative": 279,
+      "remaining": 137
     },
     {
       "step": 63,
       "implement": "conditional-distance-stun",
       "unlocks": 1,
-      "cumulative": 281,
-      "remaining": 134
+      "cumulative": 280,
+      "remaining": 136
     },
     {
       "step": 64,
       "implement": "aura-to-area-conversion",
       "unlocks": 1,
-      "cumulative": 282,
-      "remaining": 133
+      "cumulative": 281,
+      "remaining": 135
     },
     {
       "step": 65,
       "implement": "aura-trigger-grant",
       "unlocks": 1,
-      "cumulative": 283,
-      "remaining": 132
+      "cumulative": 282,
+      "remaining": 134
     },
     {
       "step": 66,
       "implement": "active-effect-range-modifier",
       "unlocks": 1,
-      "cumulative": 284,
-      "remaining": 131
+      "cumulative": 283,
+      "remaining": 133
     },
     {
       "step": 67,
       "implement": "ability-trigger-grant",
       "unlocks": 1,
-      "cumulative": 285,
-      "remaining": 130
+      "cumulative": 284,
+      "remaining": 132
     },
     {
       "step": 68,
       "implement": "stance-capacity",
       "unlocks": 1,
-      "cumulative": 286,
-      "remaining": 129
+      "cumulative": 285,
+      "remaining": 131
     },
     {
       "step": 69,
       "implement": "status-count-scaling",
       "unlocks": 1,
-      "cumulative": 287,
-      "remaining": 128
+      "cumulative": 286,
+      "remaining": 130
     },
     {
       "step": 70,
       "implement": "interrupt-rank",
       "unlocks": 1,
-      "cumulative": 288,
-      "remaining": 127
+      "cumulative": 287,
+      "remaining": 129
     },
     {
       "step": 71,
       "implement": "movement-entry-cost",
       "unlocks": 1,
-      "cumulative": 289,
-      "remaining": 126
+      "cumulative": 288,
+      "remaining": 128
     },
     {
       "step": 72,
       "implement": "attack-miss-trigger",
       "unlocks": 1,
-      "cumulative": 290,
-      "remaining": 125
+      "cumulative": 289,
+      "remaining": 127
     },
     {
       "step": 73,
       "implement": "gamble-result-override",
       "unlocks": 1,
-      "cumulative": 291,
-      "remaining": 124
+      "cumulative": 290,
+      "remaining": 126
     },
     {
       "step": 74,
       "implement": "held-ability-gate",
       "unlocks": 1,
-      "cumulative": 292,
-      "remaining": 123
+      "cumulative": 291,
+      "remaining": 125
     },
     {
       "step": 75,
       "implement": "summon-terrain-alternation",
       "unlocks": 1,
-      "cumulative": 293,
-      "remaining": 122
+      "cumulative": 292,
+      "remaining": 124
     },
     {
       "step": 76,
       "implement": "traversal-count",
       "unlocks": 1,
-      "cumulative": 294,
-      "remaining": 121
+      "cumulative": 293,
+      "remaining": 123
     },
     {
       "step": 77,
       "implement": "area-exit-trigger",
       "unlocks": 1,
-      "cumulative": 295,
-      "remaining": 120
+      "cumulative": 294,
+      "remaining": 122
     },
     {
       "step": 78,
       "implement": "path-count-predicate",
       "unlocks": 1,
-      "cumulative": 296,
-      "remaining": 119
+      "cumulative": 295,
+      "remaining": 121
     },
     {
       "step": 79,
       "implement": "aura-count-condition",
       "unlocks": 1,
-      "cumulative": 297,
-      "remaining": 118
+      "cumulative": 296,
+      "remaining": 120
     },
     {
       "step": 80,
       "implement": "pre-ability-action",
       "unlocks": 1,
-      "cumulative": 298,
-      "remaining": 117
+      "cumulative": 297,
+      "remaining": 119
     },
     {
       "step": 81,
       "implement": "cross-ability-invoke",
       "unlocks": 1,
-      "cumulative": 299,
-      "remaining": 116
+      "cumulative": 298,
+      "remaining": 118
     },
     {
       "step": 82,
       "implement": "turn-end-summon",
       "unlocks": 1,
-      "cumulative": 300,
-      "remaining": 115
+      "cumulative": 299,
+      "remaining": 117
     },
     {
       "step": 83,
       "implement": "summon-triggered-area-growth",
       "unlocks": 1,
-      "cumulative": 301,
-      "remaining": 114
+      "cumulative": 300,
+      "remaining": 116
     },
     {
       "step": 84,
       "implement": "attack-trigger-grant",
       "unlocks": 1,
-      "cumulative": 302,
-      "remaining": 113
+      "cumulative": 301,
+      "remaining": 115
     },
     {
       "step": 85,
       "implement": "entry-save-gate",
       "unlocks": 1,
-      "cumulative": 303,
-      "remaining": 112
+      "cumulative": 302,
+      "remaining": 114
     },
     {
       "step": 86,
       "implement": "distance-change-trigger",
       "unlocks": 1,
-      "cumulative": 304,
-      "remaining": 111
+      "cumulative": 303,
+      "remaining": 113
     },
     {
       "step": 87,
       "implement": "post-roll-reactive-choice",
       "unlocks": 1,
-      "cumulative": 305,
-      "remaining": 110
+      "cumulative": 304,
+      "remaining": 112
     },
     {
       "step": 88,
       "implement": "member-count-scaling",
       "unlocks": 1,
-      "cumulative": 306,
-      "remaining": 109
+      "cumulative": 305,
+      "remaining": 111
     },
     {
       "step": 89,
       "implement": "mark-as-entity-follow",
       "unlocks": 1,
-      "cumulative": 307,
-      "remaining": 108
+      "cumulative": 306,
+      "remaining": 110
     },
     {
       "step": 90,
       "implement": "trigger-threshold-override",
       "unlocks": 1,
-      "cumulative": 308,
-      "remaining": 107
+      "cumulative": 307,
+      "remaining": 109
     },
     {
       "step": 91,
       "implement": "resource-cap-override",
       "unlocks": 1,
-      "cumulative": 309,
-      "remaining": 106
+      "cumulative": 308,
+      "remaining": 108
     },
     {
       "step": 92,
       "implement": "damage-maximize",
       "unlocks": 1,
-      "cumulative": 310,
-      "remaining": 105
+      "cumulative": 309,
+      "remaining": 107
     },
     {
       "step": 93,
       "implement": "pierce",
       "unlocks": 1,
-      "cumulative": 311,
-      "remaining": 104
+      "cumulative": 310,
+      "remaining": 106
     },
     {
       "step": 94,
       "implement": "fly-or-teleport-repeat",
       "unlocks": 1,
-      "cumulative": 312,
-      "remaining": 103
+      "cumulative": 311,
+      "remaining": 105
     },
     {
       "step": 95,
       "implement": "effect-redirect",
       "unlocks": 1,
-      "cumulative": 313,
-      "remaining": 102
+      "cumulative": 312,
+      "remaining": 104
     },
     {
       "step": 96,
       "implement": "terrain-move-lifecycle",
       "unlocks": 1,
-      "cumulative": 314,
-      "remaining": 101
+      "cumulative": 313,
+      "remaining": 103
     },
     {
       "step": 97,
       "implement": "infuse-permanence",
       "unlocks": 1,
-      "cumulative": 315,
-      "remaining": 100
+      "cumulative": 314,
+      "remaining": 102
     },
     {
       "step": 98,
       "implement": "area-persistence-override",
       "unlocks": 1,
-      "cumulative": 316,
-      "remaining": 99
+      "cumulative": 315,
+      "remaining": 101
     },
     {
       "step": 99,
       "implement": "variable-cost",
       "unlocks": 1,
-      "cumulative": 317,
-      "remaining": 98
+      "cumulative": 316,
+      "remaining": 100
     },
     {
       "step": 100,
       "implement": "vigor-grant",
       "unlocks": 16,
-      "cumulative": 333,
-      "remaining": 82
+      "cumulative": 332,
+      "remaining": 84
     },
     {
       "step": 101,
       "implement": "mark-gated-modifier",
       "unlocks": 10,
-      "cumulative": 343,
-      "remaining": 72
+      "cumulative": 342,
+      "remaining": 74
     },
     {
       "step": 102,
       "implement": "fly-multirecipient",
-      "unlocks": 6,
-      "cumulative": 349,
-      "remaining": 66
+      "unlocks": 5,
+      "cumulative": 347,
+      "remaining": 69
     },
     {
       "step": 103,
       "implement": "mark-defeat-trigger",
       "unlocks": 2,
-      "cumulative": 351,
-      "remaining": 64
+      "cumulative": 349,
+      "remaining": 67
     },
     {
       "step": 104,
       "implement": "collide-rider",
       "unlocks": 3,
-      "cumulative": 354,
-      "remaining": 61
+      "cumulative": 352,
+      "remaining": 64
     },
     {
       "step": 105,
       "implement": "save-modifier",
       "unlocks": 3,
-      "cumulative": 357,
-      "remaining": 58
+      "cumulative": 355,
+      "remaining": 61
     },
     {
       "step": 106,
       "implement": "mark-transfer",
       "unlocks": 4,
-      "cumulative": 361,
-      "remaining": 54
+      "cumulative": 359,
+      "remaining": 57
     },
     {
       "step": 107,
       "implement": "action-cost-override",
       "unlocks": 2,
-      "cumulative": 363,
-      "remaining": 52
+      "cumulative": 361,
+      "remaining": 55
     },
     {
       "step": 108,
       "implement": "interrupt-grant",
       "unlocks": 3,
-      "cumulative": 366,
-      "remaining": 49
+      "cumulative": 364,
+      "remaining": 52
     },
     {
       "step": 109,
       "implement": "exceed-grant",
       "unlocks": 3,
-      "cumulative": 369,
-      "remaining": 46
+      "cumulative": 367,
+      "remaining": 49
     },
     {
       "step": 110,
       "implement": "mark-stacking",
       "unlocks": 2,
-      "cumulative": 371,
-      "remaining": 44
+      "cumulative": 369,
+      "remaining": 47
     },
     {
       "step": 111,
       "implement": "condition-preserve",
       "unlocks": 3,
-      "cumulative": 374,
-      "remaining": 41
+      "cumulative": 372,
+      "remaining": 44
     },
     {
       "step": 112,
       "implement": "shove-trigger",
       "unlocks": 2,
-      "cumulative": 376,
-      "remaining": 39
+      "cumulative": 374,
+      "remaining": 42
     },
     {
       "step": 113,
       "implement": "player-choice",
       "unlocks": 1,
-      "cumulative": 377,
-      "remaining": 38
+      "cumulative": 375,
+      "remaining": 41
     },
     {
       "step": 114,
-      "implement": "gamble-result-selection",
-      "unlocks": 2,
-      "cumulative": 379,
-      "remaining": 36
+      "implement": "movement-distance-modifier",
+      "unlocks": 1,
+      "cumulative": 376,
+      "remaining": 40
     },
     {
       "step": 115,
-      "implement": "damage-dealt-trigger",
+      "implement": "gamble-result-selection",
       "unlocks": 2,
-      "cumulative": 381,
-      "remaining": 34
+      "cumulative": 378,
+      "remaining": 38
     },
     {
       "step": 116,
-      "implement": "entity-consume",
+      "implement": "damage-dealt-trigger",
       "unlocks": 2,
-      "cumulative": 383,
-      "remaining": 32
+      "cumulative": 380,
+      "remaining": 36
     },
     {
       "step": 117,
-      "implement": "summon-recipient-targeting",
-      "unlocks": 1,
-      "cumulative": 384,
-      "remaining": 31
+      "implement": "entity-consume",
+      "unlocks": 2,
+      "cumulative": 382,
+      "remaining": 34
     },
     {
       "step": 118,
-      "implement": "once-per-round-fly-grant",
-      "unlocks": 2,
-      "cumulative": 386,
-      "remaining": 29
+      "implement": "summon-recipient-targeting",
+      "unlocks": 1,
+      "cumulative": 383,
+      "remaining": 33
     },
     {
       "step": 119,
-      "implement": "repeat-mechanic",
-      "unlocks": 1,
-      "cumulative": 387,
-      "remaining": 28
+      "implement": "once-per-round-fly-grant",
+      "unlocks": 2,
+      "cumulative": 385,
+      "remaining": 31
     },
     {
       "step": 120,
-      "implement": "foe-trigger-expansion",
+      "implement": "repeat-mechanic",
       "unlocks": 1,
-      "cumulative": 388,
-      "remaining": 27
+      "cumulative": 386,
+      "remaining": 30
     },
     {
       "step": 121,
-      "implement": "spatial-state",
+      "implement": "foe-trigger-expansion",
       "unlocks": 1,
-      "cumulative": 389,
-      "remaining": 26
+      "cumulative": 387,
+      "remaining": 29
     },
     {
       "step": 122,
-      "implement": "fly-benefit-rider",
+      "implement": "spatial-state",
       "unlocks": 1,
-      "cumulative": 390,
-      "remaining": 25
+      "cumulative": 388,
+      "remaining": 28
     },
     {
       "step": 123,
-      "implement": "end-turn-suppress",
+      "implement": "fly-benefit-rider",
       "unlocks": 1,
-      "cumulative": 391,
-      "remaining": 24
+      "cumulative": 389,
+      "remaining": 27
     },
     {
       "step": 124,
-      "implement": "interrupt-use-scaling",
+      "implement": "conditional-fly-repeat",
       "unlocks": 1,
-      "cumulative": 392,
-      "remaining": 23
+      "cumulative": 390,
+      "remaining": 26
     },
     {
       "step": 125,
-      "implement": "attack-exceed-trigger",
+      "implement": "end-turn-suppress",
       "unlocks": 1,
-      "cumulative": 393,
-      "remaining": 22
+      "cumulative": 391,
+      "remaining": 25
     },
     {
       "step": 126,
-      "implement": "shadow-summon",
+      "implement": "ordered-intermediate-state",
       "unlocks": 1,
-      "cumulative": 394,
-      "remaining": 21
+      "cumulative": 392,
+      "remaining": 24
     },
     {
       "step": 127,
-      "implement": "multi-actor-teleport",
+      "implement": "interrupt-use-scaling",
       "unlocks": 1,
-      "cumulative": 395,
-      "remaining": 20
+      "cumulative": 393,
+      "remaining": 23
     },
     {
       "step": 128,
-      "implement": "dash-modifier",
+      "implement": "attack-exceed-trigger",
       "unlocks": 1,
-      "cumulative": 396,
-      "remaining": 19
+      "cumulative": 394,
+      "remaining": 22
     },
     {
       "step": 129,
-      "implement": "aura-range-override",
+      "implement": "shadow-summon",
       "unlocks": 1,
-      "cumulative": 397,
-      "remaining": 18
+      "cumulative": 395,
+      "remaining": 21
     },
     {
       "step": 130,
-      "implement": "shared-turn-ledger",
+      "implement": "multi-actor-teleport",
       "unlocks": 1,
-      "cumulative": 398,
-      "remaining": 17
+      "cumulative": 396,
+      "remaining": 20
     },
     {
       "step": 131,
-      "implement": "range-gated-teleport",
+      "implement": "dash-modifier",
       "unlocks": 1,
-      "cumulative": 399,
-      "remaining": 16
+      "cumulative": 397,
+      "remaining": 19
     },
     {
       "step": 132,
-      "implement": "save-or-stun",
+      "implement": "aura-range-override",
       "unlocks": 1,
-      "cumulative": 400,
-      "remaining": 15
+      "cumulative": 398,
+      "remaining": 18
     },
     {
       "step": 133,
-      "implement": "lifecycle-target-selection",
+      "implement": "shared-turn-ledger",
       "unlocks": 1,
-      "cumulative": 401,
-      "remaining": 14
+      "cumulative": 399,
+      "remaining": 17
     },
     {
       "step": 134,
-      "implement": "area-modifier",
+      "implement": "range-gated-teleport",
       "unlocks": 1,
-      "cumulative": 402,
-      "remaining": 13
+      "cumulative": 400,
+      "remaining": 16
     },
     {
       "step": 135,
-      "implement": "defense-bypass",
+      "implement": "save-or-stun",
       "unlocks": 1,
-      "cumulative": 403,
-      "remaining": 12
+      "cumulative": 401,
+      "remaining": 15
     },
     {
       "step": 136,
-      "implement": "lifecycle-trigger",
+      "implement": "lifecycle-target-selection",
       "unlocks": 1,
-      "cumulative": 404,
-      "remaining": 11
+      "cumulative": 402,
+      "remaining": 14
     },
     {
       "step": 137,
-      "implement": "target-selector-variant",
+      "implement": "area-modifier",
       "unlocks": 1,
-      "cumulative": 405,
-      "remaining": 10
+      "cumulative": 403,
+      "remaining": 13
     },
     {
       "step": 138,
-      "implement": "status-reapply",
+      "implement": "defense-bypass",
+      "unlocks": 1,
+      "cumulative": 404,
+      "remaining": 12
+    },
+    {
+      "step": 139,
+      "implement": "lifecycle-trigger",
+      "unlocks": 1,
+      "cumulative": 405,
+      "remaining": 11
+    },
+    {
+      "step": 140,
+      "implement": "target-selector-variant",
       "unlocks": 1,
       "cumulative": 406,
+      "remaining": 10
+    },
+    {
+      "step": 141,
+      "implement": "status-reapply",
+      "unlocks": 1,
+      "cumulative": 407,
       "remaining": 9
+    },
+    {
+      "step": 142,
+      "implement": "flying-targeting",
+      "unlocks": 1,
+      "cumulative": 408,
+      "remaining": 8
     }
   ],
   "invariants": [
     "✓ All source IDs are unique",
+    "✓ Closed Fly lexical inventory covers all 37 census-scoped source hits",
     "✓ Every unresolved unit appears exactly once",
     "✓ No executable unit appears in the unresolved census",
-    "✓ Per-kind totals sum to unresolved total (415)",
+    "✓ Per-kind totals sum to unresolved total (416)",
     "✓ All blocker-set frequencies derive from per-unit records",
     "✓ All marginal values derive from per-unit records",
     "✓ Marginal assertion: immediate + oneCloser + multiCloser === totalContaining for every blocker",
     "✓ Cumulative unlocked + remaining = baseline at every step",
     "✓ No non-implementable classifications in greedy simulation",
-    "✓ Final remaining: 9 (residual: 0 units need non-implementable capabilities)"
+    "✓ Final remaining: 8 (residual: 0 units need non-implementable capabilities)"
   ]
 }

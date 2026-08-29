@@ -38,13 +38,13 @@ import type { Position } from '../../types.js';
 /** The minimal spatial view both the reducer and the rule runtime satisfy. */
 export interface SpatialLineView {
   grid: { width: number; height: number; terrain?: readonly { position: Position; type: string }[] };
-  /** Per-cell union of base terrain and overlay effects, matching the
-   * movement planner's view. Absent → only `grid.terrain` is consulted. */
+  /** Per-cell semantic union of base terrain and live terrain effects,
+   * matching the movement planner's view. Absent → only `grid.terrain` is
+   * consulted. */
   terrainAt?: (position: Position) => ReadonlySet<string>;
   /** Overlay effect types that explicitly block line of sight (p.92 smog and
-   * poison clouds). Closed by default: nothing in the current catalog creates
-   * such an effect, so the kernel's LoS matches the reviewed reducer exactly
-   * (grid impassable only). A future effect type can only block LoS by being
+   * poison clouds). Semantic impassable terrain blocks independently of this
+   * registry; a non-impassable effect type can only block LoS by being
    * registered here — never by prose inference. */
   lineOfSightBlockingEffectTypes?: ReadonlySet<string>;
   /** Overlay effect types that block line of effect (p.109 transparent
@@ -55,13 +55,27 @@ export interface SpatialLineView {
 
 const sameCell = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
 
+/** One semantic terrain query for every LoS/LoE category. `terrainAt` is the
+ * live union supplied by encounter/runtime adapters; `grid.terrain` remains a
+ * defensive fallback (and is harmlessly de-duplicated when the adapter also
+ * includes it). */
+function terrainTypesAt(view: SpatialLineView, position: Position): ReadonlySet<string> {
+  const types = new Set<string>();
+  for (const cell of view.grid.terrain ?? []) {
+    if (sameCell(cell.position, position)) types.add(cell.type);
+  }
+  for (const type of view.terrainAt?.(position) ?? []) types.add(type);
+  return types;
+}
+
 function blocksLineOfSight(view: SpatialLineView, position: Position): boolean {
-  const terrain = view.grid.terrain;
-  if (terrain?.some((cell) => sameCell(cell.position, position) && cell.type === 'impassable')) return true;
+  const types = terrainTypesAt(view, position);
+  // ICON p.92: impassable TERRAIN blocks sight regardless of whether it is a
+  // map-authored cell or a live terrain effect. Explicit LoS blockers are the
+  // separate additional category below.
+  if (types.has('impassable')) return true;
   const blockers = view.lineOfSightBlockingEffectTypes;
   if (!blockers || blockers.size === 0) return false;
-  const types = view.terrainAt?.(position);
-  if (!types) return false;
   for (const type of types) if (blockers.has(type)) return true;
   return false;
 }
@@ -69,8 +83,7 @@ function blocksLineOfSight(view: SpatialLineView, position: Position): boolean {
 function blocksLineOfEffect(view: SpatialLineView, position: Position): boolean {
   const blockers = view.lineOfEffectBlockingEffectTypes;
   if (!blockers || blockers.size === 0) return false;
-  const types = view.terrainAt?.(position);
-  if (!types) return false;
+  const types = terrainTypesAt(view, position);
   for (const type of types) if (blockers.has(type)) return true;
   return false;
 }

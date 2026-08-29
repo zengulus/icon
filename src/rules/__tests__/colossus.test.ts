@@ -48,7 +48,7 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Colossus ability automation (p.133–138)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
+  it('keeps the eight source-reviewed abilities executable and Raging Wolf unresolved', () => {
     for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
       if (!abilityId.startsWith('colossus:')) continue;
       const ability = findAbility(abilityId)!;
@@ -57,7 +57,9 @@ describe('Colossus ability automation (p.133–138)', () => {
       expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
     }
     const colossusIds = JOBS.find((job) => job.id === 'colossus')!.abilities.map(({ id }) => id);
-    expect(colossusIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
+    expect(colossusIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(8);
+    expect(EXECUTABLE_JOB_ABILITY_IDS.has('colossus:raging-wolf')).toBe(false);
+    expect(compileRuleSourceUnit(findRuleSourceUnit('colossus:raging-wolf')!).unsupportedClauses.length).toBeGreaterThan(0);
   });
 
   it('Valkyrie: true-strike attack, weakened target, and no fly when adjacent', () => {
@@ -195,16 +197,12 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(result.state.actors[foe.id].hp).toBe(28);
   });
 
-  it('Raging Wolf: has no effect while not bloodied, and chains rush, fray, and shove while bloodied', () => {
-    const { state, hero, foe } = colossusEncounter({ second: null });
-    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:raging-wolf', targetIds: [] }, scriptedDice())).toThrow(/bloodied/i);
-
-    const bloodied = colossusEncounter({ second: null });
-    bloodied.state.actors[bloodied.hero.id].hp = 10; // bloodied and at or below 25%
-    const result = executeCommand(bloodied.state, { type: 'USE_ABILITY', actorId: bloodied.hero.id, abilityId: 'colossus:raging-wolf', targetIds: [] }, scriptedDice());
-    expect(result.state.actors[bloodied.foe.id].hp).toBe(28); // fray 4
-    expect(result.state.actors[bloodied.foe.id].statuses).toContain('slashed');
-    expect(result.state.actors[bloodied.foe.id].position).toEqual({ x: 3, y: 1 }); // shoved 1
+  it('Raging Wolf fails closed until its optional cumulative sequence has command-time authority', () => {
+    const { state, hero } = colossusEncounter({ second: null });
+    state.actors[hero.id].abilityIds.push('colossus:raging-wolf');
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:raging-wolf', targetIds: [],
+    }, scriptedDice())).toThrow(/not an independently executable ICON rule/i);
   });
 
   it('Boiling Blood: arms defy-death and bonus damage as an interrupt', () => {
@@ -330,53 +328,4 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(blown.pendingInterrupts.every((window) => !window.heldDamage)).toBe(true);
   });
 
-  // ICON p.135 Raging Wolf talent 2: "While you're at 1 hp, increase flight
-  // to 3." The quarter-hp FLIGHT widens to 3 only when the equipped-talent
-  // gate AND the exactly-1-hp gate both hold; otherwise it stays 1.
-  // columnWolf predicate: hero at (1,1), a single foe at (5,1), so the fly
-  // direction is +x — distance 3 → (4,1), distance 1 → (2,1).
-  describe('Raging Wolf talent 2 (flight 3 while at 1 hp)', () => {
-    const flyDestinations = (state: EncounterState, heroId: string) => {
-      const result = executeCommand(state, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'colossus:raging-wolf', targetIds: [] }, scriptedDice());
-      const flies = mutationsOf(result.events, 'colossus:raging-wolf').filter((m) => m.kind === 'move' && (m as { movement?: string }).movement === 'fly');
-      return { destinations: flies.flatMap((m) => ('positions' in m && Array.isArray((m as { positions: Position[] }).positions) ? m.positions : [])), result };
-    };
-
-    it('rank 2 + at 1 hp: the quarter-hp flight becomes 3 spaces (positive)', () => {
-      const { state, hero, foe } = colossusEncounter({ second: null, foe: { x: 5, y: 1 } });
-      state.actors[hero.id].hp = 1;
-      state.actors[hero.id].talents['colossus:raging-wolf'] = 2;
-      const { destinations, result } = flyDestinations(state, hero.id);
-      expect(destinations.length).toBeGreaterThan(0);
-      // Hero at (1,1): every fly move is toward the +x foe at distance 3.
-      for (const cell of destinations) expect(cell.x - 1).toBe(3);
-      expect(applyEvents(state, result.events)).toEqual(result.state); // replay
-    });
-
-    it('rank 2 but hp 8 (quarter but not 1): flight stays 1 (hp gate negative)', () => {
-      const { state, hero, foe } = colossusEncounter({ second: null, foe: { x: 5, y: 1 } });
-      state.actors[hero.id].hp = 8;
-      state.actors[hero.id].talents['colossus:raging-wolf'] = 2;
-      const { destinations } = flyDestinations(state, hero.id);
-      expect(destinations.length).toBeGreaterThan(0);
-      for (const cell of destinations) expect(cell.x - 1).toBe(1);
-    });
-
-    it('at 1 hp but rank 1 (talent 1 only): flight stays 1 (rank gate negative)', () => {
-      const { state, hero, foe } = colossusEncounter({ second: null, foe: { x: 5, y: 1 } });
-      state.actors[hero.id].hp = 1;
-      state.actors[hero.id].talents['colossus:raging-wolf'] = 1;
-      const { destinations } = flyDestinations(state, hero.id);
-      expect(destinations.length).toBeGreaterThan(0);
-      for (const cell of destinations) expect(cell.x - 1).toBe(1);
-    });
-
-    it('at 1 hp but no talent: flight stays 1 (unequipped negative)', () => {
-      const { state, hero, foe } = colossusEncounter({ second: null, foe: { x: 5, y: 1 } });
-      state.actors[hero.id].hp = 1;
-      const { destinations } = flyDestinations(state, hero.id);
-      expect(destinations.length).toBeGreaterThan(0);
-      for (const cell of destinations) expect(cell.x - 1).toBe(1);
-    });
-  });
 });

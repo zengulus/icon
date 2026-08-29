@@ -692,7 +692,8 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // canonical `plannedFly` placement helper). Reading every source passage that
   // mentions flying (ICON 1.5 pp.131–236; general rules p.92 for footprint
   // terrain costs) shows the units fall into genuinely distinct families below,
-  // each a real missing reusable capability:
+  // each a real missing reusable capability. The ten audited disposition
+  // labels are:
   //   duration-fly-state      — the FLYING STATE (not a move) for a duration /
   //                             area / conditional window ("flying until the end
   //                             of their next turn", "for the duration of that
@@ -709,15 +710,23 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   //   fly-benefit-rider       — a benefit that applies WHILE flying (unstoppable,
   //                             damage immunity) on top of the flight itself.
   //   fly-or-teleport-repeat  — a per-bounce choice of fly OR teleport, repeatable.
+  //   conditional-fly-repeat — repeat a completed Fly move when its actual
+  //                             movement result satisfies a source predicate.
   //   once-per-round-fly-grant
   //                         — an allied fly grant capped once per round by a gate.
   //   flying-targeting        — a mechanic that merely AFFECTS flying characters.
   // Every record that carried `fly-grant` (17 singletons + 13 compounds) is
   // re-audited below against its COMPLETE passage. NONE is bulk-promoted just
   // because the keyword label disappeared; each keeps its precise residual.
-  // (colossus:raging-wolf:talent:2 is separately promoted once wired as a
-  // source-exact fly-distance-modifier consumer in the Raging Wolf resolver.)
+  // Raging Wolf TII is deliberately NOT promoted: its parent ability needs an
+  // ordered intermediate-state sequence plus durable command-time choices
+  // before the conditional distance increase can be source-exact.
   // ── Colossus ──
+  'colossus:trait:wolfheart': ['heroics-economy', 'fly-distance-modifier', 'movement-distance-modifier'],
+  // The first F4 regex missed the noun "flight". Wolfheart's optional,
+  // once-a-round Heroic spend also increases any flight, rush, or dash in
+  // that move by +1; those distance changes are separate from making the
+  // ability Heroic.
   'colossus:trait:great-leap': ['duration-fly-state'],
   // "When you would end any movement on a lower elevation than you started,
   // you may gain flying FOR THE DURATION OF THAT MOVEMENT" — a timed flying
@@ -726,14 +735,15 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "unstoppable and immune to all damage while flying with Valkyrie. Charge:
   // You may fly 3 instead" — a charge-gated distance INCREASE (1→3) plus the
   // while-flying benefit rider (unstoppable + damage immunity).
-  'colossus:valkyrie:mastery': ['fly-multirecipient', 'duration-fly-state'],
+  'colossus:valkyrie:mastery': ['fly-multirecipient', 'conditional-fly-repeat'],
   // "When you use Valkyrie, all ALLIES may fly 1. If they end this flight on a
-  // lower elevation… they may fly 1 again" — allied fly grant + a conditional
-  // descent re-fly (timed flying on movement).
-  'colossus:raging-wolf:talent:2': ['fly-distance-modifier'],
+  // lower elevation… they may fly 1 again" — two one-shot Fly moves. The
+  // second is a movement-result-conditioned repeat, not the FLYING state.
+  'colossus:raging-wolf:talent:2': ['choice-input', 'ordered-intermediate-state', 'fly-distance-modifier'],
   // "While you're at 1 hp, increase flight to 3" — a conditional distance
-  // increase of the existing flight. PROMOTED (2026-08-29) once wired into the
-  // Raging Wolf resolver with the equipped-rank + 1-hp gate.
+  // increase of the existing flight. The parent sequence cannot yet preserve
+  // its optional Rush/Fly destinations and adjacent-foe selections as durable
+  // command input, or evaluate each later tier from the actual prior landing.
   // ── Fool ──
   'fool:cavaliere:mastery': ['fly-move-timing'],
   // "After Cavaliere resolves, you may fly 4" — a post-resolution self fly.
@@ -755,7 +765,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   'chanter:trait:uplift': ['fly-multirecipient', 'once-per-round-fly-grant'],
   // "The first time a round you use any ability that allows you to fly, all
   // allies can fly 1" — an allied fly grant gated once per round.
-  'chanter:felicity:talent:2': ['fly-move-timing'],
+  'chanter:felicity:talent:2': ['fly-move-timing', 'new-shove-effect'],
   // "You can fly 1, then shove an adjacent character 1 when granting movement
   // from this ability" — a self fly move at the movement-grant edge.
   'chanter:aria:talent:1': ['fly-move-timing'],
@@ -794,7 +804,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "Yourself and allies that are shoved by gust can fly 2 after stopping
   // INSTEAD of being shoved" — a shove→fly substitution for self+allies.
   // ── Compound records whose `fly-grant` component is now precise ──
-  'colossus:boiling-blood:talent:2': ['fly-move-timing'],
+  'colossus:boiling-blood:talent:2': ['fly-move-timing', 'rush-modifier'],
   // "You can rush or fly 1 before using any ability while Defy Death is active"
   // — a pre-ability movement fly choice gated on the Defy Death state.
   'colossus:takedown:talent:1': ['rush-modifier', 'fly-move-timing'],
@@ -1472,6 +1482,58 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // the area kernel's shape rules are static today
 };
 
+/**
+ * Fail-closed F4 lexical inventory for the census-scoped ICON 1.5 source.
+ *
+ * The retired `fly-grant` regex may not become a silent fall-through. Every
+ * class/job trait, talent, mastery, or limit break containing fly/flying/
+ * flight vocabulary is named here as either an audited unresolved
+ * reclassification, an independently executable source unit, or a reviewed
+ * non-Fly projectile use of the verb. A new lexical hit
+ * or a stale inventory row aborts census generation.
+ */
+const FLY_LEXICAL_DISPOSITIONS: Readonly<Record<string, 'reclassified' | 'executable' | 'non-fly-lexeme'>> = {
+  'chanter:aria:talent:1': 'reclassified',
+  'chanter:felicity:mastery': 'reclassified',
+  'chanter:felicity:talent:2': 'reclassified',
+  'chanter:holy:mastery': 'reclassified',
+  'chanter:holy:talent:2': 'reclassified',
+  'chanter:limit-break': 'reclassified',
+  'chanter:trait:blessing-of-faith': 'reclassified',
+  'chanter:trait:divine-grace': 'reclassified',
+  'chanter:trait:uplift': 'reclassified',
+  'colossus:boiling-blood:talent:2': 'reclassified',
+  'colossus:gigaton-whip:talent:2': 'reclassified',
+  'colossus:raging-wolf:talent:2': 'reclassified',
+  'colossus:takedown:talent:1': 'reclassified',
+  'colossus:trait:great-leap': 'reclassified',
+  'colossus:trait:wolfheart': 'reclassified',
+  'colossus:valkyrie:mastery': 'reclassified',
+  'colossus:valkyrie:talent:2': 'reclassified',
+  'fool:carnevale:talent:1': 'reclassified',
+  'fool:cavaliere:mastery': 'reclassified',
+  'fool:chronotemper:talent:2': 'reclassified',
+  'fool:diablo:talent:2': 'reclassified',
+  'fool:masquerade:talent:2': 'reclassified',
+  'fool:party-favor:talent:1': 'reclassified',
+  'fool:spinning-top:talent:2': 'executable',
+  'freelancer:exorcism:mastery': 'non-fly-lexeme',
+  'freelancer:soul-shot:mastery': 'reclassified',
+  'freelancer:trait:bound-spirit': 'executable',
+  'geomancer:dragon-dive:talent:2': 'reclassified',
+  'geomancer:helix-heel:talent:2': 'reclassified',
+  'seer:sleight-of-hand:mastery': 'non-fly-lexeme',
+  'stormbender:geyser:mastery': 'reclassified',
+  'stormbender:gust:talent:2': 'reclassified',
+  'stormbender:limit-break': 'reclassified',
+  'stormbender:trait:pelagic-rage': 'reclassified',
+  'stormbender:trait:sea-legs': 'reclassified',
+  'stormbender:trait:selkie': 'executable',
+  'stormbender:tsunami:mastery': 'reclassified',
+};
+
+const FLY_LEXICAL_PATTERN = /\b(?:fly|flies|flying|flight|flights|flew)\b/i;
+
 /** Classify a source unit's rules text into a blocker set.
  *  The classification is purely syntactic (regex on the source text) and
  *  is used as a first-pass census. Singleton audit verification must be
@@ -1754,6 +1816,33 @@ function generateCensus(): CensusResult {
   // Build compilation lookup
   const compilationMap = new Map(compilations.map((c) => [c.program.sourceId, c]));
 
+  // F4 fail-closed lexical audit: retiring a coarse classifier must never
+  // make a new/current Fly mention disappear from blocker accounting.
+  const flyLexicalUnits = censusUnits.filter((unit) => FLY_LEXICAL_PATTERN.test(unit.rulesText));
+  const flyLexicalIds = new Set(flyLexicalUnits.map((unit) => unit.id));
+  const unreviewedFlyHits = flyLexicalUnits.filter((unit) => !(unit.id in FLY_LEXICAL_DISPOSITIONS));
+  const staleFlyRows = Object.keys(FLY_LEXICAL_DISPOSITIONS).filter((sourceId) => !flyLexicalIds.has(sourceId));
+  if (unreviewedFlyHits.length > 0 || staleFlyRows.length > 0) {
+    throw new Error([
+      unreviewedFlyHits.length > 0 ? `Unreviewed Fly lexical hits: ${unreviewedFlyHits.map((unit) => unit.id).join(', ')}` : '',
+      staleFlyRows.length > 0 ? `Stale Fly lexical dispositions: ${staleFlyRows.join(', ')}` : '',
+    ].filter(Boolean).join('; '));
+  }
+  for (const unit of flyLexicalUnits) {
+    const disposition = FLY_LEXICAL_DISPOSITIONS[unit.id];
+    const compilation = compilationMap.get(unit.id);
+    if (!compilation) throw new Error(`No compilation for Fly lexical source unit: ${unit.id}`);
+    if (disposition === 'reclassified' && !(unit.id in RECLASSIFIED_BLOCKERS)) {
+      throw new Error(`Fly lexical source unit ${unit.id} is marked reclassified without an audited blocker row`);
+    }
+    if (disposition === 'reclassified' && compilation.unsupportedClauses.length === 0) {
+      throw new Error(`Fly lexical source unit ${unit.id} is now executable; update its audited F4 disposition`);
+    }
+    if (disposition === 'executable' && compilation.unsupportedClauses.length > 0) {
+      throw new Error(`Fly lexical source unit ${unit.id} is marked executable without complete audited coverage`);
+    }
+  }
+
   // Determine complete vs unresolved
   const unresolved: CensusRecord[] = [];
   const complete: string[] = [];
@@ -1912,6 +2001,8 @@ function generateCensus(): CensusResult {
     const dupes = allIds.filter((id, i) => allIds.indexOf(id) !== i);
     invariants.push(`✗ Duplicate source IDs found: ${dupes.join(', ')}`);
   }
+
+  invariants.push(`✓ Closed Fly lexical inventory covers all ${flyLexicalUnits.length} census-scoped source hits`);
 
   // 2. Every unresolved unit appears exactly once
   const unresolvedIds = new Set(unresolved.map((r) => r.sourceId));

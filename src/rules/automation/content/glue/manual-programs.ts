@@ -221,7 +221,6 @@ export const EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
   'colossus:takedown',
   'colossus:great-suplex',
   'colossus:gigaton-whip',
-  'colossus:raging-wolf',
   'colossus:boiling-blood',
   'knave:low-blow',
   'knave:provoke',
