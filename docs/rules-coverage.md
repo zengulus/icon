@@ -69,7 +69,7 @@ the family's *typical* ceiling.
 | Camp fixtures / features | 16 / 85(+87 features counted earlier; NEEDS RECOUNT) | ✔ | 0 | 101 | 2–3 |
 | Reward rules | 9 | ✔ | 0 | 9 | 2 |
 | Narrative rolls | — | ✔ | zero-rating, boons/curses, crits | — | 6 |
-| Character lifecycle | — | ✔ schema v4, migration v1–v4, import/export | creation→combat entry DONE; settlement + attrition handoff DONE (P1); camp/interlude sheet transitions DONE, playable scene flow NOT STARTED | — | 7 for the deterministic core |
+| Character lifecycle | — | ✔ schema v5, migration v1–v5, import/export; narrative selections persist permanent canonical IDs | creation→combat entry DONE; settlement + attrition handoff DONE (P1); camp/interlude sheet transitions DONE, playable scene flow NOT STARTED | — | 7 for the deterministic core |
 
 ## Mechanically unresolved vs intentionally human-adjudicated
 

@@ -19,8 +19,8 @@ describe('ICON 1.5 content artifact', () => {
 
   it('indexes the character-facing catalog without duplicate identifiers', () => {
     expect(BONDS).toHaveLength(12);
-    expect(BONDS.every(({ ideals, powerDetails, kits }) => ideals.length === 3 && powerDetails.length === 10 && kits.length >= 2)).toBe(true);
-    expect(BONDS.flatMap(({ powerDetails }) => powerDetails)).toHaveLength(120);
+    expect(BONDS.every(({ ideals, powers, kits }) => ideals.length === 3 && powers.length === 10 && kits.length >= 2)).toBe(true);
+    expect(BONDS.flatMap(({ powers }) => powers)).toHaveLength(120);
     expect(BONDS.find(({ id }) => id === 'mender')?.effort).toBe(6);
     expect(JOBS).toHaveLength(16);
     expect(JOBS.flatMap(({ traits }) => traits)).toHaveLength(65);

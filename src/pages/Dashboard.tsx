@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { chapterForLevel, createCharacter, findBond, findJob, migrateCharacter, validateCharacter } from '../rules/index.js';
+import { chapterForLevel, createCharacter, findBond, findCulture, findJob, findKin, migrateCharacter, validateCharacter } from '../rules/index.js';
 import { useCharacters } from '../context/CharacterContext.js';
 import { assetBackground } from '../services/assets.js';
 
@@ -77,7 +77,7 @@ export function Dashboard() {
                 <div className="character-card-body">
                   <div className="card-meta"><span>LV {character.level}</span><span>CHAPTER {chapterForLevel(character.level)}</span></div>
                   <h2>{character.name || 'Unnamed Icon'}</h2>
-                  <p>{[character.kin, character.culture, bond?.name, job?.name].filter(Boolean).join(' · ') || 'Creation in progress'}</p>
+                  <p>{[findKin(character.kinId)?.name, findCulture(character.cultureId)?.name, bond?.name, job?.name].filter(Boolean).join(' · ') || 'Creation in progress'}</p>
                   <div className="card-status"><span className={issues.length ? 'warning' : 'valid'}>{issues.length ? `${issues.length} item${issues.length === 1 ? '' : 's'} to finish` : 'Ready for expedition'}</span><span>{character.xp}/15 XP</span></div>
                   <div className="card-actions"><Link className="button compact" to={`/characters/${character.id}`}>Open sheet</Link><button className="text-button danger" onClick={() => window.confirm(`Archive ${character.name || 'this character'}?`) && void remove(character.id)}>Archive</button></div>
                 </div>

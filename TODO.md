@@ -729,7 +729,8 @@ The canonical slices live in [`docs/deliverables.md`](docs/deliverables.md)
 
 ## Persistent / expedition lifecycle
 
-- Character schema v4, import/export, migration v1→v4: `DONE`.
+- Character schema v5, import/export, migration v1→v5 (narrative selections
+  persist permanent canonical IDs; display names never persisted): `DONE`.
 - Settlement & attrition handoff (`ENCOUNTER_ENDED` personal Resolve +1,
   `characterFromActor` projection of HP attrition/wounds/resolve): `DONE`
   (2026-08-25, roadmap P1).

@@ -7,7 +7,7 @@ What must exist for the product to be genuinely complete, translated from
 | Deliverable | Status | Owner/subsystem | Completion condition |
 | --- | --- | --- | --- |
 | Source provenance pipeline | COMPLETE | `scripts/extract-*`, `content/generated/`, digest evidence | 501 pages extracted; pinned SHA-256; byte-for-byte regeneration with the PDF (`verify:extraction`); hosted CI validates checked-in artifacts without the PDF |
-| Character rules engine | COMPLETE | `src/rules/character.ts`, `types.ts` (schema v3) | Creation/advancement validation, import/export, v1→v3 migration, strict version rejection — all tested |
+| Character rules engine | COMPLETE | `src/rules/character.ts`, `types.ts` (schema v5) | Creation/advancement validation, import/export, v1→v5 migration, strict version rejection, perspective narrative selections as permanent canonical IDs — all tested |
 | Encounter command/event engine | COMPLETE (core) / PARTIAL (breadth) | `src/rules/encounter.ts`, `types.ts` | Purity contract + exact replay for every command; remaining breadth = new commands only |
 | Turn scheduler | COMPLETE | `src/rules/turn-scheduler.ts` | Explicit side/phase authority, controller-chosen actors, Slow lifecycle, pending Delay, multi-turn entitlements — replay-tested |
 | Damage kernel | AUTHORITATIVE | `automation/kernels/encounter-adapter.ts`, `damage-resolution`, `damage-ledger` | Determine → apply pipeline, armor/resistance/weakened/vulnerable/pierce/divine/vigor/Defiance/Defy Death, held damage, wounds on defeat |

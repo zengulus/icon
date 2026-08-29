@@ -4,7 +4,11 @@ import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/ker
 import type { TurnTransitionIntent } from './automation/kernels/lifecycle.js';
 
 export const RULES_VERSION = '1.5' as const;
-export const CHARACTER_SCHEMA_VERSION = 4 as const;
+// Schema v5 locks every player-selectable narrative value (Kin, Culture, Bond,
+// Bond power, Bond-linked action) to permanent canonical IDs. v4 records
+// stored Kin/Culture and Bond-power display names and the legacy `bondAction`/
+// `bondPowers` field names; `migrateCharacter` converts those to IDs.
+export const CHARACTER_SCHEMA_VERSION = 5 as const;
 // Schema 6 records ownership for every persisted mechanic produced by
 // automation. Player projections use that provenance to withhold mechanics
 // created by a GM-hidden actor without leaking the source id.
@@ -25,6 +29,31 @@ export const ACTION_IDS = [
 
 export type ActionId = (typeof ACTION_IDS)[number];
 export type ActionRatings = Record<ActionId, number>;
+
+/**
+ * Permanent backend-safe IDs for the player-selectable narrative character
+ * content (ICON pp.45–78). These are compatibility contracts: once persisted,
+ * an ID must never silently change, be recycled, or be reused for a different
+ * source entry — only an explicit character-schema migration may repoint them.
+ * Display names live on the definitions and are freely editable independent of
+ * identity.
+ */
+export const KIN_IDS = ['thrynn', 'trogg', 'beastfolk', 'xixo'] as const;
+export type KinId = (typeof KIN_IDS)[number];
+
+export const CULTURE_IDS = ['yeokin', 'islander', 'leggio', 'churner', 'chronicler', 'guilder'] as const;
+export type CultureId = (typeof CULTURE_IDS)[number];
+
+export const BOND_IDS = ['pathfinder', 'seeker', 'mighty', 'wolf', 'harlequin', 'highborn', 'mender', 'brave', 'broker', 'elder', 'outsider', 'dreamer'] as const;
+export type BondId = (typeof BOND_IDS)[number];
+
+/**
+ * Bond powers are namespaced by Bond (`pathfinder:saddleborn`) and authored
+ * explicitly in the catalog (`src/content`/`catalog.ts`). A branded string
+ * keeps machine identity distinct from the player-facing name while avoiding
+ * a 120-member literal union.
+ */
+export type BondPowerId = string & { readonly __brand?: 'BondPowerId' };
 export type JobClassId = 'stalwart' | 'vagabond' | 'mendicant' | 'wright';
 export type FoeRoleId = 'mob' | 'heavy' | 'skirmisher' | 'leader' | 'artillery' | 'legend' | 'special';
 export type FoeKind = 'job' | 'variant' | 'unique' | 'elite' | 'legend' | 'component' | 'special';
@@ -42,19 +71,40 @@ export interface ActionDefinition {
   source: SourceReference;
 }
 
+export interface KinDefinition {
+  id: KinId;
+  name: string;
+  description: string;
+  source: SourceReference;
+}
+
+export interface CultureDefinition {
+  id: CultureId;
+  name: string;
+  description: string;
+  source: SourceReference;
+}
+
+export interface BondPowerDefinition {
+  id: BondPowerId;
+  bondId: BondId;
+  name: string;
+  rulesText: string;
+  source: SourceReference;
+}
+
 export interface BondDefinition {
-  id: string;
+  id: BondId;
   name: string;
   summary: string;
   actions: readonly [ActionId, ActionId];
   effort: number;
   strain: number;
-  powers: readonly string[];
+  powers: readonly BondPowerDefinition[];
   ideals: readonly string[];
   secondWind: string;
   specialAbility: string;
   kits: readonly { name: string; itemsText: string }[];
-  powerDetails: readonly { name: string; rulesText: string; source: SourceReference }[];
   source: SourceReference;
 }
 
@@ -287,11 +337,17 @@ export interface IconCharacter {
   ownerId: string | null;
   name: string;
   pronouns: string;
-  kin: string;
-  culture: string;
-  bondId: string;
-  bondAction: ActionId | null;
-  bondPowers: string[];
+  /** Permanent Kin ID (null until chosen at creation). Display name resolves
+   * through the catalog; never persisted by name. Schema v5+. */
+  kinId: KinId | null;
+  /** Permanent Culture ID (null until chosen at creation). Schema v5+. */
+  cultureId: CultureId | null;
+  bondId: BondId | '';
+  /** The Bond's linked action that took the Bond +2 dots. Schema v5+ ids the
+   * field explicitly as `bondActionId` (was `bondAction`, already an ActionId). */
+  bondActionId: ActionId | null;
+  /** Permanent Bond-power IDs (namespaced `bondId:power`). Schema v5+. */
+  bondPowerIds: BondPowerId[];
   actions: ActionRatings;
   level: number;
   xp: number;

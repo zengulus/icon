@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { abilityPointAllowance, aspectRelicFromSharedQuest, awardXp, chapterForLevel, completeRelicAspectQuest, createCharacter, infuseRelicDust, jobSlotsForLevel, masteryPointAllowance, migrateCharacter, narrativeBudgets, REFOCUS_DUST_COST, REFOCUS_KEEP_JOBS_DUST_COST, refocusCharacter, refocusDustCost, relicMinimumInfusedDust, relicRankForDust, relicSlotsForLevel, resolveRelicAspect, spendLevelUp, validateCharacter } from '../character.js';
-import { CHARACTER_SCHEMA_VERSION } from '../types.js';
-import { JOBS, RELICS } from '../catalog.js';
+import { CHARACTER_SCHEMA_VERSION, type IconCharacter } from '../types.js';
+import { JOBS, RELICS, BONDS, findBondPower, findCulture, findKin } from '../catalog.js';
 import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /** A level 1 character that can legally spend its level-0 abilities and AP. */
@@ -23,6 +23,20 @@ function relicCharacter(): ReturnType<typeof validCharacter> {
 function pushDust(character: ReturnType<typeof validCharacter>, amount: number) {
   character.dust = amount;
   return character;
+}
+
+/** Re-express a current character as a historical (schema ≤4) record that
+ * persisted narrative display names under the legacy field spellings. */
+function toLegacyV4(character: IconCharacter, schemaVersion = 4): Record<string, unknown> {
+  const { kinId, cultureId, bondActionId, bondPowerIds, ...rest } = character;
+  return {
+    ...rest,
+    schemaVersion,
+    kin: kinId ? findKin(kinId)?.name ?? '' : '',
+    culture: cultureId ? findCulture(cultureId)?.name ?? '' : '',
+    bondAction: bondActionId,
+    bondPowers: bondPowerIds.map((id) => findBondPower(id)?.name ?? id),
+  };
 }
 
 describe('ICON character creation', () => {
@@ -79,8 +93,8 @@ describe('ICON character creation', () => {
 
   it('rejects identity values outside the source-derived Kin and Culture catalogs', () => {
     const character = validCharacter();
-    character.kin = 'NOT-A-KIN';
-    character.culture = 'NOT-A-CULTURE';
+    character.kinId = 'NOT-A-KIN' as never;
+    character.cultureId = 'NOT-A-CULTURE' as never;
     expect(validateCharacter(character).map(({ code }) => code)).toEqual(expect.arrayContaining(['kin.unknown', 'culture.unknown']));
   });
 
@@ -98,8 +112,7 @@ describe('ICON character creation', () => {
   });
 
   it('migrates historical Aspected relics without silently inventing their advancement path', () => {
-    const legacy = validCharacter() as unknown as Record<string, unknown>;
-    legacy.schemaVersion = 2;
+    const legacy = toLegacyV4(validCharacter(), 2);
     legacy.level = 12;
     legacy.relics = [{ relicId: RELICS[0].id, rank: 4, dustInfused: 12 }];
 
@@ -116,6 +129,59 @@ describe('ICON character creation', () => {
     expect(validateCharacter(character).map(({ code }) => code)).toContain('ability.chapter');
     character.equippedAbilityIds.push('bastion:battering-ram');
     expect(validateCharacter(character).map(({ code }) => code)).toContain('ability.not-learned');
+  });
+});
+
+describe('ICON narrative ID persistence (schema v5)', () => {
+  it('migrates schema-4 display names to permanent canonical IDs', () => {
+    const migrated = migrateCharacter(toLegacyV4(validCharacter()));
+    expect(migrated.schemaVersion).toBe(CHARACTER_SCHEMA_VERSION);
+    expect(migrated.kinId).toBe('thrynn');
+    expect(migrated.cultureId).toBe('yeokin');
+    expect(migrated.bondActionId).toBe('traverse');
+    expect(migrated.bondPowerIds).toEqual([BONDS[0].powers[0].id]);
+    expect(validateCharacter(migrated).filter(({ severity }) => severity === 'error')).toEqual([]);
+  });
+
+  it('is deterministic and idempotent at the current schema', () => {
+    const migrated = migrateCharacter(toLegacyV4(validCharacter()));
+    expect(migrateCharacter(migrated)).toEqual(migrated);
+    expect(migrated.schemaVersion).toBe(CHARACTER_SCHEMA_VERSION);
+  });
+
+  it('preserves a legitimate blank historical character with no selections', () => {
+    const migrated = migrateCharacter(toLegacyV4(createCharacter(), 3));
+    expect(migrated.kinId).toBeNull();
+    expect(migrated.cultureId).toBeNull();
+    expect(migrated.bondActionId).toBeNull();
+    expect(migrated.bondPowerIds).toEqual([]);
+    expect(migrated.schemaVersion).toBe(CHARACTER_SCHEMA_VERSION);
+  });
+
+  it('fails closed on truly unknown historical narrative values', () => {
+    expect(() => migrateCharacter({ ...toLegacyV4(validCharacter()), kin: 'Not-A-Real-Kin' })).toThrow(/Unrecognized Kin/);
+    expect(() => migrateCharacter({ ...toLegacyV4(validCharacter()), culture: 'Not-A-Real-Culture' })).toThrow(/Unrecognized Culture/);
+    expect(() => migrateCharacter({ ...toLegacyV4(validCharacter()), bondAction: 'fly' })).toThrow(/Unrecognized Bond action/);
+    expect(() => migrateCharacter({ ...toLegacyV4(validCharacter()), bondPowers: ['Not A Real Power'] })).toThrow(/Unrecognized Bond power/);
+  });
+
+  it('never guesses by fuzzy matching (casing or whitespace cannot slip through)', () => {
+    // A lower-cased display name is NOT the canonical id; it must fail closed
+    // instead of being matched loosely to a permanent ID.
+    expect(() => migrateCharacter({ ...toLegacyV4(validCharacter()), culture: 'chronicler' })).toThrow(/Unrecognized Culture/);
+    expect(() => migrateCharacter({ ...toLegacyV4(validCharacter()), kin: 'thrynn' })).toThrow(/Unrecognized Kin/);
+  });
+
+  it('stores machine IDs, not display names, on migrated characters', () => {
+    const migrated = migrateCharacter(toLegacyV4(validCharacter()));
+    const snapshot = JSON.parse(JSON.stringify(migrated));
+    expect(snapshot).not.toHaveProperty('kin');
+    expect(snapshot).not.toHaveProperty('culture');
+    expect(snapshot).not.toHaveProperty('bondAction');
+    expect(snapshot).not.toHaveProperty('bondPowers');
+    expect(snapshot.kinId).toBe('thrynn');
+    expect(snapshot.cultureId).toBe('yeokin');
+    expect(snapshot.bondPowerIds).toEqual([BONDS[0].powers[0].id]);
   });
 });
 

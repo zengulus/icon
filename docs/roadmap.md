@@ -46,8 +46,8 @@ The engine never automates table judgment without source justification.
   automation audits green; automation audit reports 3,103 explicitly
   unsupported clauses across 16 content kinds (the honest gap).
 - Settlement: `ENCOUNTER_ENDED` grants each PC +1 personal resolve; the
-  `characterFromActor` projection carries HP attrition, wounds, and personal
-  resolve back onto the persistent sheet (schema v4); camp/interlude sheet
+  `  characterFromActor` projection carries HP attrition, wounds, and personal
+  resolve back onto the persistent sheet (schema v5); camp/interlude sheet
   transitions exist — implemented 2026-08-25 (P1).
 - Foe role entitlements: Elite two-turn and Legend per-player-character turn
   rows registered as production content (`role:elite-template`,

@@ -55,6 +55,31 @@ Key semantics:
   including mutants that pass naive positive-only test suites but violate an
   exhaustive semantic contract.
 
+## Persisted player-selection identity contract
+
+Persisted player character records (schema v5) store only permanent canonical
+IDs for every player-selectable narrative value — `kinId`, `cultureId`,
+`bondId`, `bondActionId`, `bondPowerIds`, plus the `ActionId`-keyed `actions`
+— never display labels. The canonical registries (Kin, Culture, Bond, Bond
+power, Action; plus Job and Ability for the wider character surface) live in
+`src/rules/` and are frozen by the ID-immutability guard
+(`src/rules/__tests__/catalog-identity.test.ts`) against the committed snapshot
+`src/rules/__tests__/__snapshots__/catalog-identity.json`.
+
+> **Persisted source-selection IDs are permanent compatibility contracts.**
+> Display names are not identities. Renaming/removing/reusing a released ID
+> requires an explicit character-schema migration
+> (`migrateCharacter`); a display-name edit never changes an ID.
+
+`migrateCharacter` converts pre-v5 display-name records into IDs via an
+explicit value map, declining any value it cannot resolve instead of
+guessing. The player-facing creation projection
+(`src/rules/player-creation.ts`) carries only identity + display data and
+structurally cannot expose an engine implementation-status field
+(`automation`/`executable`/`structured`/`implemented`/`unresolved`) — a
+character selection means "the player chose source content ID X", nothing
+more. Selecting content never implies that its rule is executable.
+
 ## Maturity states
 
 | State | Meaning |
@@ -516,7 +541,7 @@ from that record. Camp/interlude sheet transitions: `campCharacter` heals all
 strain, unticks all effort (Bond maximum), heals all HP, and resets personal
 resolve (p.253/p.99; wounds persist) / `beginInterlude` additionally restores
 wounds (p.56). Tests: `settlement.test.ts` (round-trip combat 1 → settlement →
-combat 2, purity, replay, schema v4 migration).
+combat 2, purity, replay, character migration v1→v5).
 
 ### Cost/payment — AUTHORITATIVE + SOURCE-TESTED
 Action costs, resource spends, resolve pools (party + personal), sacrifice,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ACTIONS, ACTION_IDS, BONDS, CULTURES, JOBS, KIN, RELICS, abilityPointAllowance, abilityPointsSpent, aspectRelicFromSharedQuest, awardXp, chapterForLevel, characterStats, completeRelicAspectQuest, findBond, findClass, findJob, infuseRelicDust, jobSlotsForLevel, masteryPointAllowance, narrativeBudgets, refocusCharacter, refocusDustCost, relicMinimumInfusedDust, relicRankForDust, relicSlotsForLevel, resolveRelicAspect, spendLevelUp, validateCharacter, type ActionId, type CharacterClock, type IconCharacter } from '../rules/index.js';
+import { ACTIONS, ACTION_IDS, BONDS, JOBS, RELICS, abilityPointAllowance, abilityPointsSpent, aspectRelicFromSharedQuest, awardXp, chapterForLevel, characterStats, completeRelicAspectQuest, findBond, findClass, findJob, infuseRelicDust, jobSlotsForLevel, masteryPointAllowance, narrativeBudgets, refocusCharacter, refocusDustCost, relicMinimumInfusedDust, relicRankForDust, relicSlotsForLevel, resolveRelicAspect, spendLevelUp, validateCharacter, type ActionId, type BondId, type BondPowerId, type CharacterClock, type CultureId, type IconCharacter, type KinId } from '../rules/index.js';
+import { cultureOptions, kinOptions } from '../rules/player-creation.js';
 import { downloadCharacter } from '../services/characters.js';
 import { useCharacters } from '../context/CharacterContext.js';
 import { assetBackground, uploadImage } from '../services/assets.js';
@@ -55,12 +56,12 @@ export function CharacterEditor() {
     }
   }
 
-  function chooseBond(id: string) {
+  function chooseBond(id: BondId) {
     const selectedBond = findBond(id);
     update({
       bondId: id,
-      bondAction: null,
-      bondPowers: [],
+      bondActionId: null,
+      bondPowerIds: [],
       effort: selectedBond?.effort ?? 3,
       strain: 0,
       activeKit: '',
@@ -72,14 +73,14 @@ export function CharacterEditor() {
   function chooseBondAction(action: ActionId) {
     if (!draft) return;
     const actions = { ...draft.actions };
-    if (draft.bondAction) actions[draft.bondAction] = Math.max(0, actions[draft.bondAction] - 2);
+    if (draft.bondActionId) actions[draft.bondActionId] = Math.max(0, actions[draft.bondActionId] - 2);
     actions[action] = Math.min(3, actions[action] + 2);
-    update({ bondAction: action, actions });
+    update({ bondActionId: action, actions });
   }
 
   function changeAction(action: ActionId, delta: number) {
     if (!draft) return;
-    const floor = draft.bondAction === action ? 2 : 0;
+    const floor = draft.bondActionId === action ? 2 : 0;
     const next = Math.max(floor, Math.min(draft.level === 0 ? 3 : 4, draft.actions[action] + delta));
     const budgets = narrativeBudgets(draft.level);
     if (delta > 0 && actionTotal >= budgets.fixedActionDots + budgets.flexibleChoices * 2) return;
@@ -107,12 +108,12 @@ export function CharacterEditor() {
     update({ abilities, equippedAbilityIds });
   }
 
-  function toggleBondPower(power: string) {
+  function toggleBondPower(powerId: BondPowerId) {
     if (!draft) return;
-    const selected = draft.bondPowers.includes(power);
+    const selected = draft.bondPowerIds.includes(powerId);
     const maxPowers = narrativeBudgets(draft.level).fixedPowers + narrativeBudgets(draft.level).flexibleChoices;
-    const bondPowers = selected ? draft.bondPowers.filter((item) => item !== power) : draft.level === 0 ? [power] : draft.bondPowers.length < maxPowers ? [...draft.bondPowers, power] : draft.bondPowers;
-    update({ bondPowers });
+    const bondPowerIds = selected ? draft.bondPowerIds.filter((item) => item !== powerId) : draft.level === 0 ? [powerId] : draft.bondPowerIds.length < maxPowers ? [...draft.bondPowerIds, powerId] : draft.bondPowerIds;
+    update({ bondPowerIds });
   }
 
   function setTalent(abilityId: string, talent: 1 | 2 | null) {
@@ -220,8 +221,8 @@ export function CharacterEditor() {
               <label>Name<input value={draft.name} onChange={(event) => update({ name: event.target.value })} /></label>
               <label>Pronouns<input value={draft.pronouns} onChange={(event) => update({ pronouns: event.target.value })} placeholder="they/them" /></label>
               <label>Portrait URL<input type="url" value={draft.portraitUrl} onChange={(event) => update({ portraitUrl: event.target.value })} placeholder="https://…" />{user && <span className="upload-link">or upload<input type="file" accept="image/*" onChange={(event) => void uploadPortrait(event.target.files?.[0])} /></span>}</label>
-              <label>Kin<select value={draft.kin} onChange={(event) => update({ kin: event.target.value })}><option value="">Choose Kin</option>{KIN.map((item) => <option key={item}>{item}</option>)}</select></label>
-              <label>Culture<select value={draft.culture} onChange={(event) => update({ culture: event.target.value })}><option value="">Choose Culture</option>{CULTURES.map((item) => <option key={item}>{item}</option>)}</select></label>
+              <label>Kin<select value={draft.kinId ?? ''} onChange={(event) => update({ kinId: (event.target.value || null) as KinId | null })}><option value="">Choose Kin</option>{kinOptions().map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+              <label>Culture<select value={draft.cultureId ?? ''} onChange={(event) => update({ cultureId: (event.target.value || null) as CultureId | null })}><option value="">Choose Culture</option>{cultureOptions().map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
               <label>Level<input type="number" min="0" max="12" value={draft.level} onChange={(event) => update({ level: Number(event.target.value) })} /></label>
             </div>
           </section>
@@ -231,7 +232,7 @@ export function CharacterEditor() {
             <div className="option-grid bonds">
               {BONDS.map((option) => <button key={option.id} className={`option-card ${option.id === draft.bondId ? 'selected' : ''}`} onClick={() => chooseBond(option.id)}><strong>{option.name}</strong><small>{option.summary}</small><em>{option.actions.map((id) => ACTIONS.find((item) => item.id === id)?.name).join(' / ')}</em></button>)}
             </div>
-            {bond && <div className="bond-detail"><div><label>Bond’s +2 action<select value={draft.bondAction ?? ''} onChange={(event) => chooseBondAction(event.target.value as ActionId)}><option value="">Choose action</option>{bond.actions.map((id) => <option key={id} value={id}>{ACTIONS.find((item) => item.id === id)?.name}</option>)}</select></label><small className="bond-feature"><b>Second Wind:</b> {bond.secondWind}<br /><b>Special:</b> {bond.specialAbility}</small></div><div className="bond-power-picker"><label>Bond powers <small>{draft.bondPowers.length} selected</small></label>{bond.powers.map((power) => <button key={power} title={bond.powerDetails.find((detail) => detail.name === power)?.rulesText} className={draft.bondPowers.includes(power) ? 'selected' : ''} onClick={() => toggleBondPower(power)}>{draft.bondPowers.includes(power) ? '✓ ' : '+ '}{power}</button>)}</div><Link className="source-link" to={`/compendium?section=bonds&q=${encodeURIComponent(bond.name)}`}>Read source · p.{bond.source.page}</Link></div>}
+            {bond && <div className="bond-detail"><div><label>Bond’s +2 action<select value={draft.bondActionId ?? ''} onChange={(event) => chooseBondAction(event.target.value as ActionId)}><option value="">Choose action</option>{bond.actions.map((id) => <option key={id} value={id}>{ACTIONS.find((item) => item.id === id)?.name}</option>)}</select></label><small className="bond-feature"><b>Second Wind:</b> {bond.secondWind}<br /><b>Special:</b> {bond.specialAbility}</small></div><div className="bond-power-picker"><label>Bond powers <small>{draft.bondPowerIds.length} selected</small></label>{bond.powers.map((power) => <button key={power.id} title={power.rulesText} className={draft.bondPowerIds.includes(power.id) ? 'selected' : ''} onClick={() => toggleBondPower(power.id)}>{draft.bondPowerIds.includes(power.id) ? '✓ ' : '+ '}{power.name}</button>)}</div><Link className="source-link" to={`/compendium?section=bonds&q=${encodeURIComponent(bond.name)}`}>Read source · p.{bond.source.page}</Link></div>}
           </section>
 
           <section className="sheet-section">

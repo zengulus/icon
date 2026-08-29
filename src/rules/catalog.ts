@@ -4,10 +4,16 @@ import { coverageLadderComplete } from './phase-gates.js';
 import type {
   AbilityDefinition,
   ActionDefinition,
+  ActionId,
   BondDefinition,
+  BondId,
+  BondPowerDefinition,
+  BondPowerId,
+  CultureDefinition,
   JobClassDefinition,
   JobClassId,
   JobDefinition,
+  KinDefinition,
   RelicDefinition,
   TraitDefinition,
 } from './types.js';
@@ -25,8 +31,28 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ['endure', 'Endure', 'Withstand hardship or exert tremendous physical or magical force.'],
 ].map(([id, name, description]) => ({ id, name, description, source: { page: 17, sectionId: 'narrative-play' } })) as readonly ActionDefinition[];
 
-export const KIN = ['Thrynn', 'Trogg', 'Beastfolk', 'Xixo'] as const;
-export const CULTURES = ['Yeokin', 'Islander', 'Leggio', 'Churner', 'Chronicler', 'Guilder'] as const;
+/**
+ * Permanent Kin IDs (p.48–51). `name` is the mutable display label; `id` is
+ * the persistence contract. Kin have no statistical or mechanical differences.
+ */
+export const KINS: readonly KinDefinition[] = [
+  { id: 'thrynn', name: 'Thrynn', description: 'The adaptable, aether-sensitive people found everywhere across Arden Eld, many said to descend from the Arken that survived the Doom.', source: { page: 48, sectionId: 'kin' } },
+  { id: 'trogg', name: 'Trogg', description: 'Few in number but outsize in stature — horned demi-giants who can live centuries and never stop growing.', source: { page: 49, sectionId: 'kin' } },
+  { id: 'beastfolk', name: 'Beastfolk', description: 'The varied animal-like Kin of Arden Eld, from Lopen and Garou to Vodya and Lorito, present in every culture.', source: { page: 50, sectionId: 'kin' } },
+  { id: 'xixo', name: 'Xixo', description: 'The insectile or crustacean-like water-dwelling Kin who trade along the waterways and remember everything.', source: { page: 51, sectionId: 'kin' } },
+];
+
+export const CULTURES: readonly CultureDefinition[] = [
+  { id: 'yeokin', name: 'Yeokin', description: 'The peaceful farmlands, villages, and trading posts of the Green, organized around yearly harvests and local traditions.', source: { page: 52, sectionId: 'cultures' } },
+  { id: 'islander', name: 'Islander', description: 'The seafaring folk of the great islands, where ships, fishing, and trade shape daily life.', source: { page: 52, sectionId: 'cultures' } },
+  { id: 'leggio', name: 'Leggio', description: 'The bustling, cosmopolitan culture of city guilds and commerce across Arden Eld.', source: { page: 52, sectionId: 'cultures' } },
+  { id: 'churner', name: 'Churner', description: 'The travelling merchants and caravan kin, always on the road and trading between settlements.', source: { page: 52, sectionId: 'cultures' } },
+  { id: 'chronicler', name: 'Chronicler', description: 'The scribes and archivists who record, study, and preserve knowledge of the world.', source: { page: 52, sectionId: 'cultures' } },
+  { id: 'guilder', name: 'Guilder', description: 'The powerful merchant houses and guild families whose influence spans nations.', source: { page: 52, sectionId: 'cultures' } },
+];
+
+export const findKin = (id: string | null | undefined): KinDefinition | undefined => KINS.find((kin) => kin.id === id);
+export const findCulture = (id: string | null | undefined): CultureDefinition | undefined => CULTURES.find((culture) => culture.id === id);
 
 const classTrait = (classId: JobClassId, page: number, name: string, rulesText: string): TraitDefinition => ({
   id: `${classId}:trait:${name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`,
@@ -36,7 +62,7 @@ const classTrait = (classId: JobClassId, page: number, name: string, rulesText: 
   automation: 'structured',
 });
 
-const bondPowers: Record<string, readonly string[]> = {
+const BOND_POWER_NAMES: Record<BondId, readonly string[]> = {
   pathfinder: ['Saddleborn', 'Windrider', 'Dabbler', 'Freesoul', 'Lay Burdens', 'Airfeel', 'Colortongue', 'Horizon Sweeper', 'Memory of the Sole', 'Lightspeed'],
   seeker: ['Heartsight', 'Library Organ', 'Argus', 'Midnight Eyes', 'Unhinge', 'Dark Clarity', 'Possession', 'Instinctive', 'Geist', 'Terrible Truth'],
   mighty: ['True Grit', 'Iron Jaw', 'Volcanic', 'Hammersoul', 'Overpower', 'The Tower', 'Force of Will', 'Half Light', 'The Wall', 'Make Total Destroy'],
@@ -51,7 +77,29 @@ const bondPowers: Record<string, readonly string[]> = {
   dreamer: ['Improvise', 'Punching Bag', 'Best Efforts', 'Bright Eyed', 'Follow the Leader', 'Lost Cat', 'Rash', 'Underdog', 'Heart Held Dream', 'The Lobster'],
 };
 
-export const BONDS: readonly BondDefinition[] = [
+/**
+ * Explicit, permanent Bond-power IDs (`pathfinder:saddleborn`, …). Authored
+ * here once and referenced by the catalog; never slugged from display names at
+ * runtime. Keep index-aligned with `BOND_POWER_NAMES` (both have ten per Bond).
+ */
+const BOND_POWER_IDS: Record<BondId, readonly BondPowerId[]> = {
+  pathfinder: ['pathfinder:saddleborn', 'pathfinder:windrider', 'pathfinder:dabbler', 'pathfinder:freesoul', 'pathfinder:lay-burdens', 'pathfinder:airfeel', 'pathfinder:colortongue', 'pathfinder:horizon-sweeper', 'pathfinder:memory-of-the-sole', 'pathfinder:lightspeed'],
+  seeker: ['seeker:heartsight', 'seeker:library-organ', 'seeker:argus', 'seeker:midnight-eyes', 'seeker:unhinge', 'seeker:dark-clarity', 'seeker:possession', 'seeker:instinctive', 'seeker:geist', 'seeker:terrible-truth'],
+  mighty: ['mighty:true-grit', 'mighty:iron-jaw', 'mighty:volcanic', 'mighty:hammersoul', 'mighty:overpower', 'mighty:the-tower', 'mighty:force-of-will', 'mighty:half-light', 'mighty:the-wall', 'mighty:make-total-destroy'],
+  wolf: ['wolf:clarity', 'wolf:scarcoat', 'wolf:blood-scent', 'wolf:go-for-a-walk', 'wolf:cornered', 'wolf:lurk', 'wolf:it-s-nothing', 'wolf:crack-shell', 'wolf:bishop', 'wolf:wick'],
+  harlequin: ['harlequin:mirrormask', 'harlequin:mercurio', 'harlequin:mockingbird', 'harlequin:fast-friends', 'harlequin:the-big-show', 'harlequin:habitual-line-stepper', 'harlequin:quickfingers', 'harlequin:ridi-pagliacci', 'harlequin:exuent', 'harlequin:step-of-the-smiling-few'],
+  highborn: ['highborn:rarefied', 'highborn:private-tutor', 'highborn:silver-spoon', 'highborn:trust-the-fund', 'highborn:special-reserve', 'highborn:ivory-tower', 'highborn:honor-student', 'highborn:passionate', 'highborn:unflappable', 'highborn:perfect-grace'],
+  mender: ['mender:push-through', 'mender:divine-luck', 'mender:illuminate', 'mender:untangle', 'mender:pangloss', 'mender:a-better-way', 'mender:mender', 'mender:encourage', 'mender:iron-cutting', 'mender:heart-forge'],
+  brave: ['brave:strike-the-road', 'brave:crush-limiter', 'brave:luck-as-a-constant', 'brave:all-in', 'brave:joyluck-wind-thrower', 'brave:the-sun', 'brave:coordinate', 'brave:heart-of-hearts', 'brave:team-player', 'brave:brave-destiny'],
+  broker: ['broker:contingency', 'broker:swoon', 'broker:immaculate', 'broker:beg-borrow-or-steal', 'broker:fruitful', 'broker:faust', 'broker:make-it-work', 'broker:coordinator', 'broker:ladder-climber', 'broker:golden-hand'],
+  elder: ['elder:parable', 'elder:pacifist', 'elder:long-memory', 'elder:been-around', 'elder:spinner-of-tales', 'elder:pillar-of-rock', 'elder:saltbelly', 'elder:mentor', 'elder:reputation', 'elder:the-mountain'],
+  outsider: ['outsider:xenoclash', 'outsider:gaia-compass', 'outsider:open-up', 'outsider:bloom', 'outsider:earth-glide', 'outsider:tour-guide', 'outsider:earth-speech', 'outsider:centered', 'outsider:resourceful', 'outsider:the-wave'],
+  dreamer: ['dreamer:improvise', 'dreamer:punching-bag', 'dreamer:best-efforts', 'dreamer:bright-eyed', 'dreamer:follow-the-leader', 'dreamer:lost-cat', 'dreamer:rash', 'dreamer:underdog', 'dreamer:heart-held-dream', 'dreamer:the-lobster'],
+};
+
+type BondSeed = readonly [BondId, string, string, ActionId, ActionId, number];
+
+const BOND_SEEDS: readonly BondSeed[] = [
   ['pathfinder', 'Pathfinder', 'Discover, travel, and meet the unknown.', 'traverse', 'sense', 56],
   ['seeker', 'Seeker', 'Uncover forbidden knowledge and untangle mysteries.', 'study', 'sense', 58],
   ['mighty', 'Mighty', 'Use prodigious strength to protect and overcome.', 'smash', 'endure', 60],
@@ -64,30 +112,38 @@ export const BONDS: readonly BondDefinition[] = [
   ['elder', 'Elder', 'Bring patience, experience, and weathered skill.', 'endure', 'excel', 74],
   ['outsider', 'Outsider', 'Bring a unique culture and perspective to the group.', 'sense', 'traverse', 76],
   ['dreamer', 'Dreamer', 'Try the impossible with creativity and optimism.', 'sneak', 'smash', 78],
-].map(([id, name, summary, first, second, page]) => {
+];
+
+export const BONDS: readonly BondDefinition[] = BOND_SEEDS.map(([id, name, summary, firstAction, secondAction, page]) => {
   const extracted = mechanics.bonds.find((bond) => bond.id === id);
-  const powers = bondPowers[id];
+  const powerNames = BOND_POWER_NAMES[id];
+  const powerIds = BOND_POWER_IDS[id];
   const sourcePage = Number(page);
   return {
     id,
     name,
     summary: extracted?.summary || summary,
-    actions: [first, second],
+    actions: [firstAction, secondAction],
     effort: extracted?.effort ?? 3,
     strain: extracted?.strain ?? 5,
-    powers,
+    powers: powerIds.map((powerId, index) => ({
+      id: powerId,
+      bondId: id,
+      name: powerNames[index] ?? extracted?.powers[index]?.name ?? powerId,
+      rulesText: extracted?.powers[index]?.rulesText ?? '',
+      source: { page: sourcePage + 1, sectionId: 'bonds' },
+    })),
     ideals: extracted?.ideals ?? [],
     secondWind: extracted?.secondWind ?? '',
     specialAbility: extracted?.specialAbility ?? '',
     kits: extracted?.kits ?? [],
-    powerDetails: (extracted?.powers ?? []).map((power, index) => ({
-      name: powers[index] ?? power.name,
-      rulesText: power.rulesText,
-      source: { page: sourcePage + 1, sectionId: 'bonds' },
-    })),
     source: { page: sourcePage, sectionId: 'bonds' },
   };
-}) as readonly BondDefinition[];
+});
+
+/** The canonical, source-ordered registry of every Bond power, owned by the
+ * catalog and used by `findBondPower` and the ID-immutability guard. */
+export const BOND_POWERS: readonly BondPowerDefinition[] = BONDS.flatMap((bond) => [...bond.powers]);
 
 export const JOB_CLASSES: readonly JobClassDefinition[] = [
   {
@@ -212,7 +268,8 @@ export const RELICS: readonly RelicDefinition[] = mechanics.relics.map((relic) =
   automation: 'structured',
 }));
 
-export const findBond = (id: string) => BONDS.find((bond) => bond.id === id);
+export const findBond = (id: string): BondDefinition | undefined => BONDS.find((bond) => bond.id === id);
+export const findBondPower = (id: BondPowerId): BondPowerDefinition | undefined => BOND_POWERS.find((power) => power.id === id);
 export const findJob = (id: string) => JOBS.find((job) => job.id === id);
 export const findClass = (id: JobClassId) => JOB_CLASSES.find((jobClass) => jobClass.id === id);
 export const findAbility = (id: string) => ABILITIES.find((ability) => ability.id === id);

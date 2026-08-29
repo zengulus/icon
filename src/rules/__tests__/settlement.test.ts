@@ -1,9 +1,9 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { beginInterlude, campCharacter, characterCurrentHp, characterStats, createCharacter, migrateCharacter, validateCharacter } from '../character.js';
-import { findBond } from '../catalog.js';
+import { findBond, findBondPower, findCulture, findKin } from '../catalog.js';
+import { CHARACTER_SCHEMA_VERSION, type EncounterState, type IconCharacter } from '../types.js';
 import { actorFromCharacter, applyEvents, characterFromActor, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import type { EncounterState, IconCharacter } from '../types.js';
 import { endTurnOnly, expectCommandPurity, scriptedDice, startEncounterTo, validCharacter } from './fixtures.js';
 
 /**
@@ -129,14 +129,24 @@ describe('combat settlement — actor-to-character handoff', () => {
   });
 });
 
-describe('character schema v4 — durable attrition field', () => {
+describe('character schema — durable attrition and narrative-ID fields', () => {
   it('migrates a v3 record with hpLost defaulting to 0 (full health between combats)', () => {
-    const legacy = validCharacter('Migrated') as unknown as Record<string, unknown>;
-    delete legacy.hpLost;
-    legacy.schemaVersion = 3;
+    // Express the current character as a historical v3 record: legacy narrative
+    // field spellings + no hpLost (the durable attrition field, schema v4+).
+    const current = validCharacter('Migrated');
+    const { kinId, cultureId, bondActionId, bondPowerIds, hpLost: _hpLost, ...rest } = current;
+    const legacy: Record<string, unknown> = {
+      ...rest,
+      schemaVersion: 3,
+      kin: kinId ? findKin(kinId)?.name ?? '' : '',
+      culture: cultureId ? findCulture(cultureId)?.name ?? '' : '',
+      bondAction: bondActionId,
+      bondPowers: bondPowerIds.map((id) => findBondPower(id)?.name ?? id),
+    };
     const migrated = migrateCharacter(legacy);
-    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated.schemaVersion).toBe(CHARACTER_SCHEMA_VERSION);
     expect(migrated.hpLost).toBe(0);
+    expect(migrated.kinId).toBe('thrynn');
     expect(validateCharacter(migrated)).toEqual([]);
   });
 

@@ -1,5 +1,5 @@
-import { ACTION_IDS, CHARACTER_SCHEMA_VERSION, RULES_VERSION, type ActionRatings, type IconCharacter, type ValidationIssue } from './types.js';
-import { BONDS, CULTURES, KIN, findAbility, findBond, findClass, findJob, findRelic } from './catalog.js';
+import { ACTION_IDS, CHARACTER_SCHEMA_VERSION, RULES_VERSION, type ActionId, type ActionRatings, type BondPowerId, type CultureId, type IconCharacter, type KinId, type ValidationIssue } from './types.js';
+import { BOND_POWERS, BONDS, CULTURES, KINS, findAbility, findBond, findClass, findJob, findRelic } from './catalog.js';
 
 const emptyActions = (): ActionRatings => Object.fromEntries(ACTION_IDS.map((id) => [id, 0])) as ActionRatings;
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? `icon-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -12,11 +12,11 @@ export function createCharacter(now = new Date().toISOString()): IconCharacter {
     ownerId: null,
     name: '',
     pronouns: '',
-    kin: '',
-    culture: '',
+    kinId: null,
+    cultureId: null,
     bondId: '',
-    bondAction: null,
-    bondPowers: [],
+    bondActionId: null,
+    bondPowerIds: [],
     actions: emptyActions(),
     level: 0,
     xp: 0,
@@ -151,18 +151,18 @@ export function validateCharacter(character: IconCharacter, complete = true): Va
   if (character.schemaVersion !== CHARACTER_SCHEMA_VERSION) error('schemaVersion', 'schema.unsupported', 'Character data must be migrated to the current schema.');
   if (character.rulesVersion !== RULES_VERSION) error('rulesVersion', 'rules.unsupported', `Expected ICON rules ${RULES_VERSION}.`);
   if (complete && !character.name.trim()) error('name', 'required', 'Give the character a name.');
-  if (complete && !character.kin) error('kin', 'required', 'Choose a Kin.');
-  else if (character.kin && !KIN.includes(character.kin as typeof KIN[number])) error('kin', 'kin.unknown', 'Choose a Kin from the ICON 1.5 source catalog.');
-  if (complete && !character.culture) error('culture', 'required', 'Choose a Culture.');
-  else if (character.culture && !CULTURES.includes(character.culture as typeof CULTURES[number])) error('culture', 'culture.unknown', 'Choose a Culture from the ICON 1.5 source catalog.');
+  if (complete && !character.kinId) error('kinId', 'required', 'Choose a Kin.');
+  else if (character.kinId && !KINS.some((kin) => kin.id === character.kinId)) error('kinId', 'kin.unknown', 'Choose a Kin from the ICON 1.5 source catalog.');
+  if (complete && !character.cultureId) error('cultureId', 'required', 'Choose a Culture.');
+  else if (character.cultureId && !CULTURES.some((culture) => culture.id === character.cultureId)) error('cultureId', 'culture.unknown', 'Choose a Culture from the ICON 1.5 source catalog.');
 
-  const bond = findBond(character.bondId);
+  const bond = character.bondId ? findBond(character.bondId) : undefined;
   if (complete && !bond) error('bondId', 'required', 'Choose a Bond.');
-  if (bond && (!character.bondAction || !bond.actions.includes(character.bondAction))) {
-    error('bondAction', 'bond.action', `Choose ${bond.actions.join(' or ')} for the Bond's +2 dots.`);
+  if (bond && (!character.bondActionId || !bond.actions.includes(character.bondActionId))) {
+    error('bondActionId', 'bond.action', `Choose ${bond.actions.join(' or ')} for the Bond's +2 dots.`);
   }
-  if (bond && character.bondAction && character.actions[character.bondAction] < 2) {
-    error(`actions.${character.bondAction}`, 'bond.minimum', 'The selected Bond action must include its two starting dots.');
+  if (bond && character.bondActionId && character.actions[character.bondActionId] < 2) {
+    error(`actions.${character.bondActionId}`, 'bond.minimum', 'The selected Bond action must include its two starting dots.');
   }
   if (bond && (!Number.isInteger(character.effort) || character.effort < 0 || character.effort > bond.effort)) error('effort', 'effort.range', `Effort must be between 0 and ${bond.effort} for the ${bond.name}.`);
   if (bond && (!Number.isInteger(character.strain) || character.strain < 0 || character.strain > bond.strain)) error('strain', 'strain.range', `Strain must be between 0 and ${bond.strain} for the ${bond.name}.`);
@@ -178,19 +178,20 @@ export function validateCharacter(character: IconCharacter, complete = true): Va
   if (character.level === 0 && actionTotal !== 6) error('actions', 'action.total', `Level 0 characters need exactly 6 action dots; currently ${actionTotal}.`);
   if (actionTotal > narrative.fixedActionDots + narrative.flexibleChoices * 2) error('actions', 'action.budget', 'Action ratings exceed the narrative benefits earned at this level.');
   if (ACTION_IDS.filter((id) => character.actions[id] === 4).length > 1) error('actions', 'action.four-limit', 'Only one action can ever have a rating of 4.');
-  if (new Set(character.bondPowers).size !== character.bondPowers.length) error('bondPowers', 'bond.power-duplicate', 'A Bond power cannot be selected more than once.');
-  if (character.level === 0 && complete && character.bondPowers.length !== 1) error('bondPowers', 'bond.power-count', 'Level 0 characters choose one Bond power.');
-  const allBondPowers = new Set(BONDS.flatMap(({ powers }) => powers));
-  if (character.bondPowers.some((power) => !allBondPowers.has(power))) error('bondPowers', 'bond.power-unknown', 'One or more Bond powers do not exist in ICON 1.5.');
+  if (new Set(character.bondPowerIds).size !== character.bondPowerIds.length) error('bondPowerIds', 'bond.power-duplicate', 'A Bond power cannot be selected more than once.');
+  if (character.level === 0 && complete && character.bondPowerIds.length !== 1) error('bondPowerIds', 'bond.power-count', 'Level 0 characters choose one Bond power.');
+  const allBondPowerIds = new Set(BOND_POWERS.map(({ id }) => id));
+  if (character.bondPowerIds.some((powerId) => !allBondPowerIds.has(powerId))) error('bondPowerIds', 'bond.power-unknown', 'One or more Bond powers do not exist in ICON 1.5.');
   if (bond) {
-    const ownPowerCount = character.bondPowers.filter((power) => bond.powers.includes(power)).length;
-    const gambitCount = character.bondPowers.length - ownPowerCount;
-    if (gambitCount > 1 || (gambitCount === 1 && ownPowerCount < 4)) error('bondPowers', 'bond.gambit', 'A single Gambit from another Bond unlocks only after taking four powers from your own Bond.');
+    const ownPowerIds = new Set(bond.powers.map((power) => power.id));
+    const ownPowerCount = character.bondPowerIds.filter((powerId) => ownPowerIds.has(powerId)).length;
+    const gambitCount = character.bondPowerIds.length - ownPowerCount;
+    if (gambitCount > 1 || (gambitCount === 1 && ownPowerCount < 4)) error('bondPowerIds', 'bond.gambit', 'A single Gambit from another Bond unlocks only after taking four powers from your own Bond.');
   }
-  if (character.bondPowers.length > narrative.fixedPowers + narrative.flexibleChoices) error('bondPowers', 'bond.power-budget', 'Bond powers exceed the narrative benefits earned at this level.');
+  if (character.bondPowerIds.length > narrative.fixedPowers + narrative.flexibleChoices) error('bondPowerIds', 'bond.power-budget', 'Bond powers exceed the narrative benefits earned at this level.');
   const flexibleActionChoices = Math.ceil(Math.max(0, actionTotal - narrative.fixedActionDots) / 2);
-  const flexiblePowerChoices = Math.max(0, character.bondPowers.length - narrative.fixedPowers);
-  if (flexibleActionChoices + flexiblePowerChoices > narrative.flexibleChoices) error('bondPowers', 'narrative.choice-budget', 'Level 4 and 8 narrative choices must be spent on either two action improvements or one Bond power.');
+  const flexiblePowerChoices = Math.max(0, character.bondPowerIds.length - narrative.fixedPowers);
+  if (flexibleActionChoices + flexiblePowerChoices > narrative.flexibleChoices) error('bondPowerIds', 'narrative.choice-budget', 'Level 4 and 8 narrative choices must be spent on either two action improvements or one Bond power.');
 
   const primaryJob = character.primaryJobId ? findJob(character.primaryJobId) : undefined;
   if (complete && !primaryJob) error('primaryJobId', 'required', 'Choose a combat Job.');
@@ -412,7 +413,7 @@ export function resolveRelicAspect(character: IconCharacter, relicId: string, pa
 
 const CHARACTER_FIELDS = [
   'schemaVersion', 'rulesVersion', 'id', 'ownerId', 'name', 'pronouns',
-  'kin', 'culture', 'bondId', 'bondAction', 'bondPowers', 'actions',
+  'kinId', 'cultureId', 'bondId', 'bondActionId', 'bondPowerIds', 'actions',
   'level', 'xp', 'pendingLevelUps', 'xpAbilityPointClaimed', 'jobs',
   'primaryJobId', 'abilities', 'equippedAbilityIds', 'relics', 'dust',
   'activeKit', 'customKitItems', 'looseGear', 'equippedLooseGear',
@@ -421,7 +422,12 @@ const CHARACTER_FIELDS = [
 ] as const;
 
 const CURRENT_CHARACTER_FIELDS = new Set<string>(CHARACTER_FIELDS);
-const HISTORICAL_CHARACTER_FIELDS = new Set<string>([...CHARACTER_FIELDS, 'relicIds']);
+/** Schema ≤4 persisted Kin/Culture and Bond-power display names and used the
+ * field spellings `kin`/`culture`/`bondAction`/`bondPowers`. Those legacy keys
+ * are allowed on historical records and converted to permanent IDs in
+ * `migrateCharacter`. */
+const LEGACY_NARRATIVE_FIELDS = ['kin', 'culture', 'bondAction', 'bondPowers'] as const;
+const HISTORICAL_CHARACTER_FIELDS = new Set<string>([...CHARACTER_FIELDS, 'relicIds', ...LEGACY_NARRATIVE_FIELDS]);
 
 function characterRecord(input: unknown, path: string): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error(`${path} must be an object.`);
@@ -479,13 +485,17 @@ function assertCurrentCharacterStructure(input: unknown): IconCharacter {
   if (character.rulesVersion !== RULES_VERSION) throw new Error(`Character.rulesVersion must be ICON ${RULES_VERSION}.`);
   characterString(character.id, 'Character.id', true);
   characterNullableString(character.ownerId, 'Character.ownerId');
-  for (const field of ['name', 'pronouns', 'kin', 'culture', 'bondId', 'activeKit', 'notes', 'portraitUrl', 'createdAt', 'updatedAt'] as const) {
+  for (const field of ['name', 'pronouns', 'bondId', 'activeKit', 'notes', 'portraitUrl', 'createdAt', 'updatedAt'] as const) {
     characterString(character[field], `Character.${field}`);
   }
-  if (character.bondAction !== null && (!ACTION_IDS.includes(character.bondAction as typeof ACTION_IDS[number]))) {
-    throw new Error('Character.bondAction must be a known action or null.');
+  for (const field of ['kinId', 'cultureId'] as const) {
+    if (character[field] === null) continue;
+    characterString(character[field], `Character.${field}`, true);
   }
-  characterStringArray(character.bondPowers, 'Character.bondPowers');
+  if (character.bondActionId !== null && (!ACTION_IDS.includes(character.bondActionId as typeof ACTION_IDS[number]))) {
+    throw new Error('Character.bondActionId must be a known action or null.');
+  }
+  characterStringArray(character.bondPowerIds, 'Character.bondPowerIds');
   const actions = characterRecord(character.actions, 'Character.actions');
   exactCharacterKeys(actions, 'Character.actions', ACTION_IDS);
   ACTION_IDS.forEach((action) => characterInteger(actions[action], `Character.actions.${action}`));
@@ -546,13 +556,75 @@ function historicalArray(value: unknown, path: string): unknown[] {
   return characterArray(value, path);
 }
 
+const KIN_ID_BY_NAME = new Map<string, KinId>(KINS.map(({ id, name }) => [name, id]));
+const CULTURE_ID_BY_NAME = new Map<string, CultureId>(CULTURES.map(({ id, name }) => [name, id]));
+const BOND_POWER_ID_BY_NAME = new Map<string, BondPowerId>(BOND_POWERS.map(({ id, name }) => [name, id]));
+
+/**
+ * Convert a schema ≤4 character's name-based narrative selections into their
+ * permanent canonical IDs. Deterministic and fail-closed: a value that cannot
+ * be resolved to exactly one known ID throws instead of guessing. Empty/missing
+ * values map to the "not chosen yet" state (null / []).
+ */
+function migrateNarrativeFields(candidate: {
+  kin?: unknown;
+  culture?: unknown;
+  bondAction?: unknown;
+  bondPowers?: unknown;
+}): { kinId: KinId | null; cultureId: CultureId | null; bondActionId: ActionId | null; bondPowerIds: BondPowerId[] } {
+  const kinId = (() => {
+    const value = candidate.kin;
+    if (value === '' || value === null || value === undefined) return null;
+    if (typeof value !== 'string') throw new Error('Character.kin must be a Kin display name or empty.');
+    const id = KIN_ID_BY_NAME.get(value);
+    if (!id) throw new Error(`Unrecognized Kin "${value}" in the character record; refusing to guess a permanent ID.`);
+    return id;
+  })();
+  const cultureId = (() => {
+    const value = candidate.culture;
+    if (value === '' || value === null || value === undefined) return null;
+    if (typeof value !== 'string') throw new Error('Character.culture must be a Culture display name or empty.');
+    const id = CULTURE_ID_BY_NAME.get(value);
+    if (!id) throw new Error(`Unrecognized Culture "${value}" in the character record; refusing to guess a permanent ID.`);
+    return id;
+  })();
+  const bondActionId = (() => {
+    const value = candidate.bondAction;
+    if (value === '' || value === null || value === undefined) return null;
+    if (typeof value !== 'string' || !ACTION_IDS.includes(value as ActionId)) {
+      throw new Error(`Unrecognized Bond action "${String(value)}" in the character record; refusing to guess a permanent ID.`);
+    }
+    return value as ActionId;
+  })();
+  const bondPowerIds = (() => {
+    const value = candidate.bondPowers;
+    if (value === '' || value === null || value === undefined) return [];
+    if (!Array.isArray(value)) throw new Error('Character.bondPowers must be an array of Bond-power names.');
+    return value.map((power) => {
+      if (typeof power !== 'string') throw new Error('Character.bondPowers must contain only Bond-power names.');
+      const id = BOND_POWER_ID_BY_NAME.get(power);
+      if (!id) throw new Error(`Unrecognized Bond power "${power}" in the character record; refusing to guess a permanent ID.`);
+      return id;
+    });
+  })();
+  return { kinId, cultureId, bondActionId, bondPowerIds };
+}
+
 export function migrateCharacter(input: unknown): IconCharacter {
   const raw = characterRecord(input, 'Character import');
-  const candidate = raw as Omit<Partial<IconCharacter>, 'schemaVersion'> & { schemaVersion?: number; relicIds?: string[] };
+  const candidate = raw as Omit<Partial<IconCharacter>, 'schemaVersion'> & {
+    schemaVersion?: number;
+    relicIds?: string[];
+    kin?: unknown;
+    culture?: unknown;
+    bondAction?: unknown;
+    bondPowers?: unknown;
+  };
   // Schema v3 predates the durable hpLost attrition field; it migrates like
   // v1/v2 with hpLost defaulting to 0 (full health between combats — the
-  // implicit pre-v4 semantics).
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== CHARACTER_SCHEMA_VERSION) throw new Error(`Unsupported character schema version: ${String(candidate.schemaVersion)}`);
+  // implicit pre-v4 semantics). Schema ≤4 persisted narrative display names;
+  // migrateCharacter converts them to permanent IDs (schema v5).
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== CHARACTER_SCHEMA_VERSION) throw new Error(`Unsupported character schema version: ${String(candidate.schemaVersion)}`);
   if (candidate.rulesVersion !== undefined && candidate.rulesVersion !== RULES_VERSION) {
     throw new Error(`Unsupported ICON rules version: ${String(candidate.rulesVersion)}.`);
   }
@@ -570,10 +642,12 @@ export function migrateCharacter(input: unknown): IconCharacter {
   const relics = (candidate.relics !== undefined
     ? historicalArray(candidate.relics, 'Character.relics')
     : historicalArray(candidate.relicIds, 'Character.relicIds').map((relicId) => ({ relicId, rank: 1 as const, dustInfused: 0 }))) as MigratingRelic[];
-  const { relicIds: _relicIds, ...migratingFields } = candidate;
+  const { relicIds: _relicIds, kin: _kin, culture: _culture, bondAction: _bondAction, bondPowers: _bondPowers, ...migratingFields } = candidate;
+  const narrative = migrateNarrativeFields({ kin: _kin, culture: _culture, bondAction: _bondAction, bondPowers: _bondPowers });
   const migrated = {
     ...defaults,
     ...migratingFields,
+    ...narrative,
     rulesVersion: RULES_VERSION,
     schemaVersion: CHARACTER_SCHEMA_VERSION,
     xpAbilityPointClaimed: candidate.xpAbilityPointClaimed ?? ((candidate.xp ?? 0) >= 7),
