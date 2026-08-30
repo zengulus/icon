@@ -1547,7 +1547,21 @@ bonus-damage (`bonus-damage-dice`) registries convert their content rows to
 shared rows at registration and fold through the shared discipline; the
 kernels keep their public surfaces (`effectiveScopedRange`,
 `effectiveAreaFor`, `effectiveInterruptRank`, `convertedDamageType`,
-`hasUnlimitedRange`, `bonusDamageDiceForUse`) as thin adapters. Retained
+`hasUnlimitedRange`, `bonusDamageDiceForUse`) as thin adapters. Numeric
+modifier VALUES are U5 `RuleNumber` expressions (`ModifierValue =
+{ kind: 'number', value: RuleNumber } | { kind: 'enumerated', value: string }`)
+— corrected contract: the primitive owns NO special dynamic literals (the
+old `'round'` special case is the U5 `{ kind: 'round' }` expression, and the
+range adapter's `'round'` shorthand translates to it at the kernel
+boundary). Resolution is INJECTED: the primitive folds take a
+`ModifierNumberResolver`, and `kernels/evaluate-modifiers.ts`
+(`resolveModifierNumber`) is the thin kernel-layer evaluator projecting the
+fold view onto the representable U5 subset (constant, round, pure scalar
+compositions: add/multiply/minimum/maximum/clamp/percent) — any
+context-dependent expression (stat/resource/input/distance/die) FAILS
+CLOSED at resolution, never a guessed value. Enumerated replacements (area
+shape, damage type) stay typed separately and are never folded
+arithmetically. Retained
 specialists with written boundaries: `CostModifierRule` (function-shaped
 cost-list rewriting — a list transformation, not a value fold; the
 `action-cost`/`action-cost-type` query points are where numeric folds
@@ -1638,9 +1652,24 @@ resolve split across party pool + personal resolve (p.99).
 **Current state.** `LANDED (T3, 2026-08-30)` — the generic atomic-grouping
 underlay exists and the source-declared spatial batch routes through it.
 `primitives/transaction.ts` (barrel re-exported) owns `TransactionLeg`
-(intent + per-leg validate against ONE snapshot), `validateTransaction`
-(all-or-nothing verdict naming the first failing leg),
-`proposeAtomicGroup` (intents-for-commit on `ok`), and `legWithCheck`.
+(intent + per-leg validate), `TransactionSpec` (legs + declared
+validation mode + deterministic provisional-state projection),
+`validateTransaction` (all-or-nothing verdict naming the first failing
+leg), `proposeAtomicGroup` (intents-for-commit on `ok`), and
+`legWithCheck`. Corrected contract — COLLECTIVE DEPENDENCE: a transaction
+is not only a bag of independent validators over one snapshot. Two
+families are BOTH representable via the declared `mode`: `simultaneous`
+(default) validates every leg against the ORIGINAL common pre-state
+(source-defined swaps: each swap leg judged pre-swap, never against the
+other legs' projected effects — the Masquerade gate composes this mode),
+and `sequential` validates leg i against the state projected by the
+EARLIER proposed legs (`project(snapshot, applied)`), the cumulative
+family: multiple spends against one pool, split pools, creation
+conflicts, sacrifice + payoff. The projection is the CALLER's domain
+projection (payment stays economy, creation stays creation) — the generic
+authority never guesses how an intent changes state, and a `sequential`
+transaction WITHOUT a `project` fails (a programming error, never a
+silent fallback to simultaneous semantics).
 The command boundary's `assertLegalSpatialBatch` (ICON p.151 Masquerade)
 now composes the source-declared atomic spatial group through
 `validateTransaction`: every move leg is validated against the SAME
@@ -1717,8 +1746,14 @@ dashes 3/2/1").
 **Current state.** `CORE LANDED (T3, 2026-08-30); full completion staged to
 T4`. `primitives/usage.ts` (barrel re-exported) owns the core ledger:
 `UsageKeySpec`/`usageKey` (byte-identical `ledger:<scope>:<sourceId>`
-format, extended per-target), `usageIdentity` (the CORE de-dup key — the
-U10 fact read completes it in T4), `usageCount`, `ledgerAvailable`,
+format, extended per-target — the STORAGE key, actor-local by design), and
+`usageIdentity`/`usageIdentityKey`/`usageIdentitiesEqual` (the typed
+DE-DUP IDENTITY, corrected contract: DISTINCT from the storage key and
+ALWAYS carrying the owner — two different owners of the same
+source/scope/target have different identities, proven by negative test,
+so T4's U10 fact-backed de-duplication cannot inherit the storage key's
+owner collision; the U10 fact read completes the full trigger-family
+identity in T4), `usageCount`, `ledgerAvailable`,
 `consumeUsageMutation` (one-shot boolean mark or N-per-scope count
 increment), `refreshUsageMutation`, `usageRead` (per-use magnitude
 ordinal), `holdsUsageKey`, `resetBoundaryFor` (turn/round/combat onto U8
@@ -1804,9 +1839,21 @@ them. `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
 (source-order | stack | turn-order | hostile-before-beneficial |
 non-active-owner-first | controller-choice | explicit-list),
 `applyOrdering(policy, candidates, context)` (pure — a function of the
-recorded policy + durable context), `policyYieldsChoice` (controller-choice
-yields a typed U4 choice spec; the engine never invents an order),
-`orderingKey` (durable identity), and the side/owner policy reads.
+recorded policy + durable context, returning `OrderingResult`),
+`policyYieldsChoice` (controller-choice yields a typed U4 choice spec;
+the engine never invents an order), `orderingKey` (durable identity),
+and the side/owner policy reads. Corrected contract — FAIL CLOSED:
+`applyOrdering` returns `{ ok: true, ordered }` or `{ ok: false, problem }
+` with typed problems (`missing-source-order`, `missing-turn-order`,
+`missing-perspective`, `missing-active-owner`, `yields-choice`,
+`unknown-candidate`); a policy whose required context is absent, or whose
+candidates are not fully covered by its declared authority
+(source-order/turn-order/explicit-list audit candidate ids against the
+declared list), is UNRESOLVED and the command/window boundary REJECTS —
+"fail closed" means reject, never "use whatever order the caller
+supplied". `controller-choice` is never resolved by `applyOrdering`: it
+returns `yields-choice` carrying the typed choice and the caller routes
+it through U4.
 `orderedSelectedSteps` (the engine's ability-step order, p.85/p.107 §4)
 now applies the `source-order` policy against the ability's step listing;
 `decideDamageWindow` applies the `source-order` policy against

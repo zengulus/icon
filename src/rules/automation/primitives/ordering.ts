@@ -120,91 +120,124 @@ export function orderingKey(policy: OrderingPolicy): string {
   }
 }
 
+/** What went wrong when an ordering policy cannot be resolved. FAIL CLOSED
+ * means exactly this: the policy returns an unresolved result and the
+ * command/window boundary REJECTS — it never silently falls back to the
+ * caller's incoming array order (arbitrary caller array construction must
+ * never become game semantics). */
+export type OrderingProblem =
+  /** source-order was applied without `context.sourceOrder` — the policy
+   * cannot name the source listing it must order against. */
+  | 'missing-source-order'
+  /** turn-order was applied without `context.turnOrder` — the recorded
+   * scheduler sequence is unavailable. */
+  | 'missing-turn-order'
+  /** hostile-before-beneficial was applied without a perspective actor/
+   * side — the hostile/beneficial classification is underivable. */
+  | 'missing-perspective'
+  /** non-active-owner-first was applied without `context.activeActorId` —
+   * the active owner is unknown. */
+  | 'missing-active-owner'
+  /** controller-choice was passed to `applyOrdering` — the policy YIELDS a
+   * choice and must never be resolved by this function. */
+  | 'yields-choice'
+  /** A candidate id is absent from the declared ordering authority
+   * (sourceOrder / turnOrder / explicit-list). The policy cannot order what
+   * it does not know; the incoming array order is never used as an
+   * accidental tie-break. */
+  | 'unknown-candidate';
+
+/** The result of an ordering application. `ok: true` is the ordered
+ * candidates; `ok: false` is the unresolved problem — the caller MUST
+ * reject (or route a yielded choice through U4), never fall back to the
+ * incoming order. */
+export type OrderingResult =
+  | { ok: true; ordered: OrderingCandidate[] }
+  | { ok: false; problem: OrderingProblem; choice?: RuleChoice };
+
 /** Apply one ordering policy to the candidates. Pure — a deterministic
- * function of the policy, the candidates, and the durable context. A policy
- * that yields a choice (controller-choice) returns the candidates in source
- * order: the recorded choice decides the final order, never this function.
- * An undefined/unrepresentable ordering never silently iterates — callers
- * that cannot resolve a yielded choice must reject, not fall back. */
+ * function of the policy, the candidates, and the durable context. FAIL
+ * CLOSED: a policy whose required context is absent, or whose candidates
+ * are not fully covered by its declared ordering authority, returns
+ * `ok: false` — it NEVER silently retains the incoming array order.
+ * `controller-choice` yields a choice (`policyYieldsChoice`) and is never
+ * resolved here: `applyOrdering` returns `ok: false, problem:
+ * 'yields-choice'` carrying the choice spec, and the caller routes it
+ * through the U4 choice authority. */
 export function applyOrdering(
   policy: OrderingPolicy,
   candidates: readonly OrderingCandidate[],
   context: OrderingContext = {},
-): OrderingCandidate[] {
+): OrderingResult {
   switch (policy.kind) {
     case 'source-order': {
-      const sourceOrder = context.sourceOrder ?? [];
-      const position = new Map(sourceOrder.map((id, index) => [id, index]));
-      return [...candidates].sort((a, b) => {
-        const pa = position.get(a.id);
-        const pb = position.get(b.id);
-        if (pa === undefined && pb === undefined) return 0;
-        if (pa === undefined) return 1;
-        if (pb === undefined) return -1;
-        return pa - pb;
-      });
+      const sourceOrder = context.sourceOrder;
+      if (sourceOrder === undefined) return { ok: false, problem: 'missing-source-order' };
+      return orderByList(candidates, sourceOrder);
     }
     case 'controller-choice':
       // The policy yields a choice: the recorded player decision orders the
-      // candidates, never this function. Candidates pass through in source
-      // order for the choice UI; the resolved choice reorders them durably.
-      return [...candidates];
+      // candidates, never this function. NEVER resolved here.
+      return { ok: false, problem: 'yields-choice', choice: policy.choice };
     case 'stack':
-      return [...candidates].reverse();
+      // Stack/LIFO needs no context: the most-recently-added candidate first
+      // (interrupt nesting, p.107).
+      return { ok: true, ordered: [...candidates].reverse() };
     case 'turn-order': {
-      const turnOrder = context.turnOrder ?? [];
-      const position = new Map(turnOrder.map((id, index) => [id, index]));
-      return [...candidates].sort((a, b) => {
-        const pa = position.get(a.id);
-        const pb = position.get(b.id);
-        if (pa === undefined && pb === undefined) return 0;
-        if (pa === undefined) return 1;
-        if (pb === undefined) return -1;
-        return pa - pb;
-      });
+      const turnOrder = context.turnOrder;
+      if (turnOrder === undefined) return { ok: false, problem: 'missing-turn-order' };
+      return orderByList(candidates, turnOrder);
     }
     case 'hostile-before-beneficial': {
       // Without a perspective actor/side the policy cannot classify hostile
-      // vs beneficial — candidates keep their source order (fail closed,
-      // never an invented classification).
+      // vs beneficial — unresolved, never an invented classification.
       const perspectiveSide = context.perspectiveSide
         ?? (context.perspectiveActorId === undefined ? undefined : candidateSideOf(candidates, context.perspectiveActorId));
+      if (perspectiveSide === undefined) return { ok: false, problem: 'missing-perspective' };
       const hostile: OrderingCandidate[] = [];
       const beneficial: OrderingCandidate[] = [];
       for (const candidate of candidates) {
-        if (perspectiveSide !== undefined && candidate.side !== undefined && candidate.side !== perspectiveSide) {
+        if (candidate.side !== undefined && candidate.side !== perspectiveSide) {
           hostile.push(candidate);
         } else {
           beneficial.push(candidate);
         }
       }
-      return [...hostile, ...beneficial];
+      return { ok: true, ordered: [...hostile, ...beneficial] };
     }
     case 'non-active-owner-first': {
       const active = context.activeActorId;
+      if (active === undefined) return { ok: false, problem: 'missing-active-owner' };
       const others: OrderingCandidate[] = [];
       const own: OrderingCandidate[] = [];
       for (const candidate of candidates) {
-        if (active !== undefined && (candidate.id === active || candidate.isActiveOwner)) {
+        if (candidate.id === active || candidate.isActiveOwner) {
           own.push(candidate);
         } else {
           others.push(candidate);
         }
       }
-      return [...others, ...own];
+      return { ok: true, ordered: [...others, ...own] };
     }
-    case 'explicit-list': {
-      const position = new Map(policy.order.map((id, index) => [id, index]));
-      return [...candidates].sort((a, b) => {
-        const pa = position.get(a.id);
-        const pb = position.get(b.id);
-        if (pa === undefined && pb === undefined) return 0;
-        if (pa === undefined) return 1;
-        if (pb === undefined) return -1;
-        return pa - pb;
-      });
-    }
+    case 'explicit-list':
+      return orderByList(candidates, policy.order);
   }
+}
+
+/** Order candidates by their position in the declared authority list. A
+ * candidate absent from the list is UNRESOLVED (`ok: false,
+ * 'unknown-candidate'`) — the policy cannot order what its authority does
+ * not name, and the incoming array order is never used as a tie-break. */
+function orderByList(candidates: readonly OrderingCandidate[], authority: readonly string[]): OrderingResult {
+  const position = new Map(authority.map((id, index) => [id, index]));
+  const ordered: OrderingCandidate[] = [];
+  for (const candidate of candidates) {
+    if (!position.has(candidate.id)) return { ok: false, problem: 'unknown-candidate' };
+  }
+  return {
+    ok: true,
+    ordered: [...candidates].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0)),
+  };
 }
 
 /** The side of a candidate id within the candidate list (the perspective

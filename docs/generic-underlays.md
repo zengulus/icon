@@ -503,7 +503,19 @@ Today (T3 landed 2026-08-30): `primitives/modifiers.ts` is the ONE recipe
 shape + shared gate evaluator + typed permission query points with closed
 negatives; the range (`listed-range`), area (`area-size`/`area-shape`),
 mastery (`interrupt-rank`/`damage-type`/`range-bound`), and bonus-damage
-(`bonus-damage-dice`) registries fold through it. Retained specialists with
+(`bonus-damage-dice`) registries fold through it. Corrected contract:
+numeric modifier VALUES are U5 `RuleNumber` expressions (`ModifierValue =
+{ kind: 'number', value: RuleNumber } | { kind: 'enumerated', value:
+string }`) — the primitive owns NO special dynamic literals (the old
+`'round'` special case is the U5 `{ kind: 'round' }` expression; the range
+adapter's `'round'` shorthand translates to it at the kernel boundary).
+Resolution is injected (`ModifierNumberResolver`);
+`kernels/evaluate-modifiers.ts` (`resolveModifierNumber`) is the thin
+kernel-layer evaluator projecting the fold view onto the representable U5
+subset (constant, round, pure scalar compositions) — a context-dependent
+expression FAILS CLOSED at resolution, never a guessed value; enumerated
+replacements (area shape, damage type) stay typed separately and are never
+folded arithmetically. Retained specialists with
 written boundaries: `cost-payment.ts` (function-shaped cost-list
 rewriting), the `attack-modifiers.ts` armed one-shot fold, the
 scaled/recipient bonus-damage function rows, aura/save-window boon-curse
@@ -525,9 +537,20 @@ Do NOT merge all validation algorithms (spatial stays spatial; payment stays
 economy). The reusable underlay is ATOMIC GROUPING + COMMIT SEMANTICS.
 `spatialBatchId` is prior art; creation `countMode: 'exact'` and cost-payment
 `assertRuleCostsPayable` are the other instances. Today (T3 landed
-2026-08-30): `primitives/transaction.ts` owns `validateTransaction` /
-`proposeAtomicGroup`; the Masquerade spatial-batch command gate composes
-through it (per-leg spatial legality stays in the spatial gateway).
+2026-08-30): `primitives/transaction.ts` owns `TransactionSpec` (legs +
+declared validation mode + deterministic provisional-state projection),
+`validateTransaction` / `proposeAtomicGroup`. COLLECTIVE DEPENDENCE
+(corrected contract): `mode: 'simultaneous'` (default) validates every leg
+against the ORIGINAL common pre-state (the swap family — Masquerade-style
+groups judge each leg pre-swap); `mode: 'sequential'` validates leg i
+against the state projected by the EARLIER proposed legs (`project(snapshot,
+applied)`), the cumulative family (multiple spends, split pools, creation
+conflicts, sacrifice + payoff). The projection is the caller's domain
+projection — the generic authority never guesses how an intent changes
+state, and a sequential transaction WITHOUT a projection fails (never a
+silent fallback to simultaneous semantics). The Masquerade spatial-batch
+command gate composes through it in simultaneous mode (per-leg spatial
+legality stays in the spatial gateway).
 
 ## U16 Usage / Entitlement Ledger
 
@@ -549,7 +572,12 @@ Today (T3 core landed 2026-08-30): `primitives/usage.ts` is the core ledger
 (keys byte-identical to `ledger:<scope>:<sourceId>`, caps incl. the U14
 `use-cap` fold, counts, consume/refresh, per-use magnitude reads, de-dup
 identity CORE); `kernels/use-ledger.ts` is a thin adapter; the U6
-`used-scope` predicate consumes it. The interrupt-use counter and
+`used-scope` predicate consumes it. Corrected contract: the STORAGE key
+(`usageKey`, actor-local by design) is DISTINCT from the DE-DUP IDENTITY
+(`usageIdentity`/`usageIdentityKey`/`usageIdentitiesEqual`), which ALWAYS
+carries the owner — two different owners of the same source/scope/target
+have different identities, so T4's U10 fact-backed de-duplication cannot
+inherit the storage key's owner collision. The interrupt-use counter and
 attacked-this-turn/end-turn flags remain durable actor fields (typed-ledger
 migration is T6); the shared de-dup identity for trigger families reads U10
 facts and completes in T4.
@@ -575,9 +603,20 @@ Today (T3 landed 2026-08-30): `primitives/ordering.ts` owns the typed
 policies (source-order | stack | turn-order | hostile-before-beneficial |
 non-active-owner-first | controller-choice | explicit-list) +
 `policyYieldsChoice`; `orderedSelectedSteps`, `decideDamageWindow`, and the
-pending-interrupt LIFO pop route through it. The lifecycle registry order
-remains the recorded boundary contract (source-order policy); the scheduler
-turn election stays the scheduler authority.
+pending-interrupt LIFO pop route through it. FAIL CLOSED (corrected
+contract): `applyOrdering` returns `{ ok: true, ordered }` or `{ ok:
+false, problem }` with typed problems (missing-source-order /
+missing-turn-order / missing-perspective / missing-active-owner /
+yields-choice / unknown-candidate) — a policy whose required context is
+absent, or whose candidates are not fully covered by its declared
+authority (source-order/turn-order/explicit-list audit candidate ids
+against the declared list), is UNRESOLVED and the command/window boundary
+rejects; "fail closed" means reject, never "use whatever order the caller
+supplied". `controller-choice` is never resolved by `applyOrdering` (it
+returns `yields-choice` carrying the typed choice for U4 routing). The
+lifecycle registry order remains the recorded boundary contract
+(source-order policy); the scheduler turn election stays the scheduler
+authority.
 
 ---
 

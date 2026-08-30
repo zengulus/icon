@@ -82,12 +82,18 @@ export function decideDamageWindow(
   // registry's own listing (when-damaged before defeated, p.107) — the ONE
   // ordering authority, so the recorded boundary contract never depends on
   // array construction order.
-  const ordered = applyOrdering(
+  const result = applyOrdering(
     { kind: 'source-order' },
     TRIGGER_WINDOW_RECIPES.map((recipe) => ({ id: recipe.trigger })),
     { sourceOrder: TRIGGER_WINDOW_RECIPES.map((recipe) => recipe.trigger) },
   );
-  for (const candidate of ordered) {
+  // FAIL CLOSED: the recipe list is the closed registry, so every candidate
+  // is named by the source listing by construction. An unresolvable order is
+  // a registry programming error — reject, never array-order semantics.
+  if (!result.ok) {
+    throw new Error(`Cannot order trigger window recipes: ${result.problem}`);
+  }
+  for (const candidate of result.ordered) {
     const recipe = TRIGGER_WINDOW_RECIPES.find((row) => row.trigger === candidate.id);
     if (recipe && recipe.opens(state, target, provenance)) {
       return { trigger: recipe.trigger, held: true, resolution: null };

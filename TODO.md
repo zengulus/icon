@@ -442,6 +442,52 @@ assumption here, document the evidence and update this list before proceeding.
   the turn-boundary ordering consumers (hostile-before-beneficial /
   non-active-owner-first / controller-choice) land with U13 in T5. No
   source-unit wiring; census unchanged (427).
+- **T3 corrective pass (2026-08-30) — four contract corrections, no new
+  underlays, no source-unit changes.** Full suite green (1604 tests),
+  census byte-stable, all audits green. Corrections:
+  1. **U16 identity carries the owner.** `usageKey` remains the
+     actor-local STORAGE key (byte-identical `ledger:<scope>:<sourceId>`
+     format); `usageIdentity`/`usageIdentityKey`/`usageIdentitiesEqual`
+     are the typed DE-DUP IDENTITY, DISTINCT from the storage key and
+     always carrying owner/scope/target — negative test proves two
+     owners of the same source/scope/target differ, so T4's U10
+     fact-backed de-dup cannot inherit the storage key's owner
+     collision.
+  2. **U17 rejects unresolved orderings.** `applyOrdering` returns
+     `OrderingResult`;
+     missing context (`missing-source-order`/`missing-turn-order`/
+     `missing-perspective`/`missing-active-owner`) and candidates absent
+     from the declared authority (`unknown-candidate`) are UNRESOLVED
+     rejections at the command/window boundary — never the caller's
+     incoming array order. `controller-choice` is never resolved by
+     `applyOrdering` (returns `yields-choice` carrying the typed U4
+     choice). Wired consumers (`orderedSelectedSteps`,
+     `decideDamageWindow`, pending-interrupt LIFO pop) reject on
+     non-ok results; negative missing-context/unknown-candidate tests
+     added.
+  3. **U15 collective dependence.** `TransactionSpec` gains a declared
+     `mode`: `simultaneous` (every leg against the ORIGINAL common
+     pre-state — the swap family; the Masquerade gate composes this) or
+     `sequential` (leg i against `project(snapshot, applied)` — the
+     cumulative family: multiple spends, split pools, creation
+     conflicts, sacrifice + payoff). A sequential transaction without a
+     `project` fails. Tests: wallet 5 spends 3+4 rejects WITHOUT manual
+     subtraction (each leg individually legal), mutually incompatible
+     legs, simultaneous swap stays legal against the common pre-state
+     (and a sequential projection would wrongly reject it), no intents
+     on failure, deterministic replay.
+  4. **U14 values are U5 RuleNumbers.** `ModifierValue = { kind:
+     'number', value: RuleNumber } | { kind: 'enumerated', value: string
+     }` — the primitive owns no special dynamic literals (the old
+     `'round'` special case is the U5 `{ kind: 'round' }` expression;
+     the range adapter's `'round'` shorthand translates at the kernel
+     boundary). Numeric folds take an injected `ModifierNumberResolver`;
+     `kernels/evaluate-modifiers.ts` (`resolveModifierNumber`) is the
+     thin kernel-layer evaluator projecting the fold view onto the
+     representable U5 subset (constant, round, pure scalar
+     compositions); context-dependent expressions reject rather than
+     guess. Tests: `{ kind: 'round' }` parity + a composed U5 expression
+     fixture + an unrepresentable-expression rejection.
 
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full

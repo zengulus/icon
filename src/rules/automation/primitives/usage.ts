@@ -37,7 +37,7 @@
  */
 import type { BoundaryRef } from './scope.js';
 import type { RuleMutation } from './types.js';
-import type { ModifierFoldView } from './modifiers.js';
+import type { ModifierFoldView, ModifierNumberResolver } from './modifiers.js';
 import { foldNumberModifiers } from './modifiers.js';
 
 /** The reset boundaries the core ledger understands. Each maps to a U8
@@ -59,24 +59,62 @@ export interface UsageKeySpec {
   scope: UsagePeriod;
 }
 
-/** The canonical durable state key for a usage entry. Byte-identical to the
- * engine's long-standing `ledger:<period>:<sourceId>` format (the F9
+/** The canonical durable STORAGE key for a usage entry. Byte-identical to
+ * the engine's long-standing `ledger:<period>:<sourceId>` format (the F9
  * reactive fold's `roundLedgerKey` and the use-ledger kernel write exactly
  * this key), so the shared gate, the F9 fold, and the lifecycle reset
  * recipes can never drift. An optional target ref extends the key with a
  * `:target:<id>` suffix — a per-target gate never collides with the
- * per-source gate. */
+ * per-source gate. The key is ACTOR-LOCAL by design: durable state lives on
+ * the owning actor's ruleState, so the owner is not part of the storage
+ * address. */
 export function usageKey(spec: UsageKeySpec): string {
   const base = `ledger:${spec.scope}:${spec.sourceId}`;
   return spec.targetId === undefined ? base : `${base}:target:${spec.targetId}`;
 }
 
-/** The CORE de-duplication identity: the canonical key for \"one use of this
- * rule by this owner against this target within this scope\". The FULL
- * trigger-family de-dup identity additionally reads U10 facts and completes
- * in T4 — this CORE key is the T3 part that is valid without U10. */
-export function usageIdentity(spec: UsageKeySpec): string {
-  return usageKey(spec);
+/** The typed de-duplication IDENTITY: \"one use of THIS RULE by THIS OWNER
+ * against this target within this scope\". DISTINCT from the storage key:
+ * the identity must distinguish two different OWNERS of the same
+ * source/scope/target (the storage key intentionally cannot — it is
+ * actor-local). T4's U10 fact-backed de-duplication is built on this
+ * identity and must not inherit the storage key's owner collision. */
+export interface UsageIdentity {
+  /** The gated rule/source unit id (provenance key, never parsed). */
+  sourceId: string;
+  /** The owning actor id — part of the identity, never discarded. */
+  ownerId: string;
+  scope: UsagePeriod;
+  /** Optional target reference id for per-target gates. */
+  targetId?: string;
+}
+
+/** Build the typed de-dup identity for a usage spec. The owner is ALWAYS
+ * carried — an identity without its owner cannot answer \"who used this\". */
+export function usageIdentity(spec: UsageKeySpec): UsageIdentity {
+  return {
+    sourceId: spec.sourceId,
+    ownerId: spec.ownerId,
+    scope: spec.scope,
+    ...(spec.targetId !== undefined ? { targetId: spec.targetId } : {}),
+  };
+}
+
+/** Canonical, collision-safe serialization of a de-dup identity. The owner
+ * is embedded, so two different owners of the same source/scope/target
+ * serialize to different keys (the negative test proves this). Used as the
+ * stable comparison form for U10 fact-backed de-dup. A `UsageKeySpec` and a
+ * `UsageIdentity` carry the same fields; either works. */
+export function usageIdentityKey(spec: { sourceId: string; ownerId: string; scope: UsagePeriod; targetId?: string }): string {
+  return `usage:${spec.sourceId}:${spec.ownerId}:${spec.scope}${spec.targetId === undefined ? '' : `:${spec.targetId}`}`;
+}
+
+/** Structural identity equality (the typed comparison form). */
+export function usageIdentitiesEqual(first: UsageIdentity, second: UsageIdentity): boolean {
+  return first.sourceId === second.sourceId
+    && first.ownerId === second.ownerId
+    && first.scope === second.scope
+    && (first.targetId ?? null) === (second.targetId ?? null);
 }
 
 /** The U8 reset boundary for a period: turn gates reset at the owner's own
@@ -126,8 +164,11 @@ export function usageCap(
   baseCap: number,
   view: ModifierFoldView,
   ownerAbilityId: string,
+  resolve: ModifierNumberResolver,
 ): number {
-  const folded = foldNumberModifiers('use-cap', scope, baseCap, ownerAbilityId, view);
+  // `use-cap` values are U5 RuleNumbers resolved through the injected
+  // resolver (the primitive never imports a U5 evaluation kernel).
+  const folded = foldNumberModifiers('use-cap', scope, baseCap, ownerAbilityId, view, {}, resolve);
   return Math.max(0, Math.floor(folded));
 }
 

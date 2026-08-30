@@ -154,12 +154,37 @@ export interface ModifierFoldView {
 
 // ── The one recipe shape ────────────────────────────────────────────────────
 
-/** A value a rule contributes to its query point. Numbers fold arithmetically
- * (ranges, lengths, ranks, dice, flat amounts); `'round'` is the DYNAMIC
- * round number (Open the Gates' "range equal to the round number"); a string
- * is an enumerated replacement (area shape 'arc'/'line', damage-type
- * conversion target). */
-export type ModifierValue = number | 'round' | string;
+/** A value a rule contributes to its query point, TYPED BY SEMANTIC KIND:
+ *
+ * - `number` — a U5 `RuleNumber` scalar expression (constants, the dynamic
+ *   `round`, stats, counts, composed arithmetic). The primitive fold
+ *   resolves it through an INJECTED U5 resolver (`ModifierValueResolver`);
+ *   the default resolver handles the constants and the dynamic round that
+ *   the migrated kernels need. No special dynamic literals accumulate here —
+ *   the full U5 algebra is the value language.
+ * - `enumerated` — a replacement value for an enumerated query point (area
+ *   shape 'line'/'arc', damage-type conversion target). Never folded
+ *   arithmetically.
+ */
+export type ModifierValue =
+  | { kind: 'number'; value: RuleNumber }
+  | { kind: 'enumerated'; value: string };
+
+/** A convenience constructor for a constant numeric modifier value. */
+export function constantModifierValue(value: number): ModifierValue {
+  return { kind: 'number', value: { kind: 'constant', value } };
+}
+
+/** A convenience constructor for the dynamic round modifier value (the
+ * "range equal to the round number" family). */
+export function roundModifierValue(): ModifierValue {
+  return { kind: 'number', value: { kind: 'round' } };
+}
+
+/** A convenience constructor for an enumerated replacement value. */
+export function enumeratedModifierValue(value: string): ModifierValue {
+  return { kind: 'enumerated', value };
+}
 
 /** ONE recipe shape: how one content unit alters one typed query point. */
 export interface ModifierRule {
@@ -308,16 +333,21 @@ export function modifierRulesForSource(
     && (queryPoint === undefined || rule.queryPoint === queryPoint));
 }
 
-/** Resolve a rule's dynamic value: `'round'` → the current round. */
-export function resolvedModifierValue(rule: ModifierRule, view: ModifierFoldView): number | string {
-  return rule.value === 'round' ? view.round : rule.value;
-}
+/** The U5 value-resolution seam: resolve a `RuleNumber` expression against
+ * the fold view to a concrete number. Provided by the KERNEL layer
+ * (`kernels/evaluate-modifiers.ts`), which owns the U5 projection of the
+ * fold view — the primitive never imports a U5 evaluation kernel, and no
+ * dynamic special literals accumulate here (the full `RuleNumber`
+ * vocabulary IS the value language). An expression the view cannot
+ * represent exactly throws (fail closed) — never a guessed value. */
+export type ModifierNumberResolver = (expression: RuleNumber, view: ModifierFoldView) => number;
 
 /** The numeric fold for a query point: start from `base` and apply every
  * applicable rule — `add` accumulates, the LAST `set`/`override` wins
- * (deterministic, registration order). `'round'` values resolve to the
- * current round. This is the ONE numeric fold discipline every numeric
- * query point uses. */
+ * (deterministic, registration order). Numeric values are U5 `RuleNumber`
+ * expressions resolved through the injected resolver; an unrepresentable
+ * expression fails closed at resolution. This is the ONE numeric fold
+ * discipline every numeric query point uses. */
 export function foldNumberModifiers(
   queryPoint: ModifierQueryPoint,
   scope: string,
@@ -325,11 +355,12 @@ export function foldNumberModifiers(
   ownerAbilityId: string,
   view: ModifierFoldView,
   options: { actionId?: string } = {},
+  resolve: ModifierNumberResolver,
 ): number {
   let value = base;
   for (const rule of applicableModifierRules(queryPoint, scope, ownerAbilityId, view, options)) {
-    const resolved = resolvedModifierValue(rule, view);
-    if (typeof resolved !== 'number') continue;
+    if (rule.value.kind !== 'number') continue;
+    const resolved = resolve(rule.value.value, view);
     value = rule.operation === 'add' ? value + resolved : resolved;
   }
   return value;
@@ -338,9 +369,10 @@ export function foldNumberModifiers(
 /** The last-applied enumerated value for a query point (shape overrides,
  * damage-type conversions): iterate applicable rules, the last `set`/
  * `override` wins. `from`-guarded rules apply only while the current value
- * equals `from` (chained conversions compose deterministically). Returns
- * the base value when no rule replaces it — the fold never invents a
- * replacement. */
+ * equals `from` (chained conversions compose deterministically). Enumerated
+ * replacements (area shape, damage type, …) stay TYPED SEPARATELY from the
+ * U5 numeric vocabulary — never folded arithmetically. Returns the base
+ * value when no rule replaces it — the fold never invents a replacement. */
 export function foldEnumeratedModifiers(
   queryPoint: ModifierQueryPoint,
   scope: string,
@@ -351,10 +383,9 @@ export function foldEnumeratedModifiers(
 ): string {
   let value = base;
   for (const rule of applicableModifierRules(queryPoint, scope, ownerAbilityId, view, options)) {
-    const resolved = resolvedModifierValue(rule, view);
-    if (typeof resolved !== 'string') continue;
+    if (rule.value.kind !== 'enumerated') continue;
     if (rule.from !== undefined && rule.from !== value) continue;
-    value = resolved;
+    value = rule.value.value;
   }
   return value;
 }

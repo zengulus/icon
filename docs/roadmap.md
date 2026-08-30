@@ -125,7 +125,19 @@ Masquerade spatial-batch gate; the U17 ordering policies
 (`primitives/ordering.ts`) drive the ability-step order, the
 trigger-window recipe order, and the interrupt LIFO pop. U18 evaluated
 under the plan's decision rule: not promoted. Full suite green (1586
-tests), census byte-stable at 427, no source-unit promotion. The next
+tests), census byte-stable at 427, no source-unit promotion. **T3
+corrective pass (2026-08-30)** — no new underlays, no source-unit
+changes: U16's de-dup identity now carries the owner (typed, distinct
+from the actor-local storage key, negative-tested); U17 ordering rejects
+unresolved orderings (typed `OrderingResult` problems; never the caller's incoming
+array order; `controller-choice` never resolved by `applyOrdering`); U15
+`TransactionSpec` declares `simultaneous` vs `sequential` (with a
+caller-owned deterministic `project`) so collective/dependent
+transactions are expressible without callers manually subtracting earlier
+legs; U14 numeric values are U5 `RuleNumber`s resolved through an
+injected resolver (`kernels/evaluate-modifiers.ts`), no special dynamic
+literals in the primitive. Full suite green (1604 tests), census
+byte-stable at 427. The next
 tranche is **T4 — Time and outcome: U9, U10 (completes U6 and U16)**
 (plan §3.2).
 

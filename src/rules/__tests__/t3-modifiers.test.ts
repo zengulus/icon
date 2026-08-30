@@ -18,17 +18,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   applicableModifierRules,
+  constantModifierValue,
   effectivePermission,
+  enumeratedModifierValue,
   foldEnumeratedModifiers,
   foldNumberModifiers,
   modifierGateHolds,
   modifierRulesForSource,
   registerModifierRule,
   registerPermissionRule,
+  roundModifierValue,
   PERMISSION_NEGATIVES,
   type ModifierFoldView,
   type ModifierGate,
 } from '../automation/primitives/modifiers.js';
+import { resolveModifierNumber } from '../automation/kernels/evaluate-modifiers.js';
 import { registerRangeModifierRule, effectiveScopedRange, type RangeStateView } from '../automation/kernels/range.js';
 import { registerMasteryModifierRule, effectiveInterruptRank, hasUnlimitedRange } from '../automation/kernels/mastery-fold.js';
 
@@ -69,40 +73,40 @@ function view(overrides: ViewOverrides = {}): ModifierFoldView {
 describe('U14 — one ModifierRule shape drives numeric folds', () => {
   it('add accumulates and the last override wins at the same query point (deterministic winner)', () => {
     const ability = owner();
-    registerModifierRule({ sourceId: 't3:a', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: 1 });
-    registerModifierRule({ sourceId: 't3:b', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: 2 });
-    registerModifierRule({ sourceId: 't3:c', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'override', value: 6 });
+    registerModifierRule({ sourceId: 't3:a', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: constantModifierValue(1) });
+    registerModifierRule({ sourceId: 't3:b', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: constantModifierValue(2) });
+    registerModifierRule({ sourceId: 't3:c', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'override', value: constantModifierValue(6) });
     // Adds accumulate to 3, then the last override replaces with 6.
-    expect(foldNumberModifiers('listed-range', 'attack', 0, ability, view())).toBe(6);
+    expect(foldNumberModifiers('listed-range', 'attack', 0, ability, view(), {}, resolveModifierNumber)).toBe(6);
     // Determinism (replay property): the same fold on the same state is identical.
-    expect(foldNumberModifiers('listed-range', 'attack', 0, ability, view())).toBe(6);
+    expect(foldNumberModifiers('listed-range', 'attack', 0, ability, view(), {}, resolveModifierNumber)).toBe(6);
   });
 
   it('an unowned modifier never folds (ownership gate)', () => {
     const ability = owner();
-    registerModifierRule({ sourceId: 't3:other', ownerId: 'other:ability', queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: 99 });
-    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view())).toBe(2);
+    registerModifierRule({ sourceId: 't3:other', ownerId: 'other:ability', queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: constantModifierValue(99) });
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view(), {}, resolveModifierNumber)).toBe(2);
   });
 
   it('scope filtering keeps a rule inside its declared scope', () => {
     const ability = owner();
-    registerModifierRule({ sourceId: 't3:scoped', ownerId: ability, queryPoint: 'listed-range', scope: 'terrain-placement', operation: 'add', value: 1 });
+    registerModifierRule({ sourceId: 't3:scoped', ownerId: ability, queryPoint: 'listed-range', scope: 'terrain-placement', operation: 'add', value: constantModifierValue(1) });
     // The 'attack' scope is untouched; the internal scope folds.
-    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view())).toBe(2);
-    expect(foldNumberModifiers('listed-range', 'terrain-placement', 3, ability, view())).toBe(4);
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view(), {}, resolveModifierNumber)).toBe(2);
+    expect(foldNumberModifiers('listed-range', 'terrain-placement', 3, ability, view(), {}, resolveModifierNumber)).toBe(4);
   });
 
   it('unknown query points reject at registration (a typo can never fold elsewhere)', () => {
     expect(() => registerModifierRule({
       sourceId: 't3:typo', ownerId: owner(),
       // @ts-expect-error — an unknown query point is not in the typed union.
-      queryPoint: 'not-a-query-point', scope: 'default', operation: 'set', value: 1,
+      queryPoint: 'not-a-query-point', scope: 'default', operation: 'set', value: constantModifierValue(1),
     })).toThrow(/Unknown modifier query point/);
   });
 
   it('the enumerated fold replaces with the last set and honors the from-guard (damage-type chains)', () => {
     const ability = owner();
-    registerModifierRule({ sourceId: 't3:convert', ownerId: ability, queryPoint: 'damage-type', scope: 'default', operation: 'set', value: 'divine', from: 'piercing' });
+    registerModifierRule({ sourceId: 't3:convert', ownerId: ability, queryPoint: 'damage-type', scope: 'default', operation: 'set', value: enumeratedModifierValue('divine'), from: 'piercing' });
     // Unmatched base passes through; matched base converts.
     expect(foldEnumeratedModifiers('damage-type', 'default', 'normal', ability, view())).toBe('normal');
     expect(foldEnumeratedModifiers('damage-type', 'default', 'piercing', ability, view())).toBe('divine');
@@ -132,9 +136,9 @@ describe('U14 — gates flip deterministically with state', () => {
 
   it('a predicate-gated rule flips on and off as state changes (never a stale fold)', () => {
     const ability = owner();
-    registerModifierRule({ sourceId: 't3:gated', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: 5, gates: [{ kind: 'comeback' }] });
-    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view())).toBe(2);
-    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view({ actor: { hp: 8 } }))).toBe(5);
+    registerModifierRule({ sourceId: 't3:gated', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: constantModifierValue(5), gates: [{ kind: 'comeback' }] });
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view(), {}, resolveModifierNumber)).toBe(2);
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view({ actor: { hp: 8 } }), {}, resolveModifierNumber)).toBe(5);
   });
 });
 
@@ -217,8 +221,45 @@ describe('U14 — the range and mastery kernels fold through the shared registry
 
   it('applicableModifierRules returns the ordered applicable subset', () => {
     const ability = owner();
-    registerModifierRule({ sourceId: 't3:app', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: 1 });
+    registerModifierRule({ sourceId: 't3:app', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: constantModifierValue(1) });
     const rules = applicableModifierRules('listed-range', 'attack', ability, view());
     expect(rules.every((rule) => rule.ownerId === ability && rule.scope === 'attack')).toBe(true);
+  });
+});
+
+describe('U14 — numeric values are U5 RuleNumbers (corrected contract)', () => {
+  it('parity: a { kind: \'round\' } RuleNumber modifier produces the existing dynamic-round behavior', () => {
+    const ability = owner();
+    // The old `'round'` special literal is now the U5 `{ kind: 'round' }`
+    // expression — same behavior, resolved through the kernel-layer resolver.
+    registerModifierRule({ sourceId: 't3:round', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: roundModifierValue() });
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view({ round: 3 }), {}, resolveModifierNumber)).toBe(3);
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view({ round: 7 }), {}, resolveModifierNumber)).toBe(7);
+  });
+
+  it('a composed U5 expression folds through the seam (no special-case dynamic literals)', () => {
+    const ability = owner();
+    // `round + 2` composed entirely in the U5 vocabulary — the seam cannot
+    // regress into special literals because the value IS a RuleNumber.
+    const expression = {
+      kind: 'add' as const,
+      values: [
+        { kind: 'constant' as const, value: 2 },
+        { kind: 'round' as const },
+      ],
+    };
+    registerModifierRule({ sourceId: 't3:composed', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: { kind: 'number', value: expression } });
+    expect(foldNumberModifiers('listed-range', 'attack', 0, ability, view({ round: 3 }), {}, resolveModifierNumber)).toBe(5);
+  });
+
+  it('a context-dependent RuleNumber fails closed at resolution (never a guessed value)', () => {
+    const ability = owner();
+    // `input` needs full execution context — the fold view cannot answer it.
+    registerModifierRule({
+      sourceId: 't3:unrepresentable', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set',
+      value: { kind: 'number', value: { kind: 'input', key: 'choice' } },
+    });
+    expect(() => foldNumberModifiers('listed-range', 'attack', 0, ability, view(), {}, resolveModifierNumber))
+      .toThrow(/cannot be resolved against the modifier fold view/);
   });
 });

@@ -24,7 +24,9 @@ import {
   resetBoundaryFor,
   usageCap,
   usageCount,
+  usageIdentitiesEqual,
   usageIdentity,
+  usageIdentityKey,
   usageKey,
   usageRead,
   type UsageLedgerActor,
@@ -37,7 +39,8 @@ import {
 } from '../automation/kernels/use-ledger.js';
 import { roundLedgerKey } from '../automation/kernels/trait-reactions.js';
 import { evaluatePredicate } from '../automation/kernels/runtime.js';
-import { registerModifierRule, type ModifierFoldView } from '../automation/primitives/modifiers.js';
+import { resolveModifierNumber } from '../automation/kernels/evaluate-modifiers.js';
+import { constantModifierValue, registerModifierRule, type ModifierFoldView } from '../automation/primitives/modifiers.js';
 import type { RuleActorView, RuleExecutionContext } from '../automation/primitives/types.js';
 
 function actorWithState(state: Record<string, unknown>): UsageLedgerActor {
@@ -54,9 +57,29 @@ describe('U16 — key and identity contract', () => {
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'turn', targetId: 'foe' })).toBe('ledger:turn:fixture:gate:target:foe');
   });
 
-  it('usageIdentity is the CORE de-dup key (usageKey) — the U10 fact read completes in T4', () => {
+  it('usageIdentity is the typed de-dup identity, DISTINCT from the actor-local storage key', () => {
+    // The storage key is intentionally actor-local (byte-identical
+    // `ledger:<scope>:<sourceId>` format — durable state lives on the
+    // owning actor); the identity ALWAYS carries the owner.
+    expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'combat' })).toBe('ledger:combat:fixture:gate');
     expect(usageIdentity({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'combat' }))
-      .toBe(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'combat' }));
+      .toEqual({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'combat' });
+    expect(usageIdentity({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'combat', targetId: 'foe' }))
+      .toEqual({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'combat', targetId: 'foe' });
+  });
+
+  it('two different owners of the same source/scope/target have DIFFERENT de-dup identities', () => {
+    // The storage keys collide by design (both are `ledger:round:fixture:gate:target:foe`
+    // — actor-local addresses); the identities must not.
+    const hero = usageIdentity({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'round', targetId: 'foe' });
+    const villain = usageIdentity({ sourceId: 'fixture:gate', ownerId: 'villain', scope: 'round', targetId: 'foe' });
+    expect(usageIdentityKey(hero)).not.toBe(usageIdentityKey(villain));
+    expect(usageIdentitiesEqual(hero, villain)).toBe(false);
+    // The same owner/source/scope/target is the same identity, structurally
+    // and by serialization (collision-safe, stable).
+    const heroAgain = usageIdentity({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'round', targetId: 'foe' });
+    expect(usageIdentitiesEqual(hero, heroAgain)).toBe(true);
+    expect(usageIdentityKey(heroAgain)).toBe(usageIdentityKey(hero));
   });
 
   it('resetBoundaryFor maps turn/round/combat onto U8 boundaries (turn = owner turn-start)', () => {
@@ -113,13 +136,14 @@ describe('U16 — count, consume, caps', () => {
   });
 
   it('usageCap folds U14 use-cap modifiers (count-override caps)', () => {
-    registerModifierRule({ sourceId: 't3:use-cap', ownerId: 'fixture:ability', queryPoint: 'use-cap', scope: 'round', operation: 'set', value: 4 });
+    registerModifierRule({ sourceId: 't3:use-cap', ownerId: 'fixture:ability', queryPoint: 'use-cap', scope: 'round', operation: 'set', value: constantModifierValue(4) });
     const capView: ModifierFoldView = {
       round: 1,
       actor: { id: 'hero', abilityIds: ['fixture:ability'], masteredAbilityIds: [], talents: {} },
       conditionsFor: () => new Set<string>(),
     };
-    expect(usageCap('fixture:ability', 'round', 1, capView, 'fixture:ability')).toBe(4);
+    // use-cap values resolve through the injected U5 resolver.
+    expect(usageCap('fixture:ability', 'round', 1, capView, 'fixture:ability', resolveModifierNumber)).toBe(4);
   });
 });
 

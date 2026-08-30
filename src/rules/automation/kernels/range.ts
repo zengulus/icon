@@ -2,11 +2,14 @@ import type { RuleSourceUnit } from '../../source-units.js';
 import type { Position } from '../../types.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import {
+  constantModifierValue,
   foldNumberModifiers,
   modifierRulesForSource,
   registerModifierRule,
+  roundModifierValue,
   type ModifierFoldView,
 } from '../primitives/modifiers.js';
+import { resolveModifierNumber } from './evaluate-modifiers.js';
 import type { RuleAction, RuleClauseCompilation, RuleProgramCompilation } from '../primitives/types.js';
 
 /**
@@ -155,7 +158,10 @@ export function registerRangeModifierRule(rule: RangeModifierRule): void {
       queryPoint: 'listed-range',
       scope,
       operation: rule.mode,
-      value: rule.value,
+      // The adapter surface keeps the `'round'` shorthand; it translates to
+      // the U5 `{ kind: 'round' }` RuleNumber at the boundary — the shared
+      // fold itself never special-cases a dynamic literal.
+      value: rule.value === 'round' ? roundModifierValue() : constantModifierValue(rule.value),
       ...(rule.gate ? { gates: [rule.gate] } : {}),
       ...(rule.talent !== undefined ? { talent: rule.talent } : {}),
       ...(rule.actionId !== undefined ? { actionId: rule.actionId } : {}),
@@ -222,6 +228,10 @@ export function effectiveScopedRange(
     abilityId,
     rangeFoldView(view, actorId),
     { actionId },
+    // Numeric modifier values are U5 RuleNumbers resolved through the
+    // kernel-layer resolver (constants + the dynamic round + pure
+    // compositions; anything richer fails closed).
+    resolveModifierNumber,
   );
   return Math.max(0, Math.floor(range));
 }

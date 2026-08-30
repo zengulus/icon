@@ -209,13 +209,19 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
  * authority, never a bespoke sort.
  */
 export function orderedSelectedSteps(action: RuleAction, selectedSteps: RuleStep[]): RuleStep[] {
-  const ordered = applyOrdering(
+  const result = applyOrdering(
     { kind: 'source-order' },
     selectedSteps.map((step) => ({ id: step.id })),
     { sourceOrder: action.steps.map((step) => step.id) },
   );
+  // FAIL CLOSED: every selected step must be named by the action's step
+  // listing (a selected step the source listing does not know is a malformed
+  // action — reject, never an accidental array-order tie-break).
+  if (!result.ok) {
+    throw new RuleProgramViolation('program.step-order', `Cannot order steps: ${result.problem === 'unknown-candidate' ? 'a selected step is not in the ability step listing.' : 'the ability step listing is unavailable.'}`);
+  }
   const byId = new Map(selectedSteps.map((step) => [step.id, step]));
-  return ordered
+  return result.ordered
     .map((candidate) => byId.get(candidate.id))
     .filter((step): step is RuleStep => step !== undefined);
 }

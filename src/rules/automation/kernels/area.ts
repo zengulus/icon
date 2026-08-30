@@ -1,5 +1,7 @@
 import type { RuleSourceUnit } from '../../source-units.js';
 import {
+  constantModifierValue,
+  enumeratedModifierValue,
   foldEnumeratedModifiers,
   foldNumberModifiers,
   modifierRulesForSource,
@@ -7,6 +9,7 @@ import {
   type ModifierFoldView,
   type ModifierGate,
 } from '../primitives/modifiers.js';
+import { resolveModifierNumber } from './evaluate-modifiers.js';
 import type { RuleAction, RuleClauseCompilation, RuleProgramCompilation } from '../primitives/types.js';
 
 /**
@@ -116,7 +119,8 @@ export function registerAreaModifierRule(rule: AreaModifierRule): void {
       queryPoint: 'area-shape',
       scope: 'default',
       operation: 'set',
-      value: rule.shape,
+      // Enumerated replacement (shape is never folded arithmetically).
+      value: enumeratedModifierValue(rule.shape),
       ...split,
       ...(rule.actionId !== undefined ? { actionId: rule.actionId } : {}),
     });
@@ -128,7 +132,7 @@ export function registerAreaModifierRule(rule: AreaModifierRule): void {
       queryPoint: 'area-size',
       scope: 'default',
       operation: 'set',
-      value: rule.length,
+      value: constantModifierValue(rule.length),
       ...split,
       ...(rule.actionId !== undefined ? { actionId: rule.actionId } : {}),
     });
@@ -177,7 +181,7 @@ export function effectiveAreaFor(
   actionId?: string,
 ): { shape: AreaModifierShape; length: number } {
   const foldView = areaFoldView(view);
-  const length = foldNumberModifiers('area-size', 'default', baseLength, abilityId, foldView, { actionId });
+  const length = foldNumberModifiers('area-size', 'default', baseLength, abilityId, foldView, { actionId }, resolveModifierNumber);
   const shape = foldEnumeratedModifiers('area-shape', 'default', baseShape, abilityId, foldView, { actionId });
   return {
     shape: (shape === 'line' || shape === 'arc' ? shape : baseShape),

@@ -26,11 +26,13 @@ import type { EncounterActor, EncounterState } from '../../types.js';
 import type { DiceSource } from '../../dice.js';
 import { rollDamageDice } from '../primitives/job-kit.js';
 import {
+  constantModifierValue,
   foldNumberModifiers,
   modifierRulesForSource,
   registerModifierRule,
   type ModifierFoldView,
 } from '../primitives/modifiers.js';
+import { resolveModifierNumber } from './evaluate-modifiers.js';
 import { isBloodied } from './hp-threshold.js';
 
 export { isBloodied };
@@ -88,7 +90,7 @@ export function registerBonusDamageRule(rule: BonusDamageRule): void {
       queryPoint: 'bonus-damage-dice',
       scope: 'default',
       operation: 'add',
-      value: rule.dice,
+      value: constantModifierValue(rule.dice),
       ...(rule.gate ? { gates: [rule.gate] } : {}),
       ...(rule.talent !== undefined ? { talent: rule.talent } : {}),
     });
@@ -151,7 +153,7 @@ export function bonusDamageDiceForUse(
   targetIds: readonly string[],
 ): number {
   const foldView = bonusDamageFoldView(state, actor, targetIds);
-  const shared = foldNumberModifiers('bonus-damage-dice', 'default', 0, abilityId, foldView);
+  const shared = foldNumberModifiers('bonus-damage-dice', 'default', 0, abilityId, foldView, {}, resolveModifierNumber);
   let scaled = 0;
   for (const rule of scaledBonusDamageRules) {
     if (rule.abilityId !== abilityId) continue;

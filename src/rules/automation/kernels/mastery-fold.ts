@@ -1,6 +1,8 @@
 import { type MasteryOwnerView } from './mastery.js';
 import {
+  constantModifierValue,
   effectivePermission,
+  enumeratedModifierValue,
   foldEnumeratedModifiers,
   foldNumberModifiers,
   modifierRuleHolds,
@@ -10,6 +12,7 @@ import {
   type ModifierFoldView,
   type ModifierGate,
 } from '../primitives/modifiers.js';
+import { resolveModifierNumber } from './evaluate-modifiers.js';
 import type { RuleExecutionContext } from '../primitives/types.js';
 
 /**
@@ -117,7 +120,7 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
         queryPoint: 'interrupt-rank',
         scope: 'default',
         operation: 'set',
-        value: rule.modifier.rank,
+        value: constantModifierValue(rule.modifier.rank),
         ...(gates.length > 0 ? { gates } : {}),
       });
       break;
@@ -128,7 +131,7 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
         queryPoint: 'damage-type',
         scope: 'default',
         operation: 'set',
-        value: rule.modifier.to,
+        value: enumeratedModifierValue(rule.modifier.to),
         from: rule.modifier.from,
         ...(gates.length > 0 ? { gates } : {}),
       });
@@ -195,7 +198,7 @@ export function effectiveInterruptRank(
   abilityId: string,
   baseRank: number,
 ): number {
-  const rank = foldNumberModifiers('interrupt-rank', 'default', baseRank, abilityId, masteryFoldView(view, actorId));
+  const rank = foldNumberModifiers('interrupt-rank', 'default', baseRank, abilityId, masteryFoldView(view, actorId), {}, resolveModifierNumber);
   return Math.max(1, Math.floor(rank));
 }
 

@@ -1352,11 +1352,17 @@ function assertLegalSpatialBatch(state: EncounterState, action: RuleAction, muta
   // (`deniedAtomicSpatialLegIndices`) — U15 owns the grouping, never the
   // geometry.
   const denied = deniedAtomicSpatialLegIndices(state, mutations);
+  // SIMULTANEOUS mode: every swap leg validates against the ORIGINAL
+  // pre-swap snapshot (Masquerade-style groups judge each leg pre-swap,
+  // never against the other legs' projected effects).
   const verdict = validateTransaction(
-    mutations.map((mutation, index) => ({
-      intent: mutation,
-      validate: () => (denied.has(index) ? 'spatial.atomic-denied' : null),
-    })),
+    {
+      mode: 'simultaneous',
+      legs: mutations.map((mutation, index) => ({
+        intent: mutation,
+        validate: () => (denied.has(index) ? 'spatial.atomic-denied' : null),
+      })),
+    },
     state,
   );
   if (!verdict.ok) {
@@ -2136,11 +2142,16 @@ function popInterruptWindow(state: EncounterState, actorId: string): EncounterPe
 function selectInterruptStackTop(state: EncounterState, actorId: string, heldOnly: boolean): EncounterPendingInterrupt | undefined {
   const windows = state.pendingInterrupts.filter((window) => window.actorId === actorId && (!heldOnly || window.heldDamage));
   if (windows.length === 0) return undefined;
-  const ordered = applyOrdering(
+  const result = applyOrdering(
     { kind: 'stack' },
     windows.map((window) => ({ id: window.id })),
   );
-  const top = ordered[0];
+  // Stack/LIFO needs no context and always resolves; a non-ok result would be
+  // a programming error (reject, never array-order semantics).
+  if (!result.ok) {
+    throw new RuleViolation('interrupt.order', `Cannot order pending interrupt windows: ${result.problem}.`);
+  }
+  const top = result.ordered[0];
   const index = state.pendingInterrupts.findIndex((window) => window.id === top.id);
   if (index < 0) return undefined;
   return state.pendingInterrupts.splice(index, 1)[0];
