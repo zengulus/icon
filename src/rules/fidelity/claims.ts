@@ -121,11 +121,16 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'TODO.md', linePrefix: '   `RuleMutation.creationSpatial`), fail-closed at the runtime (zero/multi/', reason: 'implementation-pattern description in the corrective-repair changelog, not an authority claim' },
   { file: 'TODO.md', linePrefix: '   audits such a unit complete only when every component is genuinely wired,', reason: 'implementation-pattern description in the corrective-repair changelog, not an authority claim' },
   { file: 'TODO.md', linePrefix: '   the reducer fail-closed declines an un-migrated legacy-shaped mutation —', reason: 'implementation-pattern description in the corrective-repair changelog, not an authority claim' },
+  { file: 'TODO.md', linePrefix: '  Closed the U17 gap where multiple effects owned by the same character', reason: 'tranche-changelog status entry describing the landed T6.2 seam, not a subsystem authority claim' },
+  { file: 'TODO.md', linePrefix: '  selected order durably, instead of failing closed or inventing a', reason: 'implementation-pattern description in the T6.2 changelog, not an authority claim' },
+  { file: 'TODO.md', linePrefix: '     window instead of failing closed, and the `ANSWER_DECISION_WINDOW`', reason: 'implementation-pattern description in the T6.2 changelog, not an authority claim' },
+  { file: 'TODO.md', linePrefix: '     effect resolves exactly once; re-answering a closed window rejects;', reason: 'implementation-pattern description in the T6.2 changelog, not an authority claim' },
   // --- ladder rung definition (coverage) -----------------------------------
   { file: 'docs/rules-coverage.md', linePrefix: '| 5 | Authoritative | Execution matches source semantics without hidden bypasses |', reason: 'capability-ladder vocabulary definition' },
   // --- gate/criterion definitions (roadmap) --------------------------------
   { file: 'docs/roadmap.md', linePrefix: 'Phase gates are acceptance criteria, not feature lists. A phase is complete', reason: 'gate-completion definition' },
   { file: 'docs/roadmap.md', linePrefix: '  authoritative with replay fixtures.', reason: 'gate-criterion continuation fragment' },
+  { file: 'docs/roadmap.md', linePrefix: 'closed); the recorded order stamps durable `resolvedOrder` ranks and the', reason: 'implementation-pattern description (U17 recorded-ordering semantics), not an authority claim' },
   { file: 'docs/roadmap.md', linePrefix: '## P2 — Foe role entitlements and the first closed foe-complexity slice', reason: 'phase heading naming a GOAL, not a status claim' },
   { file: 'docs/roadmap.md', linePrefix: 'replay; closed negative for unequipped mastery.', reason: 'test-plan continuation fragment' },
   { file: 'docs/roadmap.md', linePrefix: '(P1–P2) does multiplayer have something authoritative to share.', reason: 'rhetorical phase-justification criterion' },
@@ -135,9 +140,21 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'TODO.md', linePrefix: '     selection and fails closed on equidistant ties.', reason: 'implementation-pattern description (nearest tie policy), not an authority claim' },
   { file: 'TODO.md', linePrefix: '     their resolvers fail closed on those clauses;', reason: 'implementation-pattern description (retraction fail-closed semantics), not an authority claim' },
   { file: 'docs/rules-foundations.md', linePrefix: '`evaluate-query.ts` and fails closed on equidistant ties.', reason: 'implementation-pattern description (nearest tie policy), not an authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'choosers fail closed, cross-owner groups never open a same-owner window);', reason: 'implementation-pattern description (U17 fail-closed semantics), not an authority claim' },
   { file: 'docs/rules-foundations.md', linePrefix: 'invented) are documented non-executable, their resolvers fail closed on', reason: 'implementation-pattern description (retraction fail-closed semantics), not an authority claim' },
   { file: 'TODO.md', linePrefix: '     position reject fail-closed); `RuleExecutionContext.boundNames`', reason: 'implementation-pattern description (reference resolution fail-closed semantics), not an authority claim' },
   { file: 'docs/rules-foundations.md', linePrefix: 'position reject fail-closed; a captured defeated-actor ref stays', reason: 'implementation-pattern description (reference resolution fail-closed semantics), not an authority claim' },
+  // --- T6.3 (U17 turn-boundary consumers, 2026-08-31) ----------------------
+  { file: 'docs/rules-foundations.md', linePrefix: '### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)', reason: 'tranche-status heading naming the landed U17 state, not a subsystem authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'decision → a remaining cross-owner/missing-owner tie fails closed). The', reason: 'implementation-pattern description (U17 turn-boundary fail-closed semantics), not an authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'genuine U17 consumer remains. U17 is COMPLETE. The blocking families it', reason: 'tranche-status changelog sentence (fresh-audit conclusion), not a subsystem authority claim' },
+  { file: 'docs/roadmap.md', linePrefix: 'COMPLETE/AUTHORITATIVE.** `primitives/ordering.ts` gains', reason: 'tranche-changelog status entry describing the landed T6.3 seam, not a subsystem authority claim' },
+  { file: 'docs/roadmap.md', linePrefix: 'and any remaining cross-owner/missing-owner tie fails closed. The command', reason: 'implementation-pattern description (U17 turn-boundary fail-closed semantics), not an authority claim' },
+  { file: 'TODO.md', linePrefix: '  U13 seam; U17 remains PARTIAL with exactly that residual — closed by', reason: 'tranche-changelog residual note (T6.2 residual closed by T6.3), not a subsystem authority claim' },
+  { file: 'TODO.md', linePrefix: '  U17 now COMPLETE/AUTHORITATIVE.** Finished the remaining U17', reason: 'tranche-changelog status entry describing the landed T6.3 seam, not a subsystem authority claim' },
+  { file: 'TODO.md', linePrefix: '     FAILS CLOSED. Never one numeric priority; never array/registration', reason: 'implementation-pattern description (U17 turn-boundary fail-closed semantics), not an authority claim' },
+  { file: 'TODO.md', linePrefix: '  responder, permutation validation, fail-closed cross-owner +', reason: 'implementation-pattern description in the T6.3 changelog, not an authority claim' },
+  { file: 'TODO.md', linePrefix: '  audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.', reason: 'tranche-changelog status sentence (fresh-audit conclusion), not a subsystem authority claim' },
 ];
 
 // ---------------------------------------------------------------------------

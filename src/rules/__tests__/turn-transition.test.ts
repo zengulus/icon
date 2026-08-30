@@ -108,10 +108,22 @@ describe('F3 turn-transition intent', () => {
     const detonated = executeCommand(placed.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice(5));
     const event = turnEndedOf(detonated);
 
-    // Strip the Carnevale recipe from the recorded participants: the gate
-    // still passes at replay (the gamble window is present), but the recorded
-    // contract must win — the bombs must NOT detonate.
-    const excluding: EncounterEvent[] = [{ ...event, intent: { ...event.intent!, participants: event.intent!.participants.filter((id) => id !== 'fool:carnevale') } }];
+    // Strip the Carnevale plan from the recorded per-phase candidate plan
+    // (T6.3): the gate still passes at replay (the gamble window is present),
+    // but the recorded contract must win — the bombs must NOT detonate. The
+    // flat legacy `participants` list is filtered too; the phases plan is the
+    // authoritative replay record.
+    const excluding: EncounterEvent[] = [{
+      ...event,
+      intent: {
+        ...event.intent!,
+        participants: event.intent!.participants.filter((id) => id !== 'fool:carnevale'),
+        phases: (event.intent!.phases ?? []).map((plan) => ({
+          ...plan,
+          candidates: plan.candidates.filter((candidate) => candidate.sourceId !== 'fool:carnevale'),
+        })),
+      },
+    }];
     const replayed = applyEvents(placed.state, excluding);
     expect(Object.values(replayed.entities).filter((entity) => entity.type === 'bomb')).toHaveLength(2);
     expect(replayed.actors[hero.id].ruleState['carnevale:armed']).toBe(true);
@@ -164,10 +176,18 @@ describe('F3 turn-transition intent', () => {
     expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
     expect(applyEvents(ended.state, started.events)).toEqual(started.state);
 
-    // Removing the recipe from the recorded TURN_STARTED participants
+    // Removing the recipe from the recorded TURN_STARTED candidate plan
+    // (T6.3 — the phases record is the authoritative replay input)
     // suppresses the tick even though the stance gate still passes.
     if (startedEvent && startedEvent.type === 'TURN_STARTED') {
-      const excluding: EncounterEvent[] = [{ ...startedEvent, participants: startedEvent.participants.filter((id) => id !== 'freelancer:gallows-humor') }];
+      const excluding: EncounterEvent[] = [{
+        ...startedEvent,
+        participants: startedEvent.participants.filter((id) => id !== 'freelancer:gallows-humor'),
+        phases: (startedEvent.phases ?? []).map((plan) => ({
+          ...plan,
+          candidates: plan.candidates.filter((candidate) => candidate.sourceId !== 'freelancer:gallows-humor'),
+        })),
+      }];
       const replayed = applyEvents(ended.state, excluding);
       expect(replayed.actors[hero.id].ruleState['gallows-humor:die']).toBe(1);
     }

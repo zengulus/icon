@@ -777,7 +777,7 @@ function strictEncounter(value: unknown): EncounterState {
   encounter.decisionWindows.forEach((window, index) => {
     const windowPath = `room.encounter.decisionWindows[${index}]`;
     const item = strictRecord(window, windowPath);
-    assertExactKeys(item, windowPath, ['id', 'kind', 'actorId', 'triggeredAt', 'order', 'resolvedOrder', 'openedBy', 'provenance', 'heldPayload', 'heldEffects', 'retarget', 'retargetProgramId', 'choice', 'ordering', 'resume']);
+    assertExactKeys(item, windowPath, ['id', 'kind', 'actorId', 'triggeredAt', 'order', 'resolvedOrder', 'openedBy', 'provenance', 'heldPayload', 'heldEffects', 'retarget', 'retargetProgramId', 'choice', 'ordering', 'resume', 'heldBoundary']);
     strictIdentifier(item.id, `${windowPath}.id`);
     const windowActorId = strictIdentifier(item.actorId, `${windowPath}.actorId`);
     if (!actors[windowActorId]) invalidSnapshot(`${windowPath}.actorId`, 'must identify a current actor.');
@@ -835,6 +835,12 @@ function strictEncounter(value: unknown): EncounterState {
       resume.remaining.forEach((node, nodeIndex) => strictJson(node, `${resumePath}.remaining[${nodeIndex}]`));
       strictJson(resume.binder, `${resumePath}.binder`);
       strictString(resume.continuationPoint, `${resumePath}.continuationPoint`, 200);
+    }
+    if (item.heldBoundary !== undefined) {
+      // T6.3: the deferred turn-boundary effects an ordering window gates are
+      // bounded JSON (the same durable surface as held effects) — replayed by
+      // Render, never by the checkpoint hydrator.
+      strictJson(item.heldBoundary, `${windowPath}.heldBoundary`);
     }
   });
   // U12 (schema 8): the durable armed-continuation collection — bounded JSON

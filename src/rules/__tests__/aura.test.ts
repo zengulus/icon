@@ -414,11 +414,37 @@ describe('Aura harvest rows', () => {
     expect(encounterConditionSet(allyActor, used.state).has('counter')).toBe(true);
     expect(applyEvents(state, used.events)).toEqual(used.state);
 
-    // At the start of the hero's next turn the aura effect expires and the
-    // counter projection disappears with it.
+    // At the start of the hero's next turn the aura effect and the Bastion
+    // Shieldmaster turn-end grant (`sturdy` until the start of your turn,
+    // the ally was inside the hero's aura at the end turn) expire together.
+    // Both belong to the hero, so ICON p.108 grants the hero the choice of
+    // which ends first ("if a character has two effects that expire at the
+    // end of their turn, they can choose which ends first") — the T6.3
+    // boundary opens the ONE recorded ordering window and defers the tied
+    // expiries until the owner answers (never an invented order).
     let ended = used.state;
     ended = executeCommand(ended, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
     ended = advanceTo(ended, heroId);
+    const ordering = ended.decisionWindows.find((window) => window.kind === 'choice' && window.choice?.kind === 'ordering');
+    expect(ordering).toBeDefined();
+    const candidateIds = ordering?.choice && ordering.choice.kind === 'ordering' ? ordering.choice.candidateIds ?? [] : [];
+    expect(candidateIds).toHaveLength(2);
+    // The aura is still active while the ordering decision is pending (its
+    // expiry is deferred, so the counter projection persists until the
+    // recorded answer resolves it).
+    expect(ended.actors[heroId].activeEffects.some(({ effectId }) => effectId === 'aura')).toBe(true);
+    expect(encounterConditionSet(ended.actors[heroId], ended).has('counter')).toBe(true);
+    // The owner records the aura expiry FIRST (the p.108 same-owner choice):
+    // the aura effect ends and the counter projection disappears with it.
+    const auraCandidate = candidateIds.find((id) => id.includes('chanter:dervish'));
+    const sturdyCandidate = candidateIds.find((id) => id.includes('shieldmaster'));
+    expect(auraCandidate).toBeDefined();
+    expect(sturdyCandidate).toBeDefined();
+    ended = executeCommand(ended, {
+      type: 'ANSWER_DECISION_WINDOW',
+      windowId: ordering!.id,
+      input: { actorIds: { [ordering!.choice!.key]: [auraCandidate!, sturdyCandidate!] } },
+    }, scriptedDice()).state;
     expect(ended.actors[heroId].activeEffects.some(({ effectId }) => effectId === 'aura')).toBe(false);
     expect(encounterConditionSet(ended.actors[heroId], ended).has('counter')).toBe(false);
   });

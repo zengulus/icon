@@ -360,11 +360,31 @@ beneficial / non-active-owner-first / controller-choice at a real turn-
 boundary call site). Next smallest-first blocker: the U17 turn-boundary
 consumers, then U16 raw-field classification/migration.
 
-**T6.1 scope note (per the T6.1 §3 split mandate).** U8 (temporal
+**T6.3 landed (2026-08-31): U17 turn-boundary consumers — U17 now
+COMPLETE/AUTHORITATIVE.** `primitives/ordering.ts` gains
+`turnBoundaryOrdering`, a pure composition of the p.108 turn-boundary rules:
+non-active-owner-first, hostile-before-beneficial within each ownership
+group, the first same-owner tie becomes a recorded U4/U13 ordering decision,
+and any remaining cross-owner/missing-owner tie fails closed. The command
+boundary records a durable per-phase lifecycle candidate plan (source id +
+mechanical owner + owner side) in the F3 intent; `runLifecyclePhase` and
+`expireBoundaryEffects` route it through the authority, deferring a same-owner
+tie onto ONE U13 ordering window (`heldBoundary`), and the DECISION_ANSWERED
+reducer resolves the deferred effects in the recorded order (each exactly
+once, never registry-ordered). The lifecycle registration order is demoted
+to discovery/enumeration + the legacy pre-T6.3 replay fallback — the
+registration-order-as-boundary-order authority and the expiry listing-order
+tie-break are REMOVED. A fresh audit confirmed no other genuine U17 consumer
+remains. Suite: `t6-3-turn-boundary-ordering.test.ts` (27 cases) + pinned
+`aura`/`turn-transition`/`conditions`/`rooms` cases. **Next smallest-first
+blocker: U16 raw-field classification/migration.**
+
+**T6.1/T6.2/T6.3 scope note (per the T6 §3 split mandate).** U8 (temporal
 consolidation) and U17 (simultaneous-order arbitration / U4-U13 decision
-recording) were deliberately split: they are independent seams with no real
-implementation dependency. T6.1 did U8 only; T6.2 landed the U17
-recorded-decision seam.
+recording + turn-boundary consumers) were deliberately split: they are
+independent seams with no real implementation dependency. T6.1 did U8 only;
+T6.2 landed the U17 recorded-decision seam; T6.3 landed the U17 turn-boundary
+consumers.
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

@@ -22,6 +22,40 @@ non-active-owner-first / controller-choice at a real turn-boundary call
 site) — the §1 contract's recorded-decision seam is now landed, the
 migration rows are not.
 
+**T6.3 follow-up (this pass):** the remaining U17 turn-boundary
+consumers LANDED. `primitives/ordering.ts` gains `turnBoundaryOrdering`, a
+pure composition of the p.108 turn-boundary ordering rules:
+
+  1. non-active-owner-first — effects not owned by the turn character
+     resolve first, then the turn character's;
+  2. hostile-before-beneficial — applied WITHIN each ownership group
+     (bullet 1 is the stronger rule; a later stage never reverses it);
+  3. the first remaining SAME-OWNER tie yields the recorded U4 ordering
+     decision (the T6.2 seam); a remaining CROSS-OWNER tie (or missing
+     owner/side) FAILS CLOSED — never registry/listing/array order, never an
+     invented tie-break.
+
+The lifecycle registry's insertion order is demoted to DISCOVERY/enumeration
+order (and the legacy-replay fallback for pre-T6.3 event logs). The command
+boundary records a durable per-phase lifecycle candidate plan (source id +
+mechanical owner + owner side) in the F3 intent; `runLifecyclePhase` routes
+that plan through `turnBoundaryOrdering`, defers exactly a same-owner tie
+onto the ONE U13 ordering window (`heldBoundary` on the window record), and
+the DECISION_ANSWERED reducer resolves the deferred effects in the recorded
+order (each exactly once, never re-derived, never registry-ordered).
+`expireBoundaryEffects` and `orderCrossCharacterEffects` delegate to the
+same authority. **U17 is now COMPLETE/AUTHORITATIVE**: a fresh audit
+confirmed no other genuine U17 consumer remains — the interrupt window
+ordering, damage-window, and step-ordering paths already consumed U17
+policies, and every §1 U17 obligation is now satisfied at a real call site.
+The DUPLICATE ordering authority this row previously flagged (the lifecycle
+registration-order-as-boundary-order and the expiry listing-order tie-break)
+is REMOVED. Tests: `t6-3-turn-boundary-ordering.test.ts` (27 adversarial
+cases: deterministic bullet ordering, A→B/B→A recorded choice, 3+ candidate
+permutation, wrong responder, permutation validation, fail-closed
+cross-owner + missing-owner, suspension/exact-once, replay with permuted
+input, interrupt/phase boundaries). U16 remains the next smallest blocker.
+
 This report is a CLAIM TO AUDIT. The authoritative phase gate and the
 authoritative per-underlay contracts remain `docs/underlay-completion-plan.md`
 §4 and §1 rows. Where the prior `6591d5a` report disagreed with §1 or with
@@ -198,7 +232,7 @@ acceptance met.
 | U14 Modifier | `primitives/modifiers.ts` | LANDED + `RuleModifier` stat bag unresolved | `RuleModifier` stat bag → typed query points; attack/mastery/bonus-damage/aura reads | PARTIAL |
 | U15 Transaction | `primitives/transaction.ts` | LANDED (T3) | cost-payment, `spatialBatchId`, `countMode:exact`, `requiresLegalSpatialBatch` (documented U15 instantiations) | TRUE |
 | U16 Usage | `primitives/usage.ts` + `use-ledger.ts` | PARTIAL | raw `interruptUses`/`interruptUsedThisTurn`/`attackedThisTurn`/`slashedTriggeredThisTurn`/`dangerousTerrainTriggeredThisTurn` | PARTIAL |
-| U17 Ordering | `primitives/ordering.ts` | PARTIAL (corrected; recorded same-owner decision LANDED T6.2) | same-owner simultaneous recorded decision via U4 **LANDED (T6.2)**; hostile/active-owner/controller-choice turn-boundary consumers not landed | PARTIAL |
+| U17 Ordering | `primitives/ordering.ts` | COMPLETE/AUTHORITATIVE (T6.2 recorded same-owner decision + T6.3 turn-boundary consumers) | recorded same-owner permutation LANDED (T6.2); turn-boundary consumers (non-active-owner-first, hostile-before-beneficial, same-owner controller-choice at real call sites) LANDED (T6.3); duplicate lifecycle/listing-order authority REMOVED | TRUE |
 
 **Only U10, U13, U15 meet the complete-contract bar.** Everything else has an
 outstanding §1 consumer migration or unbuilt seam. This is materially more
@@ -287,15 +321,15 @@ changed, reason given).
 | U17 | LIFO nesting; controller-choice yields typed choice (never resolved) | `t3-ordering.test.ts`; `t5c-u13` | POS | PASS |
 | U17 | undefined/unorderable rejects, never silent iterate | `t3-ordering.test.ts` (negative) | NEG | PASS |
 | U17 | **same-owner simultaneous effects — recorded ordering decision + replay** | `t6-2-u17-recorded-ordering.test.ts` (30): positive A→B/B→A, permutation validation, suspension/state, replay (serialize/replay, permuted-array invariance, no fresh decision); `rooms.test.ts` responder authorization; `t5c1` pinned cases | BOUND/REPLAY | PASS (T6.2) |
-| U17 | hostile-before-beneficial / non-active-owner-first / controller-choice turn-boundary consumers | **MISSING** — not landed at a real turn-boundary call site | POS (migration) | MISSING |
+| U17 | hostile-before-beneficial / non-active-owner-first / controller-choice turn-boundary consumers | `t6-3-turn-boundary-ordering.test.ts` (27): deterministic non-owner-first + hostile-before-beneficial at the real END_TURN boundary, same-owner A→B/B→A recorded choice, 3+ permutation, wrong responder, permutation validation, fail-closed cross-owner + missing-owner, suspension/exact-once, replay with permuted input, interrupt/phase boundaries; registry-order permutation invariance; `aura.test.ts`/`turn-transition.test.ts`/`conditions.test.ts` pinned cases | POS/BOUND/REPLAY | PASS (T6.3) |
 
 **Criterion 3 is NOT PASS**: MISSING rows remain for U2 (aura/targeting/
 save-window routing), U4/U5, U6 (gate-body fold), U7, U8 (Clock-read resets),
-U9, U12 (resolver end-of-turn), U14 (`RuleModifier`), U16 (raw fields), and
-U17 (hostile/active-owner/controller-choice turn-boundary consumers). The
-U17 recorded same-owner ordering + replay obligation is now **PASS (T6.2)**.
-Each remaining MISSING row is a named §1 obligation without a satisfying
-test.
+U9, U12 (resolver end-of-turn), U14 (`RuleModifier`), and U16 (raw fields).
+The U17 recorded same-owner ordering + replay obligation is **PASS (T6.2)**
+and the U17 turn-boundary consumers obligation is now **PASS (T6.3)** —
+U17 is the only §1 row whose acceptance list is fully green. Each remaining
+MISSING row is a named §1 obligation without a satisfying test.
 
 ---
 
@@ -315,22 +349,16 @@ real §1 consumer-migration or unbuilt seam, confirmed at code HEAD.
    boundary reads, lifecycle phase-duration expiry, and the scheduler's
    round-count reads still re-key temporal boundaries separately. Foundational:
    U5 round/turn reads, U12 Clock triggers, U13 window timing, U16 resets.
-2. **U17 — turn-boundary ordering consumers.** T6.2 landed the recorded
-   same-owner simultaneous ordering decision (U17 + U4 + U13): the owner's
-   recorded permutation stamps durable `resolvedOrder` ranks and replay
-   consumes them — no invented tie-break, no array-order fallback. The §1
-   contract's remaining obligations are the hostile-before-beneficial /
-   non-active-owner-first / controller-choice **turn-boundary** consumers:
-   landed as vocabulary + unit tests, but no engineered turn-boundary call
-   site exists yet. Feeds the U13 window-ordering path.
-3. **U16 — raw durable usage fields.** `interruptUses`,
+2. **U16 — raw durable usage fields.** `interruptUses`,
    `interruptUsedThisTurn`, `attackedThisTurn`, `slashedTriggeredThisTurn`,
    `dangerousTerrainTriggeredThisTurn` are durable usage-restriction state
    beside the ledger. Classification (per §16): `interruptUses` /
    `interruptUsedThisTurn` / `attackedThisTurn` are usage entitlement →
    U16; `slashed`/`dangerousTerrain` are once-per-turn reaction de-dup → U10
    fact identity or a typed de-dup ledger. Then schema-visible migration +
-   save/load + replay proofs.
+   save/load + replay proofs. **T6.3 closed U17 entirely (recorded
+   same-owner decision T6.2 + all turn-boundary consumers T6.3) — U16 is now
+   the next smallest blocker.**
 4. **U2 — route role consumers.** Aura bearer/member, `targeting.ts` relation
    reads, save-window ownership, and command-layer choice responder routing
    onto `roles.ts` `deriveRoles`/`choiceEntitledPlayer`, with parity tests, OR
@@ -415,11 +443,11 @@ Evaluate each §4 criterion as written.
 
 | # | Criterion | Verdict | Evidence |
 | --- | --- | --- | --- |
-| 1 | U1–U17 source-backed contracts current and true of code | **PASS** | Every §1 row is now current and code-true: PARTIAL underlays truthfully state their unfinished migrations (U2, U3, U4, U5, U6, U7, U8, U9, U11, U12, U14, U16, U17) and LANDED/AUTHORITATIVE rows match code (U10, U13, U15). The U11 `choose` contract and the U8 `use-ledger` reset row were reconciled (see §B, §D). Note: a contract truthfully stating `PARTIAL` still satisfies §4.1; incompleteness is judged under §4.2/§4.3/§4.4, not §4.1 |
-| 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Unresolved: U2 role consumers, U8 `RuleDuration`/`RuleTiming`/lifecycle/scheduler surfaces (use-ledger reset migrated in T6.1), U14 `RuleModifier`, U16 raw fields, U9 reconstruction, U6 gate-body folds, U12 resolver effects |
-| 3 | Required acceptance tests exist and pass | **FAIL (not established)** | Exhaustive matrix (deliverable C) has MISSING rows for U2, U4, U5, U6, U7, U8 (duration/lifecycle expiry), U9, U12, U14, U16, U17 turn-boundary consumers. The U17 recorded same-owner ordering + replay obligation is now PASS (T6.2). A representative mapping cannot establish this |
-| 4 | No known duplicate competing authority | **FAIL** | U16 raw use fields beside the ledger; U2 role reads in aura/targeting/save-window; U8 `RuleDuration`/`RuleTiming`/scheduler temporal surfaces beside Clock (use-ledger reset now routes through U8); U14 `RuleModifier` bag beside the fold |
-| 5 | Full suite green | **PASS** | typecheck / npm test (1771) / build / audits / source-artifacts / e2e green at this commit (see §I verification) |
+| 1 | U1–U17 source-backed contracts current and true of code | **PASS** | Every §1 row is now current and code-true: PARTIAL underlays truthfully state their unfinished migrations (U2, U3, U4, U5, U6, U7, U8, U9, U11, U12, U14, U16) and LANDED/AUTHORITATIVE rows match code (U10, U13, U15, U17). The U11 `choose` contract and the U8 `use-ledger` reset row were reconciled (see §B, §D). Note: a contract truthfully stating `PARTIAL` still satisfies §4.1; incompleteness is judged under §4.2/§4.3/§4.4, not §4.1 |
+| 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Unresolved: U2 role consumers, U8 `RuleDuration`/`RuleTiming`/lifecycle/scheduler surfaces (use-ledger reset migrated in T6.1), U14 `RuleModifier`, U16 raw fields, U9 reconstruction, U6 gate-body folds, U12 resolver effects. U17's lifecycle registration-order and expiry misfiring-order duplicate authorities are REMOVED (T6.3) |
+| 3 | Required acceptance tests exist and pass | **FAIL (not established)** | Exhaustive matrix (deliverable C) has MISSING rows for U2, U4, U5, U6, U7, U8 (duration/lifecycle expiry), U9, U12, U14, U16. The U17 recorded same-owner ordering + replay obligation is PASS (T6.2) and the U17 turn-boundary consumers obligation is PASS (T6.3) — U17 is the only fully-green §1 row. A representative mapping cannot establish this |
+| 4 | No known duplicate competing authority | **FAIL** | U16 raw use fields beside the ledger; U2 role reads in aura/targeting/save-window; U8 `RuleDuration`/`RuleTiming`/scheduler temporal surfaces beside Clock (use-ledger reset now routes through U8); U14 `RuleModifier` bag beside the fold. The U17 duplicate ordering authority is REMOVED (T6.3) |
+| 5 | Full suite green | **PASS** | typecheck / npm test (1798) / build / audits / source-artifacts / e2e green at this commit (see §I verification) |
 | 6 | U18/U19 decided | **PASS** | Both NOT promoted from code evidence (§F) |
 | 7 | Generated docs regenerated (byte-stable) | **PASS** | `audit:class-job-census` regenerates byte-stable; census unchanged; no source promotion |
 
@@ -432,21 +460,31 @@ never proved (Criterion-3 representative defect) and reopened U2/U8/U17. T6.1
 migrated the U8 use-ledger reset seam (keeping U8 truthfully PARTIAL on its
 remaining `RuleDuration`/`RuleTiming`/lifecycle/scheduler items). T6.2
 landed the recorded same-owner ordering decision seam (U17 + U4 + U13),
-keeping U17 truthfully PARTIAL on its turn-boundary consumers.
+keeping U17 truthfully PARTIAL on its turn-boundary consumers. T6.3 landed
+those remaining turn-boundary consumers (non-active-owner-first,
+hostile-before-beneficial, same-owner controller-choice at real call sites),
+demoting the lifecycle registration order to discovery/enumeration and
+removing the expiry listing-order tie-break — **U17 is now
+COMPLETE/AUTHORITATIVE**.
 
-**Tranche sequence (from post-T6.2 evidence):**
+**Tranche sequence (from post-T6.3 evidence):**
 1. **T6.1** — U8 use-ledger reset authority consolidated onto the
    Clock (`scope.ts` owns "which period a boundary refreshes"; lifecycle reset
    recipes route through it). DONE (§C patch, §D parity/replay tests).
-2. **T6.2 (this tranche)** — recorded same-owner ordering seam (U17):
-   identify the owner entitled to order through U2, open the ONE U4/U13
-   decision window, record the selected order as durable `resolvedOrder`
-   ranks, replay that recorded order (no invented total order, no
-   array-order fallback). DONE (`t6-2-u17-recorded-ordering.test.ts`,
-   `rooms.test.ts` responder authorization).
-3. Then **U17 turn-boundary consumers** (hostile-before-beneficial /
-   non-active-owner-first / controller-choice at a real turn-boundary call
-   site), then **U16** raw-field classification/migration; then **U2**
+2. **T6.2** — recorded same-owner ordering seam (U17): identify the owner
+   entitled to order through U2, open the ONE U4/U13 decision window, record
+   the selected order as durable `resolvedOrder` ranks, replay that recorded
+   order (no invented total order, no array-order fallback). DONE
+   (`t6-2-u17-recorded-ordering.test.ts`, `rooms.test.ts` responder
+   authorization).
+3. **T6.3 (this tranche)** — U17 turn-boundary consumers: route the lifecycle
+   phases and boundary expiries through the p.108 `turnBoundaryOrdering`
+   authority, defer a same-owner tie onto the ONE recorded ordering window,
+   and fail closed on cross-owner/missing-owner — the lifecycle
+   registration-order-as-boundary-authority duplicate is REMOVED. DONE
+   (`t6-3-turn-boundary-ordering.test.ts`, 27 cases; pinned
+   `aura`/`turn-transition`/`conditions` cases).
+4. Then **U16** raw-field classification/migration; then **U2**
    role-consumer routing with parity tests; then the remaining U8 surfaces
    (`RuleDuration`/`RuleTiming`/lifecycle); then U12 resolver effects; then
    U4/U14/U6/U9 closures; then U1/U3 residuals — each with a parity/replay
@@ -461,13 +499,15 @@ Reopening + honest migration is a successful tranche result, not a failure.
 
 ## I. Verification discipline
 
-T6.1 and T6.2 are **implementation tranches**: production code changed (the
-U8 use-ledger reset authority; the U17 recorded same-owner ordering seam), so
-the full §4.5 suite was actually rerun at this commit, not inherited:
+T6.1, T6.2, and T6.3 are **implementation tranches**: production code changed
+(the U8 use-ledger reset authority; the U17 recorded same-owner ordering
+seam; the U17 turn-boundary lifecycle consumers), so the full §4.5 suite was
+actually rerun at this commit, not inherited:
 - `npm run typecheck` — PASS;
-- `npm test` — **1771 pass** (1739 baseline + 30 new
-  `t6-2-u17-recorded-ordering` cases + the `rooms.test.ts` responder
-  authorization case; the T6.2-pinned `t5c1` cases updated);
+- `npm test` — **1798 pass** (1771 post-T6.2 baseline + 27 new
+  `t6-3-turn-boundary-ordering` cases; the `aura.test.ts` Dervish ordering
+  flow + `turn-transition.test.ts`/`conditions.test.ts` F3-phases pinned
+  cases updated; `rooms.test.ts` heldBoundary seed updated);
 - `npm run build` — PASS;
 - `npm run audit:architecture` / `audit:automation` /
   `audit:source-fidelity --strict` / `audit:outcome-triggers` — PASS;

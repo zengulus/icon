@@ -337,6 +337,11 @@ registerLifecycleRecipe({
   sourceId: 'knave:dark-knight:mastery',
   phase: 'turn-end',
   applies: (_actor, _state, diceWindows) => diceWindows.darkKnightHatredSave !== undefined,
+  // T6.3: the save/hatred effect belongs to the covering KNIGHT (the aura
+  // origin), not the ending foe the recipe runs for — the p.108 same-owner
+  // read. The dice window exists only when a knight covers the foe, so the
+  // owner is always derivable here.
+  ownerOf: (actor, state) => coveringDarkKnight(state, actor)?.id ?? null,
   resolve: (state, actor, diceWindows) => {
     const result = diceWindows.darkKnightHatredSave;
     if (!result || actor.side !== 'foes' || !actor.position || result.success) return;
@@ -359,6 +364,21 @@ registerLifecycleRecipe({
   sourceId: 'freelancer:exorcism',
   phase: 'turn-end',
   applies: (actor) => Boolean(actor.position),
+  // T6.3: the ticks belong to the MARK OWNERS. At a marked FOE's turn-end the
+  // relevant marks sit on the ending actor — a single owner yields that
+  // owner; several owners' marks in one recipe resolve in the source-listed
+  // order inside the ability (p.107), never a fabricated single owner (null).
+  // At the OWNER's own turn-end the ticks are the owner's own marks (the
+  // ending actor). No marks at all → the recipe no-ops (null → excluded).
+  ownerOf: (actor, state) => {
+    const onSelf = actor.marks.filter((mark) => mark.markId === 'exorcism');
+    if (onSelf.length > 0) {
+      const owners = new Set(onSelf.map((mark) => mark.ownerId));
+      return owners.size === 1 ? [...owners][0] ?? null : null;
+    }
+    const ownsMarks = Object.values(state.actors).some((foe) => foe.marks.some((mark) => mark.markId === 'exorcism' && mark.ownerId === actor.id));
+    return ownsMarks ? actor.id : null;
+  },
   resolve: (state, actor) => {
     if (!actor.position) return;
     const tick = (mark: EncounterMark, foe: EncounterActor, owner: EncounterActor) => {
@@ -400,6 +420,9 @@ registerLifecycleRecipe({
   sourceId: 'freelancer:showdown',
   phase: 'turn-end',
   applies: (actor) => actor.marks.some((mark) => mark.markId === 'showdown'),
+  // T6.3: the dash/damage belongs to the MARK OWNER (the freelancer who
+  // marked the ending foe) — p.108 same-owner read.
+  ownerOf: (actor) => actor.marks.find((mark) => mark.markId === 'showdown')?.ownerId ?? null,
   resolve: (state, actor) => {
     const marks = actor.marks.filter((mark) => mark.markId === 'showdown');
     if (marks.length === 0) return;
@@ -443,6 +466,9 @@ registerLifecycleRecipe({
   sourceId: 'freelancer:warding-bolts',
   phase: 'turn-end',
   applies: (actor) => typeof actor.ruleState['warding-bolts:owner'] === 'string',
+  // T6.3: the strike belongs to the ZONE/AURA owner recorded at the start of
+  // the ending actor's turn — p.108 same-owner read.
+  ownerOf: (actor) => (typeof actor.ruleState['warding-bolts:owner'] === 'string' ? actor.ruleState['warding-bolts:owner'] : null),
   resolve: (state, actor) => {
     const ownerId = actor.ruleState['warding-bolts:owner'];
     if (typeof ownerId !== 'string' || !ownerId) return;
@@ -480,6 +506,9 @@ registerLifecycleRecipe({
   sourceId: 'shade:assassinate',
   phase: 'turn-end',
   applies: (actor) => actor.marks.some((mark) => mark.markId === 'assassinate'),
+  // T6.3: the strike belongs to the MARK OWNER (the shade) — p.108 same-owner
+  // read.
+  ownerOf: (actor) => actor.marks.find((mark) => mark.markId === 'assassinate')?.ownerId ?? null,
   resolve: (state, actor) => {
     const marks = actor.marks.filter((mark) => mark.markId === 'assassinate');
     if (marks.length === 0) return;
@@ -519,6 +548,12 @@ registerLifecycleRecipe({
   sourceId: 'shade:incubus',
   phase: 'turn-end',
   applies: (actor) => actor.side === 'foes' && Boolean(actor.position),
+  // T6.3: the pulse belongs to the MARK OWNER when the ending foe itself is
+  // the marked target. The rarer "an unmarked foe ends adjacent to the marked
+  // foe" instance has no owner ON the ending actor — it is excluded from
+  // arbitration (its effect resolves in the source-listed order inside the
+  // ability, p.107) rather than fabricating an owner.
+  ownerOf: (actor) => actor.marks.find((mark) => mark.markId === 'incubus')?.ownerId ?? null,
   resolve: (state, actor) => {
     if (actor.side !== 'foes' || !actor.position) return;
     for (const marked of Object.values(state.actors)) {
@@ -564,6 +599,9 @@ registerLifecycleRecipe({
   sourceId: 'warden:sidhe',
   phase: 'turn-end',
   applies: (actor) => actor.marks.some((mark) => mark.markId === 'sidhe-toxin'),
+  // T6.3: the detonation belongs to the MARK OWNER (the warden) — p.108
+  // same-owner read.
+  ownerOf: (actor) => actor.marks.find((mark) => mark.markId === 'sidhe-toxin')?.ownerId ?? null,
   resolve: (state, actor) => {
     const marks = actor.marks.filter((mark) => mark.markId === 'sidhe-toxin');
     if (marks.length === 0) return;
@@ -587,6 +625,10 @@ registerLifecycleRecipe({
   sourceId: 'warden:stampede',
   phase: 'turn-end',
   applies: (actor) => Boolean(actor.position),
+  // T6.3: the charge belongs to the MARK OWNER; at any other boundary the
+  // recipe no-ops (no stampede mark on the ending actor → null → excluded
+  // from arbitration).
+  ownerOf: (actor) => actor.marks.find((mark) => mark.markId === 'stampede')?.ownerId ?? null,
   resolve: (state, actor) => {
     if (!actor.position) return;
     for (const mark of [...actor.marks]) {
@@ -620,6 +662,9 @@ registerLifecycleRecipe({
   sourceId: 'warden:underway',
   phase: 'turn-end',
   applies: (actor) => Boolean(actor.position),
+  // T6.3: the portal growth belongs to the ENDING actor only when they own a
+  // portal; any other boundary the recipe no-ops (null → excluded).
+  ownerOf: (actor, state) => (Object.values(state.entities).some((entity) => entity.type === 'underway' && entity.ownerId === actor.id) ? actor.id : null),
   resolve: (state, actor) => {
     if (!actor.position) return;
     const ownsPortal = Object.values(state.entities).some((entity) => entity.type === 'underway' && entity.ownerId === actor.id);
@@ -640,6 +685,14 @@ registerLifecycleRecipe({
   sourceId: 'chanter:monogatari',
   phase: 'turn-end',
   applies: (actor, _state, diceWindows) => (actor.side === 'heroes' && !actor.defeated && Boolean(actor.position)) || diceWindows.monogatariGamble !== undefined,
+  // T6.3: the tale grants belong to the ending hero; the recipe NO-OPS for a
+  // hero ending its turn while no tale is active and no gamble was rolled
+  // (null → excluded — it must never drag a real effect into a spurious
+  // same-owner tie).
+  ownerOf: (actor, state, diceWindows) => (diceWindows.monogatariGamble !== undefined
+    || Object.values(state.actors).some((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined))
+    ? actor.id
+    : null,
   resolve: (state, actor, diceWindows) => {
     if (actor.side === 'heroes' && !actor.defeated && actor.position && actor.ruleState['monogatari:granted'] !== true) {
       const owner = Object.values(state.actors).find((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined);
@@ -669,6 +722,14 @@ registerLifecycleRecipe({
   sourceId: 'chanter:chastise',
   phase: 'turn-end',
   applies: (actor) => actor.side === 'foes' && Boolean(actor.position) && actor.marks.some((mark) => mark.markId === 'chastise-retribution' || mark.markId === 'chastise-charism'),
+  // T6.3: the retribution belongs to the MARK OWNER (the chanter) — p.108
+  // same-owner read. Several chanters' marks in one recipe resolve in the
+  // source-listed order inside the ability (p.107), never a fabricated owner.
+  ownerOf: (actor) => {
+    const marks = actor.marks.filter((mark) => mark.markId === 'chastise-retribution' || mark.markId === 'chastise-charism');
+    const owners = new Set(marks.map((mark) => mark.ownerId));
+    return owners.size === 1 ? [...owners][0] ?? null : null;
+  },
   resolve: (state, actor) => {
     if (actor.side !== 'foes' || !actor.position) return;
     const marks = actor.marks.filter((mark) => mark.markId === 'chastise-retribution' || mark.markId === 'chastise-charism');
@@ -786,6 +847,18 @@ registerLifecycleRecipe({
   sourceId: 'bastion:trait:shieldmaster',
   phase: 'turn-end',
   applies: (actor) => actor.traitIds.includes('bastion:trait:shieldmaster'),
+  // T6.3: the grants belong to the ending bastion ONLY when an ally is inside
+  // the aura (the body's own precondition); a lone bastion's turn-end no-ops
+  // (null → excluded from arbitration).
+  ownerOf: (actor, state) => {
+    if (!actor.traitIds.includes('bastion:trait:shieldmaster')) return null;
+    const definition = auraDefinitionFor('bastion:trait:shieldmaster');
+    if (!definition) return null;
+    const view = auraStateView(state);
+    const allyInside = Object.values(state.actors).some((candidate) =>
+      candidate.side === actor.side && candidate.id !== actor.id && isInAura(view, definition, candidate.id));
+    return allyInside ? actor.id : null;
+  },
   resolve: (state, actor) => {
     if (!actor.traitIds.includes('bastion:trait:shieldmaster')) return;
     const definition = auraDefinitionFor('bastion:trait:shieldmaster');
@@ -907,6 +980,11 @@ registerLifecycleRecipe({
   sourceId: 'knave:intimidate',
   phase: 'turn-start',
   applies: (actor) => Boolean(actor.position),
+  // T6.3: the strike belongs to the starting actor only when they own an
+  // intimidate mark; an unmarked turn-start no-ops (null → excluded from
+  // arbitration — it must never drag a real effect into a spurious tie).
+  ownerOf: (actor, state) => (Object.values(state.actors).some((foe) =>
+    foe.marks.some((mark) => mark.markId === 'intimidate' && mark.ownerId === actor.id)) ? actor.id : null),
   resolve: (state, actor) => {
     if (!actor.position) return;
     for (const foe of Object.values(state.actors)) {
@@ -949,6 +1027,20 @@ registerLifecycleRecipe({
   applies: (actor, state) => Boolean(actor.position) && Object.values(state.entities).some((entity) =>
     entity.type === 'lightning-spike' && entity.ownerId !== null
     && hasMastery(state.actors[entity.ownerId]!, 'spellblade:rampant-nail')),
+  // T6.3: the vulnerable grant belongs to the NAIL OWNER (the mastered
+  // spellblade), not the starting actor — p.108 same-owner read. No
+  // mastered nail adjacent → the recipe no-ops (null → excluded).
+  ownerOf: (actor, state) => {
+    if (!actor.position) return null;
+    for (const entity of Object.values(state.entities)) {
+      if (entity.type !== 'lightning-spike') continue;
+      const owner = entity.ownerId ? state.actors[entity.ownerId] : undefined;
+      if (!owner || !hasMastery(owner, 'spellblade:rampant-nail')) continue;
+      const spike = entity.positions[0];
+      if (spike && distance(actor.position, spike) <= 1) return owner.id;
+    }
+    return null;
+  },
   resolve: (state, actor) => {
     if (!actor.position) return;
     for (const entity of Object.values(state.entities)) {
@@ -972,6 +1064,10 @@ registerLifecycleRecipe({
   sourceId: 'freelancer:astral-chain',
   phase: 'turn-start',
   applies: (actor) => Boolean(actor.position),
+  // T6.3: the strike belongs to the starting actor only when they own an
+  // astral-chain mark; an unmarked turn-start no-ops (null → excluded).
+  ownerOf: (actor, state) => (Object.values(state.actors).some((foe) =>
+    foe.marks.some((mark) => mark.markId === 'astral-chain' && mark.ownerId === actor.id)) ? actor.id : null),
   resolve: (state, actor) => {
     if (!actor.position) return;
     for (const foe of Object.values(state.actors)) {
@@ -997,6 +1093,21 @@ registerLifecycleRecipe({
   sourceId: 'harvester:rot:talent:2',
   phase: 'turn-start',
   applies: (actor) => actor.side === 'foes' && Boolean(actor.position),
+  // T6.3: the piercing belongs to the ROT MARK OWNER (the harvester), not the
+  // starting foe — p.108 same-owner read. No adjacent rot-marked character →
+  // the recipe no-ops (null → excluded).
+  ownerOf: (actor, state) => {
+    if (!actor.position) return null;
+    for (const marked of Object.values(state.actors)) {
+      if (marked.defeated || !marked.onBattlefield || !marked.position) continue;
+      const mark = marked.marks.find((candidate) => candidate.markId === 'rot');
+      if (!mark) continue;
+      const owner = state.actors[mark.ownerId];
+      if (!owner || owner.talents?.['harvester:rot'] !== 2) continue;
+      if (distance(actor.position, marked.position) <= 1) return mark.ownerId;
+    }
+    return null;
+  },
   resolve: (state, actor) => {
     if (actor.side !== 'foes' || !actor.position) return;
     for (const marked of Object.values(state.actors)) {
@@ -1022,6 +1133,26 @@ registerLifecycleRecipe({
   sourceId: 'freelancer:warding-bolts',
   phase: 'turn-start',
   applies: (actor) => Boolean(actor.position),
+  // T6.3: the recorded hover-zone ownership belongs to the ZONE/AURA owner
+  // when the starting actor is inside; no zone → the recipe no-ops (null →
+  // excluded).
+  ownerOf: (actor, state) => {
+    if (!actor.position) return null;
+    const effect = state.terrainEffects.find((candidate) =>
+      candidate.terrain === 'warding-bolts'
+      && candidate.ownerId
+      && state.actors[candidate.ownerId]?.side !== actor.side
+      && candidate.positions.some((cell) => samePosition(cell, actor.position)));
+    if (effect) return effect.ownerId;
+    const definition = auraDefinitionFor('freelancer:warding-bolts:mastery');
+    if (!definition) return null;
+    const view = auraStateView(state);
+    for (const origin of auraOriginRefs(view, definition)) {
+      if (origin.actorId === null) continue;
+      if (isAuraMember(view, definition, origin, actor.id)) return origin.actorId;
+    }
+    return null;
+  },
   resolve: (state, actor) => {
     if (!actor.position) return;
     const effect = state.terrainEffects.find((candidate) =>
@@ -1148,6 +1279,15 @@ registerLifecycleRecipe({
   sourceId: 'chanter:symphony',
   phase: 'turn-start',
   applies: (actor) => Boolean(actor.position),
+  // T6.3: the detonation belongs to the MOTE OWNER (the chanter who placed
+  // the mote the starting actor stands on) — p.108 same-owner read. No mote
+  // under the starting actor → the recipe no-ops (null → excluded).
+  ownerOf: (actor, state) => {
+    if (!actor.position) return null;
+    const mote = state.terrainEffects.find((effect) =>
+      effect.terrain === 'symphony-mote' && effect.positions.some((cell) => samePosition(cell, actor.position!)));
+    return mote?.ownerId ?? null;
+  },
   resolve: (state, actor) => detonateSymphonyMote(state, actor),
 });
 
@@ -1158,6 +1298,11 @@ registerLifecycleRecipe({
   sourceId: 'chanter:monogatari',
   phase: 'turn-start',
   applies: (actor) => actor.side === 'heroes' && Boolean(actor.position),
+  // T6.3: the recorded start position belongs to the starting hero only while
+  // a tale is active; no tale → the recipe no-ops (null → excluded).
+  ownerOf: (actor, state) => (Object.values(state.actors).some((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined))
+    ? actor.id
+    : null,
   resolve: (state, actor) => {
     if (actor.side !== 'heroes' || !actor.position) return;
     const taleActive = Object.values(state.actors).some((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined);

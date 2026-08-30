@@ -11,15 +11,15 @@ import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, co
 import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
-import { applyOrdering } from './automation/primitives/ordering.js';
+import { applyOrdering, turnBoundaryOrdering, type TurnBoundaryCandidate } from './automation/primitives/ordering.js';
 import { validateTransaction } from './automation/primitives/transaction.js';
-import { closeDecisionWindow, decideDamageWindow, isInterruptWindowKind, openDecisionWindow, openOrderingDecisionForSameOwnerTies, orderDecisionWindows, popDecisionWindowStack, recordOrderingDecision, windowHeldDamage, windowHeldSave } from './automation/kernels/decision-window.js';
+import { closeDecisionWindow, decideDamageWindow, isInterruptWindowKind, nextWindowId, openDecisionWindow, openOrderingDecisionForSameOwnerTies, openTurnBoundaryOrderingWindow, orderDecisionWindows, popDecisionWindowStack, recordOrderingDecision, validateOrderingValue, windowHeldDamage, windowHeldSave, type TurnBoundaryHeldEffect } from './automation/kernels/decision-window.js';
 import { heldDamageContinuation, heldSaveContinuation } from './automation/primitives/continuation.js';
 import { decisionContinuationFor } from './automation/kernels/continuation-runtime.js';
 import { executeFlowResume } from './automation/kernels/execute-flow.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
 import { bonusDamageDiceForUse } from './automation/kernels/bonus-damage.js';
-import { applyCombatStartTraitEffects, planTurnStartParticipants, planTurnTransition, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
+import { applyCombatStartTraitEffects, planTurnStartParticipants, planTurnTransition, resolveLifecycleRecipeById, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
 import { resumeDueContinuations } from './automation/kernels/continuation-runtime.js';
 import { clockObservationForBoundary } from './automation/primitives/continuation.js';
 import { capturedActor } from './automation/primitives/reference.js';
@@ -1943,8 +1943,18 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       // later selection records the selected actor's turn-start participants
       // so replay runs exactly the same hooks.
       const combatStart = state.round === 1 && state.lastSide === null && state.eligibleSide === 'heroes';
-      const participants = combatStart ? [] : planTurnStartParticipants(state, actor);
-      events = [{ type: 'TURN_STARTED', actorId: actor.id, turnPhase: state.turnPhase ?? 'normal', participants, ...(combatStart ? { combatStart: true } : {}) }];
+      const planned = combatStart ? { participants: [], phases: [] } : planTurnStartParticipants(state, actor);
+      events = [{
+        type: 'TURN_STARTED',
+        actorId: actor.id,
+        turnPhase: state.turnPhase ?? 'normal',
+        participants: planned.participants,
+        // T6.3: the durable turn-start candidate plan (p.108 ordering facts) —
+        // replay applies the ordering authority from the record, never the
+        // registry insertion order.
+        ...(planned.phases.length > 0 ? { phases: planned.phases } : {}),
+        ...(combatStart ? { combatStart: true } : {}),
+      }];
       break;
     }
     case 'GO_SLOW': {
@@ -2428,32 +2438,134 @@ interface BoundaryEffect {
   kind: 'condition' | 'effect';
   record: EncounterCondition | EncounterActiveEffect;
   order: number;
+  /** The boundary the record expires at (the deterministic removal gate). */
+  boundaryKind: DurationBoundary;
 }
 
 /**
- * ICON p.107 — when effects resolve at the same time: effects that do not
- * belong to the turn character resolve first, then the turn character's; and
+ * ICON p.108 — the deterministic cross-character projection: effects that do
+ * not belong to the turn character resolve first, then the turn character's;
  * hostile effects (owned by the turn character's foes) resolve before
- * beneficial effects (owned by allies or the turn character). Same-owner
- * effects keep their listed order, the deterministic stand-in for the owning
- * player's choice. The result is a stable total order keyed on
- * (turn-character?, hostile?) with listing order as the final tiebreak.
- */
+ * beneficial effects (owned by allies or the turn character). T6.3: the
+ * projection delegates to the U17 turn-boundary ordering authority
+ * (`turnBoundaryOrdering`), which FAILS CLOSED on any remaining tie instead
+ * of using the incidental listing/registration order as a stand-in — a
+ * same-owner tie is a recorded owner decision (the full arbitration path
+ * used by `expireBoundaryEffects` opens the U13 ordering window), and a
+ * cross-owner tie has no source-defined order (rejected, never an invented
+ * tie-break). Kept as the legacy direct-call projection; boundary consumers
+ * use the full arbitration. */
 export function orderCrossCharacterEffects(state: EncounterState, turnActorId: string, pending: BoundaryEffect[]): BoundaryEffect[] {
   const turnSide = state.actors[turnActorId]?.side;
-  const rank = (entry: BoundaryEffect): [number, number] => {
-    const turn = entry.ownerId === turnActorId ? 1 : 0;
-    const owner = entry.ownerId ? state.actors[entry.ownerId] : undefined;
-    const hostile = owner && owner.side !== turnSide ? 0 : 1;
-    return [turn, hostile];
-  };
-  return [...pending].sort((first, second) => {
-    const [firstTurn, firstHostile] = rank(first);
-    const [secondTurn, secondHostile] = rank(second);
-    if (firstTurn !== secondTurn) return firstTurn - secondTurn;
-    if (firstHostile !== secondHostile) return firstHostile - secondHostile;
-    return first.order - second.order;
+  const candidates: TurnBoundaryCandidate[] = pending.map((entry, index) => ({
+    id: `${entry.actorId}:${entry.kind}:${index}`,
+    sourceId: entry.record.sourceId,
+    ownerId: entry.ownerId ?? '',
+    side: entry.ownerId ? state.actors[entry.ownerId]?.side ?? '' : '',
+  }));
+  const result = turnBoundaryOrdering(candidates, {
+    turnActorId,
+    turnSide: turnSide ?? '',
+    spec: { key: 'ordering:boundary', label: 'Order your simultaneous effects' },
   });
+  if (result.ok) {
+    const byId = new Map(candidates.map((candidate, index) => [candidate.id, pending[index]!]));
+    return result.ordered.map((candidate) => byId.get(candidate.id)!);
+  }
+  if (result.problem === 'yields-choice') {
+    throw new Error(`lifecycle.ordering.yields-choice: the boundary effects include a same-owner tie (${result.ownerId}) — a recorded owner decision is required through the U13 ordering window, never the incidental listing order.`);
+  }
+  throw new Error(`lifecycle.ordering.${result.problem}: the boundary effects cannot be ordered by the p.108 authority (${result.problem}) — fail closed, never the incidental listing order.`);
+}
+
+/** The durable identity of one pending boundary-expiry record (used to
+ * re-find the record when a deferred ordering decision resolves it). */
+function expiryIdentity(kind: 'condition' | 'effect', record: EncounterCondition | EncounterActiveEffect): { sourceId: string; id: string } {
+  return { sourceId: record.sourceId, id: 'id' in record && typeof record.id === 'string' ? (record as EncounterCondition).id : (record as EncounterActiveEffect).effectId };
+}
+
+/** Apply one pending boundary-expiry record (decrement multi-turn durations,
+ * else remove the condition/effect, with the defy-death side effect). Shared
+ * by the deterministic boundary path and the recorded ordering answer. */
+function expireOneBoundaryRecord(state: EncounterState, entry: BoundaryEffect): void {
+  const actor = state.actors[entry.actorId];
+  const duration = entry.record.duration;
+  if (!duration || duration.kind !== entry.boundaryKind) return;
+  if (duration.kind === 'turn-start' || duration.kind === 'turn-end') {
+    const turns = duration.turns ?? 1;
+    if (turns > 1) {
+      entry.record.duration = { ...duration, turns: turns - 1 };
+      return;
+    }
+  } else {
+    const rounds = duration.rounds ?? 1;
+    if (rounds > 1) {
+      entry.record.duration = { ...duration, rounds: rounds - 1 };
+      return;
+    }
+  }
+  if (entry.kind === 'condition') actor.conditions = actor.conditions.filter((candidate) => candidate !== entry.record);
+  else {
+    actor.activeEffects = actor.activeEffects.filter((candidate) => candidate !== entry.record);
+    if ('effectId' in entry.record && entry.record.effectId === 'defy-death') actor.resources['bonus-damage'] = 0;
+  }
+}
+
+/** T6.3 — resolve ONE deferred expiry effect recorded on an ordering window's
+ * heldBoundary (the DECISION_ANSWERED reducer path). The record identity is
+ * durable (actor + kind + source id + record id); the removal is
+ * deterministic. Returns false when the record is no longer present (its
+ * owning actor left the battlefield — the deferred effect is a no-op, never
+ * an error). */
+function resolveHeldBoundaryExpiry(state: EncounterState, effect: TurnBoundaryHeldEffect): boolean {
+  const expiry = effect.expiry;
+  if (!expiry) return false;
+  const actor = state.actors[expiry.actorId];
+  if (!actor) return false;
+  if (expiry.kind === 'condition') {
+    const index = actor.conditions.findIndex((candidate) => candidate.sourceId === expiry.sourceId && candidate.id === expiry.id);
+    if (index < 0) return false;
+    actor.conditions.splice(index, 1);
+    return true;
+  }
+  // The record's unique durable `id` is the re-find key (the identity
+  // `expiryIdentity` recorded at window-open) — never the shared effectId
+  // (multiple same-source effects can coexist).
+  const index = actor.activeEffects.findIndex((candidate) => candidate.sourceId === expiry.sourceId && candidate.id === expiry.id);
+  if (index < 0) return false;
+  const removed = actor.activeEffects.splice(index, 1)[0];
+  if (removed && removed.effectId === 'defy-death') actor.resources['bonus-damage'] = 0;
+  return true;
+}
+
+/** T6.3 — resolve the deferred effects of an answered turn-boundary ordering
+ * window in the RECORDED order (exactly once each, never re-derived, never
+ * registry-ordered). The recorded value was already validated as a full
+ * permutation of the exact tied set by the U4 choice authority; this re-checks
+ * against the window's heldBoundary so a corrupt recorded value fails closed. */
+function resolveHeldBoundaryOrdering(state: EncounterState, window: NonNullable<DecisionWindowRecord>, value: WindowDecisionValue): void {
+  const held = window.heldBoundary;
+  if (!held) throw new Error('decision-window.ordering: the answered ordering window carries no held boundary effects.');
+  const ordered = validateOrderingValue(window.choice!, value);
+  const byId = new Map(held.effects.map((effect) => [effect.id, effect]));
+  if (ordered.length !== held.effects.length) {
+    throw new Error('decision-window.ordering: the recorded ordering is not a permutation of the exact held boundary set.');
+  }
+  for (const id of ordered) {
+    const effect = byId.get(id);
+    if (!effect) throw new Error(`decision-window.ordering: the recorded ordering names an effect that is not in the held boundary set (${id}).`);
+  }
+  for (const id of ordered) {
+    const effect = byId.get(id)!;
+    if (effect.kind === 'recipe') {
+      const actor = state.actors[effect.actorId];
+      if (actor) {
+        resolveLifecycleRecipeById(state, actor, held.phase as Parameters<typeof resolveLifecycleRecipeById>[2], effect.sourceId, held.diceWindows ?? {});
+      }
+    } else if (effect.kind === 'expiry') {
+      resolveHeldBoundaryExpiry(state, effect);
+    }
+  }
 }
 
 /**
@@ -2627,7 +2739,19 @@ function drainUnansweredChoiceWindows(state: EncounterState) {
  * Expire conditions and persistent effects whose duration names this boundary.
  * Turn boundaries are owner-scoped ("until the start/end of your next turn"),
  * while round boundaries apply to every actor; either way the expirations
- * resolve in the canonical p.107 cross-character order.
+ * resolve in the ICON p.108 simultaneous-effect order — T6.3 routes them
+ * through the U17 turn-boundary ordering authority:
+ *
+ *   - the deterministic stages (non-active-owner-first, hostile-before-
+ *     beneficial) expire immediately in source order;
+ *   - a remaining SAME-OWNER tie (e.g. p.108's own example: "if a character
+ *     has two effects that expire at the end of their turn, they can choose
+ *     which ends first") opens the ONE U13 ordering decision window carrying
+ *     exactly the tied expiries — they are DEFERRED until the owner records
+ *     their order, and the answer expires them in exactly that order;
+ *   - a remaining CROSS-OWNER tie (or missing ownership/side) FAILS CLOSED —
+ *     the incidental collection/listing order is never a mechanical ordering
+ *     authority.
  */
 function expireBoundaryEffects(state: EncounterState, turnActorId: string, boundary: DurationBoundary) {
   const turnScoped = boundary === 'turn-start' || boundary === 'turn-end';
@@ -2636,36 +2760,59 @@ function expireBoundaryEffects(state: EncounterState, turnActorId: string, bound
   for (const candidate of Object.values(state.actors)) {
     for (const condition of candidate.conditions) {
       if (condition.duration?.kind !== boundary || (turnScoped && condition.ownerId !== turnActorId)) continue;
-      pending.push({ actorId: candidate.id, ownerId: condition.ownerId, kind: 'condition', record: condition, order: order++ });
+      pending.push({ actorId: candidate.id, ownerId: condition.ownerId, kind: 'condition', record: condition, order: order++, boundaryKind: boundary });
     }
     for (const effect of candidate.activeEffects) {
       if (effect.duration.kind !== boundary || (turnScoped && effect.ownerId !== turnActorId)) continue;
-      pending.push({ actorId: candidate.id, ownerId: effect.ownerId, kind: 'effect', record: effect, order: order++ });
+      pending.push({ actorId: candidate.id, ownerId: effect.ownerId, kind: 'effect', record: effect, order: order++, boundaryKind: boundary });
     }
   }
-  for (const entry of orderCrossCharacterEffects(state, turnActorId, pending)) {
-    const actor = state.actors[entry.actorId];
-    const duration = entry.record.duration;
-    if (!duration || duration.kind !== boundary) continue;
-    if (duration.kind === 'turn-start' || duration.kind === 'turn-end') {
-      const turns = duration.turns ?? 1;
-      if (turns > 1) {
-        entry.record.duration = { ...duration, turns: turns - 1 };
-        continue;
-      }
-    } else {
-      const rounds = duration.rounds ?? 1;
-      if (rounds > 1) {
-        entry.record.duration = { ...duration, rounds: rounds - 1 };
-        continue;
-      }
-    }
-    if (entry.kind === 'condition') actor.conditions = actor.conditions.filter((candidate) => candidate !== entry.record);
-    else {
-      actor.activeEffects = actor.activeEffects.filter((candidate) => candidate !== entry.record);
-      if ('effectId' in entry.record && entry.record.effectId === 'defy-death') actor.resources['bonus-damage'] = 0;
-    }
+  const turnSide = state.actors[turnActorId]?.side;
+  const candidates: TurnBoundaryCandidate[] = pending.map((entry) => ({
+    id: `expiry:${boundary}:${entry.actorId}:${entry.kind}:${entry.record.sourceId}:${entry.order}`,
+    sourceId: entry.record.sourceId,
+    ownerId: entry.ownerId ?? '',
+    side: entry.ownerId ? state.actors[entry.ownerId]?.side ?? '' : '',
+  }));
+  const result = turnBoundaryOrdering(candidates, {
+    turnActorId,
+    turnSide: turnSide ?? '',
+    spec: { key: `ordering:${boundary}`, label: 'Order your simultaneous effects' },
+  });
+  if (result.ok) {
+    const byId = new Map(candidates.map((candidate, index) => [candidate.id, pending[index]!]));
+    for (const candidate of result.ordered) expireOneBoundaryRecord(state, byId.get(candidate.id)!);
+    return;
   }
+  if (result.problem === 'yields-choice') {
+    // The ONE same-owner tie (p.108: the owner chooses which ends first):
+    // defer exactly the tied expiries until the recorded decision; the
+    // deterministic remainder expires now.
+    const byId = new Map(candidates.map((candidate, index) => [candidate.id, pending[index]!]));
+    const tied: TurnBoundaryHeldEffect[] = result.tied.map((candidate) => {
+      const entry = byId.get(candidate.id)!;
+      const identity = expiryIdentity(entry.kind, entry.record);
+      return {
+        id: candidate.id,
+        sourceId: candidate.sourceId,
+        ownerId: candidate.ownerId,
+        side: candidate.side,
+        actorId: entry.actorId,
+        kind: 'expiry',
+        expiry: { actorId: entry.actorId, kind: entry.kind, sourceId: identity.sourceId, id: identity.id },
+      };
+    });
+    openTurnBoundaryOrderingWindow(state, {
+      id: nextWindowId(state, 'choice', result.ownerId),
+      phase: boundary,
+      actorId: turnActorId,
+      tied,
+      frame: { sourceId: result.ownerId, ownerId: result.ownerId },
+    });
+    for (const candidate of result.deterministic) expireOneBoundaryRecord(state, byId.get(candidate.id)!);
+    return;
+  }
+  throw new Error(`lifecycle.ordering.${result.problem}: the ${boundary} expirations cannot be ordered by the p.108 authority (${result.problem}) — fail closed, never the incidental listing order.`);
 }
 
 /**
@@ -3049,7 +3196,15 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // it. Every later turn runs the recorded turn-start lifecycle.
         if (!event.combatStart) {
           expireBoundaryEffects(state, event.actorId, 'round-start');
-          resolveTurnStart(state, actor, { cause: 'voluntary', participants: event.participants, diceWindows: {}, roundAdvance: false });
+          resolveTurnStart(state, actor, {
+            cause: 'voluntary',
+            participants: event.participants,
+            // T6.3: the durable turn-start candidate plan rides the event so
+            // the p.108 ordering authority applies from the record.
+            ...(event.phases !== undefined ? { phases: event.phases } : {}),
+            diceWindows: {},
+            roundAdvance: false,
+          });
         }
         break;
       }
@@ -3334,12 +3489,19 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // already consumed at window-open).
         applyRuleMutations(state, event.mutations);
         const window = closeDecisionWindow(state, event.windowId);
-        // T6.2 recorded same-owner ordering: the answered ordering window's
-        // recorded order stamps the durable `resolvedOrder` ranks on the tied
-        // windows (exactly the recorded permutation — fail closed on a
-        // corrupt recorded value, never an invented or partial order).
+        // T6.2/T6.3 recorded same-owner ordering: the answered ordering
+        // window's recorded order stamps the durable `resolvedOrder` ranks on
+        // the tied windows (T6.2 — exactly the recorded permutation), or
+        // resolves the deferred turn-boundary effects in the recorded order
+        // (T6.3 — the window's heldBoundary; each effect exactly once, never
+        // re-derived, never registry-ordered). Either way a corrupt recorded
+        // value fails closed — never an invented or partial order.
         if (window?.kind === 'choice' && window.choice?.kind === 'ordering') {
-          recordOrderingDecision(state, window, event.decision.value);
+          if (window.heldBoundary) {
+            resolveHeldBoundaryOrdering(state, window, event.decision.value);
+          } else {
+            recordOrderingDecision(state, window, event.decision.value);
+          }
         }
         break;
       }

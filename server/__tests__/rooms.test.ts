@@ -885,6 +885,9 @@ describe('RoomManager authoritative VTT integration', () => {
       choice: undefined,
       heldPayload: undefined,
       heldEffects: [] as RuleMutation[],
+      // T6.3: the deferred turn-boundary effects an ordering window gates
+      // (absent = undefined for windows that never gate a boundary).
+      heldBoundary: undefined,
     } as const;
     const heldDamage = (id: string, instance: number) => heldDamageContinuation({
       id: `held:${id}`,
@@ -939,8 +942,6 @@ describe('RoomManager authoritative VTT integration', () => {
       domain: 'encounter',
       command: { type: 'ANSWER_DECISION_WINDOW', windowId: 'choice:hero:2', input: { actorIds: { ordering: [windowIds[1]!, windowIds[0]!] } } },
     });
-    // eslint-disable-next-line no-console
-    console.log('ERR', JSON.stringify(owner.socket.messages.filter((message) => message.type === 'error')));
     expect(manager.inspect('room-ordering-auth')?.revision).toBe(4);
     expect(manager.inspect('room-ordering-auth')?.encounter.decisionWindows).toMatchObject([
       { id: windowIds[0]!, resolvedOrder: 1 },

@@ -724,7 +724,61 @@ assumption here, document the evidence and update this list before proceeding.
   Residual (honest, staged — NOT claimed by T6.2): turn-boundary ordering
   consumers (hostile-before-beneficial / non-active-owner-first) still
   route through the scheduler/lifecycle authority rather than the recorded
-  U13 seam; U17 remains PARTIAL with exactly that residual.
+  U13 seam; U17 remains PARTIAL with exactly that residual — closed by
+  T6.3 below (2026-08-31).
+
+- **T6.3 — U17 turn-boundary ordering consumers — LANDED (2026-08-31),
+  U17 now COMPLETE/AUTHORITATIVE.** Finished the remaining U17
+  turn-boundary consumers so ICON's p.108 explicit turn-boundary ordering
+  rules are enforced by the generic ordering authority rather than by the
+  lifecycle recipe registration order.
+  1. **Durable turn-boundary candidate representation.** `lifecycle.ts`
+     now plans a per-phase candidate record per pending lifecycle effect
+     at the command boundary (source id + mechanical owner + owner side) —
+     a `TurnBoundaryCandidatePlan` recorded in the F3 intent's `phases`
+     field; source/owner/carrier/active/chooser are never conflated, and
+     the generic representation never assumes a source id alone is
+     sufficient. Recipes declare their mechanical owner via `ownerOf`
+     (defaulting to the boundary actor; a recipe with no mechanically
+     relevant effect returns null and is excluded from arbitration).
+  2. **U17 owns turn-boundary ordering.** `primitives/ordering.ts` gains
+     `turnBoundaryOrdering`, a pure composition of the p.108 rules:
+     non-active-owner-first → hostile-before-beneficial (WITHIN each
+     ownership group; bullet 1 is the stronger rule and is never
+     reversed) → the first same-owner tie yields the recorded U4 ordering
+     decision (T6.2 seam) → a remaining cross-owner/missing-owner tie
+     FAILS CLOSED. Never one numeric priority; never array/registration
+     order as a game rule.
+  3. **U13 + reducer resolve the deferred tie.** `runLifecyclePhase` /
+     `runLifecyclePhaseForAll` route the recorded plan through
+     `turnBoundaryOrdering`, deferring exactly a same-owner tie onto ONE
+     U13 ordering window (a `heldBoundary` field on the window record
+     carrying the tied effects + the recorded dice windows). The
+     `DECISION_ANSWERED` reducer validates the recorded order as a full
+     permutation and resolves the deferred effects in exactly that order —
+     each pending effect resolves exactly once, never re-derived, never
+     registry-ordered, with no partial execution past the decision point
+     while pending.
+  4. **Expiry boundaries route through U17.** `expireBoundaryEffects` and
+     `orderCrossCharacterEffects` delegate to `turnBoundaryOrdering`; the
+     previous expiry listing-order tie-break is REMOVED (the Dervish aura
+     expiry that pinned it is now a same-owner recorded decision).
+  5. **Registration order demoted, phases preserved.** The lifecycle
+     registry insertion order is now discovery/enumeration + the legacy
+     pre-T6.3 replay fallback only — never a mechanical ordering
+     authority. Lifecycle phases (turn-start / turn-end / delayed /
+     round-start / round-end) keep their source-defined sequencing and
+     interrupt windows keep their separate priority/stack mechanics.
+  Acceptance: `t6-3-turn-boundary-ordering.test.ts` (27 cases: deterministic
+  bullet-1/2 ordering + registration-order permutation invariance,
+  same-owner A→B/B→A recorded choice, 3+-candidate full permutation, wrong
+  responder, permutation validation, fail-closed cross-owner +
+  missing-owner, suspension/exact-once, replay with permuted input,
+  interrupt/phase boundaries) + pinned `aura`/`turn-transition`/`conditions`
+  F3-plan cases + `rooms.test.ts` heldBoundary window seed. Full suite green
+  (1798 tests), census byte-stable at 427 (no source promotion). A fresh
+  audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.
+  Next smallest-first blocker: U16 raw-field classification/migration.
 
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full

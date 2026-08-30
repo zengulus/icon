@@ -135,9 +135,14 @@ export function policyYieldsChoice(policy: OrderingPolicy): RuleChoice | null {
  *     `choiceEntitledPlayer`) rather than an ad-hoc actor-id assumption.
  *
  * Pure and replay-deterministic: a function of the candidates alone. */
+/** The problems a same-owner tie can genuinely have (a strict subset of
+ * `OrderingProblem` — `yields-choice` can never be an unresolved outcome of
+ * the same-owner decision itself). */
+export type SameOwnerOrderingProblem = 'not-a-tie' | 'missing-candidate-owner' | 'cross-owner';
+
 export type SameOwnerOrderingDecision =
   | { kind: 'choice'; ownerId: string; choice: RuleChoice }
-  | { kind: 'unresolved'; problem: OrderingProblem };
+  | { kind: 'unresolved'; problem: SameOwnerOrderingProblem };
 
 /** The same-owner ordering decision for a tied candidate set (see
  * `SameOwnerOrderingDecision`). The returned choice is `kind: 'ordering'`
@@ -348,4 +353,125 @@ function orderByList(candidates: readonly OrderingCandidate[], authority: readon
  * side read for hostile-before-beneficial). */
 function candidateSideOf(candidates: readonly OrderingCandidate[], id: string): string | undefined {
   return candidates.find((candidate) => candidate.id === id)?.side;
+}
+
+/** T6.3 — the durable turn-boundary candidate (ICON p.108 "When resolving
+ * effects that resolve at the same time"): one pending lifecycle effect at a
+ * turn boundary, carrying the mechanical facts the p.108 ordering reads.
+ *
+ *   - `id` — durable candidate identity (the recipe source id for a
+ *     lifecycle recipe; a deterministic instance id for an expiry).
+ *   - `ownerId` — the character who OWNS the effect (p.108 same-owner
+ *     read: "If effects are owned by the same character, they can choose the
+ *     order they resolve"). REQUIRED — unknown ownership never silently
+ *     means same-owner.
+ *   - `side` — the owner's side (the hostile-before-beneficial read,
+ *     p.108: "Hostile effects (from foes, etc) resolve before beneficial
+ *     effects (from allies or self, etc)"). REQUIRED.
+ *
+ * No source-ID branches; this is pure U17 vocabulary. */
+export interface TurnBoundaryCandidate {
+  id: string;
+  sourceId: string;
+  ownerId: string;
+  side: string;
+}
+
+/** The T6.3 turn-boundary ordering result. `ok: true` is the source-defined
+ * deterministic total order (p.108 bullets 1–2 fully resolved it).
+ * `yields-choice` means the deterministic stages left ONE same-owner tie
+ * (p.108 bullet 3) — the caller routes the recorded U4 ordering decision
+ * through the existing T6.2 U13 path and defers exactly the `tied` effects
+ * until the answer; `deterministic` is the remaining effects in their
+ * source-defined order. Any other problem is FAIL CLOSED — the caller
+ * rejects; it never falls back to registry/listing order. */
+export type TurnBoundaryOrderingResult =
+  | { ok: true; ordered: TurnBoundaryCandidate[] }
+  | {
+      ok: false;
+      problem: 'yields-choice';
+      /** The typed U4 ordering choice over the EXACT tied set. */
+      choice: RuleChoice;
+      /** The single entitled owner (p.108: the owner chooses). */
+      ownerId: string;
+      /** The tied effects — deferred until the recorded decision. */
+      tied: TurnBoundaryCandidate[];
+      /** The non-tied effects in their source-defined deterministic order. */
+      deterministic: TurnBoundaryCandidate[];
+    }
+  // `yields-choice` is deliberately EXCLUDED from the problem union: it is
+  // its own variant with the tied set + choice, never a plain fail-closed
+  // problem (TypeScript narrows on `problem`).
+  | { ok: false; problem: Exclude<OrderingProblem, 'yields-choice'> };
+
+/**
+ * T6.3 — the U17 turn-boundary ordering composition (ICON p.108 "When
+ * resolving effects that resolve at the same time"):
+ *
+ *   1. NON-ACTIVE-OWNER-FIRST — "Effects that do not belong to the character
+ *      who's turn it is resolve first, then that character's effects
+ *      resolve."
+ *   2. HOSTILE-BEFORE-BENEFICIAL — "Hostile effects (from foes, etc) resolve
+ *      before beneficial effects (from allies or self, etc)" — applied
+ *      WITHIN each ownership group (bullet 1 is the stronger rule; a later
+ *      criterion never reverses it).
+ *   3. SAME-OWNER CHOICE — "If effects are owned by the same character, they
+ *      can choose the order they resolve" — the first remaining tie owned by
+ *      ONE character YIELDS the typed U4 ordering choice (the T6.2 recorded
+ *      decision path). A remaining tie across DIFFERENT owners has no
+ *      source-defined final order and FAILS CLOSED (`cross-owner`) — never
+ *      registration/listing/array order, never an invented tie-break.
+ *
+ * Pure and replay-deterministic: a function of the candidates + the durable
+ * turn facts alone. `turnSide` is the turn character's side (the
+ * hostile/beneficial perspective, p.108); the ownership group is
+ * `ownerId === turnActorId`. */
+export function turnBoundaryOrdering(
+  candidates: readonly TurnBoundaryCandidate[],
+  context: { turnActorId: string; turnSide: string; spec: { key: string; label: string } },
+): TurnBoundaryOrderingResult {
+  if (candidates.length === 0) return { ok: true, ordered: [] };
+  // Fail closed on missing classification: unknown ownership must never
+  // silently mean "not the turn character's", and an unsided candidate must
+  // never silently mean "beneficial".
+  for (const candidate of candidates) {
+    if (candidate.ownerId === undefined || candidate.ownerId === null || candidate.ownerId === '') {
+      return { ok: false, problem: 'missing-candidate-owner' };
+    }
+    if (candidate.side === undefined || candidate.side === null || candidate.side === '') {
+      return { ok: false, problem: 'missing-candidate-side' };
+    }
+  }
+  // Buckets in source order: (non-turn-owned, hostile), (non-turn-owned,
+  // beneficial), (turn-owned, hostile), (turn-owned, beneficial).
+  const buckets: TurnBoundaryCandidate[][] = [[], [], [], []];
+  const bucketOf = (candidate: TurnBoundaryCandidate): number => {
+    const turn = candidate.ownerId === context.turnActorId ? 1 : 0;
+    const hostile = candidate.side !== context.turnSide ? 0 : 1;
+    return turn * 2 + hostile;
+  };
+  for (const candidate of candidates) buckets[bucketOf(candidate)]!.push(candidate);
+  const deterministic: TurnBoundaryCandidate[] = [];
+  for (const bucket of buckets) {
+    if (bucket.length < 2) {
+      deterministic.push(...bucket);
+      continue;
+    }
+    const ownerId = bucket[0]!.ownerId;
+    const sameOwner = bucket.every((candidate) => candidate.ownerId === ownerId);
+    if (!sameOwner) return { ok: false, problem: 'cross-owner' };
+    const decision = sameOwnerOrderingDecision(bucket, context.spec);
+    if (decision.kind !== 'choice') return { ok: false, problem: decision.problem };
+    // The deterministic stages resolved every OTHER bucket; this tie is the
+    // one recorded decision the owner must make (p.108 bullet 3).
+    return {
+      ok: false,
+      problem: 'yields-choice',
+      choice: decision.choice,
+      ownerId,
+      tied: bucket,
+      deterministic,
+    };
+  }
+  return { ok: true, ordered: deterministic };
 }

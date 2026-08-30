@@ -469,7 +469,7 @@ actor fields (typed-ledger migration is the T6 consolidation item). Tests:
 `t3-usage.test.ts` + `t4-dedup.test.ts` + `t4-corrective.test.ts` +
 `use-ledger.test.ts`.
 
-### Ordering / Arbitration (U17 underlay) — LANDED (T3, 2026-08-30)
+### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)
 
 Typed ordering policies, NOT one numeric priority: `primitives/ordering.ts`
 owns `OrderingPolicy` (source-order | stack | turn-order |
@@ -505,13 +505,27 @@ ability-step order, p.85/p.107 §4) applies the `source-order` policy;
 (`kernels/decision-window.ts`, U13); the decision-window LIFO pop
 (`popDecisionWindowStack`) applies the `stack` policy (p.107 most-recent-
 trigger-first) and `orderDecisionWindows` applies the same-trigger
-turn-order rule. The lifecycle registry order remains the recorded boundary
-contract and the scheduler's turn election stays the scheduler authority
-(both documented U17 consumers); hostile-before-beneficial /
-non-active-owner-first land their turn-boundary consumers in T6. Tests:
+turn-order rule. **T6.3 (2026-08-31) landed the remaining turn-boundary
+consumers**: `turnBoundaryOrdering` composes the p.108 rules
+(non-active-owner-first → hostile-before-beneficial within each ownership
+group → the first same-owner tie becomes a recorded U4/U13 ordering
+decision → a remaining cross-owner/missing-owner tie fails closed). The
+lifecycle phases and boundary expiries route a durable per-phase candidate
+plan (source id + mechanical owner + owner side) through it; `runLifecyclePhase`
+defers a same-owner tie onto ONE U13 ordering window (`heldBoundary`) and
+the DECISION_ANSWERED reducer resolves the deferred effects in the recorded
+order (each exactly once, never registry-ordered). The lifecycle registry
+insertion order is demoted to discovery/enumeration + the legacy pre-T6.3
+replay fallback — the registration-order-as-boundary-order authority and
+the expiry listing-order tie-break are REMOVED. The scheduler's turn
+election stays the scheduler authority (documented U17 consumer); no other
+genuine U17 consumer remains. U17 is COMPLETE. The blocking families it
+enables (simultaneous-owner ordering, turn-boundary effect ordering,
+player ordering choices, interrupt-timing ordering) are now unblocked. Tests:
 `t3-ordering.test.ts`, `t5c-u13-decision-window.test.ts`,
-`t6-2-u17-recorded-ordering.test.ts`, `rooms.test.ts` (responder
-authorization).
+`t6-2-u17-recorded-ordering.test.ts` (30), `t6-3-turn-boundary-ordering.test.ts`
+(27), `rooms.test.ts` (responder authorization + heldBoundary seed), plus
+pinned `aura`/`turn-transition`/`conditions` cases.
 
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED
 

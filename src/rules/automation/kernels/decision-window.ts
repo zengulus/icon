@@ -157,6 +157,13 @@ export interface DecisionWindowRecord {
    * a same-instant tie without a recorded order, never an invented
    * tie-break and never the incidental registration `order`. */
   resolvedOrder?: number;
+  /** T6.3 — the deferred TURN-BOUNDARY effects an ordering window gates: the
+   * same-owner simultaneous effects (p.108) that a turn boundary suspended
+   * until the owner records their order. The recorded answer resolves them
+   * in the recorded order — exactly once, never re-derived, never
+   * registry-ordered. Ride the window record (the ONE U13 payload), never a
+   * second quasi-window schema. */
+  heldBoundary?: TurnBoundaryHeldEffects;
   /** U11 flow suspension: the remaining flow nodes + bound names resume
    * when the window is answered (the FLOW → U13 → U12 → answer → resume
    * composition). */
@@ -203,6 +210,7 @@ export function openDecisionWindow(
     choice?: RuleChoice;
     ordering?: OrderingPolicy;
     resume?: DecisionWindowRecord['resume'];
+    heldBoundary?: TurnBoundaryHeldEffects;
   },
 ): DecisionWindowRecord {
   const record: DecisionWindowRecord = {
@@ -220,6 +228,7 @@ export function openDecisionWindow(
     ...(input.choice !== undefined ? { choice: input.choice } : {}),
     ...(input.ordering !== undefined ? { ordering: input.ordering } : {}),
     ...(input.resume !== undefined ? { resume: input.resume } : {}),
+    ...(input.heldBoundary !== undefined ? { heldBoundary: input.heldBoundary } : {}),
   };
   state.decisionWindows.push(record);
   return record;
@@ -307,6 +316,34 @@ export function openOrderingDecisionWindow(
   });
 }
 
+/** T6.2/T6.3 — validate a RECORDED ordering value against the exact
+ * candidate set the window offered: a FULL PERMUTATION of the pending set
+ * (same length, no repeats, every id present). FAILS CLOSED on any corrupt
+ * recorded value — the answer can never be a plausible-looking subset, a
+ * foreign id list, or an extra candidate. Returns the validated ordered
+ * ids (never raw input). */
+export function validateOrderingValue(choice: RuleChoice, value: WindowDecisionValue): string[] {
+  if (choice.kind !== 'ordering') {
+    throw new Error('decision-window.ordering: a recorded ordering decision requires the answered window to carry an ordering choice.');
+  }
+  if (!Array.isArray(value)) {
+    throw new Error('decision-window.ordering: the recorded ordering decision must carry the ordered candidate ids.');
+  }
+  const ordered = value as readonly string[];
+  const candidates = choice.candidateIds ?? [];
+  if (candidates.length !== ordered.length) {
+    throw new Error('decision-window.ordering: the recorded ordering is not a permutation of the exact candidate set.');
+  }
+  if (new Set(ordered).size !== ordered.length) {
+    throw new Error('decision-window.ordering: the recorded ordering repeats a candidate.');
+  }
+  const expected = new Set(candidates);
+  for (const id of ordered) {
+    if (!expected.has(id)) throw new Error(`decision-window.ordering: the recorded ordering names a candidate that is not in the pending set (${id}).`);
+  }
+  return [...ordered];
+}
+
 /** T6.2 — apply a RECORDED ordering decision to the tied windows: stamp the
  * durable `resolvedOrder` rank on each candidate window exactly as the
  * player recorded it. The DECISION_ANSWERED reducer consumes this for an
@@ -319,21 +356,7 @@ export function recordOrderingDecision(state: EncounterState, window: DecisionWi
   if (window.choice?.kind !== 'ordering') {
     throw new Error('decision-window.ordering: a recorded ordering decision requires the answered window to carry an ordering choice.');
   }
-  if (!Array.isArray(value)) {
-    throw new Error('decision-window.ordering: the recorded ordering decision must carry the ordered candidate ids.');
-  }
-  const ordered = value as readonly string[];
-  const candidates = window.choice.candidateIds ?? [];
-  if (candidates.length !== ordered.length) {
-    throw new Error('decision-window.ordering: the recorded ordering is not a permutation of the exact candidate set.');
-  }
-  if (new Set(ordered).size !== ordered.length) {
-    throw new Error('decision-window.ordering: the recorded ordering repeats a candidate.');
-  }
-  const expected = new Set(candidates);
-  for (const id of ordered) {
-    if (!expected.has(id)) throw new Error(`decision-window.ordering: the recorded ordering names a candidate that is not in the pending set (${id}).`);
-  }
+  const ordered = validateOrderingValue(window.choice, value);
   ordered.forEach((id, rank) => {
     const target = state.decisionWindows.find((candidate) => candidate.id === id);
     if (!target) throw new Error(`decision-window.ordering: candidate window ${id} is no longer open when its recorded ordering is applied.`);
@@ -389,6 +412,109 @@ export function openOrderingDecisionForSameOwnerTies(state: EncounterState): voi
       choice: decision.choice,
     });
   }
+}
+
+/** T6.3 — ONE deferred turn-boundary effect an ordering window gates (see
+ * `TurnBoundaryHeldEffects`). `kind: 'recipe'` names a lifecycle recipe
+ * instance (resolved through the F3 registry by `sourceId` for `actorId`);
+ * `kind: 'expiry'` names a duration-bound condition/effect record to remove
+ * (identified by its durable record identity, never by array position). */
+export interface TurnBoundaryHeldEffect {
+  /** The durable candidate id the recorded ordering names. */
+  id: string;
+  sourceId: string;
+  /** The mechanical owner (p.108 same-owner read). */
+  ownerId: string;
+  side: string;
+  /** The actor the effect resolves against (the boundary actor for the
+   * single-actor phases; the individual actor for round-start instances). */
+  actorId: string;
+  kind: 'recipe' | 'expiry';
+  /** For an expiry: the durable identity of the record to remove. */
+  expiry?: { actorId: string; kind: 'condition' | 'effect'; sourceId: string; id: string };
+}
+
+/** T6.3 — the deferred turn-boundary effects an ordering window carries: the
+ * p.108 same-owner simultaneous set that a turn boundary suspended until the
+ * owner records their order, plus the recorded dice windows the deferred
+ * recipes consume (a recorded decision must never re-roll or lose a rolled
+ * gamble). */
+export interface TurnBoundaryHeldEffects {
+  /** The lifecycle phase the effects belong to ('turn-end' | 'turn-start' |
+   * 'delayed' | 'round-start' | 'round-end'). */
+  phase: string;
+  /** The boundary actor whose turn boundary suspended them. */
+  actorId: string;
+  effects: TurnBoundaryHeldEffect[];
+  diceWindows?: TurnBoundaryDiceWindows;
+}
+
+/** The recorded dice/save windows a deferred boundary recipe consumes (the
+ * JSON-clean structural projection of the F3 intent's `TurnDiceWindows` —
+ * never re-derived, never re-rolled on the answer). */
+export interface TurnBoundaryDiceWindows {
+  carnevaleGamble?: number;
+  monogatariGamble?: number;
+  blackheartStatusCount?: number;
+  darkKnightHatredSave?: { roll: number; total: number; success: boolean };
+  recordedDice?: Readonly<Record<string, number>>;
+}
+
+/** T6.3 — open the ONE U13 ordering decision window for a deferred
+ * turn-boundary same-owner tie (p.108 "If effects are owned by the same
+ * character, they can choose the order they resolve"). Composes the existing
+ * underlays exactly like the T6.2 `openOrderingDecisionWindow`: U17
+ * classifies the tie and builds the typed U4 ordering choice over the EXACT
+ * tied set; U2 derives the entitled chooser (owner, or its recorded
+ * controller at the network boundary); U13 opens one choice-window record
+ * that carries the deferred effects (`heldBoundary`) + the recorded dice
+ * windows. The answer validates through U4, records the order durably, and
+ * the reducer resolves the deferred effects in exactly that order. */
+export function openTurnBoundaryOrderingWindow(
+  state: EncounterState,
+  input: {
+    id: string;
+    phase: string;
+    /** The boundary actor whose turn boundary suspended the tied effects. */
+    actorId: string;
+    /** The tied effects (p.108 same-owner set) — deferred until the recorded
+     * answer. Each names its kind (recipe instance or expiry record) so the
+     * answer's reducer resolves it in the recorded order. */
+    tied: TurnBoundaryHeldEffect[];
+    frame?: RoleFrame;
+    diceWindows?: TurnBoundaryDiceWindows;
+  },
+): DecisionWindowRecord {
+  const decision = sameOwnerOrderingDecision(
+    input.tied.map((effect) => ({ id: effect.id, ownerId: effect.ownerId })),
+    {
+      key: `ordering:${input.phase}`,
+      label: `Order your simultaneous ${input.phase} effects`,
+    },
+  );
+  if (decision.kind === 'unresolved') {
+    throw new Error(`decision-window.ordering: the turn-boundary tie cannot yield a same-owner ordering decision (${decision.problem}) — never an invented order.`);
+  }
+  const frame: RoleFrame = input.frame ?? { sourceId: decision.ownerId, ownerId: decision.ownerId };
+  const selector = decision.choice.chooser;
+  if (!selector) throw new Error('decision-window.ordering: the same-owner ordering choice must declare its owner chooser role.');
+  const chooserId = resolveRoleSelector(selector, deriveRoles(frame));
+  if (chooserId === null) {
+    throw new Error('decision-window.ordering: the entitled chooser for the turn-boundary ordering decision cannot be derived from the durable role frame — fail closed, never guess.');
+  }
+  return openDecisionWindow(state, {
+    id: input.id,
+    kind: 'choice',
+    actorId: chooserId,
+    provenance: { sourceActorId: input.actorId },
+    choice: decision.choice,
+    heldBoundary: {
+      phase: input.phase,
+      actorId: input.actorId,
+      effects: input.tied,
+      ...(input.diceWindows !== undefined ? { diceWindows: input.diceWindows } : {}),
+    },
+  });
 }
 
 /** The U12 held-damage projection of a window's held payload. The payload is

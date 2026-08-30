@@ -2110,23 +2110,32 @@ first) and same-trigger turn-order rules (p.107); turn-boundary ordering
 player determines order — p.107); Delay ordering at slow-turn start (p.87);
 turn alternation; player ordering choices (p.107).
 
-**Current state.** `PARTIAL (T3 policies landed; recorded same-owner
-ordering decision LANDED T6.2, 2026-08-31)` — typed policies + the
-policy→CHOICE seam exist and the recorded orders that are wired (source-order
-step ordering, stack LIFO pops) route through them. **T6.2 landed the
-recorded SAME-OWNER simultaneous ordering decision**: `sameOwnerOrderingDecision`
-classifies a tie as determined / unresolved / yields a chooser decision;
-U4 validates the answer as a FULL PERMUTATION of the exact pending set
-(`resolveChoice` `ordering` kind); U13 opens the ONE ordering decision window
+**Current state.** `COMPLETE/AUTHORITATIVE (T6.2 + T6.3, 2026-08-31)` —
+typed policies + the policy→CHOICE seam exist and every §1 consumer now
+routes through them. **T6.2 landed the recorded SAME-OWNER simultaneous
+ordering decision**: `sameOwnerOrderingDecision` classifies a tie as
+determined / unresolved / yields a chooser decision; U4 validates the answer
+as a FULL PERMUTATION of the exact pending set (`resolveChoice` `ordering`
+kind); U13 opens the ONE ordering decision window
 (`openOrderingDecisionWindow`, chooser derived through U2); the recorded
 order stamps durable `resolvedOrder` ranks (`recordOrderingDecision`) and
 the U17 LIFO pop / boundary projection consume exactly that order on replay
 — zero fresh choice, zero inferred tie-break, zero array-order dependence
 (`t6-2-u17-recorded-ordering.test.ts`, 30 cases; room responder
-authorization in `rooms.test.ts`). The remaining §1 obligations are the
-hostile-before-beneficial / non-active-owner-first / controller-choice
-turn-boundary consumers (landed as vocabulary + unit tests, with NO engineered
-turn-boundary call site). `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
+authorization in `rooms.test.ts`). **T6.3 landed the remaining turn-boundary
+consumers**: `turnBoundaryOrdering` composes the p.108 rules (non-turn-owner
+first → hostile-before-beneficial within each ownership group → the first
+same-owner tie becomes a recorded U4/U13 ordering decision → any remaining
+cross-owner/missing-owner tie fails closed). The command boundary records a
+durable per-phase lifecycle candidate plan (source id + mechanical owner +
+owner side) in the F3 intent; `runLifecyclePhase` / `expireBoundaryEffects`
+route it through `turnBoundaryOrdering`, a same-owner tie defers onto the
+ONE U13 ordering window (`heldBoundary`), and the DECISION_ANSWERED reducer
+resolves the deferred effects in the recorded order. The lifecycle registry
+insertion order is demoted to discovery/enumeration (and the pre-T6.3
+legacy-replay fallback); `orderCrossCharacterEffects` delegates to U17 and no
+longer holds a listing-order tie-break (`t6-3-turn-boundary-ordering.test.ts`,
+27 cases). `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
 (source-order | stack | turn-order | hostile-before-beneficial |
 non-active-owner-first | controller-choice | explicit-list),
 `applyOrdering(policy, candidates, context)` (pure — a function of the
@@ -2149,19 +2158,21 @@ it through U4.
 now applies the `source-order` policy against the ability's step listing;
 `decideDamageWindow` applies the `source-order` policy against
 `TRIGGER_WINDOW_RECIPES`; the pending-interrupt LIFO pop (p.107 most-
-recent-trigger-first) applies the `stack` policy. The lifecycle registry
-order stays the recorded boundary contract (`LIFECYCLE_RECIPES`
-registration order IS the explicit recorded policy) and the scheduler's
-turn election remains the scheduler authority — both documented as U17
-consumers; hostile-before-beneficial / non-active-owner-first /
-controller-choice land their turn-boundary consumers with the U13 window
-work in T5.
+recent-trigger-first) applies the `stack` policy. The scheduler's turn
+election remains the scheduler authority (documented as a U17 consumer).
+T6.3 landed the turn-boundary consumers: the lifecycle phases and boundary
+expiries route through `turnBoundaryOrdering` (T6.3) and the recorded
+same-owner decision seams route through U4/U13 (T6.2).
 
 **Locations partially owning/duplicating.** `kernels/runtime.ts`
-(`orderedSelectedSteps`); `kernels/lifecycle.ts` (registry order);
-`kernels/trigger-window.ts` (recipe order); `encounter-adapter.ts`
-(pending-interrupt order); `turn-scheduler.ts` (turn order — scheduler
-authority, reads policies where needed).
+(`orderedSelectedSteps` — source-order adapter); `kernels/trigger-window.ts`
+(recipe order — source-order adapter); `encounter-adapter.ts` (pending-interrupt
+order — stack adapter); `turn-scheduler.ts` (turn order — scheduler
+authority, reads policies where needed). `kernels/lifecycle.ts` (registry
+order) is demoted to discovery/enumeration order + the legacy-replay
+fallback for pre-T6.3 event logs — it is NO LONGER a boundary ordering
+authority (the durable per-phase candidate plan through `turnBoundaryOrdering`
+decides).
 
 **Intended authority.** `primitives/ordering.ts` (barrel re-exported):
 `OrderingPolicy` union (source-order | stack | turn-order |
@@ -2179,17 +2190,25 @@ lists, choice specs); `orderingKey` for durable identity.
 durable state; replay never depends on array construction order;
 controller-choice ordering records the player's ordering decision.
 
-**Acceptance tests.** Positive: hostile-before-beneficial at a turn
-boundary; LIFO interrupt nesting; controller-choice ordering yields a
-recorded decision; explicit-list policy. Negative: undefined policy rejects;
-unorderable candidates (no policy) reject rather than iterating silently.
-Boundary: same-owner simultaneous effects; empty candidate list. Replay:
-turn-boundary + interrupt-nesting fixtures replay with identical ordering.
+**Acceptance tests (all PASS).** Positive: hostile-before-beneficial at a
+turn boundary + non-turn-owner-first (T6.3); LIFO interrupt nesting;
+controller-choice ordering yields a recorded decision (T6.2); explicit-list
+policy. Negative: undefined policy rejects; unorderable candidates (no
+policy) reject rather than iterating silently; same-owner wrong responder
+rejects; partial/duplicate/unknown/extra permutation rejects (T6.2/T6.3).
+Boundary: same-owner simultaneous effects become ONE recorded decision;
+empty candidate list; cross-owner + missing-owner ties fail closed (T6.3).
+Replay: turn-boundary + interrupt-nesting fixtures replay with identical
+ordering; the recorded same-owner order replays with zero fresh decision
+and zero input-order dependence (T6.2 `t6-2-…` 30 cases, T6.3
+`t6-3-turn-boundary-ordering.test.ts` 27 cases).
 
-**Consumers to migrate.** `orderedSelectedSteps` → source-order policy
-adapter; lifecycle registry order → explicit recorded policy;
-`TRIGGER_WINDOW_RECIPES` order → policy; `pendingInterrupts` order → stack/
-turn-order policy; scheduler reads policies where mechanically interactive.
+**Consumers to migrate.** None — all listed consumers are landed: `orderedSelectedSteps`
+consumes the `source-order` policy; the lifecycle registry order is demoted
+to discovery/enumeration (T6.3) with the phases routed through a recorded
+per-phase candidate plan; `TRIGGER_WINDOW_RECIPES` order consumes the
+`source-order` policy; `pendingInterrupts` order consumes the `stack`
+policy; the scheduler reads policies where mechanically interactive.
 
 **Blocker families enabled (information only).** interrupt-timing/rank
 (ordering half), Delay ordering, turn-boundary effect ordering,
@@ -2597,9 +2616,38 @@ authorizes the answer by the window responder's recorded controller
 (`server/rooms.ts`). Suite: `t6-2-u17-recorded-ordering.test.ts` (30
 adversarial cases: positive, permutation validation, boundaries,
 suspension/state, stack-policy, replay), `rooms.test.ts` responder
-authorization, `t5c1` pinned cases. U17 stays PARTIAL on its turn-boundary
-consumers (hostile-before-beneficial / non-active-owner-first /
-controller-choice at a real turn-boundary call site).
+authorization, `t5c1` pinned cases.
+
+**Phase T6.3 — U17 turn-boundary consumers (lifecycle integration).** —
+**LANDED (2026-08-31), U17 now COMPLETE/AUTHORITATIVE.** The remaining
+§1 obligations are wired at a real call site. `primitives/ordering.ts` gains
+`turnBoundaryOrdering`, a pure composition of the p.108 turn-boundary rules:
+non-active-owner-first (effects not owned by the turn character resolve
+first), hostile-before-beneficial applied WITHIN each ownership group (bullet
+1 is the stronger rule and is never reversed), and the first remaining
+SAME-OWNER tie yields the recorded U4/U13 ordering decision (the T6.2 seam);
+a remaining CROSS-OWNER tie or a MISSING owner/side FAILS CLOSED. The command
+boundary records a durable per-phase lifecycle candidate plan (source id +
+mechanical owner + owner side) in the F3 intent; `runLifecyclePhase` and
+`runLifecyclePhaseForAll` route that plan through `turnBoundaryOrdering`,
+defers exactly a same-owner tie onto ONE U13 ordering window (the `heldBoundary`
+field on the window record), and the DECISION_ANSWERED reducer resolves the
+deferred effects in the recorded order (each exactly once, never re-derived,
+never registry-ordered). `expireBoundaryEffects` and `orderCrossCharacterEffects`
+delegate to the same authority. The lifecycle registry insertion order is
+demoted to discovery/enumeration + the legacy pre-T6.3 replay fallback — it
+is not a mechanical boundary-order authority anymore (the registration
+order-as-boundary-order AND the expiry listing-order tie-break are REMOVED).
+Suite: `t6-3-turn-boundary-ordering.test.ts` (27 adversarial cases: bullet-1/2
+determinism + registration-order permutation invariance, same-owner A→B/B→A
+recorded choice, 3+-candidate permutation, wrong responder, permutation
+validation, fail-closed cross-owner + missing-owner, suspension/exact-once,
+replay with permuted input, interrupt/phase boundary), plus pinned
+`aura.test.ts` (Dervish expiry now a same-owner recorded decision),
+`turn-transition.test.ts` + `conditions.test.ts` (F3 phases plan),
+`rooms.test.ts` (heldBoundary window seed). U17 is COMPLETE: a fresh audit
+confirmed the interrupt-order, damage-window, and step-order consumers already
+consume U17 policies and no genuine U17 consumer remains.
 
 ---
 

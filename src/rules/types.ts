@@ -1,7 +1,7 @@
 import type { ArmedContinuation, RuleChoice, RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
 import type { Fact } from './automation/primitives/facts.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
-import type { TurnTransitionIntent } from './automation/kernels/lifecycle.js';
+import type { TurnBoundaryPhasePlan, TurnTransitionIntent } from './automation/kernels/lifecycle.js';
 import type { DecisionWindowRecord, WindowDecisionValue } from './automation/kernels/decision-window.js';
 import type { FlowNode } from './automation/kernels/execute-flow.js';
 import type { Binder } from './automation/primitives/reference.js';
@@ -810,7 +810,7 @@ export type EncounterEvent =
   | { type: 'ACTOR_RECOVERED'; actorId: string; vigorGained: number; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[] }
   | { type: 'STATUS_APPLIED'; actorId: string; targetId: string; status: StatusId }
   | { type: 'TURN_ENDED'; actorId: string; /** Legacy field: the old automatic scheduler named the next actor. New events omit it; the controller selects via TAKE_TURN. */ nextActorId?: string; round: number; /** Scheduler transition recorded at the command boundary: the side eligible to select next and the phase. */ eligibleSide?: EncounterActor['side']; turnPhase?: 'normal' | 'slow'; saves: Array<{ status: StatusId; roll: number; cleared: boolean }>; statusSaveMutations?: RuleMutation[]; carnevaleGamble?: number; monogatariGamble?: number; cause?: TurnEndCause; intent?: TurnTransitionIntent }
-  | { type: 'TURN_STARTED'; actorId: string; turnPhase: 'normal' | 'slow'; /** The recorded turn-start lifecycle participants for this actor. */ participants: string[]; /** True only for the combat-start first turn, which replays the historical ENCOUNTER_STARTED cadence (round-start effects already ran; no turn-start lifecycle fires). */ combatStart?: boolean }
+  | { type: 'TURN_STARTED'; actorId: string; turnPhase: 'normal' | 'slow'; /** The recorded turn-start lifecycle participants for this actor. */ participants: string[]; /** T6.3 — the durable turn-start candidate plan (p.108 ordering facts): replay applies the ordering authority from the record, never registry insertion order. */ phases?: TurnBoundaryPhasePlan[]; /** True only for the combat-start first turn, which replays the historical ENCOUNTER_STARTED cadence (round-start effects already ran; no turn-start lifecycle fires). */ combatStart?: boolean }
   | { type: 'ACTOR_WENT_SLOW'; actorId: string; eligibleSide: EncounterActor['side']; turnPhase: 'normal' | 'slow' }
   | { type: 'ACTOR_DEFEATED'; actorId: string; woundGained: boolean }
   | { type: 'VIGILANCE_SPENT'; actorId: string; targetId: string; use: 'guard' | 'punish'; roll: number; appliedDamage: number; /** Durable Defiance result: the applied amount is already floored at 1 HP and

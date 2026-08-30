@@ -448,9 +448,9 @@ describe('cross-character effect ordering (p.107)', () => {
     const { state, hero, foe, ally } = conditionEncounter({ foeAt: { x: 5, y: 1 }, allyAt: { x: 2, y: 1 } });
     const allyId = ally!.id;
     const pending = [
-      { actorId: hero.id, ownerId: hero.id, kind: 'condition' as const, record: roundEndCondition(hero.id), order: 0 },
-      { actorId: foe.id, ownerId: foe.id, kind: 'condition' as const, record: roundEndCondition(foe.id), order: 1 },
-      { actorId: allyId, ownerId: allyId, kind: 'condition' as const, record: roundEndCondition(allyId), order: 2 },
+      { actorId: hero.id, ownerId: hero.id, kind: 'condition' as const, record: roundEndCondition(hero.id), order: 0, boundaryKind: 'round-end' as const },
+      { actorId: foe.id, ownerId: foe.id, kind: 'condition' as const, record: roundEndCondition(foe.id), order: 1, boundaryKind: 'round-end' as const },
+      { actorId: allyId, ownerId: allyId, kind: 'condition' as const, record: roundEndCondition(allyId), order: 2, boundaryKind: 'round-end' as const },
     ];
     // The round rolls over on the ally's turn, so the ally is the turn
     // character: the foe's hostile effect resolves first, then the hero's
