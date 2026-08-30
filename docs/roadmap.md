@@ -183,6 +183,29 @@ fact in the same resolution never share an id). Full suite green (1671
 tests), census byte-stable at 427, no source-unit promotion. The next
 tranche is **T5 — Execution: U11, U12, U13** (plan §3.2).
 
+**T5a landed (2026-08-30): U11 core FLOW / SEQUENCE.**
+`kernels/execute-flow.ts` is the single U11 flow authority (barrel
+re-exported through the runtime compatibility barrel): the typed `FlowNode`
+vacabulary (`sequence|bind|if|apply|repeat|for-each|invoke|emit-fact`),
+`executeFlow`, the `FlowPlanner`, and the reducer-facing `effectsToMutations`
+projection. `executeRuleProgram` plans the whole action against a PURE
+SIMULATED intermediate encounter state — the reducer's own sequential
+projection of the emitted-so-far mutation list, recomputed from a pre-flow
+snapshot per emit, U15 atomic groups included (a simultaneous swap can never
+become a sequential swap in the simulation) — so later effects observe the
+ACTUAL intermediate state produced by earlier ones (rush-then-damage,
+remove-then-place, teleport-then-adjacency, repeat iterations). Costs and
+named-resolver mutations are absorbed first (p.99/p.102 paid-at-start
+ordering); `U1` bind/`bound` selector propagation and `U10` emit-fact ride
+the flow. Deliberately NOT landed: `choose`, `open-window`, `suspend` (U13/
+U12 next), no ad-hoc continuation records. A T5a corrective made the bastion
+Battering Ram/Catapult Collide-or-Heroic trigger steps select their
+command-supplied referent without a stale pre-shove range re-check (the
+reaction names the shoved character, p.122/p.123 — the old engine only
+passed the range check because it re-validated against the pre-shove state).
+Full suite green (1683 tests), census byte-stable at 427, no source-unit
+promotion, no unresolved-unit wiring.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

@@ -26,7 +26,7 @@
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import { rollDamageDice } from '../primitives/job-kit.js';
 import type { DistanceEndpoint, RuleActorView, RuleExecutionContext, RuleNumber, RuleSelector } from '../primitives/types.js';
-import { resolveReference } from '../primitives/reference.js';
+import { domainOf, EMPTY_BINDER, lookupBound, resolveReference, type Reference } from '../primitives/reference.js';
 import type { SpatialOrigin } from '../primitives/anchor.js';
 import { resolveSpatialAnchor } from './candidate.js';
 import { evaluateActorQuery, evaluateValueQuery } from './evaluate-query.js';
@@ -107,6 +107,20 @@ export function selectActors(selector: RuleSelector, context: RuleExecutionConte
     case 'condition': selected = evaluateActorQuery({ relation: selector.relation, conditionId: selector.conditionId }, context); break;
     case 'marked': selected = evaluateActorQuery({ mark: { markId: selector.markId } }, context); break;
     case 'summons': selected = evaluateActorQuery({ summon: { owner: selector.owner, summonType: selector.summonType } }, context); break;
+    // U1 binding glue: resolve a reference BOUND by an earlier flow operation
+    // (`for-each` items, `BIND … AS …`). Domain-checked — a bound name that
+    // resolves to a non-actor reference rejects, never silently reinterprets.
+    case 'bound': {
+      const boundRef = lookupBound(context.boundNames ?? EMPTY_BINDER, selector.name);
+      if (boundRef === undefined) throw new RuleProgramViolation('selector.bound', `No reference named "${selector.name}" is bound in this resolution.`);
+      if (domainOf(boundRef) !== 'actor') throw new RuleProgramViolation('selector.bound', `Bound reference "${selector.name}" is not an actor reference.`);
+      const resolution = resolveReference(boundRef as Reference<'actor'>, context);
+      if (!resolution.ok) throw new RuleProgramViolation('selector.bound', `Bound reference "${selector.name}" failed to resolve: ${resolution.problem}.`);
+      if (resolution.value.kind === 'collection') selected = resolution.value.items.flatMap((item) => item.kind === 'actor' ? [item.actor] : []);
+      else if (resolution.value.kind === 'actor') selected = [resolution.value.actor];
+      else throw new RuleProgramViolation('selector.bound', `Bound reference "${selector.name}" resolved to a non-actor value.`);
+      break;
+    }
   }
   // TODO(ICON-rules, pp.87–92, 94, 107): eligibility is now ONE shared
   // authority (kernels/candidate.ts + kernels/evaluate-query.ts); line of

@@ -93,7 +93,13 @@ export type RuleSelector =
   | { kind: 'within'; origin: RuleSelector; relation: RuleRelation; range: RuleNumber }
   | { kind: 'condition'; conditionId: string; relation: RuleRelation }
   | { kind: 'marked'; markId?: string }
-  | { kind: 'summons'; summonType?: string; owner: 'self' | 'any' };
+  | { kind: 'summons'; summonType?: string; owner: 'self' | 'any' }
+  /** U1 binding glue: resolve a reference BOUND by an earlier flow operation
+   * (`for-each` items, `BIND … AS …`). The name must be bound and must
+   * resolve to the actor domain (a bound position is domain-mismatch —
+   * reject, never reinterpret). A bound COLLECTION resolves to every
+   * actor in it, in the collection's deterministic order. */
+  | { kind: 'bound'; name: string };
 
 export type RuleNumber =
   | { kind: 'constant'; value: number }

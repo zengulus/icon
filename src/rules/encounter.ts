@@ -1269,7 +1269,12 @@ export function executeRuleProgramWithReactiveTriggers(
       collidedActorIds: finalFacts.collidedActorIds,
       slainActorIds: finalFacts.slainActorIds,
     },
-    facts: [...resolvedTriggers, ...finalFacts.facts],
+    // U10 integration: facts emitted by `emit-fact` flow nodes (U11) ride
+    // the event's durable fact history after the derived facts, so the
+    // boundary records exactly what the flow produced. (Their final
+    // `instanceId` renumbering is U12/U13 boundary work — content does not
+    // emit facts yet.)
+    facts: [...resolvedTriggers, ...finalFacts.facts, ...(first.facts ?? [])],
     resolutionId: finalFacts.resolutionId,
     continuation: {
       executedStepIds: [...executedStepIds],

@@ -2,7 +2,7 @@ import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { hasUnlimitedRange, masteryFoldRuleRuntimeView, masteryModifierActive } from '../../../kernels/mastery-fold.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { Position } from '../../../../types.js';
-import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
+import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry, RuleSelector } from '../../../primitives/types.js';
 import {
   axisDirection as toward, shoveMutation as shove,
   self, attackTarget, constant, damageDie, fray, normalDamage,
@@ -33,7 +33,23 @@ import {
  * - "Collide or Heroic" and "Heroic" triggers fire only when the caller
  *   asserts the trigger through EXECUTE_RULE; USE_ABILITY resolves the
  *   base ability deterministically without triggered extras.
+ *
+ * Trigger-step referents (U11 flow): a Collide/Heroic reaction names the
+ * SHOVED character ("Foe is slashed" p.122; "That ally gains 2 vigor"
+ * p.123) — a specific referent, wherever the shove left them. The trigger
+ * step therefore selects the command-supplied target WITHOUT a range
+ * constraint: a range re-check would be evaluated against the POST-shove
+ * intermediate state under ordered flow (p.85/p.107 §4) and would wrongly
+ * reject the reaction the source unconditionally grants. The initial
+ * "adjacent character"/"adjacent ally" eligibility is validated at the
+ * command boundary, not re-checked by the reaction.
  */
+
+/** The command-supplied target as a SPECIFIC REFERENT for a triggered
+ * reaction step (see the file header): base eligibility only (alive +
+ * on-battlefield + relation), no range re-query — the reaction targets the
+ * shoved character wherever the shove left them. */
+const reactionTarget = (relation: 'ally' | 'any'): RuleSelector => ({ kind: 'input', key: 'target', relation, minimum: 1, maximum: 1 });
 
 /** ICON p.122: repeatable single-target control plus a second-foe shove. */
 const heraculeEffects: RuleResolver = (context) => {
@@ -218,8 +234,8 @@ export const BASTION_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSource
     range: constant(1),
     steps: [
       { id: 'base', timing: 'use', effects: [{ kind: 'move', target: inputTarget('any', 1), movement: 'shove', distance: constant(2), directionInput: 'direction' }] },
-      { id: 'collide-or-heroic', timing: 'use', trigger: 'collide', effects: [statusOn(inputTarget('any', 1), 'slashed'), { kind: 'actions', target: self, operation: 'refund', amount: constant(1) }] },
-      { id: 'heroic', timing: 'use', trigger: 'heroic', effects: [statusOn(inputTarget('any', 1), 'slashed'), { kind: 'actions', target: self, operation: 'refund', amount: constant(1) }] },
+      { id: 'collide-or-heroic', timing: 'use', trigger: 'collide', effects: [statusOn(reactionTarget('any'), 'slashed'), { kind: 'actions', target: self, operation: 'refund', amount: constant(1) }] },
+      { id: 'heroic', timing: 'use', trigger: 'heroic', effects: [statusOn(reactionTarget('any'), 'slashed'), { kind: 'actions', target: self, operation: 'refund', amount: constant(1) }] },
     ],
   })], ['effect', 'effect', 'collide-or-heroic']),
 
@@ -288,8 +304,8 @@ export const BASTION_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSource
     range: constant(1),
     steps: [
       { id: 'base', timing: 'interrupt', effects: [{ kind: 'move', target: inputTarget('ally', 1), movement: 'shove', distance: constant(2), directionInput: 'direction' }] },
-      { id: 'collide-or-heroic', timing: 'interrupt', trigger: 'collide', effects: [{ kind: 'vigor', target: inputTarget('ally', 1), amount: constant(2) }, { kind: 'move', target: inputTarget('ally', 1), movement: 'rush', distance: constant(1), directionInput: 'rush-direction' }] },
-      { id: 'heroic', timing: 'interrupt', trigger: 'heroic', effects: [{ kind: 'vigor', target: inputTarget('ally', 1), amount: constant(2) }, { kind: 'move', target: inputTarget('ally', 1), movement: 'rush', distance: constant(1), directionInput: 'rush-direction' }] },
+      { id: 'collide-or-heroic', timing: 'interrupt', trigger: 'collide', effects: [{ kind: 'vigor', target: reactionTarget('ally'), amount: constant(2) }, { kind: 'move', target: reactionTarget('ally'), movement: 'rush', distance: constant(1), directionInput: 'rush-direction' }] },
+      { id: 'heroic', timing: 'interrupt', trigger: 'heroic', effects: [{ kind: 'vigor', target: reactionTarget('ally'), amount: constant(2) }, { kind: 'move', target: reactionTarget('ally'), movement: 'rush', distance: constant(1), directionInput: 'rush-direction' }] },
     ],
   })], ['effect', 'trigger', 'effect', 'heroic']),
 

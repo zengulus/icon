@@ -1592,8 +1592,11 @@ const isExplicitDestinationMove = (mutation: RuleMutation): mutation is Extract<
  * co-moved with this leg — a grouped leg may only ignore the footprints of
  * actors participating in its own declared simultaneous spatial group.
  * Shared by the live application, the atomic-group prevalidation, and every
- * dry run, so simulation and replay decide from one rule. */
-function coMovedActorIdsForMove(mutations: readonly RuleMutation[], mutation: Extract<RuleMutation, { kind: 'move' }>): string[] {
+ * dry run, so simulation and replay decide from one rule. Exported so the
+ * U11 flow planner (`kernels/execute-flow.ts`) applies its simulated
+ * intermediate state with the SAME group-scoped exemption the live
+ * application and every dry run use. */
+export function coMovedActorIdsForMove(mutations: readonly RuleMutation[], mutation: Extract<RuleMutation, { kind: 'move' }>): string[] {
   if (mutation.spatialBatchId === undefined) return [];
   return [...new Set(mutations
     .filter((candidate): candidate is Extract<RuleMutation, { kind: 'move' }> => candidate.kind === 'move' && candidate.spatialBatchId === mutation.spatialBatchId)

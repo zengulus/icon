@@ -1353,45 +1353,98 @@ shove-then-collide); repeat clauses ("rush 1, then rush 1, each time
 optionally damage"); the two-pass reactive fold exists because Collide/Slay
 are only knowable after resolution.
 
-**Current state.** `PARTIAL`. `RuleProgram/RuleStep/RuleEffect`,
-`executeRuleProgram`, `effectsToMutations`, `orderedSelectedSteps`,
-`resolution-targets`, `if`, `repeat` (all in `kernels/runtime.ts` +
-`src/rules/encounter.ts`). Flow effects execute out-of-order (mutations
-are collected, not simulated); a later `repeat` iteration CANNOT observe a
-prior `move`'s result; `spatialBatchId` swap legs and `resolution-targets`
-are prior art for observation+grouping.
+**Current state.** `PARTIAL` — the CORE landed (T5a, 2026-08-30).
+`kernels/execute-flow.ts` is the single flow authority: the typed `FlowNode`
+vacabulary (`sequence|bind|if|apply|repeat|for-each|invoke|emit-fact` —
+`choose`/`open-window`/`suspend` are NOT landed yet), `executeFlow`, the
+`FlowPlanner`, and the reducer-facing `effectsToMutations` projection.
+`executeRuleProgram` plans the whole action through the planner: costs and
+the named resolver are absorbed first (paid at the start of the ability,
+p.99/p.102 — later flow steps observe the paid/resolved state), then each
+ordered step's effects run against a PURE SIMULATED intermediate encounter
+state. The simulation is the reducer's own sequential projection of the
+emitted-so-far mutation list (`applyRuleMutation`), recomputed from a
+pre-flow snapshot per emit so U15 atomic groups are judged exactly as the
+reducer judges them (every leg or none, group-scoped co-moved exemption,
+denial fixpoint included) — a simultaneous swap can never become a
+sequential swap in the simulation. `RuleEffect` `if`/`repeat`/attack
+branches/save branches evaluate against the same simulation, so a later
+`repeat` iteration observes a prior iteration's result and an `if` gate
+reads post-mutation state. U1 binding glue: a `bound` `RuleSelector` kind
+resolves names bound by earlier operations (domain-checked), and the
+`bind`/`for-each` nodes propagate them. U10 integration: the `emit-fact`
+node records typed facts on the flow result (final `instanceId` renumbering
+is U12/U13 boundary work; content does not emit facts yet).
 
-**Locations partially owning/duplicating.** `kernels/runtime.ts`
-(`effectsToMutations`, `executeRuleProgram`); `src/rules/encounter.ts`
-(two-pass reactive fold, continuation); `primitives/spatial-intent.ts`
-(spatial batch prior art); per-resolver ordered sequencing
-(`content/jobs/programs/*` hand-sequenced resolvers).
+Documented boundaries (specialists OUTSIDE the flow authority): named
+per-ability RESOLVERS still receive the original context and are absorbed
+(they do not read the simulated view — migrating them onto flow nodes is
+consumer work); kernel reads through `context.encounterState`
+(recipient-scoped bonus damage dice, teleport-choice) stay live-state
+reads; the reactive continuation fold re-invokes `executeRuleProgram` per
+pass with a FRESH simulation seeded from the original encounter state
+(cross-pass simulation rides the recorded resolution facts — U12
+territory); `rerollSaveMutations` runs through the same planner with no
+`encounterState` on its context (the original-view path, behavior
+preserved). `open-window`/`suspend` remain deliberately absent (U13/U12).
+A T5a corrective surfaced a stale range re-check on the bastion
+Battering Ram/Catapult Collide-or-Heroic trigger steps: the reaction names
+the SHOVED character ("Foe is slashed" p.122; "That ally gains 2 vigor"
+p.123), and the old engine only passed the range-1 check because it
+re-validated against the PRE-shove state; the trigger steps now select the
+command-supplied referent without a range re-query (base eligibility
+only).
 
-**Intended authority.** `kernels/execute-flow.ts` (extracted from
-`runtime.ts`, barrel re-exported): `executeFlow(nodes, context)` with a
+**Locations partially owning/duplicating.** Migrated (2026-08-30):
+`kernels/runtime.ts` (`effectsToMutations` moved to `execute-flow.ts`,
+`executeRuleProgram` plans through the `FlowPlanner`, `execute-flow`
+barrel re-exported); `src/rules/encounter.ts`'s two-pass reactive fold
+remains the documented continuation specialist (consumes the recorded
+facts, never re-plans through the flow authority); `rerollSaveMutations`
+runs through the planner's original-view path. Remaining: per-resolver
+ordered sequencing (`content/jobs/programs/*` hand-sequenced resolvers)
+and `primitives/spatial-intent.ts`'s spatial-batch prior art stay the
+spatial specialists they are (the flow authority mirrors their reducer
+application).
+
+**Intended authority.** `kernels/execute-flow.ts` (barrel re-exported
+through `kernels/runtime.ts`): `executeFlow(nodes, context)` with a
 SIMULATED intermediate state during command planning (pure), preserving the
-pure command/event architecture; `effectsToMutations` becomes the reducer-
-facing projection of the same plan. Dependencies: U1 (bind), U4 (choose),
-U6 (if), U10 (emit fact), U12 (suspend/continue), U15 (atomic groups),
-U17 (ordering). Consumed by every domain authority that sequences effects.
+pure command/event architecture; `effectsToMutations` is the reducer-facing
+projection of the same plan. Dependencies: U1 (bind — landed), U4 (choose
+— NOT landed; the `choose` node arrives with U13 window work), U6 (if —
+landed), U10 (emit fact — landed), U12 (suspend/continue — deferred),
+U15 (atomic groups — landed through the shared reducer application),
+U17 (ordering — consumed by the step selection the flow plans). Consumed
+by every domain authority that sequences effects.
 
-**Typed vocabulary.** Flow nodes (`sequence|bind|choose|if|apply|repeat|
-for-each|invoke|emit-fact|open-window|suspend`); an intermediate-state
-simulation view (clone-based, pure); `RuleEffect` union extended only as the
-next semantics need it (split last, per the file-split plan).
+**Typed vocabulary.** Flow nodes (`sequence|bind|if|apply|repeat|
+for-each|invoke|emit-fact`; `choose`/`open-window`/`suspend` land with
+U13/U12); an intermediate-state simulation view (clone-based, pure); the
+`bound` `RuleSelector` kind (U1 binding glue); `RuleEffect` union extended
+only as the next semantics need it (split last, per the file-split plan).
 
 **Replay semantics.** The command plans against a simulated intermediate
 state; the emitted mutation sequence is what replays — replay never
 re-simulates decision logic. Repeat counts, choices, and dice are recorded
-at the command boundary.
+at the command boundary; the recorded event carries the boundary stamps
+(determined damage, resolution facts) exactly as before.
 
-**Acceptance tests.** Positive: rush-then-damage observes the moved
-position; remove-then-place observes the vacated space; teleport-then-
-adjacency; repeat with observable state between iterations; for-each over a
-CandidateSet. Negative: an invalid intermediate leg rejects before commit.
-Boundary: zero-length repeat; empty for-each; swap group partial legality.
-Replay: an ordered multi-step ability (with a prior-art `spatialBatchId`
-case) replays byte-identical.
+**Acceptance tests.** LANDED (2026-08-30, `t5a-u11-flow.test.ts`, 12
+cases, all adversarial against original-state evaluation): rush-then-
+damage observes the moved position; remove-then-place observes the vacated
+space (occupying-count gate); teleport-then-adjacency; repeat iteration
+N+1 sees N's state; for-each over an already-derived CandidateSet
+executes deterministically (shared U3 authority derives the set, the flow
+never re-queries); invoke shares the simulation; bind reaches later value
+reads; emit-fact rides the flow result; an invalid intermediate leg
+rejects the whole command before durable commit (no partial list, live
+state untouched); zero-repeat and empty-for-each are clean no-ops; U15
+swap groups stay simultaneous (legal swap applied every leg with the
+follow-up read seeing the post-swap state; denied group skips every leg);
+an ordered multi-step ability (with a `spatialBatchId` swap and a
+dice-consuming damage roll) replays byte-identical with no new
+decisions/RNG. Negative/boundary/replay all covered in that file.
 
 **Consumers to migrate.** Hand-sequenced resolvers → flow nodes where the
 sequence is generic (repeat/intermediate state); `executeRuleProgram`'s
@@ -2274,13 +2327,18 @@ id, and replay reproduces the identical identities byte-for-byte. 1671
 tests green; census byte-stable at 427; no source-unit promotion.
 
 **Phase T5 — Execution: U11, U12, U13.**
+**T5a landed (2026-08-30): U11 core FLOW / SEQUENCE.**
 `kernels/execute-flow.ts` (simulated intermediate state, bind/for-each/
-invoke/emit-fact); `primitives/continuation.ts` (armed records, LIVE/
+invoke/emit-fact — the U11 row above states exactly what landed and the
+documented boundaries); `primitives/continuation.ts` (armed records, LIVE/
 CAPTURED, deferred-rule vs held-result, expiry); `kernels/decision-window.ts`
 (one record; trigger-window/save-window/gamble-window/pending-interrupts
 become instantiations); `rerollSaveMutations` → resume path. Exit:
 suspend/resume replay-exact; windows are one record shape; the terrain
-retraction lesson (`554d8ca`) is covered by fixtures.
+retraction lesson (`554d8ca`) is covered by fixtures. The remaining T5 work
+(U12 armed continuations, then U13 unified windows, then U11's
+`open-window`/`suspend` wired through them) is unchanged; T5a did NOT
+begin it.
 
 **Phase T6 — Consolidation and gate: U18/U19 decision, migration
 completion, gate.**
