@@ -170,9 +170,18 @@ no-op records no false fact; replay never re-decides); U16
 `trigger-resolved` markers persist on the event's U10 facts (byte-identical
 across replay); and U10 effect facts carry the exact live instance id the
 reducer creates/removes, with instance-scoped removals leaving coexisting
-instances intact. Full suite green (1660 tests), census byte-stable at 427,
-no source-unit promotion. The next tranche is **T5 — Execution: U11, U12,
-U13** (plan §3.2).
+instances intact. A **T4 closeout (2026-08-30)** finished the remaining
+correctness edges: `resolveMutationOutcomes` is idempotent (an
+already-stamped damage instance is treated as final — repeated continuation
+passes perform zero new determinations); legacy checkpoint migration
+derives a safe lower bound from ALL recoverable durable evidence (retained
+RMA count, parseable retained resolution ids, revision floor) so a
+saturated pre-fix checkpoint can never reuse a historical serial; and U10
+fact `instanceId` is injective within a resolution via a single global
+allocation sequence (an explicit defeat fact and a Slay-derived defeat
+fact in the same resolution never share an id). Full suite green (1671
+tests), census byte-stable at 427, no source-unit promotion. The next
+tranche is **T5 — Execution: U11, U12, U13** (plan §3.2).
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

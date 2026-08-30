@@ -155,21 +155,88 @@ describe('T4 final — Fix 1: monotonic durable resolution identity', () => {
     expect(nextRma.resolutionId).toBe('res:vagabond:trait:prowl:4');
   });
 
-  it('legacy checkpoints migrate deterministically from their recorded history', () => {
+  it('a saturated legacy checkpoint can never reuse a retained historical serial', () => {
+    const { state, hero } = startedEncounter();
+    state.actors[hero.id].traitIds.push('vagabond:trait:prowl');
+    // A pre-fix saturated checkpoint: the bounded log retained only its last
+    // 500 events, but a retained resolutionId already carries serial 731.
+    const legacyEventLog: EncounterEvent[] = Array.from({ length: 500 }, (_, i) => ({
+      ...noiseEvent(hero.id),
+      ...(i === 499 ? { resolutionId: 'res:vagabond:trait:prowl:731' } : {}),
+    }));
+    const legacy = {
+      ...state,
+      revision: 500,
+      eventLog: legacyEventLog,
+    } as unknown as EncounterState;
+    delete (legacy as Partial<EncounterState>).resolutionSerial;
+    const migrated = migrateEncounter(legacy);
+    // The migrated serial must be at least the maximum recoverable serial…
+    expect(migrated.resolutionSerial).toBeGreaterThanOrEqual(731);
+    // …and the next resolution is strictly beyond it — never a reuse.
+    const next = executeCommand(migrated, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'vagabond:trait:prowl', actionId: 'default', timing: 'use', input: {},
+    });
+    const nextRma = next.events.find((event): event is RMA => event.type === 'RULE_MUTATIONS_APPLIED')!;
+    const nextSerial = Number(nextRma.resolutionId!.slice(nextRma.resolutionId!.lastIndexOf(':') + 1));
+    expect(nextSerial).toBeGreaterThan(731);
+    expect(nextSerial).toBe(migrated.resolutionSerial + 1);
+  });
+
+  it('legacy migration parses source ids that themselves contain colons', () => {
+    const { state, hero } = startedEncounter();
+    const legacy = {
+      ...state,
+      revision: 0,
+      eventLog: [{
+        ...noiseEvent(hero.id),
+        resolutionId: 'res:job:weird:ability:core:7',
+      }],
+    } as unknown as EncounterState;
+    delete (legacy as Partial<EncounterState>).resolutionSerial;
+    // Parsed from the FINAL numeric segment — the colons inside the source id
+    // never confuse the derivation.
+    expect(migrateEncounter(legacy).resolutionSerial).toBe(7);
+  });
+
+  it('malformed or legacy resolution ids do not crash migration (ignored individually)', () => {
+    const { state, hero } = startedEncounter();
+    const legacy = {
+      ...state,
+      revision: 0,
+      eventLog: [
+        { ...noiseEvent(hero.id), resolutionId: 'res:no-serial' },
+        { ...noiseEvent(hero.id), resolutionId: 'res:trailing-colon:' },
+        { ...noiseEvent(hero.id), resolutionId: 'not-a-current-format-id' },
+        { ...noiseEvent(hero.id), resolutionId: 'res:x:12:not-a-number' },
+        noiseEvent(hero.id),
+      ],
+    } as unknown as EncounterState;
+    delete (legacy as Partial<EncounterState>).resolutionSerial;
+    // The malformed ids are skipped; the deterministic retained-RMA count
+    // remains the floor (no revision, no parseable serial).
+    expect(migrateEncounter(legacy).resolutionSerial).toBe(5);
+  });
+
+  it('ordinary unsaturated legacy history migrates deterministically (safe floor, never reuse)', () => {
     const { state, hero } = startedEncounter();
     state.actors[hero.id].traitIds.push('vagabond:trait:prowl');
     const withHistory = applyEvents(state, [noiseEvent(hero.id), noiseEvent(hero.id)]);
     const legacy = JSON.parse(JSON.stringify(withHistory)) as EncounterState;
     delete (legacy as Partial<EncounterState>).resolutionSerial;
     const migrated = migrateEncounter(legacy);
-    // Derived from the recorded RULE_MUTATIONS_APPLIED count (the historical
-    // derivation), so the next serial continues exactly where it left off.
-    expect(migrated.resolutionSerial).toBe(2);
+    // Derived conservatively from ALL durable evidence: every recorded event
+    // advanced the encounter `revision` (6 setup/round events + 2 RMAs), and
+    // revision is always >= the resolution serial count — so the migrated
+    // serial is at least that floor. It jumps forward rather than risk reusing
+    // a historical identity; the next resolution is strictly beyond it.
+    expect(migrated.resolutionSerial).toBeGreaterThanOrEqual(withHistory.revision);
     const next = executeCommand(migrated, {
       type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'vagabond:trait:prowl', actionId: 'default', timing: 'use', input: {},
     });
     const nextRma = next.events.find((event): event is RMA => event.type === 'RULE_MUTATIONS_APPLIED')!;
-    expect(nextRma.resolutionId).toBe('res:vagabond:trait:prowl:3');
+    expect(nextRma.resolutionId).toBe(`res:vagabond:trait:prowl:${migrated.resolutionSerial + 1}`);
+    expect(nextRma.resolutionId).not.toContain(':3:'); // never the pre-migration derivation
   });
 });
 

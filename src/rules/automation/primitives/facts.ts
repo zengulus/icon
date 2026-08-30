@@ -98,11 +98,20 @@ export type Fact =
 /**
  * The single deterministic event identity of one fact — a pure function of
  * the RESOLUTION identity (the replay-stable, globally-unique-per-resolution
- * id owned by the command/event boundary) + the local fact kind + the
- * mutation's position in that resolution. Two separate uses of the same
- * ability MUST differ (different `resolutionId`); replaying the same recorded
- * resolution reproduces the SAME ids (same `resolutionId`, same index). It is
- * NEVER inferred from later mutable state or array construction order.
+ * id owned by the command/event boundary) + the local fact kind + the fact's
+ * index within that resolution. Two separate uses of the same ability MUST
+ * differ (different `resolutionId`); replaying the same recorded resolution
+ * reproduces the SAME ids (same `resolutionId`, same index). It is NEVER
+ * inferred from later mutable state or array construction order.
+ *
+ * INJECTIVITY CONTRACT: the kernel assembler
+ * (`kernels/resolution-triggers.ts::renumberFactIds`) assigns every fact of
+ * one resolution its FINAL index from a single ordered global sequence, so
+ * two distinct facts within a resolution can never share an `instanceId` — an
+ * explicit `actor-defeated` mutation fact and a Slay-derived
+ * `actor-defeated` fact included. The intermediate per-source indices used
+ * while assembling (mutation position, collide/slay offset) are superseded by
+ * that final allocation before the event records the fact list.
  */
 export function factInstanceId(resolutionId: string, kind: Fact['kind'], index: number): string {
   return `fact:${resolutionId}:${kind}:${index}`;

@@ -2251,6 +2251,28 @@ same-named mark intact, and the U6 `effect-still-exists` chain is
 end-to-end exact. 1660 tests green; census byte-stable at 427; no
 source-unit promotion.
 
+**T4 closeout (2026-08-30) — the remaining correctness edges closed.** (1)
+**Idempotent outcome stamping**: `resolveMutationOutcomes` treats an
+already-stamped damage instance as authoritative — re-running it over an
+already-resolved mutation list performs ZERO new damage determinations and
+reproduces the identical stamps/state sequence, so the reactive
+continuation's repeated `deriveResolutionTriggers` passes never re-decide
+the base damage; only newly-added unstamped damage may invoke the damage
+authority. (2) **Safe legacy resolution-serial migration**: a legacy
+checkpoint (no `resolutionSerial`) derives a conservative lower bound from
+ALL recoverable durable evidence — retained RMA count, every parseable
+retained `resolutionId` (parsed from the FINAL numeric segment, so
+colon-bearing source ids are safe; malformed ids are ignored
+individually), and the encounter `revision` floor — so a saturated
+pre-fix checkpoint can never reuse a historical serial (the migrated
+counter may jump forward; it never fabricates exact unknown identities).
+(3) **Injective fact identity**: every fact of a resolution is allocated
+its final `instanceId` from ONE deterministic ordered sequence at assembly
+(`renumberFactIds`), so an explicit `actor-defeated` mutation fact and a
+Slay-derived `actor-defeated` fact in the same resolution never share an
+id, and replay reproduces the identical identities byte-for-byte. 1671
+tests green; census byte-stable at 427; no source-unit promotion.
+
 **Phase T5 — Execution: U11, U12, U13.**
 `kernels/execute-flow.ts` (simulated intermediate state, bind/for-each/
 invoke/emit-fact); `primitives/continuation.ts` (armed records, LIVE/

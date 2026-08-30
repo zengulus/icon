@@ -52,7 +52,11 @@ function resolveContextOf(
 /** The collide facts (ICON p.102/103): a shove as part of THIS ability shoved
  * an actor into an obstruction. The domain spatial authority
  * (`collidingShoveTargets`) decides WHICH actors collided; this kernel only
- * turns that into typed facts with U9 provenance, ID-scoped by resolution. */
+ * turns that into typed facts with U9 provenance, ID-scoped by resolution.
+ * The `instanceId` index here is only a deterministic INTERMEDIATE label —
+ * {@link deriveResolutionTriggers} renumbers every fact of the resolution
+ * through ONE global index sequence before recording, so the intermediate
+ * offsets can never collide across the assembled sources. */
 function collideFacts(resolutionId: string, sourceId: string, ownerId: string, collidedActorIds: string[]): Fact[] {
   return collidedActorIds.map((shovedActorId, offset) => ({
     kind: 'collide',
@@ -71,7 +75,8 @@ function collideFacts(resolutionId: string, sourceId: string, ownerId: string, c
 
 /** The slay facts (ICON p.95 glossary): THIS ability reduced an actor to 0.
  * The defeat authority (`reactiveSlayTargets`) decides WHO was slain; this
- * kernel turns that into typed facts with U9 provenance. */
+ * kernel turns that into typed facts with U9 provenance. The `instanceId`
+ * index is likewise only an intermediate label (see {@link collideFacts}). */
 function slayFacts(resolutionId: string, sourceId: string, ownerId: string, slainActorIds: string[]): Fact[] {
   return slainActorIds.map((defeatedId, offset) => ({
     kind: 'actor-defeated',
@@ -88,6 +93,22 @@ function slayFacts(resolutionId: string, sourceId: string, ownerId: string, slai
       ...(ownerId !== '' ? { sourceActorId: ownerId } : {}),
       delivery: 'effect',
     },
+  }));
+}
+
+/** Renumber a resolution's ASSEMBLED fact list (domain collide/slay facts +
+ * mutation-record facts + ability-used) through ONE global, deterministic
+ * index sequence so `instanceId` is INJECTIVE within the resolution — two
+ * distinct facts can never share an id, no matter which source produced them
+ * (an explicit `actor-defeated` mutation fact and a Slay-derived
+ * `actor-defeated` fact included). The readable `fact:<resolutionId>:<kind>:<n>`
+ * shape is preserved with `n` the fact's global position in the final
+ * ordered list; the kind remains in the payload. Deterministic and
+ * replay-safe (a pure function of the ordered list). */
+function renumberFactIds(resolutionId: string, facts: Fact[]): Fact[] {
+  return facts.map((fact, globalIndex) => ({
+    ...fact,
+    instanceId: factInstanceId(resolutionId, fact.kind, globalIndex),
   }));
 }
 
@@ -148,11 +169,18 @@ export function deriveResolutionTriggers(
   // Domain collide/slay facts (spatial + defeat authority live in the kernel).
   const collidedActorIds = collidingShoveTargets(state, mutations);
   const slainActorIds = reactiveSlayTargets(state, [...mutations]);
-  const allFacts = [
+  // ONE deterministic ordered sequence for the resolution's final fact
+  // identity: ability-used (head), then the mutation-record facts, then the
+  // domain collide/slay facts. `renumberFactIds` assigns every fact its final
+  // `instanceId` from this single global sequence, so injectivity within the
+  // resolution is by construction — an explicit defeat mutation and a
+  // Slay-derived defeat fact (or any other pair of distinct facts) can never
+  // share an id.
+  const allFacts = renumberFactIds(resolutionId, [
     ...facts,
     ...collideFacts(resolutionId, sourceId, ownerId, collidedActorIds),
     ...slayFacts(resolutionId, sourceId, ownerId, slainActorIds),
-  ];
+  ]);
   // Project the byte-compatible reactive-trigger surface from the typed facts.
   // The caller's known-trigger set (from the continuation state) is layered in
   // exactly as before — it is the pre-existing durable trigger history.

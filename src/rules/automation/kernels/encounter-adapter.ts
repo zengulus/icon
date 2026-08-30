@@ -569,7 +569,14 @@ export function damageIntentFromMutation(
  *     reducer consumes the recorded outcome instead of calling the damage
  *     authority again. A mutation that no-ops because an earlier mutation
  *     defeated/immunized its target records amount 0 (and the U10 fact layer
- *     emits no false `damage-applied` fact for it).
+ *     emits no false `damage-applied` fact for it). An instance ALREADY
+ *     stamped by an earlier pass of the same resolution is treated as
+ *     authoritative: its recorded amount is reused (the damage authority is
+ *     NEVER invoked again for it) and the simulation applies that same
+ *     recorded amount. `resolveMutationOutcomes` is therefore idempotent in
+ *     the strong semantic sense: re-running it over an already-resolved
+ *     mutation list performs ZERO new damage determinations and reproduces
+ *     the identical stamp/state sequence.
  *
  *  2. EFFECTS — mark/stance/persistent operations get their canonical LIVE
  *     instance id stamped (`instanceId`): creation ids are decided here (the
@@ -597,9 +604,21 @@ export function resolveMutationOutcomes(
     if (denied.has(index)) continue;
     if (mutation.kind === 'damage') {
       const damage = mutation;
-      if (damage.damageType === 'sacrifice') {
+      // Idempotent stamping: an ALREADY-determined instance (stamped by an
+      // earlier pass of the same resolution — reactive continuation runs
+      // `deriveResolutionTriggers` over the same mutation list several times)
+      // is authoritative. Its recorded amount is reused — the damage
+      // authority is NEVER invoked again for it — and the sequential
+      // simulation applies that same recorded amount, so later newly-added
+      // mutations still see the correct prior state. A stamp, once written,
+      // is immutable for the remainder of the resolution.
+      const recorded = damage.determined?.amount;
+      if (recorded !== undefined) {
+        resolvedDamage.set(index, recorded);
+      } else if (damage.damageType === 'sacrifice') {
         // Sacrifice (life-cost) is not armor-determined; the recorded amount
         // is the sacrifice amount itself.
+        damage.determined = { amount: damage.amount };
         resolvedDamage.set(index, damage.amount);
       } else {
         // The else branch excludes sacrifice; the cast is the provable

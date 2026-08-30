@@ -259,12 +259,13 @@ export function migrateEncounter(input: unknown): EncounterState {
     throw new RuleViolation('encounter.event-log', `Encounter event history exceeds the ${MAX_ENCOUNTER_EVENT_LOG}-event durable limit.`);
   }
   // The durable monotonic resolution serial is REQUIRED for replay-stable
-  // resolution ids. A legacy checkpoint predating the field derives it
-  // deterministically from its event history (the historical derivation
-  // counted recorded RULE_MUTATIONS_APPLIED events — the same count), so the
-  // next serial continues exactly where the old derivation left off. A
-  // current checkpoint keeps its own (possibly larger, post-truncation) value.
-  const legacyResolutionSerial = (candidate.eventLog ?? []).filter((event) => event.type === 'RULE_MUTATIONS_APPLIED').length;
+  // resolution ids. A legacy checkpoint predating the field derives a SAFE
+  // lower bound from ALL recoverable durable evidence — never merely the
+  // retained RULE_MUTATIONS_APPLIED count, which undercounts once the bounded
+  // eventLog has truncated earlier history (a saturated pre-fix checkpoint
+  // could otherwise reuse an already-used historical serial). A current
+  // checkpoint keeps its own (possibly larger, post-truncation) value.
+  const legacyResolutionSerial = deriveLegacyResolutionSerial(candidate);
   return {
     ...base,
     ...candidate,
@@ -301,6 +302,60 @@ export function migrateEncounter(input: unknown): EncounterState {
     // for an explicit archive/compaction decision instead.
     eventLog: normalizeEventLog(candidate.eventLog ? clone(candidate.eventLog) : []),
   };
+}
+
+/** Derive a SAFE migration value for the durable `resolutionSerial` of a
+ * legacy checkpoint (one that predates the field). The goal is only to pick a
+ * next serial that can never reuse a historical identity — never to fabricate
+ * exact historical identities that cannot be known:
+ *
+ *  1. RETAINED RMA COUNT — the historical derivation (count of retained
+ *     RULE_MUTATIONS_APPLIED events); a lower bound, but undercounts once the
+ *     bounded log has truncated earlier history.
+ *  2. RETAINED `resolutionId`s — every parseable current-format id
+ *     (`res:<opaque sourceId>:<serial>`) contributes its serial. Parsed from
+ *     the FINAL numeric segment (`lastIndexOf(':')`), never fixed-position
+ *     splitting, so source IDs containing `:` are safe. Malformed/legacy ids
+ *     are ignored individually rather than guessed.
+ *  3. ENCOUNTER `revision` — a conservative monotonic floor: revision counts
+ *     EVERY recorded event (setups included), so it is always ≥ the number of
+ *     RMA events, which is the old serial count. Only honored when it is a
+ *     present, valid non-negative integer; a missing/legacy revision is not
+ *     guessed.
+ *
+ * The result is max over all recoverable evidence: it is at least every
+ * recoverable historical serial (so the next `res:<sourceId>:<serial+1>` is
+ * strictly beyond every retained id) and it jumps forward when the log
+ * truncated. Deterministic — a pure function of the checkpoint itself.
+ */
+function deriveLegacyResolutionSerial(candidate: { revision?: number; eventLog?: EncounterEvent[] }): number {
+  let serial = 0;
+  const count = (candidate.eventLog ?? []).filter((event) => event.type === 'RULE_MUTATIONS_APPLIED').length;
+  if (count > serial) serial = count;
+  // Parse the FINAL numeric segment of every retained current-format
+  // resolution id. Source ids are opaque and may themselves contain ':' — the
+  // serial is defined as the trailing integer, so the last ':' delimiter is
+  // the only safe split point. Unparseable ids are skipped, never guessed.
+  for (const event of candidate.eventLog ?? []) {
+    if (event.type !== 'RULE_MUTATIONS_APPLIED') continue;
+    const resolutionId = event.resolutionId;
+    if (typeof resolutionId !== 'string' || resolutionId.length === 0) continue;
+    const lastColon = resolutionId.lastIndexOf(':');
+    if (lastColon < 0 || lastColon === resolutionId.length - 1) continue;
+    const trailing = resolutionId.slice(lastColon + 1);
+    if (!/^[0-9]+$/.test(trailing)) continue;
+    const parsed = Number(trailing);
+    if (Number.isSafeInteger(parsed) && parsed >= 0 && parsed > serial) serial = parsed;
+  }
+  // Encounter revision as a conservative floor: every recorded event advances
+  // it, so revision ≥ the RMA count ≥ the pre-truncation serial count. This
+  // keeps a saturated checkpoint's migrated serial ahead of every serial its
+  // truncated log can no longer prove, without fabricating specific values.
+  const revision = candidate.revision;
+  if (typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0 && revision > serial) {
+    serial = revision;
+  }
+  return serial;
 }
 
 /** Normalize legacy entity mutations across a migrated encounter's held
