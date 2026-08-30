@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { isOpaqueInternalAuthEmail } from '../connect/username.js';
 import { PHASE_THREE_COVERAGE_READY } from '../rules/index.js';
 import { useCharacters } from '../context/CharacterContext.js';
 
@@ -30,7 +31,7 @@ export function AppShell() {
         <div className="sidebar-foot">
           <span className={`status-dot ${user ? 'online' : ''}`} />
           <div>
-            <strong>{user?.email ?? 'Local archive'}</strong>
+            <strong>{user ? (isOpaqueInternalAuthEmail(user.email) ? 'Connected' : user.email) : 'Local archive'}</strong>
             <small>{user ? 'Synced with Supabase' : cloudEnabled ? 'Sign in to sync' : 'Browser storage'}</small>
           </div>
         </div>

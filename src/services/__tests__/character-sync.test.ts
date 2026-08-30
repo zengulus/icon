@@ -25,14 +25,14 @@ function character(id: string): IconCharacter {
 }
 
 class RecordingTransport implements CloudCharacterTransport {
-  writes: Array<{ character: IconCharacter; revision: number }> = [];
+  writes: Array<{ character: IconCharacter; revision: number; creatorInstanceId: string }> = [];
   reachable = true;
   /** Resolves each write to the last accepted revision (idempotent CAS). */
   durableRevision = 0;
-  fail: ((input: { character: IconCharacter; revision: number }) => boolean) | null = null;
+  fail: ((input: { character: IconCharacter; revision: number; creatorInstanceId: string }) => boolean) | null = null;
 
   available(): boolean { return this.reachable; }
-  async write(input: { character: IconCharacter; revision: number }): Promise<number> {
+  async write(input: { character: IconCharacter; revision: number; creatorInstanceId: string }): Promise<number> {
     this.writes.push(input);
     if (this.fail?.(input)) throw new Error('cloud unavailable');
     this.durableRevision = Math.max(this.durableRevision, input.revision);
@@ -272,6 +272,59 @@ describe('character-sync local-first replication', () => {
     second.flushAllPending();
     await Promise.resolve();
     expect(second.recordFor('hero')?.cloudState).toBe('pending');
+    vi.useRealTimers();
+  });
+
+  it('pending records replicate after the transport becomes available without replaying history (test 31)', async () => {
+    vi.useFakeTimers();
+    const hero = character('hero');
+    transport.reachable = false;
+    controller.start();
+    controller.commit(hero); // revision 1
+    controller.commit({ ...hero, name: 'v2' }); // revision 2
+    // The debounce timers fire while the transport is unavailable: the records
+    // stay durably local + pending with no cloud traffic.
+    vi.advanceTimersByTime(CLOUD_SAVE_DEBOUNCE_MS);
+    expect(transport.writes).toHaveLength(0);
+
+    // Simulate the roster refresh that follows account connection/binding:
+    // pending records are re-scheduled and only the CURRENT revision is ever
+    // uploaded — historical intermediate revisions are not replayed.
+    transport.reachable = true;
+    controller.adopt(controller.allRecords());
+    vi.advanceTimersByTime(CLOUD_SAVE_DEBOUNCE_MS);
+    await Promise.resolve();
+    expect(transport.writes).toHaveLength(1);
+    expect(transport.writes[0]?.revision).toBe(2);
+    expect(controller.recordFor('hero')).toMatchObject({ cloudRevision: 2, cloudState: 'synced' });
+    vi.useRealTimers();
+  });
+
+  it('becoming connected does not turn a character green until the exact revision is acknowledged (test 32)', async () => {
+    vi.useFakeTimers();
+    const hero = character('hero');
+    transport.reachable = false;
+    controller.start();
+    controller.commit(hero);
+    vi.advanceTimersByTime(CLOUD_SAVE_DEBOUNCE_MS);
+    expect(controller.recordFor('hero')?.cloudState).toBe('pending');
+
+    // Connection becomes available, but the cloud acknowledges a different
+    // revision: the chip must stay blue/pending.
+    transport.reachable = true;
+    transport.durableRevision = 99;
+    controller.adopt(controller.allRecords());
+    vi.advanceTimersByTime(CLOUD_SAVE_DEBOUNCE_MS);
+    await Promise.resolve();
+    expect(controller.recordFor('hero')?.cloudState).toBe('pending');
+
+    // Only an exact-revision acknowledgement turns the chip green.
+    transport.write = async (input) => input.revision;
+    controller.adopt(controller.allRecords());
+    vi.advanceTimersByTime(CLOUD_SAVE_DEBOUNCE_MS);
+    await Promise.resolve();
+    expect(controller.recordFor('hero')?.cloudState).toBe('synced');
+    expect(controller.recordFor('hero')?.cloudRevision).toBe(1);
     vi.useRealTimers();
   });
 });

@@ -38,6 +38,10 @@ export interface LocalCharacterRecord {
 export interface CloudCharacterWrite {
   character: IconCharacter;
   revision: number;
+  /** The durable local player instance that created this character. The cloud
+   * compare-and-set requires this instance to be bound to the authenticated
+   * owner, so a client can never upsert under another account. */
+  creatorInstanceId: string;
 }
 
 /** Backend-agnostic cloud transport. `write` returns the revision the durable
@@ -292,7 +296,11 @@ export class CharacterSyncController {
     const revision = record.localRevision;
     this.inflight.set(id, revision);
     try {
-      const accepted = await this.options.transport.write({ character: record.character, revision });
+      const accepted = await this.options.transport.write({
+        character: record.character,
+        revision,
+        creatorInstanceId: record.creatorInstanceId,
+      });
       this.inflight.delete(id);
       this.afterFlight(id, revision, accepted);
     } catch (reason) {

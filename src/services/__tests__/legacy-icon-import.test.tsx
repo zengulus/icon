@@ -300,9 +300,13 @@ describe('Dashboard import control', () => {
         </CharacterProvider>
       </MemoryRouter>,
     );
-    expect(html).toContain('accept=".icon"');
-    expect(html).not.toContain('application/json');
-    expect(html).not.toContain('accept=".json"');
+    // The character import control accepts exactly .icon — never a generic
+    // JSON accept. (The separate icon_connect.json descriptor control below is
+    // a different, intentionally JSON file input.)
+    const accepts = [...html.matchAll(/accept="([^"]*)"/g)].map((match) => match[1]);
+    expect(accepts).toContain('.icon');
+    expect(accepts).not.toContain('.json');
+    expect(accepts).not.toContain('application/json');
   });
 
   it('no legacy .icon export path is added (test 18)', () => {
@@ -315,6 +319,11 @@ describe('Dashboard import control', () => {
         </CharacterProvider>
       </MemoryRouter>,
     );
-    expect(html).not.toContain('Export');
+    // The only export-ish affordance is the PUBLIC icon_connect.json instance
+    // descriptor (identity artifact, required by the connect feature). There
+    // is no legacy .icon character export: no download attribute, and the
+    // import control is import-only.
+    expect(html).not.toContain('download=');
+    expect(html).not.toMatch(/Export\.icon|export as \.icon|export character/i);
   });
 });

@@ -10,6 +10,10 @@ export interface ServerConfig {
    * configuration, this is the ONLY admission path for multiplayer joins —
    * coverage readiness never admits a deployment. */
   allowIncompleteVtt: boolean;
+  /** Server-only HMAC pepper for the opaque username → internal auth email
+   * mapping. Must never reach the browser. Empty in production means the
+   * account endpoints are unavailable (503). */
+  connectPepper: string;
 }
 
 export function loadConfig(): ServerConfig {
@@ -29,5 +33,8 @@ export function loadConfig(): ServerConfig {
     discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL?.trim() ?? '',
     allowDevAuth,
     allowIncompleteVtt,
+    // A stable dev/test pepper keeps local acceptance flows deterministic;
+    // production must configure its own secret (empty ⇒ account endpoints 503).
+    connectPepper: process.env.ICON_CONNECT_PEPPER?.trim() ?? (allowDevAuth ? 'icon-connect-dev-pepper' : ''),
   };
 }

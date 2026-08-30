@@ -11,6 +11,6 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["server/**/*.ts", "src/rules/**/*.ts"],
+  "include": ["server/**/*.ts", "src/rules/**/*.ts", "src/connect/**/*.ts"],
   "exclude": ["src/rules/__tests__/**"]
 }

@@ -1,6 +1,6 @@
 import type { IconCharacter } from '../rules/index.js';
 import { migrateCharacter } from '../rules/index.js';
-import type { CloudCharacterTransport, LocalCharacterRecord } from './character-sync.js';
+import type { CloudCharacterTransport, CloudCharacterWrite, LocalCharacterRecord } from './character-sync.js';
 import { createLocalCharacterRecord, loadOrCreateCreatorInstanceId } from './character-sync.js';
 import { supabase } from './supabase.js';
 
@@ -394,14 +394,17 @@ export class SupabaseCharacterTransport implements CloudCharacterTransport {
     return supabase !== null && this.currentUserId() !== null;
   }
 
-  async write(input: { character: IconCharacter; revision: number }): Promise<number> {
+  async write(input: CloudCharacterWrite): Promise<number> {
     if (!supabase) throw new Error('Cloud storage is not configured.');
     const ownerId = this.currentUserId();
     if (!ownerId) throw new Error('No authenticated identity for cloud storage.');
     const { id, name, rulesVersion, schemaVersion } = input.character;
     const { data, error } = await supabase.rpc('save_character_cas', {
       target_id: id,
-      target_owner: ownerId,
+      // The server/DB boundary derives ownership from the session and requires
+      // this creator instance to be bound to that owner; the client never
+      // asserts an owner id.
+      target_creator_instance_id: input.creatorInstanceId,
       target_name: name,
       target_rules_version: rulesVersion,
       target_schema_version: schemaVersion,

@@ -11,6 +11,7 @@ The project does not claim affiliation with Massif Press. ICON, its text, art, l
 - Character creation and advancement validate Kin, Culture, Bond, action ratings, powers, Job slots, AP, talents, masteries, six-ability loadouts, Relic slots, gear, resources, and level/chapter limits.
 - Level-0 characters from the legacy external `.icon` format (`Douglas.icon`) import fully offline from the Dashboard: display labels are translated to canonical IDs strictly at the import boundary, and conversion reuses the native level-0 creation validation before persisting through the same local-first save path. Import-only — no legacy export is offered.
 - Characters save locally without configuration or sync through Supabase when configured.
+- ICON Connect gives each browser a cryptographically bound local player identity (a non-extractable ECDSA P-256 private key held only in IndexedDB, with a public `icon_connect.json` instance descriptor). When the Render service is available, that instance can create a username/password account, prove instance possession with a signed challenge, and bind its locally-created characters to one backend user. Usernames and passwords are never persisted by the application — the password lives only in the HTTPS request and Supabase Auth, and the username only in server-side profile state.
 - Versioned JSON import/export and schema migration are built in.
 - Narrative rolls implement zero-rating rolls, boons/curses, and criticals.
 - The shared encounter reducer implements movement, core terrain, basic attacks, armor, cover, vigor, statuses, wounds, recovery, deterministic events, and replay. Turn order is scheduler-driven: combat starts awaiting an explicit player-character selection, sides alternate, Slow rounds are elected per round, and Delay persists across round boundaries. All 144 Job abilities are on the independently reviewed execution allowlist with typed programs and replay fixtures; unresolved supporting rules remain explicitly gated or table-facing rather than silently approximated.
@@ -60,9 +61,10 @@ npm run dev:server
 ## Supabase
 
 1. Create a Supabase project.
-2. Apply every migration in `supabase/migrations/` in filename order with the Supabase CLI or SQL editor. In particular, `202608220001_vtt_room_checkpoints.sql` removes browser authority over live room state and adds the append-only checkpoint store used by Render.
+2. Apply every migration in `supabase/migrations/` in filename order with the Supabase CLI or SQL editor. In particular, `202608220001_vtt_room_checkpoints.sql` removes browser authority over live room state and adds the append-only checkpoint store used by Render, and `202608301100_icon_connect_identity.sql` adds the username profile, instance-binding, and creator-instance character ownership tables plus the hardened compare-and-set save.
 3. Add the GitHub Pages URL and local URL to the Auth redirect allow-list.
 4. Put `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local` and equivalent GitHub Actions repository variables.
+5. ICON Connect account creation is server-mediated: the Render service needs `ICON_CONNECT_PEPPER` (a server-only secret used to derive the opaque internal auth email; it must never reach the browser) alongside its existing `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`. Without it the account endpoints respond 503 and the app stays local-only.
 
 The migrations create RLS-protected characters, campaigns, memberships, encounter metadata, append-only encounter checkpoints, and a public-read/user-write `icon-assets` image bucket. Browser clients can list/create encounter metadata but never read or write a live checkpoint payload; Render's service role is the sole checkpoint authority and must never use a `VITE_` prefix. Checkpoint history is bounded by retention class (at most 234 retained snapshots per room), while recent combat history is capped at 500 events per snapshot. If a newest checkpoint is corrupt, Render validates an older snapshot and writes a new `recovery` checkpoint above the corrupt revision instead of overwriting history.
 
@@ -85,7 +87,7 @@ Create a Blueprint from `render.yaml`, then set the secret values requested ther
 - `DISCORD_WEBHOOK_URL`
 - `ALLOWED_ORIGINS` as a comma-separated list containing the GitHub Pages origin
 
-Render exposes `/health` and `/realtime`. Encounter and table commands are authoritative on the server and use the same room reducer as the local harness; durable checkpoints are written before a GM receives a save-complete acknowledgement. Per-user room command, ping, and save limits protect the room fan-out path. Discord receives session start/end notices; webhook URLs are never sent to the browser.
+Render exposes `/health` and `/realtime`. The `/api/connect` account endpoints (challenge, register, login, status) live on the same service; they are rate-limited per caller and never log request bodies. Encounter and table commands are authoritative on the server and use the same room reducer as the local harness; durable checkpoints are written before a GM receives a save-complete acknowledgement. Per-user room command, ping, and save limits protect the room fan-out path. Discord receives session start/end notices; webhook URLs are never sent to the browser.
 
 The current room manager is intentionally a single Render instance. Its in-memory live authority is not a distributed room lease or broker, so do not horizontally scale or overlap realtime deployments until a lease/relay layer is added. Checkpoint compare-and-set protects durable snapshots from a stale writer; it does not make two active in-memory rooms safe.
 

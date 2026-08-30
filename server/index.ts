@@ -5,6 +5,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { parseClientMessage, type ServerMessage } from '../src/rules/protocol.js';
 import { loadConfig } from './config.js';
 import { sendDiscordNotice } from './discord.js';
+import { createConnectRouter } from './connect.js';
 import { RoomManager, type AuthenticatedClient } from './rooms.js';
 
 const config = loadConfig();
@@ -13,6 +14,9 @@ const server = http.createServer(app);
 const rooms = new RoomManager(config);
 
 app.disable('x-powered-by');
+// Render sits behind a load balancer; the account rate limiter keys on the
+// real caller IP from X-Forwarded-For rather than the proxy's address.
+app.set('trust proxy', 1);
 app.use(cors({
   origin(origin, callback) {
     if (!origin || config.allowedOrigins.includes(origin)) callback(null, true);
@@ -20,6 +24,11 @@ app.use(cors({
   },
 }));
 app.use(express.json({ limit: '64kb' }));
+
+// Account creation/login/binding. This router never logs request bodies, and
+// the username/password travel only over HTTPS into these handlers and then
+// into Supabase Auth.
+app.use('/api/connect', createConnectRouter(config));
 
 app.get('/health', (_request, response) => {
   response.json({ ok: true, service: 'icon-realtime', rulesVersion: '1.5', ...rooms.status() });

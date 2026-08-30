@@ -24,6 +24,7 @@ const config: ServerConfig = {
   discordWebhookUrl: '',
   allowDevAuth: true,
   allowIncompleteVtt: true,
+  connectPepper: '',
 };
 
 class RecordingCheckpointPersistence implements RoomCheckpointPersistence {

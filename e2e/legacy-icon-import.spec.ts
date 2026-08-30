@@ -14,12 +14,15 @@ test('Dashboard imports Douglas.icon offline and persists it across a reload', a
   await expect(page.getByText('Your Icons', { exact: true })).toBeVisible();
   await expect(page.getByText('No Icons recorded yet', { exact: true })).toBeVisible();
 
-  // The control accepts only the legacy .icon format (no generic JSON).
-  const accept = await page.locator('input[type="file"]').getAttribute('accept');
+  // The character import control accepts only the legacy .icon format (no
+  // generic JSON). The separate icon_connect.json descriptor input below is a
+  // distinct, intentionally-JSON control.
+  const iconInput = page.locator('input[type="file"][accept=".icon"]');
+  const accept = await iconInput.getAttribute('accept');
   expect(accept).toBe('.icon');
   await page.getByRole('button', { name: 'Import .icon', exact: true }).click();
-  await expect(page.locator('input[type="file"]')).toHaveCount(1);
-  await page.setInputFiles('input[type="file"]', {
+  await expect(iconInput).toHaveCount(1);
+  await iconInput.setInputFiles({
     name: 'Douglas.icon',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(douglasIcon, 'utf8'),
