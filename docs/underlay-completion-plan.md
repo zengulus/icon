@@ -1355,10 +1355,12 @@ shove-then-collide); repeat clauses ("rush 1, then rush 1, each time
 optionally damage"); the two-pass reactive fold exists because Collide/Slay
 are only knowable after resolution.
 
-**Current state.** `PARTIAL` — the CORE landed (T5a, 2026-08-30).
+**Current state.** `PARTIAL` — the CORE landed (T5a, 2026-08-30);
+`open-window`/`suspend` landed through U13 in T5c; only the `choose` node
+remains unbuilt.
 `kernels/execute-flow.ts` is the single flow authority: the typed `FlowNode`
-vacabulary (`sequence|bind|if|apply|repeat|for-each|invoke|emit-fact` —
-`choose`/`open-window`/`suspend` are NOT landed yet), `executeFlow`, the
+vacabulary (`sequence|bind|if|apply|repeat|for-each|invoke|emit-fact|
+open-window|suspend` — `choose` alone remains unbuilt), `executeFlow`, the
 `FlowPlanner`, and the reducer-facing `effectsToMutations` projection.
 `executeRuleProgram` plans the whole action through the planner: costs and
 the named resolver are absorbed first (paid at the start of the ability,
@@ -2199,6 +2201,25 @@ migrations, not a missing record kind). **Verdict: U18 stays a candidate;
 no promotion.** The decision point re-opens at T6 after the U11/U13 work,
 per this rule.
 
+**T6 evaluation (2026-08-31, after T5c.1 landed):** re-ran the design test
+against current HEAD. The U11/U13 work is now landed: `open-window`/
+`suspend` route decision carriage through a U13 `choice` window (U4
+evaluated choice spec + U12 binder/resume), and armed/held continuations
+(U12) carry their refs/captured values and exact-window triggers. Every
+contribution KIND named in the U18 sketch resolves onto an existing
+underlay — U14 `ModifierRule` (one shared recipe shape, folded by the six
+registries), U11 flow steps/action grants, U13 windows / U11 suspend,
+U12 continuations, U4 choices, U3 queries — and the only "new" facet (an
+attachment/equipment registry + U2-owner predicate) is content-registration
+glue over U1 refs + U2 roles, not a new algebra. `mastery-fold.ts` still
+reads the shared `ModifierRule` registry; the attack-modifiers armed
+one-shot fold, cost function rows, and aura/save-window folds remain the
+same documented retained specialists. No post-T5/T6 code demonstrated a
+shared attachment/contribution record that the existing composition cannot
+express. **Verdict: U18 NOT PROMOTED.** Attachment stays a
+content-registration pattern; the evidence is the U14 one-recipe-shape
+fold + the U13/U12/U11/U4/U3 contribution seams above.
+
 ### U19 Intent — CANDIDATE, do not promote yet
 
 **What it would be.** A typed layer between FLOW and mutations:
@@ -2223,6 +2244,20 @@ for the same intent). **Decision rule:** promote U19 iff after T3/T5 the
 command-boundary validation and the reducer validation of the same typed
 intent still drift; otherwise keep intents as the domain authorities'
 validation contracts and do not add a wrapper layer.
+
+**T6 evaluation (2026-08-31):** re-inspected command-boundary vs reducer
+validation for the same typed intents. The candidate-reading
+command boundary validates candidate/save/entity/placement legality (U3/U7
+`validateActorCandidate`, `resolveSaveWindow`, `validateEntityCreation`,
+`creationSpatial`), while the reducer applies the RECORDED mutations to
+durable state and never re-derives a command-time decision — the two have
+different responsibilities (command-time legality vs replay-safe state
+application), and the typed intents that do exist are the domain
+authorities' validation contracts (`SpatialIntent`, `creationSpatial`,
+`SaveWindowSpec`), not a missing shared layer. No same-intent legality is
+re-checked by two drifting implementations. **Verdict: U19 NOT PROMOTED.**
+Intents remain the domain authorities' typed validation contracts; a
+wrapper layer adds nothing.
 
 Neither U18 nor U19 is on the critical path to the UNDERLAY PHASE COMPLETE
 gate. The gate (§4) can close with both still candidates.

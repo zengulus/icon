@@ -316,6 +316,26 @@ and the exact owner-ordering decision recording for simultaneous windows.
 Full suite green (1731 rule tests), audit:architecture/automation/
 source-fidelity strict all pass, census byte-stable (no source promotion).
 
+**T6 landed (2026-08-31): underlay-phase gate audit and hard-gate proof.**
+`docs/t6-gate-report.md` records the full U1–U17 matrix, the U18/U19
+decisions, the duplicate-authority closure report, and the per-criterion
+hard-gate verdict. **The underlay phase-close gate is NOT declared
+satisfied — it remains OPEN.** Passed criteria: full suite green (§4.5), U18/U19 decided
+(§4.6, both NOT promoted from code evidence), generated census byte-stable
+(§4.7). Open criteria: §4.1 contracts current-and-true is PARTIAL, and §4.2/
+§4.4 are FAIL for U16 — the raw durable usage-restriction fields
+(`interrupt-uses`, `interruptUsedThisTurn`, `attacked-this-turn`, per-turn
+reaction flags) sit beside the `primitives/usage.ts` authority, and the
+`RuleModifier` → typed-query-point, `ability-use-choices` → U4-validation,
+and same-owner simultaneous-ordering seams are documented but not all
+parity-proven to the strict retained-specialist bar. Corrective work landed:
+U11 doc-drift correction (the `FlowNode` vocabulary parenthetical still
+claimed `open-window`/`suspend` were not landed — both are; only `choose`
+remains unbuilt, and the U13 route already carries U4 decisions) and the
+U18/U19 post-T5c.1 evidence verdicts in `underlay-completion-plan.md` §2.
+The smallest next corrective tranche (T6.1) is scoped in the gate report:
+the U16 typed-ledger migration.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the
