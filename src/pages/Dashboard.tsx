@@ -1,8 +1,9 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { chapterForLevel, findBond, findCulture, findJob, findKin, migrateCharacter, validateCharacter } from '../rules/index.js';
+import { chapterForLevel, findBond, findCulture, findJob, findKin, validateCharacter } from '../rules/index.js';
 import { useCharacters } from '../context/CharacterContext.js';
 import { assetBackground } from '../services/assets.js';
+import { importLegacyIconFile, LEGACY_ICON_FILE_ACCEPT } from '../services/legacy-icon-import.js';
 
 export function Dashboard() {
   const { characters, loading, error, save, remove, user, cloudEnabled, signIn, signOut } = useCharacters();
@@ -14,11 +15,21 @@ export function Dashboard() {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const character = migrateCharacter(JSON.parse(await file.text()));
-      character.id = crypto.randomUUID();
-      character.name = `${character.name || 'Unnamed Icon'} (imported)`;
-      await save(character);
-      setNotice('Character imported.');
+      // Legacy .icon conversion is import-only and runs fully offline. Each
+      // valid record becomes a fresh canonical character persisted through the
+      // same local-first save path as native creation.
+      const result = importLegacyIconFile(await file.text());
+      for (const character of result.imported) {
+        await save(character);
+      }
+      const messages: string[] = [];
+      if (result.imported.length) {
+        messages.push(`Imported ${result.imported.length} character${result.imported.length === 1 ? '' : 's'}.`);
+      }
+      for (const error of result.errors) {
+        messages.push(`Record ${error.index + 1}: ${error.message}`);
+      }
+      setNotice(messages.length ? messages.join(' ') : 'No characters were imported.');
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : 'Import failed.');
     }
@@ -39,8 +50,8 @@ export function Dashboard() {
       <header className="page-header">
         <div><p className="eyebrow">Personal archive</p><h1>Your Icons</h1><p>Build narrative identity and tactical loadout from one rules-backed record.</p></div>
         <div className="header-actions">
-          <input ref={inputRef} type="file" accept="application/json,.json" hidden onChange={importFile} />
-          <button className="button ghost" onClick={() => inputRef.current?.click()}>Import</button>
+          <input ref={inputRef} type="file" accept={LEGACY_ICON_FILE_ACCEPT} hidden onChange={importFile} />
+          <button className="button ghost" onClick={() => inputRef.current?.click()}>Import .icon</button>
           <Link className="button primary" to="/characters/new">New character</Link>
         </div>
       </header>

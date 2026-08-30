@@ -9,6 +9,7 @@ The project does not claim affiliation with Massif Press. ICON, its text, art, l
 - All 501 pages of the supplied sourcebook are reproducibly extracted into a 75-section, full-text compendium.
 - Structured catalogs cover all 12 Bonds and 120 powers, all 16 Jobs and 144 abilities, all 40 Relics, and 449 color-resolved foe profiles/components with 1,365 costed abilities.
 - Character creation and advancement validate Kin, Culture, Bond, action ratings, powers, Job slots, AP, talents, masteries, six-ability loadouts, Relic slots, gear, resources, and level/chapter limits.
+- Level-0 characters from the legacy external `.icon` format (`Douglas.icon`) import fully offline from the Dashboard: display labels are translated to canonical IDs strictly at the import boundary, and conversion reuses the native level-0 creation validation before persisting through the same local-first save path. Import-only — no legacy export is offered.
 - Characters save locally without configuration or sync through Supabase when configured.
 - Versioned JSON import/export and schema migration are built in.
 - Narrative rolls implement zero-rating rolls, boons/curses, and criticals.
