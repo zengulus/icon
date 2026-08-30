@@ -31,11 +31,13 @@
  * content-owned provenance strings recorded verbatim.
  */
 import type { EncounterActor } from '../../types.js';
+import type { BoundaryRef } from '../primitives/scope.js';
 import {
   consumeUsageMutation,
   holdsUsageKey,
   usageCount,
   usageKey,
+  usagePeriodForResetBoundary,
   type UsagePeriod,
 } from '../primitives/usage.js';
 import type { RuleMutation } from '../primitives/types.js';
@@ -69,5 +71,61 @@ export function consumeUseLedgerMutation(
 /** True when the actor holds any ledger key of the given period (the
  * lifecycle reset recipes' cheap precondition — U16 core). */
 export function holdsUseLedgerKey(actor: Pick<EncounterActor, 'ruleState'>, period: UseLedgerPeriod): boolean {
+  return holdsUsageKey(actor, period);
+}
+
+/**
+ * The U8-backed reset boundary for a period, re-exposed so a consumer can
+ * derive the typed BoundaryRef a period refreshes at without knowing the
+ * boundary vocabulary directly (U16 owns usage; U8 owns the temporal
+ * boundaries). Delegates to the U16 core's `resetBoundaryFor`.
+ */
+export { resetBoundaryFor } from '../primitives/usage.js';
+
+/**
+ * U8-backed refresh of a usage period triggered by a recorded boundary:
+ * clear every durable `ledger:<period>:*` key on the actor for the single
+ * period the boundary refreshes.
+ *
+ * This is the shared reset seam for the once-per-turn / once-per-round
+ * lifecycle gates. The caller supplies the CURRENT recorded boundary (a U8
+ * `BoundaryRef`); U8 owns the decision of which period that boundary
+ * refreshes (`usagePeriodForResetBoundary`), never a hard-coded prefix parse
+ * in the content recipe. A boundary that refreshes nothing (turn-end,
+ * combat-end, …) clears nothing and returns false. Pure over the durable
+ * actor state; deterministic and replay-stable.
+ */
+export function refreshUsageLedgerForBoundary(
+  actor: EncounterActor,
+  boundary: BoundaryRef,
+): boolean {
+  const period = usagePeriodForResetBoundary(boundary);
+  if (period === null) return false;
+  const prefix = `ledger:${period}:`;
+  let cleared = false;
+  for (const key of Object.keys(actor.ruleState)) {
+    if (!key.startsWith(prefix)) continue;
+    delete actor.ruleState[key];
+    delete actor.ruleStateOwners[key];
+    cleared = true;
+  }
+  return cleared;
+}
+
+/**
+ * U8-backed PRECONDITION for the reset recipes: "does the current boundary
+ * refresh a period this actor actually holds?"
+ *
+ * Pure (`applies` gate), so the participant planner may record the recipe
+ * without mutating state. Mirrors the reset body's period decision through
+ * the SAME U8 authority — the `applies` gate and the `resolve` body can never
+ * disagree on which boundary refreshes which period.
+ */
+export function usageLedgerHoldsForBoundary(
+  actor: Pick<EncounterActor, 'ruleState'>,
+  boundary: BoundaryRef,
+): boolean {
+  const period = usagePeriodForResetBoundary(boundary);
+  if (period === null) return false;
   return holdsUsageKey(actor, period);
 }

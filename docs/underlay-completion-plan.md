@@ -1072,18 +1072,31 @@ never invent absolute-round answers. Tests: `scope.test.ts` (17 tests: the
 11 required temporal-fidelity cases — turn-start≠end, round-start≠end,
 source≠target turn, relative-3-rounds-from-round-5-origin, next-target-not-
 on-source-turn, slow≠ordinary, non-boundary-null, permanent-never, named-
-event, replay, plus edge/subject preservation in `scopeForDuration`). The
-legacy surfaces remain the executing
-authority — `RuleDuration`/`RuleTiming`/`use-ledger`/lifecycle readers
-still re-key "round" separately; migrating them onto the Clock (the U8
-completion work, including the scheduler's turn record for turn-level
-`boundaryReached` reads) is a later phase, not T1.
+event, replay, plus edge/subject preservation in `scopeForDuration`).
+T6.1 (2026-08-31) migrated the **use-ledger reset authority** onto U8:
+`primitives/usage.ts` owns the U8-backed reset mapping (`resetBoundaryFor`
+— which period a given boundary refreshes), and the lifecycle reset
+recipes call `resetUsageForBoundary`/`usagePeriodForResetBoundary` instead
+of hard-coding `ledger:turn:*`/`ledger:round:*` prefix interpretation. The
+generic temporal question ("what period does this boundary refresh, and
+whose boundary matters?") now routes through the Clock; `scope.test.ts`
+and `t6-u8-scope-consolidation.test.ts` prove the consumers actually
+route through it. The remaining legacy surfaces still decide temporal
+semantics independently and keep U8 PARTIAL: `RuleDuration` consumers,
+`RuleTiming` boundary reads, lifecycle phase-duration expiry, and the
+scheduler's round/turn counters (still the scheduling authority, but
+re-key "round" for rule-level reads). Migrating those is the remaining U8
+work.
 
 **Locations partially owning/duplicating.** `RuleDuration`
 (`primitives/types.ts`); lifecycle phases (`kernels/lifecycle.ts`);
-`useLedgerKey` periods (`kernels/use-ledger.ts`); `RuleTiming`
-(`primitives/types.ts`); scheduler round/slow logic (`turn-scheduler.ts`);
-`RuleContinuationState`-adjacent timing reads.
+`useLedgerKey` brute-force prefix keys in legacy recipes
+(`kernels/use-ledger.ts` — reset now routed through U8, see above);
+`RuleTiming` (`primitives/types.ts`); scheduler round/slow logic
+(`turn-scheduler.ts`); `RuleContinuationState`-adjacent timing reads. After
+T6.1 the use-ledger reset recipes no longer independently interpret period
+strings; they call the U8-backed `resetUsageForBoundary`/
+`usagePeriodForResetBoundary`.
 
 **Intended authority.** `primitives/scope.ts` (barrel re-exported):
 `Scope`/`Clock` types (`action|resolution|turn|between-turns|slow|round|
@@ -1095,8 +1108,9 @@ U16 (reset Clock), durations/persistent-instance lifecycle.
 
 **Typed vocabulary.** `Clock` union; `RuleDuration` rewritten over
 Scopes (+ `n`, `next-match`, named-event); use-ledger periods typed as
-Scopes; `RuleTiming` kept for step timing but its boundary semantics read
-the Clock.
+Scopes (T6.1: `resetBoundaryFor` in `primitives/usage.ts` + the kernel
+reset helpers provide the U8-backed mapping); `RuleTiming` kept for step
+timing but its boundary semantics read the Clock.
 
 **Replay semantics.** The Clock is derived from durable state
 (round/turn/boundary counters + recorded events); boundary advancement is a
@@ -1108,10 +1122,18 @@ gate, and a lifecycle recipe agrees; N-boundary duration; next-matching-
 boundary. Negative: out-of-scope read rejects. Boundary: slow-turn vs
 ordinary-turn boundary; combat-end cleanup expiry. Replay: a turn-boundary
 intent with a round-gated recipe replays identically (existing
-`turn-transition.test.ts` pattern extended to the Clock API).
+`turn-transition.test.ts` pattern extended to the Clock API). T6.1 consumer
+parity + replay: `t6-u8-scope-consolidation.test.ts` proves the lifecycle
+reset recipes actually route turn/round/combat reset through U8 (`scope.test.ts`
+proves it matches a boundary and refreshes the right `ledger:period:*`
+keys), that non-matching boundaries refresh nothing, and that a recorded
+turn-boundary transition replays to an identical ledger (never
+re-deciding). The `RuleDuration`/`lifecycle-duration`/`scheduler`
+consumers keep their own migration as remaining items.
 
-**Consumers to migrate.** `RuleDuration` consumers, `use-ledger` periods,
-lifecycle phase reads, `RuleTiming` boundary interpretation, scheduler
+**Consumers to migrate.** Use-ledger reset periods — **migrated (T6.1)**, now
+route through U8. Remaining: `RuleDuration` consumers, lifecycle phase-
+duration expiry reads, `RuleTiming` boundary interpretation, scheduler
 round counters (read the Clock, keep the scheduler).
 
 **Blocker families enabled (information only).** duration-modifier,
@@ -1356,11 +1378,19 @@ optionally damage"); the two-pass reactive fold exists because Collide/Slay
 are only knowable after resolution.
 
 **Current state.** `PARTIAL` — the CORE landed (T5a, 2026-08-30);
-`open-window`/`suspend` landed through U13 in T5c; only the `choose` node
-remains unbuilt.
+`open-window`/`suspend` landed through U13 in T5c. **No distinct
+`choose` node is required**: mid-flow player decisions are carried
+exclusively by `open-window → U13 choice window → U4 resolveChoice →
+recorded answer → suspend/resume`, so there is no second decision path to
+build. A future distinct `choose` FlowNode may only be introduced if
+source evidence demonstrates semantics that cannot be represented as
+U11 → U13 → U4.
 `kernels/execute-flow.ts` is the single flow authority: the typed `FlowNode`
 vacabulary (`sequence|bind|if|apply|repeat|for-each|invoke|emit-fact|
-open-window|suspend` — `choose` alone remains unbuilt), `executeFlow`, the
+open-window|suspend` — **no separate `choose` node is required**;
+`open-window` → U13 choice window → U4 `resolveChoice` → recorded
+answer → `suspend`/resume is the sole mid-flow decision carriage),
+`executeFlow`, the
 `FlowPlanner`, and the reducer-facing `effectsToMutations` projection.
 `executeRuleProgram` plans the whole action through the planner: costs and
 the named resolver are absorbed first (paid at the start of the ability,
@@ -1424,17 +1454,19 @@ application).
 through `kernels/runtime.ts`): `executeFlow(nodes, context)` with a
 SIMULATED intermediate state during command planning (pure), preserving the
 pure command/event architecture; `effectsToMutations` is the reducer-facing
-projection of the same plan. Dependencies: U1 (bind — landed), U4 (choose
-— the `choose` node itself is NOT built; `open-window`/`suspend` landed and
-carry the U4 choice spec through the U13 window, T5c), U6 (if — landed),
+projection of the same plan. Dependencies: U1 (bind — landed), U4 (choice
+— validated through `resolveChoice`; `open-window`/`suspend` landed and
+carry the U4 choice spec through the U13 window, T5c — no separate
+`choose` node needed), U6 (if — landed),
 U10 (emit fact — landed), U12 (suspend/continue — landed through the U13
 window `resume` seam, T5c), U15 (atomic groups — landed through the shared
 reducer application), U17 (ordering — consumed by the step selection the
 flow plans). Consumed by every domain authority that sequences effects.
 
 **Typed vocabulary.** Flow nodes (`sequence|bind|if|apply|repeat|
-for-each|invoke|emit-fact|open-window|suspend`; only `choose` remains
-unbuilt — `open-window`/`suspend` landed with U13, T5c); an
+for-each|invoke|emit-fact|open-window|suspend`; **`choose` is not part
+of the vocabulary** — `open-window`/`suspend` landed with U13, T5c and are
+the sole mid-flow decision carriage through U4); an
 intermediate-state simulation view (clone-based, pure); the `bound`
 `RuleSelector` kind (U1 binding glue); the `FlowWindowRequest` (choice spec
 + remaining nodes + binder) a suspended flow returns; `RuleEffect` union
@@ -2518,6 +2550,25 @@ deterministic folds the execution layer needs; time/outcome fourth because
 continuations/windows trigger on facts with provenance; execution last
 because U11/U12/U13 compose everything above. Blocker-family frequency was
 NOT an input (information-only per §1).
+
+**Phase T6.1 — U8 Scope/Clock consolidation (use-ledger reset seam).** —
+**LANDED (2026-08-31).** Made `primitives/scope.ts` the one authoritative
+answer to "which usage period does this recorded boundary refresh?"
+(`usagePeriodForResetBoundary`, the inverse of the existing
+`resetBoundaryFor`), and rerouted the lifecycle once-per-turn /
+once-per-round reset recipes through it — the recipes name the boundary
+(`turn-start` / `round-start`) and call `refreshUsageLedgerForBoundary` /
+`usageLedgerHoldsForBoundary` instead of hard-coding `ledger:turn:*` /
+`ledger:round:*` prefix interpretation. Behavior-preserving: the full
+suite (1739) is green with zero existing-test deltas; new consumer
+parity + replay proofs in `t6-u8-scope-consolidation.test.ts` (8 cases:
+turn-start refreshes `ledger:turn:*`, round-start `ledger:round:*`,
+turn-end / round-end / combat-end refresh nothing, and the recorded
+turn-boundary transition replays to an identical ledger). U8 stays
+PARTIAL on its remaining duplicates: `RuleDuration` consumers,
+`RuleTiming` boundary reads, lifecycle phase-duration expiry, and the
+scheduler's round counters. **T6.2** is the recorded same-owner ordering
+seam (U17), a separate, independent decision-arbitration surface.
 
 ---
 

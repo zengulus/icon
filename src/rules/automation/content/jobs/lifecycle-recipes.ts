@@ -4,12 +4,16 @@ import { auraDefinitionFor, auraOriginRefs, auraStateView, isAuraMember, isInAur
 import { hasMastery } from '../../kernels/mastery.js';
 import { resolveSaveWindow } from '../../primitives/save-window.js';
 import { isAtHpThreshold } from '../../kernels/hp-threshold.js';
-import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, registerTurnDiceWindowPlanner } from '../../kernels/lifecycle.js';
+import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, registerTurnDiceWindowPlanner, type LifecyclePhase } from '../../kernels/lifecycle.js';
 import { tickPowerDie } from '../../kernels/power-die.js';
 import { resolveGamble } from '../../primitives/gamble-window.js';
 import { registerMovementEntryTrigger } from '../../kernels/movement-triggers.js';
 import { nearestCandidates } from '../../kernels/evaluate-query.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-geometry.js';
+import { clockForTiming } from '../../primitives/scope.js';
+import type { BoundaryRef } from '../../primitives/scope.js';
+import type { RuleTiming } from '../../primitives/types.js';
+import { refreshUsageLedgerForBoundary, usageLedgerHoldsForBoundary } from '../../kernels/use-ledger.js';
 import type { DiceSource } from '../../../dice.js';
 import type { EncounterActor, EncounterMark, EncounterState, Position } from '../../../types.js';
 import type { RuleMutation } from '../../primitives/types.js';
@@ -1259,23 +1263,33 @@ registerLifecycleRecipe({
   },
 });
 
+/** The U8 boundary a lifecycle phase runs at. Only the boundary phases have a
+ * Clock boundary; driving the reset decision from the U8 BoundaryRef keeps
+ * the recipes from independently parsing `ledger:*` period prefixes. */
+const boundaryForLifecyclePhase = (phase: LifecyclePhase): BoundaryRef | null => clockForTiming(phase as RuleTiming);
+
 /** Once-per-turn gates hold a durable `ledger:turn:<sourceId>` ruleState flag
  * (the shared use-ledger kernel, `kernels/use-ledger.ts`). The actor's own
  * turn-start boundary resets them, so a once-per-turn gate is fresh at the
  * start of each of the actor's turns (ICON "once per turn"). Registered
  * per-actor; it participates only when the starting actor's turn ledger is
- * set, clearing nothing otherwise. */
+ * set, clearing nothing otherwise.
+ *
+ * U8 owns WHICH period the turn-start boundary refreshes
+ * (`usagePeriodForResetBoundary` via `usageLedgerHoldsForBoundary` /
+ * `refreshUsageLedgerForBoundary`); this recipe only names the boundary and
+ * feeds the same authority to its applies gate and body so they never differ.
+ */
 registerLifecycleRecipe({
   sourceId: 'core:turn-ledger-reset',
   phase: 'turn-start',
-  applies: (actor) => Object.keys(actor.ruleState).some((key) => key.startsWith('ledger:turn:')),
+  applies: (actor) => {
+    const boundary = boundaryForLifecyclePhase('turn-start');
+    return boundary !== null && usageLedgerHoldsForBoundary(actor, boundary);
+  },
   resolve: (state, actor) => {
-    for (const key of Object.keys(actor.ruleState)) {
-      if (key.startsWith('ledger:turn:')) {
-        delete actor.ruleState[key];
-        delete actor.ruleStateOwners[key];
-      }
-    }
+    const boundary = boundaryForLifecyclePhase('turn-start');
+    if (boundary !== null) refreshUsageLedgerForBoundary(actor, boundary);
   },
 });
 
@@ -1284,18 +1298,18 @@ registerLifecycleRecipe({
  * round boundary resets every actor's round ledger so the gate is fresh each
  * round (ICON "1/round"). Registered per-actor like the other round-start rows;
  * it participates only when some living actor's gate is set, clearing nothing
- * otherwise. */
+ * otherwise. U8 owns the round-start→round-period boundary decision; this
+ * recipe names the boundary only. */
 registerLifecycleRecipe({
   sourceId: 'core:round-ledger-reset',
   phase: 'round-start',
-  applies: (actor) => Object.keys(actor.ruleState).some((key) => key.startsWith('ledger:round:')),
+  applies: (actor) => {
+    const boundary = boundaryForLifecyclePhase('round-start');
+    return boundary !== null && usageLedgerHoldsForBoundary(actor, boundary);
+  },
   resolve: (state, actor) => {
-    for (const key of Object.keys(actor.ruleState)) {
-      if (key.startsWith('ledger:round:')) {
-        delete actor.ruleState[key];
-        delete actor.ruleStateOwners[key];
-      }
-    }
+    const boundary = boundaryForLifecyclePhase('round-start');
+    if (boundary !== null) refreshUsageLedgerForBoundary(actor, boundary);
   },
 });
 

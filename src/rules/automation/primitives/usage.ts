@@ -137,6 +137,46 @@ export function resetBoundaryFor(period: UsagePeriod, ownerId: string): Boundary
   }
 }
 
+/**
+ * The INVERSE of `resetBoundaryFor` — the U8-backed question the lifecycle
+ * reset recipes actually ask: "which usage period(s) does this recorded
+ * boundary refresh?"
+ *
+ * U8 owns temporal interpretation: the recipes must never independently parse
+ * `ledger:<period>:*` string prefixes to decide what a turn/round boundary
+ * resets. They name a boundary (turn-start / round-start / combat-end) and
+ * THIS authority — the span/edge of a U8 `BoundaryRef` resolved against the
+ * canonical reset mapping — answers the period. The subject is intentionally
+ * discarded here: whether a boundary is actor-relative (the owner's own
+ * turn-start) never changes WHICH period it refreshes, only for whom; the
+ * per-period scope is a pure function of the boundary span/edge.
+ *
+ * - turn-start resets the `turn` period (once-per-turn).
+ * - round-start resets the `round` period (once-per-round).
+ * - combat-end would reset the `combat` period, but combat never refreshes
+ *   (the encounter ends with combat) — so here it returns null (no refresh).
+ * - turn-end / round-end / any non-boundary or event ref refresh nothing.
+ *   Boundary EDGES stay distinct: never collapse start vs end.
+ *
+ * Pure and deterministic; a function of the recorded BoundaryRef only.
+ */
+export function usagePeriodForResetBoundary(boundary: BoundaryRef): UsagePeriod | null {
+  if (boundary.kind !== 'boundary') return null;
+  switch (boundary.boundary) {
+    case 'turn':
+      // Turn gates refresh at the OWNER's own turn-START (never the turn-end).
+      return boundary.edge === 'start' ? 'turn' : null;
+    case 'round':
+      return boundary.edge === 'start' ? 'round' : null;
+    case 'combat':
+      // Combat never refreshes: the encounter ends with combat, so a
+      // combat-end boundary is terminal, not a refresh point.
+      return null;
+    default:
+      return null;
+  }
+}
+
 /** The minimal actor read surface for the ledger: the durable ruleState the
  * keys live in. Satisfied by EncounterActor and the rule runtime view. */
 export interface UsageLedgerActor {

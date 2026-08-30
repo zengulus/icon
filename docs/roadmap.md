@@ -333,8 +333,24 @@ U11 doc-drift correction (the `FlowNode` vocabulary parenthetical still
 claimed `open-window`/`suspend` were not landed — both are; only `choose`
 remains unbuilt, and the U13 route already carries U4 decisions) and the
 U18/U19 post-T5c.1 evidence verdicts in `underlay-completion-plan.md` §2.
-The smallest next corrective tranche (T6.1) is scoped in the gate report:
-the U16 typed-ledger migration.
+**T6.1 landed (2026-08-31): U8 Scope/Clock consolidation — use-ledger reset
+seam.** `primitives/scope.ts` now owns which usage period a recorded
+boundary refreshes (`usagePeriodForResetBoundary`, inverse of
+`resetBoundaryFor`), and the lifecycle once-per-turn/once-per-round reset
+recipes route through it (`refreshUsageLedgerForBoundary` /
+`usageLedgerHoldsForBoundary`) instead of hard-coding `ledger:*` prefix
+interpretation. Behavior-preserving (1739 tests green, +8 new
+`t6-u8-scope-consolidation` parity/replay cases; census byte-stable; no
+source promotion). U8 remains PARTIAL on its `RuleDuration`/`RuleTiming`/
+lifecycle/scheduler surfaces. The next corrective tranche — **T6.2, the
+recorded same-owner ordering seam (U17)** — is scoped in the gate report;
+U16 is not the correct smallest-first blocker because U8 and U17 underlay
+it.
+
+**T6.1 scope note (per the T6.1 §3 split mandate).** U8 (temporal
+consolidation) and U17 (simultaneous-order arbitration / U4-U13 decision
+recording) were deliberately split: they are independent seams with no real
+implementation dependency. T6.1 did U8 only; U17 is T6.2.
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

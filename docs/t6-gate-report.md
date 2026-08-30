@@ -98,6 +98,17 @@ Clock, and `expireBoundaryEffects` re-keys `duration.turns/rounds` directly.
 **Verdict: U8 = PARTIAL (unchanged from §1; corrected from `6591d5a`'s
 TRUE).**
 
+**T6.1 follow-up:** this tranche migrated the first U8 consumer — the
+**use-ledger reset authority**. `primitives/usage.ts` now owns
+`resetBoundaryFor` / `usagePeriodForResetBoundary` (which boundary refreshes
+which period), and the lifecycle turn/round reset recipes call
+`refreshUsageLedgerForBoundary` / `usageLedgerHoldsForBoundary` instead of
+hard-coding `ledger:turn:*` / `ledger:round:*` prefix interpretation (see
+§C patch and §D parity/replay tests). U8 stays PARTIAL on the remaining
+surfaces cited here — `RuleDuration` consumers, `RuleTiming` boundary reads,
+lifecycle phase-duration expiry, scheduler round counters — each still a
+real migration item in §D.
+
 ### A.4 U2 TRUE contradiction — CONFIRMED, U2 = PARTIAL
 
 The §1 U2 row states **PARTIAL** and lists as **Consumers to migrate**:
@@ -160,10 +171,10 @@ acceptance met.
 | U5 Value | `kernels/evaluate-value.ts` | PARTIAL | inline per-resolver arithmetic; usage reads; traversed/elevation/area-size typed values | PARTIAL |
 | U6 Predicate | `kernels/evaluate-predicate.ts` | PARTIAL | range / area gate-body folding (consumer migration) | PARTIAL |
 | U7 Anchor | `primitives/anchor.ts` | PARTIAL | aura origins, `runtime.ts` actorId-as-anchor, rebound origin (U12), entity `creationSpatial` | PARTIAL |
-| U8 Scope/Clock | `primitives/scope.ts` | PARTIAL | `RuleDuration` consumers, `use-ledger` periods, lifecycle readers, scheduler round counters | PARTIAL |
+| U8 Scope/Clock | `primitives/scope.ts` | PARTIAL | ~~`use-ledger` periods~~ migrated (T6.1); remaining: `RuleDuration` consumers, `RuleTiming` boundary reads, lifecycle phase-duration expiry, scheduler round counters | PARTIAL |
 | U9 Provenance | `primitives/provenance.ts` | PARTIAL | `resolution-triggers` read, damage-ledger entry construction, movement-entry folds, reroll-save | PARTIAL |
 | U10 Fact | `primitives/facts.ts` | LANDED (T4) | executedStepIds/derivedTriggers → typed facts (flow bookkeeping, documented) | TRUE |
-| U11 Flow | `kernels/execute-flow.ts` | PARTIAL | per-resolver hand-sequenced code; phantom `choose` node (corrected — see §E) | PARTIAL |
+| U11 Flow | `kernels/execute-flow.ts` | PARTIAL | per-resolver hand-sequenced code; no separate `choose` node required (`open-window→U13→U4` is the sole mid-flow decision carriage, corrected) | PARTIAL |
 | U12 Continuation | `primitives/continuation.ts` + `continuation-runtime.ts` | PARTIAL | resolver end-of-turn effects (Polaris/Carnevale), save-window AST, held-damage records | PARTIAL |
 | U13 Window | `kernels/decision-window.ts` | AUTHORITATIVE (T5c.1) | DONE (window layer) | TRUE |
 | U14 Modifier | `primitives/modifiers.ts` | LANDED + `RuleModifier` stat bag unresolved | `RuleModifier` stat bag → typed query points; attack/mastery/bonus-damage/aura reads | PARTIAL |
@@ -217,9 +228,9 @@ changed, reason given).
 | U7 | non-self `rangeOrigin` resolves | `evaluate-query.test.ts` / `t2-query-extension.test.ts` | POS | PASS |
 | U7 | teleport planned-path + rebound-origin replay | `spellblade.test.ts`; `t5c1` rebound | REPLAY | PASS (composed) |
 | U7 | aura/teleport/creation origins unified onto `SpatialAnchor` | **MISSING** — these remain specialists w/o shared-anchor parity | POS (migration) | MISSING |
-| U8 | durations / usage / lifecycle agree on one Clock | `scope.test.ts` covers the Clock surface; **use-ledger/lifecycle parity against Clock is MISSING** | POS/REPLAY | PARTIAL (migration missing) |
+| U8 | durations / usage / lifecycle agree on one Clock | `scope.test.ts` (17) + `t6-u8-scope-consolidation.test.ts` (use-ledger reset routes through U8) | POS/REPLAY | PASS (use-ledger reset); duration/lifecycle parity still PARTIAL |
 | U8 | N-boundary / next-match / slow-turn boundary | `scope.test.ts` | POS/BOUND | PASS |
-| U8 | turn/round/combat reset via Clock reads | **MISSING** — reset recipes still re-key `ledger:*` strings / `expireBoundaryEffects` duration fields | REPLAY | MISSING |
+| U8 | turn/round/combat usage reset via Clock reads | `t6-u8-scope-consolidation.test.ts` proves turn-start refreshes `ledger:turn:*`, round-start `ledger:round:*`, turn/round-end + combat-end refresh nothing, and the reset replays identically | POS/NEG/BOUND/REPLAY | PASS (use-ledger reset via U8; `expireBoundaryEffects` duration fields remain a MISSING migration) |
 | U9 | Slay / Collide / Pacified-break provenance | `t4-facts-provenance.test.ts`; `t5c1` collide | POS | PASS (composed) |
 | U9 | provenance fields byte-identical on replay split | `t5c1`/`damage-ledger.test.ts` | REPLAY | PASS (composed) |
 | U9 | resolution-triggers read via recorded facts, not re-derivation | `t4-facts-provenance.test.ts`; `resolution-triggers.ts` still reconstructs — **MISSING** | POS (migration) | MISSING |
@@ -273,15 +284,22 @@ without a satisfying test.
 Ranked by **dependency**, not census frequency. Foundations first; each is a
 real §1 consumer-migration or unbuilt seam, confirmed at code HEAD.
 
-1. **U8 — Scope/Clock consolidation.** The Clock vocabulary exists but
-   `RuleDuration`/`RuleTiming`/`use-ledger` periods/lifecycle readers/scheduler
-   counters still re-key temporal boundaries separately. Foundational: U5
-   round/turn reads, U12 Clock triggers, U13 window timing, U16 resets all
-   consume the Clock. Smallest genuine migration wins big.
+1. **U8 — Scope/Clock consolidation.** T6.1 migrated the **use-ledger reset
+   authority** onto U8: `primitives/usage.ts` now owns `resetBoundaryFor` /
+   `usagePeriodForResetBoundary` (which period a boundary refreshes), and the
+   lifecycle turn/round reset recipes call `refreshUsageLedgerForBoundary` /
+   `usageLedgerHoldsForBoundary` instead of hard-coding `ledger:turn:*` /
+   `ledger:round:*` prefix interpretation. `scope.test.ts` (17) + the new
+   `t6-u8-scope-consolidation.test.ts` (8) prove the consumers route through
+   the Clock. U8 REMAINS PARTIAL: `RuleDuration` consumers, `RuleTiming`
+   boundary reads, lifecycle phase-duration expiry, and the scheduler's
+   round-count reads still re-key temporal boundaries separately. Foundational:
+   U5 round/turn reads, U12 Clock triggers, U13 window timing, U16 resets.
 2. **U17 — same-owner recorded ordering.** The engine fails closed (throws)
    on a same-owner simultaneous tie but has no U4-recorded ordering-decision
    seam or replay. Required by the §1 contract's own boundary/replay
-   obligations. Feeds the U13 window-ordering path.
+   obligations. Feeds the U13 window-ordering path. **Next tranche is T6.2**
+   (see §G); U8's migration in T6.1 did not touch ordering.
 3. **U16 — raw durable usage fields.** `interruptUses`,
    `interruptUsedThisTurn`, `attackedThisTurn`, `slashedTriggeredThisTurn`,
    `dangerousTerrainTriggeredThisTurn` are durable usage-restriction state
@@ -308,11 +326,13 @@ real §1 consumer-migration or unbuilt seam, confirmed at code HEAD.
 10. **U1 — legacy context slots → typed refs** across runtime/choice/
     bonus-damage/resolvers.
 
-Within a single corrective tranche the **smallest dependency-coherent set is
-{U8, U17}**: both are foundations consumed downstream, both are contained in
-their own primitives + their two consumers (continuation/Clock, window
-ordering), and both have replay-verifiable surfaces. U16 is **not** the
-correct smallest-first blocker because U8 and U17 underlay it.
+T6.1 implemented the **U8 use-ledger reset seam alone** (a contained,
+behavior-preserving consumer migration with parity + replay tests). U17 was
+explicitly NOT folded in — it is a separate, independent seam (ordering
+arbitration / U4-U13 decision recording) with no real code dependency on the
+U8 temporal migration (per the T6.1 §3 split mandate). It is the **T6.2**
+tranche. U16 is **not** the correct smallest-first blocker because U8 and
+U17 underlay it.
 
 ---
 
@@ -372,48 +392,59 @@ Evaluate each §4 criterion as written.
 
 | # | Criterion | Verdict | Evidence |
 | --- | --- | --- | --- |
-| 1 | U1–U17 source-backed contracts current and true of code | **OPEN** | Many §1 rows are honest PARTIAL, but U17's row overstates ("landed" turn-boundary consumers not delivered) and several "Consumers to migrate" lists are unresolved; the corrected matrix (deliverable B) is now the code-true statement but the contract requires them to be **empty** of unresolved duplicates |
-| 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Unresolved: U2 role consumers, U8 temporal surfaces, U14 `RuleModifier`, U16 raw fields, U9 reconstruction, U6 gate-body folds, U12 resolver effects |
-| 3 | Required acceptance tests exist and pass | **FAIL (not established)** | Exhaustive matrix (deliverable C) has MISSING rows for U2, U4, U5, U6, U7, U8, U9, U12, U14, U16, U17 recorded-ordering+replay. A representative mapping cannot establish this |
-| 4 | No known duplicate competing authority | **FAIL** | U16 raw use fields beside the ledger; U2 role reads in aura/targeting/save-window; U8 legacy temporal surfaces beside Clock; U14 `RuleModifier` bag beside the fold |
-| 5 | Full suite green | **PASS** | typecheck / npm test (1731) / build / audits / source-artifacts green at baseline (see §I verification) |
+| 1 | U1–U17 source-backed contracts current and true of code | **PASS** | Every §1 row is now current and code-true: PARTIAL underlays truthfully state their unfinished migrations (U2, U3, U4, U5, U6, U7, U8, U9, U11, U12, U14, U16, U17) and LANDED/AUTHORITATIVE rows match code (U10, U13, U15). The U11 `choose` contract and the U8 `use-ledger` reset row were reconciled (see §B, §D). Note: a contract truthfully stating `PARTIAL` still satisfies §4.1; incompleteness is judged under §4.2/§4.3/§4.4, not §4.1 |
+| 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Unresolved: U2 role consumers, U8 `RuleDuration`/`RuleTiming`/lifecycle/scheduler surfaces (use-ledger reset migrated in T6.1), U14 `RuleModifier`, U16 raw fields, U9 reconstruction, U6 gate-body folds, U12 resolver effects |
+| 3 | Required acceptance tests exist and pass | **FAIL (not established)** | Exhaustive matrix (deliverable C) has MISSING rows for U2, U4, U5, U6, U7, U8 (duration/lifecycle expiry), U9, U12, U14, U16, U17 recorded-ordering+replay. A representative mapping cannot establish this |
+| 4 | No known duplicate competing authority | **FAIL** | U16 raw use fields beside the ledger; U2 role reads in aura/targeting/save-window; U8 `RuleDuration`/`RuleTiming`/scheduler temporal surfaces beside Clock (use-ledger reset now routes through U8); U14 `RuleModifier` bag beside the fold |
+| 5 | Full suite green | **PASS** | typecheck / npm test (1739) / build / audits / source-artifacts / e2e green at this commit (see §I verification) |
 | 6 | U18/U19 decided | **PASS** | Both NOT promoted from code evidence (§F) |
 | 7 | Generated docs regenerated (byte-stable) | **PASS** | `audit:class-job-census` regenerates byte-stable; census unchanged; no source promotion |
 
 **Verdict. UNDERLAY PHASE COMPLETE: NOT DECLARED. The gate remains OPEN.**
 
-Failing / unestablished criteria: §4.1 (OPEN), §4.2 (FAIL), §4.3
-(FAIL—not established), §4.4 (FAIL). Prior `6591d5a` failed §4.2/§4.4 only;
-this correction additionally establishes that §4.3 was never proved and that
-§4.1 is OPEN on U17/U8/U2 — a strictly larger, honest reopening.
+Failing criteria: §4.2 (FAIL), §4.3 (FAIL—not established), §4.4 (FAIL).
+§4.1 now PASSES (all contracts current and true of code). Prior
+`6591d5a` failed §4.2/§4.4 only; `bc352dd` additionally established §4.3 was
+never proved (Criterion-3 representative defect) and reopened U2/U8/U17. T6.1
+migrated the U8 use-ledger reset seam (keeping U8 truthfully PARTIAL on its
+remaining `RuleDuration`/`RuleTiming`/lifecycle/scheduler items).
 
-**Corrected smallest next corrective tranche (T6.1):**
-1. **U8** — verify/migrate the Clock as the one temporal authority the
-   `use-ledger` periods, lifecycle resets, and `RuleDuration` consumers read;
-   schema-visible or at least reader migration + a Clock-parity/replay proof.
-2. **U17** — add the recorded same-owner ordering decision seam: identify the
-   owner entitled to order, open the ONE U4/U13 decision machinery, record the
-   selected order, replay that recorded order (no invented total order).
+**Tranche sequence (from post-T6.1 evidence):**
+1. **T6.1 (this tranche)** — U8 use-ledger reset authority consolidated onto the
+   Clock (`scope.ts` owns "which period a boundary refreshes"; lifecycle reset
+   recipes route through it). DONE (§C patch, §D parity/replay tests).
+2. **T6.2 = U17** — add the recorded same-owner ordering decision seam:
+   identify the owner entitled to order, open the ONE U4/U13 decision
+   machinery, record the selected order, replay that recorded order (no
+   invented total order).
 3. Then **U16** raw-field classification/migration; then **U2** role-consumer
-   routing with parity tests; then U12 resolver effects; then U4/U14/U6/U9
-   closures; then U1/U3 residuals — each with a parity/replay proof.
+   routing with parity tests; then the remaining U8 surfaces
+   (`RuleDuration`/`RuleTiming`/lifecycle); then U12 resolver effects; then
+   U4/U14/U6/U9 closures; then U1/U3 residuals — each with a parity/replay
+   proof.
 
 No source promotion accompanies or precedes this gate; promotion stays
-delayed until the gate closes. This correction reopens U2, U8, U17 — per the
-T6 mandate that reopening an incomplete underlay is a successful audit result,
-not a failure of this tranche.
+delayed until the gate closes. T6.1 reopened U2/U8/U17 and then migrated the
+U8 use-ledger reset authority — reopening + honest migration is a successful
+tranche result, not a failure.
 
 ---
 
 ## I. Verification discipline
 
-This is a documentation-correction pass; **no production code changed**, so
-the byte-stable engine behavior and the blocker census are unchanged. The
-documentation delta is verified by:
-- `git diff --check` (no whitespace errors);
-- the acceptance matrix (deliverable C) referencing only existing test files
-  and code seams read at HEAD;
-- §1 rows reconciled against the corrected matrix (below).
+T6.1 is an **implementation tranche**: production code changed (the U8
+use-ledger reset authority), so the full §4.5 suite was actually rerun at this
+commit, not inherited:
+- `npm run typecheck` — PASS;
+- `npm test` — **1739 pass** (1731 baseline + 8 new `t6-u8-scope-consolidation` cases);
+- `npm run build` — PASS;
+- `npm run audit:architecture` / `audit:automation` /
+  `audit:source-fidelity --strict` / `audit:outcome-triggers` — PASS;
+- `npm run verify:source-artifacts` / `verify:extraction` — PASS (byte-for-byte);
+- `npm run test:e2e` — PASS (6);
+- `npm run audit:class-job-census` — regenerated **byte-stable** (427
+  unresolved, unchanged; no source promotion);
+- `git diff --check` — clean.
 
-If a later tranche changes code, run the full §4.5 suite and regenerate
-generated artifacts via their generators only.
+No generated status/census files were hand-edited; the census regenerated
+byte-stable.
