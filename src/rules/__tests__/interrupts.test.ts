@@ -4,7 +4,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterEvent, EncounterPendingInterrupt, EncounterState, Position } from '../types.js';
 import { windowHeldDamage } from '../automation/kernels/decision-window.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for ICON p.107 Interrupt Order and the
@@ -93,7 +93,7 @@ describe('interrupt order (p.107)', () => {
     expect(interrupt.state.decisionWindows.some((window) => window.actorId === hero.id)).toBe(false); // LIFO pop
     expect(interrupt.state.actors[ally!.id]).toMatchObject({ hp: 40, vigor: 0 }); // held 2 absorbed by the interrupt-granted vigor
     expect(interrupt.state.actors[hero.id].hp).toBe(40); // the owner was never damaged
-    expect(interrupt.state.actors[hero.id].interruptUses['bastion:catapult']).toBe(1);
+    expect(interruptUses(interrupt.state.actors[hero.id], 'bastion:catapult')).toBe(1);
     expect(applyEvents(damaged, interrupt.events)).toEqual(interrupt.state);
   });
 
@@ -142,7 +142,7 @@ describe('interrupt order (p.107)', () => {
     expect(interrupt.state.actors[hero.id].conditions.some(({ id }) => id === 'sturdy')).toBe(true);
     expect(interrupt.state.actors[ally!.id].conditions.some(({ id }) => id === 'sturdy')).toBe(true);
     expect(interrupt.state.decisionWindows.some((window) => window.actorId === hero.id && windowHeldDamage(window))).toBe(false); // consumed
-    expect(interrupt.state.actors[hero.id].interruptUses['demon-slayer:righteous-disdain']).toBe(1);
+    expect(interruptUses(interrupt.state.actors[hero.id], 'demon-slayer:righteous-disdain')).toBe(1);
     expect(applyEvents(damaged, interrupt.events)).toEqual(interrupt.state);
   });
 

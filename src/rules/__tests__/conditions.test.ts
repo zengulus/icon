@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { executeRuleProgram, evaluatePredicate } from '../automation/kernels/runtime.js';
 import { planMovementPath } from '../movement.js';
 import type { EncounterActor, EncounterCondition, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo, slashedTriggeredThisTurn} from './fixtures.js';
 
 /**
  * Source-derived fixtures for the combat conditions wired into the shared
@@ -165,7 +165,8 @@ describe('combat condition pipeline (p.104–105)', () => {
     }]);
     // The fixture hero has Armor 2, so one 4-damage Slashed instance leaves
     // 2 HP damage despite two qualifying ability moves.
-    expect(allied.state.actors[allied.hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+    expect(allied.state.actors[allied.hero.id]).toMatchObject({ hp: 38 });
+    expect(slashedTriggeredThisTurn(allied.state.actors[allied.hero.id])).toBe(true);
 
     const hostile = conditionEncounter({ allyAt: null });
     hostile.state.actors[hostile.hero.id].statuses.push('slashed');
@@ -175,7 +176,8 @@ describe('combat condition pipeline (p.104–105)', () => {
       positions: [], direction: { x: -1, y: 0 }, phasing: false,
     }]);
     // A foe forcing the character to move is outside p.104's self/ally gate.
-    expect(hostile.state.actors[hostile.hero.id]).toMatchObject({ hp: 40, slashedTriggeredThisTurn: false });
+    expect(hostile.state.actors[hostile.hero.id]).toMatchObject({ hp: 40 });
+    expect(slashedTriggeredThisTurn(hostile.state.actors[hostile.hero.id])).toBe(false);
   });
 
   it('Hatred of X deals full damage to X and half damage to other foes', () => {

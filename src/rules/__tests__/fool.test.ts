@@ -7,7 +7,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, expectRejectedCommandPurity} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, expectRejectedCommandPurity, interruptUses, interruptUsedThisTurn} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Fool ability
@@ -234,7 +234,7 @@ describe('Fool ability automation (p.150–152)', () => {
     expect(interrupt.state.actors[ally!.id].position).toEqual({ x: 1, y: 1 });
     expect(interrupt.state.actors[hero.id].hp).toBe(40); // the blow redirected
     expect(interrupt.state.actors[ally!.id].hp).toBe(32); // 40 - (10 normal - armor 2)
-    expect(interrupt.state.actors[hero.id].interruptUses['fool:masquerade']).toBe(1);
+    expect(interruptUses(interrupt.state.actors[hero.id], 'fool:masquerade')).toBe(1);
     expect(interrupt.state.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability')).toBe(false);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
   });
@@ -279,8 +279,8 @@ describe('Fool ability automation (p.150–152)', () => {
     // triggering interaction is exactly where it was — the window stays open
     // with its redirect armed, awaiting a legal interrupt.
     expect(deferred).toEqual(before);
-    expect(deferred.actors[hero.id].interruptUses['fool:masquerade'] ?? 0).toBe(0);
-    expect(deferred.actors[hero.id].interruptUsedThisTurn).toBe(false);
+    expect(interruptUses(deferred.actors[hero.id], 'fool:masquerade')).toBe(0);
+    expect(interruptUsedThisTurn(deferred.actors[hero.id])).toBe(false);
     expect(deferred.actors[hero.id].position).toEqual({ x: 1, y: 1 });
     expect(deferred.actors[ally!.id].position).toEqual({ x: 3, y: 1 });
     expect(deferred.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability')).toBe(true);

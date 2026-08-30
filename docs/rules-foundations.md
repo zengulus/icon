@@ -431,7 +431,7 @@ event is emitted. U15 owns the grouping; per-domain legality stays in the
 domain authorities (spatial, payment, creation). Tests:
 `t3-transaction.test.ts`.
 
-### Usage / Entitlement Ledger (U16 underlay, CORE) — CORE LANDED (T3, 2026-08-30)
+### Usage / Entitlement Ledger (U16 underlay, CORE) — single executing authority (T3 core + T4 de-dup, raw-field consolidation T6.4, 2026-08-31)
 
 "How many times has/may this rule be used within scope X?" — distinct from
 spendable resources. `primitives/usage.ts` owns the core ledger:
@@ -462,12 +462,20 @@ records the marker and `hasResolvedAsFact` answers "has this logical trigger
 step already resolved within this resolution?" over the recorded fact
 history — never current state, never a broad once-per-scope mark — and is
 WIRED into the real reactive continuation
-(`executeRuleProgramWithReactiveTriggers`). Event de-duplication is
-semantically DISTINCT from the `used-scope` entitlement counts. The
-interrupt-use counter and attacked-this-turn/end-turn flags remain durable
-actor fields (typed-ledger migration is the T6 consolidation item). Tests:
+(`executeRuleProgramWithReactiveTriggers`). Event de-duplicationis semantically DISTINCT from the `used-scope` entitlement counts. **T6.4
+(2026-08-31) completed the raw-field consolidation**: the interrupt-use counter,
+interrupt-uses-per-turn, slashed/dangerous-terrain once-per-turn flags, and
+the one-attack-per-turn gate live ONLY on typed `ledger:*` entries
+(`turn` owner-relative pools + the new `any-turn` battlefield period for the
+global one-interrupt-during-any-turn window, Slashed, and dangerous terrain),
+and the raw `EncounterActor` fields were REMOVED (schema 11 folds legacy
+values 1:1 and drops them deterministically). The `attackedThisTurn`
+resolution FACT is a documented retained U10 specialist (read by Soul Blade /
+Carnevale / Hissatsu / Monogatari / VM); the `end-turn`/scheduler flags stay
+scheduler state. Lifecycle reset recipes are ownerless maintenance noops so
+they never fabricate a U17 same-owner tie. Tests:
 `t3-usage.test.ts` + `t4-dedup.test.ts` + `t4-corrective.test.ts` +
-`use-ledger.test.ts`.
+`use-ledger.test.ts` + `t6-4-usage-global-ledger.test.ts`.
 
 ### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)
 

@@ -3,7 +3,8 @@ import { ENCOUNTER_SCHEMA_VERSION } from '../types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand, hasCoverFrom, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter, replayEncounter, RuleViolation } from '../encounter.js';
 import { ABILITIES, JOBS } from '../catalog.js';
 import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, slashedTriggeredThisTurn} from './fixtures.js';
+import { attackOncePerTurnKey, dangerousOncePerTurnKey, interruptUseKey, oneInterruptPerTurnWindowKey, slashedOncePerTurnKey } from '../automation/kernels/use-ledger.js';
 
 function activeEncounter() {
   let state = createEncounter('Golden fixture');
@@ -166,7 +167,7 @@ describe('ICON encounter reducer', () => {
     // field and must not consume the once-per-turn ability trigger.
     expect(moved.events[0]).toMatchObject({ type: 'ACTOR_MOVED', slashedDamage: 0 });
     expect(moved.state.actors[hero.id].hp).toBe(40);
-    expect(moved.state.actors[hero.id].slashedTriggeredThisTurn).toBe(false);
+    expect(slashedTriggeredThisTurn(moved.state.actors[hero.id])).toBe(false);
     expect(applyEvents(state, moved.events)).toEqual(moved.state);
   });
 
@@ -181,7 +182,8 @@ describe('ICON encounter reducer', () => {
     // Valiant rushes twice, but p.104 caps Slashed at one source instance.
     // The raw 4 normal damage is determined by the common kernel, so Aster's
     // Armor 2 leaves exactly 2 applied HP damage.
-    expect(used.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+    expect(used.state.actors[hero.id]).toMatchObject({ hp: 38 });
+    expect(slashedTriggeredThisTurn(used.state.actors[hero.id])).toBe(true);
     expect(applyEvents(state, used.events)).toEqual(used.state);
   });
 
@@ -322,17 +324,40 @@ describe('ICON encounter reducer', () => {
     expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:sow', targetIds: [foe.id] })).toThrow(/not in this actor/);
   });
 
-  it('migrates v1 actors into the versioned ability state model', () => {
+  it('migrates legacy raw usage fields onto the typed U16 ledger keys', () => {
     const original = createEncounter('Old save');
     const hero = actorFromCharacter(validCharacter(), { x: 1, y: 1 });
     const legacyActor = { ...hero } as Record<string, unknown>;
-    for (const key of ['chapter', 'abilityIds', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn', 'dangerousTerrainTriggeredThisTurn']) delete legacyActor[key];
-    const migrated = migrateEncounter({ ...original, schemaVersion: 1, actors: { [hero.id]: legacyActor } });
+    // A pre-U16 checkpoint carrying the legacy raw usage fields plus a consumed
+    // one-attack fact. The fold must map them 1:1 onto typed ledger keys and
+    // then drop the raw fields — one executing authority, no uses lost/added.
+    legacyActor.interruptUses = { 'bastion:catapult': 1 };
+    legacyActor.interruptUsedThisTurn = true;
+    legacyActor.slashedTriggeredThisTurn = true;
+    legacyActor.dangerousTerrainTriggeredThisTurn = true;
+    legacyActor.attackedThisTurn = true;
+    const migrated = migrateEncounter({ ...original, schemaVersion: 10, actors: { [hero.id]: legacyActor } as never });
     expect(migrated.schemaVersion).toBe(ENCOUNTER_SCHEMA_VERSION);
-    expect(migrated.actors[hero.id]).toMatchObject({ chapter: 1, abilityIds: [], usedAbilityIds: [], interruptUses: {}, interruptUsedThisTurn: false, slashedTriggeredThisTurn: false, dangerousTerrainTriggeredThisTurn: false, conditions: [], resources: {}, activeEffects: [], marks: [], stance: null, onBattlefield: true });
+    const m = migrated.actors[hero.id] as unknown as Record<string, unknown>;
+    expect(m.ruleState as Record<string, unknown>).toMatchObject({
+      [interruptUseKey(hero.id, 'bastion:catapult')]: true,
+      [oneInterruptPerTurnWindowKey()]: true,
+      [slashedOncePerTurnKey()]: true,
+      [dangerousOncePerTurnKey()]: true,
+      [attackOncePerTurnKey(hero.id)]: true,
+    });
+    expect(m.interruptUses).toBeUndefined();
+    expect(m.interruptUsedThisTurn).toBeUndefined();
+    expect(m.slashedTriggeredThisTurn).toBeUndefined();
+    expect(m.dangerousTerrainTriggeredThisTurn).toBeUndefined();
 
-    const v3Migrated = migrateEncounter({ ...original, schemaVersion: 3, actors: { [hero.id]: legacyActor } });
-    expect(v3Migrated).toMatchObject({ schemaVersion: ENCOUNTER_SCHEMA_VERSION, actors: { [hero.id]: { dangerousTerrainTriggeredThisTurn: false } } });
+    // A legacy actor with NO legacy usage fields migrates clean: scheduler
+    // fields default, the ledger stays empty, and no raw duplicate returns.
+    const legacyClean = { ...hero } as Record<string, unknown>;
+    for (const key of ['chapter', 'abilityIds', 'usedAbilityIds']) delete legacyClean[key];
+    const cleanMigrated = migrateEncounter({ ...original, schemaVersion: 1, actors: { [hero.id]: legacyClean } });
+    expect(cleanMigrated.actors[hero.id]).toMatchObject({ chapter: 1, abilityIds: [], usedAbilityIds: [], conditions: [], resources: {}, activeEffects: [], marks: [], stance: null, onBattlefield: true });
+    expect((cleanMigrated.actors[hero.id] as unknown as Record<string, unknown>).interruptUses).toBeUndefined();
   });
 
   it('rejects oversized historical event history rather than silently truncating it', () => {

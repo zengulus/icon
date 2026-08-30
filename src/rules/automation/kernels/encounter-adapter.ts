@@ -8,6 +8,7 @@ import { projectedHpThresholdConditions } from './hp-threshold.js';
 import type { RangeStateView } from './range.js';
 import type { AreaStateView } from './area.js';
 import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, type MasteryFoldStateView } from './mastery-fold.js';
+import { dangerousOncePerTurnKey, interruptUseKey, oneInterruptPerTurnWindowKey, recordUsageKey, slashedOncePerTurnKey, usageCount, interruptAvailable as sharedInterruptAvailable } from './use-ledger.js';
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, nextWindowId, openDecisionWindow } from './decision-window.js';
 import { entityKind, entityKindOf, validateEntityCreation } from './entity-creation.js';
@@ -817,10 +818,9 @@ export function registerInterruptAllowlist(
   INTERRUPT_ALLOWLISTS[trigger] = allowlist;
 }
 
-export function hasAvailableWhenDamagedInterrupt(actor: EncounterActor): boolean {
-  if (actor.interruptUsedThisTurn) return false;
+export function hasAvailableWhenDamagedInterrupt(state: EncounterState, actor: EncounterActor): boolean {
   for (const [interruptId, { usesPerRound }] of Object.entries(INTERRUPT_ALLOWLISTS['when-damaged'] ?? {})) {
-    if (actor.abilityIds.includes(interruptId) && (actor.interruptUses[interruptId] ?? 0) < usesPerRound) return true;
+    if (sharedInterruptAvailable(state, actor, interruptId, usesPerRound)) return true;
   }
   return false;
 }
@@ -855,7 +855,7 @@ export function whenDamagedInterruptOwner(
   for (const candidate of Object.values(state.actors)) {
     if (candidate.side !== target.side) continue;
     if (candidate.id === target.id || candidate.defeated || !candidate.onBattlefield || !candidate.position) continue;
-    if (!hasAvailableWhenDamagedInterrupt(candidate)) continue;
+    if (!hasAvailableWhenDamagedInterrupt(state, candidate)) continue;
     const range = whenDamagedInterruptRange(candidate);
     if (range <= 0) continue;
     if (Math.max(Math.abs(candidate.position.x - target.position.x), Math.abs(candidate.position.y - target.position.y)) > range) continue;
@@ -868,10 +868,9 @@ export function whenDamagedInterruptOwner(
  * (Boiling Blood) — the gate that holds a lethal foe blow so the interrupt can
  * resolve before the character is defeated. Mirrors the USE_ABILITY gates.
  * Exported for the F4 TriggerWindow registry. */
-export function hasAvailableDefeatedInterrupt(actor: EncounterActor): boolean {
-  if (actor.interruptUsedThisTurn) return false;
+export function hasAvailableDefeatedInterrupt(state: EncounterState, actor: EncounterActor): boolean {
   for (const [interruptId, { usesPerRound }] of Object.entries(INTERRUPT_ALLOWLISTS['defeated'] ?? {})) {
-    if (actor.abilityIds.includes(interruptId) && (actor.interruptUses[interruptId] ?? 0) < usesPerRound) return true;
+    if (sharedInterruptAvailable(state, actor, interruptId, usesPerRound)) return true;
   }
   return false;
 }
@@ -902,10 +901,11 @@ function deferredEffects(mutations: RuleMutation[]): RuleMutation[] {
   return mutations.filter((mutation) => mutation.kind !== 'actions' && !(mutation.kind === 'resource' && mutation.operation === 'spend'));
 }
 
-/** True when the interrupt's per-round uses remain and the one-per-turn gate
- * is open, mirroring the USE_ABILITY checks. */
-function interruptAvailable(actor: EncounterActor, abilityId: string, usesPerRound: number): boolean {
-  return !actor.interruptUsedThisTurn && actor.abilityIds.includes(abilityId) && (actor.interruptUses[abilityId] ?? 0) < usesPerRound;
+/** True when the interrupt's per-round uses remain and the global
+ * one-interrupt-during-any-turn window is open, mirroring the USE_ABILITY
+ * gates through the shared U16 ledger authority. */
+function interruptAvailable(state: EncounterState, actor: EncounterActor, abilityId: string, usesPerRound: number): boolean {
+  return sharedInterruptAvailable(state, actor, abilityId, usesPerRound);
 }
 
 /** ICON p.107 — the deferred-trigger window for abilities that have not
@@ -940,7 +940,7 @@ export function deferrableEffectWindow(
       const entry = (INTERRUPT_ALLOWLISTS['uses-ability'] ?? {})[candidate.stance.stanceId];
       if (!entry || !entry.programId) continue;
       const usesPerRound = effectiveInterruptRank(foldView, candidate.id, entry.programId, entry.usesPerRound);
-      if (!interruptAvailable(candidate, entry.programId, usesPerRound)) continue;
+      if (!interruptAvailable(state, candidate, entry.programId, usesPerRound)) continue;
       const allyId = typeof candidate.stance.state.allyId === 'string' ? candidate.stance.state.allyId : undefined;
       if (!allyId || allyId === candidate.id) continue;
       const ally = state.actors[allyId];
@@ -961,7 +961,7 @@ export function deferrableEffectWindow(
   if (source.side === 'heroes') {
     for (const candidate of Object.values(state.actors)) {
       if (candidate.side !== 'heroes' || candidate.id === source.id || candidate.defeated) continue;
-      if (!interruptAvailable(candidate, 'bastion:perseus', (INTERRUPT_ALLOWLISTS['area-inclusion'] ?? {})['bastion:perseus']!.usesPerRound)) continue;
+      if (!interruptAvailable(state, candidate, 'bastion:perseus', (INTERRUPT_ALLOWLISTS['area-inclusion'] ?? {})['bastion:perseus']!.usesPerRound)) continue;
       if (!mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === candidate.id && mutation.delivery === 'area')) continue;
       return openDecisionWindow(state, {
         id: nextWindowId(state, 'area-inclusion', candidate.id),
@@ -982,7 +982,7 @@ export function deferrableEffectWindow(
   for (const candidate of Object.values(state.actors)) {
     if (candidate.side !== 'heroes' || candidate.id === source.id || candidate.defeated || !candidate.position) continue;
     const masqueradeEntry = (INTERRUPT_ALLOWLISTS['targeted-by-ability'] ?? {})['fool:masquerade'];
-    if (!masqueradeEntry || !interruptAvailable(candidate, 'fool:masquerade', masqueradeEntry.usesPerRound)) continue;
+    if (!masqueradeEntry || !interruptAvailable(state, candidate, 'fool:masquerade', masqueradeEntry.usesPerRound)) continue;
     if (!mutations.some((mutation) => (mutation.kind === 'damage' || mutation.kind === 'condition' || mutation.kind === 'mark') && mutation.actorId === candidate.id)) continue;
     // When a foe's damage to this candidate will already be held by the
     // damage pipeline (when-damaged/defeated), that window wins: it is the
@@ -1011,7 +1011,7 @@ export function deferrableEffectWindow(
       if (determined.amount <= 0) continue;
       const bypassVigor = foeDamage.bypassVigor ?? foeDamage.damageType === 'divine';
       if (whenDamagedInterruptOwner(state, candidate, source) !== undefined) continue;
-      if (hasAvailableDefeatedInterrupt(candidate)
+      if (hasAvailableDefeatedInterrupt(state, candidate)
         && prospectiveAppliedDefeat(candidate, determined.amount, bypassVigor, { ignoreDefiance: foeDamage.ignoreDefiance, damageType: foeDamage.damageType }, state)) continue;
     }
     // A willing ally in range 3 is required to swap with.
@@ -1057,7 +1057,7 @@ export function saveRerollWindow(
     if (!saver || saver.side !== 'foes' || !saver.position) continue;
     for (const candidate of Object.values(state.actors)) {
       if (candidate.side !== 'heroes' || candidate.defeated || !candidate.position) continue;
-      if (!interruptAvailable(candidate, 'knave:sucker-punch', (INTERRUPT_ALLOWLISTS['save-reroll'] ?? {})['knave:sucker-punch']!.usesPerRound)) continue;
+      if (!interruptAvailable(state, candidate, 'knave:sucker-punch', (INTERRUPT_ALLOWLISTS['save-reroll'] ?? {})['knave:sucker-punch']!.usesPerRound)) continue;
       if (Math.max(Math.abs(candidate.position.x - saver.position.x), Math.abs(candidate.position.y - saver.position.y)) > 1) continue;
       // The save's branch runs from the save record to the next save record.
       let end = index + 1;
@@ -1413,7 +1413,7 @@ function applySlashedAfterAbilityMove(
   // Conditions are the canonical durable representation; `statuses` is a
   // compatibility projection for legacy/core consumers and may be absent on
   // a valid hydrated snapshot.
-  if (!actor || !actor.onBattlefield || actor.defeated || actor.slashedTriggeredThisTurn || !encounterConditionSet(actor, state).has('slashed')) return;
+  if (!actor || !actor.onBattlefield || actor.defeated || usageCount(actor, slashedOncePerTurnKey()) >= 1 || !encounterConditionSet(actor, state).has('slashed')) return;
   if (!source || source.side !== actor.side) return;
   determineAndApplyEncounterDamage(state, {
     targetId: actor.id,
@@ -1424,7 +1424,8 @@ function applySlashedAfterAbilityMove(
     delivery: 'effect',
     ignoreCover: true,
   });
-  actor.slashedTriggeredThisTurn = true;
+  // p.116 Slashed once-per-turn damage — the U16 any-turn window key.
+  recordUsageKey(actor, slashedOncePerTurnKey());
 }
 
 export function applyRuleMutation(state: EncounterState, mutation: RuleMutation, mutationIndex: number, coMovedActorIds?: readonly string[]) {

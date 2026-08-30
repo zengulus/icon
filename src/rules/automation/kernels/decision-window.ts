@@ -757,7 +757,7 @@ export const DAMAGE_WINDOW_RECIPES: readonly DamageWindowRecipe[] = [
     opens: (state, target, provenance) => {
       const source = provenance.sourceActorId ? state.actors[provenance.sourceActorId] : undefined;
       return Boolean(source && source.side !== target.side)
-        && hasAvailableDefeatedInterrupt(target)
+        && hasAvailableDefeatedInterrupt(state, target)
         && prospectiveAppliedDefeat(target, provenance.determinedAmount, provenance.bypassVigor, {
           ignoreDefiance: provenance.ignoreDefiance,
           damageType: provenance.damageType,

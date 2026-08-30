@@ -9,7 +9,7 @@ import { resolveGamble } from '../automation/primitives/gamble-window.js';
 import { heldDamageContinuation, heldSaveContinuation } from '../automation/primitives/continuation.js';
 import { capturedActor } from '../automation/primitives/reference.js';
 import { orderDecisionWindows, windowHeldDamage, windowHeldSave } from '../automation/kernels/decision-window.js';
-import { endTurnOnly, endTurnTo, scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
+import { endTurnOnly, endTurnTo, scriptedDice, validCharacter, startEncounterTo, interruptUses, interruptUsedThisTurn } from './fixtures.js';
 
 /**
  * T5c U13 acceptance (docs/underlay-completion-plan.md U13): ONE typed
@@ -217,7 +217,7 @@ describe('U13 — Sucker Punch (p.143): the original save is a held result; a re
     }, scriptedDice(3));
     expect(interrupt.state.actors[foe.id].hp).toBe(24); // 32 - 8; the held 2 never applied
     expect(interrupt.state.decisionWindows.some((candidate) => candidate.kind === 'save-rolled')).toBe(false);
-    expect(interrupt.state.actors[hero.id].interruptUses['knave:sucker-punch']).toBe(1);
+    expect(interruptUses(interrupt.state.actors[hero.id], 'knave:sucker-punch')).toBe(1);
     // The reroll rode the recorded event (fresh command-boundary RNG exactly
     // once): replay consumes it and performs ZERO fresh rolls.
     const rerollEvent = interrupt.events.find((event) => event.type === 'RULE_MUTATIONS_APPLIED' && 'reroll' in event);
@@ -343,8 +343,8 @@ describe('U13 — automatic triggered effects are NOT windows', () => {
       input: {},
     }, scriptedDice());
     expect(rushed.state.decisionWindows.some((candidate) => candidate.kind === 'choice')).toBe(false);
-    expect(rushed.state.actors[hero.id].interruptUsedThisTurn).toBe(false);
-    expect(rushed.state.actors[hero.id].interruptUses).toEqual({});
+    expect(interruptUsedThisTurn(rushed.state.actors[hero.id])).toBe(false);
+    expect(interruptUses(rushed.state.actors[hero.id], 'knave:sucker-punch')).toBe(0);
     expect(rushed.state.actors[hero.id].ruleState['gates-of-hell:vigilance-rushed']).toBe(true);
     // And the once-per-turn gate is the effect's own (a second rush is
     // rejected — it is not gated by interrupt rank).

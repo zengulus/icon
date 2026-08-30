@@ -5,7 +5,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { planMovement } from '../movement.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterEvent, EncounterState, Position, TerrainCell } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, slashedTriggeredThisTurn} from './fixtures.js';
 
 /**
  * F0 damage-ledger matrix (ICON pp.89, 93–107).
@@ -298,7 +298,8 @@ describe('F0 matrix: delayed and Slashed damage through the shared kernel', () =
     const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
     // The single raw Slashed instance is determined by the shared kernel:
     // 4 normal - armor 2 = exactly 2 applied HP damage.
-    expect(answered.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+    expect(answered.state.actors[hero.id]).toMatchObject({ hp: 38 });
+    expect(slashedTriggeredThisTurn(answered.state.actors[hero.id])).toBe(true);
     expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 });

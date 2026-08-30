@@ -8,7 +8,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Colossus
@@ -211,8 +211,8 @@ describe('Colossus ability automation (p.133–138)', () => {
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:boiling-blood', targetIds: [] }, scriptedDice());
     expect(result.state.actors[hero.id].activeEffects.some(({ effectId }) => effectId === 'defy-death')).toBe(true);
     expect(result.state.actors[hero.id].resources['bonus-damage']).toBe(1);
-    expect(result.state.actors[hero.id].interruptUses['colossus:boiling-blood']).toBe(1);
-    expect(result.state.actors[hero.id].interruptUsedThisTurn).toBe(true);
+    expect(interruptUses(result.state.actors[hero.id], 'colossus:boiling-blood')).toBe(1);
+    expect(interruptUsedThisTurn(result.state.actors[hero.id])).toBe(true);
   });
 
   it('Boiling Blood: defy-death keeps the user at 1 hp instead of defeated, and grants bonus damage', () => {
@@ -269,7 +269,7 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(interrupt.state.actors[hero.id].resources['bonus-damage']).toBe(1);
     expect(interrupt.state.actors[hero.id].hp).toBe(1); // the held blow landed but cannot defeat
     expect(interrupt.state.actors[hero.id].defeated).toBe(false);
-    expect(interrupt.state.actors[hero.id].interruptUses['colossus:boiling-blood']).toBe(1);
+    expect(interruptUses(interrupt.state.actors[hero.id], 'colossus:boiling-blood')).toBe(1);
     expect(applyEvents(held, interrupt.events)).toEqual(interrupt.state);
   });
 

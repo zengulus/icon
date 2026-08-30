@@ -2040,16 +2040,22 @@ history RIDES the durable `RULE_MUTATIONS_APPLIED` event (with its
 consumes the recorded outcomes and their identities — it never re-derives
 them.
 Ordinary entitlement COUNTS stay in the ledger (`used-scope`); event
-de-duplication is the fact read — semantically distinct. Remaining (honest,
-staged): the `interrupt-uses` counter and the `attacked-this-turn`/`end-turn`
-ruleState flags remain durable encounter-authority fields whose typed-ledger
-migration is the T6 consolidation item.
+de-duplication is the fact read — semantically distinct. **T6.4 (2026-08-31)
+closed the raw-field consolidation**: the `interrupt-uses` counter,
+`interrupt-uses-this-turn`, `slashed`/`dangerous-terrain` once-per-turn
+flags, and the one-attack-per-turn gate now live ONLY on typed `ledger:*`
+entries (owner-relative `turn` pools + the `any-turn` battlefield windows),
+and the raw `EncounterActor` fields were REMOVED (schema 11 folds legacy
+values 1:1 and drops them deterministically). The `attackedThisTurn`
+resolution FACT is retained as a documented U10 specialist (onset resolution
+record, read by Soul Blade / Carnevale / Hissatsu / Monogatari / VM).
 
 **Locations partially owning/duplicating.** `kernels/use-ledger.ts`;
 `kernels/trait-reactions.ts` (`roundLedgerKey`, de-dup ledger);
 `RuleContinuationState.executedStepIds` + `derivedTriggers`
 (`src/rules/encounter.ts`); F9 once-per-ability registries; `ruleState`
-`attacked-this-turn`/`end-turn` flags; `interrupt-uses` counter;
+`end-turn` flag (retained scheduler flag; `attackedThisTurn` is the
+retained U10 fact specialist);
 `content/jobs/*` gated rows.
 
 **Intended authority.** `primitives/usage.ts` (barrel re-exported):

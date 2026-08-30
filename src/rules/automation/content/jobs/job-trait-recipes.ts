@@ -69,7 +69,7 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
   },
   'demon-slayer:trait:hissatsu': {
     sourceId: 'demon-slayer:trait:hissatsu', name: 'Hissatsu', status: 'wired',
-    mechanic: 'Taking a turn without attacking arms the next attack (turn-end recipe on the ending actor\u2019s attackedThisTurn flag): +1 boon, true strike, and a d10 damage die, consumed by the next attack roll through the attack-modifier kernel (VM rolls and the direct basic-attack path both read the armed state).',
+    mechanic: 'Taking a turn without attacking arms the next attack (turn-end recipe reads the retained attackedThisTurn U10 resolution fact): +1 boon, true strike, and a d10 damage die, consumed by the next attack roll through the attack-modifier kernel (VM rolls and the direct basic-attack path both read the armed state).',
     detail: '',
   },
   'demon-slayer:trait:true-horn': {

@@ -6,7 +6,7 @@ import { findAbility, JOBS } from '../catalog.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Demon Slayer
@@ -290,8 +290,8 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(result.state.actors[ally.id].hp).toBe(38);
     expect(result.state.actors[hero.id].conditions.some(({ id }) => id === 'sturdy')).toBe(true);
     expect(result.state.actors[ally.id].conditions.some(({ id }) => id === 'sturdy')).toBe(true);
-    expect(result.state.actors[hero.id].interruptUses['demon-slayer:righteous-disdain']).toBe(1);
-    expect(result.state.actors[hero.id].interruptUsedThisTurn).toBe(true);
+    expect(interruptUses(result.state.actors[hero.id], 'demon-slayer:righteous-disdain')).toBe(1);
+    expect(interruptUsedThisTurn(result.state.actors[hero.id])).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

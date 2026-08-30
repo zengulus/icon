@@ -8,7 +8,8 @@ import { encounterConditionSet } from '../automation/kernels/encounter-adapter.j
 import { ABILITIES, JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn, slashedTriggeredThisTurn} from './fixtures.js';
+import { oneInterruptPerTurnWindowKey } from '../automation/kernels/use-ledger.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Bastion
@@ -247,8 +248,8 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(interrupt.state.actors[foe.id].hp).toBe(30); // 32 - 2 from the interrupt's return
     expect(interrupt.state.actors[ally.id].hp).toBe(36); // 40 - (6 normal - armor 2), the held effects
     expect(interrupt.state.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'uses-ability')).toBe(false);
-    expect(interrupt.state.actors[hero.id].interruptUses['bastion:endless-battlement']).toBe(1);
-    expect(interrupt.state.actors[hero.id].interruptUsedThisTurn).toBe(true);
+    expect(interruptUses(interrupt.state.actors[hero.id], 'bastion:endless-battlement')).toBe(1);
+    expect(interruptUsedThisTurn(interrupt.state.actors[hero.id])).toBe(true);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
   });
 
@@ -267,7 +268,7 @@ describe('Bastion ability automation (p.122–124)', () => {
   it('Heroic Intervention: no window opens when the interrupt was already used this turn', () => {
     const { state, hero, foe, ally } = bastionEncounter({ foe: { x: 4, y: 1 }, ally: { x: 3, y: 1 } });
     const stanced = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:endless-battlement', targetIds: [ally.id] }, scriptedDice()).state;
-    stanced.actors[hero.id].interruptUsedThisTurn = true;
+    stanced.actors[hero.id].ruleState[oneInterruptPerTurnWindowKey()] = true;
     const resolved = applyEvents(stanced, [foeAbilityDamage(foe.id, ally.id, 6)]);
     expect(resolved.actors[ally.id].hp).toBe(36); // applied immediately
     expect(resolved.decisionWindows.some((candidate) => candidate.kind === 'uses-ability')).toBe(false);
@@ -309,7 +310,7 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(interrupt.state.actors[hero.id].activeEffects.some(({ effectId }) => effectId === 'aura')).toBe(true);
     expect(interrupt.state.actors[hero.id].hp).toBe(40); // immune to the held blast
     expect(interrupt.state.actors[foe.id].hp).toBe(24); // 32 - 8, the held area resolved
-    expect(interrupt.state.actors[hero.id].interruptUses['bastion:perseus']).toBe(1);
+    expect(interruptUses(interrupt.state.actors[hero.id], 'bastion:perseus')).toBe(1);
     expect(interrupt.state.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'area-inclusion')).toBe(false);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
   });
@@ -318,8 +319,8 @@ describe('Bastion ability automation (p.122–124)', () => {
     const { state, hero, ally } = bastionEncounter({ foe: { x: 5, y: 1 }, second: { x: 6, y: 1 }, ally: { x: 2, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally.id] }, scriptedDice());
     expect(result.state.actors[ally.id].position).toEqual({ x: 4, y: 1 });
-    expect(result.state.actors[hero.id].interruptUses['bastion:catapult']).toBe(1);
-    expect(result.state.actors[hero.id].interruptUsedThisTurn).toBe(true);
+    expect(interruptUses(result.state.actors[hero.id], 'bastion:catapult')).toBe(1);
+    expect(interruptUsedThisTurn(result.state.actors[hero.id])).toBe(true);
     expect(result.state.actors[hero.id].actionsRemaining).toBe(2);
     expect(() => executeCommand(result.state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally.id] }, scriptedDice())).toThrow(/repeat/i);
 
@@ -342,7 +343,7 @@ describe('Bastion ability automation (p.122–124)', () => {
     const heroAfter = result.state.actors[hero.id];
     expect(heroAfter.activeEffects.some(({ effectId, modifiers }) => effectId === 'aura' && modifiers.some(({ value }) => typeof value === 'object' && value !== null && value.kind === 'constant' && value.value === 1))).toBe(true);
     expect(heroAfter.ruleState['damage-immune']).toBe(true);
-    expect(heroAfter.interruptUses['bastion:perseus']).toBe(1);
+    expect(interruptUses(heroAfter, 'bastion:perseus')).toBe(1);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
@@ -456,7 +457,8 @@ describe('Bastion ability automation (p.122–124)', () => {
     const rushWindow = ended.decisionWindows.find((window) => window.kind === 'choice');
     expect(rushWindow).toBeDefined();
     const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
-    expect(answered.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+    expect(answered.state.actors[hero.id]).toMatchObject({ hp: 38 });
+    expect(slashedTriggeredThisTurn(answered.state.actors[hero.id])).toBe(true);
     expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 

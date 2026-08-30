@@ -2,6 +2,7 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, migrateEncounter } from '../encounter.js';
 import type { CommandResult, DecisionWindowRecord, EncounterActor, EncounterEvent, EncounterState, Position } from '../types.js';
+import { ENCOUNTER_SCHEMA_VERSION } from '../types.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { armContinuation, clockObservationForBoundary, continuationDue, heldDamageContinuation, heldSaveContinuation, resumeContinuation, type ArmedContinuation } from '../automation/primitives/continuation.js';
 import { EMPTY_BINDER, capturedActor, capturedPosition, liveRef, resolveReference } from '../automation/primitives/reference.js';
@@ -616,7 +617,7 @@ describe('T5c.1 H6 — schema migration cannot resurrect a second window authori
     ];
     delete (legacy as { windowSerial?: unknown }).windowSerial;
     const migrated = migrateEncounter(legacy);
-    expect(migrated.schemaVersion).toBe(10);
+    expect(migrated.schemaVersion).toBe(ENCOUNTER_SCHEMA_VERSION);
     // The serial initializes (0) and the legacy ids are preserved — no
     // collision, no second authority.
     expect(migrated.windowSerial).toBe(0);

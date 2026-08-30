@@ -5,6 +5,24 @@ import { applyEvents, executeCommand } from '../encounter.js';
 import type { DiceSource } from '../dice.js';
 import type { EncounterCommand, EncounterState, IconCharacter } from '../types.js';
 
+import type { EncounterActor } from '../types.js';
+import { dangerousOncePerTurnKey, interruptUseKey, oneInterruptPerTurnWindowKey, slashedOncePerTurnKey, usageCount } from '../automation/kernels/use-ledger.js';
+
+/** T6.4 ledger read helpers — tests assert the typed U16 authority instead of
+ * the migrated-away raw usage/entitlement fields. */
+export function interruptUses(actor: Pick<EncounterActor, 'id' | 'ruleState'>, sourceId: string): number {
+  return usageCount(actor, interruptUseKey(actor.id, sourceId));
+}
+export function interruptUsedThisTurn(actor: Pick<EncounterActor, 'ruleState'>): boolean {
+  return usageCount(actor, oneInterruptPerTurnWindowKey()) >= 1;
+}
+export function slashedTriggeredThisTurn(actor: Pick<EncounterActor, 'ruleState'>): boolean {
+  return usageCount(actor, slashedOncePerTurnKey()) >= 1;
+}
+export function dangerousTerrainTriggeredThisTurn(actor: Pick<EncounterActor, 'ruleState'>): boolean {
+  return usageCount(actor, dangerousOncePerTurnKey()) >= 1;
+}
+
 export function validCharacter(name = 'Aster'): IconCharacter {
   const character = createCharacter('2026-08-19T00:00:00.000Z');
   const bond = BONDS[0];

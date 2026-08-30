@@ -18,7 +18,7 @@ export const CHARACTER_SCHEMA_VERSION = 5 as const;
 // Schema 9 (U13): the interrupt-window collection becomes the ONE typed U13
 // window record (`decisionWindows: DecisionWindowRecord[]`); the legacy
 // `decisionWindows` schema is migrated field-for-field (see migrateEncounter).
-export const ENCOUNTER_SCHEMA_VERSION = 10 as const;
+export const ENCOUNTER_SCHEMA_VERSION = 11 as const;
 
 export const ACTION_IDS = [
   'sneak',
@@ -508,10 +508,6 @@ export interface EncounterActor {
   standardMoveUsed: boolean;
   attackedThisTurn: boolean;
   usedAbilityIds: string[];
-  interruptUses: Record<string, number>;
-  interruptUsedThisTurn: boolean;
-  slashedTriggeredThisTurn: boolean;
-  dangerousTerrainTriggeredThisTurn: boolean;
   /** True once the actor has taken at least one actual turn this round. The
    * scheduler derives it from `turnsTakenThisRound`; content once-per-round
    * ledgers read it as the durable "acted this round" boolean. */

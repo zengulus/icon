@@ -120,7 +120,7 @@ export const WHEN_DAMAGED_INTERRUPT_IDS: Readonly<Record<string, { usesPerRound:
  * interrupt is available, the reducer holds the foe ability's effect mutations
  * (its costs already paid), opens a window carrying them, and resolves the
  * interrupt before the ability's effects apply. Keyed by the stance that arms
- * the interrupt; `programId` is the source program the interruptUses counter
+ * the interrupt; `programId` is the source program the interrupt's per-interrupt U16 usage pool (`ledger:turn:<programId>`)
  * is tracked under.
  */
 export const USES_ABILITY_INTERRUPT_IDS: Readonly<Record<string, { programId: string; usesPerRound: number; allyRange?: number }>> = {

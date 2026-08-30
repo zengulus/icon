@@ -564,8 +564,7 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
     'dash', 'fray', 'damageDie', 'basicAttackRange', 'statuses', 'conditions',
     'resources', 'ruleState', 'ruleStateOwners', 'activeEffects', 'marks', 'stance', 'traitIds', 'talents', 'masteredAbilityIds',
     'onBattlefield', 'defeated', 'actionsRemaining', 'standardMoveUsed',
-    'attackedThisTurn', 'usedAbilityIds', 'interruptUses', 'interruptUsedThisTurn',
-    'slashedTriggeredThisTurn', 'dangerousTerrainTriggeredThisTurn', 'turnTaken',
+    'attackedThisTurn', 'usedAbilityIds', 'turnTaken',
     'turnsRemaining', 'turnsTakenThisRound', 'slow',
   ], ['foeKind']);
   const actorId = strictIdentifier(actor.id, `${path}.id`);
@@ -681,10 +680,6 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
   strictBoolean(actor.standardMoveUsed, `${path}.standardMoveUsed`);
   strictBoolean(actor.attackedThisTurn, `${path}.attackedThisTurn`);
   strictIdentifierArray(actor.usedAbilityIds, `${path}.usedAbilityIds`, 200);
-  strictNumberRecord(actor.interruptUses, `${path}.interruptUses`, 500, 0);
-  strictBoolean(actor.interruptUsedThisTurn, `${path}.interruptUsedThisTurn`);
-  strictBoolean(actor.slashedTriggeredThisTurn, `${path}.slashedTriggeredThisTurn`);
-  strictBoolean(actor.dangerousTerrainTriggeredThisTurn, `${path}.dangerousTerrainTriggeredThisTurn`);
   strictBoolean(actor.turnTaken, `${path}.turnTaken`);
   strictInteger(actor.turnsRemaining, `${path}.turnsRemaining`, 0);
   strictInteger(actor.turnsTakenThisRound, `${path}.turnsTakenThisRound`, 0);

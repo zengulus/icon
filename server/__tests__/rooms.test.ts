@@ -192,10 +192,10 @@ describe('RoomManager authoritative VTT integration', () => {
   it('does not normalize a malformed current-schema legacy parent snapshot', () => {
     const checkpoint = persistedRoom('room-current-parent-corruption', 0);
     const actor = createFoe('Missing current flag', { x: 1, y: 1 }) as unknown as Record<string, unknown>;
-    delete actor.dangerousTerrainTriggeredThisTurn;
+    delete actor.attackedThisTurn;
     checkpoint.state.encounter.actors = { current: actor as never };
 
-    expect(() => migrateAndValidateVttRoom(checkpoint.state)).toThrow(/dangerousTerrainTriggeredThisTurn is required/i);
+    expect(() => migrateAndValidateVttRoom(checkpoint.state)).toThrow(/attackedThisTurn is required/i);
   });
 
   it('migrates condition ownership before a historical checkpoint becomes live authority', () => {

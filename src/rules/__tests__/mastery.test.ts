@@ -7,6 +7,7 @@ import { determineEncounterDamage, encounterRuleState } from '../automation/kern
 import { resolveAuthoritativeAttack } from '../automation/kernels/attack-resolution.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, migrateEncounter } from '../encounter.js';
+import { attackOncePerTurnKey } from '../automation/kernels/use-ledger.js';
 import type { DiceSource } from '../dice.js';
 import type { EncounterActor, EncounterCommand, EncounterEvent, EncounterState, Position } from '../types.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
@@ -359,6 +360,10 @@ describe('Bleak Mercy mastery — Painkiller (p.144)', () => {
     // this is deliberate test manipulation, not a command sequence.)
     chain.state.actors[fixture.hero.id].usedAbilityIds = [];
     chain.state.actors[fixture.hero.id].attackedThisTurn = false;
+    // Clear the typed one-attack U16 gate too — the same-turn re-use branch.
+    // The gate now lives on the `ledger:turn:` attack key, no longer the
+    // attackedThisTurn fact alone (deliberate test manipulation as above).
+    delete chain.state.actors[fixture.hero.id].ruleState[attackOncePerTurnKey(fixture.hero.id)];
     chain.state.actors[fixture.hero.id].actionsRemaining = 2;
     chain.state.actors[fixture.hero.id].resources.combo = 1;
     chain.state.actors[fixture.foe.id].statuses = ['slashed', 'dazed'];

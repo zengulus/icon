@@ -8,6 +8,7 @@ import type { ArmedContinuation, RuleAction, RuleChoice, RuleExecutionContext, R
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
+import { attackOncePerTurnKey, dangerousOncePerTurnKey, interruptUseKey, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, slashedOncePerTurnKey, usageCount, interruptWindowUsedBy } from './automation/kernels/use-ledger.js';
 import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
@@ -191,7 +192,7 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
 export function migrateEncounter(input: unknown): EncounterState {
   if (!input || typeof input !== 'object') throw new RuleViolation('encounter.invalid', 'Encounter data must be an object.');
   const candidate = input as Omit<Partial<EncounterState>, 'schemaVersion'> & { schemaVersion?: number };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== 7 && candidate.schemaVersion !== 9 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== 7 && candidate.schemaVersion !== 9 && candidate.schemaVersion !== 10 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
     throw new RuleViolation('encounter.schema', `Unsupported encounter schema version: ${String(candidate.schemaVersion)}`);
   }
   // There is no cross-rules-version converter in this release. Treat a
@@ -203,7 +204,7 @@ export function migrateEncounter(input: unknown): EncounterState {
   const base = createEncounter(typeof candidate.name === 'string' ? candidate.name : 'Migrated encounter');
   const actors = Object.fromEntries(Object.entries(candidate.actors ?? {}).map(([id, value]) => {
     const actor = value as Partial<EncounterActor>;
-    return [id, {
+    const migrated = {
       ...actor,
       id,
       foeProfileId: actor.foeProfileId ?? null,
@@ -224,10 +225,6 @@ export function migrateEncounter(input: unknown): EncounterState {
       traitIds: [...(actor.traitIds ?? [])],
       onBattlefield: actor.onBattlefield ?? true,
       usedAbilityIds: [...(actor.usedAbilityIds ?? [])],
-      interruptUses: { ...(actor.interruptUses ?? {}) },
-      interruptUsedThisTurn: actor.interruptUsedThisTurn ?? false,
-      slashedTriggeredThisTurn: actor.slashedTriggeredThisTurn ?? false,
-      dangerousTerrainTriggeredThisTurn: actor.dangerousTerrainTriggeredThisTurn ?? false,
       // Scheduler migration: a pre-scheduler checkpoint cannot reconstruct
       // turn entitlements. An actor that already acted this round (turnTaken)
       // is treated as having spent its single entitlement; the rest still owe
@@ -235,7 +232,32 @@ export function migrateEncounter(input: unknown): EncounterState {
       turnsRemaining: actor.turnsRemaining ?? (actor.turnTaken === true ? 0 : 1),
       turnsTakenThisRound: actor.turnsTakenThisRound ?? (actor.turnTaken === true ? 1 : 0),
       slow: actor.slow ?? false,
-    } as EncounterActor];
+    } as EncounterActor & Record<string, unknown>;
+    // U16 (schema 11) usage/entitlement fold: a pre-ledger checkpoint's raw
+    // usage fields map 1:1 onto the typed ledger keys below (a boolean once-flag
+    // folds to its one-shot key; an interrupt count folds to that key's count),
+    // so migrating grants no extra uses and loses none. The one-attack gate is
+    // rebuilt from the retained attackedThisTurn resolution fact so a migrated
+    // mid-turn actor that already attacked stays blocked. Raw fields are then
+    // deleted — the ledger becomes the single executing authority.
+    const actorId = id;
+    const led = migrated.ruleState as Record<string, unknown>;
+    const foldBool = (present: unknown, key: string) => { if (present === true && !(key in led)) led[key] = true; };
+    // The legacy raw usage fields were carried in via `...actor` (loose input);
+    // read them there, never from the migrated authority which drops them.
+    foldBool(migrated.attackedThisTurn, attackOncePerTurnKey(actorId));
+    for (const [interruptId, count] of Object.entries((migrated.interruptUses as Record<string, unknown> | undefined) ?? {})) {
+      const n = typeof count === 'number' ? Math.floor(count) : count === true ? 1 : 0;
+      if (n > 0 && !(interruptUseKey(actorId, interruptId) in led)) led[interruptUseKey(actorId, interruptId)] = n === 1 ? true : n;
+    }
+    foldBool(migrated.interruptUsedThisTurn, oneInterruptPerTurnWindowKey());
+    foldBool(migrated.slashedTriggeredThisTurn, slashedOncePerTurnKey());
+    foldBool(migrated.dangerousTerrainTriggeredThisTurn, dangerousOncePerTurnKey());
+    delete migrated.interruptUses;
+    delete migrated.interruptUsedThisTurn;
+    delete migrated.slashedTriggeredThisTurn;
+    delete migrated.dangerousTerrainTriggeredThisTurn;
+    return [id, migrated as EncounterActor];
   }));
   // Pre-provenance checkpoint schemas did not record which actor created a
   // condition. Recover the unambiguous common case from the source unit held
@@ -560,10 +582,6 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     standardMoveUsed: false,
     attackedThisTurn: false,
     usedAbilityIds: [],
-    interruptUses: {},
-    interruptUsedThisTurn: false,
-    slashedTriggeredThisTurn: false,
-    dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
     turnsRemaining: 1,
     turnsTakenThisRound: 0,
@@ -642,10 +660,6 @@ export function createFoe(name: string, position: Position): EncounterActor {
     standardMoveUsed: false,
     attackedThisTurn: false,
     usedAbilityIds: [],
-    interruptUses: {},
-    interruptUsedThisTurn: false,
-    slashedTriggeredThisTurn: false,
-    dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
     turnsRemaining: 1,
     turnsTakenThisRound: 0,
@@ -737,10 +751,6 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     standardMoveUsed: false,
     attackedThisTurn: false,
     usedAbilityIds: [],
-    interruptUses: {},
-    interruptUsedThisTurn: false,
-    slashedTriggeredThisTurn: false,
-    dangerousTerrainTriggeredThisTurn: false,
     turnTaken: false,
     turnsRemaining: 1,
     turnsTakenThisRound: 0,
@@ -1059,7 +1069,7 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   const target = state.actors[command.targetId];
   const cost = command.weight === 'heavy' ? 2 : 1;
   if (!target || target.defeated || target.side === actor.side) throw new RuleViolation('attack.invalid-target', 'Basic attacks require a living foe.');
-  if (actor.attackedThisTurn) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
+  if (usageCount(actor, attackOncePerTurnKey(actor.id)) >= 1) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
   if (actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
   if (actor.actionsRemaining < cost) throw new RuleViolation('action.insufficient', `A ${command.weight} attack costs ${cost} action${cost === 1 ? '' : 's'}.`);
   const attackTargetQuery = {
@@ -1644,11 +1654,11 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   const interrupt = ability.cost.kind === 'interrupt';
   if (interrupt) {
     if (actor.statuses.includes('stunned')) throw new RuleViolation('interrupt.stunned', 'Stunned characters cannot use interrupts.');
-    if (actor.interruptUsedThisTurn) throw new RuleViolation('interrupt.turn-limit', 'A character can only use one interrupt during any turn.');
+    if (interruptWindowUsedBy(state) !== null) throw new RuleViolation('interrupt.turn-limit', 'A character can only use one interrupt during any turn.');
     // The per-round allowance is the mastery-fold authority: an interrupt's
     // rank is its uses per round (p.91), and a mastered rank override
     // (MANGONEL p.123, PERFECT BATTLEMENT p.122) genuinely raises it.
-    if ((actor.interruptUses[ability.id] ?? 0) >= effectiveInterruptRank(masteryFoldStateView(state), actor.id, ability.id, ability.cost.value)) throw new RuleViolation('interrupt.uses', 'This interrupt has no uses remaining before the actor’s next turn.');
+    if (usageCount(actor, interruptUseKey(actor.id, ability.id)) >= effectiveInterruptRank(masteryFoldStateView(state), actor.id, ability.id, ability.cost.value)) throw new RuleViolation('interrupt.uses', 'This interrupt has no uses remaining before the actor’s next turn.');
   } else {
     assertActive(state, actor.id);
     // F8a action-cost override: the cost modifier fold may reduce the
@@ -1668,7 +1678,9 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   }
 
   const attackAbility = ability.tags.includes('attack');
-  if (attackAbility && actor.attackedThisTurn) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
+  // ICON p.91 one-attack-per-turn — the U16 entitlement gate (owner-relative `ledger:turn:`
+  // key, distinct from the retained `attackedThisTurn` historical resolution fact).
+  if (attackAbility && usageCount(actor, attackOncePerTurnKey(actor.id)) >= 1) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
   if (attackAbility && actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
   const noAttackSpace = /\bno attack space\b/i.test(ability.rulesText);
   const targetIds = command.targetIds.length === 0 && ability.tags.includes('self') ? [actor.id] : [...command.targetIds];
@@ -2090,7 +2102,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       if (compilation.unsupportedClauses.length > 0) throw new RuleViolation('rule.not-executable', `${unit.name} still has ${compilation.unsupportedClauses.length} unsupported source clause${compilation.unsupportedClauses.length === 1 ? '' : 's'}.`);
       const action = compilation.program.actions.find(({ id, timing }) => id === command.actionId && timing === command.timing);
       if (!action) throw new RuleViolation('rule.action-unknown', 'That rule action is not available at this timing.');
-      if (action.tags.includes('attack') && actor.attackedThisTurn) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
+      if (action.tags.includes('attack') && usageCount(actor, attackOncePerTurnKey(actor.id)) >= 1) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
       if (action.tags.includes('attack') && actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
       // Pre-use talent augmentations resolve BEFORE target validation/effects/
       // RNG — the same authority USE_ABILITY consumes. The validated set feeds
@@ -3055,11 +3067,10 @@ function applyTurnTransition(
       candidate.marks = [];
     }
   }
+  // The battlefield any-turn windows re-open for every actor at a turn boundary.
+  refreshAnyTurnLedgersForAll(state);
   for (const candidate of Object.values(state.actors)) {
     candidate.usedAbilityIds = [];
-    candidate.interruptUsedThisTurn = false;
-    candidate.slashedTriggeredThisTurn = false;
-    candidate.dangerousTerrainTriggeredThisTurn = false;
     candidate.ruleState['damage-immune'] = false;
     candidate.ruleStateOwners['damage-immune'] ??= null;
     candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
@@ -3097,7 +3108,7 @@ function applyTurnTransition(
     next.actionsRemaining = derivedTurnStartActions(next);
     next.standardMoveUsed = false;
     next.attackedThisTurn = false;
-    next.interruptUses = {};
+    refreshAnyTurnLedgersForAll(state);
     if (next.traitIds.includes('wright:trait:aether')) next.resources.aether = (next.resources.aether ?? 0) + 1;
     state.activeActorId = event.nextActorId;
     expireBoundaryEffects(state, next.id, 'round-start');
@@ -3177,13 +3188,17 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         actor.actionsRemaining = derivedTurnStartActions(actor);
         actor.standardMoveUsed = false;
         actor.attackedThisTurn = false;
-        actor.interruptUses = {};
+        // Owner-relative U16 turn gates (one-attack gate + per-interrupt pools)
+        // refresh ONLY at the OWNER's own turn-start via the lifecycle
+        // turn-ledger-reset recipe (p.91 "get them all back at the start of any
+        // of your turns") — never another actor's boundary.
         if (actor.traitIds.includes('wright:trait:aether')) actor.resources.aether = (actor.resources.aether ?? 0) + 1;
+        // The battlefield any-turn windows (global one-interrupt-during-any-turn,
+        // slashed once per turn, dangerous terrain once per turn) re-open for
+        // EVERY actor at EVERY turn start.
+        refreshAnyTurnLedgersForAll(state);
         for (const candidate of Object.values(state.actors)) {
           candidate.usedAbilityIds = [];
-          candidate.interruptUsedThisTurn = false;
-          candidate.slashedTriggeredThisTurn = false;
-          candidate.dangerousTerrainTriggeredThisTurn = false;
           candidate.ruleState['damage-immune'] = false;
           candidate.ruleStateOwners['damage-immune'] ??= null;
           candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
@@ -3241,7 +3256,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         if (event.ledger) {
           if (event.ledger.amount > 0) {
             applyDamageLedger(state, event.ledger);
-            actor.dangerousTerrainTriggeredThisTurn = true;
+            recordUsageKey(actor, dangerousOncePerTurnKey());
           }
         } else if (event.dangerousDamage) {
           determineAndApplyEncounterDamage(state, {
@@ -3254,7 +3269,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
             delivery: 'terrain',
             ignoreCover: true,
           });
-          actor.dangerousTerrainTriggeredThisTurn = true;
+          recordUsageKey(actor, dangerousOncePerTurnKey());
         }
         // `slashedDamage` is a retired compatibility field. p.104 Slashed
         // belongs to the self/ally ability-mutation trigger in the encounter
@@ -3269,6 +3284,10 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         const target = state.actors[event.targetId];
         actor.actionsRemaining -= event.weight === 'heavy' ? 2 : 1;
         actor.attackedThisTurn = true;
+        // ICON p.91 one-attack gate (U16 entitlement) closes as soon as the
+        // attack is authorized; the `attackedThisTurn` fact above remains the
+        // distinct U10 historical "an attack resolved this turn" record.
+        recordUsageKey(actor, attackOncePerTurnKey(actor.id));
         if (event.hit) discardWickedSheathDie(actor);
         breakStealth(actor);
         // New events replay the durable AttackResolution ledger (the full
@@ -3303,9 +3322,13 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         actor.actionsRemaining -= event.actionCost;
         actor.usedAbilityIds.push(event.abilityId);
         actor.attackedThisTurn ||= event.attackAbility;
+        if (event.attackAbility) recordUsageKey(actor, attackOncePerTurnKey(actor.id));
         if (event.interrupt) {
-          actor.interruptUses[event.abilityId] = (actor.interruptUses[event.abilityId] ?? 0) + 1;
-          actor.interruptUsedThisTurn = true;
+          // p.91 per-interrupt pool (owner `ledger:turn:<id>`) and the GLOBAL
+          // one-interrupt-during-any-turn battlefield window — distinct U16
+          // entries that never share a counter.
+          recordUsageKey(actor, interruptUseKey(actor.id, event.abilityId));
+          recordUsageKey(actor, oneInterruptPerTurnWindowKey());
           // ICON p.107: an interrupt answers the most recently triggered window
           // open for its user (LIFO); windows close at the end of the turn.
           popInterruptWindow(state, actor.id);
@@ -3406,6 +3429,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         openOrderingDecisionForSameOwnerTies(state);
         if (event.timing === 'use' || event.timing === 'interrupt') actor.usedAbilityIds.push(event.sourceId);
         actor.attackedThisTurn ||= event.tags.includes('attack');
+        if (event.tags.includes('attack')) recordUsageKey(actor, attackOncePerTurnKey(actor.id));
         if (event.mutations.some((mutation) => mutation.kind === 'attack' && mutation.hit)) discardWickedSheathDie(actor);
         if (event.tags.includes('attack') && massiveOverheadArmed(actor)) {
           const attackMutation = event.mutations.find((mutation) => mutation.kind === 'attack');
@@ -3417,10 +3441,10 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // post-attack ruleState (the roll itself is already recorded).
         if (event.mutations.some((mutation) => mutation.kind === 'attack')) consumeTraitAttackModifiers(actor.ruleState);
         if (event.timing === 'interrupt') {
-          // Track per-ability interrupt uses the same way ABILITY_RESOLVED
-          // does, so resolver-based interrupts obey the source usage limit.
-          actor.interruptUses[event.sourceId] = (actor.interruptUses[event.sourceId] ?? 0) + 1;
-          actor.interruptUsedThisTurn = true;
+          // Route resolver-based interrupts through the same U16 ledger marks
+          // as ABILITY_RESOLVED, so they obey the source usage limits.
+          recordUsageKey(actor, interruptUseKey(actor.id, event.sourceId));
+          recordUsageKey(actor, oneInterruptPerTurnWindowKey());
           // ICON p.107: an interrupt answers the most recently triggered window
           // open for its user (LIFO); windows close at the end of the turn.
           const window = popInterruptWindow(state, actor.id);

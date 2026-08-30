@@ -778,7 +778,24 @@ assumption here, document the evidence and update this list before proceeding.
   F3-plan cases + `rooms.test.ts` heldBoundary window seed. Full suite green
   (1798 tests), census byte-stable at 427 (no source promotion). A fresh
   audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.
-  Next smallest-first blocker: U16 raw-field classification/migration.
+
+- **T6.4 — U16 raw usage-field consolidation onto the typed ledger.**
+  `DONE`. Classified and migrated `interruptUses`, `interruptUsedThisTurn`,
+  `slashedTriggeredThisTurn`, `dangerousTerrainTriggeredThisTurn` onto typed
+  `ledger:*` entries and REMOVED them from the `EncounterActor` type + VTT
+  checkpoint schema (bumped `ENCOUNTER_SCHEMA_VERSION` to 11; the migration
+  folds legacy values 1:1 and drops the raw fields deterministically). Added
+  the `any-turn` battlefield period for the global one-interrupt-during-any-
+  turn window (p.91), Slashed once-per-turn (p.116) and dangerous-terrain
+  once-per-turn (p.89). Split the one-attack gate
+  (`ledger:turn:core:attack-this-turn`) from the `attackedThisTurn` U10
+  resolution fact (the fact stays as a documented specialist). Routed
+  use-ledger reset recipes through ownerless maintenance noops so the reset
+  never fabricates a U17 same-owner tie. Verification: `t6-4-usage-global-
+  ledger.test.ts` (9 adversarial cases), full suite green (1807 tests),
+  architecture audit guard (`bespoke-u16-entitlement-field`) + test added,
+  census byte-stable at 427 (no source promotion). Next smallest-first
+  blocker: U2 role-consumer routing.
 
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full

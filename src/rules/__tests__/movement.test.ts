@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, RuleViolation } from '../encounter.js';
 import { planMovement, planMovementPath } from '../movement.js';
 import type { EncounterState, Position, TerrainCell } from '../types.js';
-import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import {validCharacter, endTurnTo, startEncounterTo, dangerousTerrainTriggeredThisTurn} from './fixtures.js';
 
 function activeEncounter(options: {
   heroPosition?: Position;
@@ -136,17 +136,20 @@ describe('shared movement planner', () => {
     expect(firstPlan).toMatchObject({ legal: true, dangerousDamage: 2 });
     const standardResult = executeCommand(state, { type: 'MOVE', actorId: hero.id, path: firstPlan.path, mode: 'standard' });
     const afterStandard = standardResult.state;
-    expect(afterStandard.actors[hero.id]).toMatchObject({ hp: 38, vigor: 5, dangerousTerrainTriggeredThisTurn: true });
+    expect(afterStandard.actors[hero.id]).toMatchObject({ hp: 38, vigor: 5 });
+    expect(dangerousTerrainTriggeredThisTurn(afterStandard.actors[hero.id])).toBe(true);
     expect(applyEvents(state, standardResult.events)).toEqual(afterStandard);
 
     const dashPlan = planMovement(afterStandard, hero.id, { x: 1, y: 1 }, 'dash');
     expect(dashPlan).toMatchObject({ legal: true, dangerousDamage: 0 });
     const afterDash = executeCommand(afterStandard, { type: 'MOVE', actorId: hero.id, path: dashPlan.path, mode: 'dash' }).state;
-    expect(afterDash.actors[hero.id]).toMatchObject({ hp: 38, vigor: 5, dangerousTerrainTriggeredThisTurn: true });
+    expect(afterDash.actors[hero.id]).toMatchObject({ hp: 38, vigor: 5 });
+    // A second movement in the same turn must NOT re-trigger dangerous terrain.
+    expect(dangerousTerrainTriggeredThisTurn(afterDash.actors[hero.id])).toBe(true);
 
     const foeTurn = endTurnTo(afterDash, foe.id);
     const nextHeroTurn = endTurnTo(foeTurn, hero.id);
-    expect(nextHeroTurn.actors[hero.id].dangerousTerrainTriggeredThisTurn).toBe(false);
+    expect(dangerousTerrainTriggeredThisTurn(nextHeroTurn.actors[hero.id])).toBe(false);
     const nextPlan = planMovement(nextHeroTurn, hero.id, { x: 2, y: 1 }, 'standard');
     expect(nextPlan).toMatchObject({ legal: true, dangerousDamage: 2 });
   });

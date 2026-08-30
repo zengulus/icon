@@ -1,5 +1,6 @@
 import type { EncounterActor, EncounterState, Position, TerrainCell } from './types.js';
 import { encounterConditionSet, rampartObstructs } from './automation/kernels/encounter-adapter.js';
+import { dangerousOncePerTurnKey, usageCount } from './automation/kernels/use-ledger.js';
 import { footprintCells, footprintsOverlap, footprintsAdjacent } from './automation/primitives/spatial-intent.js';
 
 /** The two built-in movement abilities available to an actor. */
@@ -340,7 +341,9 @@ function resolveStep(
 
 function consequences(actor: EncounterActor, state: EncounterState, steps: readonly MovementStep[]): Pick<MovementPlan, 'dangerousDamage' | 'slashedDamage'> {
   return {
-    dangerousDamage: !movementConditions(actor, state).has('flying') && !actor.dangerousTerrainTriggeredThisTurn && steps.some((step) => step.entersOrExitsDangerousTerrain) ? 2 : 0,
+    // p.89 dangerous terrain once-per-turn damage — the U16 any-turn window
+    // key (resets for every actor at each turn start), not a historical marker.
+    dangerousDamage: !movementConditions(actor, state).has('flying') && usageCount(actor, dangerousOncePerTurnKey()) < 1 && steps.some((step) => step.entersOrExitsDangerousTerrain) ? 2 : 0,
     // ICON p.104 Slashed is not a normal-movement consequence. It follows an
     // ability mutation from the character or an ally, so the authoritative
     // trigger lives beside RuleMutation application rather than this planner.

@@ -13,7 +13,7 @@ import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-ge
 import { clockForTiming } from '../../primitives/scope.js';
 import type { BoundaryRef } from '../../primitives/scope.js';
 import type { RuleTiming } from '../../primitives/types.js';
-import { refreshUsageLedgerForBoundary, usageLedgerHoldsForBoundary } from '../../kernels/use-ledger.js';
+import { oneInterruptPerTurnWindowKey, refreshUsageLedgerForBoundary, usageCount, usageLedgerHoldsForBoundary } from '../../kernels/use-ledger.js';
 import type { DiceSource } from '../../../dice.js';
 import type { EncounterActor, EncounterMark, EncounterState, Position } from '../../../types.js';
 import type { RuleMutation } from '../../primitives/types.js';
@@ -234,7 +234,10 @@ function monogatariTaleMet(state: EncounterState, actor: EncounterActor, tale: n
       return Math.max(Math.abs(actor.position.x - sx), Math.abs(actor.position.y - sy)) > 4;
     }
     case 3: return !actor.attackedThisTurn;
-    case 4: return actor.interruptUsedThisTurn;
+    // p.91 Monogatari tale 4 "Cunning": the actor used an interrupt this turn.
+    // A durable U16 fact read (the global one-interrupt-during-any-turn window
+    // is stored on the actor who fired it) — NOT the availability gate.
+    case 4: return usageCount(actor, oneInterruptPerTurnWindowKey()) >= 1;
     case 5: return actor.position !== null && Object.values(state.actors).some((candidate) =>
       candidate.side === actor.side && candidate.id !== actor.id && !candidate.defeated && candidate.onBattlefield && candidate.position && distance(candidate.position, actor.position) <= 1);
     default: return false;
@@ -1432,6 +1435,12 @@ registerLifecycleRecipe({
     const boundary = boundaryForLifecyclePhase('turn-start');
     return boundary !== null && usageLedgerHoldsForBoundary(actor, boundary);
   },
+  // Ownerless maintenance (ownerOf null): clearing expiry keys is order-
+  // independent, so it must NOT participate as a p.108 same-owner ordering
+  // candidate alongside a real starting actor's turn-start effect (that would
+  // fabricate a tie with e.g. Astral Chain's strike). It runs in the noop
+  // bucket, after the ordered meaningful effects, on the starting actor.
+  ownerOf: () => null,
   resolve: (state, actor) => {
     const boundary = boundaryForLifecyclePhase('turn-start');
     if (boundary !== null) refreshUsageLedgerForBoundary(actor, boundary);
@@ -1452,6 +1461,8 @@ registerLifecycleRecipe({
     const boundary = boundaryForLifecyclePhase('round-start');
     return boundary !== null && usageLedgerHoldsForBoundary(actor, boundary);
   },
+  // Ownerless maintenance (ownerOf null) — see core:turn-ledger-reset above.
+  ownerOf: () => null,
   resolve: (state, actor) => {
     const boundary = boundaryForLifecyclePhase('round-start');
     if (boundary !== null) refreshUsageLedgerForBoundary(actor, boundary);

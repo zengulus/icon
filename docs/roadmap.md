@@ -377,14 +377,35 @@ registration-order-as-boundary-order authority and the expiry listing-order
 tie-break are REMOVED. A fresh audit confirmed no other genuine U17 consumer
 remains. Suite: `t6-3-turn-boundary-ordering.test.ts` (27 cases) + pinned
 `aura`/`turn-transition`/`conditions`/`rooms` cases. **Next smallest-first
-blocker: U16 raw-field classification/migration.**
+blocker: U2 role-consumer routing (U16 raw-field classification/migration
+landed in T6.4).**
 
-**T6.1/T6.2/T6.3 scope note (per the T6 §3 split mandate).** U8 (temporal
-consolidation) and U17 (simultaneous-order arbitration / U4-U13 decision
-recording + turn-boundary consumers) were deliberately split: they are
-independent seams with no real implementation dependency. T6.1 did U8 only;
-T6.2 landed the U17 recorded-decision seam; T6.3 landed the U17 turn-boundary
-consumers.
+**T6.4 landed (2026-08-31): U16 raw usage-field consolidation — U16 is now the
+single executing usage authority.** The raw `EncounterActor` usage/entitlement fields
+(`interruptUses`, `interruptUsedThisTurn`, `slashedTriggeredThisTurn`,
+`dangerousTerrainTriggeredThisTurn`) were classified and migrated onto the
+typed `ledger:*` authority, then REMOVED from the type + VTT checkpoint
+schema (schema 11 folds legacy values 1:1 and drops them deterministically).
+Added the `any-turn` battlefield period for the global
+one-interrupt-during-any-turn window (p.91), Slashed once-per-turn (p.116)
+and dangerous-terrain once-per-turn (p.89); the one-attack-per-turn gate
+lives on `ledger:turn:core:attack-this-turn`, split from the
+`attackedThisTurn` U10 resolution FACT (retained as a documented specialist).
+Lifecycle reset recipes are ownerless maintenance noops so clearing keys
+can never fabricate a U17 same-owner tie. Suite:
+`t6-4-usage-global-ledger.test.ts` (9 adversarial cases) + updated
+`t5c1`/`interrupts`/`bastion`/`knave`/`movement`/`conditions`/
+`damage-ledger`/`encounter`/`rooms`/`mastery` assertions reading the typed
+ledger; full suite green (1807 tests); census byte-stable at 427 (no source
+promotion); architecture guard (`bespoke-u16-entitlement-field`) + detection
+test added.
+
+**T6.1–T6.4 scope note (per the T6 §3 split mandate).** U8 (temporal
+consolidation), U17 (simultaneous-order arbitration + turn-boundary
+consumers) and U16 (raw-field consolidation) were deliberately split: they
+are independent seams with no real implementation dependency. T6.1 did U8
+only; T6.2 landed the U17 recorded-decision seam; T6.3 landed the U17
+turn-boundary consumers; T6.4 landed the U16 raw-field consolidation.
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

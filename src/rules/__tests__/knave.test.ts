@@ -7,7 +7,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
+import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn} from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Knave
@@ -195,7 +195,7 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(parry.state.actors[foe.id].hp).toBe(26); // 6 gamble damage
     expect(parry.state.actors[foe.id].statuses).toContain('slashed');
     expect(parry.state.actors[foe.id].position).toEqual({ x: 3, y: 1 }); // shoved 1 away
-    expect(parry.state.actors[hero.id].interruptUses['knave:riposte']).toBe(1);
+    expect(interruptUses(parry.state.actors[hero.id], 'knave:riposte')).toBe(1);
   });
 
   it('Dark Knight: retracted — hatred+ of the closest foe grants a player choice on equidistant ties (p.143)', () => {
@@ -313,8 +313,8 @@ describe('Knave ability automation (p.139–144)', () => {
   it('Sucker Punch: an adjacent-foe interrupt that tracks its usage', () => {
     const { state, hero, foe } = knaveEncounter({ second: null });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:sucker-punch', targetIds: [foe.id] }, scriptedDice());
-    expect(result.state.actors[hero.id].interruptUses['knave:sucker-punch']).toBe(1);
-    expect(result.state.actors[hero.id].interruptUsedThisTurn).toBe(true);
+    expect(interruptUses(result.state.actors[hero.id], 'knave:sucker-punch')).toBe(1);
+    expect(interruptUsedThisTurn(result.state.actors[hero.id])).toBe(true);
     expect(result.state.actors[hero.id].ruleState['sucker-punch:used']).toBe(true);
   });
 
@@ -376,7 +376,7 @@ describe('Knave ability automation (p.139–144)', () => {
       input: { actorIds: { target: [foe.id] } },
     }, scriptedDice(3));
     expect(interrupt.state.actors[foe.id].hp).toBe(24); // 32 - 8; the held 2 never applied
-    expect(interrupt.state.actors[hero.id].interruptUses['knave:sucker-punch']).toBe(1);
+    expect(interruptUses(interrupt.state.actors[hero.id], 'knave:sucker-punch')).toBe(1);
     expect(interrupt.state.actors[hero.id].ruleState['sucker-punch:used']).toBe(true);
     expect(interrupt.state.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'save-rolled')).toBe(false);
     // The regenerated save carries the same durable F2 record as the original

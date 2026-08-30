@@ -41,9 +41,11 @@ import type { ModifierFoldView, ModifierNumberResolver } from './modifiers.js';
 import { foldNumberModifiers } from './modifiers.js';
 
 /** The reset boundaries the core ledger understands. Each maps to a U8
- * boundary on the shared Clock: turn (the actor's own next turn-start),
- * round (round-start), combat (never — the encounter ends with combat). */
-export type UsagePeriod = 'turn' | 'round' | 'combat';
+ * boundary on the shared Clock: turn (the actor's OWN next turn-start),
+ * any-turn (ANY turn-start — a battlefield turn window like "only one
+ * interrupt during any turn", p.91), round (round-start), combat (never —
+ * the encounter ends with combat). */
+export type UsagePeriod = 'turn' | 'any-turn' | 'round' | 'combat';
 
 /** The typed identity of one usage ledger entry: which source unit, used by
  * which owner (the U1 reference-key form), optionally against which target,
@@ -129,7 +131,12 @@ export function usageIdentitiesEqual(first: UsageIdentity, second: UsageIdentity
 export function resetBoundaryFor(period: UsagePeriod, ownerId: string): BoundaryRef {
   switch (period) {
     case 'turn':
+      // Owner-relative: the OWNER's own next turn-start.
       return { kind: 'boundary', boundary: 'turn', edge: 'start', subject: { kind: 'live', domain: 'actor', name: { kind: 'id', id: ownerId } } };
+    case 'any-turn':
+      // Battlefield turn window: EVERY turn-start (subject-less — any actor's
+      // turn), distinct from the owner-relative `turn` period.
+      return { kind: 'boundary', boundary: 'turn', edge: 'start' };
     case 'round':
       return { kind: 'boundary', boundary: 'round', edge: 'start' };
     case 'combat':
@@ -164,7 +171,13 @@ export function usagePeriodForResetBoundary(boundary: BoundaryRef): UsagePeriod 
   if (boundary.kind !== 'boundary') return null;
   switch (boundary.boundary) {
     case 'turn':
-      // Turn gates refresh at the OWNER's own turn-START (never the turn-end).
+      // A turn-START boundary refreshes turn gates. The OWNER-relative `turn`
+      // period is reset by the per-actor lifecycle recipe (which runs for the
+      // actor whose turn starts); the battlefield `any-turn` window is reset
+      // by the reducer's all-actors turn-start sweep. Both are refreshed by
+      // an identical turn-start boundary — the period vocabulary is the same;
+      // the sweep TARGET (owner vs every actor) is what the two reset call
+      // sites encode, never a different boundary here.
       return boundary.edge === 'start' ? 'turn' : null;
     case 'round':
       return boundary.edge === 'start' ? 'round' : null;
