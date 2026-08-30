@@ -160,9 +160,10 @@ export type RulePredicate =
    * instance named by `effectKind`/`effectId` (scoped to `sourceId`, default
    * the acting source) still exist on the target? Reads through the U10
    * fact/instance seam (`effectExistsLive`) against the target's LIVE effect
-   * surfaces — never re-derived history. `instanceKey` names a specific
-   * coexisting instance when multiple may exist; an instance identity the
-   * live view cannot represent FAILS CLOSED. */
+   * surfaces — never re-derived history. `instanceId` names the specific
+   * coexisting instance when multiple may exist (a U10 fact's
+   * `effectInstanceId`); an instance identity the live view cannot
+   * represent FAILS CLOSED. */
   | { kind: 'effect-still-exists'; target: RuleSelector; effectKind: 'condition' | 'status' | 'mark' | 'stance' | 'persistent'; effectId: string; sourceId?: string; /** The authoritative DURABLE instance id (a U10 fact's `instanceId` / the
      reducer's EncounterActiveEffect.id): asks whether THAT EXACT instance
      still exists. Absent = presence by effectId (or owner-sensitive mark). */
@@ -476,6 +477,16 @@ export type RuleMutation =
       bypassVigor?: boolean;
       ignoreArmor?: boolean;
       ignoreDefiance?: boolean;
+      /** The command/window boundary's SINGLE determination of this instance:
+       * the final post-mitigation amount (armor/resistance/dodge/etc. already
+       * resolved) decided ONCE against the sequentially-simulated pre-event
+       * state. The reducer consumes this recorded outcome instead of invoking
+       * the damage authority again; replay applies the recorded result without
+       * re-calculating mitigation. Absent only on historical events that
+       * predate the determined handoff (they replay the legacy re-derivation
+       * path, which is deterministic). A no-op (defeated/immunized/fully
+       * prevented) records amount 0 so no false damage-applied fact is emitted. */
+      determined?: { amount: number };
     }
   | { kind: 'heal'; sourceId: string; actorId: string; amount: number; maximum: number | null }
   | { kind: 'vigor'; sourceId: string; actorId: string; amount: number; uncapped: boolean }
@@ -490,9 +501,20 @@ export type RuleMutation =
   | { kind: 'actions'; sourceId: string; actorId: string; operation: 'gain' | 'spend' | 'set' | 'refund'; amount: number }
   | { kind: 'terrain'; sourceId: string; sourceActorId: string; operation: 'create' | 'remove' | 'raise' | 'lower'; terrain: string; positions: Position[]; height: number | null; duration?: RuleDuration }
   | { kind: 'entity'; sourceId: string; operation: 'summon' | 'create' | 'remove' | 'update'; entityType: string; ownerId: string; positions: Position[]; count: number; state: Readonly<Record<string, string | number | boolean | null>>; duration?: RuleDuration; /** The source category ('summon' default; 'object' for boulders/statues/ etc). When absent the reducer/registry infer it from a single central registry. */ category?: 'summon' | 'object'; /** 'exact' — must land exactly `count` legal cells or the creation fails; 'up-to' (default) — create as many legal cells as exist, bounded by the per-owner cap. */ countMode?: 'exact' | 'up-to'; /** Replay-safe creation spatial contract, computed at command time: the resolved CREATOR LoS origin position, the origin actor's size for the p.92 footprint-distance metric, and an optional maximum range. A PAIRED invariant: the contract always carries a valid origin — the reducer rejects a range without a valid origin defensively even if a malformed mutation bypasses the type. */ creationSpatial?: { origin: Position; originSize: number; maxRange?: number } }
-  | { kind: 'mark'; sourceId: string; ownerId: string; operation: 'apply' | 'remove'; actorId: string; markId: string; duration?: RuleDuration; state: Readonly<Record<string, string | number | boolean | null>> }
-  | { kind: 'stance'; sourceId: string; sourceActorId: string; operation: 'enter' | 'refresh' | 'exit'; actorId: string; stanceId: string; state: Readonly<Record<string, string | number | boolean | null>> }
-  | { kind: 'persistent'; sourceId: string; ownerId: string; operation: 'add' | 'remove'; actorId: string; effectId: string; duration: RuleDuration; modifiers: RuleModifier[]; triggers: string[]; state: Readonly<Record<string, string | number | boolean | null>> }
+  | { kind: 'mark'; sourceId: string; ownerId: string; operation: 'apply' | 'remove'; actorId: string; markId: string; duration?: RuleDuration; state: Readonly<Record<string, string | number | boolean | null>>; /** The canonical LIVE instance id this operation creates/removes — decided
+     ONCE at the command/window boundary (the same deterministic id the reducer
+     mints for legacy mutations) and consumed by the reducer, so the recorded
+     U10 fact and the live EncounterMark.id are the SAME id. A removal naming
+     an instance removes THAT instance only; absent on legacy events (the
+     reducer falls back to the historical markId-scoped removal). */
+    instanceId?: string }
+  | { kind: 'stance'; sourceId: string; sourceActorId: string; operation: 'enter' | 'refresh' | 'exit'; actorId: string; stanceId: string; state: Readonly<Record<string, string | number | boolean | null>>; /** The canonical LIVE instance id this operation creates/removes (see the
+     mark `instanceId` contract). */
+    instanceId?: string }
+  | { kind: 'persistent'; sourceId: string; ownerId: string; operation: 'add' | 'remove'; actorId: string; effectId: string; duration: RuleDuration; modifiers: RuleModifier[]; triggers: string[]; state: Readonly<Record<string, string | number | boolean | null>>; /** The canonical LIVE instance id this operation creates/removes (see the
+     mark `instanceId` contract). A removal naming an instance removes THAT
+     instance only — coexisting instances stay intact. */
+    instanceId?: string }
   | { kind: 'modifier'; sourceId: string; ownerId: string; actorId: string; modifier: RuleModifier; duration: RuleDuration }
   /** The F2 durable SaveWindow record: `windowKind` names the save's nature
    * (`status-clear` / `cure-immediate` / `effect` / `movement`), `modifiers`

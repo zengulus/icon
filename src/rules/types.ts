@@ -660,6 +660,17 @@ export interface EncounterState {
    * resolve most-recently-triggered first (LIFO) and close at turn end. */
   pendingInterrupts: EncounterPendingInterrupt[];
   revision: number;
+  /** The durable, UNBOUNDED monotonic resolution serial — the count of
+   * RULE_MUTATIONS_APPLIED events this encounter has recorded, independent of
+   * the bounded `eventLog` (which truncates to MAX_ENCOUNTER_EVENT_LOG). The
+   * command/event boundary derives each resolution's identity from this
+   * serial (`res:<sourceId>:<serial>`), so resolution ids remain unique for
+   * the LIFETIME of the encounter even after event-log truncation, and replay
+   * advances it exactly like every other recorded event. Never derived from
+   * array length; never random; survives save/load/checkpoint migration
+   * (migrateEncounter derives it deterministically from the legacy log when
+   * absent). */
+  resolutionSerial: number;
   eventLog: EncounterEvent[];
 }
 

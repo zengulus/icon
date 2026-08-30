@@ -170,6 +170,7 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
     terrainEffects: [],
     pendingInterrupts: [],
     revision: 0,
+    resolutionSerial: 0,
     eventLog: [],
   };
 }
@@ -257,6 +258,13 @@ export function migrateEncounter(input: unknown): EncounterState {
   if (candidate.eventLog && candidate.eventLog.length > MAX_ENCOUNTER_EVENT_LOG) {
     throw new RuleViolation('encounter.event-log', `Encounter event history exceeds the ${MAX_ENCOUNTER_EVENT_LOG}-event durable limit.`);
   }
+  // The durable monotonic resolution serial is REQUIRED for replay-stable
+  // resolution ids. A legacy checkpoint predating the field derives it
+  // deterministically from its event history (the historical derivation
+  // counted recorded RULE_MUTATIONS_APPLIED events — the same count), so the
+  // next serial continues exactly where the old derivation left off. A
+  // current checkpoint keeps its own (possibly larger, post-truncation) value.
+  const legacyResolutionSerial = (candidate.eventLog ?? []).filter((event) => event.type === 'RULE_MUTATIONS_APPLIED').length;
   return {
     ...base,
     ...candidate,
@@ -283,6 +291,11 @@ export function migrateEncounter(input: unknown): EncounterState {
     // durable current-state shape is already schema 7; this boundary
     // upgrades the audit/display event history to the same representation.
     pendingInterrupts: normalizeInterruptWindows(clone(candidate.pendingInterrupts ?? [])),
+    // The durable resolution serial survives save/load: keep a present valid
+    // value; derive the historical count only for legacy checkpoints.
+    resolutionSerial: typeof candidate.resolutionSerial === 'number' && Number.isSafeInteger(candidate.resolutionSerial) && candidate.resolutionSerial >= 0
+      ? candidate.resolutionSerial
+      : legacyResolutionSerial,
     // A migration may add canonical fields, but it must never erase an older
     // event simply to fit the current bounded-history policy. Reject and ask
     // for an explicit archive/compaction decision instead.
@@ -1099,15 +1112,15 @@ function deriveTriggers(state: EncounterState, actor: EncounterActor, attackTarg
  * and then the reactive steps in source-listing order, deterministically.
  */
 /** The durable, replay-stable resolution identity for a new rule resolution:
- * the deterministic number of RULE_MUTATIONS_APPLIED events already recorded
- * (a monotonic serial under replay), scoped by source. Two separate uses of
- * the same ability → different serials → distinct fact ids; replaying the
- * same recorded events reproduces the identical serials. Never random; never
- * derived from later mutable state. Owned by the command/event boundary. */
+ * the encounter's UNBOUNDED monotonic `resolutionSerial` (the count of
+ * RULE_MUTATIONS_APPLIED events this encounter has recorded, advanced by
+ * applyEvents and independent of the bounded eventLog), scoped by source. Two
+ * separate uses of the same ability → different serials → distinct fact ids;
+ * replaying the same recorded events reproduces the identical serials. Never
+ * random; never derived from later mutable state or a bounded history's array
+ * length. Owned by the command/event boundary. */
 function nextResolutionId(state: EncounterState, sourceId: string, localOffset = 0): string {
-  let serial = 0;
-  for (const event of state.eventLog) if (event.type === 'RULE_MUTATIONS_APPLIED') serial += 1;
-  return `res:${sourceId}:${serial + 1 + localOffset}`;
+  return `res:${sourceId}:${state.resolutionSerial + 1 + localOffset}`;
 }
 
 export function executeRuleProgramWithReactiveTriggers(
@@ -1131,11 +1144,12 @@ export function executeRuleProgramWithReactiveTriggers(
   // named resolver remain confined to the primary pass by onlyTriggers.
   // The U16 authority (`hasResolvedAsFact`) is the semantic gate for reactive
   // continuation: a triggered step resolves ONCE per resolution (ICON p.107
-  // once-per-ability). `resolvedTriggers` is the durable recorded marker list
-  // for THIS resolution — replay consumes the recorded markers in the event's
-  // `continuation`, never re-deriving eligibility from later facts. A trigger
-  // already marked resolved is never re-offered, so per-fact routing facts
-  // (three Collides) open exactly ONE Collide step.
+  // once-per-ability). `resolvedTriggers` collects the durable marker facts
+  // for THIS resolution — each marker's `instanceId` is the canonical resolve
+  // identity key, and the merged list rides the event's U10 facts below so
+  // replay consumes the RECORDED markers, never re-deriving eligibility from
+  // later facts. A trigger already marked resolved is never re-offered, so
+  // per-fact routing facts (three Collides) open exactly ONE Collide step.
   const resolutionSource = context.sourceId;
   const resolutionOwner = context.actorId;
   const resolvedTriggers: Fact[] = [];
@@ -1181,6 +1195,15 @@ export function executeRuleProgramWithReactiveTriggers(
   const bullStrengthDamage = bullStrengthCollideMutations(state, mutations);
   if (bullStrengthDamage.length > 0) mutations = [...mutations, ...bullStrengthDamage];
   const finalFacts = deriveResolutionTriggers(state, mutations, derived.triggers, resolutionId, resolutionAction);
+  // The U16 trigger-resolved markers ride the durable U10 fact history: the
+  // markers recorded while resolving triggered steps are merged into the
+  // event's facts (markers first, in resolution order) so replay consumes the
+  // RECORDED once-per-ability decisions instead of re-inferring them from
+  // current state. Each marker's `instanceId` is its canonical resolve
+  // identity key (source + owner + scope + resolution + trigger), so one
+  // resolution + one triggered step = one marker, and a second resolution
+  // produces a distinct marker. `continuation.derivedTriggers` remains FLOW
+  // bookkeeping only — the markers are the semantic authority.
   return {
     ...first,
     mutations,
@@ -1191,7 +1214,7 @@ export function executeRuleProgramWithReactiveTriggers(
       collidedActorIds: finalFacts.collidedActorIds,
       slainActorIds: finalFacts.slainActorIds,
     },
-    facts: finalFacts.facts,
+    facts: [...resolvedTriggers, ...finalFacts.facts],
     resolutionId: finalFacts.resolutionId,
     continuation: {
       executedStepIds: [...executedStepIds],
@@ -3057,6 +3080,12 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         break;
     }
     state.revision += 1;
+    // The durable resolution serial advances with every recorded
+    // RULE_MUTATIONS_APPLIED event — the exact same count the command boundary
+    // derives the next resolution identity from — so it stays monotonic and
+    // unique for the lifetime of the encounter, independent of event-log
+    // truncation, and replay reproduces it event-for-event.
+    if (event.type === 'RULE_MUTATIONS_APPLIED') state.resolutionSerial += 1;
     state.eventLog.push(clone(event));
   }
   if (state.eventLog.length > MAX_ENCOUNTER_EVENT_LOG) {

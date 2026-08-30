@@ -160,9 +160,19 @@ resolve identity is RESOLUTION-scoped once-per-ability and WIRED into the
 genuine reactive continuation (multiple routing facts open ONE triggered
 step); and the live RuleActorView carries the durable instance id + ownership
 so `effectExistsLive` answers specific-instance reads exactly and effect
-lifecycle facts reference the original instance. Full suite green (1645
-tests), census byte-stable at 427, no source-unit promotion. The next
-tranche is **T5 — Execution: U11, U12, U13** (plan §3.2).
+lifecycle facts reference the original instance. A **T4 final contract fix
+(2026-08-30)** made the four contracts true in the implementation: a
+durable monotonic `resolutionSerial` on EncounterState (independent of the
+bounded eventLog, migration-safe) guarantees resolution ids never repeat
+past truncation; damage is determined ONCE at the command boundary and the
+reducer consumes the recorded stamp (U10 amount == applied amount; a
+no-op records no false fact; replay never re-decides); U16
+`trigger-resolved` markers persist on the event's U10 facts (byte-identical
+across replay); and U10 effect facts carry the exact live instance id the
+reducer creates/removes, with instance-scoped removals leaving coexisting
+instances intact. Full suite green (1660 tests), census byte-stable at 427,
+no source-unit promotion. The next tranche is **T5 — Execution: U11, U12,
+U13** (plan §3.2).
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

@@ -56,10 +56,14 @@ export type EffectInstanceKind = 'condition' | 'status' | 'mark' | 'stance' | 'p
  * stance lifecycle. The critical invariant: the instance created as X is
  * later removable/refreshable as X — a removal NEVER mints a new identity.
  *
- * Where the reducer/domain chooses a replacement identity (e.g. a mark is
- * replaced per owner), that decision is recorded once and carried on the
- * fact via `instanceKey`, so a later remove/refresh names the ORIGINAL
- * instance, not a freshly-minted one. */
+ * The instance created as X is later removable/refreshable as X because the
+ * canonical LIVE instance id (`effectInstanceId`, decided once at the
+ * command/event boundary) is carried on the apply/refresh/remove fact — a
+ * removal names the ORIGINAL instance, never a freshly-minted one. Where the
+ * reducer/domain chooses a replacement identity (e.g. a mark is replaced per
+ * owner), that replacement is a NEW instance with its own recorded id, and
+ * the owner-scoped natural key (`instanceKey`) stays the secondary
+ * disambiguation surface. */
 export type EffectOperation = 'apply' | 'refresh' | 'remove' | 'enter' | 'exit';
 
 /** One recorded fact. Every member carries the common envelope — its own
@@ -76,7 +80,16 @@ export type Fact =
     viaSlay?: boolean }
   | { kind: 'collide'; instanceId: string; sourceId: string; ownerId: string; shovedActorId: string; provenance?: Provenance }
   | { kind: 'movement'; instanceId: string; sourceId: string; ownerId: string; actorId: string; mode: RuleMovementMode; provenance?: Provenance }
-  | { kind: 'effect'; instanceId: string; instanceKey: string; sourceId: string; ownerId: string; targetId: string; effectKind: EffectInstanceKind; effectId: string; operation: EffectOperation; provenance?: Provenance }
+  | { kind: 'effect'; instanceId: string; instanceKey: string; sourceId: string; ownerId: string; targetId: string; effectKind: EffectInstanceKind; effectId: string; operation: EffectOperation; /** The canonical LIVE encounter instance id this fact's operation created /
+     removed — the EXACT id the reducer creates on its live surface
+     (EncounterActiveEffect.id / EncounterMark.id / EncounterStance.id), decided
+     once at the command/event boundary and consumed by the reducer. A removal
+     fact naming an instance removes THAT instance only; a later
+     `effect-still-exists` read with this id answers about THAT SAME instance.
+     Absent for single-instance kinds without a durable per-instance id
+     (condition/status) and for legacy removals the boundary could not resolve
+     to one specific instance. */
+    effectInstanceId?: string; provenance?: Provenance }
   | { kind: 'entity'; instanceId: string; sourceId: string; ownerId: string; entityType: string; operation: 'create' | 'remove' | 'summon' | 'update'; provenance?: Provenance }
   | { kind: 'terrain'; instanceId: string; sourceId: string; ownerId: string; terrain: string; operation: 'create' | 'remove' | 'raise' | 'lower'; provenance?: Provenance }
   | { kind: 'save-resolved'; instanceId: string; sourceId: string; ownerId: string; actorId: string; success: boolean; provenance?: Provenance }
@@ -166,11 +179,14 @@ export interface RecordFactsOptions {
   actionId?: string;
   resolutionId?: string;
   /** The RESOLVED (post-mitigation) damage amount per mutation index, when a
-   * domain damage authority has determined it. `damage-applied` facts record
-   * THIS, never the raw proposed `mutation.amount`; a fully-prevented
-   * (0) amount records NO `damage-applied` fact (no false application).
-   * Absent for primitive-level convenience (no state) — the recorded amount
-   * then equals `mutation.amount` so pure-mutation tests read honestly. */
+   * domain damage authority has determined it. When provided it is the
+   * AUTHORITATIVE determination map: `damage-applied` facts record exactly its
+   * per-index amount, a 0 records NO fact, and a damage mutation with NO entry
+   * records NO fact either (it no-op'd — the target was defeated/immunized by
+   * an earlier mutation in the same event). Never the raw proposed
+   * `mutation.amount`. Absent for primitive-level convenience (no state) — the
+   * recorded amount then equals `mutation.amount` so pure-mutation tests read
+   * honestly. */
   resolvedDamage?: ReadonlyMap<number, number>;
 }
 
@@ -204,8 +220,15 @@ export function recordFacts(
     } else if (kind === 'damage') {
       // The RESOLVED amount is the damage authority's determined (post-
       // mitigation) result — never a raw proposed amount mislabeled as
-      // applied. When fully prevented (0), NO damage-applied fact is emitted.
-      const resolved = options.resolvedDamage?.get(index) ?? mutation.amount;
+      // applied. When the determination map is provided it is AUTHORITATIVE:
+      // a 0 (fully prevented) or an ABSENT entry (the mutation no-op'd — the
+      // target was already defeated/immunized by an earlier mutation in this
+      // event) emits NO damage-applied fact, so U10 never claims a false
+      // application. Without the map (primitive convenience) the raw amount
+      // is recorded honestly.
+      const damageMap = options.resolvedDamage;
+      const mapProvided = damageMap !== undefined;
+      const resolved = mapProvided ? (damageMap.get(index) ?? 0) : mutation.amount;
       if (resolved > 0) {
         facts.push({
           kind: 'damage-applied',
@@ -221,11 +244,11 @@ export function recordFacts(
     } else if (kind === 'condition') {
       facts.push(effectFact(resolutionId, mutation.sourceId, mutation.sourceActorId, mutation.actorId, 'condition', mutation.conditionId, mutation.operation === 'apply' ? 'apply' : 'remove', index, ownerId, options.actionId));
     } else if (kind === 'stance') {
-      facts.push(effectFact(resolutionId, mutation.sourceId, mutation.sourceActorId, mutation.actorId, 'stance', mutation.stanceId, mutation.operation === 'enter' ? 'enter' : mutation.operation === 'exit' ? 'exit' : 'apply', index, ownerId, options.actionId));
+      facts.push(effectFact(resolutionId, mutation.sourceId, mutation.sourceActorId, mutation.actorId, 'stance', mutation.stanceId, mutation.operation === 'enter' ? 'enter' : mutation.operation === 'exit' ? 'exit' : 'apply', index, ownerId, options.actionId, mutation.instanceId));
     } else if (kind === 'mark') {
-      facts.push(effectFact(resolutionId, mutation.sourceId, mutation.ownerId, mutation.actorId, 'mark', mutation.markId, mutation.operation, index, ownerId, options.actionId));
+      facts.push(effectFact(resolutionId, mutation.sourceId, mutation.ownerId, mutation.actorId, 'mark', mutation.markId, mutation.operation, index, ownerId, options.actionId, mutation.instanceId));
     } else if (kind === 'persistent') {
-      facts.push(effectFact(resolutionId, mutation.sourceId, mutation.ownerId, mutation.actorId, 'persistent', mutation.effectId, mutation.operation === 'remove' ? 'remove' : 'apply', index, ownerId, options.actionId));
+      facts.push(effectFact(resolutionId, mutation.sourceId, mutation.ownerId, mutation.actorId, 'persistent', mutation.effectId, mutation.operation === 'remove' ? 'remove' : 'apply', index, ownerId, options.actionId, mutation.instanceId));
     } else if (kind === 'move') {
       facts.push({
         kind: 'movement',
@@ -292,6 +315,7 @@ function effectFact(
   index: number,
   ownerId: string | undefined,
   actionId: string | undefined,
+  liveInstanceId?: string,
 ): Fact {
   const residentOwner = ownerId ?? mutationOwner ?? targetId;
   // Instance-config identity: for coexist-capable kinds (persistent/mark) the
@@ -299,12 +323,17 @@ function effectFact(
   // NOT the arbitrary mutation index — the same instance created at index 0
   // and removed/became-X is named by the SAME natural key, and two different
   // owners' same-mark never alias. Single-instance kinds (condition/stance)
-  // need no discriminator. `instanceId` is the resolution-unique event id.
+  // need no discriminator. `instanceId` is the resolution-unique event id
+  // (the FACT's own id); `effectInstanceId` is the canonical LIVE encounter
+  // instance id the reducer creates/removes (the mutation's command-boundary
+  // stamp), so a recorded fact can say exactly WHICH live instance it
+  // created/removed.
   const instanceKey = effectInstanceKey(effectKind, sourceId, targetId, effectId, residentOwner === undefined ? undefined : `${residentOwner}`);
   return {
     kind: 'effect',
     instanceId: factInstanceId(resolutionId, 'effect', index),
     instanceKey,
+    ...(liveInstanceId !== undefined ? { effectInstanceId: liveInstanceId } : {}),
     sourceId,
     ownerId: residentOwner,
     targetId,

@@ -407,24 +407,31 @@ Triggered-effect de-duplication ("a given triggered effect only triggers once
 per ability even when multiple routes would trigger it") belongs here WITH
 USAGE (U16). Never rediscover a historical outcome from current state.
 
-Today (T4 landed 2026-08-30, corrected 2026-08-30): `primitives/facts.ts`
-owns the closed `Fact` union (ability-used / attack-resolved /
-damage-applied / actor-defeated / collide / movement / effect / entity /
-terrain / save-resolved / trigger-resolved) + `recordFacts` + the LIVE
-`effectExistsLive` read + the U16 `trigger-resolved` de-dup marker +
-`hasResolvedAsFact`. Facts are now GENUINELY durable: every resolution owns
-a deterministic, replay-stable `resolutionId` (command/event boundary),
-fact ids are scoped under it, and the typed facts + `resolutionId` RIDE the
+Today (T4 landed 2026-08-30, corrected 2026-08-30, final contract fix
+2026-08-30): `primitives/facts.ts` owns the closed `Fact` union
+(ability-used / attack-resolved / damage-applied / actor-defeated /
+collide / movement / effect / entity / terrain / save-resolved /
+trigger-resolved) + `recordFacts` + the LIVE `effectExistsLive` read + the
+U16 `trigger-resolved` de-dup marker + `hasResolvedAsFact`. Facts are now
+GENUINELY durable: every resolution owns a deterministic, replay-stable
+`resolutionId` derived from the durable UNBOUNDED `resolutionSerial` on
+EncounterState (never the bounded eventLog; migration-safe), fact ids are
+scoped under it, and the typed facts + `resolutionId` RIDE the
 `RULE_MUTATIONS_APPLIED` event. `damage-applied` records the DETERMINED
-(post-mitigation) amount from the damage authority (no false fact on
-fully-prevented damage). `effectExistsLive` answers EXACT specific-instance
-reads by the durable id carried on the live `RuleActorView`. `ability-used`
-is emitted at the ability boundary. `kernels/resolution-triggers.ts`
-records facts and projects the byte-compatible `ResolutionTriggerFacts`
-encounter.ts consumes (behavior-preserving). The damage/held/save ledgers
-remain domain-specific specialists whose fuller fact composition is
-U12-scoped; the duplication gate reads the U16 RESOLUTION-scoped resolve
-identity (once-per-ability) + recorded facts, never current state.
+(post-mitigation) amount from the damage authority — determined ONCE at the
+command boundary and stamped on the mutation, which the reducer consumes
+(no false fact on fully-prevented or mid-event no-op damage; replay never
+re-decides). U16 `trigger-resolved` markers ride the event's durable facts.
+Effect facts carry the canonical LIVE instance id (`effectInstanceId`) the
+reducer creates/removes, so `effectExistsLive` answers EXACT
+specific-instance reads by the same durable id and removals address the
+specific instance. `ability-used` is emitted at the ability boundary.
+`kernels/resolution-triggers.ts` records facts and projects the
+byte-compatible `ResolutionTriggerFacts` encounter.ts consumes
+(behavior-preserving). The damage/held/save ledgers remain domain-specific
+specialists whose fuller fact composition is U12-scoped; the duplication
+gate reads the U16 RESOLUTION-scoped resolve identity (once-per-ability) +
+recorded facts, never current state.
 
 ## U11 Flow / Sequence
 

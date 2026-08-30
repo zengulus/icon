@@ -329,16 +329,28 @@ trigger-resolved) with the smallest common envelope (deterministic
 `instanceId` scoped under a durable RESOLUTION identity, `sourceId`,
 `ownerId`, U9 `provenance`). Facts are GENUINELY durable and
 replay-stable: every ability/action resolution owns a deterministic,
-replay-stable `resolutionId` (command/event boundary), fact ids are scoped
-under it (two uses of one ability differ; replay reproduces them), and the
-typed facts + `resolutionId` RIDE the `RULE_MUTATIONS_APPLIED` event —
-replay consumes the recorded outcomes, never re-derives them. Historical
-events without a recoverable identity refuse fabricating
-(no invented de-dup identity). `damage-applied` facts record the DETERMINED (post-mitigation)
-amount from the shared damage authority, never a raw proposal; fully-
-prevented damage emits no false fact. Effect facts name their instance by a
-natural owner-scoped `instanceKey` (never a freshly-minted per-index
-identity), so a later remove/refresh references the ORIGINAL instance.
+replay-stable `resolutionId` (command/event boundary). The id serial comes
+from a DURABLE UNBOUNDED `resolutionSerial` on `EncounterState` — advanced
+by applyEvents per recorded RULE_MUTATIONS_APPLIED event, never the bounded
+eventLog's array length, so ids stay unique past 500-event log truncation
+and survive save/load (legacy checkpoints derive it deterministically from
+their recorded history). Fact ids are scoped under the resolution id (two
+uses of one ability differ; replay reproduces them), and the typed facts +
+`resolutionId` RIDE the `RULE_MUTATIONS_APPLIED` event — replay consumes
+the recorded outcomes, never re-derives them. Historical events without a
+recoverable identity refuse fabricating (no invented de-dup identity).
+`damage-applied` facts record the DETERMINED (post-mitigation) amount from
+the shared damage authority, never a raw proposal; fully-prevented damage
+emits no false fact, and a mutation that no-ops because an earlier mutation
+defeated/immunized its target emits no false fact either (the boundary
+runs a reducer-faithful sequential dry run and stamps the recorded amount
+on the mutation; the reducer consumes the stamp instead of re-deciding).
+The U16 `trigger-resolved` markers (one per resolution + triggered step)
+ride the same durable fact list. Effect facts carry the canonical LIVE
+instance id the reducer creates/removes (`effectInstanceId`, stamped once
+at the command/event boundary and consumed by the reducer — never invented
+after the fact), so a later remove/refresh references the ORIGINAL
+instance and removing instance A leaves coexisting instance B intact.
 `kernels/resolution-triggers.ts` records facts via `recordFacts`, merges
 the domain collide/slay facts, and projects the byte-compatible
 `ResolutionTriggerFacts` encounter.ts consumes (behavior-preserving

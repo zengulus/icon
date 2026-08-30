@@ -494,13 +494,11 @@ assumption here, document the evidence and update this list before proceeding.
   427, all audits green. Corrections (per the four reported gaps):
   1. **U10 facts are durable + replay-stable.** Every resolution
      owns a deterministic, replay-stable `resolutionId` (command/event
-     boundary, counting recorded RULE_MUTATIONS_APPLIED events); every
-     fact `instanceId` is scoped under it (two uses of one ability differ;
-     replay reproduces the identical history), and the typed `facts` +
-     `resolutionId` now RIDE the durable RULE_MUTATIONS_APPLIED event.
-     Historical events without a recoverable identity refuse fabricating
-     (no invented de-dup identity); comments/doc claims that facts already
-     rode the event are now true.
+     boundary); every fact `instanceId` is scoped under it (two uses of one
+     ability differ; replay reproduces the identical history), and the
+     typed `facts` + `resolutionId` now RIDE the durable
+     RULE_MUTATIONS_APPLIED event. Historical events without a recoverable
+     identity refuse fabricating (no invented de-dup identity).
   2. **Facts record RESOLVED outcomes.** `damage-applied` records the
      DETERMINED (post-mitigation) amount from the shared damage authority
      at the recording boundary — never the raw proposed amount — and
@@ -520,8 +518,42 @@ assumption here, document the evidence and update this list before proceeding.
      durable instance id + ownership, so `effectExistsLive` answers
      EXACT specific-instance reads (owner-A's mark never satisfies owner
      B's identical markId), and effect lifecycle facts (apply/refresh/
-     remove/enter/exit) reference the ORIGINAL instance (natural
-     owner-scoped instanceKey, never a per-index mint).
+     remove/enter/exit) reference the ORIGINAL instance.
+- **T4 final contract fix (2026-08-30) — the four contracts made TRUE in
+  the implementation (not only in comments/tests).** Full suite green
+  (1660 tests; existing fixtures pass unchanged), census byte-stable at
+  427, all audits green, no source-unit promotion, no T5/U11–U13 work.
+  1. **Monotonic durable resolution identity.** `nextResolutionId` now
+     derives from a durable UNBOUNDED `resolutionSerial` on
+     `EncounterState` — advanced by applyEvents per recorded
+     RULE_MUTATIONS_APPLIED event, NEVER the bounded eventLog's array
+     length (the old derivation repeated ids after 500-event truncation),
+     migrated deterministically for legacy checkpoints — so resolution ids
+     stay unique for the lifetime of an encounter, survive save/load, and
+     replay reproduces them.
+  2. **Single determined-damage handoff.** `resolveMutationOutcomes`
+     (command/window boundary) determines every damage instance ONCE via a
+     reducer-faithful sequential dry run over the event's mutation list
+     and stamps the recorded post-mitigation amount on the mutation
+     (`determined.amount`); the reducer consumes the stamp instead of
+     calling the damage authority again, U10 `damage-applied` facts record
+     the SAME amount, a mutation that no-ops (target defeated/immunized by
+     an earlier mutation) records no false fact, and replay applies the
+     recorded result without re-calculating armor/resistance/dodge.
+  3. **Durable U16 markers.** `trigger-resolved` facts (one per resolution
+     + triggered step, keyed by the canonical resolve identity) ride the
+     event's U10 fact list — byte-identical across replay — so U16's
+     recorded decision is consumed, not re-inferred; `continuation`
+     remains FLOW bookkeeping only.
+  4. **Canonical effect-instance identity.** U10 effect facts carry the
+     exact LIVE instance id the reducer creates/removes
+     (`effectInstanceId`, decided once at the command/event boundary and
+     consumed by the reducer); removals address the specific instance
+     (removing A leaves coexisting B alive; owner-A mark removal leaves
+     owner-B's same-named mark intact), and the U6
+     `effect-still-exists` chain (application fact → live exact instance →
+     true → removal of that instance → false) is end-to-end exact with no
+     manually synchronized fake ids.
 - **Phase T4 — Time and outcome: U9, U10 (completes U6 and U16) — LANDED
   (2026-08-30).** Full suite green (1645 tests after the corrective pass),
   census byte-stable at 427, all audits green, no source-unit promotion.

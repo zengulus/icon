@@ -1241,25 +1241,39 @@ corrective pass made the facts genuinely durable and authoritative:
 
 - **Durable resolution identity.** Every ability/action resolution gets a
   deterministic, replay-stable `resolutionId` owned by the command/event
-  boundary (`nextResolutionId`, counting recorded RULE_MUTATIONS_APPLIED
-  events). Every fact `instanceId` is scoped under it, so two separate uses
-  of the same ability NEVER collide and a replayed event reproduces the
-  identical fact history. The typed `facts` + `resolutionId` now RIDE the
-  durable `RULE_MUTATIONS_APPLIED` event — replay consumes the recorded
-  outcomes, never re-derives them.
-- **Resolved outcomes, not raw proposals.** `damage-applied` facts record
-  the DETERMINED (post-mitigation) amount from the shared damage authority
-  (`determineEncounterDamage` at the recording boundary) — never the raw
-  proposed `mutation.amount`. Fully-prevented damage records NO false
-  `damage-applied` fact. Decisions occur once; replay never re-runs
-  determination (the fact rides the event).
-- **Durable effect instance identity.** Effect facts name their instance by
-  a natural owner-scoped `instanceKey` (never a freshly-minted per-index
-  identity), so a later remove/refresh references the ORIGINAL instance; the
-  live `RuleActorView` now carries the authoritative durable instance id +
-  ownership (marks/stance/active-effects), so `effectExistsLive` answers
+  boundary. The serial comes from a DURABLE, UNBOUNDED `resolutionSerial`
+  field on `EncounterState` (advanced by applyEvents per recorded
+  RULE_MUTATIONS_APPLIED event) — NEVER from the bounded eventLog's array
+  length, so resolution ids stay unique for the LIFETIME of an encounter
+  even after 500-event log truncation, and the field survives save/load/
+  checkpoint migration (legacy checkpoints derive it deterministically from
+  their recorded history). Every fact `instanceId` is scoped under the
+  resolution id, so two separate uses of the same ability NEVER collide and
+  a replayed event reproduces the identical fact history. The typed `facts`
+  + `resolutionId` RIDE the durable `RULE_MUTATIONS_APPLIED` event — replay
+  consumes the recorded outcomes, never re-derives them.
+- **Resolved outcomes, not raw proposals.** Damage is determined EXACTLY
+  ONCE at the command/window boundary: `resolveMutationOutcomes` runs a
+  reducer-faithful sequential dry run over the event's mutation list,
+  stamps each damage mutation with its recorded post-mitigation amount
+  (`mutation.determined`), and the reducer CONSUMES that stamp instead of
+  invoking the damage authority again. `damage-applied` facts record the
+  SAME recorded amount — never the raw proposed `mutation.amount` — and a
+  mutation that no-ops because an earlier mutation defeated/immunized its
+  target records NO false fact. Replay applies the recorded result without
+  re-calculating armor/resistance/dodge.
+- **Durable effect instance identity.** Effect facts carry the canonical
+  LIVE instance id the reducer creates/removes (`effectInstanceId` — the
+  mutation's command-boundary stamp, decided once and consumed by the
+  reducer, never invented after the fact). Creation ids are minted
+  deterministically at the boundary; a removal resolves the SPECIFIC
+  instance it addresses (owner-scoped; ambiguous matches stay unstamped and
+  keep the honest legacy broad removal). The live `RuleActorView` carries
+  the authoritative durable instance id + ownership
+  (marks/stance/active-effects), so `effectExistsLive` answers
   specific-instance reads EXACTLY and owner-A's mark never satisfies owner
-  B's identical markId.
+  B's identical markId — and removing instance A leaves coexisting
+  instance B intact.
 - `kernels/resolution-triggers.ts` RECORDS facts, merges the domain
   collide/slay facts (spatial + defeat authority), and PROJECTS the
   byte-compatible `ResolutionTriggerFacts` surface encounter.ts consumes
@@ -1826,9 +1840,15 @@ and are WIRED into the real reactive continuation
 facts (three Collides) open ONE triggered step; a second ability use
 (different `resolutionId`) may trigger again. Per-target de-dup is keyed in
 ONLY where a source declares once-per-target; distinct triggered STEPS stay
-distinct. The typed U10 fact history now RIDES the durable
-`RULE_MUTATIONS_APPLIED` event (with its `resolutionId`), so replay consumes
-the recorded outcomes and their identities — it never re-derives them.
+distinct. The `trigger-resolved` markers themselves RIDE the event's U10
+fact list (one per resolution + triggered step, keyed by the canonical
+resolve identity), so replay consumes the RECORDED once-per-ability
+decision — `RuleContinuationState.derivedTriggers`/`executedStepIds` are
+FLOW bookkeeping only, never the semantic substitute. The typed U10 fact
+history RIDES the durable `RULE_MUTATIONS_APPLIED` event (with its
+`resolutionId`, derived from the durable `resolutionSerial`), so replay
+consumes the recorded outcomes and their identities — it never re-derives
+them.
 Ordinary entitlement COUNTS stay in the ledger (`used-scope`); event
 de-duplication is the fact read — semantically distinct. Remaining (honest,
 staged): the `interrupt-uses` counter and the `attacked-this-turn`/`end-turn`
@@ -2203,8 +2223,33 @@ per-target only where the source declares it — and it is wired into the
 actual reactive continuation. (4) The live `RuleActorView` carries the
 authoritative durable instance id + ownership, so `effectExistsLive`
 answers specific-instance reads EXACTLY and effect lifecycle facts
-(apply/refresh/remove) reference the ORIGINAL instance. 1645 tests green;
-no census change.
+(apply/refresh/remove) reference the ORIGINAL instance.
+
+**T4 final contract fix (2026-08-30) — the four contracts made true IN THE
+IMPLEMENTATION (not only in comments/tests).** (1) **Monotonic durable
+resolution identity**: `nextResolutionId` now derives from a durable
+unbounded `resolutionSerial` on `EncounterState` (advanced by applyEvents
+per recorded RULE_MUTATIONS_APPLIED event, migrated deterministically from
+legacy logs), so resolution ids never repeat after event-log truncation
+and survive save/load. (2) **Single determined-damage handoff**: the
+command/window boundary determines each damage instance ONCE
+(`resolveMutationOutcomes`, a reducer-faithful sequential dry run over the
+mutation list), stamps the recorded post-mitigation amount on the mutation
+(`determined.amount`), and the reducer consumes the stamp — U10 facts and
+reducer application read the SAME recorded amount, a no-op (target
+defeated/immunized by an earlier mutation) records no false fact, and
+replay never re-decides. (3) **Durable U16 markers**: `trigger-resolved`
+facts (one per resolution + triggered step, keyed by the canonical resolve
+identity) ride the event's U10 fact list, so replay consumes the recorded
+marker instead of re-inferring eligibility; `continuation.derivedTriggers`
+remains FLOW bookkeeping only. (4) **Canonical effect-instance identity**:U10 effect facts carry the exact LIVE instance id the reducer
+creates/removes (`effectInstanceId`, stamped at the boundary; removal
+resolves the specific instance it addresses), and the reducer consumes the
+stamp instead of minting its own id — removing instance A leaves
+coexisting instance B alive, owner-A mark removal leaves owner-B's
+same-named mark intact, and the U6 `effect-still-exists` chain is
+end-to-end exact. 1660 tests green; census byte-stable at 427; no
+source-unit promotion.
 
 **Phase T5 — Execution: U11, U12, U13.**
 `kernels/execute-flow.ts` (simulated intermediate state, bind/for-each/

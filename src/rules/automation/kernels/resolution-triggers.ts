@@ -1,7 +1,7 @@
 import type { EncounterState } from '../../types.js';
 import type { Fact, RuleMutation } from '../primitives/types.js';
 import { recordFacts, deriveResolutionFactProjection, factInstanceId } from '../primitives/facts.js';
-import { collidingShoveTargets, reactiveSlayTargets, determineEncounterDamage } from './encounter-adapter.js';
+import { collidingShoveTargets, reactiveSlayTargets, resolveMutationOutcomes } from './encounter-adapter.js';
 
 /** Facts produced by the current ability resolution. The projection fields
  * remain byte-compatible with the long-standing surface encounter.ts
@@ -91,48 +91,6 @@ function slayFacts(resolutionId: string, sourceId: string, ownerId: string, slai
   }));
 }
 
-/** Determine the actual damage resolution for damage mutations against the
- * ALREADY-AUTHORITATIVE encounter state (armor/resistance/vigor/dodge), so a
- * `damage-applied` fact records the RESOLVED amount — not the raw proposed
- * `mutation.amount` — and no fact is emitted for fully prevented damage. The
- * damage authority (`determineEncounterDamage`) runs ONCE, at the recording
- * boundary; replay never re-runs it (the fact rides the event). Returns a
- * snapshot of the encounter's pre-application vitals per recipient so the
- * recorded amount reflects the determined operation the reducer performs. */
-function resolvedDamageAmounts(
-  state: EncounterState,
-  mutations: readonly RuleMutation[],
-): ReadonlyMap<number, number> {
-  const resolved = new Map<number, number>();
-  mutations.forEach((mutation, mutationIndex) => {
-    if (mutation.kind !== 'damage') return;
-    const target = state.actors[mutation.actorId];
-    if (!target || target.defeated) return;
-    const source = state.actors[mutation.sourceActorId];
-    // Skip sacrifice self-damage (life-cost) — it is not armor-determined and
-    // is reported as the sacrifice amount; the damage authority's determined
-    // amount for a sacrifice is not a mitigation read.
-    if (mutation.damageType === 'sacrifice') {
-      resolved.set(mutationIndex, mutation.amount);
-      return;
-    }
-    const determination = determineEncounterDamage(state, {
-      targetId: target.id,
-      sourceActorId: source?.id ?? null,
-      sourceRuleId: mutation.sourceId,
-      amount: mutation.amount,
-      damageType: mutation.damageType,
-      delivery: mutation.delivery,
-      instance: mutation.instance,
-      ignoreCover: mutation.ignoreCover,
-      ...(mutation.ignoreDodge ? { ignoreDodge: true } : {}),
-      ignoreArmor: mutation.ignoreArmor,
-    });
-    resolved.set(mutationIndex, determination.amount);
-  });
-  return resolved;
-}
-
 /**
  * Derive the fact history from already-resolved mutations and attack records,
  * then project the reactive trigger surface (U10 as the authority). `facts`
@@ -140,9 +98,14 @@ function resolvedDamageAmounts(
  * boundary) so two separate uses of the same ability never collide, and a
  * replayed event reproduces the identical fact history. Damage facts record
  * the DETERMINED (post-mitigation) amount from the damage authority, never a
- * raw proposal. This fold never rolls, mutates, or interprets source ids;
- * {collide, slay} facts come from the encounter domain authorities (spatial +
- * defeat) and are merged before projecting the byte-compatible surface.
+ * raw proposal. Effect facts carry the canonical LIVE instance id the reducer
+ * will create/remove (`effectInstanceId` — the mutation's command-boundary
+ * stamp). This fold never rolls or interprets source ids; it records the
+ * single boundary decisions ({@link resolveMutationOutcomes} stamps the
+ * determined damage outcome and the effect instance identity onto the
+ * mutations, and the reducer consumes exactly those records); {collide, slay}
+ * facts come from the encounter domain authorities (spatial + defeat) and are
+ * merged before projecting the byte-compatible surface.
  */
 export function deriveResolutionTriggers(
   state: EncounterState,
@@ -152,10 +115,15 @@ export function deriveResolutionTriggers(
   actionId = '',
 ): ResolutionTriggerFacts {
   const { sourceId, ownerId } = resolveContextOf(mutations);
-  // Per-mutation facts (attack/damage/effect/movement/entity/terrain/save).
-  // Damage facts record the DETERMINED (post-mitigation) amount from the
-  // damage authority; fully-prevented damage emits no `damage-applied` fact.
-  const resolvedDamage = resolvedDamageAmounts(state, mutations);
+  // The command/window boundary's single determination pass: damages are
+  // determined ONCE against the sequentially-simulated pre-event state (the
+  // reducer applies the recorded outcome, never a second determination), and
+  // effect operations get their canonical LIVE instance id stamped (so a
+  // recorded fact and the reducer's instance are the SAME id). Damage facts
+  // record the DETERMINED (post-mitigation) amount; fully-prevented and
+  // no-op (target already defeated/immunized by an earlier mutation) damage
+  // emits no `damage-applied` fact.
+  const resolvedDamage = resolveMutationOutcomes(state, mutations);
   const facts = recordFacts(mutations, {
     ownerId: ownerId === '' ? undefined : ownerId,
     actionId: actionId === '' ? undefined : actionId,

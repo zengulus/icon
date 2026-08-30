@@ -86,9 +86,18 @@ describe('T4 corrective — Issue 1: durable resolution identity + facts ride th
     const event = collideRuleEvents(state, hero.id, foe.id);
     expect(event.resolutionId).toBe('res:collide:1');
     expect(event.facts && event.facts.length).toBeGreaterThan(0);
-    // Every fact is ID-scoped under the resolution id.
-    const instanceIds = event.facts!.map((fact) => fact.instanceId);
-    expect(instanceIds.every((id) => id.startsWith('fact:res:collide:1:'))).toBe(true);
+    // Every recorded OUTCOME fact is ID-scoped under the resolution id. The
+    // U16 `trigger-resolved` markers (the collide step resolved once) ride the
+    // same durable fact list but carry the canonical resolve-identity KEY as
+    // their instance id — resolution-scoped, distinct per resolution.
+    const scopedFacts = event.facts!.filter((fact) => fact.kind !== 'trigger-resolved');
+    expect(scopedFacts.length).toBeGreaterThan(0);
+    expect(scopedFacts.every((fact) => fact.instanceId.startsWith('fact:res:collide:1:'))).toBe(true);
+    // The collide triggered step resolved exactly once in this resolution →
+    // exactly one durable marker, whose identity key embeds the resolution id.
+    const markers = event.facts!.filter((fact) => fact.kind === 'trigger-resolved');
+    expect(markers).toHaveLength(1);
+    expect(markers[0]!.instanceId).toContain('"res:collide:1"');
     // ability-used is emitted at the resolution boundary under the resolution id.
     const used = event.facts!.find((fact) => fact.kind === 'ability-used');
     expect(used).toMatchObject({ sourceId: 'test:collide-fixture', ownerId: hero.id, actionId: 'default' });
@@ -101,7 +110,7 @@ describe('T4 corrective — Issue 1: durable resolution identity + facts ride th
     // Second use: a new resolution (serial 2).
     const next = executeRuleProgramWithReactiveTriggers(collideFixture(state, hero.id, foe.id).program, collideFixture(state, hero.id, foe.id).context, {}, state, 'res:collide:2');
     expect(next.resolutionId).toBe('res:collide:2');
-    expect(next.facts![0].instanceId.startsWith('fact:res:collide:2:')).toBe(true);
+    expect(next.facts!.filter((fact) => fact.kind !== 'trigger-resolved')[0]!.instanceId.startsWith('fact:res:collide:2:')).toBe(true);
     // The resolution ids differ.
     expect(one.resolutionId).not.toBe(next.resolutionId);
   });

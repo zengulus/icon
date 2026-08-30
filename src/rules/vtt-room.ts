@@ -703,7 +703,7 @@ function strictEncounter(value: unknown): EncounterState {
   assertExactKeys(encounter, 'room.encounter', [
     'schemaVersion', 'rulesVersion', 'id', 'name', 'phase', 'grid', 'actors',
     'round', 'activeActorId', 'turnPhase', 'eligibleSide', 'lastSide', 'partyResolve', 'entities',
-    'terrainEffects', 'pendingInterrupts', 'revision', 'eventLog',
+    'terrainEffects', 'pendingInterrupts', 'revision', 'resolutionSerial', 'eventLog',
   ]);
   if (encounter.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) invalidSnapshot('room.encounter.schemaVersion', `must be ${ENCOUNTER_SCHEMA_VERSION}.`);
   if (encounter.rulesVersion !== RULES_VERSION) invalidSnapshot('room.encounter.rulesVersion', `must be ${RULES_VERSION}.`);
@@ -841,6 +841,7 @@ function strictEncounter(value: unknown): EncounterState {
     }
   });
   const encounterRevision = strictInteger(encounter.revision, 'room.encounter.revision', 0);
+  strictInteger(encounter.resolutionSerial, 'room.encounter.resolutionSerial', 0);
   if (!Array.isArray(encounter.eventLog) || encounter.eventLog.length > MAX_ENCOUNTER_EVENT_LOG) invalidSnapshot('room.encounter.eventLog', `contains more than ${MAX_ENCOUNTER_EVENT_LOG} recent events.`);
   encounter.eventLog.forEach((event, index) => {
     const eventPath = `room.encounter.eventLog[${index}]`;

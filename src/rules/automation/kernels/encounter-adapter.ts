@@ -325,7 +325,14 @@ export function encounterQueryContext(state: EncounterState, actorId: string, so
   };
 }
 
-function generatedId(state: EncounterState, sourceId: string, mutationIndex: number, suffix: string) {
+/** The deterministic LIVE instance id the reducer mints for a created effect
+ * (mark/stance/persistent/entity/terrain) — source + the encounter revision
+ * the event applied under + the mutation's position + a kind suffix. The
+ * command/event boundary stamps the SAME id onto effect mutations
+ * (`instanceId`) so the reducer consumes the recorded identity instead of
+ * inventing one after the fact has already recorded it; this function is the
+ * legacy fallback for mutations (historical events) that carry no stamp. */
+export function generatedId(state: EncounterState, sourceId: string, mutationIndex: number, suffix: string) {
   return `${sourceId}:${state.revision}:${mutationIndex}:${suffix}`;
 }
 
@@ -523,6 +530,128 @@ export function determineEncounterDamage(state: EncounterState, intent: Encounte
     ignoreCover: intent.ignoreCover,
     hostile: Boolean(source && source.side !== target.side),
   });
+}
+
+/** Build the full damage intent one damage mutation describes, against the
+ * CURRENT state — the single intent-construction authority shared by the
+ * command boundary's sequential determination dry-run and the reducer's
+ * legacy re-derivation, so both fold through the identical mitigation
+ * arithmetic. */
+export function damageIntentFromMutation(
+  state: EncounterState,
+  mutation: Extract<RuleMutation, { kind: 'damage' }> & { damageType: 'normal' | 'piercing' | 'divine' },
+): EncounterDamageIntent {
+  const target = state.actors[mutation.actorId];
+  const source = state.actors[mutation.sourceActorId];
+  return {
+    targetId: target?.id ?? mutation.actorId,
+    sourceActorId: source?.id,
+    sourceRuleId: mutation.sourceId,
+    amount: mutation.amount,
+    damageType: mutation.damageType,
+    delivery: mutation.delivery,
+    instance: mutation.instance,
+    ignoreCover: mutation.ignoreCover,
+    ...(mutation.ignoreDodge !== undefined ? { ignoreDodge: mutation.ignoreDodge } : {}),
+    ...(mutation.ignoreArmor !== undefined ? { ignoreArmor: mutation.ignoreArmor } : {}),
+  };
+}
+
+/**
+ * The command/window boundary's SINGLE determination pass over one event's
+ * mutation list (the T4 determined/recorded handoff):
+ *
+ *  1. DAMAGE — every damage instance is determined EXACTLY ONCE against the
+ *     sequentially-simulated pre-event state (a reducer-faithful dry run that
+ *     applies the same mutations in the same order, including defeat,
+ *     immunity, Defiance consumption, and damage-window holding), and the
+ *     result is stamped onto the mutation (`determined.amount`) so the
+ *     reducer consumes the recorded outcome instead of calling the damage
+ *     authority again. A mutation that no-ops because an earlier mutation
+ *     defeated/immunized its target records amount 0 (and the U10 fact layer
+ *     emits no false `damage-applied` fact for it).
+ *
+ *  2. EFFECTS — mark/stance/persistent operations get their canonical LIVE
+ *     instance id stamped (`instanceId`): creation ids are decided here (the
+ *     same deterministic id the reducer mints for legacy mutations), and a
+ *     removal resolves the SPECIFIC existing instance it addresses from the
+ *     simulation (owner-scoped natural key; left unstamped when zero or
+ *     several match, so the legacy broad removal stays honest and no fake id
+ *     is minted).
+ *
+ * Returns the authoritative per-mutation-index damage map for the fact layer.
+ * Pure over a clone — the live encounter is never touched and no dice are
+ * consumed — and deterministic under replay (the reducer applies the same
+ * list in the same order). Idempotent: re-running over already-stamped
+ * mutations reproduces the identical stamps.
+ */
+export function resolveMutationOutcomes(
+  state: EncounterState,
+  mutations: readonly RuleMutation[],
+): ReadonlyMap<number, number> {
+  const simulation = structuredClone(state);
+  const resolvedDamage = new Map<number, number>();
+  const denied = deniedAtomicSpatialLegIndices(state, mutations);
+  for (let index = 0; index < mutations.length; index += 1) {
+    const mutation = mutations[index];
+    if (denied.has(index)) continue;
+    if (mutation.kind === 'damage') {
+      const damage = mutation;
+      if (damage.damageType === 'sacrifice') {
+        // Sacrifice (life-cost) is not armor-determined; the recorded amount
+        // is the sacrifice amount itself.
+        resolvedDamage.set(index, damage.amount);
+      } else {
+        // The else branch excludes sacrifice; the cast is the provable
+        // exclusion of that union member so the mitigation intent can be
+        // built (property narrowing does not chain through the kind narrow).
+        const mitigated = damage as Extract<RuleMutation, { kind: 'damage' }> & { damageType: 'normal' | 'piercing' | 'divine' };
+        const target = simulation.actors[mitigated.actorId];
+        let result = null;
+        if (target && !target.defeated) result = determineEncounterDamage(simulation, damageIntentFromMutation(simulation, mitigated));
+        const amount = result?.amount ?? 0;
+        damage.determined = { amount };
+        resolvedDamage.set(index, amount);
+      }
+    } else if (mutation.kind === 'mark' || mutation.kind === 'persistent' || mutation.kind === 'stance') {
+      stampEffectInstance(simulation, mutation, index);
+    }
+    applyRuleMutation(simulation, mutation, index, mutation.kind === 'move' ? coMovedActorIdsForMove(mutations, mutation) : undefined);
+  }
+  return resolvedDamage;
+}
+
+/** Stamp one effect operation with its canonical LIVE instance id, resolved
+ * against the CURRENT simulation state (the mutations before it already
+ * applied). Creation (apply/add/refresh/enter) mints the deterministic id
+ * once here; removal (remove/exit) resolves the specific instance it
+ * addresses by the operation's owner-scoped natural key — exactly one
+ * candidate is stamped, an ambiguous zero/multiple-match is left unstamped so
+ * the legacy broad removal (and an honest fact without a fake id) applies. */
+function stampEffectInstance(
+  state: EncounterState,
+  mutation: Extract<RuleMutation, { kind: 'mark' | 'persistent' | 'stance' }>,
+  mutationIndex: number,
+) {
+  if (mutation.kind === 'stance') {
+    if (mutation.operation === 'exit') {
+      if (state.actors[mutation.actorId]?.stance) mutation.instanceId = state.actors[mutation.actorId]!.stance!.id;
+      return;
+    }
+    mutation.instanceId = generatedId(state, mutation.sourceId, mutationIndex, 'stance');
+    return;
+  }
+  const actor = state.actors[mutation.actorId];
+  if (!actor) return;
+  if (mutation.operation === 'remove') {
+    const candidates = mutation.kind === 'mark'
+      ? actor.marks.filter((mark) => mark.markId === mutation.markId && mark.ownerId === mutation.ownerId)
+      : actor.activeEffects.filter((effect) => effect.effectId === mutation.effectId && effect.ownerId === mutation.ownerId);
+    if (candidates.length === 1) mutation.instanceId = candidates[0]!.id;
+    return;
+  }
+  const suffix = mutation.kind === 'mark' ? 'mark' : 'effect';
+  mutation.instanceId = generatedId(state, mutation.sourceId, mutationIndex, suffix);
 }
 
 /**
@@ -958,19 +1087,19 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
     target.vigor = applied.vigor;
     return;
   }
-  const determination = determineEncounterDamage(state, {
-    targetId: target.id,
-    sourceActorId: source?.id,
-    sourceRuleId: mutation.sourceId,
-    amount: mutation.amount,
-    damageType: mutation.damageType,
-    delivery: mutation.delivery,
-    instance: mutation.instance,
-    ignoreCover: mutation.ignoreCover,
-    ignoreDodge: mutation.ignoreDodge,
-    ignoreArmor: mutation.ignoreArmor,
-  });
-  const amount = determination.amount;
+  const mitigated = mutation as Extract<RuleMutation, { kind: 'damage' }> & { damageType: 'normal' | 'piercing' | 'divine' };
+  // T4 determined handoff: the command/window boundary decided this
+  // instance's post-mitigation amount ONCE and stamped it on the mutation
+  // (`determined.amount`). The reducer CONSUMES that recorded outcome — it
+  // never invokes the damage determination authority again for a stamped
+  // event, so U10's recorded amount and the reducer-applied amount are the
+  // same value and replay applies the recorded result without re-calculating
+  // armor/resistance/dodge/etc. Only historical events without the stamp
+  // fall back to the (deterministic) re-derivation path.
+  const recorded = mutation.determined?.amount;
+  const amount = recorded !== undefined
+    ? recorded
+    : determineEncounterDamage(state, damageIntentFromMutation(state, mitigated)).amount;
   if (amount <= 0) return;
   const bypassVigor = mutation.bypassVigor ?? mutation.damageType === 'divine';
   // ICON p.107: damage from a foe is held while the target has an available
@@ -1340,10 +1469,19 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
     case 'mark': {
       const actor = state.actors[mutation.actorId];
       if (!actor) break;
-      if (mutation.operation === 'remove') actor.marks = actor.marks.filter(({ markId }) => markId !== mutation.markId);
-      else {
+      if (mutation.operation === 'remove') {
+        // T4 instance-scoped removal: a removal that names its specific live
+        // instance (the id recorded on its U10 fact) removes THAT instance
+        // only — coexisting same-named marks stay intact. Legacy removals
+        // without the stamp keep the historical markId-scoped removal.
+        if (mutation.instanceId !== undefined) actor.marks = actor.marks.filter(({ id }) => id !== mutation.instanceId);
+        else actor.marks = actor.marks.filter(({ markId }) => markId !== mutation.markId);
+      } else {
+        // Replacement rule (ICON: a source places its own mark on a target —
+        // the previous instance of THAT owner is replaced, other owners' marks
+        // with the same markId are untouched): source-rule-correct and kept.
         actor.marks = actor.marks.filter(({ ownerId }) => ownerId !== mutation.ownerId);
-        actor.marks.push({ id: generatedId(state, mutation.sourceId, mutationIndex, 'mark'), sourceId: mutation.sourceId, ownerId: mutation.ownerId, markId: mutation.markId, duration: mutation.duration ?? null, state: { ...mutation.state } });
+        actor.marks.push({ id: mutation.instanceId ?? generatedId(state, mutation.sourceId, mutationIndex, 'mark'), sourceId: mutation.sourceId, ownerId: mutation.ownerId, markId: mutation.markId, duration: mutation.duration ?? null, state: { ...mutation.state } });
         // Reviewed Rot mark state (noDefiance suppression, REGENERATE ally
         // regeneration) is interpreted by the closed source-ID projection in
         // passive-projection.ts; arbitrary mark state is never mechanical.
@@ -1353,15 +1491,25 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
     case 'stance': {
       const actor = state.actors[mutation.actorId];
       if (!actor) break;
-      if (mutation.operation === 'exit') actor.stance = null;
-      else actor.stance = { id: generatedId(state, mutation.sourceId, mutationIndex, 'stance'), sourceId: mutation.sourceId, ownerId: mutation.sourceActorId, stanceId: mutation.stanceId, state: { ...mutation.state } };
+      if (mutation.operation === 'exit') {
+        // Stance is single-instance per actor; an exit naming a specific
+        // instance only clears when that IS the current stance (always true
+        // for a recorded event — the boundary resolved the current id).
+        if (mutation.instanceId === undefined || actor.stance?.id === mutation.instanceId) actor.stance = null;
+      } else actor.stance = { id: mutation.instanceId ?? generatedId(state, mutation.sourceId, mutationIndex, 'stance'), sourceId: mutation.sourceId, ownerId: mutation.sourceActorId, stanceId: mutation.stanceId, state: { ...mutation.state } };
       break;
     }
     case 'persistent': {
       const actor = state.actors[mutation.actorId];
       if (!actor) break;
-      if (mutation.operation === 'remove') actor.activeEffects = actor.activeEffects.filter(({ effectId }) => effectId !== mutation.effectId);
-      else actor.activeEffects.push({ id: generatedId(state, mutation.sourceId, mutationIndex, 'effect'), sourceId: mutation.sourceId, effectId: mutation.effectId, ownerId: mutation.ownerId, duration: mutation.duration, modifiers: clone(mutation.modifiers), triggers: [...mutation.triggers], state: { ...mutation.state } });
+      if (mutation.operation === 'remove') {
+        // T4 instance-scoped removal: a removal naming its specific live
+        // instance removes THAT instance only — coexisting instances (A vs B)
+        // stay intact. Legacy removals without the stamp keep the historical
+        // effectId-scoped removal (which is intentionally broad).
+        if (mutation.instanceId !== undefined) actor.activeEffects = actor.activeEffects.filter(({ id }) => id !== mutation.instanceId);
+        else actor.activeEffects = actor.activeEffects.filter(({ effectId }) => effectId !== mutation.effectId);
+      } else actor.activeEffects.push({ id: mutation.instanceId ?? generatedId(state, mutation.sourceId, mutationIndex, 'effect'), sourceId: mutation.sourceId, effectId: mutation.effectId, ownerId: mutation.ownerId, duration: mutation.duration, modifiers: clone(mutation.modifiers), triggers: [...mutation.triggers], state: { ...mutation.state } });
       break;
     }
     case 'modifier': {
