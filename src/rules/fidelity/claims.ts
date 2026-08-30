@@ -227,9 +227,9 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
   {
     id: 'claim:deliverables:interrupt-window-engine',
     file: 'docs/deliverables.md',
-    anchor: '| Interrupt/window engine | AUTHORITATIVE (when-damaged, defeated, uses-ability, area-inclusion, targeted-by-ability, save-rolled) |',
+    anchor: '| Interrupt/window engine | AUTHORITATIVE (U13: when-damaged, defeated, uses-ability, area-inclusion, targeted-by-ability, save-rolled, choice) |',
     strength: 'authoritative',
-    subject: 'Interrupt/window engine for wired triggers',
+    subject: 'Interrupt/window engine (U13 decision-window record)',
     binding: legacy('replay-tested via encounter fixtures; not bound to a fidelity scope'),
   },
   {

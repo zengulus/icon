@@ -47,10 +47,18 @@ import type { RuleEffect, RuleMutation } from './types.js';
 /** What makes an armed continuation become due. Either a U8 Clock boundary
  * (relative clocks need the epoch recorded at arm time) or a recorded U10
  * Fact outcome (a specific fact kind must be present in the observed fact
- * history). */
+ * history).
+ *
+ * Fact triggers are CORRELATED to the exact causal instance: when the arming
+ * site knows the triggering fact's deterministic `instanceId`, it records it
+ * (`instanceId`) so an UNRELATED fact of the same kind can never satisfy the
+ * continuation — two same-kind continuations in the same resolution never
+ * cross-fire. Without a recorded instance the trigger matches by kind alone
+ * (the documented coarse seam; window-held results are never fact-auto-fired
+ * by the U12 boundary — U13 drains them by window identity). */
 export type ContinuationTrigger =
   | { kind: 'clock'; clock: ClockObservation['last'] extends never ? never : BoundaryRef; epoch?: ClockObservation }
-  | { kind: 'fact'; factKind: Extract<Fact, { instanceId: string }>['kind'] };
+  | { kind: 'fact'; factKind: Extract<Fact, { instanceId: string }>['kind']; instanceId?: string };
 
 /**
  * The U12 armed-continuation record. Durable, JSON-clean, deterministic.
@@ -136,6 +144,11 @@ export type HeldResult =
       windowKind?: string;
       windowId?: string;
       statusId?: string;
+      /** Who initiated the save's source ability (the reroll's provenance). */
+      sourceActorId: string;
+      /** The durable F2 modifier breakdown, so a reroll reproduces the exact
+       * evaluated modifier policy (source + policy boon/curse + Blessing). */
+      modifiers?: { sourceModifier: number; saveBoon: number; saveCurse: number; blessing: boolean };
       /** The original save's outcome branch — regenerating either outcome
        * without re-reading the source ability. */
       onSuccess: RuleEffect[];
@@ -153,6 +166,13 @@ export type HeldResult =
       instance: number;
       delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain';
       ignoreCover: boolean;
+      /** Source-specific HP routing, recorded so the held blow reapplies
+       * exactly as it was determined (piercing terrain, divine). */
+      bypassVigor?: boolean;
+      /** Source-specific application exception (Bleak Mercy p.144). */
+      ignoreDefiance?: boolean;
+      /** Audit provenance for a determined True-Strike instance. */
+      ignoreDodge?: boolean;
     }
   /** A held ability's effect list (a targeted ability held while its
    * interrupt window is open — costs already paid). */
@@ -249,7 +269,11 @@ export function continuationDue(
       return true;
     }
     case 'fact':
-      return facts.some((fact) => fact.kind === trigger.factKind);
+      // Correlated by the exact causal fact instance when recorded: an
+      // unrelated same-kind fact can never satisfy the continuation. Without
+      // a recorded instance, match by kind (the documented coarse seam).
+      return facts.some((fact) => fact.kind === trigger.factKind
+        && (trigger.instanceId === undefined || fact.instanceId === trigger.instanceId));
   }
 }
 
@@ -288,6 +312,8 @@ export function heldSaveContinuation(input: {
   windowKind?: string;
   windowId?: string;
   statusId?: string;
+  sourceActorId: string;
+  modifiers?: { sourceModifier: number; saveBoon: number; saveCurse: number; blessing: boolean };
   onSuccess: RuleEffect[];
   onFailure: RuleEffect[];
 }): ArmedContinuation {
@@ -296,7 +322,9 @@ export function heldSaveContinuation(input: {
     programId: input.sourceId,
     ownerRef: { kind: 'captured-actor', actorId: input.ownerActorId },
     // The trigger is the window's close — represented here as the fact that
-    // recorded the save resolution; the window machinery (U13) drains it.
+    // recorded the save resolution; the window machinery (U13) drains it and
+    // NEVER auto-fires this held result at a boundary (held results resume
+    // only when the window that holds them resolves).
     trigger: { kind: 'fact', factKind: 'save-resolved' },
     payload: {
       kind: 'held-result',
@@ -310,6 +338,8 @@ export function heldSaveContinuation(input: {
         ...(input.windowKind !== undefined ? { windowKind: input.windowKind } : {}),
         ...(input.windowId !== undefined ? { windowId: input.windowId } : {}),
         ...(input.statusId !== undefined ? { statusId: input.statusId } : {}),
+        sourceActorId: input.sourceActorId,
+        ...(input.modifiers !== undefined ? { modifiers: input.modifiers } : {}),
         onSuccess: input.onSuccess,
         onFailure: input.onFailure,
       },
@@ -333,6 +363,9 @@ export function heldDamageContinuation(input: {
   instance: number;
   delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain';
   ignoreCover: boolean;
+  bypassVigor?: boolean;
+  ignoreDefiance?: boolean;
+  ignoreDodge?: boolean;
 }): ArmedContinuation {
   return armContinuation({
     id: input.id,
@@ -351,6 +384,9 @@ export function heldDamageContinuation(input: {
         instance: input.instance,
         delivery: input.delivery,
         ignoreCover: input.ignoreCover,
+        ...(input.bypassVigor !== undefined ? { bypassVigor: input.bypassVigor } : {}),
+        ...(input.ignoreDefiance !== undefined ? { ignoreDefiance: input.ignoreDefiance } : {}),
+        ...(input.ignoreDodge !== undefined ? { ignoreDodge: input.ignoreDodge } : {}),
       },
     },
   });

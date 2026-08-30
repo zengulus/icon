@@ -349,21 +349,21 @@ describe('cost-payment: Sacrifice (Combat Glossary p.103)', () => {
 
   it('does not open a when-damaged window merely because HP changed', () => {
     const { state, heroId } = sacrificeEncounter({ hp: 40 });
-    const initialInterrupts = (state.pendingInterrupts ?? []).length;
+    const initialInterrupts = (state.decisionWindows ?? []).length;
     applyRuleMutations(state, [sacrificeMutation('fixture:sacrifice', heroId, 6)]);
-    expect(state.pendingInterrupts ?? []).toHaveLength(initialInterrupts);
+    expect(state.decisionWindows ?? []).toHaveLength(initialInterrupts);
   });
 
   it('control: ordinary foe damage DOES open a when-damaged window', () => {
     const { state, heroId } = sacrificeEncounter({ hp: 40 });
     const foeId = Object.values(state.actors).find((actor) => actor.side === 'foes')!.id;
-    const before = (state.pendingInterrupts ?? []).length;
+    const before = (state.decisionWindows ?? []).length;
     applyRuleMutations(state, [{
       kind: 'damage', sourceId: 'fixture:foe-hit', sourceActorId: foeId, actorId: heroId,
       amount: 4, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false,
     }]);
-    expect(state.pendingInterrupts ?? []).toHaveLength(before + 1);
-    expect(state.pendingInterrupts![state.pendingInterrupts!.length - 1].trigger).toBe('when-damaged');
+    expect(state.decisionWindows ?? []).toHaveLength(before + 1);
+    expect(state.decisionWindows![state.decisionWindows!.length - 1].kind).toBe('when-damaged');
   });
 });
 

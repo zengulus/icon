@@ -1,4 +1,5 @@
 import '../automation/content/registry.js';
+import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
@@ -344,7 +345,7 @@ describe('Chanter ability automation (p.174–181)', () => {
       mutations: [{ kind: 'damage', sourceId: 'fixture:foe-ability', sourceActorId: foe.id, actorId: hero.id, amount: 2, damageType: 'piercing', instance: 1, delivery: 'hit', ignoreCover: false }],
     }]);
     expect(triggered.actors[hero.id].hp).toBe(40); // held, not applied
-    expect(triggered.pendingInterrupts.some((window) => window.actorId === hero.id && window.heldDamage?.amount === 2)).toBe(true);
+    expect(triggered.decisionWindows.some((window) => window.actorId === hero.id && windowHeldDamage(window)?.amount === 2)).toBe(true);
     expect(triggered.actors[foe.id].marks.find(({ markId }) => markId === 'chastise-retribution')?.state.triggered).toBeFalsy();
 
     // The held damage resolves at the end of the hero's turn — the foe's

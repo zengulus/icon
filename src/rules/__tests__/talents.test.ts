@@ -695,7 +695,7 @@ describe('F14 cost-payment foundation proofs (optional sacrifice + resource-gain
     // has exactly the same interrupt count as the same ability without the
     // talent (the base provoke's two 1-piercing windows only).
     const base = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:provoke', targetIds: [] }, scriptedDice());
-    const heroWindows = (stateAfter: { pendingInterrupts?: EncounterPendingInterrupt[] }) => (stateAfter.pendingInterrupts ?? []).filter(({ actorId: id }) => id === hero.id).length;
+    const heroWindows = (stateAfter: { decisionWindows?: EncounterPendingInterrupt[] }) => (stateAfter.decisionWindows ?? []).filter(({ actorId: id }) => id === hero.id).length;
     expect(heroWindows(result.state)).toBe(heroWindows(base.state));
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });

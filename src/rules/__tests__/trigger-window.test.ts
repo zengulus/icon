@@ -1,4 +1,5 @@
 import '../automation/content/registry.js';
+import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
@@ -70,15 +71,15 @@ describe('F4 attack windows from the ledger', () => {
     expect(attack.attackResolution!.damage.window).toEqual({ trigger: 'when-damaged', held: true, resolution: null });
     // Replay opens the window from the record: the blow is held, not applied.
     expect(result.state.actors[hero.id].hp).toBe(40);
-    const window = result.state.pendingInterrupts.find((pending) => pending.actorId === hero.id && pending.trigger === 'when-damaged');
+    const window = result.state.decisionWindows.find((pending) => pending.actorId === hero.id && pending.kind === 'when-damaged');
     expect(window).toBeDefined();
-    expect(window!.heldDamage).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
+    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
     // The recorded amount is the kernel's determined amount (6 raw - 2 armor).
-    expect(window!.heldDamage!.amount).toBe(attack.attackResolution!.damage.amount);
+    expect(windowHeldDamage(window!)!.amount).toBe(attack.attackResolution!.damage.amount);
     // No interrupt answers, so the boundary resolves the held blow.
     const ended = executeCommand(result.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
     expect(ended.state.actors[hero.id].hp).toBe(36);
-    expect(ended.state.pendingInterrupts).toHaveLength(0);
+    expect(ended.state.decisionWindows).toHaveLength(0);
     expect(applyEvents(result.state, ended.events)).toEqual(ended.state);
   });
 
@@ -96,9 +97,9 @@ describe('F4 attack windows from the ledger', () => {
     expect(result.events.some((event) => event.type === 'ACTOR_DEFEATED')).toBe(false);
     expect(result.state.actors[hero.id].defeated).toBe(false);
     expect(result.state.actors[hero.id].hp).toBe(3);
-    const window = result.state.pendingInterrupts.find((pending) => pending.trigger === 'defeated');
+    const window = result.state.decisionWindows.find((pending) => pending.kind === 'defeated');
     expect(window).toBeDefined();
-    expect(window!.heldDamage!.amount).toBeGreaterThanOrEqual(3 + 0);
+    expect(windowHeldDamage(window!)!.amount).toBeGreaterThanOrEqual(3 + 0);
     // Unanswered, the boundary resolves the held lethal blow and the hero falls.
     const ended = executeCommand(result.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
     expect(ended.state.actors[hero.id].defeated).toBe(true);
@@ -109,15 +110,15 @@ describe('F4 attack windows from the ledger', () => {
     const { state, hero, foe } = windowEncounter({ interrupts: ['righteous-disdain'] });
     const vm = applyEvents(state, [vmDamageEvent(foe.id, hero.id, 6)]);
     expect(vm.actors[hero.id].hp).toBe(40); // held
-    const window = vm.pendingInterrupts.find((pending) => pending.actorId === hero.id && pending.trigger === 'when-damaged');
+    const window = vm.decisionWindows.find((pending) => pending.actorId === hero.id && pending.kind === 'when-damaged');
     expect(window).toBeDefined();
-    expect(window!.heldDamage).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
+    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
 
     // The same blow through the split attack path holds the same amount —
     // both paths call decideDamageWindow with the same provenance.
     const attackResult = executeCommand(state, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: hero.id, weight: 'light' }, scriptedDice(14, 3));
-    const attackWindow = attackResult.state.pendingInterrupts.find((pending) => pending.actorId === hero.id && pending.trigger === 'when-damaged');
-    expect(attackWindow!.heldDamage!.amount).toBe(window!.heldDamage!.amount);
+    const attackWindow = attackResult.state.decisionWindows.find((pending) => pending.actorId === hero.id && pending.kind === 'when-damaged');
+    expect(windowHeldDamage(attackWindow!)!.amount).toBe(windowHeldDamage(window!)!.amount);
   });
 
   it('replay consumes the recorded window — stripping the record applies the blow immediately (bite)', () => {
@@ -135,7 +136,7 @@ describe('F4 attack windows from the ledger', () => {
     }];
     const replayed = applyEvents(state, stripped);
     expect(replayed.actors[hero.id].hp).toBe(36); // applied immediately
-    expect(replayed.pendingInterrupts.some((pending) => pending.actorId === hero.id)).toBe(false);
+    expect(replayed.decisionWindows.some((pending) => pending.actorId === hero.id)).toBe(false);
   });
 
   it('a held record outside the closed registry is ignored so the damage still applies', () => {
@@ -154,6 +155,6 @@ describe('F4 attack windows from the ledger', () => {
     }];
     const replayed = applyEvents(state, fabricated);
     expect(replayed.actors[hero.id].hp).toBe(36);
-    expect(replayed.pendingInterrupts.some((pending) => pending.actorId === hero.id)).toBe(false);
+    expect(replayed.decisionWindows.some((pending) => pending.actorId === hero.id)).toBe(false);
   });
 });

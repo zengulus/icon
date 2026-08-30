@@ -1,4 +1,5 @@
 import '../automation/content/registry.js';
+import { windowHeldSave } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS, EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
@@ -359,9 +360,9 @@ describe('Knave ability automation (p.139–144)', () => {
     const deferred = applyEvents(state, [saveAbilityEvent(hero.id, foe.id)]);
     // The save's branch (2 damage) is held; the ability's cost already paid.
     expect(deferred.actors[foe.id].hp).toBe(32);
-    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'save-rolled');
+    const window = deferred.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'save-rolled');
     expect(window).toBeDefined();
-    expect(window!.heldSave).toMatchObject({ targetId: foe.id, boon: 0, sourceId: 'fixture:save-ability' });
+    expect(windowHeldSave(window!)).toMatchObject({ targetId: foe.id, boon: 0, sourceId: 'fixture:save-ability' });
     expect(window!.heldEffects).toHaveLength(2); // the save record + the 2-damage success branch
 
     // Sucker Punch re-rolls the save: the second roll (3) fails, so the held
@@ -377,7 +378,7 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(interrupt.state.actors[foe.id].hp).toBe(24); // 32 - 8; the held 2 never applied
     expect(interrupt.state.actors[hero.id].interruptUses['knave:sucker-punch']).toBe(1);
     expect(interrupt.state.actors[hero.id].ruleState['sucker-punch:used']).toBe(true);
-    expect(interrupt.state.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'save-rolled')).toBe(false);
+    expect(interrupt.state.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'save-rolled')).toBe(false);
     // The regenerated save carries the same durable F2 record as the original
     // (windowKind, modifiers, threshold), so the re-roll stays replay-exact.
     const rerollEvent = interrupt.events.find((event) => event.type === 'RULE_MUTATIONS_APPLIED' && 'reroll' in event);
@@ -438,7 +439,7 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(deferred.actors[foe.id].hp).toBe(32);
     const ended = endTurnTo(deferred, foe.id, scriptedDice());
     expect(ended.actors[foe.id].hp).toBe(30); // 32 - 2, the original success branch resolved
-    expect(ended.pendingInterrupts).toHaveLength(0);
+    expect(ended.decisionWindows).toHaveLength(0);
   });
 
   it('Bleak Mercy: 2[D]+fray attack, with only its named defenses bypassed at three statuses', () => {

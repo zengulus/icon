@@ -62,7 +62,7 @@ These strong project claims exist outside migrated fidelity scopes. They are rep
 | Damage determination/apply kernel (`claim:deliverables:damage-kernel`) | docs/deliverables.md | AUTHORITATIVE | kernel tests are extensive but no independent source-derived oracle is wired into the fidelity evaluator |
 | Attack resolution/modifiers kernel (`claim:deliverables:attack-kernel`) | docs/deliverables.md | AUTHORITATIVE | kernel tests are extensive but no independent source-derived oracle is wired into the fidelity evaluator |
 | Targeting/area/range/movement spatial kernels (`claim:deliverables:targeting-spatial-kernels`) | docs/deliverables.md | AUTHORITATIVE | core geometry is source-tested via fixtures; not bound to a fidelity scope |
-| Interrupt/window engine for wired triggers (`claim:deliverables:interrupt-window-engine`) | docs/deliverables.md | AUTHORITATIVE | replay-tested via encounter fixtures; not bound to a fidelity scope |
+| Interrupt/window engine (U13 decision-window record) (`claim:deliverables:interrupt-window-engine`) | docs/deliverables.md | AUTHORITATIVE | replay-tested via encounter fixtures; not bound to a fidelity scope |
 | Turn/round boundary lifecycle engine (`claim:deliverables:lifecycle-engine`) | docs/deliverables.md | AUTHORITATIVE | replay-tested via lifecycle fixtures; not bound to a fidelity scope |
 | Shared resource registry (nine resources) (`claim:deliverables:resource-registry`) | docs/deliverables.md | COMPLETE | reducer-enforced with source pages; not bound to a fidelity scope |
 | Combat settlement & attrition handoff (`claim:deliverables:combat-settlement`) | docs/deliverables.md | COMPLETE | settlement regression suite exists; not decomposed into a strict fidelity scope |

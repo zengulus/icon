@@ -235,6 +235,54 @@ resumes, missing trigger fact, U17 ordering identity, byte-identical
 replay). Full suite green (1693 tests), census byte-stable at 427, no
 source-unit promotion, no unresolved-unit wiring.
 
+**T5c landed (2026-08-30): U13 WINDOW / DECISION POINT.**
+`kernels/decision-window.ts` is the ONE typed window authority (the
+interrupt/window-engine status is registered in the deliverables claim
+registry): the
+`DecisionWindowRecord` (durable id, typed `DecisionWindowKind` —
+when-damaged/defeated/save-rolled/uses-ability/area-inclusion/
+targeted-by-ability/choice — U10 `openedBy` provenance with the U12
+`instanceId` correlation seam, U12 held `heldPayload` continuation, held
+effects, retarget, U4 choice spec, U17 ordering policy, U11 flow `resume`),
+plus `openDecisionWindow`/`closeDecisionWindow`, the U17 LIFO pop
+(`popDecisionWindowStack`), the p.107 turn-order total order
+(`orderDecisionWindows`), the `DAMAGE_WINDOW_RECIPES` eligibility
+registry (Righteous Disdain p.128 / Boiling Blood p.138), and the
+`windowHeldDamage`/`windowHeldSave` projections (the payload is the
+authority — determined damage/saves are NEVER recomputed). Old authorities
+DELETED or thinned: `kernels/trigger-window.ts` deleted (registry moved
+in); the `EncounterPendingInterrupt` schema deleted (compat alias only);
+`pendingInterrupts` → `decisionWindows` (schema 8→9, migrated); the
+per-window `heldDamage`/`heldSave`/`heldResult` fields gone — every window
+carries its determined outcome as a U12 held-result payload. The `choice`
+kind answers through the new `ANSWER_DECISION_WINDOW` command (recorded
+U4 decision; the engine never invents a default). Migrations: damage
+interrupt windows (when-damaged/defeated, held damage), the save-rolled
+window (Sucker Punch held save), and the deferred-rule decision seam
+(Great Giorgios "may rush" is now a genuine recorded choice — the mark is
+consumed at window-open either way, decline is legal, accept resolves
+against THEN-CURRENT positions; the old automatic rush was a documented
+T5b-era approximation, now repaired). U11 `open-window`/`suspend` wired
+through U13: a suspended flow carries the remaining nodes + binder on the
+window and `ANSWER_DECISION_WINDOW` resumes it via `executeFlowResume`
+(no content consumes the nodes yet). Deliberately NOT landed: U4 `choose`
+as a flow node, `ability-use-choices.ts` (opaque fold, documented
+specialist), Vigilance as a window (it stays a triggered EFFECT —
+non-interrupt, per p.104-105), and Gamble-as-window (`resolveGamble`
+stays the deterministic recorded dice operation — only genuine decisions
+become windows). U12 kept choice-free: the decision lives in U13; the
+fact-trigger correlation seam records the specific `instanceId` so an
+unrelated same-kind fact never satisfies the wrong window.
+`t5c-u13-decision-window.test.ts` (17 adversarial cases: held damage never
+recomputed, defeated window only on prospective lethal, Sucker Punch held-
+result/reroll/replace/decline/Heroic-curse-on-new-roll, nested LIFO,
+same-trigger turn-order, owner-order yields a choice, automatic effects and
+Vigilance are not windows, deterministic Gamble vs genuine decision,
+Great Giorgios may-rush accept/decline + THEN-CURRENT positions +
+Dragonslayer distinct, same-kind windows never answer each other,
+byte-identical replay). Full suite green (1519 rule tests), census
+byte-stable at 427, no source-unit promotion, no unresolved-unit wiring.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

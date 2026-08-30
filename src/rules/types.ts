@@ -1,8 +1,10 @@
-import type { ArmedContinuation, RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
+import type { ArmedContinuation, RuleChoice, RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
 import type { Fact } from './automation/primitives/facts.js';
-import type { SaveWindowKind, SaveWindowModifiers } from './automation/primitives/save-window.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
 import type { TurnTransitionIntent } from './automation/kernels/lifecycle.js';
+import type { DecisionWindowRecord, WindowDecisionValue } from './automation/kernels/decision-window.js';
+import type { FlowNode } from './automation/kernels/execute-flow.js';
+import type { Binder } from './automation/primitives/reference.js';
 
 export const RULES_VERSION = '1.5' as const;
 // Schema v5 locks every player-selectable narrative value (Kin, Culture, Bond,
@@ -13,7 +15,10 @@ export const CHARACTER_SCHEMA_VERSION = 5 as const;
 // Schema 6 records ownership for every persisted mechanic produced by
 // automation. Player projections use that provenance to withhold mechanics
 // created by a GM-hidden actor without leaking the source id.
-export const ENCOUNTER_SCHEMA_VERSION = 8 as const;
+// Schema 9 (U13): the interrupt-window collection becomes the ONE typed U13
+// window record (`decisionWindows: DecisionWindowRecord[]`); the legacy
+// `decisionWindows` schema is migrated field-for-field (see migrateEncounter).
+export const ENCOUNTER_SCHEMA_VERSION = 9 as const;
 
 export const ACTION_IDS = [
   'sneak',
@@ -566,71 +571,15 @@ export interface EncounterHeldDamage {
   defianceTriggered?: boolean;
 }
 
-/** ICON p.107 — an interrupt window opened by an effect. `triggeredAt` is the
- * encounter revision when the window opened, so windows opened later (nested
- * interrupts) resolve first; windows opened by the same effect share the
- * revision and resolve in turn order (see `orderInterrupts`). A `when-damaged`
- * window may hold the damage that opened it (see `EncounterHeldDamage`); a
- * `uses-ability` window may hold the triggering ability's effect mutations
- * (costs already paid) until the interrupt resolves. */
-export interface EncounterPendingInterrupt {
-  id: string;
-  /** The character whose interrupt the window belongs to. */
-  actorId: string;
-  /** The trigger that opened the window (e.g. `when-damaged`, `uses-ability`). */
-  trigger: string;
-  /** Encounter revision when the window opened; higher resolves first (LIFO). */
-  triggeredAt: number;
-  /** Registration order within the same trigger event (deterministic tiebreak). */
-  order: number;
-  /** Present when the window opened on damage that has not been applied yet. */
-  heldDamage?: EncounterHeldDamage;
-  /** Present when the window opened on an ability that has not resolved yet
-   * (a foe targeted the interrupt user's ally; the ability's effects resolve
-   * after the interrupt, or at the end of the turn if none answers). */
-  heldEffects?: RuleMutation[];
-  /** Present when the interrupt redirects the held ability (Masquerade, p.151:
-   * the ability targeted `fromActorId` and targets `toActorId` instead after
-   * the swap). Applied when the held effects resolve — and only when the
-   * interrupt that closes the window is the program that armed the redirect
-   * (`retargetProgramId`): if that interrupt cannot be made ("If you or your
-   * ally can't make a valid teleport, this interrupt can't be made") or the
-   * window closes at a boundary, the held ability hits its original target. */
-  retarget?: { fromActorId: string; toActorId: string };
-  /** The interrupt program that armed `retarget` (the targeted-by-ability
-   * allowlist row). The reducer honors the redirect only when the closing
-   * interrupt event carries this exact source id. */
-  retargetProgramId?: string;
-  /** U12 representation of the held save (see `heldSave`): the original save
-   * result is an already-determined HELD RESULT — it resumes exactly as
-   * recorded unless an explicitly recorded interrupt reroll replaces it with
-   * a separately recorded result. The window keeps its legacy public shape;
-   * this record is the durable U12 vocabulary riding beside it. */
-  heldResult?: ArmedContinuation;
-  /** Present when the window opened on a rolled save (Sucker Punch, p.143: an
-   * enemy adjacent to the interrupt user rolled a save). `heldEffects` carries
-   * the save's original branch; the interrupt re-rolls it, keeping the second
-   * result, and the regenerated branch replaces it (see the event `reroll`).
-   * New windows carry the full F2 SaveWindow record (`windowKind`, `windowId`,
-   * `statusId`, `modifiers`, `threshold`) so the re-roll reproduces the exact
-   * evaluated modifier; historical windows fall back to the recorded `boon`. */
-  heldSave?: {
-    targetId: string;
-    /** Evaluated save modifier (boon/curse) applied to both rolls. */
-    boon: number;
-    /** Provenance of the triggering ability, reused for the regenerated branch. */
-    sourceId: string;
-    sourceActorId: string;
-    /** F2 durable record — the held save's window nature and modifier breakdown. */
-    windowKind?: SaveWindowKind;
-    windowId?: string;
-    statusId?: string;
-    modifiers?: SaveWindowModifiers;
-    threshold?: number;
-    onSuccess: RuleEffect[];
-    onFailure: RuleEffect[];
-  };
-}
+/** U13 (schema 9): the interrupt/decision window collection is the ONE typed
+ * U13 window record (`DecisionWindowRecord`, kernels/decision-window.ts). The
+ * legacy `EncounterPendingInterrupt` schema is deleted; migrateEncounter maps
+ * legacy entries field-for-field onto the U13 record (the old `trigger`
+ * becomes `kind`, `heldDamage`/`heldSave`/`heldResult` become the U12
+ * `heldPayload` held-result continuation). */
+export type { DecisionWindowRecord, WindowDecisionValue };
+/** Re-export the U13 record type under its durable home for consumers. */
+export type EncounterPendingInterrupt = DecisionWindowRecord;
 
 export interface EncounterState {
   schemaVersion: typeof ENCOUNTER_SCHEMA_VERSION;
@@ -662,9 +611,11 @@ export interface EncounterState {
   partyResolve: number;
   entities: Record<string, EncounterEntity>;
   terrainEffects: EncounterTerrainEffect[];
-  /** ICON p.107: interrupt windows opened by effects (e.g. damage dealt). They
-   * resolve most-recently-triggered first (LIFO) and close at turn end. */
-  pendingInterrupts: EncounterPendingInterrupt[];
+  /** U13: the one decision/interrupt window collection (ICON p.107). Windows
+   * resolve most-recently-triggered first (LIFO) and close at turn end;
+   * `choice` windows persist until answered or drained at a later boundary.
+   * Schema-9 field: legacy `decisionWindows` checkpoints migrate onto it. */
+  decisionWindows: DecisionWindowRecord[];
   /** U12 durable armed-continuation collection: deferred-rule and held-result
    * records waiting for their Clock/Fact trigger. Deterministically ordered
    * (arm order); resume consumes through the U17 ordering identity when one
@@ -770,6 +721,13 @@ export type EncounterCommand =
   /** Controller decision: an eligible player character skips its normal turn
    * and commits to the Slow mini-round instead (ICON p.87). */
   | { type: 'GO_SLOW'; actorId: string }
+  /** Controller decision: answer an open U13 decision window (a `choice`
+   * window — e.g. Great Giorgios' "may rush 4" at the marked foe's turn end,
+   * p.124, or a U11 flow suspension). The recorded decision rides the event;
+   * replay consumes it and never re-decides. `input` carries the choice value
+   * under the window's choice key (booleans/options/numbers/actors/positions/
+   * directions). */
+  | { type: 'ANSWER_DECISION_WINDOW'; windowId: string; input?: StatusSaveCommandInput }
   /** Internal deterministic fixture/admin command; never accepted by the websocket schema. */
   | { type: 'APPLY_STATUS'; actorId: string; targetId: string; status: StatusId }
   | { type: 'END_ENCOUNTER' };
@@ -856,7 +814,18 @@ export type EncounterEvent =
      command/event boundary); every fact instance id is scoped under it, so
      two separate uses of the same ability never collide and a replayed event
      reproduces the identical fact history. */
-    resolutionId?: string; continuation?: RuleContinuationState; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] } };
+    resolutionId?: string; continuation?: RuleContinuationState; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] }; /** U13/U11: when the planned flow suspended at an `open-window` node, the
+     durable window request rides the event — the reducer opens the window
+     (kind `choice`) carrying the recorded choice spec and the remaining flow
+     nodes + bound names to resume when answered. Mutations-so-far apply now;
+     the window gates the rest. */
+    window?: { id: string; choice?: RuleChoice; resume: { remaining: FlowNode[]; binder: Binder; continuationPoint: string } } }
+  /** U13: a decision window was answered. The recorded decision and the
+   * deterministic answer mutations ride the event — replay consumes them and
+   * performs zero fresh decisions (accepting a Great Giorgios rush re-plans
+   * against then-current state at the command boundary and records the
+   * mutations; declining records none). */
+  | { type: 'DECISION_ANSWERED'; windowId: string; decision: { key: string; value: WindowDecisionValue }; sourceId: string; sourceActorId: string; mutations: RuleMutation[] }
 
 export interface CommandResult {
   state: EncounterState;

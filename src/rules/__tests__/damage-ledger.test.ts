@@ -1,4 +1,5 @@
 import '../automation/content/registry.js';
+import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { planMovement } from '../movement.js';
@@ -145,9 +146,9 @@ describe('F0 damage ledger (pp.89, 93–107)', () => {
     // The hero's when-damaged interrupt (Righteous Disdain) holds the blow:
     // 6 raw - 2 armor = the same 4 the basic-attack ledger records.
     expect(damaged.actors[hero.id].hp).toBe(40); // held, not applied
-    const window = damaged.pendingInterrupts.find((pending) => pending.actorId === hero.id && pending.trigger === 'when-damaged');
+    const window = damaged.decisionWindows.find((pending) => pending.actorId === hero.id && pending.kind === 'when-damaged');
     expect(window).toBeDefined();
-    expect(window!.heldDamage).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
+    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
     // No interrupt answers, so the turn boundary resolves the held 4 through
     // the shared kernel — identical to an immediate blow.
     const endedResult = executeCommand(damaged, { type: 'END_TURN', actorId: hero.id }, scriptedDice());
@@ -264,11 +265,17 @@ describe('F0 matrix: delayed and Slashed damage through the shared kernel', () =
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
     // The ability ended the hero's turn; the GM selects the foe (TAKE_TURN).
     const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
-    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // U13: the trigger opens the "may rush" choice window (the mark was
+    // consumed; the engine never chooses "yes"); accepting resolves the
+    // delayed rush.
+    const rushWindow = ended.decisionWindows.find((candidate) => candidate.kind === 'choice');
+    expect(rushWindow).toBeDefined();
+    const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
     // The delayed rush travels two spaces (source damage 4); armor 2 reduces
     // it through the common p.93 determination before application.
-    expect(ended.state.actors[foe.id].hp).toBe(30);
-    expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
+    expect(answered.state.actors[foe.id].hp).toBe(30);
+    expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 
   it('Slashed ability-move damage determines through the shared kernel (armor applies)', () => {
@@ -276,10 +283,15 @@ describe('F0 matrix: delayed and Slashed damage through the shared kernel', () =
     state.actors[hero.id].statuses.push('slashed');
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
     const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
-    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // U13: the trigger opens the "may rush" choice window; accepting resolves
+    // the delayed rush through the shared kernel.
+    const rushWindow = ended.decisionWindows.find((candidate) => candidate.kind === 'choice');
+    expect(rushWindow).toBeDefined();
+    const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
     // The single raw Slashed instance is determined by the shared kernel:
     // 4 normal - armor 2 = exactly 2 applied HP damage.
-    expect(ended.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
-    expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
+    expect(answered.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+    expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 });

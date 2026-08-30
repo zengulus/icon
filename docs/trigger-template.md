@@ -1,18 +1,21 @@
 # Trigger-window template
 
 Every interrupt window (ICON p.107) has **one decision point and one replay
-entry point**, both in `src/rules/automation/kernels/trigger-window.ts`. This is the
-F4 foundation rule from `docs/rules-foundations.md` §5:
+entry point**, both in `src/rules/automation/kernels/decision-window.ts` (the
+single U13 `DecisionWindowRecord`; the old `trigger-window.ts` is deleted).
+This is the F4 foundation rule from `docs/rules-foundations.md` §5:
 
-- `TRIGGER_WINDOW_RECIPES` is the closed registry keyed by trigger
+- `DAMAGE_WINDOW_RECIPES` is the closed registry keyed by trigger
   (`when-damaged`, `defeated`). Each row answers, from **durable provenance**
   — who damaged whom, with what determined amount, through which delivery —
   whether a window opens. The rows are ordered: when both triggers are armed
   the more specific one wins (when-damaged before defeated), matching p.107.
-- `decideDamageWindow(state, target, provenance)` is the single decision
+-  `decideDamageWindow(state, target, provenance)` is the single decision
   point. The single-pass VM path (`applyDamage` in `encounter-adapter.ts`)
   and the split-event path (a basic attack in `encounter.ts`) both call it,
-  so they can never drift.
+  so they can never drift. The window it returns is opened through
+  `openDecisionWindow` (the ONE record, carrying the determined blow as a
+  U12 held-result `heldPayload`).
 - A split event records the decision on its ledger at construction time
   (`AttackResolutionLedger.window` and the nested `DamageLedgerEntry.window`);
   replay opens the window from the record via
@@ -21,15 +24,15 @@ F4 foundation rule from `docs/rules-foundations.md` §5:
   replay; it applies when the interrupt answers the window or the boundary
   drains it.
 
-**Never open a damage window inline without a `TRIGGER_WINDOW_RECIPES` row,
+**Never open a damage window inline without a `DAMAGE_WINDOW_RECIPES` row,
 and never re-derive a held decision from mutable window state at replay.**
 
 ## 1. Decide the trigger
 
 | The window opens when… | Trigger | Row |
 | --- | --- | --- |
-| A foe's determined damage would hit a target with an unused when-damaged interrupt (Righteous Disdain p.128) | `when-damaged` | `TRIGGER_WINDOW_RECIPES` (first — more specific) |
-| A foe's determined damage would defeat a target with an unused defeated interrupt (Boiling Blood p.138), after the Defiance/Defy Death floors | `defeated` | `TRIGGER_WINDOW_RECIPES` (second) |
+| A foe's determined damage would hit a target with an unused when-damaged interrupt (Righteous Disdain p.128) | `when-damaged` | `DAMAGE_WINDOW_RECIPES` (first — more specific) |
+| A foe's determined damage would defeat a target with an unused defeated interrupt (Boiling Blood p.138), after the Defiance/Defy Death floors | `defeated` | `DAMAGE_WINDOW_RECIPES` (second) |
 
 The decision inputs are the durable `DamageWindowProvenance`:
 `targetId`, `sourceActorId` (null = terrain, never opens), the
@@ -66,7 +69,7 @@ Rules of thumb:
 ## 3. Wire a new damage-carrying path
 
 1. VM mutations: `applyDamage` already routes through `decideDamageWindow` +
-   `openDamageWindow` — nothing to do.
+   `openDecisionWindow` — nothing to do.
 2. Split events: call `decideDamageWindow` at construction, record the result
    on the ledger's `window` (and the attack's `AttackResolutionLedger.window`),
    and let `applyDamageLedger` open it from the record. Suppress the

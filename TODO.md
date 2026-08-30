@@ -607,6 +607,56 @@ assumption here, document the evidence and update this list before proceeding.
   U11/U12/U13 execution land in T5. No source-unit wiring; census unchanged
   (427).
 
+- **Phase T5 — Execution: U11 FLOW, U12 CONTINUATION, U13 WINDOW —
+  LANDED (2026-08-30).** Three sub-tranches, full suite green at each step
+  (1683 → 1693 → 1519 rule tests), census byte-stable at 427 throughout,
+  all audits green, no source-unit promotion, no unresolved-unit wiring.
+  1. **T5a — U11 core FLOW/SEQUENCE** (`kernels/execute-flow.ts`):
+     `executeRuleProgram` plans every action against a PURE SIMULATED
+     intermediate encounter state (the reducer's own sequential
+     projection, U15 atomic groups included) so later effects observe
+     earlier effects' results; the durable ordered mutation list stays
+     the replay payload. `U1` bind/bound-selector propagation and `U10`
+     emit-fact ride the flow. A corrective made the bastion
+     Collide-or-Heroic trigger steps select their command-supplied
+     referent (p.122/p.123) instead of a stale pre-shove range re-check.
+  2. **T5b — U12 CONTINUATION/SUSPENSION core**
+     (`primitives/continuation.ts` + `kernels/continuation-runtime.ts`):
+     the typed `ArmedContinuation` with the explicit DEFERRED-RULE vs
+     HELD-RESULT payload discriminant, LIVE/CAPTURED refs, captured
+     values, Clock/Fact triggers, expiry, U17 ordering identity; pure
+     `armContinuation`/`resumeContinuation` (zero fresh decisions/RNG).
+     `EncounterState.continuations` (schema 8) with the reducer as the
+     single arming point. Great Giorgios moved off the `delayed`
+     lifecycle recipe onto an armed continuation; the Sucker Punch held
+     save rides a held-result continuation.
+  3. **T5c — U13 WINDOW/DECISION POINT — landed**
+     (`kernels/decision-window.ts`): ONE `DecisionWindowRecord` replaces
+     `trigger-window.ts` (deleted), the `EncounterPendingInterrupt`
+     schema (deleted; compat alias), per-window heldDamage/heldSave/
+     heldResult fields (gone — every window carries a U12 held
+     `heldPayload`), and `pendingInterrupts` (→ `decisionWindows`,
+     schema 9). `choice` windows answer through the recorded
+     `ANSWER_DECISION_WINDOW` command; U17 ordering is the one ordering
+     authority (LIFO stack, p.107 turn-order, owner-order yields a U4
+     choice); `DAMAGE_WINDOW_RECIPES` is the when-damaged/defeated
+     eligibility registry (p.107/p.128/p.138). The Great
+     Giorgios "may rush" is now a recorded decision (the T5b-era
+     automatic rush was a documented approximation, repaired — decline
+     legal, accept reads THEN-CURRENT positions, Dragonslayer distinct).
+     U11 `open-window`/`suspend` wired through U13 (flow resume seam);
+     Vigilance stays a triggered EFFECT (not a window); `resolveGamble`
+     stays the deterministic dice operation (only genuine decisions
+     become windows); the U12 fact-trigger correlation seam records the
+     specific `instanceId`. Acceptance: `t5a-u11-flow.test.ts` (12),
+     `t5b-u12-continuation.test.ts` (10), `t5c-u13-decision-window.test.ts`
+     (17) — all adversarial.
+  Remaining before T6: the separate T6 gate is NOT satisfied — the
+  interrupt-uses/turn-attack/end-turn typed-ledger migration, the
+  AREA/PERSISTENT-INSTANCE/RULE-SOURCE query domains, the opaque
+  ability-use-choices fold, the U4 `choose` flow node, and the remaining
+  delayed-lifecycle consumers (Polaris/Carnevale) are still staged.
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

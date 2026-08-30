@@ -236,8 +236,10 @@ slot/position REJECT rather than defaulting; a captured defeated-actor
 ref stays resolvable (identity captured). The legacy context slots (`actorId`,
 `attackTargetId`, `triggerSourceId`, `triggerTargetIds`,
 `damageRecipientId`) remain the LIVE refs' resolution sources — migrating
-consumers onto typed refs is the T2+ de-dup work; `RuleContinuationState`
-still carries no refs across continuations (U12). Tests:
+consumers onto typed refs is the T2+ de-dup work; the U12
+`ArmedContinuation` carries its refs with explicit LIVE/CAPTURED semantics
+(T5b) and the U13 windows carry the continuation as their held payload
+(T5c). Tests:
 `reference.test.ts` (positive captured-exactness + live re-resolution +
 binder/collection + ordered plural targets, negative unbound/missing +
 domain-mismatch, boundary empty-collection + defeated-actor-captured,
@@ -487,13 +489,15 @@ caller's supplied array order.
 `controller-choice` is never resolved by `applyOrdering` (it returns
 `yields-choice` carrying the typed choice for U4 routing). Wired consumers: `orderedSelectedSteps` (the engine's
 ability-step order, p.85/p.107 §4) applies the `source-order` policy;
-`decideDamageWindow` applies it to `TRIGGER_WINDOW_RECIPES`; the
-pending-interrupt LIFO pop applies the `stack` policy (p.107 most-recent-
-trigger-first). The lifecycle registry order remains the recorded boundary
+`decideDamageWindow` applies it to `DAMAGE_WINDOW_RECIPES`
+(`kernels/decision-window.ts`, U13); the decision-window LIFO pop
+(`popDecisionWindowStack`) applies the `stack` policy (p.107 most-recent-
+trigger-first) and `orderDecisionWindows` applies the same-trigger
+turn-order rule. The lifecycle registry order remains the recorded boundary
 contract and the scheduler's turn election stays the scheduler authority
 (both documented U17 consumers); hostile-before-beneficial /
-non-active-owner-first / controller-choice land their turn-boundary
-consumers with the U13 window work in T5. Tests: `t3-ordering.test.ts`.
+non-active-owner-first land their turn-boundary consumers in T6. Tests:
+`t3-ordering.test.ts`, `t5c-u13-decision-window.test.ts`.
 
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED
 
@@ -628,15 +632,30 @@ hostile before beneficial); party Resolve +1 exactly once per round boundary;
 legend Juggernaut clear; per-round flag resets. Voluntary Slow clears at the
 round reset; pending Delay survives until consumed (see scheduler below).
 
-### Interrupt / window engine — AUTHORITATIVE for wired triggers
+### Interrupt / window engine — AUTHORITATIVE for wired triggers (U13)
 
-Windows: when-damaged, defeated, uses-ability, area-inclusion,
-targeted-by-ability, save-rolled. LIFO pop (most recent first, p.107), stable
-total order for simultaneous, retargeting (Masquerade), held effects cloned +
-checkpoint-validated + redacted, drain-at-boundary. Deferral priority mirrors
-the damage pipeline (mitigated blows don't open phantom windows). Tests:
+ONE typed window record (`DecisionWindowRecord`, `kernels/decision-window.ts`,
+U13, T5c 2026-08-30; the deliverables claim registers the authority status)
+for all windows: when-damaged, defeated,
+uses-ability, area-inclusion, targeted-by-ability, save-rolled, and `choice`
+(player/GM decision answered through the recorded `ANSWER_DECISION_WINDOW`
+command — the engine never invents a default). Every interrupt window
+carries its already-determined outcome as a U12 held-result `heldPayload`
+(determined damage / held save — never recomputed); the
+`DAMAGE_WINDOW_RECIPES` registry decides when-damaged/defeated eligibility
+from durable provenance (p.107/p.128 Righteous Disdain, p.138 Boiling
+Blood). LIFO pop (most recent first, p.107), stable total order for
+simultaneous (turn-order alternation), retargeting (Masquerade), held
+effects cloned + checkpoint-validated + redacted, drain-at-boundary
+(choice windows persist until answered or a later boundary drain closes
+them as the recorded decline). The Great Giorgios "may rush" (p.124) is a
+recorded decision through a `choice` window (decline legal; accept resolves
+against THEN-CURRENT positions). Deferral priority mirrors the damage
+pipeline (mitigated blows don't open phantom windows). Tests:
 `interrupts.test.ts`, `bastion.test.ts`, `colossus.test.ts`, `fool.test.ts`,
-`knave.test.ts`. Hole: Vigilance guard/punish are commands, not windows (B4).
+`knave.test.ts`, `t5c-u13-decision-window.test.ts`. Hole: Vigilance
+guard/punish are commands/triggered effects, not windows (B4) — and they
+must stay that way (p.104-105).
 
 ### Turn scheduler — AUTHORITATIVE + REPLAY-TESTED
 

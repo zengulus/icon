@@ -1,18 +1,21 @@
-import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type EncounterActiveEffect, type EncounterActor, type EncounterCommand, type EncounterCondition, type EncounterEvent, type EncounterMark, type EncounterPendingInterrupt, type EncounterState, type IconCharacter, type Position, type StatusId, type StatusSaveCommandInput, type TurnEndCause } from './types.js';
+import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type DecisionWindowRecord, type EncounterActiveEffect, type EncounterActor, type EncounterCommand, type EncounterCondition, type EncounterEvent, type EncounterHeldDamage, type EncounterMark, type EncounterState, type IconCharacter, type Position, type StatusId, type StatusSaveCommandInput, type TurnEndCause, type WindowDecisionValue } from './types.js';
 import { findAbility, findClass, findJob } from './catalog.js';
 import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
 import { randomDice, rollBoonOrCurse, rollDamage, type DiceSource } from './dice.js';
 import { compileRuleSourceUnit } from './automation/content/glue/compiler.js';
-import type { RuleAction, RuleExecutionContext, RuleExecutionResult, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
+import type { ArmedContinuation, RuleAction, RuleChoice, RuleExecutionContext, RuleExecutionResult, RuleEffect, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
-import { applyDamageLedger } from './automation/kernels/damage-ledger.js';
+import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { applyOrdering } from './automation/primitives/ordering.js';
 import { validateTransaction } from './automation/primitives/transaction.js';
-import { decideDamageWindow } from './automation/kernels/trigger-window.js';
+import { closeDecisionWindow, decideDamageWindow, isInterruptWindowKind, openDecisionWindow, orderDecisionWindows, popDecisionWindowStack, windowHeldDamage, windowHeldSave } from './automation/kernels/decision-window.js';
+import { heldDamageContinuation, heldSaveContinuation } from './automation/primitives/continuation.js';
+import { decisionContinuationFor } from './automation/kernels/continuation-runtime.js';
+import { executeFlowResume } from './automation/kernels/execute-flow.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
 import { bonusDamageDiceForUse } from './automation/kernels/bonus-damage.js';
 import { applyCombatStartTraitEffects, planTurnStartParticipants, planTurnTransition, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
@@ -41,7 +44,7 @@ import { auraStateView, projectedAuraAttackModifiers } from './automation/kernel
 import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
 import { type DirectTargetProblem, type DirectTargetQuery } from './automation/primitives/targeting.js';
-import { executeRuleProgram, integer, orderedSelectedSteps, rerollSaveMutations } from './automation/kernels/runtime.js';
+import { executeRuleProgram, integer, orderedSelectedSteps, rerollSaveMutations, type RuleExecutionResultWithWindow } from './automation/kernels/runtime.js';
 import { assertRuleCostsPayable, costContextFromEncounter, effectiveRuleCosts, evaluateCosts, CostPaymentViolation } from './automation/kernels/cost-payment.js';
 import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
 import { hasLineOfSight as lineOfSightKernel } from './automation/primitives/line-of-sight.js';
@@ -171,7 +174,7 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
     partyResolve: 0,
     entities: {},
     terrainEffects: [],
-    pendingInterrupts: [],
+    decisionWindows: [],
     // U12: the durable armed-continuation collection (deferred rules and held
     // results awaiting their Clock/Fact trigger).
     continuations: [],
@@ -289,15 +292,14 @@ export function migrateEncounter(input: unknown): EncounterState {
       : null),
     entities: clone(candidate.entities ?? {}),
     terrainEffects: clone(candidate.terrainEffects ?? []),
-    // Schema-7 representation normalization: rewrite legacy entity-creation
-    // spatial fields (creationOrigin/creationOriginSize/creationMaxRange) on
-    // any durable mutation list — event history and held interrupt windows —
-    // into the current paired `creationSpatial` contract, so an old event
-    // with spatial restrictions can never replay as unrestricted creation
-    // (see normalizeLegacyEntityMutation). The version is unchanged: the
-    // durable current-state shape is already schema 7; this boundary
-    // upgrades the audit/display event history to the same representation.
-    pendingInterrupts: normalizeInterruptWindows(clone(candidate.pendingInterrupts ?? [])),
+    // U13 (schema 9): the window collection is the ONE typed U13 record
+    // (`DecisionWindowRecord`). Legacy schema-8 `decisionWindows` entries
+    // migrate field-for-field onto it (the old `trigger` becomes `kind`; the
+    // legacy heldDamage/heldSave/heldResult become the U12 held-result
+    // continuation carried as `heldPayload`), and their held-effect mutation
+    // lists get the same legacy entity-mutation normalization every durable
+    // list receives.
+    decisionWindows: migrateDecisionWindows((candidate as { decisionWindows?: unknown }).decisionWindows),
     // U12 (schema 8): the durable armed-continuation collection defaults to
     // empty for legacy checkpoints — a pre-U12 state has no armed
     // continuations by definition (the Great Giorgios delayed recipe used to
@@ -369,16 +371,99 @@ function deriveLegacyResolutionSerial(candidate: { revision?: number; eventLog?:
   return serial;
 }
 
-/** Normalize legacy entity mutations across a migrated encounter's held
- * interrupt windows (their `heldEffects` are the triggering ability's
- * already-generated durable mutation lists). */
-function normalizeInterruptWindows(windows: EncounterPendingInterrupt[]): EncounterPendingInterrupt[] {
-  for (const window of windows) {
-    if (window.heldEffects !== undefined) {
-      (window as { heldEffects: unknown }).heldEffects = normalizeLegacyMutationList(window.heldEffects);
+/** U13 (schema 9): map a legacy schema-8 `decisionWindows` entry onto the
+ * ONE typed `DecisionWindowRecord`. The old `trigger` string becomes the
+ * typed `kind`; the legacy `heldResult` (T5b's U12 record), else `heldSave`,
+ * else `heldDamage`, becomes the U12 held-result continuation carried as
+ * `heldPayload` — the window's durable authority, never recomputed. The
+ * `heldEffects`/`retarget`/`retargetProgramId` fields ride unchanged, with
+ * the same legacy entity-mutation normalization every durable mutation list
+ * receives. An unknown legacy trigger is a migration error (fail closed —
+ * the closed kind union is the source of truth). */
+function migrateDecisionWindows(windows: unknown): DecisionWindowRecord[] {
+  if (!Array.isArray(windows)) return [];
+  const records: DecisionWindowRecord[] = [];
+  for (const candidate of windows as Array<{
+    id?: unknown;
+    actorId?: unknown;
+    trigger?: unknown;
+    triggeredAt?: unknown;
+    order?: unknown;
+    heldDamage?: unknown;
+    heldSave?: unknown;
+    heldResult?: unknown;
+    heldEffects?: unknown;
+    retarget?: unknown;
+    retargetProgramId?: unknown;
+  }>) {
+    const id = String(candidate.id ?? '');
+    const actorId = String(candidate.actorId ?? '');
+    const trigger = String(candidate.trigger ?? '');
+    const kind = (['when-damaged', 'defeated', 'save-rolled', 'uses-ability', 'area-inclusion', 'targeted-by-ability'] as const)
+      .find((candidateKind) => candidateKind === trigger);
+    if (kind === undefined) {
+      throw new RuleViolation('encounter.migration', `Cannot migrate interrupt window ${id}: unknown trigger kind ${trigger}.`);
     }
+    const record: DecisionWindowRecord = {
+      id,
+      kind,
+      actorId,
+      triggeredAt: typeof candidate.triggeredAt === 'number' ? candidate.triggeredAt : 0,
+      order: typeof candidate.order === 'number' ? candidate.order : 0,
+    };
+    const heldResult = candidate.heldResult as ArmedContinuation | undefined;
+    const heldSave = candidate.heldSave as {
+      targetId?: unknown; boon?: unknown; sourceId?: unknown; sourceActorId?: unknown;
+      windowKind?: unknown; windowId?: unknown; statusId?: unknown; modifiers?: unknown;
+      threshold?: unknown; onSuccess?: unknown; onFailure?: unknown;
+    } | undefined;
+    const heldDamage = candidate.heldDamage as EncounterHeldDamage | undefined;
+    if (heldResult) {
+      record.heldPayload = heldResult;
+    } else if (heldSave && typeof heldSave.onSuccess === 'object' && typeof heldSave.onFailure === 'object') {
+      record.heldPayload = heldSaveContinuation({
+        id: `held:${id}`,
+        sourceId: String(heldSave.sourceId ?? ''),
+        ownerActorId: actorId,
+        targetId: String(heldSave.targetId ?? actorId),
+        boon: typeof heldSave.boon === 'number' ? heldSave.boon : 0,
+        threshold: typeof heldSave.threshold === 'number' ? heldSave.threshold : 10,
+        roll: 0,
+        success: false,
+        sourceActorId: String(heldSave.sourceActorId ?? ''),
+        ...(typeof heldSave.windowKind === 'string' ? { windowKind: heldSave.windowKind } : {}),
+        ...(typeof heldSave.windowId === 'string' ? { windowId: heldSave.windowId } : {}),
+        ...(typeof heldSave.statusId === 'string' ? { statusId: heldSave.statusId } : {}),
+        ...(typeof heldSave.modifiers === 'object' && heldSave.modifiers !== null ? { modifiers: heldSave.modifiers as { sourceModifier: number; saveBoon: number; saveCurse: number; blessing: boolean } } : {}),
+        onSuccess: heldSave.onSuccess as RuleEffect[],
+        onFailure: heldSave.onFailure as RuleEffect[],
+      });
+    } else if (heldDamage && typeof heldDamage.amount === 'number') {
+      record.heldPayload = heldDamageContinuation({
+        id: `held:${id}`,
+        programId: heldDamage.sourceId,
+        ownerActorId: actorId,
+        targetId: actorId,
+        amount: heldDamage.amount,
+        damageType: heldDamage.damageType,
+        sourceActorId: heldDamage.sourceActorId,
+        sourceId: heldDamage.sourceId,
+        instance: heldDamage.instance,
+        delivery: heldDamage.delivery,
+        ignoreCover: heldDamage.ignoreCover,
+        ...(heldDamage.bypassVigor !== undefined ? { bypassVigor: heldDamage.bypassVigor } : {}),
+        ...(heldDamage.ignoreDefiance !== undefined ? { ignoreDefiance: heldDamage.ignoreDefiance } : {}),
+        ...(heldDamage.ignoreDodge !== undefined ? { ignoreDodge: heldDamage.ignoreDodge } : {}),
+      });
+    }
+    if (candidate.heldEffects !== undefined) {
+      record.heldEffects = normalizeLegacyMutationList(candidate.heldEffects as RuleMutation[]) as RuleMutation[];
+    }
+    if (candidate.retarget !== undefined) record.retarget = candidate.retarget as { fromActorId: string; toActorId: string };
+    if (candidate.retargetProgramId !== undefined) record.retargetProgramId = String(candidate.retargetProgramId);
+    records.push(record);
   }
-  return windows;
+  return records;
 }
 
 /** Normalize legacy entity mutations across a migrated encounter's event
@@ -1013,14 +1098,17 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   // time — when the target has an armed when-damaged/defeated interrupt, the
   // blow is held on the replay side (openDamageWindowFromLedger) exactly as
   // the single-pass VM path would hold it. The record and the replay decision
-  // are the same TriggerWindow registry row.
-  const attackWindow = decideDamageWindow(state, target, {
+  // are the same U13 damage-window registry row.
+  const decidedWindow = decideDamageWindow(state, target, {
     targetId: target.id,
     sourceActorId: actor.id,
     determinedAmount: determination.amount,
     bypassVigor: false,
     damageType: 'normal',
   });
+  const attackWindow: DamageWindowLedger | null = decidedWindow
+    ? { trigger: decidedWindow.kind, held: true, resolution: null }
+    : null;
   const events: EncounterEvent[] = [{ type: 'ATTACK_RESOLVED', actorId: actor.id, targetId: target.id, weight: command.weight, d20, boonDie: boon, total, evasionRoll, hit, critical, rawDamage, appliedDamage, ...(defianceTriggered ? { defianceTriggered: true } : {}),
     // F0 ledger — the AttackResolution (roll/authority provenance) with the
     // downstream damage ledger (determined handoff) nested inside: the full
@@ -1195,8 +1283,15 @@ export function executeRuleProgramWithReactiveTriggers(
   resolvers: RuleResolverRegistry,
   state: EncounterState,
   resolutionId = '',
-): RuleExecutionResult {
+): RuleExecutionResultWithWindow {
   const first = executeRuleProgram(program, context, resolvers);
+  // U13/U11: a flow that suspended at an `open-window`/`suspend` node gates
+  // the remaining execution behind the window — the reactive fold does NOT
+  // continue planning past the suspension (the window carries the remaining
+  // nodes; answering resumes them).
+  if (first.window) {
+    return { ...first, window: first.window };
+  }
   let mutations = first.mutations;
   let selectedSteps = first.selectedSteps;
   const executedStepIds = new Set(selectedSteps.map(({ id }) => id));
@@ -1843,6 +1938,60 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       events = [{ type: 'ACTOR_WENT_SLOW', actorId: actor.id, eligibleSide: decision.eligibleSide, turnPhase: decision.turnPhase }];
       break;
     }
+    case 'ANSWER_DECISION_WINDOW': {
+      if (state.phase !== 'active') throw new RuleViolation('encounter.not-active', 'The encounter is not active.');
+      const window = state.decisionWindows.find((candidate) => candidate.id === command.windowId);
+      if (!window) throw new RuleViolation('window.unknown', 'That decision window is not open.');
+      if (window.kind !== 'choice') throw new RuleViolation('window.not-decision', 'Only a decision window can be answered this way.');
+      const input = command.input ?? {};
+      // The recorded U4 decision: the choice spec names the input key; a pure
+      // `suspend` gate (no choice) records the plain resume decision.
+      const decision: { key: string; value: WindowDecisionValue } = window.choice
+        ? { key: window.choice.key, value: decisionValueFor(window.choice, input) }
+        : { key: 'resume', value: true };
+      let mutations: RuleMutation[] = [];
+      if (window.resume) {
+        // U11 flow suspension: resume the REMAINING flow nodes through the
+        // SAME flow authority against THEN-CURRENT state, with the recorded
+        // decision on the input surface. The resumed mutations are the new
+        // durable event payload — replay consumes them, never re-plans.
+        const actor = state.actors[window.actorId];
+        if (!actor) throw new RuleViolation('window.actor-missing', 'The decision window owner is unavailable.');
+        const context: RuleExecutionContext = {
+          state: encounterRuleState(state),
+          encounterState: state,
+          actorId: actor.id,
+          sourceId: window.provenance?.sourceId ?? 'core:decision',
+          actionId: 'decision',
+          timing: 'interrupt',
+          input,
+          dice,
+        };
+        const resumed = executeFlowResume({ remaining: window.resume.remaining, binder: window.resume.binder }, context, { decision });
+        mutations = resumed.mutations;
+      } else if (window.heldPayload) {
+        // U13 decision continuation (e.g. Great Giorgios "may rush"): the
+        // recorded accept runs the deterministic THEN-CURRENT resolution; a
+        // decline records nothing (the trigger was already consumed at
+        // window-open). The engine never chooses a default.
+        const row = decisionContinuationFor(window.heldPayload.programId);
+        if (!row) throw new RuleViolation('window.no-resolver', 'That decision window has no registered resolution.');
+        if (decision.value === true || decision.value === 'accept' || decision.value === 1) {
+          mutations = row.resolve(state, window.heldPayload);
+        }
+      } else {
+        throw new RuleViolation('window.malformed', 'That decision window cannot be resolved.');
+      }
+      events = [{
+        type: 'DECISION_ANSWERED',
+        windowId: window.id,
+        decision,
+        sourceId: window.provenance?.sourceId ?? 'core:decision',
+        sourceActorId: window.actorId,
+        mutations,
+      }];
+      break;
+    }
     case 'MOVE':
       events = movementEvents(state, command, dice);
       break;
@@ -1956,7 +2105,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         .filter((cost): cost is Extract<RuleMutation, { kind: 'damage' }> => cost.kind === 'damage' && cost.damageType === 'sacrifice')
         .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: cost.amount } }));
       assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: [...action.costs, ...augmentationCosts] }, ruleContext);
-      let result: RuleExecutionResult;
+      let result: RuleExecutionResultWithWindow;
       const resolutionId = nextResolutionId(state, unit.id, 0);
       try {
         result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state, resolutionId);
@@ -2006,6 +2155,20 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         ...(result.facts ? { facts: result.facts } : {}),
         ...(result.resolutionId ? { resolutionId: result.resolutionId } : {}),
         ...(result.continuation ? { continuation: result.continuation } : {}),
+        // U13/U11: a suspended flow carries its window request (the choice
+        // spec + remaining nodes + binder) so the reducer opens the window
+        // and the controller can answer it.
+        ...(result.window ? {
+          window: {
+            id: `flow:${unit.id}:${resolutionId}`,
+            ...(result.window.choice ? { choice: result.window.choice } : {}),
+            resume: {
+              remaining: result.window.remaining,
+              binder: result.window.binder,
+              continuationPoint: result.window.continuationPoint,
+            },
+          },
+        } : {}),
       })];
       break;
     }
@@ -2251,55 +2414,31 @@ export function orderCrossCharacterEffects(state: EncounterState, turnActorId: s
  * the window that opened them. Interrupts that share a trigger and trigger at
  * the same time resolve in the same order as turns — the turn character's
  * side first, then alternating sides, with same-side entries keeping their
- * registration order as the deterministic stand-in for the players' choice.
- * The result is a stable total order keyed on (triggeredAt desc, side,
- * registration order).
- */
-export function orderInterrupts(state: EncounterState, turnActorId: string, pending: EncounterPendingInterrupt[]): EncounterPendingInterrupt[] {
-  const turnSide = state.actors[turnActorId]?.side;
-  const sideRank = (actorId: string): number => (state.actors[actorId]?.side === turnSide ? 0 : 1);
-  return [...pending].sort((first, second) => {
-    if (first.triggeredAt !== second.triggeredAt) return second.triggeredAt - first.triggeredAt;
-    if (first.trigger !== second.trigger) return first.trigger.localeCompare(second.trigger);
-    const bySide = sideRank(first.actorId) - sideRank(second.actorId);
-    if (bySide !== 0) return bySide;
-    return first.order - second.order;
-  });
+ * registration order as the deterministic stand-in for the players' choice
+ * (p.107: same-owner ambiguity is the owner's to determine — a recorded
+ * player ordering decision routes through the U17 `controller-choice` policy
+ * instead when content declares one). The result is a stable total order
+ * keyed on (triggeredAt desc, kind, side, registration order) — the U13
+ * authority `kernels/decision-window.ts::orderDecisionWindows`; this wrapper
+ * preserves the legacy export for compatibility. */
+export function orderInterrupts(state: EncounterState, turnActorId: string, pending: DecisionWindowRecord[]): DecisionWindowRecord[] {
+  return orderDecisionWindows(state, turnActorId, pending);
 }
 
 /** Pop (LIFO) the most recently triggered interrupt window for `actorId` and
  * return it. An interrupt answers the most recently triggered window that is
- * still holding damage — windows opened by the interrupt's own later damage
- * are newer triggers, not the window being answered. Falls back to the most
- * recently triggered plain window (no held damage) for interrupts that answer
- * a trigger with no deferral. The LIFO selection is the U17 `stack` policy
- * applied to the actor's windows (`primitives/ordering.ts`) — the ONE
- * ordering authority; the window's recorded push order decides, never
- * array construction order. */
-function popInterruptWindow(state: EncounterState, actorId: string): EncounterPendingInterrupt | undefined {
-  const held = selectInterruptStackTop(state, actorId, true);
+ * still holding a payload — windows opened by the interrupt's own later
+ * damage are newer triggers, not the window being answered. Falls back to the
+ * most recently triggered plain window for interrupts that answer a trigger
+ * with no deferral. Choice windows (player decisions) are NEVER popped by an
+ * interrupt execution — they are answered by id through
+ * `ANSWER_DECISION_WINDOW`. The LIFO selection is the U13 stack rule
+ * (`kernels/decision-window.ts`), the ONE ordering authority; the window's
+ * recorded `triggeredAt` decides, never array construction order. */
+function popInterruptWindow(state: EncounterState, actorId: string): DecisionWindowRecord | undefined {
+  const held = popDecisionWindowStack(state, actorId, true);
   if (held) return held;
-  return selectInterruptStackTop(state, actorId, false);
-}
-
-/** The most recently triggered window for `actorId` (matching `heldOnly`),
- * through the shared stack ordering policy; removes and returns it. */
-function selectInterruptStackTop(state: EncounterState, actorId: string, heldOnly: boolean): EncounterPendingInterrupt | undefined {
-  const windows = state.pendingInterrupts.filter((window) => window.actorId === actorId && (!heldOnly || window.heldDamage));
-  if (windows.length === 0) return undefined;
-  const result = applyOrdering(
-    { kind: 'stack' },
-    windows.map((window) => ({ id: window.id })),
-  );
-  // Stack/LIFO needs no context and always resolves; a non-ok result would be
-  // a programming error (reject, never array-order semantics).
-  if (!result.ok) {
-    throw new RuleViolation('interrupt.order', `Cannot order pending interrupt windows: ${result.problem}.`);
-  }
-  const top = result.ordered[0];
-  const index = state.pendingInterrupts.findIndex((window) => window.id === top.id);
-  if (index < 0) return undefined;
-  return state.pendingInterrupts.splice(index, 1)[0];
+  return popDecisionWindowStack(state, actorId, false);
 }
 
 /** ICON p.151 Masquerade: the interrupt swaps places with a willing ally and
@@ -2320,13 +2459,36 @@ function retargetEffects(mutations: RuleMutation[], from: string, to: string): R
  * "If you or your ally can't make a valid teleport, this interrupt can't be
  * made") or the window closes at a turn boundary, the held ability hits its
  * original target instead. */
-function resolveHeldEffects(state: EncounterState, window: EncounterPendingInterrupt, closingSourceId?: string) {
+function resolveHeldEffects(state: EncounterState, window: DecisionWindowRecord, closingSourceId?: string) {
   if (!window.heldEffects || window.heldEffects.length === 0) return;
   const redirects = window.retarget !== undefined
     && window.retargetProgramId !== undefined
     && closingSourceId === window.retargetProgramId;
   const effects = redirects ? retargetEffects(window.heldEffects, window.retarget!.fromActorId, window.retarget!.toActorId) : window.heldEffects;
   applyRuleMutations(state, effects);
+}
+
+/** The recorded U4 decision value for a choice kind, read from the command's
+ * input surface under the choice key — the same seam every other recorded
+ * choice consumes (booleans for boolean choices, options for option
+ * choices, etc.). The engine never invents a default: an absent value is
+ * recorded as-is (false / 0 / empty), which for a boolean choice is the
+ * decline. */
+function decisionValueFor(choice: RuleChoice, input: StatusSaveCommandInput): WindowDecisionValue {
+  switch (choice.kind) {
+    case 'boolean': return input.booleans?.[choice.key] === true;
+    case 'number': return input.numbers?.[choice.key] ?? 0;
+    case 'option': return input.options?.[choice.key] ?? '';
+    case 'actors': return input.actorIds?.[choice.key]?.[0] ?? '';
+    case 'positions': {
+      const position = input.positions?.[choice.key]?.[0];
+      return position ? JSON.stringify(position) : '';
+    }
+    case 'direction': {
+      const direction = input.directions?.[choice.key];
+      return direction ? JSON.stringify(direction) : '';
+    }
+  }
 }
 
 /** ICON p.143 Sucker Punch: when the interrupt executes and a `save-rolled`
@@ -2342,8 +2504,11 @@ function attachSaveReroll(
   event: Extract<EncounterEvent, { type: 'RULE_MUTATIONS_APPLIED' }>,
 ): Extract<EncounterEvent, { type: 'RULE_MUTATIONS_APPLIED' }> {
   if (!SAVE_REROLL_INTERRUPT_IDS[interruptSourceId]) return event;
-  const saveWindow = state.pendingInterrupts.find((window) => window.actorId === actorId && window.trigger === 'save-rolled');
-  const heldSave = saveWindow?.heldSave;
+  // U13: the save rides the window as a U12 held-result continuation;
+  // `windowHeldSave` projects the durable record the re-roll reads (the
+  // EXACT evaluated modifier policy — never re-derived).
+  const saveWindow = state.decisionWindows.find((window) => window.actorId === actorId && window.kind === 'save-rolled');
+  const heldSave = saveWindow ? windowHeldSave(saveWindow) : undefined;
   if (!heldSave) return event;
   const roll = dice.die(20);
   // ICON p.144 Heroic: "The character rolls the new save with +1 curse." The
@@ -2371,20 +2536,43 @@ function attachSaveReroll(
   };
 }
 
-/** ICON p.107: at a boundary (turn end, encounter end) every open interrupt
- * window closes. Damage that was held unapplied is determined damage — the
- * window was the interrupt opportunity, not a damage cancellation — so it
- * resolves now; actors that became immune or were defeated while the window
- * was open are skipped by `applyHeldDamage`. Held ability effects (Heroic
- * Intervention, Perseus, Masquerade) and held save branches (Sucker Punch)
- * also resolve now when no interrupt answers them. Resolving effects can open
- * new windows, so the queue drains until empty. */
+/** ICON p.107: at a boundary (turn end, encounter end) every open INTERRUPT
+ * window closes (choice windows — player decisions — are NOT drained here;
+ * they persist until answered or drained at a later boundary). Damage that
+ * was held unapplied is determined damage — the window was the interrupt
+ * opportunity, not a damage cancellation — so it resolves now; actors that
+ * became immune or were defeated while the window was open are skipped by
+ * `applyHeldDamage`. Held ability effects (Heroic Intervention, Perseus,
+ * Masquerade) and held save branches (Sucker Punch) also resolve now when no
+ * interrupt answers them. Resolving effects can open new windows, so the
+ * queue drains until empty. */
 function resolveHeldInterruptWindows(state: EncounterState) {
-  while (state.pendingInterrupts.length > 0) {
-    const window = state.pendingInterrupts.shift()!;
-    if (window.heldDamage) applyHeldDamage(state, window.actorId, window.heldDamage);
+  // Boundary drain preserves the historical FIFO among interrupt windows
+  // (the p.107 stack order governs interrupt ANSWERING — the LIFO pop — not
+  // the boundary drain). Choice windows are skipped: they are decisions.
+  let index = state.decisionWindows.findIndex((candidate) => isInterruptWindowKind(candidate.kind));
+  while (index >= 0) {
+    const window = state.decisionWindows.splice(index, 1)[0]!;
+    const heldDamage = windowHeldDamage(window);
+    if (heldDamage) applyHeldDamage(state, window.actorId, heldDamage);
     resolveHeldEffects(state, window);
+    index = state.decisionWindows.findIndex((candidate) => isInterruptWindowKind(candidate.kind));
   }
+}
+
+/** U13: at a boundary, close every unanswered `choice` window that was NOT
+ * opened by THIS boundary as a recorded decline (the recorded decision is
+ * the empty decline — the window offered the choice, no one took it). A
+ * choice window opened during the current event has `triggeredAt` equal to
+ * the current revision and is skipped — the controller gets the intervening
+ * time (the next turn) to answer it. */
+function drainUnansweredChoiceWindows(state: EncounterState) {
+  // A choice window opened during the CURRENT event has `triggeredAt` equal
+  // to the current revision — it is skipped (the controller gets the
+  // intervening time to answer it); one left unanswered from an earlier
+  // boundary closes now as the recorded decline.
+  const now = state.revision;
+  state.decisionWindows = state.decisionWindows.filter((window) => !(window.kind === 'choice' && window.triggeredAt < now));
 }
 
 /**
@@ -2701,7 +2889,11 @@ function applyTurnTransition(
   state.lastSide = actor.side;
   // ICON p.107: interrupt windows close at the end of the turn; held damage
   // and held ability effects resolve now (the window was the opportunity).
+  // U13: choice windows opened by THIS boundary persist (the controller gets
+  // the intervening turn to answer); earlier unanswered choice windows close
+  // as the recorded decline.
   resolveHeldInterruptWindows(state);
+  drainUnansweredChoiceWindows(state);
   if (event.nextActorId !== undefined) {
     // Legacy automatic-scheduler event: complete the recorded transition by
     // starting the named next actor's turn immediately (historical replays
@@ -2950,8 +3142,22 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         const held = new Set<RuleMutation>();
         for (const window of [deferredWindow, saveWindow]) {
           if (!window) continue;
-          state.pendingInterrupts.push(window);
+          state.decisionWindows.push(window);
           for (const mutation of window.heldEffects ?? []) held.add(mutation);
+        }
+        // U13/U11: a planned flow that suspended at an `open-window`/`suspend`
+        // node opens its choice window here — the mutations-so-far apply now
+        // and the window gates the remaining flow nodes (answered later
+        // through ANSWER_DECISION_WINDOW, which resumes the flow).
+        if (event.window) {
+          openDecisionWindow(state, {
+            id: event.window.id,
+            kind: 'choice',
+            actorId: actor.id,
+            provenance: { sourceId: event.sourceId },
+            choice: event.window.choice,
+            resume: { remaining: event.window.resume.remaining, binder: event.window.resume.binder, continuationPoint: event.window.resume.continuationPoint },
+          });
         }
         const appliedMutations = held.size > 0 ? event.mutations.filter((mutation) => !held.has(mutation)) : event.mutations;
         // ICON p.157 Ace / p.156 Trick Shot: the armed next attack consumes the
@@ -3006,9 +3212,11 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           // before the damage that opened its window applies. The held damage
           // applies after the interrupt's own mutations — unless the interrupt
           // re-dealt damage to the held target (e.g. Righteous Disdain splits
-          // the held blow between two characters, consuming it).
-          if (window?.heldDamage && !event.mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === window.actorId)) {
-            applyHeldDamage(state, window.actorId, window.heldDamage);
+          // the held blow between two characters, consuming it). The held
+          // damage is the window's U12 held-result payload — never recomputed.
+          const heldDamage = window ? windowHeldDamage(window) : undefined;
+          if (heldDamage && !event.mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === window!.actorId)) {
+            applyHeldDamage(state, window!.actorId, heldDamage);
           }
           // ICON p.107 deferred-effect windows: the ability resolves after the
           // interrupt (Heroic Intervention repositions the stance user before
@@ -3016,7 +3224,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           // swaps and redirects the effects to the ally). The interrupts do
           // not cancel the ability, so its held effects now apply.
           if (window) {
-            if (window.heldSave) {
+            if (windowHeldSave(window)) {
               // ICON p.143 Sucker Punch: re-roll the save, keeping the second
               // result — the command layer's regenerated branch replaces the
               // held one; any other interrupt (or the turn boundary) lets the
@@ -3049,6 +3257,15 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         if (event.actionId !== 'combo' && hasComboVersion(event.sourceId)) {
           actor.resources.combo = Math.min(1, (actor.resources.combo ?? 0) + 1);
         }
+        break;
+      }
+      case 'DECISION_ANSWERED': {
+        // U13: apply the recorded answer mutations and close the window. The
+        // recorded decision is the authority — replay consumes it and never
+        // re-decides (a declined window applies nothing; the trigger was
+        // already consumed at window-open).
+        applyRuleMutations(state, event.mutations);
+        closeDecisionWindow(state, event.windowId);
         break;
       }
       case 'ACTOR_INTERACTED': {
@@ -3132,7 +3349,9 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         state.partyResolve = 0;
         // ICON p.107: open windows close at the encounter boundary; held damage
         // and held ability effects resolve (see `resolveHeldInterruptWindows`).
+        // U13: unanswered choice windows close as the recorded decline.
         resolveHeldInterruptWindows(state);
+        drainUnansweredChoiceWindows(state);
         for (const actor of Object.values(state.actors)) {
           actor.vigor = 0;
           actor.statuses = [];

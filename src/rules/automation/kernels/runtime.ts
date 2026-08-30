@@ -10,10 +10,11 @@ import { evaluatePredicate } from './evaluate-predicate.js';
 // The U11 FLOW authority (kernels/execute-flow.ts) owns ordered rule
 // execution against the PURE SIMULATED intermediate encounter state;
 // `executeRuleProgram` plans through it and this barrel re-exports it.
-import { FlowPlanner, effectsToMutations } from './execute-flow.js';
+import { FlowPlanner, effectsToMutations, type FlowWindowRequest } from './execute-flow.js';
 import type { SaveWindowKind, SaveWindowModifiers } from '../primitives/save-window.js';
 import type {
   RuleAction,
+  RuleChoice,
   RuleEffect,
   RuleExecutionContext,
   RuleExecutionResult,
@@ -116,12 +117,21 @@ export function rerollSaveMutations(
   return output;
 }
 
+/** The execution result, augmented with the U13 window request when the
+ * planned flow suspended at an `open-window`/`suspend` node (the window
+ * carries the remaining flow nodes + binder to resume through the same flow
+ * authority). The primitives surface stays kernel-free; this augmentation
+ * is the runtime (kernel) layer's return contract. */
+export interface RuleExecutionResultWithWindow extends RuleExecutionResult {
+  window?: { choice?: RuleChoice; remaining: FlowWindowRequest['remaining']; binder: FlowWindowRequest['binder']; continuationPoint: string };
+}
+
 export function executeRuleProgram(
   program: RuleProgram,
   context: RuleExecutionContext,
   resolvers: RuleResolverRegistry = {},
   options: { onlyTriggers?: ReadonlySet<string> } = {},
-): RuleExecutionResult {
+): RuleExecutionResultWithWindow {
   if (program.sourceId !== context.sourceId) throw new RuleProgramViolation('program.source', 'The execution context does not match this source program.');
   const action = program.actions.find(({ id, timing }) => id === context.actionId && timing === context.timing);
   if (!action) throw new RuleProgramViolation('program.action', `${context.actionId} is not available at ${context.timing}.`);
@@ -168,5 +178,8 @@ export function executeRuleProgram(
     // U10 integration: facts emitted by `emit-fact` flow nodes ride the
     // execution result so the event boundary can record them.
     ...(planner.facts.length > 0 ? { facts: planner.facts } : {}),
+    // U13/U11: a flow that suspended at an `open-window`/`suspend` node
+    // carries the window request (remaining nodes + binder) on the result.
+    ...(planner.window !== null ? { window: planner.window } : {}),
   };
 }

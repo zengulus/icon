@@ -57,6 +57,8 @@ function eventSummary(event: EncounterEvent, encounter: EncounterState): { title
       return { title: `${actorName(event.actorId)} cleared ${event.status}`, detail: '' };
     case 'ACTOR_INTERACTED':
       return { title: `${actorName(event.actorId)} interacted`, detail: event.description || `(${event.position.x}, ${event.position.y})` };
+    case 'DECISION_ANSWERED':
+      return { title: 'Decision window answered', detail: `${event.decision.key}=${String(event.decision.value)} · ${event.mutations.length} recorded mutation${event.mutations.length === 1 ? '' : 's'}` };
     case 'RULE_MUTATIONS_APPLIED': {
       const ability = findAbility(event.sourceId);
       const name = ability?.name ?? event.sourceId;

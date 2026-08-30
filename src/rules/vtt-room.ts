@@ -1,6 +1,7 @@
 import { applyEvents, createEncounter, executeCommand, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter, RuleViolation } from './encounter.js';
 import type { DiceSource } from './dice.js';
 import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type EncounterCommand, type EncounterEvent, type EncounterState, type Position } from './types.js';
+import { windowHeldDamage, windowHeldSave } from './automation/kernels/decision-window.js';
 import { durableAssetUrlProblem } from './durable-assets.js';
 
 /**
@@ -703,7 +704,7 @@ function strictEncounter(value: unknown): EncounterState {
   assertExactKeys(encounter, 'room.encounter', [
     'schemaVersion', 'rulesVersion', 'id', 'name', 'phase', 'grid', 'actors',
     'round', 'activeActorId', 'turnPhase', 'eligibleSide', 'lastSide', 'partyResolve', 'entities',
-    'terrainEffects', 'pendingInterrupts', 'continuations', 'revision', 'resolutionSerial', 'eventLog',
+    'terrainEffects', 'decisionWindows', 'continuations', 'revision', 'resolutionSerial', 'eventLog',
   ]);
   if (encounter.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) invalidSnapshot('room.encounter.schemaVersion', `must be ${ENCOUNTER_SCHEMA_VERSION}.`);
   if (encounter.rulesVersion !== RULES_VERSION) invalidSnapshot('room.encounter.rulesVersion', `must be ${RULES_VERSION}.`);
@@ -769,31 +770,35 @@ function strictEncounter(value: unknown): EncounterState {
     if (item.height !== null) strictInteger(item.height, `${effectPath}.height`, -100, 100);
     strictDuration(item.duration, `${effectPath}.duration`, true);
   });
-  if (!Array.isArray(encounter.pendingInterrupts) || encounter.pendingInterrupts.length > 10_000) invalidSnapshot('room.encounter.pendingInterrupts', 'contains too many interrupt windows.');
-  encounter.pendingInterrupts.forEach((window, index) => {
-    const windowPath = `room.encounter.pendingInterrupts[${index}]`;
+  if (!Array.isArray(encounter.decisionWindows) || encounter.decisionWindows.length > 10_000) invalidSnapshot('room.encounter.decisionWindows', 'contains too many windows.');
+  encounter.decisionWindows.forEach((window, index) => {
+    const windowPath = `room.encounter.decisionWindows[${index}]`;
     const item = strictRecord(window, windowPath);
-    assertExactKeys(item, windowPath, ['id', 'actorId', 'trigger', 'triggeredAt', 'order', 'heldDamage', 'heldEffects', 'retarget', 'heldSave', 'heldResult']);
+    assertExactKeys(item, windowPath, ['id', 'kind', 'actorId', 'triggeredAt', 'order', 'openedBy', 'provenance', 'heldPayload', 'heldEffects', 'retarget', 'retargetProgramId', 'choice', 'ordering', 'resume']);
     strictIdentifier(item.id, `${windowPath}.id`);
     const windowActorId = strictIdentifier(item.actorId, `${windowPath}.actorId`);
     if (!actors[windowActorId]) invalidSnapshot(`${windowPath}.actorId`, 'must identify a current actor.');
-    strictString(item.trigger, `${windowPath}.trigger`, 200);
+    strictEnum(item.kind, `${windowPath}.kind`, new Set(['when-damaged', 'defeated', 'save-rolled', 'uses-ability', 'area-inclusion', 'targeted-by-ability', 'choice']));
     strictInteger(item.triggeredAt, `${windowPath}.triggeredAt`, 0);
     strictInteger(item.order, `${windowPath}.order`, 0);
-    if (item.heldDamage !== undefined) {
-      const heldPath = `${windowPath}.heldDamage`;
-      const held = strictRecord(item.heldDamage, heldPath);
-      assertExactKeys(held, heldPath, ['amount', 'damageType', 'sourceActorId', 'sourceId', 'instance', 'delivery', 'ignoreCover'], ['bypassVigor', 'ignoreDodge', 'ignoreDefiance']);
-      strictFinite(held.amount, `${heldPath}.amount`, 0, 1_000_000);
-      strictEnum(held.damageType, `${heldPath}.damageType`, new Set(['normal', 'piercing', 'divine', 'sacrifice']));
-      if (held.bypassVigor !== undefined) strictBoolean(held.bypassVigor, `${heldPath}.bypassVigor`);
-      if (held.ignoreDodge !== undefined) strictBoolean(held.ignoreDodge, `${heldPath}.ignoreDodge`);
-      if (held.ignoreDefiance !== undefined) strictBoolean(held.ignoreDefiance, `${heldPath}.ignoreDefiance`);
-      strictIdentifier(held.sourceActorId, `${heldPath}.sourceActorId`);
-      strictIdentifier(held.sourceId, `${heldPath}.sourceId`);
-      strictInteger(held.instance, `${heldPath}.instance`, 0);
-      strictEnum(held.delivery, `${heldPath}.delivery`, new Set(['hit', 'miss', 'area', 'effect', 'save-success', 'terrain']));
-      strictBoolean(held.ignoreCover, `${heldPath}.ignoreCover`);
+    if (item.openedBy !== undefined) {
+      const openedByPath = `${windowPath}.openedBy`;
+      const openedBy = strictRecord(item.openedBy, openedByPath);
+      assertExactKeys(openedBy, openedByPath, ['factKind', 'instanceId']);
+      strictString(openedBy.factKind, `${openedByPath}.factKind`, 200);
+      if (openedBy.instanceId !== undefined) strictString(openedBy.instanceId, `${openedByPath}.instanceId`, 300);
+    }
+    if (item.provenance !== undefined) {
+      const provenancePath = `${windowPath}.provenance`;
+      const provenance = strictRecord(item.provenance, provenancePath);
+      assertExactKeys(provenance, provenancePath, ['sourceId', 'sourceActorId']);
+      if (provenance.sourceId !== undefined) strictIdentifier(provenance.sourceId, `${provenancePath}.sourceId`);
+      if (provenance.sourceActorId !== undefined) strictIdentifier(provenance.sourceActorId, `${provenancePath}.sourceActorId`);
+    }
+    if (item.heldPayload !== undefined) {
+      // The U12 held-result / deferred continuation is bounded JSON — the
+      // durable payload the window holds, never recomputed.
+      strictJson(item.heldPayload, `${windowPath}.heldPayload`);
     }
     if (item.heldEffects !== undefined) {
       // The held effects are the triggering ability's already-generated
@@ -811,38 +816,19 @@ function strictEncounter(value: unknown): EncounterState {
       strictIdentifier(retarget.fromActorId, `${retargetPath}.fromActorId`);
       strictIdentifier(retarget.toActorId, `${retargetPath}.toActorId`);
     }
-    if (item.heldSave !== undefined) {
-      // The held save carries the save effect's branch AST (bounded JSON, like
-      // the held effects it came from) plus identifiers.
-      const heldSavePath = `${windowPath}.heldSave`;
-      const heldSave = strictRecord(item.heldSave, heldSavePath);
-      assertExactKeys(heldSave, heldSavePath, ['targetId', 'boon', 'sourceId', 'sourceActorId', 'onSuccess', 'onFailure'], ['windowKind', 'windowId', 'statusId', 'modifiers', 'threshold']);
-      strictIdentifier(heldSave.targetId, `${heldSavePath}.targetId`);
-      strictFinite(heldSave.boon, `${heldSavePath}.boon`, -100, 100);
-      strictIdentifier(heldSave.sourceId, `${heldSavePath}.sourceId`);
-      strictIdentifier(heldSave.sourceActorId, `${heldSavePath}.sourceActorId`);
-      if (heldSave.windowKind !== undefined) strictEnum(heldSave.windowKind, `${heldSavePath}.windowKind`, new Set(['status-clear', 'cure-immediate', 'effect', 'movement']));
-      if (heldSave.windowId !== undefined) strictIdentifier(heldSave.windowId, `${heldSavePath}.windowId`);
-      if (heldSave.statusId !== undefined) strictIdentifier(heldSave.statusId, `${heldSavePath}.statusId`);
-      if (heldSave.modifiers !== undefined) {
-        const modifiersPath = `${heldSavePath}.modifiers`;
-        const modifiers = strictRecord(heldSave.modifiers, modifiersPath);
-        assertExactKeys(modifiers, modifiersPath, ['sourceModifier', 'saveBoon', 'saveCurse', 'blessing']);
-        strictFinite(modifiers.sourceModifier, `${modifiersPath}.sourceModifier`, -100, 100);
-        strictFinite(modifiers.saveBoon, `${modifiersPath}.saveBoon`, -100, 100);
-        strictFinite(modifiers.saveCurse, `${modifiersPath}.saveCurse`, -100, 100);
-        strictBoolean(modifiers.blessing, `${modifiersPath}.blessing`);
-      }
-      if (heldSave.threshold !== undefined) strictFinite(heldSave.threshold, `${heldSavePath}.threshold`, 1, 100);
-      for (const branch of ['onSuccess', 'onFailure'] as const) {
-        if (!Array.isArray(heldSave[branch]) || heldSave[branch]!.length > 1_000) invalidSnapshot(`${heldSavePath}.${branch}`, 'contains too many save effects.');
-        heldSave[branch]!.forEach((effect, effectIndex) => strictJson(effect, `${heldSavePath}.${branch}[${effectIndex}]`));
-      }
-    }
-    if (item.heldResult !== undefined) {
-      // The U12 held-result continuation is bounded JSON (the same durable
-      // surface as the held save / held effects it rides beside).
-      strictJson(item.heldResult, `${windowPath}.heldResult`);
+    if (item.retargetProgramId !== undefined) strictIdentifier(item.retargetProgramId, `${windowPath}.retargetProgramId`);
+    if (item.choice !== undefined) strictJson(item.choice, `${windowPath}.choice`);
+    if (item.ordering !== undefined) strictJson(item.ordering, `${windowPath}.ordering`);
+    if (item.resume !== undefined) {
+      // The U11 flow suspension: remaining flow nodes + binder are bounded
+      // JSON (the same durable surface as held effects / the event history).
+      const resumePath = `${windowPath}.resume`;
+      const resume = strictRecord(item.resume, resumePath);
+      assertExactKeys(resume, resumePath, ['remaining', 'binder', 'continuationPoint']);
+      if (!Array.isArray(resume.remaining) || resume.remaining.length > 1_000) invalidSnapshot(`${resumePath}.remaining`, 'contains too many flow nodes.');
+      resume.remaining.forEach((node, nodeIndex) => strictJson(node, `${resumePath}.remaining[${nodeIndex}]`));
+      strictJson(resume.binder, `${resumePath}.binder`);
+      strictString(resume.continuationPoint, `${resumePath}.continuationPoint`, 200);
     }
   });
   // U12 (schema 8): the durable armed-continuation collection — bounded JSON
@@ -1158,20 +1144,30 @@ export function roomVisibleToRole(room: VttRoomState, role: 'gm' | 'player'): Vt
     .filter(([, entity]) => entity.ownerId !== null && !hiddenActorIds.has(entity.ownerId)));
   encounter.terrainEffects = encounter.terrainEffects
     .filter((effect) => !isHiddenMechanic(effect.ownerId, effect.sourceId));
-  // A hidden actor's interrupt windows are as sensitive as the actor record.
-  encounter.pendingInterrupts = encounter.pendingInterrupts
+  // A hidden actor's windows are as sensitive as the actor record.
+  encounter.decisionWindows = encounter.decisionWindows
     .filter((window) => !hiddenActorIds.has(window.actorId))
     // Deferred-trigger windows hold the triggering ability's mutations, which
-    // name the source; a Masquerade redirect names the swap partner. Render
-    // stays authoritative; the player projection withholds any reference to a
+    // name the source; a Masquerade redirect names the swap partner; the U12
+    // held payload names the source/target of the held result. Render stays
+    // authoritative; the player projection withholds any reference to a
     // hidden actor rather than leak its id.
-    .map((window) => ({
-      ...window,
-      heldEffects: window.heldEffects?.filter((effect) => !hiddenActorIds.has((effect as { sourceActorId?: string }).sourceActorId ?? '')
-        && !hiddenSourceIds.has((effect as { sourceId?: string }).sourceId ?? '')) || undefined,
-      retarget: window.retarget && !hiddenActorIds.has(window.retarget.fromActorId) && !hiddenActorIds.has(window.retarget.toActorId) ? window.retarget : undefined,
-      heldSave: window.heldSave && !hiddenActorIds.has(window.heldSave.targetId) && !hiddenActorIds.has(window.heldSave.sourceActorId) ? window.heldSave : undefined,
-    }));
+    .map((window) => {
+      const heldSave = windowHeldSave(window);
+      const heldDamage = windowHeldDamage(window);
+      const payloadHidden = heldSave
+        ? hiddenActorIds.has(heldSave.targetId) || hiddenActorIds.has(heldSave.sourceActorId)
+        : heldDamage
+          ? hiddenActorIds.has(heldDamage.sourceActorId)
+          : false;
+      return {
+        ...window,
+        heldEffects: window.heldEffects?.filter((effect) => !hiddenActorIds.has((effect as { sourceActorId?: string }).sourceActorId ?? '')
+          && !hiddenSourceIds.has((effect as { sourceId?: string }).sourceId ?? '')) || undefined,
+        retarget: window.retarget && !hiddenActorIds.has(window.retarget.fromActorId) && !hiddenActorIds.has(window.retarget.toActorId) ? window.retarget : undefined,
+        heldPayload: window.heldPayload && !payloadHidden ? window.heldPayload : undefined,
+      };
+    });
   // A visible actor can carry mechanics created by another actor. Keep no
   // owner reference for a GM-hidden source in the player projection: those
   // IDs are as sensitive as the hidden actor record itself. Filtering is

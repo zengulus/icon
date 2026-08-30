@@ -1,7 +1,7 @@
 import type { EncounterState } from '../../types.js';
 import { applyDeterminedEncounterDamage, determineAndApplyEncounterDamage, type EncounterDamageIntent } from './encounter-adapter.js';
 import type { AppliedDamage, DamageDelivery } from '../primitives/damage-resolution.js';
-import { openDamageWindowFromLedger } from './trigger-window.js';
+import { openDamageWindowFromLedger } from './decision-window.js';
 
 /**
  * The durable damage ledger (ICON pp.93–107).

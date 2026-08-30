@@ -109,6 +109,15 @@ describe('T5b U12 — DEFERRED RULE resolves against THEN-CURRENT state', () => 
 
     const foeT = foeTurn(armed, foe.id).state;
     const ended = executeCommand(foeT, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // U13: the trigger opens the "may rush" choice window (the mark was
+    // consumed at window-open; nothing moved yet — the engine never chooses
+    // "yes"). Accepting resolves the deferred rule against THEN-CURRENT state.
+    const rushWindow = ended.decisionWindows.find((candidate) => candidate.kind === 'choice');
+    expect(rushWindow).toBeDefined();
+    expect(rushWindow!.choice!.key).toBe('rush');
+    expect(ended.actors[hero.id].position).toEqual({ x: 3, y: 1 });
+    expect(ended.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
     // From the LIVE position (3,1) the hero is already adjacent: the rush
     // cannot step INTO the foe's occupied space, so it travels 0, no shove
     // follows (the shove travels "that many spaces" = the rush's travel), and
@@ -117,9 +126,10 @@ describe('T5b U12 — DEFERRED RULE resolves against THEN-CURRENT state', () => 
     // blocked), shoving the foe 2 spaces (to (6,1)) for 4 damage — an
     // observably different outcome. The resolved state proves the deferred
     // rule read the LIVE position, never the arming snapshot.
-    expect(ended.actors[hero.id].position).toEqual({ x: 3, y: 1 });
-    expect(ended.actors[foe.id].position).toEqual({ x: 4, y: 1 });
-    expect(ended.actors[foe.id].hp).toBe(30); // 32 - (rushed 0 + 2)
+    expect(answered.state.actors[hero.id].position).toEqual({ x: 3, y: 1 });
+    expect(answered.state.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(answered.state.actors[foe.id].hp).toBe(30); // 32 - (rushed 0 + 2)
+    expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 
   it('CAPTURED value stays captured: a captured position is a literal that later movement never rewrites', () => {
@@ -185,11 +195,18 @@ describe('T5b U12 — DEFERRED RULE resolves against THEN-CURRENT state', () => 
     // deferred rule must observe the mutation because it re-resolves.
     foeT.actors[hero.id].hp = 20;
     const ended = executeCommand(foeT, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // U13: the trigger opens the "may rush" choice window; the decision is
+    // recorded at the command boundary and the deferred rule then resolves
+    // against the LIVE actor object — never a stale snapshot.
+    const rushWindow = ended.decisionWindows.find((candidate) => candidate.kind === 'choice');
+    expect(rushWindow).toBeDefined();
+    const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
     // The rush resolved with the live actor (same position); the mark was
     // consumed and the foe took the delayed damage regardless of the owner's
     // intervening hp change — the resolver read the live object, not a copy.
-    expect(ended.actors[hero.id].position).toEqual({ x: 3, y: 1 });
-    expect(ended.actors[foe.id].marks).toEqual([]);
+    expect(answered.state.actors[hero.id].position).toEqual({ x: 3, y: 1 });
+    expect(answered.state.actors[foe.id].marks).toEqual([]);
+    expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 });
 
@@ -204,11 +221,11 @@ describe('T5b U12 — HELD RESULT is immutable', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
     state = startEncounterTo(state, hero.id);
     const deferred = applyEvents(state, [saveAbilityEvent(hero.id, foe.id)]);
-    const window = deferred.pendingInterrupts.find((candidate) => candidate.trigger === 'save-rolled');
+    const window = deferred.decisionWindows.find((candidate) => candidate.kind === 'save-rolled');
     expect(window).toBeDefined();
     // The U12 held-result record rides the window: the ORIGINAL determined
     // save — roll 12, boon 0, success true — is captured as a durable literal.
-    const held = window!.heldResult;
+    const held = window!.heldPayload;
     expect(held).toBeDefined();
     expect(held!.payload.kind).toBe('held-result');
     if (held!.payload.kind === 'held-result') {
@@ -228,7 +245,7 @@ describe('T5b U12 — HELD RESULT is immutable', () => {
     // never rerolled. (The hero is the active actor; end its turn to drain.)
     const ended = endTurnTo(deferred, foe.id, scriptedDice());
     expect(ended.actors[foe.id].hp).toBe(30);
-    expect(ended.pendingInterrupts).toHaveLength(0);
+    expect(ended.decisionWindows).toHaveLength(0);
   });
 
   it('Sucker Punch: a reroll is a SEPARATELY recorded result caused by the interrupt — the original held result is only replaced by it', () => {
@@ -241,7 +258,7 @@ describe('T5b U12 — HELD RESULT is immutable', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
     state = startEncounterTo(state, hero.id);
     const deferred = applyEvents(state, [saveAbilityEvent(hero.id, foe.id)]);
-    const before = deferred.pendingInterrupts.find((candidate) => candidate.trigger === 'save-rolled')!.heldResult!;
+    const before = deferred.decisionWindows.find((candidate) => candidate.kind === 'save-rolled')!.heldPayload!;
     // The interrupt executes with a NEW roll (3) that FAILS: the held 2-damage
     // success branch is replaced by the 8-damage failure branch — a new
     // recorded result, not a recomputation of the original.
@@ -261,7 +278,7 @@ describe('T5b U12 — HELD RESULT is immutable', () => {
     }
     // The save-rolled window is closed (the reroll's own 8 damage may open a
     // fresh when-damaged window — that is a NEW result, not the held one).
-    expect(interrupt.state.pendingInterrupts.some((w) => w.trigger === 'save-rolled')).toBe(false);
+    expect(interrupt.state.decisionWindows.some((w) => w.kind === 'save-rolled')).toBe(false);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
   });
 

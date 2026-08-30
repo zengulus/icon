@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS, EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
+import { isInterruptWindowKind, windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
 import { ABILITIES, JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
@@ -226,7 +227,7 @@ describe('Bastion ability automation (p.122–124)', () => {
     // immediately, the damage is held in a uses-ability window.
     const deferred = applyEvents(stanced, [foeAbilityDamage(foe.id, ally.id, 6)]);
     expect(deferred.actors[ally.id].hp).toBe(40); // held, not applied
-    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'uses-ability');
+    const window = deferred.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'uses-ability');
     expect(window).toBeDefined();
     expect(window!.heldEffects).toHaveLength(1); // the cost was separated out
     expect(window!.heldEffects![0]).toMatchObject({ kind: 'damage', actorId: ally.id, amount: 6 });
@@ -245,7 +246,7 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(interrupt.state.actors[hero.id].position).toEqual({ x: 3, y: 2 });
     expect(interrupt.state.actors[foe.id].hp).toBe(30); // 32 - 2 from the interrupt's return
     expect(interrupt.state.actors[ally.id].hp).toBe(36); // 40 - (6 normal - armor 2), the held effects
-    expect(interrupt.state.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'uses-ability')).toBe(false);
+    expect(interrupt.state.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'uses-ability')).toBe(false);
     expect(interrupt.state.actors[hero.id].interruptUses['bastion:endless-battlement']).toBe(1);
     expect(interrupt.state.actors[hero.id].interruptUsedThisTurn).toBe(true);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
@@ -256,11 +257,11 @@ describe('Bastion ability automation (p.122–124)', () => {
     const stanced = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:endless-battlement', targetIds: [ally.id] }, scriptedDice()).state;
     const deferred = applyEvents(stanced, [foeAbilityDamage(foe.id, ally.id, 6)]);
     expect(deferred.actors[ally.id].hp).toBe(40);
-    expect(deferred.pendingInterrupts.some((candidate) => candidate.trigger === 'uses-ability')).toBe(true);
+    expect(deferred.decisionWindows.some((candidate) => candidate.kind === 'uses-ability')).toBe(true);
 
     const ended = endTurnTo(deferred, foe.id, scriptedDice());
     expect(ended.actors[ally.id].hp).toBe(36); // the held effects resolved at the boundary
-    expect(ended.pendingInterrupts).toHaveLength(0);
+    expect(ended.decisionWindows).toHaveLength(0);
   });
 
   it('Heroic Intervention: no window opens when the interrupt was already used this turn', () => {
@@ -269,7 +270,7 @@ describe('Bastion ability automation (p.122–124)', () => {
     stanced.actors[hero.id].interruptUsedThisTurn = true;
     const resolved = applyEvents(stanced, [foeAbilityDamage(foe.id, ally.id, 6)]);
     expect(resolved.actors[ally.id].hp).toBe(36); // applied immediately
-    expect(resolved.pendingInterrupts.some((candidate) => candidate.trigger === 'uses-ability')).toBe(false);
+    expect(resolved.decisionWindows.some((candidate) => candidate.kind === 'uses-ability')).toBe(false);
   });
 
   it('Perseus: holds an allied area effect that includes the user until the interrupt grants immunity (p.123)', () => {
@@ -289,7 +290,7 @@ describe('Bastion ability automation (p.122–124)', () => {
     }]);
     expect(deferred.actors[hero.id].hp).toBe(40); // held: the whole area effect has not resolved
     expect(deferred.actors[foe.id].hp).toBe(32);
-    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'area-inclusion');
+    const window = deferred.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'area-inclusion');
     expect(window).toBeDefined();
     expect(window!.heldEffects).toHaveLength(2);
 
@@ -309,7 +310,7 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(interrupt.state.actors[hero.id].hp).toBe(40); // immune to the held blast
     expect(interrupt.state.actors[foe.id].hp).toBe(24); // 32 - 8, the held area resolved
     expect(interrupt.state.actors[hero.id].interruptUses['bastion:perseus']).toBe(1);
-    expect(interrupt.state.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'area-inclusion')).toBe(false);
+    expect(interrupt.state.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'area-inclusion')).toBe(false);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
   });
 
@@ -398,10 +399,30 @@ describe('Bastion ability automation (p.122–124)', () => {
 
     const foeTurn = executeCommand(afterUse, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
     const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // U13: "you may rush 4" is a genuine decision — the window opens at the
+    // marked foe's turn end (the mark is consumed either way; nothing has
+    // moved yet) and the user answers it. The engine never chooses "yes".
     expect(ended.actors[foe.id].marks).toEqual([]);
-    expect(ended.actors[hero.id].position).toEqual({ x: 3, y: 1 });
-    expect(ended.actors[foe.id].position).toEqual({ x: 6, y: 1 });
-    expect(ended.actors[foe.id].hp).toBe(28);
+    const rushWindow = ended.decisionWindows.find((window) => window.kind === 'choice');
+    expect(rushWindow).toBeDefined();
+    expect(rushWindow!.choice!.key).toBe('rush');
+    expect(ended.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(ended.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(ended.actors[foe.id].hp).toBe(32);
+    // Accepting records the decision at the command boundary and resolves the
+    // rush against then-current state.
+    const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
+    expect(answered.state.actors[hero.id].position).toEqual({ x: 3, y: 1 });
+    expect(answered.state.actors[foe.id].position).toEqual({ x: 6, y: 1 });
+    expect(answered.state.actors[foe.id].hp).toBe(28);
+    // The rush's own damage opened a when-damaged interrupt window for the
+    // foe (the blow was not HELD — the foe has no when-damaged interrupt, so
+    // it applied directly); the boundary drain closes it at the next turn end.
+    const residue = answered.state.decisionWindows.filter((window) => isInterruptWindowKind(window.kind));
+    expect(residue).toHaveLength(1);
+    expect(residue[0]).toMatchObject({ kind: 'when-damaged', actorId: foe.id });
+    expect(windowHeldDamage(residue[0])).toBeUndefined();
+    expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 
   it('Great Giorgios determines its delayed raw damage through the shared damage kernel', () => {
@@ -409,13 +430,16 @@ describe('Bastion ability automation (p.122–124)', () => {
     state.actors[foe.id].armor = 2;
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
     const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
-    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
-
-    // The rush travels two spaces, so the source damage is 4. Its delayed
-    // lifecycle hook no longer writes that raw value directly: armor reduces
-    // it through the common p.93 determination before application.
-    expect(ended.state.actors[foe.id].hp).toBe(30);
-    expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // The window opened at the foe's turn end (the mark is gone); accepting
+    // the "may rush" resolves the delay. The rush travels two spaces, so the
+    // source damage is 4: armor reduces it through the common p.93
+    // determination before application.
+    const rushWindow = ended.decisionWindows.find((window) => window.kind === 'choice');
+    expect(rushWindow).toBeDefined();
+    const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
+    expect(answered.state.actors[foe.id].hp).toBe(30);
+    expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 
   it('Great Giorgios routes its delayed self-rush through the Slashed ability-move gate', () => {
@@ -424,13 +448,16 @@ describe('Bastion ability automation (p.122–124)', () => {
 
     const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice());
     const foeTurn = executeCommand(used.state, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
-    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
-
-    // Great Giorgios's delayed rush is still a self ability move. The single
-    // raw Slashed instance is determined by the shared kernel, so Armor 2
-    // turns its 4 normal damage into exactly 2 applied HP damage.
-    expect(ended.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
-    expect(applyEvents(foeTurn, ended.events)).toEqual(ended.state);
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    // Accepting the "may rush" decision resolves the delayed rush. Great
+    // Giorgios's delayed rush is still a self ability move: the single raw
+    // Slashed instance is determined by the shared kernel, so Armor 2 turns
+    // its 4 normal damage into exactly 2 applied HP damage.
+    const rushWindow = ended.decisionWindows.find((window) => window.kind === 'choice');
+    expect(rushWindow).toBeDefined();
+    const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
+    expect(answered.state.actors[hero.id]).toMatchObject({ hp: 38, slashedTriggeredThisTurn: true });
+    expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 
   it('Great Giorgios: Collide adds hatred of the user', () => {

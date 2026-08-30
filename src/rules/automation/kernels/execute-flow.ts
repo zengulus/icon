@@ -76,6 +76,7 @@ import { resolveCureMutations } from '../primitives/status-saves.js';
 import { RuleProgramViolation } from './violations.js';
 import type {
   Fact,
+  RuleChoice,
   RuleEffect,
   RuleExecutionContext,
   RuleMutation,
@@ -109,9 +110,18 @@ import { consumeTraitAttackModifiers, consumedTraitModifier } from './attack-mod
  *   flow. The fact rides the flow result and the event's fact list; the
  *   boundary's global id renumbering (U12/U13 work) owns the final
  *   `instanceId` allocation when content starts emitting facts.
+ * - `open-window` (U13) — suspend the flow and open a U13 decision window
+ *   carrying the recorded U4 choice spec + the REMAINING flow nodes. The
+ *   flow's mutations-so-far are the durable pre-window payload; the window
+ *   gates the rest (FLOW → U13 window → U12 held/deferred continuation →
+ *   recorded answer → resume FLOW through the same planner).
+ * - `suspend` (U13) — suspend the flow at a pure resume gate (a window with
+ *   no choice of its own; the answer is the recorded `resume` decision).
  *
- * `open-window` (U13) and `suspend` (U12) are deliberately NOT present;
- * they land after those authorities exist.
+ * The suspension carries NO ad-hoc continuation record: the remaining
+ * nodes + the current binder ARE the continuation, stored on the U13 window
+ * record (`DecisionWindowRecord.resume`) and re-executed by the flow
+ * planner when the window is answered.
  */
 export type FlowNode =
   | { kind: 'sequence'; nodes: FlowNode[] }
@@ -121,13 +131,31 @@ export type FlowNode =
   | { kind: 'repeat'; times: RuleNumber; nodes: FlowNode[] }
   | { kind: 'for-each'; items: readonly Reference<'actor'>[]; bindName: string; nodes: FlowNode[] }
   | { kind: 'invoke'; nodes: FlowNode[] }
-  | { kind: 'emit-fact'; fact: Fact };
+  | { kind: 'emit-fact'; fact: Fact }
+  | { kind: 'open-window'; choice: RuleChoice; continuationPoint?: string }
+  | { kind: 'suspend'; continuationPoint?: string };
+
+/** The U13 window request a suspended flow produces: the recorded U4 choice
+ * spec (absent for a pure `suspend` gate), the REMAINING flow nodes, and the
+ * current U1 binder — everything the window needs to resume the flow
+ * through this same authority when answered. JSON-clean and replay-safe. */
+export interface FlowWindowRequest {
+  /** The U4 choice spec the window offers; absent for a pure resume gate. */
+  choice?: RuleChoice;
+  remaining: FlowNode[];
+  binder: Binder;
+  /** The program/action-relative point the flow resumed from. */
+  continuationPoint: string;
+}
 
 /** The result of a flow execution: the durable ordered mutations (the event
- * payload) plus any U10 facts emitted by `emit-fact` nodes. */
+ * payload), any U10 facts emitted by `emit-fact` nodes, and — when the flow
+ * suspended at an `open-window`/`suspend` node — the U13 window request
+ * carrying the remaining nodes. */
 export interface FlowExecution {
   mutations: RuleMutation[];
   facts: Fact[];
+  window?: FlowWindowRequest | null;
 }
 
 /**
@@ -151,6 +179,11 @@ export class FlowPlanner {
   private binder: Binder;
   readonly mutations: RuleMutation[] = [];
   readonly facts: Fact[] = [];
+  /** The U13 window request once the flow suspends; null while unsuspended. */
+  window: FlowWindowRequest | null = null;
+  /** The enclosing node lists currently being walked (for remaining-node
+   * capture when a nested node suspends). */
+  private readonly stack: { list: readonly FlowNode[]; index: number }[] = [];
 
   constructor(context: RuleExecutionContext) {
     this.base = context;
@@ -201,8 +234,14 @@ export class FlowPlanner {
     for (const mutation of mutations) this.emit(mutation);
   }
 
+  /** Whether the flow has suspended (no further nodes execute). */
+  get suspended(): boolean {
+    return this.window !== null;
+  }
+
   /** Run one flow node. */
   node(node: FlowNode): void {
+    if (this.suspended) return;
     switch (node.kind) {
       case 'sequence':
       case 'invoke':
@@ -237,12 +276,46 @@ export class FlowPlanner {
       case 'emit-fact':
         this.facts.push(node.fact);
         break;
+      case 'open-window':
+      case 'suspend':
+        this.suspendAt(node.kind === 'open-window' ? node.choice : undefined, node.continuationPoint);
+        break;
     }
   }
 
-  /** Run an ordered list of flow nodes against the shared simulation. */
+  /** Suspend the flow at the current point: capture the remaining nodes from
+   * the walk stack (the rest of the current list PLUS the remaining parts of
+   * every enclosing list — the ENTIRE un-executed execution, never just the
+   * innermost tail), record the window request, and stop. */
+  private suspendAt(choice: RuleChoice | undefined, continuationPoint?: string): void {
+    const remaining: FlowNode[] = [];
+    for (let frame = this.stack.length - 1; frame >= 0; frame -= 1) {
+      const current = this.stack[frame]!;
+      remaining.push(...current.list.slice(current.index + 1));
+    }
+    this.window = {
+      ...(choice !== undefined ? { choice } : {}),
+      remaining,
+      binder: this.binder,
+      continuationPoint: continuationPoint ?? 'suspended',
+    };
+  }
+
+  /** Run an ordered list of flow nodes against the shared simulation. Each
+   * list frames itself on the walk stack so a suspension inside a nested
+   * list captures the whole remaining execution. */
   nodes(nodes: readonly FlowNode[]): void {
-    for (const node of nodes) this.node(node);
+    if (this.suspended) return;
+    const frame = { list: nodes, index: -1 };
+    this.stack.push(frame);
+    try {
+      for (let index = 0; index < nodes.length && !this.suspended; index += 1) {
+        frame.index = index;
+        this.node(nodes[index]!);
+      }
+    } finally {
+      this.stack.pop();
+    }
   }
 
   /** Run one ordered list of existing `RuleEffect`s (the RuleProgram/RuleStep
@@ -437,7 +510,48 @@ export function executeFlow(
   const planner = new FlowPlanner(context);
   if (options.preEmitted) planner.absorb(options.preEmitted);
   planner.nodes(nodes);
-  return { mutations: planner.mutations, facts: planner.facts };
+  return {
+    mutations: planner.mutations,
+    facts: planner.facts,
+    ...(planner.window !== null ? { window: planner.window } : {}),
+  };
+}
+
+/** Resume a suspended flow: re-run the REMAINING nodes through the SAME
+ * flow authority against THEN-CURRENT state, with the recorded U1 binder
+ * restored and the recorded decision available through the context input
+ * (the U4 choice surface). The resumed mutations are the new durable event
+ * payload — replay consumes them and never re-plans. The resumed flow may
+ * itself suspend again (nested windows) or complete; the returned window
+ * request, when present, is the next suspension. */
+export function executeFlowResume(
+  resume: { remaining: FlowNode[]; binder: Binder },
+  context: RuleExecutionContext,
+  options: { decision?: { key: string; value: string | number | boolean }; preEmitted?: readonly RuleMutation[] } = {},
+): FlowExecution {
+  // The recorded U4 decision rides the input surface under the choice key
+  // (the same seam every other recorded choice consumes — booleans for
+  // boolean choices, options for option choices, etc.).
+  let input = context.input;
+  if (options.decision) {
+    const key = options.decision.key;
+    const value = options.decision.value;
+    if (typeof value === 'boolean') input = { ...input, booleans: { ...(input.booleans ?? {}), [key]: value } };
+    else if (typeof value === 'number') input = { ...input, numbers: { ...(input.numbers ?? {}), [key]: value } };
+    else input = { ...input, options: { ...(input.options ?? {}), [key]: value } };
+  }
+  // Re-run the remaining nodes through the SAME flow authority against
+  // THEN-CURRENT state, with the recorded binder restored and the recorded
+  // decision on the input surface. The simulation clones state, so the
+  // augmented context is safe to pass at construction.
+  const planner = new FlowPlanner({ ...context, boundNames: resume.binder, input });
+  if (options.preEmitted) planner.absorb(options.preEmitted);
+  planner.nodes(resume.remaining);
+  return {
+    mutations: planner.mutations,
+    facts: planner.facts,
+    ...(planner.window !== null ? { window: planner.window } : {}),
+  };
 }
 
 /** The reducer-facing projection of the same plan: emit a list of existing

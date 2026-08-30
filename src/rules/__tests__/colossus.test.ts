@@ -1,4 +1,5 @@
 import '../automation/content/registry.js';
+import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
@@ -250,9 +251,9 @@ describe('Colossus ability automation (p.133–138)', () => {
     }]);
     expect(held.actors[hero.id].hp).toBe(2); // held, not defeated yet
     expect(held.actors[hero.id].defeated).toBe(false);
-    const window = held.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'defeated');
+    const window = held.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'defeated');
     expect(window).toBeDefined();
-    expect(window!.heldDamage).toMatchObject({ amount: 8, sourceActorId: foe.id });
+    expect(windowHeldDamage(window!)).toMatchObject({ amount: 8, sourceActorId: foe.id });
 
     // Boiling Blood resolves before the blow lands: the hero fights on, and
     // the held lethal blow is clamped to 1 hp by the newly armed defy-death.
@@ -296,8 +297,8 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(blown.actors[hero.id]).toMatchObject({ hp: 1, defeated: false });
     expect(blown.actors[hero.id].conditions.some(({ id }) => id === 'defiance')).toBe(false);
     expect(blown.actors[hero.id].ruleState['damage-immune']).toBe(true);
-    expect(blown.pendingInterrupts.some((window) => window.actorId === hero.id && window.trigger === 'defeated')).toBe(false);
-    expect(blown.pendingInterrupts.every((window) => !window.heldDamage)).toBe(true); // nothing was held
+    expect(blown.decisionWindows.some((window) => window.actorId === hero.id && window.kind === 'defeated')).toBe(false);
+    expect(blown.decisionWindows.every((window) => !windowHeldDamage(window))).toBe(true); // nothing was held
   });
 
   it('Boiling Blood: a defy-death hero\'s lethal blow never opens a defeated window (p.138 floor)', () => {
@@ -324,8 +325,8 @@ describe('Colossus ability automation (p.133–138)', () => {
       mutations: [{ kind: 'damage', sourceId: 'fixture:foe-blow', sourceActorId: foe.id, actorId: hero.id, amount: 10, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: false }],
     }]);
     expect(blown.actors[hero.id]).toMatchObject({ hp: 1, defeated: false });
-    expect(blown.pendingInterrupts.some((window) => window.actorId === hero.id && window.trigger === 'defeated')).toBe(false);
-    expect(blown.pendingInterrupts.every((window) => !window.heldDamage)).toBe(true);
+    expect(blown.decisionWindows.some((window) => window.actorId === hero.id && window.kind === 'defeated')).toBe(false);
+    expect(blown.decisionWindows.every((window) => !windowHeldDamage(window))).toBe(true);
   });
 
 });

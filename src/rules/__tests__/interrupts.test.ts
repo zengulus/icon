@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, orderInterrupts } from '../encounter.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterEvent, EncounterPendingInterrupt, EncounterState, Position } from '../types.js';
+import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
@@ -56,8 +57,8 @@ describe('interrupt order (p.107)', () => {
   it('orders nested interrupts most-recently-triggered first (LIFO)', () => {
     const { state, hero, foe } = interruptEncounter({ second: null });
     const pending: EncounterPendingInterrupt[] = [
-      { id: 'older', actorId: foe.id, trigger: 'when-damaged', triggeredAt: 5, order: 0 },
-      { id: 'newer', actorId: hero.id, trigger: 'when-damaged', triggeredAt: 9, order: 0 },
+      { id: 'older', actorId: foe.id, kind: 'when-damaged', triggeredAt: 5, order: 0 },
+      { id: 'newer', actorId: hero.id, kind: 'when-damaged', triggeredAt: 9, order: 0 },
     ];
     expect(orderInterrupts(state, hero.id, pending).map(({ id }) => id)).toEqual(['newer', 'older']);
   });
@@ -65,8 +66,8 @@ describe('interrupt order (p.107)', () => {
   it('orders simultaneous same-trigger interrupts in turn order (turn character’s side first)', () => {
     const { state, hero, foe } = interruptEncounter({ second: null });
     const pending: EncounterPendingInterrupt[] = [
-      { id: 'foe-window', actorId: foe.id, trigger: 'when-damaged', triggeredAt: 7, order: 0 },
-      { id: 'hero-window', actorId: hero.id, trigger: 'when-damaged', triggeredAt: 7, order: 1 },
+      { id: 'foe-window', actorId: foe.id, kind: 'when-damaged', triggeredAt: 7, order: 0 },
+      { id: 'hero-window', actorId: hero.id, kind: 'when-damaged', triggeredAt: 7, order: 1 },
     ];
     // Same trigger, same revision: the turn character's side acts first.
     expect(orderInterrupts(state, hero.id, pending).map(({ id }) => id)).toEqual(['hero-window', 'foe-window']);
@@ -78,16 +79,16 @@ describe('interrupt order (p.107)', () => {
     // The hero has an unused when-damaged interrupt (Righteous Disdain), so
     // the determined damage (4 normal - 2 armor) is held unapplied.
     expect(damaged.actors[hero.id].hp).toBe(40);
-    const heroWindow = damaged.pendingInterrupts.find((window) => window.actorId === hero.id && window.trigger === 'when-damaged');
+    const heroWindow = damaged.decisionWindows.find((window) => window.actorId === hero.id && window.kind === 'when-damaged');
     expect(heroWindow).toBeDefined();
-    expect(heroWindow!.heldDamage).toMatchObject({ amount: 2, damageType: 'normal', sourceActorId: foe.id });
-    expect(damaged.pendingInterrupts.every((window) => window.triggeredAt <= damaged.revision)).toBe(true);
+    expect(windowHeldDamage(heroWindow!)).toMatchObject({ amount: 2, damageType: 'normal', sourceActorId: foe.id });
+    expect(damaged.decisionWindows.every((window) => window.triggeredAt <= damaged.revision)).toBe(true);
 
     // An interrupt answers the most recently triggered window (LIFO); because
     // Catapult does not re-deal damage to the held target, the held damage
     // applies after its own mutations resolve.
     const interrupt = executeCommand(damaged, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally!.id] }, scriptedDice());
-    expect(interrupt.state.pendingInterrupts.some((window) => window.actorId === hero.id)).toBe(false); // LIFO pop
+    expect(interrupt.state.decisionWindows.some((window) => window.actorId === hero.id)).toBe(false); // LIFO pop
     expect(interrupt.state.actors[hero.id].hp).toBe(38); // 40 - held 2, applied after the interrupt
     expect(interrupt.state.actors[hero.id].interruptUses['bastion:catapult']).toBe(1);
     expect(applyEvents(damaged, interrupt.events)).toEqual(interrupt.state);
@@ -97,13 +98,13 @@ describe('interrupt order (p.107)', () => {
     const { state, hero, foe, ally } = interruptEncounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
     const first = applyEvents(state, [damageEvent(foe.id, hero.id, 4)]);
     const second = applyEvents(first, [damageEvent(foe.id, hero.id, 4)]);
-    const heroWindows = second.pendingInterrupts.filter((window) => window.actorId === hero.id);
+    const heroWindows = second.decisionWindows.filter((window) => window.actorId === hero.id);
     expect(heroWindows).toHaveLength(2);
     expect(heroWindows[1]!.triggeredAt).toBeGreaterThan(heroWindows[0]!.triggeredAt);
     expect(second.actors[hero.id].hp).toBe(40); // both blows still held
 
     const interrupt = executeCommand(second, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally!.id] }, scriptedDice());
-    const remaining = interrupt.state.pendingInterrupts.filter((window) => window.actorId === hero.id);
+    const remaining = interrupt.state.decisionWindows.filter((window) => window.actorId === hero.id);
     expect(remaining).toHaveLength(1);
     expect(remaining[0]!.triggeredAt).toBe(heroWindows[0]!.triggeredAt); // the older window remains
     expect(interrupt.state.actors[hero.id].hp).toBe(38); // only the newest held 2 applied
@@ -115,7 +116,7 @@ describe('interrupt order (p.107)', () => {
     // 20 normal damage: determined as 18 after the hero's armor 2.
     const damaged = applyEvents(state, [damageEvent(foe.id, hero.id, 20)]);
     expect(damaged.actors[hero.id].hp).toBe(40); // held: not applied yet
-    expect(damaged.pendingInterrupts.some((window) => window.actorId === hero.id && window.heldDamage?.amount === 18)).toBe(true);
+    expect(damaged.decisionWindows.some((window) => window.actorId === hero.id && windowHeldDamage(window)?.amount === 18)).toBe(true);
 
     // The interrupt answers the window before the blow lands, splitting the
     // held damage: both the hero and the ally take ceil(18/2) = 9, each
@@ -133,7 +134,7 @@ describe('interrupt order (p.107)', () => {
     expect(interrupt.state.actors[ally!.id].hp).toBe(33); // 40 - (9 - 2)
     expect(interrupt.state.actors[hero.id].conditions.some(({ id }) => id === 'sturdy')).toBe(true);
     expect(interrupt.state.actors[ally!.id].conditions.some(({ id }) => id === 'sturdy')).toBe(true);
-    expect(interrupt.state.pendingInterrupts.some((window) => window.actorId === hero.id && window.heldDamage)).toBe(false); // consumed
+    expect(interrupt.state.decisionWindows.some((window) => window.actorId === hero.id && windowHeldDamage(window))).toBe(false); // consumed
     expect(interrupt.state.actors[hero.id].interruptUses['demon-slayer:righteous-disdain']).toBe(1);
     expect(applyEvents(damaged, interrupt.events)).toEqual(interrupt.state);
   });
@@ -142,18 +143,18 @@ describe('interrupt order (p.107)', () => {
     const { state, hero, foe, ally } = interruptEncounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
     // The foe is damaged, so the window belongs to the foe — not the hero.
     const damaged = applyEvents(state, [damageEvent(hero.id, foe.id, 4)]);
-    expect(damaged.pendingInterrupts.some((window) => window.actorId === foe.id)).toBe(true);
+    expect(damaged.decisionWindows.some((window) => window.actorId === foe.id)).toBe(true);
     const interrupt = executeCommand(damaged, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally!.id] }, scriptedDice());
-    expect(interrupt.state.pendingInterrupts).toHaveLength(1);
-    expect(interrupt.state.pendingInterrupts[0]?.actorId).toBe(foe.id); // untouched by the hero's interrupt
+    expect(interrupt.state.decisionWindows).toHaveLength(1);
+    expect(interrupt.state.decisionWindows[0]?.actorId).toBe(foe.id); // untouched by the hero's interrupt
   });
 
   it('closes all interrupt windows at the end of the turn, resolving any held damage', () => {
     const { state, hero, foe } = interruptEncounter({ second: null });
     const damaged = applyEvents(state, [damageEvent(foe.id, hero.id, 4)]);
-    expect(damaged.pendingInterrupts.length).toBeGreaterThan(0);
+    expect(damaged.decisionWindows.length).toBeGreaterThan(0);
     const ended = endTurnTo(damaged, foe.id, scriptedDice());
-    expect(ended.pendingInterrupts).toHaveLength(0);
+    expect(ended.decisionWindows).toHaveLength(0);
     // No interrupt answered the window, so the held 2 resolves at the boundary.
     expect(ended.actors[hero.id].hp).toBe(38);
   });

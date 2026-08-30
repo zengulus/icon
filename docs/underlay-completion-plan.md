@@ -206,9 +206,11 @@ Other residual U3 work:
 ### Landed-slice ≠ complete-underlay
 
 The same **landed-slice ≠ complete-underlay** distinction is applied to every
-U-number: e.g. `kernels/trigger-window.ts` + `save-window.ts` +
-`gamble-window.ts` + `pendingInterrupts` each handle wired cases, but U13
-WINDOW as a single generic decision-window record does **not** exist yet.
+U-number: e.g. U4 CHOOSE is not built yet and `ability-use-choices.ts`
+remains an opaque fold, but the U13 WINDOW underlay itself is now
+AUTHORITATIVE — `kernels/decision-window.ts` is the single
+`DecisionWindowRecord` and the old `trigger-window.ts`/`pendingInterrupts`
+quasi-window schemas are gone (T5c).
 
 State vocabulary used below:
 
@@ -1386,7 +1388,16 @@ pass with a FRESH simulation seeded from the original encounter state
 (cross-pass simulation rides the recorded resolution facts — U12
 territory); `rerollSaveMutations` runs through the same planner with no
 `encounterState` on its context (the original-view path, behavior
-preserved). `open-window`/`suspend` remain deliberately absent (U13/U12).
+preserved). T5c wired the remaining U11 nodes: `open-window` and `suspend`
+ARE implemented (U13 integration) — a suspended flow captures the ENTIRE
+remaining execution (walk-stack remainder + binder) as a `resume` record on
+a U13 `choice` window, `ANSWER_DECISION_WINDOW` resumes it through
+`executeFlowResume` against THEN-CURRENT state, and the resumed mutations
+are the new durable event payload (FLOW → U13 → U12 → answer → resume).
+No content consumes the nodes yet (no source rule needs a mid-flow player
+decision — the Great Giorgios may-rush rides the deferred-rule decision
+seam instead); the composition is proven by the planner's
+`FlowWindowRequest` and the reducer's `event.window` handling.
 A T5a corrective surfaced a stale range re-check on the bastion
 Battering Ram/Catapult Collide-or-Heroic trigger steps: the reaction names
 the SHOVED character ("Foe is slashed" p.122; "That ally gains 2 vigor"
@@ -1412,17 +1423,21 @@ through `kernels/runtime.ts`): `executeFlow(nodes, context)` with a
 SIMULATED intermediate state during command planning (pure), preserving the
 pure command/event architecture; `effectsToMutations` is the reducer-facing
 projection of the same plan. Dependencies: U1 (bind — landed), U4 (choose
-— NOT landed; the `choose` node arrives with U13 window work), U6 (if —
-landed), U10 (emit fact — landed), U12 (suspend/continue — deferred),
-U15 (atomic groups — landed through the shared reducer application),
-U17 (ordering — consumed by the step selection the flow plans). Consumed
-by every domain authority that sequences effects.
+— the `choose` node itself is NOT built; `open-window`/`suspend` landed and
+carry the U4 choice spec through the U13 window, T5c), U6 (if — landed),
+U10 (emit fact — landed), U12 (suspend/continue — landed through the U13
+window `resume` seam, T5c), U15 (atomic groups — landed through the shared
+reducer application), U17 (ordering — consumed by the step selection the
+flow plans). Consumed by every domain authority that sequences effects.
 
 **Typed vocabulary.** Flow nodes (`sequence|bind|if|apply|repeat|
-for-each|invoke|emit-fact`; `choose`/`open-window`/`suspend` land with
-U13/U12); an intermediate-state simulation view (clone-based, pure); the
-`bound` `RuleSelector` kind (U1 binding glue); `RuleEffect` union extended
-only as the next semantics need it (split last, per the file-split plan).
+for-each|invoke|emit-fact|open-window|suspend`; only `choose` remains
+unbuilt — `open-window`/`suspend` landed with U13, T5c); an
+intermediate-state simulation view (clone-based, pure); the `bound`
+`RuleSelector` kind (U1 binding glue); the `FlowWindowRequest` (choice spec
++ remaining nodes + binder) a suspended flow returns; `RuleEffect` union
+extended only as the next semantics need it (split last, per the
+file-split plan).
 
 **Replay semantics.** The command plans against a simulated intermediate
 state; the emitted mutation sequence is what replays — replay never
@@ -1503,31 +1518,38 @@ content rows register resolvers against a program id and
 `resumeDueContinuations` fires due continuations at the boundary through the
 shared mutation authority. Wired migration: Great Giorgios (p.124) moved
 from a `delayed`-phase lifecycle recipe to an armed continuation — the mark
-arms it, the deferred-rule resolver fires at the marked foe's turn-end
-against THEN-CURRENT state (the owner is a LIVE re-resolution; the mark id
-is the CAPTURED value), and the rush/shove/damage apply through
-`applyRuleMutations`. The save-rolled window (Sucker Punch, p.143) now also
-carries the held save as a U12 `held-result` continuation (`heldResult`)
-beside its legacy public shape.
+arms it and the trigger fires at the marked foe's turn-end. The save-rolled
+window (Sucker Punch, p.143) carries the held save as a U12 `held-result`
+continuation.
+
+T5c (U13) then migrated the window layer: the hold/decision semantics now
+compose through U13 rather than U12 alone. A decision continuation
+(`DecisionContinuationRow`) opens a U13 `choice` window at its trigger
+instead of auto-resolving — the Great Giorgios "may rush" is now a
+RECORDED U4 choice (the mark is consumed at window-open either way; accept
+runs the pure THEN-CURRENT rush at the command boundary; decline resolves
+nothing). The held-result continuations are carried by U13 windows as
+`heldPayload` (determined damage / held save), and windows drain/resolve
+through U13, not the U12 collection.
 
 Documented boundaries: `RuleContinuationState` (executedStepIds/
 derivedTriggers) remains the reactive same-ability fold's ledger — the two
-records are distinct authorities; the other pending-interrupt specialists
-(trigger-window held damage, held effects, retarget) keep their shapes —
-U13 unifies the windows; the held-damage U12 factory exists but no window
-carries it yet (U13 work); `rerollSaveMutations` remains the command-layer
-reroll path (a reroll is a SEPARATELY recorded result caused by the
-interrupt, never a recomputation of the held result).
+records are distinct authorities; `rerollSaveMutations` remains the
+command-layer reroll path (a reroll is a SEPARATELY recorded result caused
+by the interrupt, never a recomputation of the held result); the U12
+fact-trigger correlation seam records the specific fact `instanceId` on the
+window `openedBy` provenance so an unrelated same-kind fact can never
+satisfy the wrong window (T5c).
 
 **Locations partially owning/duplicating.** `RuleContinuationState`
 (`primitives/types.ts`, `src/rules/encounter.ts`) — reactive fold ledger,
 NOT the armed record; lifecycle `delayed` phase (`kernels/lifecycle.ts`)
 still runs (no `delayed` recipes remain — the phase now feeds
 `resumeDueContinuations`); save branch (`primitives/save-window.ts`) — the
-branch AST stays, the held-result continuation rides the window;
-held damage (`encounter-adapter.ts`) — represented through the U12
-factory but not yet carried by windows; per-source delayed logic in
-resolvers (Polaris meteor, Carnevale, end-of-turn effects) — REMAINS.
+branch AST stays, the held-result continuation rides the U13 window;
+held damage (`encounter-adapter.ts`) — applied/held through the U13 window
+payload; per-source delayed logic in resolvers (Polaris meteor, Carnevale,
+end-of-turn effects) — REMAINS.
 
 **Intended authority.** `primitives/continuation.ts` (barrel re-exported)
 + `kernels/continuation-runtime.ts`: `ArmedContinuation` record
@@ -1535,7 +1557,8 @@ resolvers (Polaris meteor, Carnevale, end-of-turn effects) — REMAINS.
 LIVE/CAPTURED, captured values, expiry/cancellation, ordering identity);
 `armContinuation` / `resumeContinuation` (replay-exact). Dependencies: U1,
 U2, U8, U10, U17. Consumed by U11 (suspend/continue), U13 (windows
-hold/resume continuations), delayed/terrain/entity lifecycle.
+hold/resume continuations and gate deferred decisions), delayed/terrain/
+entity lifecycle.
 
 **Typed vocabulary.** `ArmedContinuation`; deferred-rule vs held-result
 discriminant; captured-value map; expiry/cancellation spec; LIVE/CAPTURED
@@ -1601,54 +1624,76 @@ Righteous Disdain and p.107/p.138 Boiling Blood); save-reroll window
 (p.105); interrupt priority/nesting and turn-order rules (p.107);
 Masquerade interrupt legality (p.151); gamble windows (p.150/p.179).
 
-**Current state.** `SKELETON`. `kernels/trigger-window.ts`
-(`TRIGGER_WINDOW_RECIPES`, `decideDamageWindow`, `openDamageWindow`,
-`openDamageWindowFromLedger`); `primitives/save-window.ts` (`SaveWindowSpec`,
-`ResolvedSaveWindow`, window kinds); `primitives/gamble-window.ts`
-(`resolveGamble`); `pendingInterrupts` + held damage in encounter state;
-`rerollSaveMutations` (`kernels/runtime.ts`). Each is its own record shape;
-there is NO single decision-window record covering them; window-carried
-choices (U4) are not expressible; the once-per-trigger ledger (U16) is
-separate.
+**Current state.** `AUTHORITATIVE (T5c, 2026-08-30)` — the FULL declared
+U13 scope now has ONE authority: `kernels/decision-window.ts`
+(`DecisionWindowRecord`). The old quasi-window schemas are gone:
+`kernels/trigger-window.ts` is DELETED (its registry moved in as
+`DAMAGE_WINDOW_RECIPES` + `decideDamageWindow` +
+`openDamageWindowFromLedger`); the `EncounterPendingInterrupt` schema is
+DELETED (a compatibility alias remains); the per-window
+`heldDamage`/`heldSave`/`heldResult` fields are gone — every window carries
+its already-determined outcome as a U12 HELD-RESULT `heldPayload`
+continuation; `pendingInterrupts` in encounter state is replaced by
+`decisionWindows` (schema 8→9, migrated); the `choice` kind carries a U4
+`RuleChoice` and answers through the new `ANSWER_DECISION_WINDOW` command
+(recorded decision, never an engine default).
 
-**Locations partially owning/duplicating.** `kernels/trigger-window.ts`;
-`primitives/save-window.ts`; `primitives/gamble-window.ts`;
-`kernels/encounter-adapter.ts` (held damage, pending interrupts);
-`kernels/runtime.ts::rerollSaveMutations`; `kernels/damage-ledger.ts`
-(WindowLedger); `ability-use-choices.ts` (opaque window-ish fold).
+**Locations partially owning/duplicating.** NONE at the record level —
+`primitives/save-window.ts` still owns rolling/formatting a save (the
+save-RESOLUTION primitive, not a window) and `primitives/gamble-window.ts`
+still owns the deterministic recorded dice operation (a Gamble roll is NOT
+a window); `kernels/runtime.ts::rerollSaveMutations` still owns the
+reroll computation and consumes the window's held payload through
+`windowHeldSave`. These are distinct domain responsibilities, documented
+boundaries, not duplicate window schemas.
 
-**Intended authority.** `kernels/decision-window.ts` (new; the U13 home):
-`DecisionWindowSpec`/`DecisionWindowRecord` (windowKind, triggering Fact,
-responder query + decision maker, eligible registered sources, held payload,
-ordering policy, choice spec, close/resume); the existing window kernels
-become typed instantiations. Dependencies: U2, U3, U4, U8, U10, U12, U16,
-U17. Consumed by interrupt/save/gamble domain authorities and, later, all
-post-result decision content.
+**Intended authority.** `kernels/decision-window.ts` (the U13 home):
+`DecisionWindowRecord` (durable id, typed `DecisionWindowKind`, actorId,
+triggeredAt/order, U10 `openedBy` fact-kind provenance with the U12
+`instanceId` correlation seam, held payload as U12 `ArmedContinuation`,
+held ability effects, retarget, U4 choice spec, U17 ordering policy, U11
+flow `resume`); `openDecisionWindow`/`closeDecisionWindow`;
+`popDecisionWindowStack` (LIFO by triggeredAt — the p.107 stack rule);
+`orderDecisionWindows` (p.107 turn-order alternation);
+`DAMAGE_WINDOW_RECIPES` (the closed when-damaged/defeated eligibility
+registry, p.107/p.128/p.138); `windowHeldDamage`/`windowHeldSave`
+(projections of the held payload — the payload is the authority).
+Dependencies: U2, U4, U10, U12, U17. Consumed by the interrupt/save
+command paths and the U11 flow-suspension seam.
 
-**Typed vocabulary.** `WindowKind` (interrupt-when-damaged, interrupt-
-defeated, save-reroll, post-damage-choice, vigilance, gamble, future-choice);
-one record shape; held payload union (held damage / held save / held
-result / armed continuation); responder query + decision maker; ordering
-policy; once-per-trigger U16 identity on the record.
+**Typed vocabulary.** `DecisionWindowKind` (when-damaged, defeated,
+save-rolled, uses-ability, area-inclusion, targeted-by-ability, choice);
+one record shape; held payload is a U12 `ArmedContinuation` (held-result
+damage/save, or a deferred decision continuation); U4 choice on `choice`
+windows; U17 ordering identity on the record.
 
-**Replay semantics.** The window opens from a recorded Fact + ledger entry
-(the `openDamageWindowFromLedger` bar); the decision is recorded once at
-the window boundary; replay closes/resumes exactly the recorded record;
-never re-evaluate mutable availability at replay.
+**Replay semantics.** The window opens from a recorded ledger entry /
+recorded event (`openDamageWindowFromLedger`, the reducer's `applyDamage`
+decision); the decision is recorded ONCE at the window boundary
+(`DECISION_ANSWERED` carries the recorded mutations); replay closes/resumes
+exactly the recorded record and never re-evaluates mutable availability.
 
-**Acceptance tests.** Positive: each typed window kind opens/resolves;
-window-carried choice (U4) resolves through the spec; Vigilance window opens
-from a real damage trigger. Negative: automatic triggered effects never
-open a window; unavailable responder closes with the recorded fallback.
-Boundary: nested interrupts (LIFO, p.107); same-trigger turn-order; window
-drained by boundary. Replay: split-event damage window + Sucker Punch reroll
-+ gamble replay byte-identical (extend existing fixtures to the unified
-record).
+**Acceptance tests.** `src/rules/__tests__/t5c-u13-decision-window.test.ts`
+(17 adversarial cases): Righteous Disdain holds the determined amount and
+replays it byte-for-byte (no re-mitigation); Boiling Blood opens the
+defeated window only on prospective lethal damage; Sucker Punch holds the
+original save exactly, rerolls once at the command boundary with the second
+result replacing the first (decline preserves the first; Heroic's curse
+applies only to the new roll); nested interrupts LIFO; same-trigger
+turn-order (never insertion order); owner-order ambiguity yields a U4
+choice (`yields-choice`); automatic triggered effects open no window;
+Vigilance consumes no interrupt entitlement; a deterministic Gamble roll
+creates no window while a genuine decision does; Great Giorgios may-rush is
+a real decision (decline legal, accept reads THEN-CURRENT positions, no
+invented destination); two same-kind windows never answer each other;
+replay of held damage + save reroll is byte-identical with zero fresh
+RNG/decisions.
 
-**Consumers to migrate.** `trigger-window.ts`/`save-window.ts`/
-`gamble-window.ts`/`pendingInterrupts` → instantiations of the record;
-`rerollSaveMutations` → resume path; `ability-use-choices` → window where
-the decision is meaningful.
+**Consumers to migrate.** DONE for the window layer: trigger-window.ts
+(deleted), pendingInterrupts (→ decisionWindows), damage-ledger window
+side, save-rolled window, and the deferred-rule decision seam
+(Great Giorgios may-rush). `ability-use-choices.ts` remains an opaque
+fold NOT part of U13's record layer (a documented specialist).
 
 **Blocker families enabled (information only).** interrupt-rider/grant/
 timing/rank, post-roll-reactive-choice, gamble-result-selection, damage-

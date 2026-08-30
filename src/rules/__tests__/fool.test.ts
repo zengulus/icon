@@ -1,4 +1,5 @@
 import '../automation/content/registry.js';
+import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
@@ -215,7 +216,7 @@ describe('Fool ability automation (p.150–152)', () => {
       ],
     }]);
     expect(deferred.actors[hero.id].hp).toBe(40); // held, not applied
-    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability');
+    const window = deferred.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability');
     expect(window).toBeDefined();
     expect(window!.retarget).toEqual({ fromActorId: hero.id, toActorId: ally!.id });
 
@@ -234,7 +235,7 @@ describe('Fool ability automation (p.150–152)', () => {
     expect(interrupt.state.actors[hero.id].hp).toBe(40); // the blow redirected
     expect(interrupt.state.actors[ally!.id].hp).toBe(32); // 40 - (10 normal - armor 2)
     expect(interrupt.state.actors[hero.id].interruptUses['fool:masquerade']).toBe(1);
-    expect(interrupt.state.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(false);
+    expect(interrupt.state.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability')).toBe(false);
     expect(applyEvents(deferred, interrupt.events)).toEqual(interrupt.state);
   });
 
@@ -256,7 +257,7 @@ describe('Fool ability automation (p.150–152)', () => {
       ],
     }]);
     expect(deferred.actors[hero.id].hp).toBe(40); // held by the window, not applied
-    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability');
+    const window = deferred.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability');
     expect(window).toBeDefined();
     expect(window!.retarget).toEqual({ fromActorId: hero.id, toActorId: ally!.id });
 
@@ -282,7 +283,7 @@ describe('Fool ability automation (p.150–152)', () => {
     expect(deferred.actors[hero.id].interruptUsedThisTurn).toBe(false);
     expect(deferred.actors[hero.id].position).toEqual({ x: 1, y: 1 });
     expect(deferred.actors[ally!.id].position).toEqual({ x: 3, y: 1 });
-    expect(deferred.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(true);
+    expect(deferred.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability')).toBe(true);
 
     // The triggering ability is NOT redirected: when the window closes at the
     // turn boundary with no interrupt answering it, the held blow lands on
@@ -290,7 +291,7 @@ describe('Fool ability automation (p.150–152)', () => {
     const heroEnds = endTurnTo(deferred, foe.id, scriptedDice());
     expect(heroEnds.actors[hero.id].hp).toBe(32); // 40 - (10 normal - armor 2)
     expect(heroEnds.actors[ally!.id].hp).toBe(40);
-    expect(heroEnds.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(false);
+    expect(heroEnds.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability')).toBe(false);
   });
 
   it('Masquerade: an armor-mitigated blow is not preempted by a hypothetical defeated window', () => {
@@ -317,10 +318,10 @@ describe('Fool ability automation (p.150–152)', () => {
       ],
     }]);
     expect(deferred.actors[hero.id].hp).toBe(25); // held by Masquerade, not applied
-    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability');
+    const window = deferred.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability');
     expect(window).toBeDefined();
     expect(window!.retarget).toEqual({ fromActorId: hero.id, toActorId: ally!.id });
-    expect(deferred.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'defeated')).toBe(false);
+    expect(deferred.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'defeated')).toBe(false);
 
     // The redirected mutation re-enters the determination pipeline against the
     // ally's own armor: 30 - 2 = 28.
@@ -361,9 +362,9 @@ describe('Fool ability automation (p.150–152)', () => {
       ],
     }]);
     expect(deferred.actors[hero.id].hp).toBe(25); // held, not applied
-    const window = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability');
+    const window = deferred.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability');
     expect(window).toBeDefined();
-    expect(deferred.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'defeated')).toBe(false);
+    expect(deferred.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'defeated')).toBe(false);
 
     // The redirected mutation re-enters the determination pipeline against the
     // ally's own armor: 30 - 2 = 28. The hero's defiance is untouched because
@@ -404,10 +405,10 @@ describe('Fool ability automation (p.150–152)', () => {
         { kind: 'damage', sourceId: 'fixture:foe-ability', sourceActorId: foe.id, actorId: hero.id, amount: 30, damageType: 'normal', instance: 1, delivery: 'hit', ignoreCover: false },
       ],
     }]);
-    const defeated = deferred.pendingInterrupts.find((candidate) => candidate.actorId === hero.id && candidate.trigger === 'defeated');
+    const defeated = deferred.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'defeated');
     expect(defeated).toBeDefined();
-    expect(defeated!.heldDamage).toMatchObject({ amount: 28, sourceActorId: foe.id });
-    expect(deferred.pendingInterrupts.some((candidate) => candidate.actorId === hero.id && candidate.trigger === 'targeted-by-ability')).toBe(false);
+    expect(windowHeldDamage(defeated!)).toMatchObject({ amount: 28, sourceActorId: foe.id });
+    expect(deferred.decisionWindows.some((candidate) => candidate.actorId === hero.id && candidate.kind === 'targeted-by-ability')).toBe(false);
     expect(deferred.actors[hero.id].hp).toBe(25); // held, not applied
   });
 

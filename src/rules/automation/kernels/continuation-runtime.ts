@@ -24,12 +24,13 @@
  * ride recorded events. The resolver reads current state and emits
  * mutations only.
  */
-import type { ArmedContinuation, ContinuationPayload, RuleMutation } from '../primitives/types.js';
+import type { ArmedContinuation, ContinuationPayload, RuleChoice, RuleMutation } from '../primitives/types.js';
 import { resumeContinuation } from '../primitives/continuation.js';
 import type { ClockObservation } from '../primitives/scope.js';
 import type { Fact } from '../primitives/facts.js';
 import type { EncounterState } from '../../types.js';
 import { applyRuleMutations } from './encounter-adapter.js';
+import { openDecisionWindow } from './decision-window.js';
 
 /** A deferred-rule resolver row: source-specific resume behavior registered
  * against the continuation's `programId` (content-owned; the kernel never
@@ -42,7 +43,34 @@ export interface ContinuationResolver {
   resolve(state: EncounterState, continuation: ArmedContinuation): RuleMutation[];
 }
 
+/** A DECISION continuation row (U13): a deferred rule whose trigger opens a
+ * player/GM decision window instead of auto-resolving. The source's "may"/
+ * "can" language is preserved — the engine never chooses a default.
+ *
+ * - `consume` runs at window-open (the boundary where the trigger fired):
+ *   deterministic mutations that retire the triggering resource (e.g. the
+ *   Great Giorgios mark — the challenge's opportunity passed at the marked
+ *   foe's turn end, whether the user rushes or not).
+ * - `resolve` runs at answer time when the user accepts: deterministic
+ *   mutations computed against THEN-CURRENT state at the command boundary
+ *   and recorded on the answer event (no dice, no choices — the decision
+ *   itself is the recorded command input).
+ *
+ * U12 itself stays choice-free: the DECISION lives in the U13 window;
+ * U12 only carries the deferred rule (what will resume). */
+export interface DecisionContinuationRow {
+  /** The exact program id that armed continuations this row gates. */
+  programId: string;
+  /** The U4 choice spec the window offers (accept/decline and beyond). */
+  choice: RuleChoice;
+  /** Applied at window-open: deterministic consumption mutations. */
+  consume(state: EncounterState, continuation: ArmedContinuation): RuleMutation[];
+  /** Applied at answer time on accept: deterministic THEN-CURRENT mutations. */
+  resolve(state: EncounterState, continuation: ArmedContinuation): RuleMutation[];
+}
+
 const continuationResolvers: Record<string, ContinuationResolver> = {};
+const decisionContinuationRows: Record<string, DecisionContinuationRow> = {};
 
 /** Register a deferred-rule resolver row (content). Registration replaces
  * the row for the same program id — a single authority per program. */
@@ -54,6 +82,17 @@ export function registerContinuationResolver(resolver: ContinuationResolver): vo
  * by recorded program id, never by registration order). */
 export function continuationResolverFor(programId: string): ContinuationResolver | undefined {
   return continuationResolvers[programId];
+}
+
+/** Register a DECISION continuation row (content): the program's deferred
+ * rule opens a U13 choice window at its trigger instead of auto-resolving. */
+export function registerDecisionContinuation(row: DecisionContinuationRow): void {
+  decisionContinuationRows[row.programId] = row;
+}
+
+/** The closed decision registry (dispatch by recorded program id). */
+export function decisionContinuationFor(programId: string): DecisionContinuationRow | undefined {
+  return decisionContinuationRows[programId];
 }
 
 /** Resume every armed continuation whose trigger is due at the observed
@@ -81,6 +120,32 @@ export function resumeDueContinuations(
       // Held results waiting on a window are drained by the window machinery
       // (U13); a held result never auto-resumes at a boundary. Keep it armed.
       stillArmed.push(continuation);
+      continue;
+    }
+    // U13: a DECISION continuation opens a choice window at its trigger
+    // instead of auto-resolving — the source's "may"/"can" language is
+    // preserved (the engine never chooses a default). The continuation is
+    // consumed (it armed the window); the recorded answer later resolves it.
+    const decisionRow = decisionContinuationFor(payload.resumeId ?? continuation.programId);
+    if (decisionRow) {
+      const ownerId = continuation.ownerRef.kind === 'captured-actor'
+        ? continuation.ownerRef.actorId
+        : undefined;
+      if (ownerId === undefined) {
+        throw new Error(`Cannot open a decision window for continuation ${continuation.id}: the owner reference is not a single actor.`);
+      }
+      const id = `decision:${continuation.id}`;
+      openDecisionWindow(state, {
+        id,
+        kind: 'choice',
+        actorId: ownerId,
+        provenance: { sourceId: continuation.programId },
+        heldPayload: continuation,
+        choice: decisionRow.choice,
+      });
+      // The trigger fired: consume the triggering resource deterministically
+      // (the window-open consumption mutations, e.g. the mark removal).
+      applyRuleMutations(state, decisionRow.consume(state, continuation));
       continue;
     }
     const resolver = continuationResolverFor(payload.resumeId ?? continuation.programId);

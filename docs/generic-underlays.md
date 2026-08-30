@@ -167,10 +167,11 @@ moved). The aura
 bearer-vs-member and `targeting.ts` relation reads still derive roles
 locally — the de-dup migration is T2+. The durable save-reroll window (Sucker
 Punch p.143) decides who owns a reroll; the when-damaged/defeated/uses-
-ability/area-inclusion/targeted windows (`kernels/trigger-window.ts` + the
-p.107 window rules in `core.ts`) decide who answers and against whom; and the
-aura kernel's bearer-vs-member distinction (`kernels/aura.ts`) is a role
-boundary the engine must derive, never string-match.
+ability/area-inclusion/targeted/choice windows (`kernels/decision-window.ts`
+— the ONE U13 record, T5c — plus the p.107 window rules in `core.ts`) decide
+who answers and against whom; and the aura kernel's bearer-vs-member
+distinction (`kernels/aura.ts`) is a role boundary the engine must derive,
+never string-match.
 
 ## U3 Query / Candidate
 
@@ -503,11 +504,23 @@ post-result choices. Do NOT turn automatic triggered effects into windows.
 Interrupt priority and nesting are real, so this stays an underlay rather
 than a mere EVENT recipe.
 
-Today: `kernels/trigger-window.ts` (TRIGGER_WINDOW_RECIPES,
-`openDamageWindow`, `decideDamageWindow`, LIFO held effects/held damage),
-`save-window.ts`, `gamble-window.ts`, pending interrupts in encounter state.
-These are already one family; they need a SINGLE decision-window record shape
-covering the source-defined windows.
+Today (T5c, 2026-08-30): `kernels/decision-window.ts` is the SINGLE
+decision-window record shape — `DecisionWindowRecord` (typed kind, U10
+`openedBy` provenance with the U12 `instanceId` correlation seam, U12 held
+`heldPayload` continuation, U4 choice spec, U17 ordering, U11 flow
+`resume`), `openDecisionWindow`/`closeDecisionWindow`, the U17 LIFO pop,
+the p.107 turn-order total order, the closed `DAMAGE_WINDOW_RECIPES`
+eligibility registry (when-damaged/defeated), and the
+`windowHeldDamage`/`windowHeldSave` payload projections. The old
+quasi-window records are gone: `trigger-window.ts` deleted, the
+`EncounterPendingInterrupt` schema deleted, `pendingInterrupts` in
+encounter state replaced by `decisionWindows`. `save-window.ts` (rolling/
+formatting a save) and `gamble-window.ts` (the deterministic recorded dice
+operation) remain as distinct domain primitives, NOT windows. A `choice`
+window answers through the recorded `ANSWER_DECISION_WINDOW` command; a
+suspended U11 flow rides the window `resume` seam. Vigilance stays a
+triggered EFFECT (p.104-105), never a window; automatic triggered effects
+never open windows.
 
 ## U14 Modifier / Policy
 
@@ -791,8 +804,8 @@ Direction preserved: `content → kernels → primitives`. No `underlays/` layer
   `mastery-fold.ts`, `bonus-damage.ts`, `ordinary-attack.ts`, `save-window.ts`,
   `hp-threshold.ts` — the typed modifier/recipe registries + folds.
 - `entity-creation.ts`, `summon-recipes.ts` — placement/entity authority.
-- `damage-ledger.ts`, `encounter-adapter.ts`, `trigger-window.ts` — durable
-  facts + interrupt windows.
+- `damage-ledger.ts`, `encounter-adapter.ts`, `decision-window.ts` — durable
+  facts + the ONE interrupt/decision-window authority.
 - `lifecycle.ts`, `resolution-triggers.ts`, `movement-triggers.ts`,
   `trait-reactions.ts`, `passive-projection.ts` — lifecycle/trigger/fact folds.
 - `use-ledger.ts` — usage gates. `power-die.ts` — scalable resource die.

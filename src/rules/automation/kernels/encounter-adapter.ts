@@ -1,4 +1,4 @@
-import type { EncounterActor, EncounterEntity, EncounterHeldDamage, EncounterPendingInterrupt, EncounterState, EncounterTerrainEffect, Position, StatusId } from '../../types.js';
+import type { EncounterActor, EncounterEntity, EncounterHeldDamage, DecisionWindowRecord, EncounterState, EncounterTerrainEffect, Position, StatusId } from '../../types.js';
 import { seededDice } from '../../dice.js';
 import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
@@ -9,9 +9,9 @@ import type { RangeStateView } from './range.js';
 import type { AreaStateView } from './area.js';
 import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, type MasteryFoldStateView } from './mastery-fold.js';
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
-import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
+import { decideDamageWindow, openDecisionWindow } from './decision-window.js';
 import { entityKind, entityKindOf, validateEntityCreation } from './entity-creation.js';
-import { armContinuation, heldSaveContinuation } from '../primitives/continuation.js';
+import { armContinuation, heldDamageContinuation, heldSaveContinuation } from '../primitives/continuation.js';
 import { capturedActor } from '../primitives/reference.js';
 import type { RuleActorView, RuleExecutionContext, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
 
@@ -885,7 +885,7 @@ export function deferrableEffectWindow(
   state: EncounterState,
   sourceActorId: string,
   mutations: RuleMutation[],
-): EncounterPendingInterrupt | null {
+): DecisionWindowRecord | null {
   const source = state.actors[sourceActorId];
   if (!source) return null;
   // 1. Heroic Intervention — a foe ability targeting the armored ally.
@@ -910,11 +910,11 @@ export function deferrableEffectWindow(
         && Math.max(Math.abs(candidate.position.x - ally.position.x), Math.abs(candidate.position.y - ally.position.y)) > entry.allyRange) continue;
       if (!mutations.some((mutation) => 'actorId' in mutation && mutation.actorId === allyId)) continue;
       return {
-        id: `uses-ability:${allyId}:${state.revision}:${state.pendingInterrupts.length}`,
+        id: `uses-ability:${allyId}:${state.revision}:${state.decisionWindows.length}`,
+        kind: 'uses-ability',
         actorId: candidate.id,
-        trigger: 'uses-ability',
         triggeredAt: state.revision,
-        order: state.pendingInterrupts.length,
+        order: state.decisionWindows.length,
         heldEffects: deferredEffects(mutations),
       };
     }
@@ -926,11 +926,11 @@ export function deferrableEffectWindow(
       if (!interruptAvailable(candidate, 'bastion:perseus', (INTERRUPT_ALLOWLISTS['area-inclusion'] ?? {})['bastion:perseus']!.usesPerRound)) continue;
       if (!mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === candidate.id && mutation.delivery === 'area')) continue;
       return {
-        id: `area-inclusion:${candidate.id}:${state.revision}:${state.pendingInterrupts.length}`,
+        id: `area-inclusion:${candidate.id}:${state.revision}:${state.decisionWindows.length}`,
+        kind: 'area-inclusion',
         actorId: candidate.id,
-        trigger: 'area-inclusion',
         triggeredAt: state.revision,
-        order: state.pendingInterrupts.length,
+        order: state.decisionWindows.length,
         heldEffects: deferredEffects(mutations),
       };
     }
@@ -983,11 +983,11 @@ export function deferrableEffectWindow(
       && Math.max(Math.abs(other.position.x - candidate.position.x), Math.abs(other.position.y - candidate.position.y)) <= 3);
     if (!ally) continue;
     return {
-      id: `targeted-by-ability:${candidate.id}:${state.revision}:${state.pendingInterrupts.length}`,
+      id: `targeted-by-ability:${candidate.id}:${state.revision}:${state.decisionWindows.length}`,
+      kind: 'targeted-by-ability',
       actorId: candidate.id,
-      trigger: 'targeted-by-ability',
       triggeredAt: state.revision,
-      order: state.pendingInterrupts.length,
+      order: state.decisionWindows.length,
       heldEffects: deferredEffects(mutations),
       retarget: { fromActorId: candidate.id, toActorId: ally.id },
       retargetProgramId: masqueradeEntry.programId ?? 'fool:masquerade',
@@ -1015,7 +1015,7 @@ export function saveRerollWindow(
   state: EncounterState,
   sourceActorId: string,
   mutations: RuleMutation[],
-): EncounterPendingInterrupt | null {
+): DecisionWindowRecord | null {
   for (let index = 0; index < mutations.length; index += 1) {
     const mutation = mutations[index];
     if (mutation.kind !== 'save' || mutation.windowKind !== 'effect' || !mutation.branch) continue;
@@ -1028,18 +1028,20 @@ export function saveRerollWindow(
       // The save's branch runs from the save record to the next save record.
       let end = index + 1;
       while (end < mutations.length && mutations[end]!.kind !== 'save') end += 1;
-      const windowId = `save-rolled:${saver.id}:${state.revision}:${state.pendingInterrupts.length}`;
+      const windowId = `save-rolled:${saver.id}:${state.revision}:${state.decisionWindows.length}`;
+      // U13: the ONE window record, carrying the original save as a U12
+      // HELD-RESULT continuation — the original result already exists and
+      // waits for the reroll window to close; it resumes EXACTLY as recorded
+      // (a reroll is a separately recorded command-boundary result). The
+      // legacy `heldSave` shape is gone: `windowHeldSave` projects the same
+      // surface from the held payload.
       return {
         id: windowId,
+        kind: 'save-rolled',
         actorId: candidate.id,
-        trigger: 'save-rolled',
         triggeredAt: state.revision,
-        order: state.pendingInterrupts.length,
-        // U12 held-result representation: the original save result already
-        // exists and waits for the reroll window to close — it resumes
-        // EXACTLY as recorded; a reroll is a separately recorded result.
-        // The window keeps its legacy `heldSave` shape for the command layer.
-        heldResult: heldSaveContinuation({
+        order: state.decisionWindows.length,
+        heldPayload: heldSaveContinuation({
           id: `held:${windowId}`,
           sourceId: mutation.sourceId,
           ownerActorId: candidate.id,
@@ -1051,25 +1053,11 @@ export function saveRerollWindow(
           windowKind: mutation.windowKind,
           ...(mutation.windowId ? { windowId: mutation.windowId } : {}),
           ...(mutation.statusId ? { statusId: mutation.statusId } : {}),
+          sourceActorId,
+          ...(mutation.modifiers ? { modifiers: mutation.modifiers } : {}),
           onSuccess: mutation.branch.onSuccess,
           onFailure: mutation.branch.onFailure,
         }),
-        heldSave: {
-          targetId: saver.id,
-          // The evaluated modifier (branch.boon), so the command layer
-          // re-rolls the save with the same boon/curse, not the previous
-          // rolled value.
-          boon: mutation.branch.boon,
-          sourceId: mutation.sourceId,
-          sourceActorId,
-          windowKind: mutation.windowKind,
-          ...(mutation.windowId ? { windowId: mutation.windowId } : {}),
-          ...(mutation.statusId ? { statusId: mutation.statusId } : {}),
-          ...(mutation.modifiers ? { modifiers: mutation.modifiers } : {}),
-          threshold: mutation.branch.threshold,
-          onSuccess: mutation.branch.onSuccess,
-          onFailure: mutation.branch.onFailure,
-        },
         heldEffects: mutations.slice(index, end),
       };
     }
@@ -1195,9 +1183,11 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
   // interrupt (Boiling Blood, p.138) so the character can fight on before
   // being defeated. The held damage applies after the interrupt resolves, or
   // at the end of the turn; an interrupt that re-deals the damage consumes it.
-  // F4: the decision is the TriggerWindow registry's (single decision point
-  // shared with the split-event ledger path), evaluated from durable
-  // provenance.
+  // F4/U13: the decision is the damage-window registry's (single decision
+  // point shared with the split-event ledger path), evaluated from durable
+  // provenance. The opened window carries the determined blow as a U12
+  // HELD-RESULT continuation — the post-mitigation amount is final and
+  // resumes exactly as recorded.
   const window = decideDamageWindow(state, target, {
     targetId: target.id,
     sourceActorId: source?.id ?? null,
@@ -1206,22 +1196,29 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
     damageType: mutation.damageType,
     ignoreDefiance: mutation.ignoreDefiance,
   });
-  if (window && state.pendingInterrupts) {
-    openDamageWindow(state, {
-      window,
+  if (window && state.decisionWindows) {
+    const id = `${window.kind}:${target.id}:${state.revision}:${state.decisionWindows.length}`;
+    openDecisionWindow(state, {
+      id,
+      kind: window.kind,
       actorId: target.id,
-      heldDamage: {
+      provenance: { sourceId: mutation.sourceId, sourceActorId: mutation.sourceActorId },
+      heldPayload: heldDamageContinuation({
+        id: `held:${id}`,
+        programId: mutation.sourceId,
+        ownerActorId: target.id,
+        targetId: target.id,
         amount,
         damageType: mutation.damageType,
-        bypassVigor,
         sourceActorId: mutation.sourceActorId,
         sourceId: mutation.sourceId,
         instance: mutation.instance,
         delivery: mutation.delivery,
         ignoreCover: mutation.ignoreCover,
+        ...(mutation.bypassVigor !== undefined ? { bypassVigor } : {}),
         ...(mutation.ignoreDodge ? { ignoreDodge: true } : {}),
         ...(mutation.ignoreDefiance ? { ignoreDefiance: true } : {}),
-      },
+      }),
     });
     return;
   }
@@ -1240,13 +1237,12 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
   // ICON p.107: damage dealt opens a 'when-damaged' interrupt window for the
   // target. Windows resolve most-recently-triggered first (LIFO by encounter
   // revision) and close at the end of the turn.
-  if (amount > 0 && !target.defeated && state.pendingInterrupts) {
-    state.pendingInterrupts.push({
-      id: `when-damaged:${target.id}:${state.revision}:${state.pendingInterrupts.length}`,
+  if (amount > 0 && !target.defeated && state.decisionWindows) {
+    openDecisionWindow(state, {
+      id: `when-damaged:${target.id}:${state.revision}:${state.decisionWindows.length}`,
+      kind: 'when-damaged',
       actorId: target.id,
-      trigger: 'when-damaged',
-      triggeredAt: state.revision,
-      order: state.pendingInterrupts.length,
+      provenance: { sourceId: mutation.sourceId, sourceActorId: mutation.sourceActorId },
     });
   }
 }

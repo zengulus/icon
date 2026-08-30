@@ -57,7 +57,7 @@ describe('F1 spatial gateway (pp.87–92, 94, 107)', () => {
     // Occupied: the hero sits on (1,1).
     const occupied = applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 1, y: 1 })]);
     expect(occupied.actors[foe.id].position).toEqual({ x: 4, y: 1 });
-    expect(occupied.pendingInterrupts).toHaveLength(0); // no window from a denied move
+    expect(occupied.decisionWindows).toHaveLength(0); // no window from a denied move
     // Out of bounds.
     const bounds = applyEvents(state, [moveEvent(hero.id, foe.id, 'place', { x: 99, y: 1 })]);
     expect(bounds.actors[foe.id].position).toEqual({ x: 4, y: 1 });
@@ -278,7 +278,7 @@ describe('F1 atomic spatial groups (source-declared, every leg or none)', () => 
     const result = applyEvents(state, [swap]);
     expect(result.actors[foe.id].position).toEqual({ x: 4, y: 1 });
     expect(result.actors[hero.id].position).toEqual({ x: 1, y: 1 });
-    expect(result.pendingInterrupts).toHaveLength(0); // no window from a denied swap
+    expect(result.decisionWindows).toHaveLength(0); // no window from a denied swap
     expect(applyEvents(state, [swap])).toEqual(result);
   });
 
