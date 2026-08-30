@@ -4,6 +4,7 @@ import { CharacterProvider } from './context/CharacterContext.js';
 import { AppShell } from './components/AppShell.js';
 import { Dashboard } from './pages/Dashboard.js';
 import { CharacterEditor } from './pages/CharacterEditor.js';
+import { NewCharacter } from './pages/NewCharacter.js';
 
 const Compendium = lazy(() => import('./pages/Compendium.js').then((module) => ({ default: module.Compendium })));
 const Campaigns = lazy(() => import('./pages/Campaigns.js').then((module) => ({ default: module.Campaigns })));
@@ -27,6 +28,7 @@ export function AuthenticatedApp() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<Dashboard />} />
+          <Route path="characters/new" element={<NewCharacter />} />
           <Route path="characters/:id" element={<CharacterEditor />} />
           <Route path="compendium" element={<Suspense fallback={loading}><Compendium /></Suspense>} />
           <Route path="sandbox" element={<Navigate to="/lab" replace />} />

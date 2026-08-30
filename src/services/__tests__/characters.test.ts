@@ -80,7 +80,10 @@ describe('character persistence recovery', () => {
     expect(result.issues).toHaveLength(1);
     expect(result.issues[0]).toMatchObject({ source: 'local', index: 1 });
     expect(result.issues[0]?.quarantineKey).toBe(`${LOCAL_CHARACTER_QUARANTINE_PREFIX}1777777777777-0`);
-    expect(JSON.parse(storage.getItem(LOCAL_CHARACTER_STORAGE_KEY) ?? 'null')).toEqual([preserved]);
+    const storedAfterRepair = JSON.parse(storage.getItem(LOCAL_CHARACTER_STORAGE_KEY) ?? 'null');
+    expect(storedAfterRepair).toMatchObject({ version: 2 });
+    expect(storedAfterRepair.records.map(({ character }: { character: IconCharacter }) => character.id)).toEqual(['preserved']);
+    expect(storedAfterRepair.records[0]).toMatchObject({ localRevision: 1, cloudRevision: null, cloudState: 'pending' });
 
     const recoveries = listLocalCharacterQuarantines();
     expect(recoveries).toHaveLength(1);
@@ -91,8 +94,9 @@ describe('character persistence recovery', () => {
     });
 
     await saveCharacter(character('new-record'), null);
-    expect((JSON.parse(storage.getItem(LOCAL_CHARACTER_STORAGE_KEY) ?? '[]') as IconCharacter[]).map(({ id }) => id))
-      .toEqual(['new-record', 'preserved']);
+    const storedAfterSave = JSON.parse(storage.getItem(LOCAL_CHARACTER_STORAGE_KEY) ?? '[]');
+    expect(storedAfterSave).toMatchObject({ version: 2 });
+    expect(storedAfterSave.records.map(({ character }: { character: IconCharacter }) => character.id)).toEqual(['new-record', 'preserved']);
     expect(listLocalCharacterQuarantines()).toHaveLength(1);
   });
 
@@ -104,7 +108,7 @@ describe('character persistence recovery', () => {
 
     expect(result.characters).toEqual([]);
     expect(result.issues).toHaveLength(1);
-    expect(JSON.parse(storage.getItem(LOCAL_CHARACTER_STORAGE_KEY) ?? 'null')).toEqual([]);
+    expect(JSON.parse(storage.getItem(LOCAL_CHARACTER_STORAGE_KEY) ?? 'null')).toMatchObject({ version: 2, records: [] });
     expect(listLocalCharacterQuarantines()[0]?.recovery).toMatchObject({
       originalPayload,
       records: [{ index: null, raw: originalPayload }],
@@ -139,6 +143,11 @@ describe('character persistence recovery', () => {
     expect(from).toHaveBeenCalledWith('characters');
     expect(result.characters.map(({ id }) => id)).toEqual(['cloud-preserved']);
     expect(result.issues).toEqual([expect.objectContaining({ source: 'supabase', index: 1 })]);
-    expect(storage.getItem(LOCAL_CHARACTER_STORAGE_KEY)).toBeNull();
+    // Local-first: the single valid cloud row is imported into the local
+    // envelope (and left acknowledged in cloud storage). Malformed rows are
+    // isolated and cloud storage is untouched.
+    const envelope = JSON.parse(storage.getItem(LOCAL_CHARACTER_STORAGE_KEY) ?? 'null');
+    expect(envelope).toMatchObject({ version: 2 });
+    expect(envelope.records.map(({ character }: { character: IconCharacter }) => character.id)).toEqual(['cloud-preserved']);
   });
 });

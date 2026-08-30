@@ -2,13 +2,29 @@ import { ACTION_IDS, CHARACTER_SCHEMA_VERSION, RULES_VERSION, type ActionId, typ
 import { BOND_POWERS, BONDS, CULTURES, KINS, findAbility, findBond, findClass, findJob, findRelic } from './catalog.js';
 
 const emptyActions = (): ActionRatings => Object.fromEntries(ACTION_IDS.map((id) => [id, 0])) as ActionRatings;
-const makeId = () => globalThis.crypto?.randomUUID?.() ?? `icon-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-export function createCharacter(now = new Date().toISOString()): IconCharacter {
+/**
+ * A secure, stable persistent-character identity. The character UUID is
+ * generated ONCE locally and later identifies the character's cloud row;
+ * cloud synchronization must never replace it. Weak (Math.random/date) ids are
+ * never manufactured for a persisted record: if a secure generator is truly
+ * unavailable this fails loudly instead of persisting a guessable identity. A
+ * deterministic `idFactory` may be injected for tests.
+ */
+export function secureUuid(idFactory?: () => string): string {
+  const cryptoGlobal = globalThis.crypto;
+  if (idFactory) return idFactory();
+  if (!cryptoGlobal || typeof cryptoGlobal.randomUUID !== 'function') {
+    throw new Error('crypto.randomUUID is unavailable; refusing to fabricate a weak persistent character identity.');
+  }
+  return cryptoGlobal.randomUUID();
+}
+
+export function createCharacter(now = new Date().toISOString(), idFactory?: () => string): IconCharacter {
   return {
     schemaVersion: CHARACTER_SCHEMA_VERSION,
     rulesVersion: RULES_VERSION,
-    id: makeId(),
+    id: secureUuid(idFactory),
     ownerId: null,
     name: '',
     pronouns: '',

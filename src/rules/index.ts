@@ -2,6 +2,7 @@ export * from './types.js';
 export * from './catalog.js';
 export * from './core.js';
 export * from './character.js';
+export * from './player-creation.js';
 export * from './dice.js';
 export * from './movement.js';
 export * from './vtt-room.js';

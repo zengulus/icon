@@ -1,20 +1,14 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { chapterForLevel, createCharacter, findBond, findCulture, findJob, findKin, migrateCharacter, validateCharacter } from '../rules/index.js';
+import { Link } from 'react-router-dom';
+import { chapterForLevel, findBond, findCulture, findJob, findKin, migrateCharacter, validateCharacter } from '../rules/index.js';
 import { useCharacters } from '../context/CharacterContext.js';
 import { assetBackground } from '../services/assets.js';
 
 export function Dashboard() {
   const { characters, loading, error, save, remove, user, cloudEnabled, signIn, signOut } = useCharacters();
-  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
   const [notice, setNotice] = useState('');
-
-  async function addCharacter() {
-    const character = await save(createCharacter());
-    navigate(`/characters/${character.id}`);
-  }
 
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -47,7 +41,7 @@ export function Dashboard() {
         <div className="header-actions">
           <input ref={inputRef} type="file" accept="application/json,.json" hidden onChange={importFile} />
           <button className="button ghost" onClick={() => inputRef.current?.click()}>Import</button>
-          <button className="button primary" onClick={addCharacter}>New character</button>
+          <Link className="button primary" to="/characters/new">New character</Link>
         </div>
       </header>
 
@@ -64,7 +58,7 @@ export function Dashboard() {
       </section>
 
       {loading ? <div className="empty-state">Opening the archive…</div> : characters.length === 0 ? (
-        <div className="empty-state"><span>◈</span><h2>No Icons recorded yet</h2><p>Start at level 0 with Kin, Culture, Bond, Job, and two abilities.</p><button className="button primary" onClick={addCharacter}>Create your first Icon</button></div>
+        <div className="empty-state"><span>◈</span><h2>No Icons recorded yet</h2><p>Start at level 0 with Kin, Culture, Bond, Job, and two abilities.</p><Link className="button primary" to="/characters/new">Create your first Icon</Link></div>
       ) : (
         <div className="character-grid">
           {characters.map((character) => {

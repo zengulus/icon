@@ -1,0 +1,71 @@
+[
+  {
+    "level": 0,
+    "xp": 0,
+    "dust": 0,
+    "burdens": [],
+    "ambitions": [],
+    "stress": 0,
+    "effort": 0,
+    "session": {
+      "xp": {
+        "ideals": 0,
+        "challenges": 0,
+        "ambitions": 0,
+        "burdens": 0
+      },
+      "powersUsed": {}
+    },
+    "trophies": [],
+    "relics": [],
+    "levelActionChoice": 0,
+    "levelJobChoice": 0,
+    "prepared": [
+      {
+        "name": "Default",
+        "trophies": [],
+        "abilities": [],
+        "class": "Vagabond",
+        "job": "Freelancer"
+      }
+    ],
+    "active": 0,
+    "wounds": 0,
+    "camps": 0,
+    "hp": 0,
+    "vigor": 0,
+    "statuses": [],
+    "resolve": 0,
+    "partyResolve": 0,
+    "tacticalClocks": [],
+    "fixtures": [],
+    "image": "",
+    "kit": "",
+    "looseGear": [],
+    "kin": "Thrynn",
+    "culture": "Yeokin",
+    "bond": "Dreamer",
+    "powers": [
+      "Bright Eyed"
+    ],
+    "actionBonuses": {
+      "Smash": 2,
+      "Command": 2,
+      "Excel": 2
+    },
+    "bondBonus": "Smash",
+    "jobs": [
+      "Freelancer"
+    ],
+    "abilities": [
+      {
+        "name": "TRICK SHOT"
+      },
+      {
+        "name": "DEUS EX MACHINA"
+      }
+    ],
+    "name": "Douglas",
+    "id": "1cd154b8-0bd0-4a3e-b0cf-50df2539be4e"
+  }
+]

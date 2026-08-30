@@ -710,3 +710,41 @@ label input, label select, label textarea { color: var(--ink); font: 12px 'Manro
   .vtt-log-panel { grid-template-columns: 1fr; gap: 8px; }
   .vtt-log-panel .event-log { grid-column: auto; }
 }
+
+/* ============================================================================
+ * LEVEL-0 CREATION WIZARD + SAVE STATE + SOURCE REFERENCE
+ * ============================================================================ */
+
+/* Persistence-state chip: color never communicates state alone; the label is
+   always real text and the element exposes role="status". */
+.save-state-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; font: 700 10px 'DM Mono', monospace; border-radius: 999px; }
+.save-state-chip .save-state-dot { width: 8px; height: 8px; border-radius: 50%; }
+.save-state-chip.local { color: #1d4d8f; background: #e6f0fb; border: 1px solid #bcd4ee; }
+.save-state-chip.local .save-state-dot { background: #2f6fc4; }
+.save-state-chip.cloud { color: #2c5e14; background: #eef8e2; border: 1px solid #c4e3a4; }
+.save-state-chip.cloud .save-state-dot { background: #6aa52e; }
+
+/* Accessible source-reference control. It is a sibling of each selectable
+   option (not nested inside it) so both remain independently clickable, and
+   it works by hover, focus, and tap. */
+.source-reference { display: inline-flex; position: relative; margin-top: 7px; }
+.source-reference-trigger { color: #636028; font: 800 8px 'DM Mono', monospace; text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 2px; cursor: pointer; }
+.source-reference-trigger:focus-visible { outline: 2px solid var(--acid); outline-offset: 2px; border-radius: 3px; }
+.source-reference-pop { position: absolute; z-index: 4; left: 0; top: 100%; margin-top: 3px; padding: 3px 8px; color: #fff; font: 700 9px 'DM Mono', monospace; background: #2f3524; border-radius: 4px; white-space: nowrap; }
+
+/* Each selectable card carries its source-reference just below it. */
+.creation-option { display: flex; flex-direction: column; }
+
+.wizard-steps { display: flex; gap: 20px; margin: 4px 0 22px; color: var(--muted); font: 700 9px 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .06em; }
+.wizard-steps span { display: flex; align-items: center; gap: 7px; opacity: .6; }
+.wizard-steps span.active { color: #2f3524; opacity: 1; }
+.wizard-steps b { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; }
+
+.new-character-page .subheading { margin: 26px 0 10px; }
+.new-character-page .compact-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.new-character-page .compact-picker button { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 10px 12px; text-align: left; font-size: 11px; background: #faf7ef; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.new-character-page .compact-picker button.selected { background: #f4f9dc; border-color: #aab94e; }
+
+.wizard-actions { display: flex; align-items: center; gap: 12px; margin-top: 26px; }
+.wizard-actions .blocking-reason { color: #b24e3b; font-size: 11px; flex: 1; }
+.gate-actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
