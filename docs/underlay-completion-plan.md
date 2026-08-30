@@ -852,14 +852,22 @@ target-state) is unchanged. T3 (2026-08-30) added `used-scope` against the lande
 predicate reads the target's durable `ledger:<scope>:<sourceId>` key via
 `primitives/usage.ts` (`usageKey`/`usageCount`), so once-per-turn/round/
 combat gates and N-per-scope counts are the same authority the command
-boundary consumes and the lifecycle recipes reset. Missing after T3
-(honest): `effect-still-exists` reads U10 facts/instances (T4).
+boundary consumes and the lifecycle recipes reset. T4 (2026-08-30)
+completed U6 with `effect-still-exists`, reading through the U10
+fact/instance seam (`effectExistsLive` over `primitives/facts.ts`) against
+the target's LIVE effect surfaces (conditions/statuses/stance/marks/
+active-effects) — the general active-effect state authority stays in its
+domain; U6 only reads through the generic reference/fact seam, and an
+instance identity the projected view cannot represent (a specific coexisting
+mark/persistent instance without `anyInstance`) FAILS CLOSED via
+`RuleProgramViolation` rather than guessing.
 
 **Staged completion (DAG-consistent).** U6's core predicate algebra depends
 on U1/U3/U5/U8 only and lands in T2 (LANDED 2026-08-30); the
-`effect-still-exists` predicate reads U10 facts/instances and completes
-U6 in T4. U6 is NOT described as complete before its declared U10
-dependency exists.
+`effect-still-exists` predicate reads U10 facts/instances and LANDED in T4
+(2026-08-30). U6's declared dependencies (U10 for effect-still-exists) are
+now satisfied; the remaining predicate vocabulary enumerated in the
+vocabulary below is landed, with no documented U6 dependency left.
 
 **Locations partially owning/duplicating.** `evaluatePredicate`
 (`kernels/runtime.ts`) — MOVED to `kernels/evaluate-predicate.ts`
@@ -878,8 +886,9 @@ U13 (window eligibility gates), U14 (recipe predicates), U17 (ordering
 policies with predicates).
 
 **Typed vocabulary.** Extended `RulePredicate`: `count-query`, `distance`,
-`mark-exists`, `in-stance`, `inside-aura`, `used-scope`, `effect-exists`,
-`acted-this-round`, `terrain-at` (exists), compound `all/any/not`.
+`mark-exists`, `in-stance`, `inside-aura`, `used-scope`,
+`effect-still-exists` (T4), `acted-this-round`, `terrain-at` (exists),
+compound `all/any/not`.
 
 **Replay semantics.** Predicates evaluate replay state deterministically;
 the used-this-scope read consumes the durable U16 ledger + U10 facts,
@@ -1133,13 +1142,23 @@ once per ability (p.105); unerring/cover/dodge provenance on attacks
 (p.104/p.105); delivery modes distinguish hit/miss/area/effect/save-success/
 terrain damage.
 
-**Current state.** `PARTIAL`. `sourceActorId` on most mutations; `RuleResolutionFacts`
-(triggers/attackTargets/collided/slain, durable on `RULE_MUTATIONS_APPLIED`);
-`AttackDamageProvenance` + `attackDamageProvenance` on the VM context;
-`DamageIntent.hostile`-style reads; `delivery` on damage mutations; `cause:
-TurnEndCause` on turn transitions; movement-entry `voluntary` flag
-(`kernels/movement-triggers.ts`). The ontology's `DeliverySourceKind` does
-not exist yet.
+**Current state.** `LANDED (T4, 2026-08-30)`. `primitives/provenance.ts`
+(barrel re-exported) owns the typed PROVENANCE vocabulary:
+`DeliverySourceKind` ('actor' | 'terrain' | 'entity' | 'environment'),
+`RuleDelivery` (incl. reflected/triggered), `RuleMovementMode`, and the
+`Provenance` dimension record (sourceId / ownerId / sourceActorId /
+actionId / delivery / deliverySource / movementMode / volition / role /
+recipientId / rebound / redirect / derivedFromFact / parent) — SOURCE
+identity is kept distinct from DELIVERY kind, and `sameCausalOrigin`
+preserves the TRUE initiating actor through reflected/secondary delivery
+(so a reflection can never white-out the original owner/source).
+`provenanceOfMutation` derives a provenance at each resolve point from the
+mutation's own fields, ALWAYS preserving the causal `sourceActorId` (even
+when it equals the owner). Existing domain-specific provenance stays where
+it is (the VM's `attackDamageProvenance`, `delivery` on damage mutations,
+`cause: TurnEndCause`, the movement-entry `voluntary` flag) — documented
+retained specialists; U9 provides the shared generic vocabulary facts and
+de-dup read through.
 
 **Locations partially owning/duplicating.** `primitives/attack-resolution.ts`
 (provenance); `kernels/runtime.ts` (delivery threading); `kernels/damage-ledger.ts`
@@ -1209,15 +1228,23 @@ a determined-but-not-applied fact (p.107, p.128, p.138); movement-entry
 triggers read entered cells (p.151, p.178, p.353); "once per ability even
 when multiple routes would trigger it" (p.105).
 
-**Current state.** `PARTIAL`. `RuleResolutionFacts` (triggers/attackTargets/
-collided/slain) durable on the event; `deriveResolutionTriggers`
-(`kernels/resolution-triggers.ts`); damage/held/window ledgers
-(`kernels/damage-ledger.ts`, `encounter-adapter.ts`); save records with
-continuation branch (`primitives/save-window.ts`). Missing: the full fact
-vocabulary (movement facts, damage-applied facts, status facts, effect-
-expiry facts) and the shared de-dup identity with U16 (today
-`derivedTriggers`, `executedStepIds`, `trait-reactions` ledger keys, and F9
-once-per-ability registries each de-duplicate separately).
+**Current state.** `LANDED (T4, 2026-08-30)`. `primitives/facts.ts` (barrel
+re-exported) owns the CLOSED DISCRIMINATED `Fact` union (ability-used /
+attack-resolved / damage-applied / actor-defeated / collide / movement /
+effect / entity / terrain / save-resolved / trigger-resolved) with the
+smallest common envelope (deterministic `instanceId`, `sourceId`, `ownerId`,
+U9 provenance). `recordFacts` derives the fact history at the authoritative
+resolve point from already-resolved mutations (a pure function — the same
+event sequence yields the same fact sequence). `kernels/resolution-triggers.ts`
+now RECORDS facts via `recordFacts`, merges the domain collide/slay facts
+(spatial + defeat authority), and PROJECTS the byte-compatible
+`ResolutionTriggerFacts` surface encounter.ts consumes from the typed facts
+— behavior-preserving migration (all existing ability fixtures pass
+unchanged). A `trigger-resolved` fact records the U16 event-de-dup marker.
+Damage/held/window ledgers (`damage-ledger.ts`, `encounter-adapter.ts`) and
+save records remain the domain-specific ledger authorities (documented
+retained specialists) whose fact composition is a future U12 concern; the
+shared de-dup identity with U16 is now fact-backed (see U16 row).
 
 **Locations partially owning/duplicating.** `RuleResolutionFacts`
 (`primitives/types.ts`); `kernels/resolution-triggers.ts`;
@@ -1761,9 +1788,17 @@ boundaries), and `usageCap` (folds the U14 `use-cap` query point for
 count-override caps). `kernels/use-ledger.ts` is now a thin adapter
 preserving the byte-identical keys/marks (the F9 `roundLedgerKey`
 contract still holds), and the U6 `used-scope` predicate evaluates against
-the durable ledger. Remaining for the full underlay: the shared de-dup
-identity for trigger families reads U10 facts and completes U16 in T4
-(per the staged DAG below); the `interrupt-uses` counter and the
+the durable ledger. **T4 (2026-08-30) completed U16's U10-backed
+de-duplication** (`primitives/facts.ts`): the full resolve identity is the
+U16 usage identity (source + owner + scope + optional target, the corrected
+owner-carrying `usageIdentity`) PLUS the logical `trigger` PLUS the U10
+FACT dimension (`resolveIdentityKey` — collision-safe JSON-tuple
+serialization). `triggerResolvedFact` records the marker; `hasResolvedAsFact`
+answers "has this exact logical use resolved for this underlying fact/event?"
+over the recorded fact history — never current state, never a broad
+once-per-scope ledger mark. Ordinary entitlement COUNTS stay in the ledger
+(`used-scope`); event de-duplication is the fact read — semantically
+distinct. Remaining (honest, staged): the `interrupt-uses` counter and the
 `attacked-this-turn`/`end-turn` ruleState flags remain durable
 encounter-authority fields whose typed-ledger migration is the T6
 consolidation item.
@@ -2104,15 +2139,28 @@ in T4. U18 evaluated under the §2 decision rule: NOT promoted (see the
 U18 row). Exit met: one ModifierRule shape folded everywhere; one usage
 ledger vocabulary; one commit seam; typed ordering policies.
 
-**Phase T4 — Time and outcome: U9, U10 (completes U6 and U16).**
-`primitives/provenance.ts` (dimension vocabulary, `DeliverySourceKind`);
-`primitives/facts.ts` (fact union; record at each resolve point); U6's
-`effect-still-exists` predicate reads U10 instances (U6 completion); U16's
-de-dup identity (U10-backed) is confirmed over facts (U16 completion);
-`resolution-triggers.ts` and the ledgers migrate to read provenance+facts.
-Exit: mutations/events carry enough provenance to answer source questions;
-facts are the only history; U6 and U16 are complete WITH their declared
-U10 dependencies.
+**Phase T4 — Time and outcome: U9, U10 (completes U6 and U16) — LANDED
+(2026-08-30).** `primitives/provenance.ts` (dimension vocabulary,
+`DeliverySourceKind`, `sameCausalOrigin`, `provenanceOfMutation`) and
+`primitives/facts.ts` (the closed `Fact` union, `recordFacts`, the LIVE
+`effectExistsLive` instance read, and the `trigger-resolved` de-dup marker +
+`hasResolvedAsFact` read) LANDED and are barrel re-exported. U6 was
+COMPLETED with `effect-still-exists` reading U10 instances via the
+fact/instance seam (fail-closed on unrepresentable instance identity). U16
+was COMPLETED with the U10-backed de-dup identity (`resolveIdentityKey` =
+usage identity + trigger + fact dimension; `hasResolvedAsFact` over the
+recorded fact history — event de-dup, semantically distinct from the
+`used-scope` entitlement counts). `kernels/resolution-triggers.ts` migrated
+onto U9/U10: it records facts via `recordFacts`, merges the domain
+collide/slay facts, and projects the byte-compatible `ResolutionTriggerFacts`
+surface encounter.ts consumes (behavior-preserving — all existing ability
+fixtures pass unchanged, 1632 tests green; no census change;
+`sourceActivations` count unchanged). The damage/held/window + save records
+ledgers remain domain-specific authorities (documented retained
+specialists) whose fuller fact composition is U12-scoped. Exit met for the
+T4 scope: facts are the resolved-history authority; mutations/events carry
+the applicable provenance dimensions; U6 and U16 are complete WITH their
+declared U10 dependencies.
 
 **Phase T5 — Execution: U11, U12, U13.**
 `kernels/execute-flow.ts` (simulated intermediate state, bind/for-each/

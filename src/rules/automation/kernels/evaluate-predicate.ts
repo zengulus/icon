@@ -11,11 +11,15 @@
  * authorities (references, queries, values, the clock) and composes them
  * with always/not/all/any/compare.
  *
- * The T2 contract deliberately EXCLUDES the `effect-still-exists` predicate:
- * it reads U10 facts/instances and completes U6 in T4 (the plan's staged
- * DAG). `used-this-scope` reads the U16 ledger and lands with the U16 core
- * in T3. This module is NOT described as complete before those declared
- * dependencies exist.
+ * T3 added `used-scope` (U16 ledger). T4 completed U6 with
+ * `effect-still-exists`, reading through the U10 fact/instance seam
+ * (`effectExistsLive`) against the target's LIVE effect surfaces — the
+ * general active-effect state authority stays in its domain (conditions/
+ * statuses/stance/marks/active-effects on the actor view); U6 only reads
+ * through the generic reference/fact seam and FAILS CLOSED when the required
+ * instance identity cannot be represented. With the U10 dependency present,
+ * this module's declared dependencies (U6 needs U10 for effect-still-exists)
+ * are now satisfied.
  *
  * Replay semantics: predicates evaluate replay state deterministically —
  * the same state produces the same boolean; no ambient flags, no second
@@ -30,6 +34,7 @@ import type { RuleExecutionContext, RulePredicate } from '../primitives/types.js
 import { selectActors, evaluateNumber } from './evaluate-value.js';
 import { auraDefinitionFor, auraRuntimeView, isInAura } from './aura.js';
 import { usageCount, usageKey } from '../primitives/usage.js';
+import { effectExistsLive, type EffectInstanceIdentity } from '../primitives/facts.js';
 import { RuleProgramViolation } from './violations.js';
 
 export function evaluatePredicate(predicate: RulePredicate, context: RuleExecutionContext): boolean {
@@ -94,6 +99,28 @@ export function evaluatePredicate(predicate: RulePredicate, context: RuleExecuti
     case 'used-scope': return selectActors(predicate.target, context).every((target) => {
       const key = usageKey({ sourceId: predicate.sourceId, ownerId: target.id, scope: predicate.scope });
       return usageCount({ ruleState: target.state }, key) >= (predicate.atLeast ?? 1);
+    });
+    // U6 completed (T4) via U10: does the SPECIFIC live effect instance still
+    // exist on the target? The identity is read through the U10 fact/instance
+    // seam (`effectExistsLive`) against the target's LIVE effect surfaces —
+    // the general active-effect state authority stays in its domain; U6 only
+    // reads through the generic seam. An instance identity the projected view
+    // cannot represent (a specific coexisting mark/persistent instance, no
+    // `anyInstance`) FAILS CLOSED — the predicate rejects rather than guess.
+    case 'effect-still-exists': return selectActors(predicate.target, context).every((target) => {
+      const identity: EffectInstanceIdentity = {
+        kind: predicate.effectKind,
+        sourceId: predicate.sourceId ?? context.sourceId,
+        targetId: target.id,
+        effectId: predicate.effectId,
+        ...(predicate.ownerId !== undefined ? { ownerId: predicate.ownerId } : {}),
+        ...(predicate.instanceKey !== undefined ? { instanceKey: predicate.instanceKey } : {}),
+      };
+      const result = effectExistsLive(target, identity);
+      if (!result.ok) {
+        throw new RuleProgramViolation('effect-still-exists.unrepresentable', `A ${predicate.effectKind} instance on ${target.id} cannot be disambiguated on the projected live view; the effect-still-exists predicate cannot be answered.`);
+      }
+      return result.exists;
     });
     case 'trigger': return context.triggers?.has(predicate.trigger) ?? false;
     case 'state': return selectActors(predicate.target, context).every((target) => predicate.equals === undefined ? target.state[predicate.key] !== undefined : target.state[predicate.key] === predicate.equals);

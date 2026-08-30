@@ -302,6 +302,46 @@ turn not on source turn, slow-turn≠ordinary-turn, non-boundary-null,
 permanent-never, named-event, replay; plus edge/subject preservation in
 `scopeForDuration`) — 17 tests.
 
+### Provenance / Delivery Dimensions (U9 underlay) — LANDED (T4, 2026-08-30)
+
+`primitives/provenance.ts` owns the typed provenance vocabulary:
+`DeliverySourceKind` (`actor`/`terrain`/`entity`/`environment`),
+`RuleDelivery` (incl. `reflected`/`triggered`), `RuleMovementMode`, and
+`Provenance` (sourceId / ownerId / sourceActorId / actionId / delivery /
+deliverySource / movementMode / volition / role / recipientId / rebound /
+redirect / derivedFromFact / parent). SOURCE identity is kept distinct from
+DELIVERY kind; `sameCausalOrigin` preserves the TRUE initiating actor
+through reflected/secondary delivery (a reflection can never white-out the
+original owner/source — p.94 Pacified-break, p.103 Slay, p.151 Masquerade
+all read the causal origin). `provenanceOfMutation` derives a provenance at
+a resolve point from the mutation's own fields, always preserving the
+causal `sourceActorId`. Domain-specific provenance (`attackDamageProvenance`,
+`delivery` on damage mutations, `cause: TurnEndCause`, the movement-entry
+`voluntary` flag) stays as documented retained specialists; U9 is the
+shared vocabulary facts and U16 reads consume. Tests: `t4-facts-provenance.test.ts`.
+
+### Fact / Outcome Record (U10 underlay) — LANDED (T4, 2026-08-30)
+
+`primitives/facts.ts` owns the exactly-typed DISCRIMINATED `Fact` union
+(ability-used / attack-resolved / damage-applied / actor-defeated /
+collide / movement / effect / entity / terrain / save-resolved /
+trigger-resolved) with the smallest common envelope (deterministic
+`instanceId`, `sourceId`, `ownerId`, U9 `provenance`). `recordFacts`
+records the fact history at the resolve point from already-resolved
+mutations — a pure function (same event sequence ⇒ same fact sequence),
+never re-derived from later mutable state. `kernels/resolution-triggers.ts`
+now records facts via `recordFacts`, merges the domain collide/slay facts,
+and projects the byte-compatible `ResolutionTriggerFacts` encounter.ts
+consumes (behavior-preserving migration; the `slay` trigger resolves only
+on a true Slay, p.95 glossary — `viaSlay` — never an explicit
+instant-defeat mutation). The LIVE `effectExistsLive` read answers whether a
+specific effect instance still exists (LIVE vs CAPTURED; it REJECTS as
+unrepresentable when the projected view cannot disambiguate a specific
+coexisting instance). The
+damage/held/window + save ledgers remain domain-specific authorities whose
+fuller fact composition is U12-scoped. Tests: `t4-facts-provenance.test.ts`
++ `t4-effect-exists.test.ts` + `t4-dedup.test.ts`.
+
 ### Modifier / Policy (U14 underlay) — LANDED (T3, 2026-08-30)
 
 One recipe shape for "how an attached rule alters a typed query point":
@@ -386,11 +426,18 @@ event), `refreshUsageMutation`, `usageRead` (per-use magnitude ordinal),
 `holdsUsageKey`, `resetBoundaryFor` (turn/round/combat onto U8
 boundaries), and `usageCap` (folds the U14 `use-cap` query point for
 count-override caps). `kernels/use-ledger.ts` is a thin adapter; the U6
-`used-scope` predicate reads the durable ledger. The shared de-dup
-identity for trigger families reads U10 facts and completes U16 in T4; the
+`used-scope` predicate reads the durable ledger (entitlement COUNTS). U16
+was COMPLETED in T4 with the U10 fact-backed DE-DUP identity
+(`primitives/facts.ts`): the full resolve identity (`resolveIdentityKey`) is
+the identity above (source + owner + scope + optional target) PLUS the
+logical trigger PLUS the U10 FACT dimension; `triggerResolvedFact` records
+the marker and `hasResolvedAsFact` answers "has this exact logical use
+resolved for this underlying fact/event?" over the recorded fact history —
+never current state, never a broad once-per-scope mark. Event de-duplication
+is semantically DISTINCT from the `used-scope` entitlement counts. The
 interrupt-use counter and attacked-this-turn/end-turn flags remain durable
 actor fields (typed-ledger migration is the T6 consolidation item). Tests:
-`t3-usage.test.ts` + `use-ledger.test.ts`.
+`t3-usage.test.ts` + `t4-dedup.test.ts` + `use-ledger.test.ts`.
 
 ### Ordering / Arbitration (U17 underlay) — LANDED (T3, 2026-08-30)
 

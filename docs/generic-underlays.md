@@ -295,9 +295,11 @@ Builds on QUERY + VALUE + REFERENCE:
     target has not acted this round
 
 Avoid bespoke "gate" kernels whenever this expression algebra suffices.
-Today: `RulePredicate` + `evaluatePredicate` (`kernels/runtime.ts`); missing
-compound gates from query+count+number + has-mark/in-stance/inside-aura/
-used-this-scope/effect-still-exists.
+Today: `RulePredicate` + `evaluatePredicate` (`kernels/runtime.ts`
+re-exports `kernels/evaluate-predicate.ts`); T3 added `used-scope` (U16
+ledger) and T4 added `effect-still-exists` (U10 fact/instance seam,
+fail-closed on unrepresentable instance identity) — U6's declared U10
+dependency is now satisfied (U6 complete per the plan).
 
 ## U7 Anchor / Spatial Frame
 
@@ -377,11 +379,17 @@ character to 0; Collide means shoved INTO obstruction AS PART OF THIS
 ability; dangerous terrain has its own delivery; triggered effects fire once
 per ability. Never reconstruct cause from current state or source names.
 
-Today: `sourceActorId` on mutations, `RuleResolutionFacts`, attack/damage
-provenance (`attackDamageProvenance`, `DamageIntent.hostile`,
-`resolutionFacts` in `RuleExecutionContext`), `DeliverySourceKind` in the
-movement authority. Events/mutations must carry enough provenance to answer
-source questions.
+Today (T4 landed 2026-08-30): `primitives/provenance.ts` is the shared
+generic vocabulary — `DeliverySourceKind`, `RuleDelivery` (incl.
+reflected/triggered), `RuleMovementMode`, the `Provenance` dimension record
+(source identity distinct from delivery kind), `sameCausalOrigin`
+(preserves the true initiating actor through reflected/secondary delivery),
+and `provenanceOfMutation` (derives a provenance at a resolve point,
+ALWAYS preserving the causal `sourceActorId`). Domain-specific provenance
+they stay as documented retained specialists (the VM's
+`attackDamageProvenance`, `delivery` on damage mutations, `cause:
+TurnEndCause`, the movement-entry `voluntary` flag). U9 facts and U16 reads
+consume the shared vocabulary.
 
 ## U10 Fact / Outcome
 
@@ -399,11 +407,17 @@ Triggered-effect de-duplication ("a given triggered effect only triggers once
 per ability even when multiple routes would trigger it") belongs here WITH
 USAGE (U16). Never rediscover a historical outcome from current state.
 
-Today: `RuleResolutionFacts` (triggers/attackTargets/collided/slain),
-`encounterAdapter` fact ledger, `resolutionFacts` already durable.
-Extend the vocabulary at each authority's resolve point; the duplication gate
-reads the same durable identity (U16 usage key) + a U10 fact rather than
-re-deriving from current state.
+Today (T4 landed 2026-08-30): `primitives/facts.ts` owns the closed
+`Fact` union (ability-used / attack-resolved / damage-applied /
+actor-defeated / collide / movement / effect / entity / terrain /
+save-resolved / trigger-resolved) + `recordFacts` (records at the resolve
+point, deterministic instance ids) + the LIVE `effectExistsLive` read +
+the U16 `trigger-resolved` de-dup marker + `hasResolvedAsFact`.
+`kernels/resolution-triggers.ts` now records facts and projects the
+byte-compatible `ResolutionTriggerFacts` encounter.ts consumes
+(behavior-preserving). The damage/held/save ledgers remain domain-specific
+specialists whose fuller fact composition is U12-scoped; the duplication
+gate reads the U16 resolve identity + a U10 fact, never current state.
 
 ## U11 Flow / Sequence
 

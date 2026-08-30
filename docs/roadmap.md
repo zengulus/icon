@@ -137,9 +137,22 @@ transactions are expressible without callers manually subtracting earlier
 legs; U14 numeric values are U5 `RuleNumber`s resolved through an
 injected resolver (`kernels/evaluate-modifiers.ts`), no special dynamic
 literals in the primitive. Full suite green (1604 tests), census
-byte-stable at 427. The next
-tranche is **T4 — Time and outcome: U9, U10 (completes U6 and U16)**
-(plan §3.2).
+byte-stable at 427. **T4 — Time and outcome: U9, U10 (completes U6 and
+U16) — LANDED (2026-08-30)** (plan §3.2): `primitives/provenance.ts`
+(U9: the typed provenance/delivery-dimension vocabulary incl.
+`DeliverySourceKind` and the causal-origin-preserving `sameCausalOrigin`)
+and `primitives/facts.ts` (U10: the exactly-typed discriminated `Fact`
+union,
+`recordFacts` at each resolve point, the LIVE `effectExistsLive` instance
+read) landed and are barrel re-exported. U6 was completed with
+`effect-still-exists` via the fact/instance seam (rejects on unrepresentable
+instance identity); U16 completed with the U10 fact-backed
+de-dup identity (`resolveIdentityKey` + `hasResolvedAsFact`, event
+de-dup distinct from the `used-scope` counts).
+`kernels/resolution-triggers.ts` migrated to record facts and project the
+byte-compatible reactive-trigger surface (behavior-preserving). Full suite
+green (1632 tests), census byte-stable at 427, no source-unit promotion.
+The next tranche is **T5 — Execution: U11, U12, U13** (plan §3.2).
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

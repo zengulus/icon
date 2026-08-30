@@ -488,6 +488,56 @@ assumption here, document the evidence and update this list before proceeding.
      compositions); context-dependent expressions reject rather than
      guess. Tests: `{ kind: 'round' }` parity + a composed U5 expression
      fixture + an unrepresentable-expression rejection.
+- **Phase T4 — Time and outcome: U9, U10 (completes U6 and U16) — LANDED
+  (2026-08-30).** Full suite green (1632 tests, +25 over the T3 baseline),
+  census byte-stable at 427, all audits green, no source-unit promotion.
+  Deliverables:
+  1. **U9 — `primitives/provenance.ts`** (barrel re-exported): the typed
+     provenance/delivery-dimension vocabulary — `DeliverySourceKind`
+     (`actor`/`terrain`/`entity`/`environment`), `RuleDelivery` (incl.
+     `reflected`/`triggered`), `RuleMovementMode`, and `Provenance`
+     (source identity DISTINCT from delivery kind); `sameCausalOrigin`
+     preserves the true initiating actor through reflected/secondary
+     delivery (never white-outs the original owner/source);
+     `provenanceOfMutation` derives a provenance at each resolve point.
+     Domain-specific provenance (`attackDamageProvenance`, `delivery` on
+     damage mutations, `cause: TurnEndCause`, movement-entry `voluntary`)
+     stay as documented retained specialists.
+  2. **U10 — `primitives/facts.ts`** (barrel re-exported): the
+     exactly-typed discriminated `Fact` union (ability-used / attack-resolved /
+     damage-applied / actor-defeated / collide / movement / effect /
+     entity / terrain / save-resolved / trigger-resolved) with the
+     smallest common envelope (deterministic `instanceId`, sourceId,
+     ownerId, U9 provenance); `recordFacts` records at each resolve
+     point (pure — same event sequence yields the same fact
+     sequence, never re-derived from mutable state); LIVE `effectExistsLive`
+     (rejects on an unrepresentable specific instance identity); the
+     `trigger-resolved` de-dup marker + `hasResolvedAsFact` read.
+  3. **Consumer migration — `kernels/resolution-triggers.ts`** now records
+     facts via `recordFacts`, merges the domain collide/slay facts
+     (spatial + defeat authority), and projects the byte-compatible
+     `ResolutionTriggerFacts` surface encounter.ts consumes
+     (behavior-preserving; the `slay` trigger resolves only on a true Slay,
+     p.95 — `viaSlay` — never an explicit instant-defeat mutation). The
+     damage/held/save ledgers remain domain-specific specialists whose
+     fuller fact composition is U12-scoped.
+  4. **U6 COMPLETED** with `effect-still-exists` (T4): reads U10
+     instances via `effectExistsLive` against the target's LIVE effect
+     surfaces — the general active-effect state authority stays in its
+     domain; U6 only reads through the generic reference/fact seam.
+  5. **U16 COMPLETED** (U10-backed de-dup): the full resolve identity
+     (`resolveIdentityKey`) = the corrected usage identity (source + owner
+     + scope + optional target) + logical trigger + U10 FACT dimension;
+     `hasResolvedAsFact` answers "has this exact logical use resolved for
+     this underlying fact/event?" over the recorded history. EVENT
+     de-dup is semantically distinct from the `used-scope` entitlement
+     COUNTS.
+  Residuals (honest, staged): the interrupt-uses counter and
+  attacked-this-turn/end-turn flags typed-ledger migration (T6); the
+  damage/held/window + save ledgers' fuller fact composition (U12); the
+  AREA/PERSISTENT-INSTANCE/RULE-SOURCE query domains (U10/U12-scoped);
+  U11/U12/U13 execution land in T5. No source-unit wiring; census unchanged
+  (427).
 
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full

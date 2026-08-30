@@ -20,6 +20,8 @@ export * from './modifiers.js';
 export * from './usage.js';
 export * from './transaction.js';
 export * from './ordering.js';
+export * from './provenance.js';
+export * from './facts.js';
 
 export const RULE_PROGRAM_SCHEMA_VERSION = 1 as const;
 
@@ -148,9 +150,19 @@ export type RulePredicate =
   | { kind: 'target-state'; target: RuleSelector; key: string; equals?: string | number | boolean | null }
   /** Used-scope (U16, T3): the target has used `sourceId` at least `atLeast`
    * (default 1) times within `scope` (turn/round/combat). Reads the durable
-   * usage ledger key — never ambient state. The U10-backed de-dup identity
-   * completes U16 in T4; this predicate is valid against the landed core. */
-  | { kind: 'used-scope'; target: RuleSelector; sourceId: string; scope: 'turn' | 'round' | 'combat'; atLeast?: number };
+   * usage ledger key — never ambient state. DISTINCT from trigger-event
+   * de-duplication (the U10 fact-backed `hasResolvedAsFact` read, U16/T4):
+   * this counts entitlements; the fact read answers "has this specific use
+   * resolved for this fact/event?". */
+  | { kind: 'used-scope'; target: RuleSelector; sourceId: string; scope: 'turn' | 'round' | 'combat'; atLeast?: number }
+  /** Effect-still-exists (U6, completed T4): does the SPECIFIC live effect
+   * instance named by `effectKind`/`effectId` (scoped to `sourceId`, default
+   * the acting source) still exist on the target? Reads through the U10
+   * fact/instance seam (`effectExistsLive`) against the target's LIVE effect
+   * surfaces — never re-derived history. `instanceKey` names a specific
+   * coexisting instance when multiple may exist; an instance identity the
+   * live view cannot represent FAILS CLOSED. */
+  | { kind: 'effect-still-exists'; target: RuleSelector; effectKind: 'condition' | 'status' | 'mark' | 'stance' | 'persistent'; effectId: string; sourceId?: string; ownerId?: string; instanceKey?: string };
 
 export interface RuleChoice {
   key: string;
