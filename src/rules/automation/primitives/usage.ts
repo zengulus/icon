@@ -100,13 +100,19 @@ export function usageIdentity(spec: UsageKeySpec): UsageIdentity {
   };
 }
 
-/** Canonical, collision-safe serialization of a de-dup identity. The owner
- * is embedded, so two different owners of the same source/scope/target
- * serialize to different keys (the negative test proves this). Used as the
- * stable comparison form for U10 fact-backed de-dup. A `UsageKeySpec` and a
- * `UsageIdentity` carry the same fields; either works. */
+/** Canonical, UNAMBIGUOUS serialization of a de-dup identity. The owner is
+ * embedded, so two different owners of the same source/scope/target
+ * serialize to different keys (the negative test proves this). SSRIDs are
+ * opaque strings, so a delimiter-concatenated key would NOT be injective
+ * (e.g. source `a:b` / owner `c` would collide with source `a` / owner
+ * `b:c`); the canonical form is a JSON tuple over
+ * `[sourceId, ownerId, scope, targetId | null]`, whose string escaping and
+ * fixed shape make distinct identities always serialize to distinct keys.
+ * Used as the stable comparison form for U10 fact-backed de-dup. A
+ * `UsageKeySpec` and a `UsageIdentity` carry the same fields; either
+ * works. */
 export function usageIdentityKey(spec: { sourceId: string; ownerId: string; scope: UsagePeriod; targetId?: string }): string {
-  return `usage:${spec.sourceId}:${spec.ownerId}:${spec.scope}${spec.targetId === undefined ? '' : `:${spec.targetId}`}`;
+  return JSON.stringify([spec.sourceId, spec.ownerId, spec.scope, spec.targetId ?? null]);
 }
 
 /** Structural identity equality (the typed comparison form). */

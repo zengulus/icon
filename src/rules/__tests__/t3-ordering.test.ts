@@ -114,17 +114,47 @@ describe('U17 — ordering policies', () => {
     expect(applyOrdering({ kind: 'hostile-before-beneficial' }, candidates)).toEqual({ ok: false, problem: 'missing-perspective' });
   });
 
-  it('non-active-owner-first puts the active owner last (p.107)', () => {
+  it('hostile-before-beneficial fails closed on a candidate with no derivable side (unknown ≠ beneficial)', () => {
+    // Every candidate in the list must be classifiable; an unsided candidate
+    // is UNRESOLVED, never silently treated as beneficial.
+    const result = applyOrdering(
+      { kind: 'hostile-before-beneficial' },
+      [{ id: 'hero', side: 'heroes' }, { id: 'unknown-actor' }],
+      { perspectiveActorId: 'hero' },
+    );
+    expect(result).toEqual({ ok: false, problem: 'missing-candidate-side' });
+  });
+
+  it('non-active-owner-first puts the active owner last (p.107), ownership affirmed', () => {
     const result = applyOrdering(
       { kind: 'non-active-owner-first' },
-      [{ id: 'hero', isActiveOwner: true }, { id: 'foe' }, { id: 'ally' }],
+      [
+        { id: 'hero', isActiveOwner: true },
+        { id: 'foe', isActiveOwner: false },
+        { id: 'ally', isActiveOwner: false },
+      ],
       { activeActorId: 'hero' },
     );
-    expect(result).toEqual({ ok: true, ordered: [{ id: 'foe' }, { id: 'ally' }, { id: 'hero', isActiveOwner: true }] });
+    expect(result).toEqual({ ok: true, ordered: [{ id: 'foe', isActiveOwner: false }, { id: 'ally', isActiveOwner: false }, { id: 'hero', isActiveOwner: true }] });
   });
 
   it('non-active-owner-first FAILS CLOSED without the active owner', () => {
     expect(applyOrdering({ kind: 'non-active-owner-first' }, candidates)).toEqual({ ok: false, problem: 'missing-active-owner' });
+  });
+
+  it('non-active-owner-first fails closed on a candidate with underivable ownership (unknown ≠ not-active)', () => {
+    // `foe` is neither the active id nor carries an isActiveOwner flag — its
+    // ownership relative to the active actor cannot be derived, so the
+    // policy rejects rather than assuming it is not-the-owner.
+    const result = applyOrdering(
+      { kind: 'non-active-owner-first' },
+      [
+        { id: 'hero', isActiveOwner: true },
+        { id: 'foe' },
+      ],
+      { activeActorId: 'hero' },
+    );
+    expect(result).toEqual({ ok: false, problem: 'missing-candidate-ownership' });
   });
 
   it('explicit-list orders by the id list', () => {

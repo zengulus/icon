@@ -54,8 +54,8 @@ export interface OrderingContext {
   perspectiveActorId?: string;
   /** The perspective actor's side (the hostile/beneficial classification
    * read). When absent, the policy falls back to reading the perspective
-   * actor's side from the candidate list; with neither it fails closed
-   * (source order) rather than inventing a classification. */
+   * actor's side from the candidate list; with neither it is UNRESOLVED
+   * (`missing-perspective`) rather than inventing a classification. */
   perspectiveSide?: string;
   /** The recorded turn order (turn-order policy): candidates ordered by
    * their position in the scheduler's turn sequence. */
@@ -84,18 +84,20 @@ export type OrderingPolicy =
   | { kind: 'turn-order' }
   /** Hostile-before-beneficial (p.107 turn-boundary ordering): candidates
    * of a different side than the perspective actor come first; the rest
-   * keep their source order. */
+   * keep the candidates' declared order within the beneficiary group. */
   | { kind: 'hostile-before-beneficial' }
   /** Non-active-owner-first (p.107): candidates that are NOT the active
    * actor's resolve before the active actor's own. */
   | { kind: 'non-active-owner-first' }
   /** Controller-choice: someone with authority (U2 role) decides the order.
    * The policy YIELDS A CHOICE (`policyYieldsChoice`); `applyOrdering`
-   * returns the candidates in source order and the caller must resolve the
-   * recorded ordering choice — the engine never invents an order. */
+   * returns a `yields-choice` unresolved result carrying the typed choice
+   * and the caller routes the recorded ordering decision through U4 — the
+   * engine never invents an order. */
   | { kind: 'controller-choice'; choice: RuleChoice }
-  /** Explicit ordered list: candidates ordered by the given id list
-   * (unknown ids keep their source order after the listed ones). */
+  /** Explicit ordered list: candidates ordered by the given id list. An id
+   * absent from the list is UNRESOLVED (`unknown-candidate`); the incoming
+   * array order is never used as an accidental tie-break. */
   | { kind: 'explicit-list'; order: readonly string[] };
 
 /** Whether the policy delegates the order to a player/GM choice. A
@@ -138,6 +140,16 @@ export type OrderingProblem =
   /** non-active-owner-first was applied without `context.activeActorId` —
    * the active owner is unknown. */
   | 'missing-active-owner'
+  /** hostile-before-beneficial found a candidate whose side cannot be
+   * derived (neither `candidate.side` nor a side-bearing classification of
+   * the candidate is available). Unknown classification must NOT mean
+   * beneficial — unresolved. */
+  | 'missing-candidate-side'
+  /** non-active-owner-first found a candidate whose ownership relative to
+   * the active actor cannot be derived (it is not the active id and carries
+   * no `isActiveOwner` flag). Unknown classification must NOT mean
+   * not-active — unresolved. */
+  | 'missing-candidate-ownership'
   /** controller-choice was passed to `applyOrdering` — the policy YIELDS a
    * choice and must never be resolved by this function. */
   | 'yields-choice'
@@ -194,10 +206,16 @@ export function applyOrdering(
       const perspectiveSide = context.perspectiveSide
         ?? (context.perspectiveActorId === undefined ? undefined : candidateSideOf(candidates, context.perspectiveActorId));
       if (perspectiveSide === undefined) return { ok: false, problem: 'missing-perspective' };
+      // EVERY candidate must derive a side to be classified. An unsided
+      // candidate is UNRESOLVED (`missing-candidate-side`) — unknown
+      // classification must never silently mean beneficial.
+      for (const candidate of candidates) {
+        if (candidate.side === undefined) return { ok: false, problem: 'missing-candidate-side' };
+      }
       const hostile: OrderingCandidate[] = [];
       const beneficial: OrderingCandidate[] = [];
       for (const candidate of candidates) {
-        if (candidate.side !== undefined && candidate.side !== perspectiveSide) {
+        if (candidate.side !== perspectiveSide) {
           hostile.push(candidate);
         } else {
           beneficial.push(candidate);
@@ -208,10 +226,20 @@ export function applyOrdering(
     case 'non-active-owner-first': {
       const active = context.activeActorId;
       if (active === undefined) return { ok: false, problem: 'missing-active-owner' };
+      // Every candidate needs AFFIRMATIVE ownership knowledge relative to
+      // the active actor: the active id itself (own), an explicit
+      // `isActiveOwner` flag (own or not-own), or it is UNRESOLVED
+      // (`missing-candidate-ownership`) — unknown must never silently mean
+      // not-active.
+      for (const candidate of candidates) {
+        const own = candidate.id === active || candidate.isActiveOwner === true;
+        const notOwn = candidate.id !== active && candidate.isActiveOwner === false;
+        if (!own && !notOwn) return { ok: false, problem: 'missing-candidate-ownership' };
+      }
       const others: OrderingCandidate[] = [];
       const own: OrderingCandidate[] = [];
       for (const candidate of candidates) {
-        if (candidate.id === active || candidate.isActiveOwner) {
+        if (candidate.id === active || candidate.isActiveOwner === true) {
           own.push(candidate);
         } else {
           others.push(candidate);

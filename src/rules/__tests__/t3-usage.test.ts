@@ -82,6 +82,20 @@ describe('U16 — key and identity contract', () => {
     expect(usageIdentityKey(heroAgain)).toBe(usageIdentityKey(hero));
   });
 
+  it('usageIdentityKey is unambiguous across delimiter-bearing opaque ids (adversarial collision)', () => {
+    // Ids are opaque strings, so a delimiter-concatenated key would collide:
+    // source `a:b` / owner `c` vs source `a` / owner `b:c`. The canonical
+    // tuple serialization must keep every distinct identity distinct.
+    const first = usageIdentity({ sourceId: 'a:b', ownerId: 'c', scope: 'round' });
+    const second = usageIdentity({ sourceId: 'a', ownerId: 'b:c', scope: 'round' });
+    expect(usageIdentitiesEqual(first, second)).toBe(false);
+    expect(usageIdentityKey(first)).not.toBe(usageIdentityKey(second));
+    // targetId round-trips through the tuple (null vs a delimiter-bearing ref
+    // are still distinct).
+    expect(usageIdentityKey({ sourceId: 'a', ownerId: 'b', scope: 'turn' }))
+      .not.toBe(usageIdentityKey({ sourceId: 'a', ownerId: 'b', scope: 'turn', targetId: '-' }));
+  });
+
   it('resetBoundaryFor maps turn/round/combat onto U8 boundaries (turn = owner turn-start)', () => {
     const turn = resetBoundaryFor('turn', 'hero');
     expect(turn).toEqual({ kind: 'boundary', boundary: 'turn', edge: 'start', subject: { kind: 'live', domain: 'actor', name: { kind: 'id', id: 'hero' } } });
