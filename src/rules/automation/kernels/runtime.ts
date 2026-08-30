@@ -1,229 +1,31 @@
 import { costContextFromRuntime, effectiveRuleCosts, evaluateCosts, ruleCostMutations } from './cost-payment.js';
-import { consumeTraitAttackModifiers, consumedTraitModifier, effectiveDamageDie } from './attack-modifiers.js';
+import { consumeTraitAttackModifiers, consumedTraitModifier } from './attack-modifiers.js';
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
-import { footprintDistance } from '../primitives/spatial-intent.js';
-import { rollDamageDice } from '../primitives/job-kit.js';
-import { recipientBonusDamageDice } from './bonus-damage.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
-import { evaluateActorQuery } from './evaluate-query.js';
 import { RuleProgramViolation } from './violations.js';
+// The U5 VALUE algebra (`evaluateNumber`) and its selector read surface
+// (`selectActors`) plus the U6 PREDICATE algebra (`evaluatePredicate`) live
+// in their semantic modules; this barrel re-exports them for the migration
+// duration (the split plan's "runtime.ts stays a compatibility barrel").
+import { actor, evaluateNumber, integer, selectActors } from './evaluate-value.js';
+import { evaluatePredicate } from './evaluate-predicate.js';
 import type {
   RuleAction,
-  RuleActorView,
   RuleEffect,
   RuleExecutionContext,
   RuleExecutionResult,
   RuleMutation,
-  RuleNumber,
-  RulePredicate,
   RuleProgram,
   RuleResolverRegistry,
-  RuleSelector,
   RuleStep,
 } from '../primitives/types.js';
 import type { Position } from '../../types.js';
 
 export { RuleProgramViolation };
 
-const distance = (a: RuleActorView, b: RuleActorView) => {
-  if (!a.position || !b.position) return Number.POSITIVE_INFINITY;
-  // The canonical p.92 footprint metric (L∞ between occupied footprints) —
-  // the same distance the targeting gates, auras, and the attack modifiers
-  // use, so a Size-2 edge that is within range is never measured by its
-  // anchor cells.
-  return footprintDistance({ position: a.position, size: a.size }, { position: b.position, size: b.size });
-};
-
-function actor(context: RuleExecutionContext, id: string) {
-  const value = context.state.actors[id];
-  if (!value) throw new RuleProgramViolation('selector.actor-missing', `Rule target ${id} does not exist.`);
-  return value;
-}
-
-export function selectActors(selector: RuleSelector, context: RuleExecutionContext): RuleActorView[] {
-  const source = actor(context, context.actorId);
-  let selected: RuleActorView[];
-  switch (selector.kind) {
-    // Reference selectors — a named referent, not a candidate query. The
-    // `attack-target` referent is still gated by the shared U3 eligibility
-    // (alive + on-battlefield) so a defeated/removed target yields nothing.
-    case 'self': selected = [source]; break;
-    case 'attack-target': {
-      const target = context.attackTargetId ? actor(context, context.attackTargetId) : undefined;
-      if (!target) { selected = []; break; }
-      const eligible = new Set(evaluateActorQuery({ relation: 'any' }, context).map((entry) => entry.id));
-      selected = eligible.has(target.id) ? [target] : [];
-      break;
-    }
-    case 'trigger-source': selected = context.triggerSourceId ? [actor(context, context.triggerSourceId)] : []; break;
-    case 'trigger-targets': selected = (context.triggerTargetIds ?? []).map((id) => actor(context, id)); break;
-    case 'input': {
-      const supplied = (context.input.actorIds?.[selector.key] ?? []).map((id) => actor(context, id));
-      // p.92: `ally` means another ally; generic input selectors also reject
-      // defeated/off-board actors before a resolver can mutate them — through
-      // the same U3 eligibility authority automatic targeting uses.
-      const relationQuery = { relation: selector.relation ?? 'any' };
-      const eligible = new Set(evaluateActorQuery(relationQuery, context).map((entry) => entry.id));
-      selected = supplied.filter((target) => eligible.has(target.id));
-      const minimum = selector.minimum ?? 0;
-      const maximum = selector.maximum ?? Number.POSITIVE_INFINITY;
-      if (selected.length < minimum || selected.length > maximum) throw new RuleProgramViolation('choice.actor-count', `${selector.key} requires ${minimum}–${maximum} actor targets.`);
-      // The input selector's legacy contract ENFORCES its declared range
-      // (throws) rather than silently excluding — preserved verbatim, but
-      // the legality question itself is the U3 candidate authority's answer:
-      // the range filter is the SAME p.92 footprint query automatic targeting
-      // uses, never a second actor-range algorithm in this adapter.
-      if (selector.range) {
-        const maximumRange = evaluateNumber(selector.range, context);
-        const inRange = new Set(evaluateActorQuery({ ...relationQuery, range: maximumRange }, context).map((entry) => entry.id));
-        if (selected.some((target) => !inRange.has(target.id))) throw new RuleProgramViolation('choice.actor-range', `${selector.key} contains a target outside range ${maximumRange}.`);
-      }
-      break;
-    }
-    // Query selectors — eligibility and every domain filter live in the
-    // shared U3 authority; this adapter only maps selector → query.
-    case 'all': selected = evaluateActorQuery({ relation: selector.relation }, context); break;
-    case 'adjacent': {
-      const origins = selectActors(selector.origin, context);
-      selected = evaluateActorQuery({ relation: selector.relation, origins, originDistance: 1 }, context);
-      break;
-    }
-    case 'within': {
-      const origins = selectActors(selector.origin, context);
-      const maximumRange = evaluateNumber(selector.range, context);
-      selected = evaluateActorQuery({ relation: selector.relation, origins, originDistance: maximumRange }, context);
-      break;
-    }
-    case 'condition': selected = evaluateActorQuery({ relation: selector.relation, conditionId: selector.conditionId }, context); break;
-    case 'marked': selected = evaluateActorQuery({ mark: { markId: selector.markId } }, context); break;
-    case 'summons': selected = evaluateActorQuery({ summon: { owner: selector.owner, summonType: selector.summonType } }, context); break;
-  }
-  // TODO(ICON-rules, pp.87–92, 94, 107): eligibility is now ONE shared
-  // authority (kernels/candidate.ts + kernels/evaluate-query.ts); line of
-  // sight/effect, Blind, Stealth, areas, and movement destinations still
-  // await the planned TargetQuery gateway (U3 Phase T2).
-  return [...new Map(selected.map((target) => [target.id, target])).values()];
-}
-
-function oneActor(selector: RuleSelector, context: RuleExecutionContext) {
-  const selected = selectActors(selector, context);
-  if (selected.length !== 1) throw new RuleProgramViolation('selector.single', `Expected one actor, received ${selected.length}.`);
-  return selected[0];
-}
-
-export function evaluateNumber(expression: RuleNumber, context: RuleExecutionContext): number {
-  switch (expression.kind) {
-    case 'constant': return expression.value;
-    case 'round': return context.state.round;
-    case 'input': {
-      const value = context.input.numbers?.[expression.key];
-      if (!Number.isFinite(value)) throw new RuleProgramViolation('choice.number-required', `${expression.key} requires a numeric choice.`);
-      if (expression.minimum !== undefined && value! < expression.minimum) throw new RuleProgramViolation('choice.number-minimum', `${expression.key} must be at least ${expression.minimum}.`);
-      if (expression.maximum !== undefined && value! > expression.maximum) throw new RuleProgramViolation('choice.number-maximum', `${expression.key} must be at most ${expression.maximum}.`);
-      return value!;
-    }
-    case 'stat': {
-      const target = oneActor(expression.actor, context);
-      const stats = {
-        hp: target.hp,
-        'max-hp': target.maxHp,
-        vitality: target.vitality,
-        vigor: target.vigor,
-        defense: target.defense,
-        armor: target.armor,
-        speed: target.speed,
-        dash: target.dash,
-        fray: target.fray,
-        actions: target.actions,
-        size: target.size,
-      } as const;
-      return stats[expression.stat];
-    }
-    case 'resource': return oneActor(expression.actor, context).resources[expression.resourceId] ?? 0;
-    case 'count': return selectActors(expression.selector, context).length;
-    case 'distance': return distance(oneActor(expression.from, context), oneActor(expression.to, context));
-    case 'die': {
-      const count = expression.count ? Math.max(0, Math.floor(evaluateNumber(expression.count, context))) : 1;
-      return Array.from({ length: count }, () => context.dice.die(expression.sides)).reduce((total, roll) => total + roll, 0);
-    }
-    case 'damage-die': {
-      const target = oneActor(expression.actor, context);
-      const count = Math.max(0, Math.floor(evaluateNumber(expression.count, context)));
-      return Array.from({ length: count }, () => context.dice.die(effectiveDamageDie(target))).reduce((total, roll) => total + roll, 0);
-    }
-    case 'damage-roll': {
-      const target = oneActor(expression.actor, context);
-      const dice = Math.max(0, Math.floor(evaluateNumber(expression.dice, context)));
-      // Recipient-scoped bonus-damage grants (Finesse p.116 / Vagabond Gambit
-      // p.145, content/jobs/bonus-damage-recipes.ts) are evaluated against the
-      // ACTUAL damage recipient at the roll query point — the VM threads the
-      // per-target recipient (`damageRecipientId`) through the damage effect,
-      // so a bloodied recipient gets its own bonus die and a healthy one does
-      // not, regardless of the primary attack target's state.
-      const recipientDice = context.damageRecipientId && context.encounterState
-        ? recipientBonusDamageDice(context.encounterState, context.actorId, context.sourceId, context.damageRecipientId)
-        : 0;
-      // F6a bonus-damage grants (content/jobs/bonus-damage-recipes.ts) fold
-      // their dice at the USE_ABILITY boundary into abilityUseModifiers, so
-      // this roll carries exactly what the command decided. The roll itself
-      // stays the shared keep-highest bonus-dice semantics (ICON p.102).
-      const bonusDice = (expression.bonusDice ? Math.max(0, Math.floor(evaluateNumber(expression.bonusDice, context))) : 0) + recipientDice + Math.max(0, target.resources['bonus-damage'] ?? 0) + Math.max(0, context.abilityUseModifiers?.bonusDamageDice ?? 0);
-      // F6 Hissatsu: an armed next attack rolls its damage die as a d10.
-      const die = effectiveDamageDie(target);
-      return rollDamageDice(context.dice, die, dice, bonusDice) + (expression.flat ? evaluateNumber(expression.flat, context) : 0);
-    }
-    case 'if': return evaluateNumber(evaluatePredicate(expression.predicate, context) ? expression.then : expression.otherwise, context);
-    case 'percent': {
-      const value = evaluateNumber(expression.value, context) * expression.percent / 100;
-      return expression.rounding === 'up' ? Math.ceil(value) : expression.rounding === 'down' ? Math.floor(value) : Math.round(value);
-    }
-    case 'add': return expression.values.reduce((total, value) => total + evaluateNumber(value, context), 0);
-    case 'multiply': return expression.values.reduce((total, value) => total * evaluateNumber(value, context), 1);
-    case 'minimum': return Math.min(...expression.values.map((value) => evaluateNumber(value, context)));
-    case 'maximum': return Math.max(...expression.values.map((value) => evaluateNumber(value, context)));
-    case 'clamp': {
-      const value = evaluateNumber(expression.value, context);
-      const minimum = expression.minimum ? evaluateNumber(expression.minimum, context) : Number.NEGATIVE_INFINITY;
-      const maximum = expression.maximum ? evaluateNumber(expression.maximum, context) : Number.POSITIVE_INFINITY;
-      return Math.min(maximum, Math.max(minimum, value));
-    }
-  }
-}
-
-export function evaluatePredicate(predicate: RulePredicate, context: RuleExecutionContext): boolean {
-  switch (predicate.kind) {
-    case 'always': return true;
-    case 'not': return !evaluatePredicate(predicate.predicate, context);
-    case 'all': return predicate.predicates.every((entry) => evaluatePredicate(entry, context));
-    case 'any': return predicate.predicates.some((entry) => evaluatePredicate(entry, context));
-    case 'compare': {
-      const left = evaluateNumber(predicate.left, context);
-      const right = evaluateNumber(predicate.right, context);
-      if (predicate.operator === '<') return left < right;
-      if (predicate.operator === '<=') return left <= right;
-      if (predicate.operator === '=') return left === right;
-      if (predicate.operator === '>=') return left >= right;
-      return left > right;
-    }
-    case 'has-condition': return selectActors(predicate.target, context).every((target) => target.conditions.has(predicate.conditionId));
-    // p.94/p.104: bloodied is at or under 50% of the wounds-adjusted maximum
-    // (RuleActorView.maxHp is already wounds-adjusted); "at 25% hp or lower"
-    // is the exact quarter mark. Both are the canonical HP-threshold
-    // predicates (`kernels/hp-threshold.ts`).
-    case 'bloodied': return selectActors(predicate.target, context).every((target) => target.hp <= target.maxHp / 2);
-    case 'quarter': return selectActors(predicate.target, context).every((target) => target.hp <= target.maxHp / 4);
-    case 'defeated': return selectActors(predicate.target, context).every((target) => target.defeated);
-    case 'in-terrain': return selectActors(predicate.target, context).every((target) => target.position && context.state.terrainAt(target.position).has(predicate.terrain));
-    case 'trigger': return context.triggers?.has(predicate.trigger) ?? false;
-    case 'state': return selectActors(predicate.target, context).every((target) => predicate.equals === undefined ? target.state[predicate.key] !== undefined : target.state[predicate.key] === predicate.equals);
-    case 'target-state': return selectActors(predicate.target, context).every((target) => predicate.equals === undefined ? target.state[predicate.key] !== undefined : target.state[predicate.key] === predicate.equals);
-  }
-}
-
-export function integer(expression: RuleNumber, context: RuleExecutionContext) {
-  return Math.max(0, Math.floor(evaluateNumber(expression, context)));
-}
+export * from './evaluate-value.js';
+export { evaluatePredicate } from './evaluate-predicate.js';
 
 function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext, output: RuleMutation[]) {
   for (const effect of effects) {

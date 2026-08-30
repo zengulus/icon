@@ -102,6 +102,21 @@ U6-core/U4** (plan §3.2), NOT further U3 expansion alone: U3/U7 still
 borrow `RuleSelector`/`context.actorId` because U1/U2 consumers are not yet
 migrated, and those temporary dependencies must not be deepened.
 
+**T2 landed (2026-08-30):** the query & expression algebra — U7 (entity
+anchor + retained-specialist boundaries), U3 (actor-domain operators
+completed: LoS/LoE-from-anchor, occupying, terrain predicate, owned-by,
+set composition; entity + terrain domains; query types moved to
+`primitives/query.ts`), the p.108 placement-LoS boundary resolved through
+the generic legality authority (teleport player-chosen destinations now
+require line of sight), U5 (`kernels/evaluate-value.ts`: count-query,
+distance-between-endpoints, percent-base-max), U6 CORE
+(`kernels/evaluate-predicate.ts`: mark-exists / in-stance / inside-aura /
+acted-this-round; effect-still-exists stays T4 with U10), and U4
+(`RuleChoice.rangeOrigin` anchor + the U2 chooser/controller entitlement
+seam). Full suite green (1544 tests), census byte-stable at 427, no
+source-unit promotion. The next tranche is **T3 — Policy, state, ledger:
+U14, U16 (core), U15, U17** (plan §3.2).
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

@@ -34,9 +34,9 @@ import type {
   RuleExecutionContext,
   RuleSelector,
 } from '../primitives/types.js';
+import type { ActorCandidateQuery } from '../primitives/query.js';
 import {
   matchesTargetRelation,
-  type TargetRelation,
 } from '../primitives/targeting.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import {
@@ -50,23 +50,11 @@ import { RuleProgramViolation } from './violations.js';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A candidate-legality query for actors. Every field is optional; absent
- * fields default to the most permissive value that is still source-safe. */
-export interface ActorCandidateQuery {
-  /** p.92 relation filter: 'self' | 'ally' | 'foe' | 'any'. Default 'any'. */
-  relation?: TargetRelation;
-  /** Optional maximum range (p.92 footprint distance). A RESOLVED SCALAR:
-   * the caller evaluates a dynamic `RuleNumber` through the U5 VALUE
-   * authority (`evaluateNumber`) at the query point. */
-  range?: number;
-  /** Who the range is measured from (U7 SpatialAnchor). Defaults to the
-   * acting actor — a LIVE `actor` anchor with no selector. */
-  rangeOrigin?: SpatialAnchor;
-  /** Whether defeated actors may appear in the CandidateSet. Default false. */
-  includeDefeated?: boolean;
-  /** Whether off-battlefield actors may appear. Default false. */
-  includeOffBattlefield?: boolean;
-}
+// The `ActorCandidateQuery` typed vocabulary lives in `primitives/query.ts`
+// (U3 QUERY vocabulary, barrel re-exported); this kernel owns the evaluation.
+// Kept re-exported here so the historical `candidate.ts` import surface stays
+// stable for the migration duration.
+export type { ActorCandidateQuery } from '../primitives/query.js';
 
 /** A structured rejection reason. The `code` is drawn from the existing
  * violation-code vocabulary so callers (e.g. `choice.ts`) can throw a
@@ -96,6 +84,18 @@ export function resolveSpatialAnchor(
   switch (anchor.kind) {
     case 'captured-position':
       return { position: { ...anchor.position }, size: Math.max(1, Math.floor(anchor.size ?? 1)) };
+    case 'entity': {
+      // A LIVE entity footprint anchor (p.92: the origin space may be any
+      // occupied space — an entity/object/summon is a size-1 cell).
+      const entity = context.state.entities[anchor.entityId];
+      if (!entity) {
+        throw new RuleProgramViolation('selector.entity-missing', `Anchor entity ${anchor.entityId} does not exist.`);
+      }
+      if (!entity.position) {
+        throw new RuleProgramViolation('selector.origin-invalid', `Anchor entity ${anchor.entityId} has no battlefield position.`);
+      }
+      return { position: { ...entity.position }, size: 1 };
+    }
     case 'actor': {
       const ids = anchorSelectorIds(anchor.selector, context);
       if (ids.length !== 1) {

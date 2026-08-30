@@ -106,9 +106,17 @@ the row's declared constraints (cardinality min/max/distinct, relation,
 p.92 footprint range, option membership, numeric bounds, direction non-zero,
 position in-grid). Actor-candidate legality is delegated to the shared U3
 authority (`kernels/candidate.ts`, see below) — the kernel keeps only
-required/optional, cardinality, and distinctness. Domain refinements stay
+required/optional, cardinality, and distinctness. T2 (2026-08-30): position
+choices route their in-grid + footprint-range reads through the shared U3
+position predicates and the range frame is a U7 `RuleChoice.rangeOrigin`
+anchor (default the acting actor; a malformed anchor rejects the choice
+instead of silently skipping the range check), and
+the U2 chooser/controller substrate is consumable
+(`choiceEntitledPlayer(choice, RoleFrame)` — declared chooser, else
+controller, else the source; an underivable declared role returns null,
+never a fallback). Domain refinements stay
 with their specialists (`kernels/teleport-choice.ts` owns unoccupied +
-Rampart). Network parity:
+Rampart + the p.108 line-of-sight leg). Network parity:
 `StatusSaveCommandInput` + the `USE_ABILITY` websocket schema carry all six
 buckets (non-ability commands carry only the Blessing surface). Pre/post
 boundary: a choice whose candidate set depends on a roll/movement/future
@@ -117,7 +125,7 @@ WINDOW/CONTINUATION underlays; never supply it speculatively. Tests:
 `choice.test.ts` (23 semantic cases) + protocol fixtures. Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
-### Candidate sets (QUERY underlay) — PARTIAL: actor + position query with the eligibility duplicates routed (2026-08-30)
+### Candidate sets (QUERY underlay) — PARTIAL: actor/position/entity/terrain query with the eligibility duplicates routed (T2, 2026-08-30)
 
 One deterministic ACTOR-domain eligibility authority beneath both automatic
 targeting and player choices. `kernels/candidate.ts`
@@ -174,21 +182,34 @@ OBJECT entities block, p.95; intangible summons do NOT obstruct — a bomb's
 cannot-share-with-bombs rule is a specialist constraint in the bomb
 placement resolver, never this predicate).
 
+T2 (2026-08-30) completed the T2 U3 contract on top of the landed actor/
+position slices: the query TYPES moved to `primitives/query.ts` (split-
+plan home, barrel re-exported); the actor-domain operator list now
+covers the full T2 contract (line of sight / line of effect composed
+from the query's U7
+anchor through the one LoS kernel, occupying-position, terrain predicate
+`onTerrain`, owned-by via the `summon.owner` explicit-id filter, and set
+composition `composeActorQueries` union/intersection/difference with
+distinct-by-identity — no invented ordering); the ENTITY domain
+(`evaluateEntityQuery`: owner/type/range-from-anchor/at-position) and
+TERRAIN domain (`evaluateTerrainCells`) landed; and the p.108
+placement-LoS boundary is resolved through the generic authority —
+`validatePositionLegality`/`evaluatePositions` gained the `lineOfSightFrom`
+policy and the teleport kernel's player-chosen destinations now enforce
+it (`move.line-of-sight`, spellblade behind-the-wall + control
+fixtures). The U5 `count-query` value and U6 predicates consume the new
+domains through `evaluateValueQuery`.
+
 NOT yet the full U3 QUERY underlay (see `docs/underlay-completion-plan.md`
-§1 U3): the query covers the actor domain and a FREE/UNOCCUPIED position
-slice — occupancy is an explicit query policy, not a property of a
-position candidate — but still lacks the terrain/entity/area/instance
-domains, ordering policies beyond the min-distance set, and the
+§1 U3): the AREA, PERSISTENT-INSTANCE, and RULE-SOURCE query domains are
+U10/U12-scoped (not part of the T2 contract); ordering policies remain
+the min-distance set + the opt-in distance-from-origin cell order
+(first/last/nth land only where a SOURCE defines them); and the
 `rushTowardFoes` direction fallback remains a flagged player-choice
-approximation. The pre-flight audit (T1 pass, 2026-08-30) sharpened the
-residual: the ACTOR domain itself lacks contract operators (LoS/LoE
-composition, occupying-position, terrain predicate, owned/controlled,
-union/intersection/difference, count, distinct-by-identity), and the
-p.108 line-of-sight predicate is missing from teleport/placement legality
-(classified as a deliberate T2 boundary — enforcing it would change
-existing teleport behavior). U3 and U7 remain honestly PARTIAL. The
-tracked completion task is TODO.md §"Underlay-phase task ledger" (U3
-audit correction). Sequencing owner:
+approximation (a movement-direction read, not an eligibility query). U3
+and U7 remain honestly PARTIAL. The tracked completion task is TODO.md
+§"Underlay-phase task ledger" (U3 audit correction + T2 expression
+algebra). Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
 ### Reference / Binding (U1 underlay) — PARTIAL: typed vocabulary landed (T1, 2026-08-30)

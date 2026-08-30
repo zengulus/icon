@@ -176,13 +176,21 @@ list understated two boundaries, now classified explicitly:
 - **Teleport/placement legality omits the p.108 LoS predicate.** ICON
   p.108: "For a space to be valid for summoning, teleporting, or creating
   objects, unless specified it must be free and unobstructed, and you also
-  need line of sight." `validatePositionLegality` expresses only in-grid →
-  range → occupied, and neither the teleport-choice kernel nor the spatial
-  gateway adds LoS for teleport destinations (entity-creation checks
-  creator LoS; the teleport path does not). ENFORCING this would change
-  existing teleport behavior/fixtures (a destination behind an
-  LoS-blocking effect would now fail), so it is CLASSIFIED here as a
-  deliberate boundary for T2, not silently changed in this pass.
+  need line of sight." At the T1 pass `validatePositionLegality` expressed
+  only in-grid → range → occupied, and neither the teleport-choice kernel
+  nor the spatial gateway added LoS for teleport destinations
+  (entity-creation checked creator LoS; the teleport path did not). This
+  was CLASSIFIED as a deliberate T2 boundary, not silently changed in that
+  pass. **T2 (2026-08-30) RESOLVED the boundary through the generic
+  authority:** `PositionLegalityQuery`/`PositionQuery` gained the
+  `lineOfSightFrom` policy, `validatePositionLegality` reports a
+  `line-of-sight` problem after occupancy, and the teleport kernel's
+  player-chosen destinations now route through it (`move.line-of-sight`,
+  with a behind-the-wall rejection fixture + a clear-line control fixture
+  in `spellblade.test.ts`). Entity/object creation already checked creator
+  LoS through the shared kernel. The reducer movement gateway remains the
+  movement authority (documented boundary): forced/derived teleports
+  (save-driven or swap legs) have no source-defined LoS origin.
 
 Other residual U3 work:
 
@@ -499,9 +507,34 @@ through the same selection and fails closed on equidistant ties. The
 position slice is a FREE/UNOCCUPIED specialist, NOT the complete U3
 position domain: occupancy is an explicit query policy (`any` vs
 `unoccupied`), ordering is opt-in, and movement/placement legality stays
-with the spatial gateway. Residual: query domains beyond
-actors/positions (terrain/entities/areas/instances) and ordering policies
-beyond the min-distance set.
+with the spatial gateway.
+
+**T2 extensions landed (2026-08-30)** — the query TYPES moved to their
+split-plan home `primitives/query.ts` (barrel re-exported; kernel
+`evaluate-query.ts` owns the evaluation), and the missing actor-domain
+operators + domains landed: line of sight / line of effect composition
+from the query's anchor (`lineOfSight`/`lineOfEffect`, sharing the one
+line-of-sight kernel), occupying-position (`occupying`), the terrain
+predicate (`onTerrain`), owned-by (the `summon.owner` filter now accepts an
+explicit owning actor id), and set composition
+(`composeActorQueries` union/intersection/difference, distinct-by-
+identity, no invented ordering). New domains: ENTITY
+(`evaluateEntityQuery` — owner/type/range-from-anchor/at-position over
+`state.entities`) and TERRAIN (`evaluateTerrainCells` — the
+terrain-predicate cell read). The position slice gained the p.108
+`lineOfSightFrom` policy (generic query + legality specialist) and
+`originSize` (the legality specialist measures the p.92 footprint of a
+Size>1 origin; size-1 collapses to the historical point metric). The U5
+`count-query` value and the U6 predicates consume these domains through
+`evaluateValueQuery`.
+
+Residual (honest): query domains for AREAS, PERSISTENT INSTANCES, and
+RULE SOURCES are not part of the T2 contract (persistent-instance reads
+are U10/U12-scoped; rule-source reads belong with the U16/U17 consumers),
+and ordering policies remain the min-distance set + the opt-in
+`distance-from-origin` cell order (first/last/nth land only where a
+SOURCE defines them). `rushTowardFoes`' direction fallback remains the
+flagged player-choice approximation named in §0.
 
 **Locations partially owning/duplicating.** Migrated (2026-08-30):
 `kernels/runtime.ts::selectActors` is a thin adapter over
@@ -577,11 +610,16 @@ check). Corrective pass (2026-08-30): the Dark Knight and Eye of the
 Storm nearest reads were retracted (player-choice clauses, §0), the
 `includeDefeated` flags they carried dropped, `rushTowardFoes` moved into
 this kernel, and `occupied` was corrected to an obstruction test.
-Remaining (Phase T2, honestly NOT "nothing"): the position slice covers
-in-grid space with explicit policies only — the generic `Query<T>` still
-lacks the terrain/entity/area/instance domains, ordering policies beyond
-the min-distance set, and `rushTowardFoes`' direction fallback remains a
-flagged player-choice approximation (a movement-direction read, not an
+T2 (2026-08-30): the actor-domain operators and the entity + terrain
+domains landed (see the Current state row), the p.108 placement-LoS
+boundary is resolved through the shared legality operator + position
+query policy (spellblade behind-the-wall + control fixtures), and the
+query types moved to `primitives/query.ts`. Remaining after T2 (honestly
+NOT "nothing"): the AREA/PERSISTENT-INSTANCE/RULE-SOURCE domains
+(persistent-instance reads are U10/U12-scoped; not part of the T2
+contract), ordering policies beyond the min-distance set + the opt-in
+cell order, and `rushTowardFoes`' direction fallback remains a flagged
+player-choice approximation (a movement-direction read, not an
 eligibility query).
 
 **Blocker families enabled (information only).** choice-input,
@@ -621,11 +659,23 @@ durable choice window (U12/U13), not legality — the evidence the ontology's
 **Current state.** `PARTIAL`. `kernels/choice.ts` is authoritative for the
 six bucket kinds (23 tests, tranche 1): required/optional/cardinality/
 distinctness/option membership/bounds; actor legality delegates to U3.
-Missing: chooser/controller roles on the row; candidate legality for
-positions/directions through U3 domains (positions still do their own
-in-grid + footprint-range check against `context.actorId`); opaque
-`abilityUseChoices`/`talentChoices` folds not yet folded onto the same
-spec.
+T2 (2026-08-30): position choices now route their in-grid + p.92
+footprint-range reads through the SHARED position predicates
+(`withinGrid` + footprintDistance from a resolved U7 anchor — the range
+frame is `RuleChoice.rangeOrigin`, a `SpatialAnchor` defaulting to the
+acting actor; a malformed anchor FAILS CLOSED instead of silently
+skipping the range check, `t2-choice-roles.test.ts`); and the U2
+chooser/controller substrate is consumable:
+`choiceEntitledPlayer(choice, RoleFrame)` / `choiceEntitledPlayerFromContext`
+derive the entitled chooser from the durable role frame (declared
+`chooser`, else `controller`, else the source) — a DECLARED role that
+cannot be derived returns null (the command/network boundary rejects
+rather than guesses), no content row sets the roles yet (the U13 window
+layer consumes the seam). Missing after T2: candidate legality for
+DIRECTIONS through a U3 domain (directions are axis-unit vectors, not a
+candidate domain); the opaque `abilityUseChoices`/`talentChoices` folds
+not yet folded onto the same spec; window-carried choices (U12/U13)
+constructing the same `ChoiceSpec`.
 
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
@@ -656,9 +706,11 @@ window-carried `ChoiceSpec` resolution; optional-decline never defaults
 (already covered, extended to window timing).
 
 **Consumers to migrate.** `teleport-choice.ts` (consume U3 position
-candidates where generic; keep in-grid/unoccupied/Rampart), selectActors'
+candidates where generic; keep in-grid/unoccupied/Rampart) — DONE
+(2026-08-30, the teleport legality already routed through
+`validatePositionLegality`, now with the p.108 LoS leg); selectActors'
 `input` branch, `ability-use-choices.ts` opaque fold, `talentChoices`
-allowlist (unify behind U4 optional-decline).
+allowlist (unify behind U4 optional-decline) — REMAIN after T2.
 
 **Blocker families enabled (information only).** choice-input,
 player-choice, post-roll-reactive-choice, gamble-result-selection,
@@ -691,20 +743,36 @@ percent of your maximum HP", p.103; p.219 Terraforming) needs BASE HP
 semantics; traversed-distance ("for every space you moved", rush/fly
 abilities) needs movement-traveled reads.
 
-**Current state.** `PARTIAL`. `RuleNumber` + `evaluateNumber`
-(`kernels/runtime.ts`) covers constant/stat/resource/round/input/count(actor
-selector)/distance(actor-to-actor)/die/damage-die/damage-roll/if/percent/
-add/multiply/minimum/maximum/clamp. Missing: count over general Query
-domains, distance between arbitrary refs/anchors, percent-of-BASE-max,
-usage reads (U16), status/member counts, traversed-distance, elevation,
-area size, non-numeric typed values. `evaluateNumber` lives in the runtime
-barrel; the split plan moves it to a semantic module.
+**Current state.** `PARTIAL`. T2 (2026-08-30) extracted the VALUE algebra
+from the runtime barrel to its semantic home `kernels/evaluate-value.ts`
+(`evaluateNumber` + `integer`, plus the selector read surface
+`selectActors` it resolves intrinsically; `kernels/runtime.ts` remains
+the compatibility barrel and re-exports it) and EXTENDED the operator
+list: `count-query` over the general U3 domains (actors/entities/
+positions/terrain cells via `evaluateValueQuery`),
+`distance` between arbitrary ENDPOINTS (RuleSelector | U1 reference |
+U7 anchor — always the canonical p.92 footprint metric, an unresolvable
+ref FAILS CLOSED), and `percent-base-max` (ICON p.107 "% HEALTH":
+percentage costs/damage use the BASE maximum, never the wounds-adjusted
+bar; the durable base max is now projected onto `RuleActorView`
+`baseMaxHp` by the encounter adapter, and a view without it fails
+closed). The existing core (constant/stat/resource/round/input/count
+(selector)/distance(actor-to-actor)/die/damage-die/damage-roll/if/
+percent/add/multiply/minimum/maximum/clamp) is unchanged. Missing after
+T2: usage reads (U16, T3), status/member counts (domain reads the
+`count-query` value now expresses), traversed-distance, elevation,
+area-size, and typed non-numeric values (positions/refs/colors stay
+typed in the surrounding vocabulary — no number collapse).
 
 **Locations partially owning/duplicating.** `evaluateNumber`
-(`kernels/runtime.ts`); `hp-threshold.ts` (bloodied/quarter reads);
-`kernels/bonus-damage.ts` (roll/recipient reads); inline per-resolver
-arithmetic (e.g. `integer()` callers, gamble sums in
-`content/jobs/programs/*`); `RuleNumber` type (`primitives/types.ts`).
+(`kernels/runtime.ts`) — MOVED to `kernels/evaluate-value.ts` (2026-08-30),
+runtime re-exports; `hp-threshold.ts` (bloodied/quarter state-threshold
+reads — the p.94/p.104 wounds-adjusted bar, distinct from the p.107 BASE
+max the `percent-base-max` value reads); `kernels/bonus-damage.ts`
+(roll/recipient reads stay at the ROLL query point but through the value
+vocabulary); inline per-resolver arithmetic (e.g. `integer()` callers,
+gamble sums in `content/jobs/programs/*`); `RuleNumber` type
+(`primitives/types.ts`).
 
 **Intended authority.** `kernels/evaluate-value.ts` (extracted from
 `runtime.ts`, barrel re-exported): `evaluateValue(expr, context)` over the
@@ -729,10 +797,13 @@ rejects. Boundary: quarter mark exactly; 0-count; traversal of 0.
 Replay: a damage-roll expression with recipient-scoped bonus dice replays
 byte-identical (existing Finesse fixture extended).
 
-**Consumers to migrate.** Resolver inline arithmetic → typed expressions;
-`hp-threshold.ts` reads fold into the expression algebra; bonus-damage
-recipient reads stay at the ROLL query point but through the value
-vocabulary.
+**Consumers to migrate.** Resolver inline arithmetic → typed expressions
+(REMAINS); `hp-threshold.ts` state-threshold reads stay the threshold
+authority (the `stat max-hp` read is the wounds-adjusted bar the
+bloodied/quarter predicates already fold; `percent-base-max` is the
+BASE-max % cost/damage read — the p.107 vs p.94 distinction is now
+TESTED in `t2-expression-algebra.test.ts`); bonus-damage recipient reads
+stay at the ROLL query point but through the value vocabulary.
 
 **Blocker families enabled (information only).** effect-count,
 status-count-scaling, member-count-scaling, damage-count-scaling,
@@ -764,22 +835,38 @@ usage gates ("once per round", p.99/p.105); terrain-at gates (p.104
 Rampart-adjacent clauses, p.129 movement gates); "has not acted this round"
 (p.129 Special).
 
-**Current state.** `PARTIAL`. `RulePredicate` + `evaluatePredicate`
-(`kernels/runtime.ts`): always/not/all/any/compare/has-condition/bloodied/
-quarter/defeated/in-terrain/trigger/state/target-state. Missing: compound
-gates from query+count+number, markExists, in-stance, inside-aura,
-used-this-scope, effect-still-exists, has-not-acted-this-round.
+**Current state.** `PARTIAL`. T2 (2026-08-30) extracted the PREDICATE
+algebra from the runtime barrel to its semantic home
+`kernels/evaluate-predicate.ts` (runtime re-exports it) and EXTENDED the
+CORE contract using only U1/U3/U5/U8: `mark-exists` (default mark key =
+source id, mirroring the `marked` query filter), `in-stance`,
+`inside-aura` (membership derived through the shared aura kernel's
+`isInAura` over the runtime view — never a parallel geometry read; an
+unregistered provenance FAILS CLOSED), and `acted-this-round` (the VM
+view's durable attack-made-this-turn read, p.129 Special). Compound gates
+compose through the existing `compare` operator over the new
+`count-query`/`distance` values (tests prove `count(foes) == 4` and
+`distance(source,target) >= 3`). The core (always/not/all/any/compare/
+has-condition/bloodied/quarter/defeated/in-terrain/trigger/state/
+target-state) is unchanged. Missing after T2 (honest): `used-this-scope`
+consumes the U16 ledger (T3) and `effect-still-exists` reads U10
+facts/instances (T4).
 
 **Staged completion (DAG-consistent).** U6's core predicate algebra depends
-on U1/U3/U5/U8 only and lands in T2; the `effect-still-exists` predicate
-reads U10 facts/instances and completes U6 in T4. U6 is NOT described as
-complete before its declared U10 dependency exists.
+on U1/U3/U5/U8 only and lands in T2 (LANDED 2026-08-30); the
+`effect-still-exists` predicate reads U10 facts/instances and completes
+U6 in T4. U6 is NOT described as complete before its declared U10
+dependency exists.
 
 **Locations partially owning/duplicating.** `evaluatePredicate`
-(`kernels/runtime.ts`); `kernels/hp-threshold.ts`; inline predicate logic in
-resolvers (`content/jobs/programs/*` condition checks); `kernels/range.ts`
-gates (stealth/comeback/mastery/choice — these are U6-predicate-shaped but
-live in the range fold); `kernels/area.ts` gates (same).
+(`kernels/runtime.ts`) — MOVED to `kernels/evaluate-predicate.ts`
+(2026-08-30), runtime re-exports; `kernels/hp-threshold.ts` (bloodied/
+quarter state reads); inline predicate logic in resolvers
+(`content/jobs/programs/*` condition checks); `kernels/range.ts` gates
+(stealth/comeback/mastery/choice — these are U6-predicate-shaped but
+live in the range fold); `kernels/area.ts` gates (same). The range/area
+gate folding is a behavior-preserving consumer migration that remains
+post-T2 (no source semantics change is implied by the plan).
 
 **Intended authority.** `kernels/evaluate-predicate.ts` (extracted from
 `runtime.ts`, barrel re-exported). Dependencies: U1, U3, U5, U8, U10
@@ -802,8 +889,10 @@ replays identically.
 
 **Consumers to migrate.** Range/area gate logic folds onto the predicate
 algebra (gates stay registered per recipe, but the gate bodies become
-predicates); resolver inline condition checks; `hp-threshold` predicate
-reads.
+predicates) — REMAINS post-T2; resolver inline condition checks —
+REMAINS; `hp-threshold` predicate reads — the bloodied/quarter predicates
+already evaluate through the shared `stat max-hp` read (the wounds-
+adjusted bar), kept as the threshold authority.
 
 **Blocker families enabled (information only).** distance-predicate,
 conditional-distance-stun, path-count-predicate, aura-count-condition,
@@ -843,13 +932,25 @@ the original user.
 (`kernels/candidate.ts` `resolveSpatialAnchor`, consumed by U3
 `rangeOrigin`; fail-closed on query-shaped selectors / zero-multi actors /
 position-less anchors; relation stays with the acting actor while range
-moves to the anchor). Specialist anchor ideas still exist and are NOT yet
-unified onto `SpatialAnchor`: `RuleArea.origin`
-(`self|target|position|entity`, `primitives/types.ts`); entity
-`creationSpatial` (origin selector + size + maxRange, `primitives/types.ts`,
-`kernels/entity-creation.ts`); `teleport-choice` origin positions;
-`SpatialIntent.from`; aura origins (`kernels/aura.ts`); rebound origin
-absent.
+moves to the anchor). T2 (2026-08-30) added the LIVE ENTITY footprint
+anchor (`{ kind: 'entity'; entityId }`, resolved to the entity's size-1
+cell; fail-closed `selector.entity-missing` / position-less) — consumed by
+the U3 entity-domain range origin and the U5 `distance` anchor endpoints.
+Specialist anchor ideas still exist and are NOT yet unified onto
+`SpatialAnchor`, each with a written boundary: `RuleArea.origin`
+(`self|target|position|entity`, `primitives/types.ts`) is DECLARATIVE
+ONLY — no runtime consumer exists yet (areas compute through
+`computeSpatialArea` intents), so typing it as an anchor is churn without
+a semantic seam; entity `creationSpatial` (origin selector + size +
+maxRange, `primitives/types.ts`, `kernels/entity-creation.ts`) is a
+RESOLVED-position contract evaluated at command time and carried on the
+mutation for replay — it names the same frame but travels with the
+creation record (documented retained specialist); `teleport-choice` origin
+positions are resolved positions consumed by the shared
+`validatePositionLegality` (a captured-position anchor in effect);
+`SpatialIntent.from` and aura origins (`kernels/aura.ts`) stay with the
+movement gateway / aura kernel (U2 migration is T3+); rebound origin
+absent (U12 continuation records).
 
 **PARTIAL / scaffolding (corrective pass 2026-08-30).** U7 remains
 PARTIAL and must not be extended as if it were U1 REFERENCE: the LIVE
@@ -895,9 +996,13 @@ referent rejects. Boundary: anchor to a defeated actor (source permits) vs
 off-board actor (rejects); size>1 footprint anchor edges (p.92). Replay:
 teleport planned-path + rebound-origin fixture replays byte-identical.
 
-**Consumers to migrate.** `candidate.ts` (resolve `rangeOrigin`),
-`RuleArea.origin` consumers, `teleport-choice` origin reads, aura origin
-derivation, `runtime.ts` `context.actorId`-as-anchor reads.
+**Consumers to migrate.** `candidate.ts` (resolve `rangeOrigin`) — DONE;
+`teleport-choice` origin reads — the positions are already consumed
+through the shared `validatePositionLegality` (a captured-position
+anchor in effect); `RuleArea.origin` consumers — none exist (declarative
+shape only, documented retained specialist); aura origin derivation —
+U2/T3+; `runtime.ts` `context.actorId`-as-anchor reads — T2+ de-dup
+work.
 
 **Blocker families enabled (information only).** rebound, entity-distance-
 selection, object-distance, range-gated-teleport, multi-actor-teleport,
@@ -1832,20 +1937,38 @@ PARTIAL; U8 stays PARTIAL (vocabulary + boundary-read surface landed;
 consumer migration remains). Exit met: vocabulary types + unit tests;
 zero existing test deltas.
 
-**Phase T2 — Query & expression algebra: U7, U3, U5, U6 (core), U4.**
-`primitives/anchor.ts` (SpatialAnchor, LIVE/CAPTURED) — landed;
-`kernels/evaluate-query.ts` extracted from `selectActors` with real
-`rangeOrigin` resolution and the actor/position domains; `selectActors`
-migrated (landed), the direct-target gate's base eligibility routed
-through the candidate authority (landed), and area actor-inclusion routed
-through the `insideArea` operator (landed; all behavior-preserving parity
-suites); `kernels/evaluate-value.ts` + `kernels/evaluate-predicate.ts`
-extracted and extended; `choice.ts` completes (roles, all domains through
-U3). **U6 lands in CORE form here** — the predicate algebra without the
-`effect-still-exists` read, which consumes U10 facts (see the U6 row);
-U6's U10-backed completion lands in T4. Exit: one eligibility authority;
-`rangeOrigin` resolved; expression/predicate core covers the §1 lists;
-choice legality = CandidateSet for every domain.
+**Phase T2 — Query & expression algebra: U7, U3, U5, U6 (core), U4.** —
+**LANDED (2026-08-30).** `primitives/anchor.ts` (SpatialAnchor,
+LIVE/CAPTURED) landed earlier; T2 added the LIVE ENTITY anchor.
+`kernels/evaluate-query.ts` (extracted from `selectActors` with real
+`rangeOrigin` resolution) owns the actor/position/entity/terrain domain
+operators — the query TYPES now live in `primitives/query.ts` (split-plan
+home); `selectActors` migrated, the direct-target gate's base eligibility
+routed through the candidate authority, and area actor-inclusion routed
+through the `insideArea` operator (all landed earlier, behavior-
+preserving). T2 completed the actor-domain operator list (LoS/LoE from
+the anchor, occupying, terrain predicate, owned-by, set composition with
+distinct-by-identity), added the entity + terrain domains, and resolved
+the p.108 placement-LoS boundary through the shared legality operator +
+position query policy (`move.line-of-sight`; behind-the-wall + control
+fixtures). `kernels/evaluate-value.ts` + `kernels/evaluate-predicate.ts`
+extracted from the runtime barrel (which re-exports them) and extended
+(`count-query` over all domains, distance between refs/anchors,
+percent-base-max; mark-exists / in-stance / inside-aura /
+acted-this-round predicates); `choice.ts` completes the U2
+chooser/controller seam and routes position legality through a U7
+`rangeOrigin` anchor. **U6 lands in CORE form here** — the predicate
+algebra without the `effect-still-exists` read, which consumes U10 facts
+(see the U6 row); U6's U10-backed completion lands in T4. Exit met for
+the T2 scope: one eligibility authority; `rangeOrigin` resolved (actor /
+entity / captured-position); expression/predicate core covers the §1
+lists for the T2 contract; choice position legality routes through the
+shared predicates + anchor. Honest residuals: area/persistent-instance/
+rule-source query domains (U10/U12-scoped), ordering beyond the
+min-distance set + opt-in cell order, direction-choice candidate domain,
+the opaque ability/talent choice folds, used-scope (U16) and
+effect-still-exists (U10) predicates, and the range/area gate body
+folding.
 
 **Phase T3 — Policy, state, ledger: U14, U16 (core), U15, U17.**
 `primitives/modifiers.ts` (one recipe shape, typed permission query

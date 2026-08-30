@@ -1,14 +1,25 @@
 /**
- * evaluate-query.ts — the U3 QUERY evaluation kernel (actor + position
- * domains).
+ * evaluate-query.ts — the U3 QUERY evaluation kernel (actor, position,
+ * entity, and terrain domains).
  *
  * ACTOR DOMAIN: the extended actor-query evaluator behind the
  * RuleSelector→views authority (`selectActors`, kernels/runtime.ts). Base
  * eligibility (relation / defeated / on-battlefield / range-from-anchor)
  * delegates to `kernels/candidate.ts` `evaluateActorCandidates` — ONE
  * eligibility machinery — and this module adds the domain operators the
- * selector vocabulary needs: condition, mark, summon, adjacency,
- * within-origin, and inside-area.
+ * selector vocabulary and the T2 query contract need: condition, mark,
+ * summon/owned-by, adjacency, within-origin, inside-area, line of sight /
+ * line of effect (from the query's anchor), occupying-position, and
+ * terrain predicate. Set composition (union/intersection/difference) over
+ * actor queries is `composeActorQueries`.
+ *
+ * ENTITY DOMAIN: `evaluateEntityQuery` is the generic entity/object/summon
+ * candidate read (owner, type, range-from-anchor, at-position) that the
+ * `entity-distance-selection` / `object-distance` blocker families and
+ * `count(query)` draw from.
+ *
+ * TERRAIN DOMAIN: `evaluateTerrainCells` is the terrain-predicate cell read
+ * (every in-grid cell within radius whose terrain union contains a type).
  *
  * POSITION DOMAIN: the position-candidate operators the placement/teleport
  * resolvers use (`evaluatePositions`, `validatePositionLegality`) and the
@@ -17,8 +28,10 @@
  * distance), so resolvers stop re-implementing the same free-cell scans and
  * teleport legality. Occupancy is an EXPLICIT query policy, never built into
  * the definition of a position candidate: `evaluatePositions` can represent
- * occupied OR unoccupied spaces (`space` policy), and deterministic ordering
- * is applied only when the caller requests it (`ordering` policy).
+ * occupied OR unoccupied spaces (`space` policy), deterministic ordering is
+ * applied only when the caller requests it (`ordering` policy), and line of
+ * sight from a declared origin is an explicit policy too (p.108: \"you also
+ * need line of sight\" for summoning/teleporting/creating objects).
  * `rushTowardFoes` (the directional-movement default the movement resolvers
  * use) lives here too — it is a nearest-foe read and must answer through the
  * same min-distance selection; it fails closed when several foes are
@@ -34,33 +47,62 @@
  */
 import type { RuleActorView, RuleExecutionContext } from '../primitives/types.js';
 import type { Position } from '../../types.js';
-import { footprintDistance, footprintIntersectsCells } from '../primitives/spatial-intent.js';
-import { axisDirection, distance, occupied, sameCell, squareArea, withinGrid } from '../primitives/job-kit.js';
-import { evaluateActorCandidates, type ActorCandidateQuery } from './candidate.js';
+import {
+  footprintDistance,
+  footprintIntersectsCells,
+} from '../primitives/spatial-intent.js';
+import {
+  axisDirection,
+  distance,
+  occupied,
+  sameCell,
+  squareArea,
+  withinGrid,
+} from '../primitives/job-kit.js';
+import { hasLineOfEffect, hasLineOfSight } from '../primitives/line-of-sight.js';
+import {
+  anchorFromActorSelector,
+  type SpatialAnchor,
+  type SpatialOrigin,
+} from '../primitives/anchor.js';
+import type {
+  ActorQuery,
+  ComposedActorQuery,
+  EntityQuery,
+  PositionLegalityProblem,
+  PositionLegalityQuery,
+  PositionQuery,
+  TerrainQuery,
+  ValueQuery,
+} from '../primitives/query.js';
+import { evaluateActorCandidates, resolveSpatialAnchor } from './candidate.js';
 import { RuleProgramViolation } from './violations.js';
 
-/** An actor query with the selector vocabulary's domain operators on top of
- * the base CandidateSet eligibility. */
-export interface ActorQuery extends ActorCandidateQuery {
-  /** Present → only actors carrying this condition (selector `condition`). */
-  conditionId?: string;
-  /** Present → only actors carrying this mark; absent `markId` = the source
-   * unit id (selector `marked`). */
-  mark?: { markId?: string };
-  /** Present → only summon/companion actors of the owner/type (selector
-   * `summons`). */
-  summon?: { owner: 'self' | 'any'; summonType?: string };
-  /** Pre-resolved origin actor views for the adjacency/within filters. */
-  origins?: readonly RuleActorView[];
-  /** When `origins` is present: maximum footprint distance from ANY origin
-   * (1 = adjacency). A resolved scalar, like `range`. */
-  originDistance?: number;
-  /** Present → only actors whose footprint intersects these area cells
-   * (p.95 area inclusion; p.290 a large actor counts when any footprint
-   * space is hit). The cells come from the spatial gateway
-   * (`computeSpatialArea`); the query owns which ACTORS qualify, so the
-   * base eligibility (defeated/off-battlefield/relation) applies here too. */
-  insideArea?: { cells: readonly Position[] };
+// The query typed vocabulary lives in `primitives/query.ts` (U3 QUERY
+// vocabulary, barrel re-exported); this kernel owns the evaluation. Kept
+// re-exported here so the historical `evaluate-query.ts` import surface stays
+// stable for the migration duration.
+export type {
+  ActorCandidateQuery,
+  ActorQuery,
+  ComposedActorQuery,
+  EntityQuery,
+  PositionLegalityProblem,
+  PositionLegalityQuery,
+  PositionOrderingPolicy,
+  PositionQuery,
+  PositionSpacePolicy,
+  TerrainQuery,
+  ValueQuery,
+} from '../primitives/query.js';
+
+/** The shared line-of-sight view over the VM state: the grid bounds plus the
+ * live terrain union (`RuleRuntimeState.terrainAt`). The grid carries no
+ * base `terrain` cells on the VM view, so `grid.terrain` is absent and only
+ * the live union is consulted — exactly what the reducer's terrain union
+ * produces for dynamic effects. */
+function lineView(context: RuleExecutionContext) {
+  return { grid: context.state.grid, terrainAt: context.state.terrainAt };
 }
 
 /** Evaluate an actor CandidateSet for a selector-shaped query. Pure — no
@@ -94,6 +136,36 @@ export function evaluateActorQuery(query: ActorQuery, context: RuleExecutionCont
       && footprintIntersectsCells({ position: candidate.position, size: candidate.size }, cells));
   }
 
+  // Line of sight / line of effect from the query's anchor (the same frame
+  // as `range`, default the acting actor) — the p.92 sight gate composed as
+  // a query operator, sharing the one line-of-sight kernel.
+  if (query.lineOfSight === true || query.lineOfEffect === true) {
+    const anchor = resolveSpatialAnchor(query.rangeOrigin ?? anchorFromActorSelector(), context);
+    const view = lineView(context);
+    candidates = candidates.filter((candidate) => {
+      if (candidate.position === null) return false;
+      if (query.lineOfSight === true && !hasLineOfSight(view, anchor.position, candidate.position)) return false;
+      if (query.lineOfEffect === true && !hasLineOfEffect(view, anchor.position, candidate.position)) return false;
+      return true;
+    });
+  }
+
+  // Occupying-position: the candidate's footprint contains the space.
+  if (query.occupying !== undefined) {
+    const position = query.occupying.position;
+    candidates = candidates.filter((candidate) =>
+      candidate.position !== null
+      && footprintIntersectsCells({ position: candidate.position, size: candidate.size }, [position]));
+  }
+
+  // Terrain predicate: the candidate stands on a cell whose terrain union
+  // contains the type (p.104 Rampart-adjacent clauses, p.129 movement gates).
+  if (query.onTerrain !== undefined) {
+    const terrain = query.onTerrain;
+    candidates = candidates.filter((candidate) =>
+      candidate.position !== null && context.state.terrainAt(candidate.position).has(terrain));
+  }
+
   // Condition membership.
   if (query.conditionId !== undefined) {
     const conditionId = query.conditionId;
@@ -111,7 +183,11 @@ export function evaluateActorQuery(query: ActorQuery, context: RuleExecutionCont
   // malformed state and fails closed, exactly as the selector authority has
   // always behaved.
   if (query.summon !== undefined) {
-    const ownerId = query.summon.owner === 'self' ? context.actorId : null;
+    const ownerId = query.summon.owner === 'self'
+      ? context.actorId
+      : query.summon.owner === 'any'
+        ? null
+        : query.summon.owner.actorId;
     const ids = Object.values(context.state.entities)
       .filter((entity) => entity.ownerId
         && (ownerId === null || entity.ownerId === ownerId)
@@ -140,58 +216,67 @@ function originDistance(origin: RuleActorView, target: RuleActorView): number {
   );
 }
 
+/** Set composition over actor queries (U3 "union/intersection/difference").
+ * Each query is evaluated independently through the one actor evaluator;
+ * the results are combined BY IDENTITY (distinct-by-identity), so an actor
+ * appearing under several member queries is never duplicated. The result
+ * order follows the first query's result order — no ordering is invented
+ * (source-defined first/last/nth ordering stays an explicit query policy
+ * only where the source defines it). Pure: no state is mutated. */
+export function composeActorQueries(
+  composition: ComposedActorQuery,
+  context: RuleExecutionContext,
+): RuleActorView[] {
+  const evaluated = composition.queries.map((query) => evaluateActorQuery(query, context));
+  const byId = (actor: RuleActorView) => actor.id;
+  switch (composition.operator) {
+    case 'union': {
+      const seen = new Set<string>();
+      const out: RuleActorView[] = [];
+      for (const set of evaluated) {
+        for (const actor of set) {
+          if (seen.has(actor.id)) continue;
+          seen.add(actor.id);
+          out.push(actor);
+        }
+      }
+      return out;
+    }
+    case 'intersection': {
+      if (evaluated.length === 0) return [];
+      const [first, ...rest] = evaluated;
+      const restSets = rest.map((set) => new Set(set.map(byId)));
+      return first.filter((actor) => restSets.every((set) => set.has(actor.id)));
+    }
+    case 'difference': {
+      if (evaluated.length === 0) return [];
+      const [first, ...rest] = evaluated;
+      const subtracted = new Set(rest.flatMap((set) => set.map(byId)));
+      return first.filter((actor) => !subtracted.has(actor.id));
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Position domain (U3 position slice)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The SPACE POLICY for a position query — what makes a cell a candidate.
- * `unoccupied` is the FREE/PLACEMENT reading: no OBSTRUCTING character or
- * object footprint (ICON p.95: summons are intangible and do not cause
- * obstruction, so a cell holding only an intangible summon is free). `any`
- * represents every in-grid space regardless of contents — ICON p.92 "Space:
- * Any space in range, and any characters or objects occupying it" means
- * generic position querying must be able to represent occupied spaces too.
- * A cell being "unavailable for a particular placement" (object stacking,
- * teleport unoccupied, bomb-can't-share-with-bombs) is a SPECIALIST rule
- * layered on top by the domain authority, never this policy. */
-export type PositionSpacePolicy =
-  | { kind: 'any' }
-  | { kind: 'unoccupied'; excludeActorId?: string };
-
-/** Optional deterministic ordering. The default (`none`) returns candidates
- * in no guaranteed order; a caller that needs a source-defined or
- * caller-requested order (the placement resolvers' "first available by
- * distance" scan) requests it explicitly. */
-export type PositionOrderingPolicy = { kind: 'none' } | { kind: 'distance-from-origin' };
-
-/** A position-domain candidate query. */
-export interface PositionQuery {
-  /** The center the radius is measured from. */
-  origin: Position;
-  /** Chebyshev radius. */
-  radius: number;
-  /** Whether the origin cell itself is a candidate. Default false — the
-   * placement helpers exclude the center (a free cell adjacent to it). */
-  includeOrigin?: boolean;
-  /** The space policy (see `PositionSpacePolicy`). */
-  space: PositionSpacePolicy;
-  /** Optional deterministic ordering policy. Default `none`. */
-  ordering?: PositionOrderingPolicy;
-}
-
 /** Evaluate a position CandidateSet: every in-grid cell within Chebyshev
- * `radius` of `origin` that passes the query's explicit SPACE POLICY,
- * ordered only when the caller requests an ORDERING policy. The bounds /
- * obstruction predicates are the shared primitives
- * (`primitives/job-kit.ts` `withinGrid`/`occupied`); this operator owns the
- * CANDIDATE semantics so placement resolvers stop re-implementing the same
- * cell scans (the historical `freeCellsInRange` helper). */
+ * `radius` of `origin` that passes the query's explicit SPACE POLICY (and
+ * the optional p.108 line-of-sight policy), ordered only when the caller
+ * requests an ORDERING policy. The bounds / obstruction predicates are the
+ * shared primitives (`primitives/job-kit.ts` `withinGrid`/`occupied`); this
+ * operator owns the CANDIDATE semantics so placement resolvers stop
+ * re-implementing the same cell scans (the historical `freeCellsInRange`
+ * helper). */
 export function evaluatePositions(query: PositionQuery, context: RuleExecutionContext): Position[] {
   const cells: Position[] = [];
+  const view = query.lineOfSightFrom ? lineView(context) : null;
   for (const cell of squareArea(query.origin, query.radius)) {
     if (!withinGrid(cell, context)) continue;
     if (!query.includeOrigin && sameCell(cell, query.origin)) continue;
     if (query.space.kind === 'unoccupied' && occupied(cell, context, query.space.excludeActorId ?? '')) continue;
+    if (view && !hasLineOfSight(view, query.lineOfSightFrom!, cell)) continue;
     cells.push(cell);
   }
   if (query.ordering?.kind === 'distance-from-origin') {
@@ -200,30 +285,28 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
   return cells;
 }
 
-/** The TELEPORT/placement legality specialist: in-grid, within point-cell
- * `range` of `origin`, and unoccupied (the teleport reading of free space —
- * no obstructing character/object; ICON p.104 "instantly move to unoccupied
- * space within range X"). Structured so the teleport kernel maps each
- * problem onto its existing violation codes instead of re-implementing the
- * same checks. This is a DOMAIN rule, not the generic position query: the
- * in-grid → range → unoccupied order is teleport's own contract. */
-export interface PositionLegalityQuery {
-  origin: Position;
-  range: number;
-  /** The mover whose own footprint is not an obstruction. */
-  excludeActorId?: string;
-}
-
-export type PositionLegalityProblem = 'out-of-bounds' | 'range' | 'occupied';
-
+/** The TELEPORT/placement legality specialist: in-grid, within the canonical
+ * p.92 footprint `range` of the origin footprint, unoccupied (the teleport
+ * reading of free space — no obstructing character/object; ICON p.104
+ * "instantly move to unoccupied space within range X"), and — when
+ * `lineOfSightFrom` is declared — with line of sight from that position
+ * (ICON p.108: summoning/teleporting/creating objects also needs line of
+ * sight). Structured so the teleport kernel maps each problem onto its
+ * existing violation codes instead of re-implementing the same checks. This
+ * is a DOMAIN rule, not the generic position query: the in-grid → range →
+ * unoccupied → LoS order is placement's own contract. */
 export function validatePositionLegality(
   query: PositionLegalityQuery,
   position: Position,
   context: RuleExecutionContext,
 ): { legal: boolean; problem: PositionLegalityProblem | null } {
   if (!withinGrid(position, context)) return { legal: false, problem: 'out-of-bounds' };
-  if (distance(query.origin, position) > query.range) return { legal: false, problem: 'range' };
+  const originFootprint = { position: query.origin, size: Math.max(1, Math.floor(query.originSize ?? 1)) };
+  if (footprintDistance(originFootprint, { position, size: 1 }) > query.range) return { legal: false, problem: 'range' };
   if (occupied(position, context, query.excludeActorId ?? '')) return { legal: false, problem: 'occupied' };
+  if (query.lineOfSightFrom && !hasLineOfSight(lineView(context), query.lineOfSightFrom, position)) {
+    return { legal: false, problem: 'line-of-sight' };
+  }
   return { legal: true, problem: null };
 }
 
@@ -259,4 +342,84 @@ export function rushTowardFoes(context: RuleExecutionContext, position: Position
     'choice.direction-ambiguous',
     'Several foes are equidistant; the movement direction requires a choice.',
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Entity domain (U3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Evaluate an entity CandidateSet (objects + summons on the battlefield).
+ * The only relation entities have is ownership, so the owner filter is the
+ * domain's relation read (p.95: summons belong to their summoner; objects
+ * may have a null owner). Range uses the canonical p.92 footprint metric
+ * from the query's anchor; `atPosition` is the occupying-position read.
+ * Deterministic, de-duplicated by identity. Pure — no state is mutated. */
+export function evaluateEntityQuery(query: EntityQuery, context: RuleExecutionContext): Array<{ id: string; type: string; ownerId: string | null; position: Position | null }> {
+  const anchor = query.rangeOrigin === undefined ? null : resolveSpatialAnchor(query.rangeOrigin, context);
+  const candidates = Object.values(context.state.entities).filter((entity) => {
+    if (query.owner !== undefined) {
+      const ownerId = query.owner.kind === 'self'
+        ? context.actorId
+        : query.owner.kind === 'any'
+          ? null
+          : query.owner.actorId;
+      if (ownerId === null ? entity.ownerId === null : entity.ownerId !== ownerId) return false;
+    }
+    if (query.entityType !== undefined && entity.type !== query.entityType) return false;
+    if (query.range !== undefined && entity.position !== null && anchor !== null) {
+      if (footprintDistance(anchor, { position: entity.position, size: 1 }) > query.range) return false;
+    }
+    if (query.atPosition !== undefined && entity.position !== null) {
+      if (!footprintIntersectsCells({ position: entity.position, size: 1 }, [query.atPosition])) return false;
+    }
+    return true;
+  }).map((entity) => ({ id: entity.id, type: entity.type, ownerId: entity.ownerId, position: entity.position }));
+  const seen = new Set<string>();
+  return candidates.filter((entity) => {
+    if (seen.has(entity.id)) return false;
+    seen.add(entity.id);
+    return true;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Terrain domain (U3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Evaluate a terrain-cell CandidateSet: every in-grid cell within Chebyshev
+ * `radius` of `origin` whose terrain union contains `terrain` (the terrain
+ * predicate read). Deterministic only when an ORDERING policy is requested —
+ * otherwise no order is guaranteed. Pure. */
+export function evaluateTerrainCells(query: TerrainQuery, context: RuleExecutionContext): Position[] {
+  const cells: Position[] = [];
+  for (const cell of squareArea(query.origin, query.radius)) {
+    if (!withinGrid(cell, context)) continue;
+    if (!context.state.terrainAt(cell).has(query.terrain)) continue;
+    cells.push(cell);
+  }
+  if (query.ordering?.kind === 'distance-from-origin') {
+    cells.sort((a, b) => distance(query.origin, a) - distance(query.origin, b) || a.x - b.x || a.y - b.y);
+  }
+  return cells;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Value-domain dispatch (U5 `count(query)`)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Evaluate a domain-dispatched query spec to its candidate list. Used by
+ * `RuleNumber.count-query` (U5) and the count comparisons composed on top of
+ * it (U6). Each domain returns its candidate elements (actor views, entity
+ * views, positions, terrain cells). Pure. */
+export function evaluateValueQuery(query: ValueQuery, context: RuleExecutionContext): unknown[] {
+  switch (query.domain) {
+    case 'actors':
+      return evaluateActorQuery(query.query, context);
+    case 'entities':
+      return evaluateEntityQuery(query.query, context);
+    case 'positions':
+      return evaluatePositions(query.query, context);
+    case 'terrain-cells':
+      return evaluateTerrainCells(query.query, context);
+  }
 }

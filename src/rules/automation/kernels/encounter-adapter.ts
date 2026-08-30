@@ -248,6 +248,9 @@ export function encounterRuleState(state: EncounterState): RuleRuntimeState {
       position: actor.onBattlefield ? { ...actor.position } : null,
       hp: actor.hp,
       maxHp: Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality),
+      // The durable BASE maximum for p.107 "% HEALTH" reads (percentage
+      // costs/damage use the base max, never the wounds-adjusted bar).
+      baseMaxHp: actor.baseMaxHp,
       vitality: actor.vitality,
       vigor: actor.vigor,
       defense: actor.defense,

@@ -2,14 +2,17 @@ import type { DiceSource } from '../../dice.js';
 import type { AttackDamageProvenance } from './attack-resolution.js';
 import type { SaveWindowBranch, SaveWindowKind, SaveWindowModifiers } from './save-window.js';
 import type { EncounterState, Position, SourceReference } from '../../types.js';
-import type { Binder } from './reference.js';
+import type { Binder, Reference } from './reference.js';
 import type { RoleSelector } from './roles.js';
+import type { SpatialAnchor } from './anchor.js';
+import type { ValueQuery } from './query.js';
 
 // Compatibility barrel: incremental underlay extraction re-exports new
 // primitive vocabulary here so consumers can keep importing from the
 // canonical types surface (U7 anchor vocabulary, then U1/U2/U8 as they
 // split).
 export * from './anchor.js';
+export * from './query.js';
 export * from './reference.js';
 export * from './roles.js';
 export * from './scope.js';
@@ -64,6 +67,14 @@ export interface RuleArea {
 
 export type RuleRelation = 'self' | 'ally' | 'foe' | 'any';
 
+/** One endpoint of a `distance` expression (U5): a RuleSelector (resolved
+ * through the selector authority), a typed U1 reference, or a U7 anchor. */
+export type DistanceEndpoint =
+  | RuleSelector
+  | { ref: Reference<'actor' | 'entity' | 'position'> }
+  | { anchor: SpatialAnchor };
+
+
 export type RuleSelector =
   | { kind: 'self' }
   | { kind: 'attack-target' }
@@ -84,7 +95,20 @@ export type RuleNumber =
   | { kind: 'round' }
   | { kind: 'input'; key: string; minimum?: number; maximum?: number }
   | { kind: 'count'; selector: RuleSelector }
-  | { kind: 'distance'; from: RuleSelector; to: RuleSelector }
+  /** Count over a general QUERY domain (U3/U5): `count(foesInArea) == 1`
+   * style reads over actors/entities/positions/terrain cells. The query
+   * spec is the typed U3 vocabulary (`primitives/query.ts`) with RESOLVED
+   * scalars; the kernel dispatches through `evaluateValueQuery`. */
+  | { kind: 'count-query'; query: ValueQuery }
+  /** Distance between two arbitrary ENDPOINTS (U5/U7): a RuleSelector, a
+   * typed U1 reference (actor/entity/position), or a U7 SpatialAnchor.
+   * Always the canonical p.92 footprint metric. */
+  | { kind: 'distance'; from: DistanceEndpoint; to: DistanceEndpoint }
+  /** Percent of the target's BASE maximum HP (ICON p.107 "% HEALTH":
+   * percentage costs/damage use the BASE maximum — never the
+   * wounds-adjusted bar). Fails closed when the view does not project the
+   * durable base max. */
+  | { kind: 'percent-base-max'; target: RuleSelector; percent: number; rounding: 'up' | 'down' | 'nearest' }
   | { kind: 'die'; sides: number; count?: RuleNumber }
   | { kind: 'damage-die'; actor: RuleSelector; count: RuleNumber }
   | { kind: 'damage-roll'; actor: RuleSelector; dice: RuleNumber; bonusDice?: RuleNumber; flat?: RuleNumber }
@@ -103,6 +127,18 @@ export type RulePredicate =
   | { kind: 'quarter'; target: RuleSelector }
   | { kind: 'defeated'; target: RuleSelector }
   | { kind: 'in-terrain'; target: RuleSelector; terrain: string }
+  /** Mark-exists: the target carries a mark (p.94). Absent `markId` = the
+   * source unit id, mirroring the `marked` query filter's default. */
+  | { kind: 'mark-exists'; target: RuleSelector; markId?: string }
+  /** In-stance: the target currently holds the stance (stance gate). */
+  | { kind: 'in-stance'; target: RuleSelector; stanceId: string }
+  /** Inside-aura: the target is currently inside the aura whose provenance
+   * is `sourceId` (default the acting source). Membership is derived
+   * through the shared aura kernel — never a parallel geometry read. */
+  | { kind: 'inside-aura'; target: RuleSelector; sourceId?: string }
+  /** Acted-this-round: the target has already made an attack this turn
+   * (the VM view's durable act state, p.129 Special). */
+  | { kind: 'acted-this-round'; target: RuleSelector }
   | { kind: 'trigger'; trigger: string }
   | { kind: 'state'; target: RuleSelector; key: string; equals?: string | number | boolean | null }
   | { kind: 'target-state'; target: RuleSelector; key: string; equals?: string | number | boolean | null };
@@ -124,6 +160,10 @@ export interface RuleChoice {
   /** U2 ROLE carriage (typed, optional — behavior-neutral until U4 consumes
    * them): who ANSWERS at the network boundary. */
   controller?: RoleSelector;
+  /** U7 ANCHOR carriage: the spatial frame a `positions` choice's range is
+   * measured from (default the acting actor). Resolved through the shared
+   * anchor authority at the choice point. */
+  rangeOrigin?: SpatialAnchor;
 }
 
 export type RuleDuration =
@@ -228,7 +268,13 @@ export interface RuleActorView {
   side: 'heroes' | 'foes';
   position: Position | null;
   hp: number;
+  /** The wounds-adjusted maximum (base minus wounds×vitality) — the bar
+   * HP thresholds (bloodied/quarter) are measured against. */
   maxHp: number;
+  /** The durable BASE maximum (p.107 "% HEALTH": percentage costs/damage
+   * use the BASE maximum, never the wounds-adjusted bar). Optional: views
+   * that do not project it fail closed on `percent-base-max` reads. */
+  baseMaxHp?: number;
   vitality: number;
   vigor: number;
   defense: number;

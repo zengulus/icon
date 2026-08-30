@@ -164,6 +164,39 @@ describe('Spellblade ability automation (p.222–229)', () => {
     expect(hero.position).toEqual({ x: 1, y: 1 });
   });
 
+  it('Nothung: a teleport destination behind impassable terrain is outside line of sight (p.108)', () => {
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    // Hero at (1,1), foe at (3,1). An impassable wall at (1,2) blocks the
+    // straight line to the otherwise-legal destination (0,2) (in-grid,
+    // within Teleport 1, unoccupied) without blocking the direct target
+    // (whose line passes (2,1)) — ICON p.108: "For a space to be valid for
+    // summoning, teleporting, or creating objects, unless specified it must
+    // be free and unobstructed, and you also need line of sight." The
+    // player-chosen destination is rejected at the generic position-legality
+    // authority (move.line-of-sight), nothing is consumed, and the hero
+    // never moves.
+    state.grid.terrain.push({ position: { x: 1, y: 2 }, type: 'impassable', elevation: 0 });
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 0, y: 2 }, { x: 0, y: 2 }),
+    }, scriptedDice(12, 4, 5))).toThrowError(expect.objectContaining({ code: 'move.line-of-sight' }));
+    expect(hero.actionsRemaining).toBe(2);
+    expect(hero.position).toEqual({ x: 1, y: 1 });
+  });
+
+  it('Nothung: a clear-line destination still teleports when impassable terrain sits elsewhere (p.108 control)', () => {
+    const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
+    // A wall at (0,1) does not block the line to (2,0) — the destination is
+    // legal and the teleport applies.
+    state.grid.terrain.push({ position: { x: 0, y: 1 }, type: 'impassable', elevation: 0 });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'spellblade:nothung', targetIds: [foe.id],
+      input: nothungTeleports({ x: 2, y: 0 }, { x: 2, y: 0 }),
+    }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 0 });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Nothung: hostile rampart blocks a chosen teleport destination (p.104)', () => {
     const { state, hero, foe } = spellbladeEncounter({ foe: { x: 3, y: 1 }, second: null });
     // A fortify foe projects rampart over its adjacent cells; a teleport

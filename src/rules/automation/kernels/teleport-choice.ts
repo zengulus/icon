@@ -59,11 +59,28 @@ export function chosenTeleportDestination(
     if (options?.optional) return null;
     throw new RuleProgramViolation('choice.position-required', `${label} requires a chosen teleport destination.`);
   }
-  // Position legality (in-grid / range / occupied) routes through the U3
-  // position-domain predicates — the same authority the free-cell candidate
-  // scans use — mapped onto the teleport kernel's historical violation codes
-  // so the command boundary rejects the whole ability identically.
-  const legality = validatePositionLegality({ origin, range, excludeActorId: actorId }, destination, context);
+  // Position legality (in-grid / footprint range / occupied / line of sight)
+  // routes through the U3 position-domain predicates — the same authority the
+  // free-cell candidate scans use — mapped onto the teleport kernel's
+  // historical violation codes so the command boundary rejects the whole
+  // ability identically.
+  //
+  // ICON p.108: "For a space to be valid for summoning, teleporting, or
+  // creating objects, unless specified it must be free and unobstructed, and
+  // you also need line of sight." The player-chosen destination must have
+  // line of sight from the teleporter's current position (the same origin the
+  // range is measured from); a destination behind impassable terrain or an
+  // LoS-blocking effect is rejected here, at the generic legality operator,
+  // exactly like an out-of-bounds or occupied one. (Forced/derived teleports
+  // — save-driven or swap legs whose LoS source the source text does not
+  // define — stay the movement gateway's application-time authority; this
+  // gate governs player-chosen Teleport X destinations.)
+  const legality = validatePositionLegality({
+    origin,
+    range,
+    excludeActorId: actorId,
+    lineOfSightFrom: origin,
+  }, destination, context);
   if (!legality.legal) {
     switch (legality.problem) {
       case 'out-of-bounds':
@@ -72,6 +89,8 @@ export function chosenTeleportDestination(
         throw new RuleProgramViolation('move.range', `${label} teleport is limited to ${range} space${range === 1 ? '' : 's'} (Teleport ${range}).`);
       case 'occupied':
         throw new RuleProgramViolation('choice.position-unavailable', `${label} teleport destination is occupied.`);
+      case 'line-of-sight':
+        throw new RuleProgramViolation('move.line-of-sight', `${label} teleport destination is outside line of sight.`);
     }
   }
   return destination;

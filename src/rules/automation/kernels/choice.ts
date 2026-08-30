@@ -35,7 +35,10 @@ import type {
   RuleExecutionContext,
 } from '../primitives/types.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
-import { validateActorCandidate } from './candidate.js';
+import { withinGrid } from '../primitives/job-kit.js';
+import { anchorFromActorSelector } from '../primitives/anchor.js';
+import { deriveRoles, resolveRoleSelector, roleFrameFromContext, type RoleFrame } from '../primitives/roles.js';
+import { resolveSpatialAnchor, validateActorCandidate } from './candidate.js';
 import { RuleProgramViolation, evaluateNumber } from './runtime.js';
 
 /** The validated value for one `RuleChoice`: what the player supplied,
@@ -122,16 +125,24 @@ function resolvePositions(choice: RuleChoice, context: RuleExecutionContext): Ch
     if (!choice.required) return { kind: 'positions', positions: [] };
     throw choiceViolation('choice.position-required', choice, 'requires a chosen position.');
   }
-  const source = context.state.actors[context.actorId];
-  const origin = source.position;
+  // The range frame is the U7 ANCHOR (default the acting actor), resolved
+  // through the shared anchor authority — a malformed anchor (zero/multi
+  // actors, a position-less actor) FAILS CLOSED rather than silently
+  // skipping the range check.
+  const origin = resolveSpatialAnchor(choice.rangeOrigin ?? anchorFromActorSelector(), context);
   const positions: Position[] = [];
   for (const cell of supplied) {
-    if (cell.x < 0 || cell.y < 0 || cell.x >= context.state.grid.width || cell.y >= context.state.grid.height) {
+    // In-grid legality routes through the same shared predicate the U3
+    // position operators compose (`withinGrid`).
+    if (!withinGrid(cell, context)) {
       throw choiceViolation('move.out-of-bounds', choice, `position (${cell.x},${cell.y}) is outside the battlefield.`);
     }
-    if (choice.range && origin) {
+    // Range through the canonical p.92 footprint metric from the anchor
+    // (a Size>1 origin measures from its footprint edge — the same metric
+    // the query authority uses).
+    if (choice.range) {
       const maximumRange = evaluateNumber(choice.range, context);
-      if (footprintDistance({ position: origin, size: source.size }, { position: cell, size: 1 }) > maximumRange) {
+      if (footprintDistance({ position: origin.position, size: origin.size }, { position: cell, size: 1 }) > maximumRange) {
         throw choiceViolation('move.range', choice, `position (${cell.x},${cell.y}) is outside range ${maximumRange}.`);
       }
     }
@@ -192,4 +203,32 @@ function resolveBoolean(choice: RuleChoice, context: RuleExecutionContext): Chos
     throw choiceViolation('choice.boolean-required', choice, 'requires a yes/no answer.');
   }
   return { kind: 'boolean', value: supplied };
+}
+
+/**
+ * The entitled chooser for a choice row (U2 CHOICE/CHOER/control substrate):
+ * the declared `chooser` role, else the declared `controller`, else the
+ * acting source. Returns null when a DECLARED chooser/controller cannot be
+ * derived from the role frame — the command/network boundary must REJECT
+ * rather than guess (an underivable semantic role is malformed; the engine
+ * never silently falls back to the source for a declared role).
+ *
+ * The frame is the durable role authority: `roleFrameFromContext` builds it
+ * from the legacy context slots; the command/network boundary supplies the
+ * recorded per-subject controllers (multiplayer/VTT). No content row sets
+ * `chooser`/`controller` yet — this is the substrate the window layer (U13)
+ * and the network boundary consume.
+ */
+export function choiceEntitledPlayer(choice: RuleChoice, frame: RoleFrame): string | null {
+  const selector = choice.chooser ?? choice.controller;
+  if (!selector) return frame.sourceId;
+  return resolveRoleSelector(selector, deriveRoles(frame));
+}
+
+/** Convenience over the legacy context slots. The legacy context carries no
+ * recorded per-subject controller facts, so every `controller-of` resolution
+ * fails closed (returns null) until a real multiplayer/session authority
+ * records controllers — never a silent fallback to the source. */
+export function choiceEntitledPlayerFromContext(choice: RuleChoice, context: RuleExecutionContext): string | null {
+  return choiceEntitledPlayer(choice, roleFrameFromContext(context));
 }

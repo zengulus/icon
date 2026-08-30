@@ -41,6 +41,11 @@ export type SpatialAnchor =
    * selectors may anchor a measurement; query selectors (`all`, `within`,
    * `adjacent`, …) cannot name one origin and are rejected at resolution. */
   | { kind: 'actor'; selector?: RuleSelector }
+  /** A LIVE entity/object/summon footprint, named by its entity id (p.92
+   * "from the edge of the origin space (or character)" — an entity's
+   * footprint is a valid origin for range/LoS/area measurements, e.g. a
+   * summon-placement or entity-centered query). Entities are size-1 cells. */
+  | { kind: 'entity'; entityId: string }
   /** A CAPTURED battlefield position (a chosen or bound space from an
    * earlier operation). Size defaults to 1 (a point cell). */
   | { kind: 'captured-position'; position: Position; size?: number };
@@ -54,4 +59,9 @@ export function anchorFromPosition(position: Position, size = 1): SpatialAnchor 
 /** Pure constructor: a live actor anchor. Absent selector = acting actor. */
 export function anchorFromActorSelector(selector?: RuleSelector): SpatialAnchor {
   return { kind: 'actor', selector };
+}
+
+/** Pure constructor: a live entity footprint anchor. */
+export function anchorFromEntity(entityId: string): SpatialAnchor {
+  return { kind: 'entity', entityId };
 }
