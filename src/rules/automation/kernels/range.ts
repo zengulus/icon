@@ -1,7 +1,12 @@
 import type { RuleSourceUnit } from '../../source-units.js';
 import type { Position } from '../../types.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
-import { hasMastery } from './mastery.js';
+import {
+  foldNumberModifiers,
+  modifierRulesForSource,
+  registerModifierRule,
+  type ModifierFoldView,
+} from '../primitives/modifiers.js';
 import type { RuleAction, RuleClauseCompilation, RuleProgramCompilation } from '../primitives/types.js';
 
 /**
@@ -80,27 +85,30 @@ export function isExactlyRange(view: RangeStateView, fromId: string, toId: strin
   return distanceBetween(view, fromId, toId) === range;
 }
 
-// ── Range modifier registry ──────────────────────────────────────────────────
+// ── Range modifier registry (U14 shared shape) ─────────────────────────────
+//
+// The range fold reads the ONE U14 ModifierRule registry
+// (`primitives/modifiers.ts`) at the `listed-range` query point: content
+// rows registered through `registerRangeModifierRule` are converted to
+// shared-shape rows, and `effectiveScopedRange` folds through the shared
+// `foldNumberModifiers` discipline (registration order, add accumulates,
+// last override wins, shared gate evaluator). The gate vocabulary and the
+// `RangeStateView` read surface stay the range kernel's public API — no
+// consumer changes.
 
+/** The fold mode: `add` accumulates, `override` replaces (the shared
+ * ModifierOperation, restricted to the two the range kernel uses). */
 export type RangeModifierMode = 'add' | 'override';
 
-export type RangeModifierGate =
-  /** The actor has the stealth condition (Incubus talent 1: "If you make it
-   * from stealth"). */
-  | { kind: 'stealth' }
-  /** The actor is bloodied (Harvest talent 2: "Comeback: Range 5"). */
-  | { kind: 'comeback' }
-  /** The actor has mastered the named parent ability (mastery rows). */
-  | { kind: 'mastery'; abilityId: string }
-  /** The player has declared a talent-use choice for this source unit at
-   * command time (Dark Sliver talent 2: "Sacrifice 2: Ability gains
-   * range 6"). The range modifier fires only when the player opted in.
-   * Replay carries the recorded choice. */
-  | { kind: 'choice'; sourceId: string };
+/** The source-defined conditions under which a range rule applies — the
+ * shared U14 gate union (stealth / comeback / mastery / choice, plus the
+ * other gates the shared evaluator understands). */
+export type RangeModifierGate = import('../primitives/modifiers.js').ModifierGate;
 
 /** A registered range-modifier rule: how one content unit modifies its parent
- * ability's listed range. Deterministic: rules apply in registration order,
- * `add` accumulates and the last matching `override` wins. */
+ * ability's listed range. This is the U14 `ModifierRule` shape restricted to
+ * the `listed-range` query point — the kernel converts each row to shared
+ * rows (one per declared scope) at registration. */
 export interface RangeModifierRule {
   /** The exact source unit id that owns this rule (talent/mastery id). */
   sourceId: string;
@@ -129,47 +137,58 @@ export interface RangeModifierRule {
   scopes?: ReadonlyArray<string>;
 }
 
-const rangeModifierRules: RangeModifierRule[] = [];
-
-/** Register a range-modifier rule (content/jobs/range-recipes.ts). */
-export function registerRangeModifierRule(rule: RangeModifierRule): void {
-  rangeModifierRules.push(rule);
-}
-
 /** The scope keys a rule applies to: its declared `scopes`, or the default
  * top-level `'attack'` scope when none are declared. */
 function ruleScopes(rule: RangeModifierRule): readonly string[] {
   return rule.scopes ?? ['attack'];
 }
 
+/** Register a range-modifier rule (content/jobs/range-recipes.ts). Each
+ * declared scope becomes one shared U14 ModifierRule row at the
+ * `listed-range` query point; the fold and the content audits read the
+ * shared registry, so the range gate logic lives exactly once. */
+export function registerRangeModifierRule(rule: RangeModifierRule): void {
+  for (const scope of ruleScopes(rule)) {
+    registerModifierRule({
+      sourceId: rule.sourceId,
+      ownerId: rule.abilityId,
+      queryPoint: 'listed-range',
+      scope,
+      operation: rule.mode,
+      value: rule.value,
+      ...(rule.gate ? { gates: [rule.gate] } : {}),
+      ...(rule.talent !== undefined ? { talent: rule.talent } : {}),
+      ...(rule.actionId !== undefined ? { actionId: rule.actionId } : {}),
+    });
+  }
+}
+
 /** The union of scope keys the registered rules for `sourceId` modify, or
  * null when no range rule is registered for the unit. The compound-talent
  * completeness manifest uses this to require every scope a compound talent's
- * complete semantics need. */
+ * complete semantics need. Reads the shared registry. */
 export function rangeModifierRuleScopes(sourceId: string): ReadonlySet<string> | null {
-  const rules = rangeModifierRules.filter((rule) => rule.sourceId === sourceId);
+  const rules = modifierRulesForSource(sourceId, 'listed-range');
   if (rules.length === 0) return null;
-  return new Set(rules.flatMap((rule) => ruleScopes(rule)));
+  return new Set(rules.map((rule) => rule.scope));
 }
 
-function ruleApplies(rule: RangeModifierRule, view: RangeStateView, actorId: string): boolean {
+/** Project a RangeStateView + actor onto the shared U14 fold view. */
+function rangeFoldView(view: RangeStateView, actorId: string): ModifierFoldView {
   const actor = view.actors[actorId];
-  if (!actor) return false;
-  if (rule.talent !== undefined && actor.talents?.[rule.abilityId] !== rule.talent) return false;
-  switch (rule.gate?.kind) {
-    case 'stealth':
-      return view.conditionsFor(actorId).has('stealth');
-    case 'comeback': {
-      const maximum = actor.maximumHp ?? 0;
-      return maximum > 0 && (actor.hp ?? 0) <= maximum / 2;
-    }
-    case 'mastery':
-      return hasMastery(actor, rule.gate.abilityId);
-    case 'choice':
-      return view.selectedTalentSourceIds?.has(rule.gate.sourceId) ?? false;
-    default:
-      return true;
-  }
+  return {
+    round: view.round,
+    actor: {
+      id: actorId,
+      hp: actor?.hp,
+      maximumHp: actor?.maximumHp,
+      abilityIds: actor?.abilityIds,
+      masteredAbilityIds: actor?.masteredAbilityIds,
+      talents: actor?.talents,
+    },
+    conditionsFor: (id) => view.conditionsFor(id),
+    ...(view.selectedTalentSourceIds ? { selectedTalentSourceIds: view.selectedTalentSourceIds } : {}),
+  };
 }
 
 /**
@@ -185,7 +204,8 @@ function ruleApplies(rule: RangeModifierRule, view: RangeStateView, actorId: str
  * an internal selector), so every consumer agrees on the same effective
  * authority. Evaluated against the current encounter state at command time —
  * a conditional gate that stops being true (stealth lost, healed above
- * half) shrinks the range back immediately.
+ * half) shrinks the range back immediately. Folds through the shared U14
+ * `foldNumberModifiers` at the `listed-range` query point.
  */
 export function effectiveScopedRange(
   view: RangeStateView,
@@ -195,16 +215,14 @@ export function effectiveScopedRange(
   scope: string,
   actionId?: string,
 ): number {
-  let range = baseRange;
-  for (const rule of rangeModifierRules) {
-    if (rule.abilityId !== abilityId) continue;
-    if (rule.actionId !== undefined && rule.actionId !== actionId) continue;
-    if (!ruleScopes(rule).includes(scope)) continue;
-    if (!ruleApplies(rule, view, actorId)) continue;
-    range = rule.mode === 'add'
-      ? range + (rule.value === 'round' ? view.round : rule.value)
-      : rule.value === 'round' ? view.round : rule.value;
-  }
+  const range = foldNumberModifiers(
+    'listed-range',
+    scope,
+    baseRange,
+    abilityId,
+    rangeFoldView(view, actorId),
+    { actionId },
+  );
   return Math.max(0, Math.floor(range));
 }
 
@@ -231,7 +249,7 @@ export function effectiveAbilityRange(
  * ability and the gate holds, so the program is audit-complete without
  * adding EXECUTE_RULE authority. */
 export function compileRangeModifierRecipe(unit: RuleSourceUnit): RuleProgramCompilation | null {
-  if (!rangeModifierRules.some((rule) => rule.sourceId === unit.id)) return null;
+  if (!rangeModifierRuleScopes(unit.id)) return null;
   const clause: RuleClauseCompilation = {
     id: `${unit.id}:clause:1`,
     label: 'passive',

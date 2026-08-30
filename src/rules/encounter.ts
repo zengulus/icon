@@ -10,6 +10,8 @@ import { initialCharacterResources, perEncounterCharacterResourceIds } from './c
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
 import { applyDamageLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
+import { applyOrdering } from './automation/primitives/ordering.js';
+import { validateTransaction } from './automation/primitives/transaction.js';
 import { decideDamageWindow } from './automation/kernels/trigger-window.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
 import { bonusDamageDiceForUse } from './automation/kernels/bonus-damage.js';
@@ -1342,7 +1344,22 @@ function assertProgramCostsPayable(
  * consumed, redirected, or half-applied. */
 function assertLegalSpatialBatch(state: EncounterState, action: RuleAction, mutations: RuleMutation[]) {
   if (!action.requiresLegalSpatialBatch) return;
-  if (deniedAtomicSpatialLegIndices(state, mutations).size > 0) {
+  // The all-or-nothing contract is the U15 TRANSACTION authority
+  // (`primitives/transaction.ts`): every leg of the source-declared atomic
+  // spatial group is validated against the SAME pre-swap snapshot; a single
+  // denied leg rejects the whole action before any event is emitted. The
+  // per-leg spatial legality stays with the spatial gateway
+  // (`deniedAtomicSpatialLegIndices`) — U15 owns the grouping, never the
+  // geometry.
+  const denied = deniedAtomicSpatialLegIndices(state, mutations);
+  const verdict = validateTransaction(
+    mutations.map((mutation, index) => ({
+      intent: mutation,
+      validate: () => (denied.has(index) ? 'spatial.atomic-denied' : null),
+    })),
+    state,
+  );
+  if (!verdict.ok) {
     throw new RuleViolation('spatial.atomic-denied', `${action.name} cannot be made: its spatial effect is not legal right now.`);
   }
 }
@@ -2104,19 +2121,29 @@ export function orderInterrupts(state: EncounterState, turnActorId: string, pend
  * still holding damage — windows opened by the interrupt's own later damage
  * are newer triggers, not the window being answered. Falls back to the most
  * recently triggered plain window (no held damage) for interrupts that answer
- * a trigger with no deferral. */
+ * a trigger with no deferral. The LIFO selection is the U17 `stack` policy
+ * applied to the actor's windows (`primitives/ordering.ts`) — the ONE
+ * ordering authority; the window's recorded push order decides, never
+ * array construction order. */
 function popInterruptWindow(state: EncounterState, actorId: string): EncounterPendingInterrupt | undefined {
-  for (let index = state.pendingInterrupts.length - 1; index >= 0; index -= 1) {
-    if (state.pendingInterrupts[index].actorId === actorId && state.pendingInterrupts[index].heldDamage) {
-      return state.pendingInterrupts.splice(index, 1)[0];
-    }
-  }
-  for (let index = state.pendingInterrupts.length - 1; index >= 0; index -= 1) {
-    if (state.pendingInterrupts[index].actorId === actorId) {
-      return state.pendingInterrupts.splice(index, 1)[0];
-    }
-  }
-  return undefined;
+  const held = selectInterruptStackTop(state, actorId, true);
+  if (held) return held;
+  return selectInterruptStackTop(state, actorId, false);
+}
+
+/** The most recently triggered window for `actorId` (matching `heldOnly`),
+ * through the shared stack ordering policy; removes and returns it. */
+function selectInterruptStackTop(state: EncounterState, actorId: string, heldOnly: boolean): EncounterPendingInterrupt | undefined {
+  const windows = state.pendingInterrupts.filter((window) => window.actorId === actorId && (!heldOnly || window.heldDamage));
+  if (windows.length === 0) return undefined;
+  const ordered = applyOrdering(
+    { kind: 'stack' },
+    windows.map((window) => ({ id: window.id })),
+  );
+  const top = ordered[0];
+  const index = state.pendingInterrupts.findIndex((window) => window.id === top.id);
+  if (index < 0) return undefined;
+  return state.pendingInterrupts.splice(index, 1)[0];
 }
 
 /** ICON p.151 Masquerade: the interrupt swaps places with a willing ally and

@@ -114,8 +114,20 @@ distance-between-endpoints, percent-base-max), U6 CORE
 acted-this-round; effect-still-exists stays T4 with U10), and U4
 (`RuleChoice.rangeOrigin` anchor + the U2 chooser/controller entitlement
 seam). Full suite green (1544 tests), census byte-stable at 427, no
-source-unit promotion. The next tranche is **T3 — Policy, state, ledger:
-U14, U16 (core), U15, U17** (plan §3.2).
+source-unit promotion. **T3 — Policy, state, ledger: U14, U16 (core),
+U15, U17 — LANDED (2026-08-30)** (plan §3.2): the one ModifierRule shape
+(`primitives/modifiers.ts`, typed permission query points with enumerated
+negatives) absorbed the range/area/mastery/bonus-damage fold registries;
+the U16 core ledger (`primitives/usage.ts`) landed with byte-identical
+keys, caps, per-use magnitude, and the `used-scope` predicate; the U15
+transaction seam (`primitives/transaction.ts`) is wired into the
+Masquerade spatial-batch gate; the U17 ordering policies
+(`primitives/ordering.ts`) drive the ability-step order, the
+trigger-window recipe order, and the interrupt LIFO pop. U18 evaluated
+under the plan's decision rule: not promoted. Full suite green (1586
+tests), census byte-stable at 427, no source-unit promotion. The next
+tranche is **T4 — Time and outcome: U9, U10 (completes U6 and U16)**
+(plan §3.2).
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

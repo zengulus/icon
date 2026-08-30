@@ -1,5 +1,6 @@
 import type { EncounterActor, EncounterHeldDamage, EncounterPendingInterrupt, EncounterState } from '../../types.js';
 import type { DamageLedgerEntry, DamageWindowLedger } from './damage-ledger.js';
+import { applyOrdering } from '../primitives/ordering.js';
 import { hasAvailableDefeatedInterrupt, hasAvailableWhenDamagedInterrupt, prospectiveAppliedDefeat } from './encounter-adapter.js';
 
 /**
@@ -77,8 +78,20 @@ export function decideDamageWindow(
   target: EncounterActor,
   provenance: DamageWindowProvenance,
 ): DamageWindowLedger | null {
-  for (const recipe of TRIGGER_WINDOW_RECIPES) {
-    if (recipe.opens(state, target, provenance)) return { trigger: recipe.trigger, held: true, resolution: null };
+  // The recipe order is the U17 `source-order` policy applied against the
+  // registry's own listing (when-damaged before defeated, p.107) — the ONE
+  // ordering authority, so the recorded boundary contract never depends on
+  // array construction order.
+  const ordered = applyOrdering(
+    { kind: 'source-order' },
+    TRIGGER_WINDOW_RECIPES.map((recipe) => ({ id: recipe.trigger })),
+    { sourceOrder: TRIGGER_WINDOW_RECIPES.map((recipe) => recipe.trigger) },
+  );
+  for (const candidate of ordered) {
+    const recipe = TRIGGER_WINDOW_RECIPES.find((row) => row.trigger === candidate.id);
+    if (recipe && recipe.opens(state, target, provenance)) {
+      return { trigger: recipe.trigger, held: true, resolution: null };
+    }
   }
   return null;
 }

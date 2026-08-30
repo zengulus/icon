@@ -1,4 +1,5 @@
 import { costContextFromRuntime, effectiveRuleCosts, evaluateCosts, ruleCostMutations } from './cost-payment.js';
+import { applyOrdering } from '../primitives/ordering.js';
 import { consumeTraitAttackModifiers, consumedTraitModifier } from './attack-modifiers.js';
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
@@ -203,10 +204,20 @@ function effectsToMutations(effects: RuleEffect[], context: RuleExecutionContext
  * trigger priority — simultaneously-derived triggers share the ability's
  * source-listing order. This returns the selected steps in that canonical
  * order so execution never depends on Set iteration or author discipline.
+ * The ordering is the U17 `source-order` policy applied against the
+ * ability's step listing (`primitives/ordering.ts`) — the ONE ordering
+ * authority, never a bespoke sort.
  */
 export function orderedSelectedSteps(action: RuleAction, selectedSteps: RuleStep[]): RuleStep[] {
-  const sourceOrder = new Map(action.steps.map((step, index) => [step.id, index]));
-  return [...selectedSteps].sort((first, second) => (sourceOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) - (sourceOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER));
+  const ordered = applyOrdering(
+    { kind: 'source-order' },
+    selectedSteps.map((step) => ({ id: step.id })),
+    { sourceOrder: action.steps.map((step) => step.id) },
+  );
+  const byId = new Map(selectedSteps.map((step) => [step.id, step]));
+  return ordered
+    .map((candidate) => byId.get(candidate.id))
+    .filter((step): step is RuleStep => step !== undefined);
 }
 
 /** ICON p.143 — regenerate a save and its outcome branch for a re-roll

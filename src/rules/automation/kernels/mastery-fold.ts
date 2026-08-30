@@ -1,4 +1,15 @@
-import { hasMastery, type MasteryOwnerView } from './mastery.js';
+import { type MasteryOwnerView } from './mastery.js';
+import {
+  effectivePermission,
+  foldEnumeratedModifiers,
+  foldNumberModifiers,
+  modifierRuleHolds,
+  modifierRulesForSource,
+  registerModifierRule,
+  registerPermissionRule,
+  type ModifierFoldView,
+  type ModifierGate,
+} from '../primitives/modifiers.js';
 import type { RuleExecutionContext } from '../primitives/types.js';
 
 /**
@@ -38,14 +49,13 @@ import type { RuleExecutionContext } from '../primitives/types.js';
  * planning and replay read the same authority.
  */
 
-/** The source-defined conditions under which a mastery modifier applies. */
-export type MasteryFoldGate =
-  /** Unconditional. */
-  | { kind: 'always' }
-  /** The encounter round is at least `value` (ICON "at round 4 or higher"). */
-  | { kind: 'round-at-least'; value: number };
+/** The source-defined conditions under which a mastery modifier applies — the
+ * shared U14 gate union (always / round-at-least are the mastery families). */
+export type MasteryFoldGate = import('../primitives/modifiers.js').ModifierGate;
 
-/** The reusable modifier families this kernel owns. */
+/** The reusable modifier families this kernel owns — each maps to a shared
+ * U14 query point: `interrupt-rank` (set), `damage-type` (set with the
+ * `from` guard), and the `range-bound` permission (immune). */
 export type MasteryModifier =
   /** Override the parent interrupt's rank (= uses per round). Last match wins. */
   | { kind: 'interrupt-rank'; rank: number }
@@ -86,20 +96,69 @@ export interface MasteryModifierRule {
   modifier: MasteryModifier;
 }
 
-const masteryModifierRules: MasteryModifierRule[] = [];
-
-/** Register a reviewed mastery-modifier rule (content/jobs). */
+/** Register a reviewed mastery-modifier rule (content/jobs). Each family
+ * converts to the shared U14 substrate: `interrupt-rank` and `damage-type`
+ * become shared ModifierRule rows, `unlimited-range` becomes a `range-bound`
+ * permission row (immune). The mastery fold reads the shared registry. */
 export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
-  masteryModifierRules.push(rule);
+  // Every mastery row REQUIRES the parent ability equipped AND mastered
+  // (`hasMastery`) — that ownership requirement is part of the mastery
+  // semantics independent of the source gate, so it is baked into the shared
+  // row's gates as the `mastery` gate (the shared evaluator's mastery gate IS
+  // `hasMastery`). A `{ kind: 'always' }` source gate then means "no extra
+  // round condition", never "applies without mastering".
+  const gates: ModifierGate[] = [{ kind: 'mastery', abilityId: rule.abilityId }];
+  if (rule.gate && rule.gate.kind !== 'always') gates.push(rule.gate);
+  switch (rule.modifier.kind) {
+    case 'interrupt-rank':
+      registerModifierRule({
+        sourceId: rule.sourceId,
+        ownerId: rule.abilityId,
+        queryPoint: 'interrupt-rank',
+        scope: 'default',
+        operation: 'set',
+        value: rule.modifier.rank,
+        ...(gates.length > 0 ? { gates } : {}),
+      });
+      break;
+    case 'damage-type':
+      registerModifierRule({
+        sourceId: rule.sourceId,
+        ownerId: rule.abilityId,
+        queryPoint: 'damage-type',
+        scope: 'default',
+        operation: 'set',
+        value: rule.modifier.to,
+        from: rule.modifier.from,
+        ...(gates.length > 0 ? { gates } : {}),
+      });
+      break;
+    case 'unlimited-range':
+      registerPermissionRule({
+        sourceId: rule.sourceId,
+        ownerId: rule.abilityId,
+        queryPoint: 'range-bound',
+        kind: 'immune',
+        ...(gates.length > 0 ? { gates } : {}),
+      });
+      break;
+  }
 }
 
-function ruleHolds(rule: MasteryModifierRule, view: MasteryFoldStateView, actorId: string): boolean {
+/** Project a MasteryFoldStateView + actor onto the shared U14 fold view. */
+function masteryFoldView(view: MasteryFoldStateView, actorId: string): ModifierFoldView {
   const actor = view.actors[actorId];
-  if (!actor || !hasMastery(actor, rule.abilityId)) return false;
-  const gate = rule.gate;
-  if (!gate || gate.kind === 'always') return true;
-  if (gate.kind === 'round-at-least') return view.round >= gate.value;
-  return false;
+  return {
+    round: view.round,
+    actor: {
+      id: actorId,
+      hp: actor?.hp,
+      maximumHp: actor?.maximumHp,
+      abilityIds: actor?.abilityIds,
+      masteredAbilityIds: actor?.masteredAbilityIds,
+    },
+    conditionsFor: () => new Set<string>(),
+  };
 }
 
 /**
@@ -108,16 +167,18 @@ function ruleHolds(rule: MasteryModifierRule, view: MasteryFoldStateView, actorI
  * source gates holding). Program-level folds that alter a value inside a
  * parent resolver (PERFECT BATTLEMENT's "deals 4 damage instead of 2") ask
  * this instead of re-stating the gate locally, so the source conditions
- * live in exactly one place — the registered rows.
+ * live in exactly one place — the registered rows. Reads the shared
+ * registry through the shared gate evaluator.
  */
 export function masteryModifierActive(
   view: MasteryFoldStateView,
   actorId: string,
   sourceId: string,
 ): boolean {
-  const rules = masteryModifierRules.filter((rule) => rule.sourceId === sourceId);
+  const rules = modifierRulesForSource(sourceId);
   if (rules.length === 0) return false;
-  return rules.every((rule) => ruleHolds(rule, view, actorId));
+  const foldView = masteryFoldView(view, actorId);
+  return rules.every((rule) => modifierRuleHolds(rule, foldView, rule.ownerId, {}));
 }
 
 /**
@@ -125,7 +186,8 @@ export function masteryModifierActive(
  * rank the caller would otherwise use (the source catalog cost value), after
  * every registered `interrupt-rank` mastery rule whose parent is mastered
  * and whose gate holds. Deterministic in registration order; the last match
- * wins, exactly like the range/area kernels' override semantics.
+ * wins, exactly like the range/area kernels' override semantics. Folds
+ * through the shared U14 `foldNumberModifiers`.
  */
 export function effectiveInterruptRank(
   view: MasteryFoldStateView,
@@ -133,12 +195,7 @@ export function effectiveInterruptRank(
   abilityId: string,
   baseRank: number,
 ): number {
-  let rank = baseRank;
-  for (const rule of masteryModifierRules) {
-    if (rule.abilityId !== abilityId || rule.modifier.kind !== 'interrupt-rank') continue;
-    if (!ruleHolds(rule, view, actorId)) continue;
-    rank = rule.modifier.rank;
-  }
+  const rank = foldNumberModifiers('interrupt-rank', 'default', baseRank, abilityId, masteryFoldView(view, actorId));
   return Math.max(1, Math.floor(rank));
 }
 
@@ -147,7 +204,8 @@ export function effectiveInterruptRank(
  * resolver is about to emit: every registered `damage-type` conversion whose
  * parent is mastered and whose gate hold applies in registration order, so
  * chained conversions compose deterministically. An unmatched base type
- * passes through unchanged — the fold never invents a conversion.
+ * passes through unchanged — the fold never invents a conversion. Folds
+ * through the shared U14 `foldEnumeratedModifiers` with the `from` guard.
  *
  * Generic over the caller's damage-type literal so an unconverted base type
  * keeps its exact type at the call site.
@@ -158,27 +216,20 @@ export function convertedDamageType<T extends string>(
   abilityId: string,
   baseType: T,
 ): T {
-  let type: string = baseType;
-  for (const rule of masteryModifierRules) {
-    if (rule.abilityId !== abilityId || rule.modifier.kind !== 'damage-type') continue;
-    if (!ruleHolds(rule, view, actorId)) continue;
-    if (rule.modifier.from === type) type = rule.modifier.to;
-  }
+  const type = foldEnumeratedModifiers('damage-type', 'default', baseType, abilityId, masteryFoldView(view, actorId));
   return type as T;
 }
 
 /**
  * True when the parent ability's maximum-range bound is removed for this
  * actor ("no maximum range") — the caller keeps owning what its bound
- * applies to; the fold only answers whether it collapses.
+ * applies to; the fold only answers whether it collapses. Reads the shared
+ * `range-bound` permission registry (immune).
  */
 export function hasUnlimitedRange(
   view: MasteryFoldStateView,
   actorId: string,
   abilityId: string,
 ): boolean {
-  return masteryModifierRules.some((rule) =>
-    rule.abilityId === abilityId
-    && rule.modifier.kind === 'unlimited-range'
-    && ruleHolds(rule, view, actorId));
+  return effectivePermission('range-bound', abilityId, masteryFoldView(view, actorId)) !== null;
 }

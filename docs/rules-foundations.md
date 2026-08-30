@@ -302,6 +302,86 @@ turn not on source turn, slow-turn≠ordinary-turn, non-boundary-null,
 permanent-never, named-event, replay; plus edge/subject preservation in
 `scopeForDuration`) — 17 tests.
 
+### Modifier / Policy (U14 underlay) — LANDED (T3, 2026-08-30)
+
+One recipe shape for "how an attached rule alters a typed query point":
+`primitives/modifiers.ts` (barrel re-exported) owns `ModifierRule`
+(`{ sourceId, ownerId, queryPoint, scope, operation, value, gates,
+talent, actionId, from, ordering }`), `registerModifierRule` (unknown
+query points reject at registration), `applicableModifierRules` /
+`foldNumberModifiers` / `foldEnumeratedModifiers` (registration order,
+`add` accumulates, last `set`/`override` wins, `from`-guarded chained
+conversions), ONE shared gate evaluator (`modifierGateHolds` over the
+shared `ModifierGate` union: always/stealth/comeback/round-at-least/
+mastery/choice/self-bloodied/target-bloodied/target-has-condition), and
+typed `PermissionQueryPoint` kinds (`cannot`/`ignore`/`immune`) with the
+enumerated negative registry `PERMISSION_NEGATIVES` (an unlisted pair
+rejects at registration — a wildcard bypass is unrepresentable). The range
+(`listed-range` per declared scope), area (`area-size` + `area-shape`),
+mastery (`interrupt-rank`/`damage-type` + the `range-bound` permission,
+with equipped+mastered baked into every row), and bonus-damage
+(`bonus-damage-dice`) fold registries convert their content rows to shared
+rows and fold through the shared discipline; the kernels keep their public
+surfaces as thin adapters. Retained specialists with written boundaries:
+cost-modifier function rows (cost-list rewriting), the attack-modifiers
+armed one-shot fold, scaled/recipient bonus-damage function rows, aura /
+save-window boon-curse consumption sites, and the damage-exception
+mutation fields (`bypassVigor`/`ignoreArmor`/`ignoreDefiance`/
+`ignoreAetherwall`/`ignoreCover`/`ignoreDodge` stay distinct
+program-emitted fields; the permission registry is where content-registered
+permission rows fold). Tests: `t3-modifiers.test.ts`. Sequencing owner:
+[`generic-underlays.md`](generic-underlays.md).
+
+### Transaction / Atomic Commit (U15 underlay) — LANDED (T3, 2026-08-30)
+
+One atomic-grouping authority: `primitives/transaction.ts` owns
+`TransactionLeg` (intent + per-leg validate against ONE snapshot),
+`validateTransaction` (all-or-nothing verdict naming the first failing
+leg), `proposeAtomicGroup`, and `legWithCheck`. The command boundary's
+Masquerade gate (`assertLegalSpatialBatch`, ICON p.151) composes the
+source-declared atomic spatial group through `validateTransaction` — every
+move leg validated against the same pre-swap snapshot via the spatial
+gateway, a single denied leg rejects the whole action before any event is
+emitted. U15 owns the grouping; per-domain legality stays in the domain
+authorities (spatial, payment, creation). Tests: `t3-transaction.test.ts`.
+
+### Usage / Entitlement Ledger (U16 underlay, CORE) — CORE LANDED (T3, 2026-08-30)
+
+"How many times has/may this rule be used within scope X?" — distinct from
+spendable resources. `primitives/usage.ts` owns the core ledger:
+`usageKey` (byte-identical `ledger:<scope>:<sourceId>` format, shared with
+the F9 reactive fold), `usageIdentity` (the CORE de-dup key; the U10 fact
+read completes U16 in T4), `usageCount`/`ledgerAvailable`,
+`consumeUsageMutation` (one-shot boolean mark or N-per-scope count
+increment — decided once at the command boundary, riding the recorded
+event), `refreshUsageMutation`, `usageRead` (per-use magnitude ordinal),
+`holdsUsageKey`, `resetBoundaryFor` (turn/round/combat onto U8
+boundaries), and `usageCap` (folds the U14 `use-cap` query point for
+count-override caps). `kernels/use-ledger.ts` is a thin adapter; the U6
+`used-scope` predicate reads the durable ledger. The shared de-dup
+identity for trigger families reads U10 facts and completes U16 in T4; the
+interrupt-use counter and attacked-this-turn/end-turn flags remain durable
+actor fields (typed-ledger migration is the T6 consolidation item). Tests:
+`t3-usage.test.ts` + `use-ledger.test.ts`.
+
+### Ordering / Arbitration (U17 underlay) — LANDED (T3, 2026-08-30)
+
+Typed ordering policies, NOT one numeric priority: `primitives/ordering.ts`
+owns `OrderingPolicy` (source-order | stack | turn-order |
+hostile-before-beneficial | non-active-owner-first | controller-choice |
+explicit-list), `applyOrdering` (pure — a function of the recorded policy
++ durable context), `policyYieldsChoice` (controller-choice yields a typed
+U4 choice spec; the engine never invents an order), and `orderingKey`
+(durable identity). Wired consumers: `orderedSelectedSteps` (the engine's
+ability-step order, p.85/p.107 §4) applies the `source-order` policy;
+`decideDamageWindow` applies it to `TRIGGER_WINDOW_RECIPES`; the
+pending-interrupt LIFO pop applies the `stack` policy (p.107 most-recent-
+trigger-first). The lifecycle registry order remains the recorded boundary
+contract and the scheduler's turn election stays the scheduler authority
+(both documented U17 consumers); hostile-before-beneficial /
+non-active-owner-first / controller-choice land their turn-boundary
+consumers with the U13 window work in T5. Tests: `t3-ordering.test.ts`.
+
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED
 
 `executeCommand(input, command, dice)` never mutates input; it plans ordered

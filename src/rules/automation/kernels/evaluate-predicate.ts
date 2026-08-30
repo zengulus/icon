@@ -29,6 +29,7 @@
 import type { RuleExecutionContext, RulePredicate } from '../primitives/types.js';
 import { selectActors, evaluateNumber } from './evaluate-value.js';
 import { auraDefinitionFor, auraRuntimeView, isInAura } from './aura.js';
+import { usageCount, usageKey } from '../primitives/usage.js';
 import { RuleProgramViolation } from './violations.js';
 
 export function evaluatePredicate(predicate: RulePredicate, context: RuleExecutionContext): boolean {
@@ -86,6 +87,14 @@ export function evaluatePredicate(predicate: RulePredicate, context: RuleExecuti
     // view's durable act state (attack-made-this-turn projection); a fuller
     // "any action" ledger is a later scope.
     case 'acted-this-round': return selectActors(predicate.target, context).every((target) => target.attacked);
+    // Used-scope (U16, T3): the target's durable usage ledger counts how many
+    // times `sourceId` was used within the scope (once-per-turn/round/combat
+    // gates, N-per-scope counts). Reads the SAME key the command boundary
+    // consumes and the lifecycle recipes reset — never a parallel counter.
+    case 'used-scope': return selectActors(predicate.target, context).every((target) => {
+      const key = usageKey({ sourceId: predicate.sourceId, ownerId: target.id, scope: predicate.scope });
+      return usageCount({ ruleState: target.state }, key) >= (predicate.atLeast ?? 1);
+    });
     case 'trigger': return context.triggers?.has(predicate.trigger) ?? false;
     case 'state': return selectActors(predicate.target, context).every((target) => predicate.equals === undefined ? target.state[predicate.key] !== undefined : target.state[predicate.key] === predicate.equals);
     case 'target-state': return selectActors(predicate.target, context).every((target) => predicate.equals === undefined ? target.state[predicate.key] !== undefined : target.state[predicate.key] === predicate.equals);

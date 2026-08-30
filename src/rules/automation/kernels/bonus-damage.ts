@@ -25,6 +25,12 @@
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { DiceSource } from '../../dice.js';
 import { rollDamageDice } from '../primitives/job-kit.js';
+import {
+  foldNumberModifiers,
+  modifierRulesForSource,
+  registerModifierRule,
+  type ModifierFoldView,
+} from '../primitives/modifiers.js';
 import { isBloodied } from './hp-threshold.js';
 
 export { isBloodied };
@@ -60,16 +66,35 @@ export interface BonusDamageRule {
   talent?: 1 | 2;
   /** Source conditions (default: unconditional). */
   gate?: BonusDamageGate;
-  /** Bonus dice for the use. A number, or a deterministic function of the
-   * fold view for scaled rows (an ally/foe count read from current state). */
+  /** Bonus dice for the use. A NUMBER registers a shared U14
+   * `bonus-damage-dice` ModifierRule row (folded through the one registry);
+   * a FUNCTION is the retained scaled-row specialist (a deterministic count
+   * read from current state, e.g. Incubus' "one die per ally adjacent to
+   * your target") — its per-source read cannot be a plain value fold, and
+   * it stays in this kernel's local fold. */
   dice: number | ((view: BonusDamageFoldView) => number);
 }
 
-const bonusDamageRules: BonusDamageRule[] = [];
+const scaledBonusDamageRules: BonusDamageRule[] = [];
 
-/** Register a bonus-damage grant rule (content/jobs/bonus-damage-recipes.ts). */
+/** Register a bonus-damage grant rule (content/jobs/bonus-damage-recipes.ts).
+ * Numeric rows convert to the shared U14 `bonus-damage-dice` query point;
+ * function rows (scaled counts) stay in the local specialist fold. */
 export function registerBonusDamageRule(rule: BonusDamageRule): void {
-  bonusDamageRules.push(rule);
+  if (typeof rule.dice === 'number') {
+    registerModifierRule({
+      sourceId: rule.sourceId,
+      ownerId: rule.abilityId,
+      queryPoint: 'bonus-damage-dice',
+      scope: 'default',
+      operation: 'add',
+      value: rule.dice,
+      ...(rule.gate ? { gates: [rule.gate] } : {}),
+      ...(rule.talent !== undefined ? { talent: rule.talent } : {}),
+    });
+  } else {
+    scaledBonusDamageRules.push(rule);
+  }
 }
 
 function targetActor(state: EncounterState, targetIds: readonly string[]): EncounterActor | undefined {
@@ -77,8 +102,72 @@ function targetActor(state: EncounterState, targetIds: readonly string[]): Encou
   return targetId ? state.actors[targetId] : undefined;
 }
 
-function gateHolds(gate: BonusDamageGate | undefined, state: EncounterState, actorId: string, targetIds: readonly string[]): boolean {
-  if (!gate || gate.kind === 'always') return true;
+/** Project the encounter state + actor + attack target onto the shared U14
+ * fold view (the bonus-damage gates read the actor and target state). */
+function bonusDamageFoldView(state: EncounterState, actor: EncounterActor, targetIds: readonly string[]): ModifierFoldView {
+  const target = targetActor(state, targetIds);
+  return {
+    round: state.round,
+    actor: {
+      id: actor.id,
+      hp: actor.hp,
+      // The wounds-adjusted maximum — the same bar isBloodied measures
+      // against (the self-bloodied gate compares hp <= maxHp/2).
+      maximumHp: Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality),
+      side: actor.side,
+      abilityIds: actor.abilityIds,
+      masteredAbilityIds: actor.masteredAbilityIds,
+      talents: actor.talents,
+      conditions: new Set(actor.conditions.map((condition) => condition.id)),
+    },
+    conditionsFor: () => new Set(actor.conditions.map((condition) => condition.id)),
+    ...(target ? {
+      target: {
+        id: target.id,
+        side: target.side,
+        hp: target.hp,
+        // The wounds-adjusted maximum — the same bar isBloodied measures
+        // against (the shared target-bloodied gate compares hp <= maxHp/2).
+        maxHp: Math.max(1, target.baseMaxHp - target.wounds * target.vitality),
+        conditions: target.conditions,
+      },
+    } : {}),
+  };
+}
+
+/**
+ * The total bonus dice a single use of `abilityId` carries for `actor`, per
+ * every registered rule whose parent, talent choice, and gate hold. Evaluated
+ * once at the USE_ABILITY command boundary; the result rides
+ * `abilityUseModifiers` so the rolled damage mutations record it durably.
+ * Numeric rows fold through the shared U14 `bonus-damage-dice` registry;
+ * scaled function rows fold through the local specialist (identical
+ * registration-order semantics).
+ */
+export function bonusDamageDiceForUse(
+  state: EncounterState,
+  actor: EncounterActor,
+  abilityId: string,
+  targetIds: readonly string[],
+): number {
+  const foldView = bonusDamageFoldView(state, actor, targetIds);
+  const shared = foldNumberModifiers('bonus-damage-dice', 'default', 0, abilityId, foldView);
+  let scaled = 0;
+  for (const rule of scaledBonusDamageRules) {
+    if (rule.abilityId !== abilityId) continue;
+    if (rule.talent !== undefined && actor.talents?.[abilityId] !== rule.talent) continue;
+    const gate = rule.gate;
+    if (gate && !bonusDamageFoldGateHolds(gate, state, actor.id, targetIds)) continue;
+    const dice = (rule.dice as (view: BonusDamageFoldView) => number)({ state, actorId: actor.id, abilityId, targetIds });
+    scaled += Math.max(0, Math.floor(dice));
+  }
+  return shared + scaled;
+}
+
+/** The scaled-row gate evaluator (the shared evaluator already covers the
+ * numeric rows; function rows re-read the same gates against the raw state). */
+function bonusDamageFoldGateHolds(gate: BonusDamageGate, state: EncounterState, actorId: string, targetIds: readonly string[]): boolean {
+  if (gate.kind === 'always') return true;
   const actor = state.actors[actorId];
   if (!actor) return false;
   switch (gate.kind) {
@@ -95,29 +184,6 @@ function gateHolds(gate: BonusDamageGate | undefined, state: EncounterState, act
         : target.conditions.some((condition) => condition.id === gate.conditionId);
     }
   }
-}
-
-/**
- * The total bonus dice a single use of `abilityId` carries for `actor`, per
- * every registered rule whose parent, talent choice, and gate hold. Evaluated
- * once at the USE_ABILITY command boundary; the result rides
- * `abilityUseModifiers` so the rolled damage mutations record it durably.
- */
-export function bonusDamageDiceForUse(
-  state: EncounterState,
-  actor: EncounterActor,
-  abilityId: string,
-  targetIds: readonly string[],
-): number {
-  let total = 0;
-  for (const rule of bonusDamageRules) {
-    if (rule.abilityId !== abilityId) continue;
-    if (rule.talent !== undefined && actor.talents?.[abilityId] !== rule.talent) continue;
-    if (!gateHolds(rule.gate, state, actor.id, targetIds)) continue;
-    const dice = typeof rule.dice === 'function' ? rule.dice({ state, actorId: actor.id, abilityId, targetIds }) : rule.dice;
-    total += Math.max(0, Math.floor(dice));
-  }
-  return total;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +235,8 @@ export function registerRecipientBonusDamageRule(rule: RecipientBonusDamageRule)
  * this to require a compound talent's bonus-damage component to be genuinely
  * wired — a manifest entry never audits complete on a bare allowlist. */
 export function hasBonusDamageRule(sourceId: string): boolean {
-  return bonusDamageRules.some((rule) => rule.sourceId === sourceId)
+  return modifierRulesForSource(sourceId, 'bonus-damage-dice').length > 0
+    || scaledBonusDamageRules.some((rule) => rule.sourceId === sourceId)
     || recipientBonusDamageRules.some((rule) => rule.sourceId === sourceId);
 }
 

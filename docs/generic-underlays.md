@@ -499,12 +499,15 @@ PERMISSION/IMMUNITY is a typed policy/modifier query, NOT a separate underlay
 collapsed boolean. Deterministic fold order; ownership gate; closed negatives
 (never alias every bypass to Divine).
 
-Today: `kernels/range.ts` (RangeModifierRule, scopes),
-`kernels/area.ts` (AreaModifierRule), `kernels/cost-payment.ts`
-(CostModifierRule), `attack-modifiers.ts` trait fold, `mastery-fold.ts`,
-aura boon/curses, `save-window` boon/curse, damage exceptions on
-`DamageIntent`/`RuleMutation`. This is the family with the most redundancy:
-unify the fold discipline per query point over ONE recipe shape.
+Today (T3 landed 2026-08-30): `primitives/modifiers.ts` is the ONE recipe
+shape + shared gate evaluator + typed permission query points with closed
+negatives; the range (`listed-range`), area (`area-size`/`area-shape`),
+mastery (`interrupt-rank`/`damage-type`/`range-bound`), and bonus-damage
+(`bonus-damage-dice`) registries fold through it. Retained specialists with
+written boundaries: `cost-payment.ts` (function-shaped cost-list
+rewriting), the `attack-modifiers.ts` armed one-shot fold, the
+scaled/recipient bonus-damage function rows, aura/save-window boon-curse
+consumption sites, and the damage-exception mutation fields.
 
 ## U15 Transaction / Atomic Commit
 
@@ -521,7 +524,10 @@ mutations; else reject / source-defined fallback.
 Do NOT merge all validation algorithms (spatial stays spatial; payment stays
 economy). The reusable underlay is ATOMIC GROUPING + COMMIT SEMANTICS.
 `spatialBatchId` is prior art; creation `countMode: 'exact'` and cost-payment
-`assertRuleCostsPayable` are the other instances.
+`assertRuleCostsPayable` are the other instances. Today (T3 landed
+2026-08-30): `primitives/transaction.ts` owns `validateTransaction` /
+`proposeAtomicGroup`; the Masquerade spatial-batch command gate composes
+through it (per-leg spatial legality stays in the spatial gateway).
 
 ## U16 Usage / Entitlement Ledger
 
@@ -539,10 +545,14 @@ ability per turn; no-repeat ability rule; limit break once/combat; Vigilance
 once per trigger. Foundational because the PDF uses scoped entitlement
 everywhere.
 
-Today: `kernels/use-ledger.ts` (turn/round/combat durable gates), F9
-`roundLedgerKey`, interrupt-use counter, turn-attack/ends-used flags. Missing:
-count-override caps, per-use magnitude reads ("2nd/3rd use dashes 3/2/1"),
-refresh hooks, and the shared de-dup identity for trigger families.
+Today (T3 core landed 2026-08-30): `primitives/usage.ts` is the core ledger
+(keys byte-identical to `ledger:<scope>:<sourceId>`, caps incl. the U14
+`use-cap` fold, counts, consume/refresh, per-use magnitude reads, de-dup
+identity CORE); `kernels/use-ledger.ts` is a thin adapter; the U6
+`used-scope` predicate consumes it. The interrupt-use counter and
+attacked-this-turn/end-turn flags remain durable actor fields (typed-ledger
+migration is T6); the shared de-dup identity for trigger families reads U10
+facts and completes in T4.
 
 ## U17 Ordering / Arbitration
 
@@ -561,9 +571,13 @@ hostile before beneficial, same-owner player determines order); Delay
 ordering; turn alternation; player ordering choices. Prevents arbitrary array
 iteration from becoming the game rule.
 
-Today: `orderedSelectedSteps` (source order), lifecycle registry order,
-pending-interrupt order, TRIGGER_WINDOW_RECIPES order. Ordering is scattered;
-U17 gives it a home.
+Today (T3 landed 2026-08-30): `primitives/ordering.ts` owns the typed
+policies (source-order | stack | turn-order | hostile-before-beneficial |
+non-active-owner-first | controller-choice | explicit-list) +
+`policyYieldsChoice`; `orderedSelectedSteps`, `decideDamageWindow`, and the
+pending-interrupt LIFO pop route through it. The lifecycle registry order
+remains the recorded boundary contract (source-order policy); the scheduler
+turn election stays the scheduler authority.
 
 ---
 

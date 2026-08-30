@@ -16,6 +16,10 @@ export * from './query.js';
 export * from './reference.js';
 export * from './roles.js';
 export * from './scope.js';
+export * from './modifiers.js';
+export * from './usage.js';
+export * from './transaction.js';
+export * from './ordering.js';
 
 export const RULE_PROGRAM_SCHEMA_VERSION = 1 as const;
 
@@ -141,7 +145,12 @@ export type RulePredicate =
   | { kind: 'acted-this-round'; target: RuleSelector }
   | { kind: 'trigger'; trigger: string }
   | { kind: 'state'; target: RuleSelector; key: string; equals?: string | number | boolean | null }
-  | { kind: 'target-state'; target: RuleSelector; key: string; equals?: string | number | boolean | null };
+  | { kind: 'target-state'; target: RuleSelector; key: string; equals?: string | number | boolean | null }
+  /** Used-scope (U16, T3): the target has used `sourceId` at least `atLeast`
+   * (default 1) times within `scope` (turn/round/combat). Reads the durable
+   * usage ledger key — never ambient state. The U10-backed de-dup identity
+   * completes U16 in T4; this predicate is valid against the landed core. */
+  | { kind: 'used-scope'; target: RuleSelector; sourceId: string; scope: 'turn' | 'round' | 'combat'; atLeast?: number };
 
 export interface RuleChoice {
   key: string;

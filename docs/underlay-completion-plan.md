@@ -848,9 +848,12 @@ compose through the existing `compare` operator over the new
 `count-query`/`distance` values (tests prove `count(foes) == 4` and
 `distance(source,target) >= 3`). The core (always/not/all/any/compare/
 has-condition/bloodied/quarter/defeated/in-terrain/trigger/state/
-target-state) is unchanged. Missing after T2 (honest): `used-this-scope`
-consumes the U16 ledger (T3) and `effect-still-exists` reads U10
-facts/instances (T4).
+target-state) is unchanged. T3 (2026-08-30) added `used-scope` against the landed U16 CORE ledger: the
+predicate reads the target's durable `ledger:<scope>:<sourceId>` key via
+`primitives/usage.ts` (`usageKey`/`usageCount`), so once-per-turn/round/
+combat gates and N-per-scope counts are the same authority the command
+boundary consumes and the lifecycle recipes reset. Missing after T3
+(honest): `effect-still-exists` reads U10 facts/instances (T4).
 
 **Staged completion (DAG-consistent).** U6's core predicate algebra depends
 on U1/U3/U5/U8 only and lands in T2 (LANDED 2026-08-30); the
@@ -1523,16 +1526,41 @@ permissions (p.104/p.105); immunity/resist/deny on damage (p.102 glossary);
 use caps ("use count override"); interrupt rank; duration modifiers;
 "cannot/ignore/immune" distinct (p.102, p.104).
 
-**Current state.** `PARTIAL` — the family with the most redundancy. Six+
-fold registries, each with its own recipe shape: `kernels/range.ts`
-(`RangeModifierRule`), `kernels/area.ts` (`AreaModifierRule`),
-`kernels/cost-payment.ts` (`CostModifierRule`), `kernels/attack-modifiers.ts`
-(trait fold), `kernels/mastery-fold.ts`, `kernels/bonus-damage.ts`, aura
-boon/curses (`kernels/aura.ts`), save boon/curse (`primitives/save-window.ts`),
-damage exceptions on `DamageIntent`/`RuleMutation` (`bypassVigor`,
-`ignoreArmor`, `ignoreDefiance`, `ignoreAetherwall`, `ignoreCover`,
-`ignoreDodge`). Permission query points are partially merged
-(`ignoreAetherwall` ≈ unerring) — the "alias to Divine" hazard.
+**Current state.** `LANDED (T3, 2026-08-30)` — the ONE recipe shape exists
+and the value/override fold registries fold through it.
+`primitives/modifiers.ts` (barrel re-exported) owns: `ModifierRule`
+`{ sourceId, ownerId, queryPoint, scope, operation, value, gates, talent,
+actionId, from, ordering }`; `registerModifierRule` (unknown query points
+reject at registration); `applicableModifierRules` / `foldNumberModifiers` /
+`foldEnumeratedModifiers` (registration order, `add` accumulates, last
+`set`/`override` wins, `from`-guarded chained conversions); ONE shared gate
+evaluator (`modifierGateHolds` over the shared `ModifierGate` union:
+always/stealth/comeback/round-at-least/mastery/choice/self-bloodied/
+target-bloodied/target-has-condition); and the typed `PermissionQueryPoint`
+kinds (`cannot`/`ignore`/`immune`) with the CLOSED negative registry
+`PERMISSION_NEGATIVES` — a (queryPoint, kind) pair outside it rejects at
+registration, so a wildcard bypass is unrepresentable. The range
+(`listed-range`, per declared scope), area (`area-size` + `area-shape`),
+mastery (`interrupt-rank`/`damage-type` + the `range-bound` permission,
+with the equipped+mastered requirement baked into every row), and
+bonus-damage (`bonus-damage-dice`) registries convert their content rows to
+shared rows at registration and fold through the shared discipline; the
+kernels keep their public surfaces (`effectiveScopedRange`,
+`effectiveAreaFor`, `effectiveInterruptRank`, `convertedDamageType`,
+`hasUnlimitedRange`, `bonusDamageDiceForUse`) as thin adapters. Retained
+specialists with written boundaries: `CostModifierRule` (function-shaped
+cost-list rewriting — a list transformation, not a value fold; the
+`action-cost`/`action-cost-type` query points are where numeric folds
+apply), the attack-modifiers armed one-shot fold (`armedKey`/`attachmentKey`/
+`exactRange` consumption — armed state is not a value fold), the
+scaled/recipient bonus-damage function rows, aura boon/curses and
+save-window boon/curse (domain-authority consumption sites), and the
+damage-exception mutation fields (`bypassVigor`/`ignoreArmor`/
+`ignoreDefiance`/`ignoreAetherwall`/`ignoreCover`/`ignoreDodge` stay
+distinct program-emitted delivery fields; the permission registry exists
+for content-registered permission rows and the unerring → cover-ignore +
+aetherwall-ignore mapping stays explicit — never one aliased Divine
+bypass).
 
 **Locations partially owning/duplicating.** The six registries listed
 above + `primitives/types.ts::RuleModifier` (a stat/op/value bag without a
@@ -1607,12 +1635,24 @@ entity creation (p.95/p.107/p.108 — `countMode: 'exact'`); costs validated
 before any effect or RNG (p.99, p.102/103 — `assertRuleCostsPayable`);
 resolve split across party pool + personal resolve (p.99).
 
-**Current state.** `PARTIAL`. `kernels/cost-payment.ts` (validate-then-commit
-for costs); `spatialBatchId` swap groups (prevalidated against the pre-swap
-state, every-leg-or-none, `primitives/spatial-intent.ts` +
-`encounter-adapter.ts::deniedAtomicSpatialLegIndices`); entity creation
-`countMode: 'exact'` (`kernels/entity-creation.ts`). Each is bespoke; no
-generic atomic-grouping underlay.
+**Current state.** `LANDED (T3, 2026-08-30)` — the generic atomic-grouping
+underlay exists and the source-declared spatial batch routes through it.
+`primitives/transaction.ts` (barrel re-exported) owns `TransactionLeg`
+(intent + per-leg validate against ONE snapshot), `validateTransaction`
+(all-or-nothing verdict naming the first failing leg),
+`proposeAtomicGroup` (intents-for-commit on `ok`), and `legWithCheck`.
+The command boundary's `assertLegalSpatialBatch` (ICON p.151 Masquerade)
+now composes the source-declared atomic spatial group through
+`validateTransaction`: every move leg is validated against the SAME
+pre-swap snapshot via the spatial gateway
+(`encounter-adapter.ts::deniedAtomicSpatialLegIndices` — U15 owns the
+grouping, never the geometry) and a single denied leg rejects the whole
+action before any event is emitted. The cost-payment
+validate-then-commit, the swap `spatialBatchId` groups, and entity
+creation `countMode: 'exact'` remain the per-domain legality authorities
+(their all-or-nothing contracts are the same shape and are documented as
+U15 instantiations); the seam exists for future grouped flow steps and
+multi-leg costs/spends.
 
 **Locations partially owning/duplicating.** `kernels/cost-payment.ts`;
 `primitives/spatial-intent.ts` + `encounter-adapter.ts` (spatial batch);
@@ -1674,18 +1714,24 @@ once per turn; slashed once per turn; one attack-tag ability per turn
 once per trigger (p.105); interrupt refresh; per-use magnitude ("2nd/3rd use
 dashes 3/2/1").
 
-**Current state.** `PARTIAL`. `kernels/use-ledger.ts` (turn/round/combat
-durable gates: `useLedgerKey`/`useLedgerAvailable`/`consumeUseLedgerMutation`);
-lifecycle reset recipes; F9 `roundLedgerKey` (same key format — good);
-interrupt-use counter; turn-attack/ends-used flags; per-ability
-once-per-ability registries. Missing: count-override caps, per-use magnitude
-reads, refresh hooks, and the shared de-dup identity for trigger families
-(still four separate de-dup mechanisms — see U10).
-
-**Staged completion (DAG-consistent).** The core usage ledger (gates/caps/
-reset) depends on U1+U8 only and lands in T3; the shared de-dup identity
-reads U10 facts and completes U16 in T4. U16 is NOT described as complete
-before its declared U10 dependency exists.
+**Current state.** `CORE LANDED (T3, 2026-08-30); full completion staged to
+T4`. `primitives/usage.ts` (barrel re-exported) owns the core ledger:
+`UsageKeySpec`/`usageKey` (byte-identical `ledger:<scope>:<sourceId>`
+format, extended per-target), `usageIdentity` (the CORE de-dup key — the
+U10 fact read completes it in T4), `usageCount`, `ledgerAvailable`,
+`consumeUsageMutation` (one-shot boolean mark or N-per-scope count
+increment), `refreshUsageMutation`, `usageRead` (per-use magnitude
+ordinal), `holdsUsageKey`, `resetBoundaryFor` (turn/round/combat onto U8
+boundaries), and `usageCap` (folds the U14 `use-cap` query point for
+count-override caps). `kernels/use-ledger.ts` is now a thin adapter
+preserving the byte-identical keys/marks (the F9 `roundLedgerKey`
+contract still holds), and the U6 `used-scope` predicate evaluates against
+the durable ledger. Remaining for the full underlay: the shared de-dup
+identity for trigger families reads U10 facts and completes U16 in T4
+(per the staged DAG below); the `interrupt-uses` counter and the
+`attacked-this-turn`/`end-turn` ruleState flags remain durable
+encounter-authority fields whose typed-ledger migration is the T6
+consolidation item.
 
 **Locations partially owning/duplicating.** `kernels/use-ledger.ts`;
 `kernels/trait-reactions.ts` (`roundLedgerKey`, de-dup ledger);
@@ -1752,11 +1798,26 @@ first) and same-trigger turn-order rules (p.107); turn-boundary ordering
 player determines order — p.107); Delay ordering at slow-turn start (p.87);
 turn alternation; player ordering choices (p.107).
 
-**Current state.** `SKELETON`. `orderedSelectedSteps` (source order);
-lifecycle registry order (`kernels/lifecycle.ts` — registration order is
-the recorded boundary contract); `pendingInterrupts` order;
-`TRIGGER_WINDOW_RECIPES` order. Ordering is scattered as array order; no
-typed policies; no policy→CHOICE seam.
+**Current state.** `LANDED (T3, 2026-08-30)` — typed policies + the
+policy→CHOICE seam exist and the engine's recorded orders route through
+them. `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
+(source-order | stack | turn-order | hostile-before-beneficial |
+non-active-owner-first | controller-choice | explicit-list),
+`applyOrdering(policy, candidates, context)` (pure — a function of the
+recorded policy + durable context), `policyYieldsChoice` (controller-choice
+yields a typed U4 choice spec; the engine never invents an order),
+`orderingKey` (durable identity), and the side/owner policy reads.
+`orderedSelectedSteps` (the engine's ability-step order, p.85/p.107 §4)
+now applies the `source-order` policy against the ability's step listing;
+`decideDamageWindow` applies the `source-order` policy against
+`TRIGGER_WINDOW_RECIPES`; the pending-interrupt LIFO pop (p.107 most-
+recent-trigger-first) applies the `stack` policy. The lifecycle registry
+order stays the recorded boundary contract (`LIFECYCLE_RECIPES`
+registration order IS the explicit recorded policy) and the scheduler's
+turn election remains the scheduler authority — both documented as U17
+consumers; hostile-before-beneficial / non-active-owner-first /
+controller-choice land their turn-boundary consumers with the U13 window
+work in T5.
 
 **Locations partially owning/duplicating.** `kernels/runtime.ts`
 (`orderedSelectedSteps`); `kernels/lifecycle.ts` (registry order);
@@ -1837,12 +1898,19 @@ registry + equipment predicate** — but that is content registration glue
 plus U2-role/U1-ref reads, not new algebra. U18 should be promoted only if,
 during the U14 consolidation (Phase T3) and U11/U13 work (Phase T5), a
 single shared attachment record actually eliminates duplicated fold
-authority that the one-recipe-shape ModifierRule cannot. **Decision rule:**
-promote U18 iff, after T3/T5, `mastery-fold.ts` + `attack-modifiers.ts`
-trait fold + talent folds + fortune still require a common record that is
-not just U14 ModifierRule + U11 flow steps + U13 windows registered from
-content. Otherwise fold consolidation is a U14/U11/U13 migration and U18
-stays a content-registration pattern.
+authority that the one-recipe-shape ModifierRule cannot.**Decision rule:** promote U18 iff, after T3/T5, `mastery-fold.ts` + `attack-modifiers.ts` trait fold + talent folds + fortune still require a common record that is not just U14 ModifierRule + U11 flow steps + U13 windows registered from content. Otherwise fold consolidation is a U14/U11/U13 migration and U18 stays a content-registration pattern.
+
+**T3 evaluation (2026-08-30):** the U14 consolidation did NOT produce a
+need for a new attachment record. `mastery-fold.ts` now reads the shared
+`ModifierRule` registry (`interrupt-rank`/`damage-type` rows + the
+`range-bound` permission), and range/area/bonus-damage fold through the
+same one-shape rows; the attack-modifiers armed one-shot fold, the
+cost function rows, and the fortune/aura/save-window folds remain
+documented retained specialists with written boundaries (their remaining
+duplication is the armed-state consumption seam and the U11/U13 consumer
+migrations, not a missing record kind). **Verdict: U18 stays a candidate;
+no promotion.** The decision point re-opens at T6 after the U11/U13 work,
+per this rule.
 
 ### U19 Intent — CANDIDATE, do not promote yet
 
@@ -1970,17 +2038,24 @@ the opaque ability/talent choice folds, used-scope (U16) and
 effect-still-exists (U10) predicates, and the range/area gate body
 folding.
 
-**Phase T3 — Policy, state, ledger: U14, U16 (core), U15, U17.**
-`primitives/modifiers.ts` (one recipe shape, typed permission query
-points, closed negatives); the six fold registries read it (content row
-rewrites, behavior-preserving); `primitives/usage.ts` (caps, magnitude,
-refresh; the de-dup identity CORE without the U10 fact read);
-`primitives/transaction.ts` (atomic groups over cost/spatial/creation
-instances); `primitives/ordering.ts` (policies + policy→CHOICE seam).
-**U16 lands in CORE-ledger form here** (gates/caps/reset need only U1+U8,
-per the DAG note); U16's U10-backed de-dup identity completes in T4. Exit:
-one ModifierRule shape folded everywhere; one usage ledger vocabulary; one
-commit seam; typed ordering policies.
+**Phase T3 — Policy, state, ledger: U14, U16 (core), U15, U17 — LANDED
+(2026-08-30).** `primitives/modifiers.ts` landed (one recipe shape, typed
+permission query points, closed negatives, shared gate evaluator); the
+range/area/mastery/bonus-damage fold registries convert onto it
+(behavior-preserving; cost + attack-modifiers retained as documented
+specialists); `primitives/usage.ts` landed as the CORE ledger (keys,
+caps incl. the `use-cap` fold, counts, consume/refresh, per-use
+magnitude, de-dup identity CORE without the U10 fact read) with the
+use-ledger kernel as an adapter and the U6 `used-scope` predicate
+consuming it; `primitives/transaction.ts` landed (all-or-nothing verdict,
+wired into the Masquerade spatial-batch gate); `primitives/ordering.ts`
+landed (all seven policies + the policy→CHOICE seam, wired into
+`orderedSelectedSteps`, `decideDamageWindow`, and the pending-interrupt
+stack pop). **U16 landed in CORE-ledger form here** (gates/caps/reset need
+only U1+U8, per the DAG note); U16's U10-backed de-dup identity completes
+in T4. U18 evaluated under the §2 decision rule: NOT promoted (see the
+U18 row). Exit met: one ModifierRule shape folded everywhere; one usage
+ledger vocabulary; one commit seam; typed ordering policies.
 
 **Phase T4 — Time and outcome: U9, U10 (completes U6 and U16).**
 `primitives/provenance.ts` (dimension vocabulary, `DeliverySourceKind`);

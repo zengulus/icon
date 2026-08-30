@@ -1,5 +1,12 @@
 import type { RuleSourceUnit } from '../../source-units.js';
-import { hasMastery } from './mastery.js';
+import {
+  foldEnumeratedModifiers,
+  foldNumberModifiers,
+  modifierRulesForSource,
+  registerModifierRule,
+  type ModifierFoldView,
+  type ModifierGate,
+} from '../primitives/modifiers.js';
 import type { RuleAction, RuleClauseCompilation, RuleProgramCompilation } from '../primitives/types.js';
 
 /**
@@ -42,23 +49,30 @@ export interface AreaStateView {
   actor: AreaStateActor;
 }
 
+// ── Area modifier registry (U14 shared shape) ───────────────────────────────
+//
+// The area fold reads the ONE U14 ModifierRule registry
+// (`primitives/modifiers.ts`) at the `area-size` (length) and `area-shape`
+// (shape override) query points: content rows registered through
+// `registerAreaModifierRule` are converted to shared-shape rows, and
+// `effectiveAreaFor` folds through the shared `foldNumberModifiers` /
+// `foldEnumeratedModifiers` discipline with the shared gate evaluator. The
+// `AreaStateActor` / `AreaStateView` read surfaces stay the kernel's public
+// API — no consumer changes. The area kernel's historical `talent` gate kind
+// maps to the shared rule-level `talent` field (a talent gate reads the
+// owner ability's equipped rank).
+
 export type AreaModifierShape = 'line' | 'arc';
 
-export type AreaModifierGate =
-  /** The actor has the stealth condition. */
-  | { kind: 'stealth' }
-  /** The actor is bloodied (at or under 50% of the wounds-adjusted maximum). */
-  | { kind: 'comeback' }
-  /** The current round is at least `value` (ICON "at round 4 or later"). */
-  | { kind: 'round-at-least'; value: number }
-  /** The actor has mastered the named parent ability (equipped AND mastered). */
-  | { kind: 'mastery'; abilityId: string }
-  /** The actor has the named talent rank equipped for the parent ability. */
-  | { kind: 'talent'; talent: 1 | 2 };
+/** The source-defined conditions under which an area rule applies — the
+ * shared U14 gate union plus the area kernel's historical `talent` gate
+ * kind (extracted to the shared rule-level `talent` field at registration). */
+export type AreaModifierGate = ModifierGate | { kind: 'talent'; talent: 1 | 2 };
 
 /** A registered area-modifier rule: how one content unit changes its parent
- * ability's area shape/size. Deterministic: rules apply in registration
- * order, later shape/length values win. */
+ * ability's area shape/size. The kernel converts each row to shared U14
+ * rows — an `area-shape` `set` row and an `area-size` `set` row — so the
+ * shape/length fold order and gate logic live exactly once. */
 export interface AreaModifierRule {
   /** The exact source unit id that owns this rule (talent/mastery id). */
   sourceId: string;
@@ -74,31 +88,76 @@ export interface AreaModifierRule {
   gates?: AreaModifierGate[];
 }
 
-const areaModifierRules: AreaModifierRule[] = [];
+/** Split a content row's gates into the shared gate list + the extracted
+ * rule-level talent rank (the area kernel's `talent` gate kind). */
+function splitAreaGates(rule: AreaModifierRule): { gates?: ModifierGate[]; talent?: 1 | 2 } {
+  const gates: ModifierGate[] = [];
+  let talent: 1 | 2 | undefined;
+  for (const gate of rule.gates ?? []) {
+    if (gate.kind === 'talent') {
+      talent = gate.talent;
+    } else {
+      gates.push(gate as ModifierGate);
+    }
+  }
+  return {
+    ...(gates.length > 0 ? { gates } : {}),
+    ...(talent !== undefined ? { talent } : {}),
+  };
+}
 
 /** Register an area-modifier rule (content/jobs/area-recipes.ts). */
 export function registerAreaModifierRule(rule: AreaModifierRule): void {
-  areaModifierRules.push(rule);
+  const split = splitAreaGates(rule);
+  if (rule.shape !== undefined) {
+    registerModifierRule({
+      sourceId: rule.sourceId,
+      ownerId: rule.abilityId,
+      queryPoint: 'area-shape',
+      scope: 'default',
+      operation: 'set',
+      value: rule.shape,
+      ...split,
+      ...(rule.actionId !== undefined ? { actionId: rule.actionId } : {}),
+    });
+  }
+  if (rule.length !== undefined) {
+    registerModifierRule({
+      sourceId: rule.sourceId,
+      ownerId: rule.abilityId,
+      queryPoint: 'area-size',
+      scope: 'default',
+      operation: 'set',
+      value: rule.length,
+      ...split,
+      ...(rule.actionId !== undefined ? { actionId: rule.actionId } : {}),
+    });
+  }
 }
 
-function gateHolds(rule: AreaModifierRule, gate: AreaModifierGate, view: AreaStateView): boolean {
+/** True when any shared-area rule row is registered for `sourceId` (the
+ * audit compile reads the shared registry — never a bare allowlist). */
+export function hasAreaModifierRule(sourceId: string): boolean {
+  return modifierRulesForSource(sourceId, 'area-size').length > 0
+    || modifierRulesForSource(sourceId, 'area-shape').length > 0;
+}
+
+/** Project an AreaStateView onto the shared U14 fold view. */
+function areaFoldView(view: AreaStateView): ModifierFoldView {
   const actor = view.actor;
-  switch (gate.kind) {
-    case 'stealth':
-      return actor.conditions?.has('stealth') ?? false;
-    case 'comeback': {
-      const maximum = actor.maximumHp ?? 0;
-      return maximum > 0 && (actor.hp ?? 0) <= maximum / 2;
-    }
-    case 'round-at-least':
-      return view.round >= gate.value;
-    case 'mastery':
-      return hasMastery(actor, gate.abilityId);
-    case 'talent':
-      return actor.talents?.[rule.abilityId] === gate.talent;
-    default:
-      return false;
-  }
+  return {
+    round: view.round,
+    actor: {
+      id: '',
+      hp: actor.hp,
+      maximumHp: actor.maximumHp,
+      abilityIds: actor.abilityIds,
+      masteredAbilityIds: actor.masteredAbilityIds,
+      talents: actor.talents,
+      conditions: actor.conditions,
+    },
+    conditionsFor: () => actor.conditions ?? new Set<string>(),
+  };
 }
 
 /** The authoritative area descriptor for an ability after every registered
@@ -107,7 +166,8 @@ function gateHolds(rule: AreaModifierRule, gate: AreaModifierGate, view: AreaSta
  * the same effective authority. Evaluated against current state at command
  * time — a gate that stops holding (round passes, bloodied heals, mastery
  * unequipped) reverts the area immediately. The resolver runs the parent
- * ability, so the ability-equip requirement is implicit. */
+ * ability, so the ability-equip requirement is implicit. Folds through the
+ * shared U14 registry at the `area-size` / `area-shape` query points. */
 export function effectiveAreaFor(
   view: AreaStateView,
   actorId: string,
@@ -116,16 +176,13 @@ export function effectiveAreaFor(
   baseLength: number,
   actionId?: string,
 ): { shape: AreaModifierShape; length: number } {
-  let shape = baseShape;
-  let length = baseLength;
-  for (const rule of areaModifierRules) {
-    if (rule.abilityId !== abilityId) continue;
-    if (rule.actionId !== undefined && rule.actionId !== actionId) continue;
-    if (!(rule.gates ?? []).every((gate) => gateHolds(rule, gate, view))) continue;
-    if (rule.shape) shape = rule.shape;
-    if (rule.length !== undefined) length = rule.length;
-  }
-  return { shape, length: Math.max(1, Math.floor(length)) };
+  const foldView = areaFoldView(view);
+  const length = foldNumberModifiers('area-size', 'default', baseLength, abilityId, foldView, { actionId });
+  const shape = foldEnumeratedModifiers('area-shape', 'default', baseShape, abilityId, foldView, { actionId });
+  return {
+    shape: (shape === 'line' || shape === 'arc' ? shape : baseShape),
+    length: Math.max(1, Math.floor(length)),
+  };
 }
 
 // ── Audit compilation ────────────────────────────────────────────────────────
@@ -137,7 +194,7 @@ export function effectiveAreaFor(
  * parent ability and the gates hold, so the program is audit-complete
  * without adding EXECUTE_RULE authority. */
 export function compileAreaModifierRecipe(unit: RuleSourceUnit): RuleProgramCompilation | null {
-  if (!areaModifierRules.some((rule) => rule.sourceId === unit.id)) return null;
+  if (!hasAreaModifierRule(unit.id)) return null;
   const clause: RuleClauseCompilation = {
     id: `${unit.id}:clause:1`,
     label: 'passive',
