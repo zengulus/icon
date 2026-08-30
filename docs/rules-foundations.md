@@ -320,27 +320,37 @@ causal `sourceActorId`. Domain-specific provenance (`attackDamageProvenance`,
 `voluntary` flag) stays as documented retained specialists; U9 is the
 shared vocabulary facts and U16 reads consume. Tests: `t4-facts-provenance.test.ts`.
 
-### Fact / Outcome Record (U10 underlay) — LANDED (T4, 2026-08-30)
+### Fact / Outcome Record (U10 underlay) — LANDED (T4, 2026-08-30; corrected 2026-08-30)
 
 `primitives/facts.ts` owns the exactly-typed DISCRIMINATED `Fact` union
 (ability-used / attack-resolved / damage-applied / actor-defeated /
 collide / movement / effect / entity / terrain / save-resolved /
 trigger-resolved) with the smallest common envelope (deterministic
-`instanceId`, `sourceId`, `ownerId`, U9 `provenance`). `recordFacts`
-records the fact history at the resolve point from already-resolved
-mutations — a pure function (same event sequence ⇒ same fact sequence),
-never re-derived from later mutable state. `kernels/resolution-triggers.ts`
-now records facts via `recordFacts`, merges the domain collide/slay facts,
-and projects the byte-compatible `ResolutionTriggerFacts` encounter.ts
-consumes (behavior-preserving migration; the `slay` trigger resolves only
-on a true Slay, p.95 glossary — `viaSlay` — never an explicit
-instant-defeat mutation). The LIVE `effectExistsLive` read answers whether a
-specific effect instance still exists (LIVE vs CAPTURED; it REJECTS as
-unrepresentable when the projected view cannot disambiguate a specific
-coexisting instance). The
-damage/held/window + save ledgers remain domain-specific authorities whose
-fuller fact composition is U12-scoped. Tests: `t4-facts-provenance.test.ts`
-+ `t4-effect-exists.test.ts` + `t4-dedup.test.ts`.
+`instanceId` scoped under a durable RESOLUTION identity, `sourceId`,
+`ownerId`, U9 `provenance`). Facts are GENUINELY durable and
+replay-stable: every ability/action resolution owns a deterministic,
+replay-stable `resolutionId` (command/event boundary), fact ids are scoped
+under it (two uses of one ability differ; replay reproduces them), and the
+typed facts + `resolutionId` RIDE the `RULE_MUTATIONS_APPLIED` event —
+replay consumes the recorded outcomes, never re-derives them. Historical
+events without a recoverable identity refuse fabricating
+(no invented de-dup identity). `damage-applied` facts record the DETERMINED (post-mitigation)
+amount from the shared damage authority, never a raw proposal; fully-
+prevented damage emits no false fact. Effect facts name their instance by a
+natural owner-scoped `instanceKey` (never a freshly-minted per-index
+identity), so a later remove/refresh references the ORIGINAL instance.
+`kernels/resolution-triggers.ts` records facts via `recordFacts`, merges
+the domain collide/slay facts, and projects the byte-compatible
+`ResolutionTriggerFacts` encounter.ts consumes (behavior-preserving
+migration; the `slay` trigger resolves only on a true Slay, p.95 glossary —
+`viaSlay` — never an explicit instant-defeat mutation). The LIVE
+`effectExistsLive` read answers EXACT specific-instance reads by the
+durable id carried on the live `RuleActorView` (marks/stance/active-effects
+now project their durable instance id + ownership); a genuinely ambiguous
+coexisting read without an exact id refuses to guess. The damage/held/window +
+save ledgers remain domain-specific authorities whose fuller fact
+composition is U12-scoped. Tests: `t4-facts-provenance.test.ts` +
+`t4-effect-exists.test.ts` + `t4-dedup.test.ts` + `t4-corrective.test.ts`.
 
 ### Modifier / Policy (U14 underlay) — LANDED (T3, 2026-08-30)
 
@@ -428,16 +438,22 @@ boundaries), and `usageCap` (folds the U14 `use-cap` query point for
 count-override caps). `kernels/use-ledger.ts` is a thin adapter; the U6
 `used-scope` predicate reads the durable ledger (entitlement COUNTS). U16
 was COMPLETED in T4 with the U10 fact-backed DE-DUP identity
-(`primitives/facts.ts`): the full resolve identity (`resolveIdentityKey`) is
-the identity above (source + owner + scope + optional target) PLUS the
-logical trigger PLUS the U10 FACT dimension; `triggerResolvedFact` records
-the marker and `hasResolvedAsFact` answers "has this exact logical use
-resolved for this underlying fact/event?" over the recorded fact history —
-never current state, never a broad once-per-scope mark. Event de-duplication
-is semantically DISTINCT from the `used-scope` entitlement counts. The
+(`primitives/facts.ts`), then corrected to RESOLUTION-SCOPED
+once-per-ability semantics (p.107): the resolve identity (`resolveIdentityKey`)
+is `{ sourceId, ownerId, scope, resolutionId, trigger }` — NOT per-fact — so
+one ability's multiple routing facts open ONE triggered step while a second
+ability use (different `resolutionId`) may trigger again. Per-target is
+keyed only where a source declares once-per-target. `triggerResolvedFact`
+records the marker and `hasResolvedAsFact` answers "has this logical trigger
+step already resolved within this resolution?" over the recorded fact
+history — never current state, never a broad once-per-scope mark — and is
+WIRED into the real reactive continuation
+(`executeRuleProgramWithReactiveTriggers`). Event de-duplication is
+semantically DISTINCT from the `used-scope` entitlement counts. The
 interrupt-use counter and attacked-this-turn/end-turn flags remain durable
 actor fields (typed-ledger migration is the T6 consolidation item). Tests:
-`t3-usage.test.ts` + `t4-dedup.test.ts` + `use-ledger.test.ts`.
+`t3-usage.test.ts` + `t4-dedup.test.ts` + `t4-corrective.test.ts` +
+`use-ledger.test.ts`.
 
 ### Ordering / Arbitration (U17 underlay) — LANDED (T3, 2026-08-30)
 

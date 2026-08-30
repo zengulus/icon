@@ -488,8 +488,42 @@ assumption here, document the evidence and update this list before proceeding.
      compositions); context-dependent expressions reject rather than
      guess. Tests: `{ kind: 'round' }` parity + a composed U5 expression
      fixture + an unrepresentable-expression rejection.
+- **T4 corrective pass (2026-08-30) — durable/resolution-scoped facts, no
+  new underlays, no source-unit changes.** Full suite green (1645 tests,
+  +11 over T4; existing fixtures pass unchanged), census byte-stable at
+  427, all audits green. Corrections (per the four reported gaps):
+  1. **U10 facts are durable + replay-stable.** Every resolution
+     owns a deterministic, replay-stable `resolutionId` (command/event
+     boundary, counting recorded RULE_MUTATIONS_APPLIED events); every
+     fact `instanceId` is scoped under it (two uses of one ability differ;
+     replay reproduces the identical history), and the typed `facts` +
+     `resolutionId` now RIDE the durable RULE_MUTATIONS_APPLIED event.
+     Historical events without a recoverable identity refuse fabricating
+     (no invented de-dup identity); comments/doc claims that facts already
+     rode the event are now true.
+  2. **Facts record RESOLVED outcomes.** `damage-applied` records the
+     DETERMINED (post-mitigation) amount from the shared damage authority
+     at the recording boundary — never the raw proposed amount — and
+     fully-prevented damage emits NO false fact. `ability-used` is emitted
+     at the ability boundary under the resolution identity.
+  3. **U16 de-dup wired into real execution, once-per-ability.** The
+     resolve identity is RESOLUTION-scoped
+     (`{ sourceId, ownerId, scope, resolutionId, trigger }`), NOT per-fact:
+     multiple routing facts (three Collides) open ONE triggered step; a
+     second ability use (different resolutionId) may trigger again;
+     per-target only where a source declares it. `hasResolvedAsFact` is
+     consulted in `executeRuleProgramWithReactiveTriggers` (recorded
+     markers eliminate re-offers). `executedStepIds` remains FLOW
+     bookkeeping; U16 is the semantic authority.
+  4. **Durable instance identity through the projection.**
+     `RuleActorView` active-effects/marks/stance now carry the
+     durable instance id + ownership, so `effectExistsLive` answers
+     EXACT specific-instance reads (owner-A's mark never satisfies owner
+     B's identical markId), and effect lifecycle facts (apply/refresh/
+     remove/enter/exit) reference the ORIGINAL instance (natural
+     owner-scoped instanceKey, never a per-index mint).
 - **Phase T4 — Time and outcome: U9, U10 (completes U6 and U16) — LANDED
-  (2026-08-30).** Full suite green (1632 tests, +25 over the T3 baseline),
+  (2026-08-30).** Full suite green (1645 tests after the corrective pass),
   census byte-stable at 427, all audits green, no source-unit promotion.
   Deliverables:
   1. **U9 — `primitives/provenance.ts`** (barrel re-exported): the typed
@@ -527,11 +561,13 @@ assumption here, document the evidence and update this list before proceeding.
      domain; U6 only reads through the generic reference/fact seam.
   5. **U16 COMPLETED** (U10-backed de-dup): the full resolve identity
      (`resolveIdentityKey`) = the corrected usage identity (source + owner
-     + scope + optional target) + logical trigger + U10 FACT dimension;
-     `hasResolvedAsFact` answers "has this exact logical use resolved for
-     this underlying fact/event?" over the recorded history. EVENT
-     de-dup is semantically distinct from the `used-scope` entitlement
-     COUNTS.
+     + scope) + RESOLUTION id + logical trigger — RESOLUTION-scoped
+     once-per-ability semantics (a second use of the ability may trigger
+     again; three Collide facts open ONE step). `hasResolvedAsFact`
+     answers "has this logical trigger step already resolved within this
+     resolution?" over the recorded history and is WIRED into the real
+     reactive continuation. EVENT de-dup is semantically distinct from the
+     `used-scope` entitlement COUNTS.
   Residuals (honest, staged): the interrupt-uses counter and
   attacked-this-turn/end-turn flags typed-ledger migration (T6); the
   damage/held/window + save ledgers' fuller fact composition (U12); the

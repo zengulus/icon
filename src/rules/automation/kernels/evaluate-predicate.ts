@@ -114,7 +114,8 @@ export function evaluatePredicate(predicate: RulePredicate, context: RuleExecuti
         targetId: target.id,
         effectId: predicate.effectId,
         ...(predicate.ownerId !== undefined ? { ownerId: predicate.ownerId } : {}),
-        ...(predicate.instanceKey !== undefined ? { instanceKey: predicate.instanceKey } : {}),
+        ...(predicate.instanceId !== undefined ? { instanceId: predicate.instanceId } : {}),
+        ...(predicate.ownerSensitive === true ? { ownerSensitive: true } : {}),
       };
       const result = effectExistsLive(target, identity);
       if (!result.ok) {

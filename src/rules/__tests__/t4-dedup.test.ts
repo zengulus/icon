@@ -1,26 +1,28 @@
 /**
- * t4-dedup.test.ts — Phase T4 U16 completion: U10 fact-backed de-duplication.
+ * t4-dedup.test.ts — Phase T4 U16 completion, corrected: U10 fact-backed
+ * de-duplication with ICON's once-per-ability semantics (p.107).
  *
- * The full de-dup identity is the U16 usage identity (source + owner + scope
- * + optional target) PLUS the U10 FACT dimension (WHICH specific resolved
- * event this use answers) + the logical trigger. `hasResolvedAsFact` reads
- * the recorded fact history for a `trigger-resolved` marker — it is EVENT
- * de-duplication, semantically distinct from the U16 entitlement COUNTS
- * (`used-scope`). The corrected T3 identity (`usageIdentityKey`, owner
- * always carried, unambiguous serialization) is what the fact dimension
- * extends — storage keys are never merged with fact identity.
+ * The DEFAULT de-dup identity is RESOLUTION-scoped:
+ *   { sourceId, ownerId, scope, resolutionId, trigger (the triggering step) }
+ * This is deliberately NOT per-fact. U10 facts answer WHY an effect became
+ * eligible; they do NOT imply one execution per qualifying fact. Within ONE
+ * resolution (one ability use), a triggered step resolves ONCE however many
+ * facts qualify (three Collides → one Collide triggered effect). Across TWO
+ * separate resolutions (two uses of the ability), each may trigger again.
+ * Per-target de-dup is keyed in ONLY when a source rule genuinely declares
+ * once-per-target (`oncePerTarget`); per-event re-triggering only when the
+ * source distinguishes trigger instances (`perEvent`).
  *
- * Covered here (acceptance §T4): distinct owners produce distinct identities;
- * the same logical trigger reachable through two routes resolves once; two
- * genuinely separate triggering facts from the same source each resolve;
- * per-target identity distinguishes recipients; unambiguous serialization;
- * missing identity fails closed (never guessed); and replay determinism.
+ * Distinct owners using the same source stay distinct; different triggered
+ * STEPS on the same fact stay distinct; and resolution captures the recorded
+ * result identically.
  */
 import { describe, expect, it } from 'vitest';
 import {
   hasResolvedAsFact,
   resolveIdentitiesEqual,
   resolveIdentityForFact,
+  resolveIdentityForTrigger,
   resolveIdentityKey,
   triggerResolvedFact,
   type Fact,
@@ -28,16 +30,17 @@ import {
 } from '../automation/primitives/facts.js';
 import { usageIdentitiesEqual, usageIdentity, usageIdentityKey } from '../automation/primitives/usage.js';
 
-const damageFact = (instanceId: string, ownerId = 'hero'): Extract<Fact, { kind: 'damage-applied' }> => ({
-  kind: 'damage-applied', instanceId, sourceId: 'fixture:gate', ownerId, recipientId: 'foe', amount: 3, delivery: 'hit',
+const RES = 'res:fixture:gate:use:1';
+const damageFact = (sourceId = 'fixture:gate', ownerId = 'hero'): Extract<Fact, { kind: 'damage-applied' }> => ({
+  kind: 'damage-applied', instanceId: `fact:${sourceId}:damage-applied:0`, sourceId, ownerId, recipientId: 'foe', amount: 3, delivery: 'hit',
 });
 
-describe('U16 completion — the de-dup identity carries owner + the U10 fact dimension', () => {
-  it('two different owners using the same source produce distinct fact/de-dup identities', () => {
-    const fHero = damageFact('fact:g:damage-applied:0', 'hero');
-    const fVillain = damageFact('fact:g:damage-applied:1', 'villain');
-    const idHero = resolveIdentityForFact(fHero, 'round', 'hit');
-    const idVillain = resolveIdentityForFact(fVillain, 'round', 'hit');
+describe('U16 completion — resolution-scoped once-per-ability de-dup', () => {
+  it('two different owners using the same source produce distinct de-dup identities', () => {
+    const fHero = damageFact();
+    const fVillain = damageFact('fixture:gate', 'villain');
+    const idHero = resolveIdentityForFact(fHero, 'round', 'hit', { resolutionId: RES });
+    const idVillain = resolveIdentityForFact(fVillain, 'round', 'hit', { resolutionId: RES });
     expect(resolveIdentitiesEqual(idHero, idVillain)).toBe(false);
     expect(resolveIdentityKey(idHero)).not.toBe(resolveIdentityKey(idVillain));
     // The corrected T3 usage identity also distinguishes the owners.
@@ -49,65 +52,77 @@ describe('U16 completion — the de-dup identity carries owner + the U10 fact di
       .not.toBe(usageIdentityKey(usageIdentity({ sourceId: 'fixture:gate', ownerId: 'villain', scope: 'round' })));
   });
 
-  it('the same logical trigger reachable through two routes resolves once (same fact dimension)', () => {
-    const fact = damageFact('fact:g:damage-applied:0');
-    // Route A and route B both respond to the SAME damage event.
-    const routeA = resolveIdentityForFact(fact, 'round', 'hit');
-    const routeB = resolveIdentityForFact(fact, 'round', 'hit');
+  it('one ability, multiple routing facts for the same step → resolves ONCE (once-per-ability)', () => {
+    // THREE Collide facts establish that Collide occurred within one ability.
+    const collideA = { kind: 'collide' as const, instanceId: 'fact:g:collide:0', sourceId: 'fixture:shove', ownerId: 'hero', shovedActorId: 'foe1' };
+    const collideB = { kind: 'collide' as const, instanceId: 'fact:g:collide:1', sourceId: 'fixture:shove', ownerId: 'hero', shovedActorId: 'foe2' };
+    const collideC = { kind: 'collide' as const, instanceId: 'fact:g:collide:2', sourceId: 'fixture:shove', ownerId: 'hero', shovedActorId: 'foe3' };
+    // The same triggered STEP identity — once per resolution, NOT per fact.
+    const step = resolveIdentityForTrigger('fixture:shove', 'hero', 'round', RES, 'collide');
+    const facts = [collideA, collideB, collideC, triggerResolvedFact(step)];
+    expect(hasResolvedAsFact(step, facts)).toBe(true); // ONE Collide resolution
+  });
+
+  it('the same triggered step reachable through overlapping routes resolves once', () => {
+    const fact = damageFact();
+    // Route A and route B respond to the SAME ability's HIT.
+    const routeA = resolveIdentityForFact(fact, 'round', 'hit', { resolutionId: RES });
+    const routeB = resolveIdentityForFact(fact, 'round', 'hit', { resolutionId: RES });
     expect(resolveIdentityKey(routeA)).toBe(resolveIdentityKey(routeB));
-    // Recording the marker for route A marks the shared event as resolved.
     const recorded = [triggerResolvedFact(routeA)];
     expect(hasResolvedAsFact(routeA, recorded)).toBe(true);
     expect(hasResolvedAsFact(routeB, recorded)).toBe(true); // resolves ONCE
   });
 
-  it('two genuinely separate triggering facts from the same source each resolve', () => {
-    const factOne = damageFact('fact:g:damage-applied:0');
-    const factTwo = damageFact('fact:g:damage-applied:1');
-    const idOne = resolveIdentityForFact(factOne, 'round', 'hit');
-    const idTwo = resolveIdentityForFact(factTwo, 'round', 'hit');
-    expect(resolveIdentityKey(idOne)).not.toBe(resolveIdentityKey(idTwo));
-    // Resolving the first does NOT resolve the second — each is distinct.
-    const recorded = [triggerResolvedFact(idOne)];
-    expect(hasResolvedAsFact(idOne, recorded)).toBe(true);
-    expect(hasResolvedAsFact(idTwo, recorded)).toBe(false);
+  it('a second use of the same ability can trigger the step again (different resolution)', () => {
+    const resOne = 'res:fixture:gate:ability:1';
+    const resTwo = 'res:fixture:gate:ability:2';
+    const useOne = resolveIdentityForTrigger('fixture:gate', 'hero', 'round', resOne, 'hit');
+    const useTwo = resolveIdentityForTrigger('fixture:gate', 'hero', 'round', resTwo, 'hit');
+    expect(resolveIdentitiesEqual(useOne, useTwo)).toBe(false); // distinct resolutions
+    // Resolving the first does NOT resolve the second.
+    const recorded = [triggerResolvedFact(useOne)];
+    expect(hasResolvedAsFact(useOne, recorded)).toBe(true);
+    expect(hasResolvedAsFact(useTwo, recorded)).toBe(false);
   });
 
-  it('per-target identity distinguishes different recipients', () => {
-    const factFoe = damageFact('fact:g:damage-applied:0');
-    const factFoe2 = { ...damageFact('fact:g:damage-applied:1'), recipientId: 'foe2' };
-    const a = resolveIdentityForFact(factFoe, 'round', 'hit');
-    const b = resolveIdentityForFact(factFoe2, 'round', 'hit');
-    expect(resolveIdentitiesEqual(a, b)).toBe(false);
-    const recorded = [triggerResolvedFact(a)];
-    expect(hasResolvedAsFact(a, recorded)).toBe(true);
-    expect(hasResolvedAsFact(b, recorded)).toBe(false);
-  });
-
-  it('a different trigger route on the same event stays distinct', () => {
-    const fact = damageFact('fact:g:damage-applied:0');
-    const hit = resolveIdentityForFact(fact, 'round', 'hit');
-    const crit = resolveIdentityForFact(fact, 'round', 'critical-hit');
+  it('two distinct triggered steps responding to the same fact stay independent', () => {
+    const fact = damageFact();
+    const hit = resolveIdentityForFact(fact, 'round', 'hit', { resolutionId: RES });
+    const crit = resolveIdentityForFact(fact, 'round', 'critical-hit', { resolutionId: RES });
     expect(resolveIdentityKey(hit)).not.toBe(resolveIdentityKey(crit));
+    const recorded = [triggerResolvedFact(hit)];
+    expect(hasResolvedAsFact(hit, recorded)).toBe(true);
+    expect(hasResolvedAsFact(crit, recorded)).toBe(false);
+  });
+
+  it('per-target de-dup is keyed in ONLY when a source declares once-per-target', () => {
+    // Default: no per-target dimension — two targets under the same step in
+    // one resolution share the identity (the triggered effect resolves once).
+    const defaultA = resolveIdentityForTrigger('fixture:gate', 'hero', 'round', RES, 'hit');
+    const defaultB = resolveIdentityForTrigger('fixture:gate', 'hero', 'round', RES, 'hit', { targetId: 'foe' });
+    expect(resolveIdentityKey(defaultA)).toBe(resolveIdentityKey(defaultB));
+    // Source-declared once-per-target: the target becomes part of the identity.
+    const perTargetA = resolveIdentityForTrigger('fixture:gate', 'hero', 'round', RES, 'hit', { targetId: 'foe1', oncePerTarget: true });
+    const perTargetB = resolveIdentityForTrigger('fixture:gate', 'hero', 'round', RES, 'hit', { targetId: 'foe2', oncePerTarget: true });
+    expect(resolveIdentityKey(perTargetA)).not.toBe(resolveIdentityKey(perTargetB));
   });
 
   it('serialization is unambiguous over delimiter-bearing opaque ids', () => {
-    const build = (sourceId: string, ownerId: string): ResolveIdentity => ({ sourceId, ownerId, scope: 'round', factDimension: 'F' });
+    const build = (sourceId: string, ownerId: string): ResolveIdentity => ({ sourceId, ownerId, scope: 'round', resolutionId: 'res:1' });
     expect(resolveIdentityKey(build('a:b', 'c'))).not.toBe(resolveIdentityKey(build('a', 'b:c')));
-    // Fact dimension is structurally part of the identity (never array-order).
-    const a = resolveIdentityForFact(damageFact('f:0'), 'round', 'hit');
-    const b = resolveIdentityForFact(damageFact('f:1'), 'round', 'hit');
+    // Resolution dimension is structurally part of the identity (never array-order).
+    const a = resolveIdentityForTrigger('s', 'hero', 'round', 'res:1', 'hit');
+    const b = resolveIdentityForTrigger('s', 'hero', 'round', 'res:2', 'hit');
     expect(resolveIdentityKey(a)).not.toBe(resolveIdentityKey(b));
   });
 
   it('missing/ambiguous identity fails closed: hasResolvedAsFact never guesses', () => {
-    // No recorded marker → not resolved. An unrecorded/ambiguous event is
-    // simply unanswered until a genuine marker is recorded.
-    const fact = damageFact('fact:g:damage-applied:0');
-    const id = resolveIdentityForFact(fact, 'round', 'hit');
-    expect(hasResolvedAsFact(id, [])).toBe(false);
-    // A marker with a DIFFERENT fact dimension does not satisfy this one.
-    const other = { ...damageFact('fact:g:damage-applied:9'), amount: 99 };
-    expect(hasResolvedAsFact(id, [triggerResolvedFact(resolveIdentityForFact(other, 'round', 'hit'))])).toBe(false);
+    // No recorded marker → not resolved.
+    const step = resolveIdentityForTrigger('s', 'hero', 'round', RES, 'hit');
+    expect(hasResolvedAsFact(step, [])).toBe(false);
+    // A marker for a DIFFERENT resolution does not satisfy this one.
+    const otherRes = resolveIdentityForTrigger('s', 'hero', 'round', 'res:other', 'hit');
+    expect(hasResolvedAsFact(step, [triggerResolvedFact(otherRes)])).toBe(false);
   });
 });

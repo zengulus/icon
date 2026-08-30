@@ -26,6 +26,7 @@ import { applyDeterminedDamageToVitals } from './automation/primitives/damage-re
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
 import { resolveAuthoritativeAttack } from './automation/kernels/attack-resolution.js';
 import { deriveResolutionTriggers } from './automation/kernels/resolution-triggers.js';
+import { factInstanceId, hasResolvedAsFact, resolveIdentityForTrigger, triggerResolvedFact, type Fact } from './automation/primitives/facts.js';
 import { resolveOrdinaryAttackMutations } from './automation/kernels/ordinary-attack.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
 import { areaStateView, masteryFoldStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
@@ -1097,38 +1098,76 @@ function deriveTriggers(state: EncounterState, actor: EncounterActor, attackTarg
  * follows the effect that reveals it. Mutations therefore apply base-first
  * and then the reactive steps in source-listing order, deterministically.
  */
+/** The durable, replay-stable resolution identity for a new rule resolution:
+ * the deterministic number of RULE_MUTATIONS_APPLIED events already recorded
+ * (a monotonic serial under replay), scoped by source. Two separate uses of
+ * the same ability → different serials → distinct fact ids; replaying the
+ * same recorded events reproduces the identical serials. Never random; never
+ * derived from later mutable state. Owned by the command/event boundary. */
+function nextResolutionId(state: EncounterState, sourceId: string, localOffset = 0): string {
+  let serial = 0;
+  for (const event of state.eventLog) if (event.type === 'RULE_MUTATIONS_APPLIED') serial += 1;
+  return `res:${sourceId}:${serial + 1 + localOffset}`;
+}
+
 export function executeRuleProgramWithReactiveTriggers(
   program: RuleProgram,
   context: RuleExecutionContext,
   resolvers: RuleResolverRegistry,
   state: EncounterState,
+  resolutionId = '',
 ): RuleExecutionResult {
   const first = executeRuleProgram(program, context, resolvers);
   let mutations = first.mutations;
   let selectedSteps = first.selectedSteps;
   const executedStepIds = new Set(selectedSteps.map(({ id }) => id));
   const knownTriggers = new Set(context.triggers ?? []);
-  const derived = deriveResolutionTriggers(state, mutations, knownTriggers);
+  const resolutionAction = context.actionId;
+  const derived = deriveResolutionTriggers(state, mutations, knownTriggers, resolutionId, resolutionAction);
   const pending = new Set([...derived.triggers].filter((trigger) => !knownTriggers.has(trigger)));
 
   // Monotonic continuation: each source step executes at most once, while
   // newly emitted mutations may add further resolution facts. Costs and the
   // named resolver remain confined to the primary pass by onlyTriggers.
+  // The U16 authority (`hasResolvedAsFact`) is the semantic gate for reactive
+  // continuation: a triggered step resolves ONCE per resolution (ICON p.107
+  // once-per-ability). `resolvedTriggers` is the durable recorded marker list
+  // for THIS resolution — replay consumes the recorded markers in the event's
+  // `continuation`, never re-deriving eligibility from later facts. A trigger
+  // already marked resolved is never re-offered, so per-fact routing facts
+  // (three Collides) open exactly ONE Collide step.
+  const resolutionSource = context.sourceId;
+  const resolutionOwner = context.actorId;
+  const resolvedTriggers: Fact[] = [];
+  const offerIdentity = (trigger: string) =>
+    resolveIdentityForTrigger(resolutionSource, resolutionOwner, 'round', resolutionId, trigger);
   while (pending.size > 0) {
+    // U16 gate: drop any trigger already resolved within this resolution, then
+    // record a marker for every trigger this pass offers so a later pass never
+    // re-resolves it. The batch is what remains un-answered.
+    for (const trigger of [...pending]) {
+      if (hasResolvedAsFact(offerIdentity(trigger), resolvedTriggers)) pending.delete(trigger);
+    }
+    if (pending.size === 0) break;
     const batch = new Set(pending);
     const additional = executeRuleProgram(program, {
       ...context,
       triggers: new Set(derived.triggers),
     }, resolvers, { onlyTriggers: batch });
     const freshSteps = additional.selectedSteps.filter(({ id }) => !executedStepIds.has(id));
-    for (const trigger of batch) pending.delete(trigger);
+    for (const trigger of batch) {
+      // Whether or not a step answered, the offer is recorded: a triggered
+      // step is by default once-per-ability, so offering it is resolving it.
+      resolvedTriggers.push(triggerResolvedFact(offerIdentity(trigger)));
+      pending.delete(trigger);
+    }
     if (freshSteps.length === 0) continue;
     for (const step of freshSteps) executedStepIds.add(step.id);
     mutations = [...mutations, ...additional.mutations];
     selectedSteps = orderedSelectedSteps(first.selectedAction, [...selectedSteps, ...freshSteps]);
-    const next = deriveResolutionTriggers(state, mutations, derived.triggers);
+    const next = deriveResolutionTriggers(state, mutations, derived.triggers, resolutionId, resolutionAction);
     for (const trigger of next.triggers) {
-      if (!derived.triggers.has(trigger)) {
+      if (!derived.triggers.has(trigger) && !knownTriggers.has(trigger)) {
         derived.triggers.add(trigger);
         pending.add(trigger);
       }
@@ -1141,7 +1180,7 @@ export function executeRuleProgramWithReactiveTriggers(
   // mutations; the guard clears at turn end via the lifecycle recipe).
   const bullStrengthDamage = bullStrengthCollideMutations(state, mutations);
   if (bullStrengthDamage.length > 0) mutations = [...mutations, ...bullStrengthDamage];
-  const finalFacts = deriveResolutionTriggers(state, mutations, derived.triggers);
+  const finalFacts = deriveResolutionTriggers(state, mutations, derived.triggers, resolutionId, resolutionAction);
   return {
     ...first,
     mutations,
@@ -1152,6 +1191,8 @@ export function executeRuleProgramWithReactiveTriggers(
       collidedActorIds: finalFacts.collidedActorIds,
       slainActorIds: finalFacts.slainActorIds,
     },
+    facts: finalFacts.facts,
+    resolutionId: finalFacts.resolutionId,
     continuation: {
       executedStepIds: [...executedStepIds],
       derivedTriggers: [...finalFacts.triggers].sort(),
@@ -1573,7 +1614,8 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
       .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: (cost as Extract<RuleMutation, { kind: 'damage' }>).amount } })),
   ];
   assertProgramCostsPayable(state, actor, ability.name, ability.id, { costs: combinedCosts }, ruleContext);
-  const result = executeRuleProgramWithReactiveTriggers(compilation.program, { ...ruleContext, abilityUseModifiers }, RULE_RESOLVERS, state);
+  const resolutionId = nextResolutionId(state, ability.id);
+  const result = executeRuleProgramWithReactiveTriggers(compilation.program, { ...ruleContext, abilityUseModifiers }, RULE_RESOLVERS, state, resolutionId);
   // F10 Blessing of Rebirth pierce (p.183): the chosen ability gains pierce.
   // The declarative VM converts its own damage at emission; resolver-emitted
   // damage converts here at the same command boundary, so both execution
@@ -1615,6 +1657,10 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     tags: [...programAction.tags],
     mutations: eventMutations,
     ...(result.resolutionFacts ? { resolutionFacts: result.resolutionFacts } : {}),
+    // The durable U10 fact history + its resolution identity ride the event so
+    // replay consumes the recorded outcomes (never re-deriving them).
+    ...(result.facts ? { facts: result.facts } : {}),
+    ...(result.resolutionId ? { resolutionId: result.resolutionId } : {}),
     ...(result.continuation ? { continuation: result.continuation } : {}),
   })];
   if (endsTurn && !interrupt) {
@@ -1817,8 +1863,9 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: cost.amount } }));
       assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: [...action.costs, ...augmentationCosts] }, ruleContext);
       let result: RuleExecutionResult;
+      const resolutionId = nextResolutionId(state, unit.id, 0);
       try {
-        result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state);
+        result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state, resolutionId);
       } catch (error) {
         if (error instanceof StatusSaveViolation) throw new RuleViolation(error.code, error.message);
         throw error;
@@ -1861,6 +1908,10 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         tags: [...action.tags],
         // F7 talent fold + F9 reactive job-trait fold: symmetric with USE_ABILITY.
         mutations: eventMutations,
+        ...(result.resolutionFacts ? { resolutionFacts: result.resolutionFacts } : {}),
+        ...(result.facts ? { facts: result.facts } : {}),
+        ...(result.resolutionId ? { resolutionId: result.resolutionId } : {}),
+        ...(result.continuation ? { continuation: result.continuation } : {}),
       })];
       break;
     }

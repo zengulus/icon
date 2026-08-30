@@ -1,6 +1,7 @@
 import type { DiceSource } from '../../dice.js';
 import type { AttackDamageProvenance } from './attack-resolution.js';
 import type { SaveWindowBranch, SaveWindowKind, SaveWindowModifiers } from './save-window.js';
+import type { Fact } from './facts.js';
 import type { EncounterState, Position, SourceReference } from '../../types.js';
 import type { Binder, Reference } from './reference.js';
 import type { RoleSelector } from './roles.js';
@@ -162,7 +163,12 @@ export type RulePredicate =
    * surfaces — never re-derived history. `instanceKey` names a specific
    * coexisting instance when multiple may exist; an instance identity the
    * live view cannot represent FAILS CLOSED. */
-  | { kind: 'effect-still-exists'; target: RuleSelector; effectKind: 'condition' | 'status' | 'mark' | 'stance' | 'persistent'; effectId: string; sourceId?: string; ownerId?: string; instanceKey?: string };
+  | { kind: 'effect-still-exists'; target: RuleSelector; effectKind: 'condition' | 'status' | 'mark' | 'stance' | 'persistent'; effectId: string; sourceId?: string; /** The authoritative DURABLE instance id (a U10 fact's `instanceId` / the
+     reducer's EncounterActiveEffect.id): asks whether THAT EXACT instance
+     still exists. Absent = presence by effectId (or owner-sensitive mark). */
+    instanceId?: string; ownerId?: string; /** Owner-sensitive: when true + `ownerId`, only that owner's mark satisfies
+     the read (marks from another owner with an identical markId never do). */
+    ownerSensitive?: boolean };
 
 export interface RuleChoice {
   key: string;
@@ -325,16 +331,18 @@ export interface RuleActorView {
    * reads). Exposed on the runtime view so ability resolvers can gate on an
    * active aura's presence — e.g. Painkiller's Sweet Torment re-use and
    * Phantom Bolts' retrigger (p.144/p.158) — and so the runtime aura view
-   * resolves `aura-effect` origins identically to the reducer view. Only the
-   * effectId/sourceId and the resolved aura radius are projected; the modifier
-   * payload stays reducer-side. */
-  activeEffects?: ReadonlyArray<{ sourceId: string; effectId: string; radius?: number }>;
+   * resolves `aura-effect` origins identically to the reducer view. The
+   * modifier payload stays reducer-side; the durable `id`/`ownerId` are
+   * carried so a recorded U10 effect fact can ask whether THAT SAME instance
+   * still exists (specific-instance reads never fabricate a key). */
+  activeEffects?: ReadonlyArray<{ id: string; sourceId: string; effectId: string; ownerId: string; radius?: number }>;
   size: number;
   defeated: boolean;
   /** The durable stance this actor holds, when any (the stance gate the
    * aura kernel and stance-gated resolvers read; marks are exposed the same
-   * way). Only the id is projected — stance payload state stays reducer-side. */
-  stance?: { stanceId: string } | null;
+   * way). The durable `id`/`ownerId` are carried for specific-instance
+   * `effect-still-exists` reads. */
+  stance?: { id: string; ownerId: string | null; stanceId: string } | null;
   conditions: ReadonlySet<string>;
   /**
    * Statuses with their source potency.  `conditions` remains the broad
@@ -355,8 +363,10 @@ export interface RuleActorView {
   };
   resources: Readonly<Record<string, number>>;
   state: Readonly<Record<string, string | number | boolean | null>>;
-  /** Marks on this actor (resolvers key on markId/ownerId, e.g. Incubus). */
-  marks: ReadonlyArray<{ markId: string; ownerId: string }>;
+  /** Marks on this actor (resolvers key on markId/ownerId, e.g. Incubus). The
+   * durable `id` is carried so a specific-instance mark read is exact; two
+   * owners' same markId stay owner-distinct through `ownerId`. */
+  marks: ReadonlyArray<{ id: string; markId: string; ownerId: string }>;
 }
 
 export interface RuleEntityView {
@@ -502,6 +512,12 @@ export interface RuleExecutionResult {
   selectedAction: RuleAction;
   selectedSteps: RuleStep[];
   resolutionFacts?: RuleResolutionFacts;
+  /** The durable U10 fact history recorded under `resolutionId` — the event
+   * boundary carries it so replay consumes the recorded outcomes. */
+  facts?: Fact[];
+  /** The durable, replay-stable resolution identity this execution resolved
+   * under (owned by the command/event boundary). */
+  resolutionId?: string;
   continuation?: RuleContinuationState;
 }
 

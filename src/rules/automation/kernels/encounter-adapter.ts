@@ -267,19 +267,18 @@ export function encounterRuleState(state: EncounterState): RuleRuntimeState {
       masteredAbilityIds: [...actor.masteredAbilityIds],
       activeEffects: actor.activeEffects.map((effect) => {
         const radius = auraEffectRadius({ sourceId: effect.sourceId, modifiers: effect.modifiers });
-        return radius === null
-          ? { sourceId: effect.sourceId, effectId: effect.effectId }
-          : { sourceId: effect.sourceId, effectId: effect.effectId, radius };
+        const base = { id: effect.id, sourceId: effect.sourceId, effectId: effect.effectId, ownerId: effect.ownerId };
+        return radius === null ? base : { ...base, radius };
       }),
       size: actor.size,
       defeated: actor.defeated,
-      stance: actor.stance ? { stanceId: actor.stance.stanceId } : null,
+      stance: actor.stance ? { id: actor.stance.id, ownerId: actor.stance.ownerId ?? null, stanceId: actor.stance.stanceId } : null,
       conditions: encounterConditionSet(actor, state),
       statuses: projectedStatuses(actor, state),
       statusSavePolicy: encounterStatusSavePolicy(state, actor),
       resources: { ...actor.resources, resolve: state.partyResolve + (actor.resources['personal-resolve'] ?? 0) },
       state: { ...actor.ruleState, phaseId: actor.ruleState.phaseId ?? null },
-      marks: actor.marks.map(({ markId, ownerId }) => ({ markId, ownerId })),
+      marks: actor.marks.map(({ id, markId, ownerId }) => ({ id, markId, ownerId })),
     }])),
     entities: Object.fromEntries(Object.values(state.entities).map((entity) => [entity.id, {
       id: entity.id,

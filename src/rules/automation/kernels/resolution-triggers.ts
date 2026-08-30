@@ -1,21 +1,24 @@
 import type { EncounterState } from '../../types.js';
 import type { Fact, RuleMutation } from '../primitives/types.js';
 import { recordFacts, deriveResolutionFactProjection, factInstanceId } from '../primitives/facts.js';
-import { collidingShoveTargets, reactiveSlayTargets } from './encounter-adapter.js';
+import { collidingShoveTargets, reactiveSlayTargets, determineEncounterDamage } from './encounter-adapter.js';
 
 /** Facts produced by the current ability resolution. The projection fields
  * remain byte-compatible with the long-standing surface encounter.ts
  * consumes; the `facts` list is the typed U10 history they [[recordFacts]]
- * is projected FROM. */
+ * is projected FROM and the event carries for durable replay. */
 export interface ResolutionTriggerFacts {
   triggers: Set<string>;
   attackTargets: string[];
   collidedActorIds: string[];
   slainActorIds: string[];
-  /** The typed U10 fact history this resolution produced (the newly-landed
-   * authority). Encounter.ts need not read it to keep behavior; U16/U6 and
-   * future U12/U13 consumers read facts through this list. */
-  facts?: Fact[];
+  /** The typed U10 fact history this resolution produced (the durable fact
+   * authority). The `RULE_MUTATIONS_APPLIED` event carries this list so
+   * replay consumes the recorded outcome identity — never re-derives it. */
+  facts: Fact[];
+  /** The durable, replay-stable resolution identity this fact history was
+   * recorded under (owned by the command/event boundary). */
+  resolutionId: string;
 }
 
 export function resolutionFactsFromRecorded(
@@ -26,6 +29,8 @@ export function resolutionFactsFromRecorded(
     attackTargets: [...facts.attackTargets],
     collidedActorIds: [...facts.collidedActorIds],
     slainActorIds: [...facts.slainActorIds],
+    facts: [],
+    resolutionId: '',
   };
 }
 
@@ -47,11 +52,11 @@ function resolveContextOf(
 /** The collide facts (ICON p.102/103): a shove as part of THIS ability shoved
  * an actor into an obstruction. The domain spatial authority
  * (`collidingShoveTargets`) decides WHICH actors collided; this kernel only
- * turns that into typed facts with U9 provenance. */
-function collideFacts(sourceId: string, ownerId: string, collidedActorIds: string[]): Fact[] {
+ * turns that into typed facts with U9 provenance, ID-scoped by resolution. */
+function collideFacts(resolutionId: string, sourceId: string, ownerId: string, collidedActorIds: string[]): Fact[] {
   return collidedActorIds.map((shovedActorId, offset) => ({
     kind: 'collide',
-    instanceId: factInstanceId(sourceId, 'collide', offset),
+    instanceId: factInstanceId(resolutionId, 'collide', offset),
     sourceId,
     ownerId,
     shovedActorId,
@@ -67,10 +72,10 @@ function collideFacts(sourceId: string, ownerId: string, collidedActorIds: strin
 /** The slay facts (ICON p.95 glossary): THIS ability reduced an actor to 0.
  * The defeat authority (`reactiveSlayTargets`) decides WHO was slain; this
  * kernel turns that into typed facts with U9 provenance. */
-function slayFacts(sourceId: string, ownerId: string, slainActorIds: string[]): Fact[] {
+function slayFacts(resolutionId: string, sourceId: string, ownerId: string, slainActorIds: string[]): Fact[] {
   return slainActorIds.map((defeatedId, offset) => ({
     kind: 'actor-defeated',
-    instanceId: factInstanceId(sourceId, 'actor-defeated', offset),
+    instanceId: factInstanceId(resolutionId, 'actor-defeated', offset),
     sourceId,
     ownerId,
     defeatedId,
@@ -86,31 +91,99 @@ function slayFacts(sourceId: string, ownerId: string, slainActorIds: string[]): 
   }));
 }
 
+/** Determine the actual damage resolution for damage mutations against the
+ * ALREADY-AUTHORITATIVE encounter state (armor/resistance/vigor/dodge), so a
+ * `damage-applied` fact records the RESOLVED amount — not the raw proposed
+ * `mutation.amount` — and no fact is emitted for fully prevented damage. The
+ * damage authority (`determineEncounterDamage`) runs ONCE, at the recording
+ * boundary; replay never re-runs it (the fact rides the event). Returns a
+ * snapshot of the encounter's pre-application vitals per recipient so the
+ * recorded amount reflects the determined operation the reducer performs. */
+function resolvedDamageAmounts(
+  state: EncounterState,
+  mutations: readonly RuleMutation[],
+): ReadonlyMap<number, number> {
+  const resolved = new Map<number, number>();
+  mutations.forEach((mutation, mutationIndex) => {
+    if (mutation.kind !== 'damage') return;
+    const target = state.actors[mutation.actorId];
+    if (!target || target.defeated) return;
+    const source = state.actors[mutation.sourceActorId];
+    // Skip sacrifice self-damage (life-cost) — it is not armor-determined and
+    // is reported as the sacrifice amount; the damage authority's determined
+    // amount for a sacrifice is not a mitigation read.
+    if (mutation.damageType === 'sacrifice') {
+      resolved.set(mutationIndex, mutation.amount);
+      return;
+    }
+    const determination = determineEncounterDamage(state, {
+      targetId: target.id,
+      sourceActorId: source?.id ?? null,
+      sourceRuleId: mutation.sourceId,
+      amount: mutation.amount,
+      damageType: mutation.damageType,
+      delivery: mutation.delivery,
+      instance: mutation.instance,
+      ignoreCover: mutation.ignoreCover,
+      ...(mutation.ignoreDodge ? { ignoreDodge: true } : {}),
+      ignoreArmor: mutation.ignoreArmor,
+    });
+    resolved.set(mutationIndex, determination.amount);
+  });
+  return resolved;
+}
+
 /**
  * Derive the fact history from already-resolved mutations and attack records,
- * then project the reactive trigger surface (U10 as the authority). This
- * fold never rolls, mutates, or interprets source ids: per-mutation facts
- * come from `recordFacts` (primitives/facts.ts), {collide, slay} facts come
- * from the encounter domain authorities (spatial + defeat), and the
- * `ResolutionTriggerFacts` projection is derived FROM the typed fact history
- * — so facts are the single authority, behavior-preserving for the surface
- * encounter.ts consumes.
+ * then project the reactive trigger surface (U10 as the authority). `facts`
+ * are ID-scoped by the durable `resolutionId` (owned by the command/event
+ * boundary) so two separate uses of the same ability never collide, and a
+ * replayed event reproduces the identical fact history. Damage facts record
+ * the DETERMINED (post-mitigation) amount from the damage authority, never a
+ * raw proposal. This fold never rolls, mutates, or interprets source ids;
+ * {collide, slay} facts come from the encounter domain authorities (spatial +
+ * defeat) and are merged before projecting the byte-compatible surface.
  */
 export function deriveResolutionTriggers(
   state: EncounterState,
   mutations: readonly RuleMutation[],
   initial: ReadonlySet<string> = new Set(),
+  resolutionId = '',
+  actionId = '',
 ): ResolutionTriggerFacts {
   const { sourceId, ownerId } = resolveContextOf(mutations);
   // Per-mutation facts (attack/damage/effect/movement/entity/terrain/save).
-  const facts = recordFacts(mutations, { ownerId: ownerId === '' ? undefined : ownerId });
+  // Damage facts record the DETERMINED (post-mitigation) amount from the
+  // damage authority; fully-prevented damage emits no `damage-applied` fact.
+  const resolvedDamage = resolvedDamageAmounts(state, mutations);
+  const facts = recordFacts(mutations, {
+    ownerId: ownerId === '' ? undefined : ownerId,
+    actionId: actionId === '' ? undefined : actionId,
+    resolutionId,
+    resolvedDamage,
+  });
+  // `ability-used`: the resolution's initiating ability/action use, recorded
+  // at the ability/action resolution boundary only when the mutation audit
+  // authorities confirm an action genuinely resolved here (mutations present
+  // for an ability source). Emitted under the resolution identity so two uses
+  // of the same ability never collide. No/unknown action records none (no
+  // false use), keeping the member honest.
+  if (sourceId !== '' && mutations.length > 0 && ownerId !== '' && actionId !== '') {
+    facts.unshift({
+      kind: 'ability-used',
+      instanceId: factInstanceId(resolutionId, 'ability-used', 0),
+      sourceId,
+      ownerId,
+      actionId,
+    });
+  }
   // Domain collide/slay facts (spatial + defeat authority live in the kernel).
   const collidedActorIds = collidingShoveTargets(state, mutations);
   const slainActorIds = reactiveSlayTargets(state, [...mutations]);
   const allFacts = [
     ...facts,
-    ...collideFacts(sourceId, ownerId, collidedActorIds),
-    ...slayFacts(sourceId, ownerId, slainActorIds),
+    ...collideFacts(resolutionId, sourceId, ownerId, collidedActorIds),
+    ...slayFacts(resolutionId, sourceId, ownerId, slainActorIds),
   ];
   // Project the byte-compatible reactive-trigger surface from the typed facts.
   // The caller's known-trigger set (from the continuation state) is layered in
@@ -123,5 +196,6 @@ export function deriveResolutionTriggers(
     collidedActorIds: projection.collidedActorIds,
     slainActorIds: projection.slainActorIds,
     facts: allFacts,
+    resolutionId,
   };
 }

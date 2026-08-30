@@ -231,7 +231,7 @@ describe('U6 (CORE) — predicate extensions', () => {
   it('in-stance: the target currently holds the stance', () => {
     const context = {
       ...ctx(),
-      state: { ...ctx().state, actors: { ...ctx().state.actors, ally: actorView('ally', 'heroes', { x: 6, y: 4 }, { stance: { stanceId: 'vigilance' } }) } },
+      state: { ...ctx().state, actors: { ...ctx().state.actors, ally: actorView('ally', 'heroes', { x: 6, y: 4 }, { stance: { id: 'stance:vigilance:1', ownerId: 'ally', stanceId: 'vigilance' } }) } },
     };
     expect(evaluatePredicate({ kind: 'in-stance', target: { kind: 'input', key: 't', relation: 'any' }, stanceId: 'vigilance' }, {
       ...context,

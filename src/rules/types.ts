@@ -1,4 +1,5 @@
 import type { RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
+import type { Fact } from './automation/primitives/facts.js';
 import type { SaveWindowKind, SaveWindowModifiers } from './automation/primitives/save-window.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
 import type { TurnTransitionIntent } from './automation/kernels/lifecycle.js';
@@ -826,7 +827,14 @@ export type EncounterEvent =
    * events replay the legacy appliedDamage + defianceTriggered fields. */
       ledger?: DamageLedgerEntry }
   | { type: 'ENCOUNTER_ENDED' }
-  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[]; resolutionFacts?: RuleResolutionFacts; continuation?: RuleContinuationState; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] } };
+  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[]; resolutionFacts?: RuleResolutionFacts; /** The durable U10 fact history for this resolution, ID-scoped by
+     `resolutionId`. Carried so replay consumes the recorded outcomes (and
+     their IDs) rather than re-deriving them from mutations. */
+    facts?: Fact[]; /** The durable, replay-stable identity of this resolution (owned by the
+     command/event boundary); every fact instance id is scoped under it, so
+     two separate uses of the same ability never collide and a replayed event
+     reproduces the identical fact history. */
+    resolutionId?: string; continuation?: RuleContinuationState; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] } };
 
 export interface CommandResult {
   state: EncounterState;

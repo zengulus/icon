@@ -107,18 +107,29 @@ describe('U10 — recordFacts records the typed history at the resolve point', (
     expect((damage as Extract<Fact, { kind: 'damage-applied' }>).provenance?.sourceActorId).toBe('hero');
   });
 
-  it('coexisting persistent effect applications get DISTINCT instance keys (never alias)', () => {
-    const a = {
+  it('a persistent effect is named by a natural instance key so a later remove refers to the ORIGINAL instance (never a freshly-minted identity)', () => {
+    const add = {
       kind: 'persistent', sourceId: 'fixture:gate', ownerId: 'hero', operation: 'add' as const,
       actorId: 'hero', effectId: 'aura', duration: { kind: 'combat' }, modifiers: [], triggers: [], state: {},
     } as Extract<RuleMutation, { kind: 'persistent' }>;
-    const facts = recordFacts([a, a], { ownerId: 'hero' });
-    const effects = facts.filter((fact) => fact.kind === 'effect') as Extract<Fact, { kind: 'effect' }>[];
-    expect(effects).toHaveLength(2);
-    // Same source/target/effect, DIFFERENT application — distinct instance keys.
-    expect(effects[0].instanceKey).not.toBe(effects[1].instanceKey);
-    expect(effects[0].instanceKey).toMatch(/^inst:persistent:/);
-    expect(effects[1].instanceKey).toMatch(/^inst:persistent:/);
+    const remove = {
+      kind: 'persistent', sourceId: 'fixture:gate', ownerId: 'hero', operation: 'remove' as const,
+      actorId: 'hero', effectId: 'aura', duration: { kind: 'combat' }, modifiers: [], triggers: [], state: {},
+    } as Extract<RuleMutation, { kind: 'persistent' }>;
+    const [apply] = recordFacts([add], { ownerId: 'hero', resolutionId: 'res:1' });
+    // Later resolution removes THAT SAME instance: the removal references the
+    // original natural instance key (never aliases to a new synthesized one).
+    const [removal] = recordFacts([remove], { ownerId: 'hero', resolutionId: 'res:1' });
+    expect((apply as Extract<Fact, { kind: 'effect' }>).instanceKey).toBe((removal as Extract<Fact, { kind: 'effect' }>).instanceKey);
+    expect((apply as Extract<Fact, { kind: 'effect' }>).instanceKey).toMatch(/^inst:persistent:/);
+    // The apply and remove are distinct EVENTS (resolution index differs) even
+    // though they name the SAME instance — coexisting coexist disambiguation
+    // happens on the LIVE view by durable id, not a per-index key.
+    expect((apply as Extract<Fact, { kind: 'effect' }>).operation).toBe('apply');
+    expect((removal as Extract<Fact, { kind: 'effect' }>).operation).toBe('remove');
+    // A distinct owner's identical mark/effect names a different instance.
+    const otherOwner = recordFacts([{ ...add, ownerId: 'villain' }], { ownerId: 'villain', resolutionId: 'res:1' })[0] as Extract<Fact, { kind: 'effect' }>;
+    expect(otherOwner.instanceKey).not.toBe((apply as Extract<Fact, { kind: 'effect' }>).instanceKey);
   });
 
   it('a defeat mutation is recorded as an actor-defeated outcome but is NOT a Slay (viaSlay false)', () => {

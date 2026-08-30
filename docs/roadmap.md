@@ -150,9 +150,19 @@ instance identity); U16 completed with the U10 fact-backed
 de-dup identity (`resolveIdentityKey` + `hasResolvedAsFact`, event
 de-dup distinct from the `used-scope` counts).
 `kernels/resolution-triggers.ts` migrated to record facts and project the
-byte-compatible reactive-trigger surface (behavior-preserving). Full suite
-green (1632 tests), census byte-stable at 427, no source-unit promotion.
-The next tranche is **T5 — Execution: U11, U12, U13** (plan §3.2).
+byte-compatible reactive-trigger surface (behavior-preserving). A **T4
+corrective pass (2026-08-30)** refined the contracts without new underlays:
+facts are now GENUINELY durable (per-resolution `resolutionId` owned by the
+command/event boundary; typed facts + id RIDE the RULE_MUTATIONS_APPLIED
+event so replay consumes recorded outcomes); `damage-applied` records the
+DETERMINED amount and emits no false fact on fully-prevented damage; U16
+resolve identity is RESOLUTION-scoped once-per-ability and WIRED into the
+genuine reactive continuation (multiple routing facts open ONE triggered
+step); and the live RuleActorView carries the durable instance id + ownership
+so `effectExistsLive` answers specific-instance reads exactly and effect
+lifecycle facts reference the original instance. Full suite green (1645
+tests), census byte-stable at 427, no source-unit promotion. The next
+tranche is **T5 — Execution: U11, U12, U13** (plan §3.2).
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
