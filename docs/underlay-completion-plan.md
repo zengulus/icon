@@ -1146,7 +1146,7 @@ once per ability (p.105); unerring/cover/dodge provenance on attacks
 (p.104/p.105); delivery modes distinguish hit/miss/area/effect/save-success/
 terrain damage.
 
-**Current state.** `LANDED (T4, 2026-08-30)`. `primitives/provenance.ts`
+**Current state.** `PARTIAL (T4 vocabulary landed; corrected 2026-08-31 by the T6 audit)`. `primitives/provenance.ts`
 (barrel re-exported) owns the typed PROVENANCE vocabulary:
 `DeliverySourceKind` ('actor' | 'terrain' | 'entity' | 'environment'),
 `RuleDelivery` (incl. reflected/triggered), `RuleMovementMode`, and the
@@ -1748,8 +1748,11 @@ permissions (p.104/p.105); immunity/resist/deny on damage (p.102 glossary);
 use caps ("use count override"); interrupt rank; duration modifiers;
 "cannot/ignore/immune" distinct (p.102, p.104).
 
-**Current state.** `LANDED (T3, 2026-08-30)` — the ONE recipe shape exists
-and the value/override fold registries fold through it.
+**Current state.** `PARTIAL (T3 recipe shape landed; corrected 2026-08-31 by the T6 audit)` — the ONE recipe shape
+exists and the value/override fold registries fold through it, but the
+`RuleModifier` stat bag (a stat/op/value bag without a typed query point,
+consumed by `encounter-adapter.ts`/effect-instance mutations) is NOT yet
+migrated onto typed query points and has no parity proof.
 `primitives/modifiers.ts` (barrel re-exported) owns: `ModifierRule`
 `{ sourceId, ownerId, queryPoint, scope, operation, value, gates, talent,
 actionId, from, ordering }`; `registerModifierRule` (unknown query points
@@ -2075,9 +2078,16 @@ first) and same-trigger turn-order rules (p.107); turn-boundary ordering
 player determines order — p.107); Delay ordering at slow-turn start (p.87);
 turn alternation; player ordering choices (p.107).
 
-**Current state.** `LANDED (T3, 2026-08-30)` — typed policies + the
-policy→CHOICE seam exist and the engine's recorded orders route through
-them. `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
+**Current state.** `PARTIAL (T3 policies landed; corrected 2026-08-31 by the T6 audit)` — typed policies + the
+policy→CHOICE seam exist and the recorded orders that are wired (source-order
+step ordering, stack LIFO pops) route through them. The §1 acceptance
+obligations that remain unbuilt: a SAME-OWNER simultaneous ordering decision
+recorded through the U4 `controller-choice` seam and replayed, and the
+hostile-before-beneficial / non-active-owner-first / controller-choice
+turn-boundary consumers (landed as vocabulary + unit tests, with NO engineered
+turn-boundary call site). A same-instant same-owner window tie currently
+throws (`ambiguous-order`/`ordering-unrepresentable`) rather than offering the
+recorded owner decision the contract names. `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
 (source-order | stack | turn-order | hostile-before-beneficial |
 non-active-owner-first | controller-choice | explicit-list),
 `applyOrdering(policy, candidates, context)` (pure — a function of the

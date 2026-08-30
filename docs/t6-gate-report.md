@@ -1,120 +1,419 @@
-# T6 — Underlay Phase gate report (2026-08-31)
+# T6 — Underlay Phase gate report (corrected audit, 2026-08-31)
 
-Baseline `f5830da` (landed T5c.1). Corrective/non-promotion tranche. **No
-source unit was promoted**; the blocker census regenerates byte-stable.
+Baseline `f5830da` (landed T5c.1). HEAD `6591d5a` was reviewed, and this
+pass is the **corrective audit** of that report. **No source unit is
+promoted**; the blocker census is untouched and remains byte-stable.
 
-## A. Pre-patch gate matrix (U1–U17)
+This report is a CLAIM TO AUDIT. The authoritative phase gate and the
+authoritative per-underlay contracts remain `docs/underlay-completion-plan.md`
+§4 and §1 rows. Where the prior `6591d5a` report disagreed with §1 or with
+the code, this version is corrected to agree with **code at HEAD first and §1
+rows second** — never the reverse.
 
-Verified against actual HEAD code (module existence, consumer/routing
-searches, duplicate reads), not the prior prose. Owning authority module
-listed per underlay.
+## 0. Executive correction
 
-| U | Declared authority (HEAD) | Contract status | Duplicate/partial owners | Remaining consumers | Required T6 action |
-| --- | --- | --- | --- | --- | --- |
-| U1 Reference/Binding | `primitives/reference.ts` | TRUE | legacy context slots remain input/transport surfaces (documented) | refs carried by continuations/windows/choices | none blocking |
-| U2 Role | `primitives/roles.ts` | TRUE | aura/targeting reads are specialists; no string/`source==owner` shortcuts found | chooser/controller carriage | none blocking |
-| U3 Query/Candidate | `kernels/candidate.ts` + `evaluate-query.ts` (+ `primitives/query.ts` domain) | PARTIAL | teleport/placement/entity/spatial specialists documented; `freeCellNear` noted | per-domain gates | continue narrowing documented specialists |
-| U4 Choice | `kernels/choice.ts` | PARTIAL | `ability-use-choices.ts` (closed trait-table spends) not routed through `resolveChoice`; U11 `choose` node unbuilt | `ability-use-choices`, talent folds, window choices | migrate `ability-use-choices` reads to `resolveChoice` OR prove specialist parity; build `choose` only if the U11 contract requires it |
-| U5 Value | `kernels/evaluate-value.ts` | TRUE | inline resolver arithmetic retained per §2 rule | — | document any retained specialist boundary |
-| U6 Predicate | `kernels/evaluate-predicate.ts` | TRUE | range/area gate bodies fold through predicate algebra (staged) | range/area gates | finish gate-body fold migration (staged) |
-| U7 Anchor | `primitives/anchor.ts` (+ role/ref separation) | TRUE | aura/teleport/creation origins are specialists | — | none blocking |
-| U8 Scope/Clock | `primitives/scope.ts` | TRUE | `RuleDuration` is a serialization surface projected onto U8 (documented) | durations/marks/expiry | none blocking |
-| U9 Provenance | `primitives/provenance.ts` | PARTIAL | resolution/replay reconstruction noted | damage-ledger, triggers, movement provenance | continue recording rather than reconstructing (staged) |
-| U10 Fact | `primitives/facts.ts` | TRUE | `executedStepIds`/`derivedTriggers` are flow bookkeeping only | reactive fold consumes recorded facts | none blocking |
-| U11 Flow/Sequence | `kernels/execute-flow.ts` | **PARTIAL — doc now corrected** | per-resolver hand-sequenced code (documented specialists); `choose` node unbuilt | resolvers | do NOT build a second decision system; `choose` only if contract requires it (it routes through U13 now) |
-| U12 Continuation | `primitives/continuation.ts` + `continuation-runtime.ts` | TRUE | T5c.1 closed the held-result trigger seam | legacy `RuleContinuationState` is bookkeeping | none blocking |
-| U13 Window | `kernels/decision-window.ts` | TRUE | `DamageWindowLedger.window` is replay handoff provenance; `EncounterPendingInterrupt` is a compat alias; all open/answer/close/drain central | — | none blocking |
-| U14 Modifier/Policy | `primitives/modifiers.ts` | PARTIAL | `RuleModifier` stat bag (effect-instance projection, not a fold) + listed registries | `RuleModifier`→typed query points | classify/parity-prove the effect-instance boundary (staged) |
-| U15 Transaction | `primitives/transaction.ts` | TRUE | `spatialBatchId`/`requiresLegalSpatialBatch`/`creationSpatial` route through shared seams | — | none blocking |
-| U16 Usage/Entitlement | `primitives/usage.ts` + `use-ledger.ts` | **PARTIAL — typed-ledger migration incomplete** | raw `interruptUses`/`interruptUsedThisTurn`/`attackedThisTurn`/`slashedTriggeredThisTurn`/`dangerousTerrainTriggeredThisTurn` durable fields | interrupt/attack/terrain gates | migrate genuine usage-restriction reads onto the U16 ledger (next tranche) |
-| U17 Ordering | `primitives/ordering.ts` + `continuationOrderKey` + `orderDecisionWindows` | TRUE | T5c.1 removed invented tie-breaks and same-instant fail-closed | same-owner simultaneous decision seam | route same-owner ordering decision through U4 (recorded) |
+`6591d5a` correctly concluded **UNDERLAY PHASE COMPLETE is NOT DECLARED and
+the gate remains OPEN**. That conservative result is preserved.
 
-**Doc-vs-code discrepancy found and fixed:** the U11 row's Current-state
-`FlowNode` vocabulary parenthetical still claimed `open-window`/`suspend`
-were "NOT landed yet"; T5c landed both (the `FlowNode` union contains them).
-Corrected to "only the `choose` node remains unbuilt."
+But the `6591d5a` report was internally inconsistent and overstated several
+rows. Its own matrix marked **U1, U2, U5, U6, U7, U8, U10, U12, U13, U15 as
+TRUE** while the authoritative §1 rows state most of those as **PARTIAL with
+non-empty "Consumers to migrate" lists**, and while the §1 **U17 contract
+itself lists acceptance obligations the engine does not yet satisfy**.
+This corrected report:
 
-## C. U18 / U19 decision (evidence-based)
+- puts every U1–U17 verdict back on the §1 row's own authoritative state,
+  re-verified against code at HEAD;
+- proves **criterion 3 (acceptance) was not actually established** and
+  replaces the "spot, representative" mapping with an exhaustive acceptance
+  matrix;
+- removes the false "only one §1 row (U16) remains" claim;
+- reopens **U17** (same-owner simultaneous ordering decision seam),
+  **U8** (legacy temporal surfaces not migrated onto the Clock), and
+  **U2** (role consumers not routed through `roles.ts`) as PARTIAL;
+- leaves the gate OPEN (§4.2 and §4.4 fail; §4.3 not established).
 
-- **U18 Attachment/Contribution — NOT PROMOTED.** After T5c.1, every named
-  contribution kind resolves onto an existing underlay: U14 one-recipe-shape
-  `ModifierRule` (six registries fold through it), U11 flow steps/action
-  grants, U13 windows / U11 suspend, U12 continuations, U4 choices, U3
-  queries. The only novel facet (an attachment/equipment registry + U2-owner
-  predicate) is content-registration glue, not new algebra. `mastery-fold.ts`
-  still reads the shared `ModifierRule` registry. Full decision recorded in
-  `docs/underlay-completion-plan.md` §2.
+---
+
+## A. Audit-correction report (deliverable)
+
+### A.1 Criterion-3 representative-vs-exhaustive defect — CONFIRMED
+
+`6591d5a` §D said: "*The named acceptance obligations in each §1 row map to
+real tranche suites* (`t5a`, `t5b`, `t5c`, `t5c1`, plus foundation suites) …
+**Only one §1 row** (U16 …) names migration obligations whose completion is
+still pending."
+
+That is a **representative** mapping, and §4.3 requires the acceptance tests
+**named in each §1 row** (positive / negative / boundary / replay where
+stateful). A representative mapping cannot establish criterion 3. The
+exhaustive acceptance matrix (deliverable C below) shows several §1-named
+obligations are **MISSING** or **only indirectly assumed** (notably U17
+recorded ordering + replay, U8 Clock migration reads, U2 aura/targeting/
+save-window routing). **Criterion 3 was not established and is not PASS.**
+
+### A.2 U17 TRUE contradiction — CONFIRMED, U17 = PARTIAL
+
+The §1 U17 row's own acceptance list requires:
+
+- *controller-choice ordering yields a recorded decision*;
+- *Boundary: same-owner simultaneous effects*;
+- *Replay: … controller-choice ordering records the player's ordering
+  decision.*
+
+Code at HEAD shows the ordering policies and `policyYieldsChoice` exist, but
+**no consumer wires a same-owner simultaneous ordering decision through U4 as
+a recorded decision and replays it**. `orderDecisionWindows(state, turnActorId,
+pending)` **throws** `ordering-unrepresentable` on a same-instant same-side
+tie, and `topDecisionWindowStack` **throws** `ambiguous-order` on a
+same-instant same-owner tie — it rejects as "unrepresentable until a recorded
+ordering decision exists" rather than offering the U4
+`controller-choice` record the §1 contract says the owner is entitled to.
+`controller-choice` has no end-to-end recorded-decision consumer.
+
+**Verdict: U17 = PARTIAL.** The "Land then hostile-before-beneficial /
+non-active-owner-first / controller-choice land turn-boundary consumers in
+T5" claim in the §1 row was not actually delivered. The engine correctly
+fails closed (never invents an order), but the contract's recorded-decision
+seam is unbuilt. This must remain, and is a real hard-gate item.
+
+### A.3 U8 TRUE contradiction — CONFIRMED, U8 = PARTIAL
+
+The §1 U8 row states **PARTIAL** and says, verbatim: "*The legacy surfaces
+remain the executing authority — `RuleDuration` / `RuleTiming` / `use-ledger`
+/ lifecycle readers still re-key 'round' separately; migrating them onto the
+Clock (the U8 completion work …) is a later phase, not T1*", with:
+`RuleDuration` consumers, `use-ledger` periods, lifecycle phase reads,
+`RuleTiming` boundary interpretation, and scheduler round counters listed as
+**Consumers to migrate**.
+
+`6591d5a` marked U8 TRUE and called `RuleDuration` "a serialization surface
+projected onto U8". That directly contradicts the authoritative row. Code
+confirms `scopeForDuration` / `clockForTiming` / `boundaryReached` /
+`currentClock` are consumed only by `continuation.ts` and `scope.test.ts`; the
+use-ledger kernel still carries its own `UseLedgerPeriod` string periods
+(`turn|round|combat`) writing `ledger:<period>:*` keys independent of the
+Clock, and `expireBoundaryEffects` re-keys `duration.turns/rounds` directly.
+
+**Verdict: U8 = PARTIAL (unchanged from §1; corrected from `6591d5a`'s
+TRUE).**
+
+### A.4 U2 TRUE contradiction — CONFIRMED, U2 = PARTIAL
+
+The §1 U2 row states **PARTIAL** and lists as **Consumers to migrate**:
+aura bearer/member derivation, `targeting.ts` relation reads, command-layer
+choice routing, and `save-window.ts` owner derivation. Code at HEAD confirms
+`deriveRoles` / `roleFrameFromContext` / `choiceEntitledPlayer` are consumed
+**only** by `kernels/choice.ts`; `kernels/aura.ts` derives membership via
+side comparisons, `targeting.ts` relation reads are local, and the command
+boundary routes `ANSWER_DECISION_WINDOW` by `window.actorId` alone.
+
+**Verdict: U2 = PARTIAL.** "Aura/targeting are specialists" is not a
+sufficient argument by itself: ROLE is "relative to whom is this clause
+interpreted?", and these modules answer that question with their own side /
+relation reads. Under the strict retained-specialist test they do not
+currently prove disjointness.
+
+### A.5 The "only one §1 row remains" claim — FALSE
+
+`6591d5a` §D claims only U16 has pending migration obligations. Its own
+matrix lists unfinished work in **U3, U4, U6, U9, U11, U14, U16 and U17**,
+and §1 states PARTIAL with non-empty **Consumers to migrate** for **U1, U2,
+U3, U4, U5, U6, U7, U8, U9, U11, U12, U14** and U16. The claim is false and
+is deleted.
+
+### A.6 Other matrix/§1 mismatches discovered and corrected
+
+| Row | `6591d5a` claimed | §1 row states | Corrected |
+| --- | --- | --- | --- |
+| U1 | TRUE | PARTIAL (legacy context slots remain resolution sources; consumers to migrate) | PARTIAL |
+| U5 | TRUE | PARTIAL (inline resolver arithmetic; typed non-numeric values; usage elevations) | PARTIAL |
+| U6 | TRUE | PARTIAL (range/area gate-body folding remains post-T2) | PARTIAL |
+| U7 | TRUE | PARTIAL (aura/teleport/creation origins + rebound origin not unified) | PARTIAL |
+| U9 | PARTIAL | PARTIAL (vocab LANDED; `resolution-triggers`/`damage-ledger`/movement folds still reconstruct) | PARTIAL |
+| U10 | TRUE | LANDED (T4-corrected) — fact ledger authoritative | LANDED (TRUE, nearest) |
+| U12 | TRUE | PARTIAL (resolver end-of-turn effects, save AST, held-damage consumers REMAIN) | PARTIAL |
+| U13 | TRUE | AUTHORITATIVE (T5c.1) | TRUE |
+| U15 | TRUE | LANDED (T3) — one transaction seam | TRUE (documented instantiations) |
+
+A module existing is not completion. Per §4, a row with a non-empty,
+unresolved **Consumers to migrate** list is PARTIAL for gate purposes unless
+every remaining item is a proven retained specialist (§3 test). Apply that
+test below.
+
+---
+
+## B. Corrected U1–U17 matrix (authoritative, code-true)
+
+State vocabulary mirrors the plan (§0): `PARTIAL` (vocab/authority exists for
+a subset; full contract or a consumer migration missing) vs `LANDED`/
+`AUTHORITATIVE` (one authority; complete for its declared scope). `TRUE` in
+the gate sense = §4.2/§4.4 satisfied with no unresolved duplicate and all §1
+acceptance met.
+
+| U | Declared authority (HEAD) | §1 state | Consumers to migrate (unresolved) | Gate verdict |
+| --- | --- | --- | --- | --- |
+| U1 Reference | `primitives/reference.ts` | PARTIAL | legacy context slots (`actorId`/`attackTargetId`/`triggerSourceId`/`triggerTargetIds`/`damageRecipientId`) remain resolution sources; continuation refs map | PARTIAL |
+| U2 Role | `primitives/roles.ts` | PARTIAL | aura bearer/member, `targeting.ts` relation reads, command-layer choice routing, `save-window.ts` owner | PARTIAL |
+| U3 Query | `kernels/evaluate-query.ts` + `primitives/query.ts` | PARTIAL | area / persistent-instance / rule-source query domains; ordering beyond min-distance set | PARTIAL |
+| U4 Choice | `kernels/choice.ts` | PARTIAL | `ability-use-choices`/`talentChoices` fold reads; window-carried `ChoiceSpec` | PARTIAL |
+| U5 Value | `kernels/evaluate-value.ts` | PARTIAL | inline per-resolver arithmetic; usage reads; traversed/elevation/area-size typed values | PARTIAL |
+| U6 Predicate | `kernels/evaluate-predicate.ts` | PARTIAL | range / area gate-body folding (consumer migration) | PARTIAL |
+| U7 Anchor | `primitives/anchor.ts` | PARTIAL | aura origins, `runtime.ts` actorId-as-anchor, rebound origin (U12), entity `creationSpatial` | PARTIAL |
+| U8 Scope/Clock | `primitives/scope.ts` | PARTIAL | `RuleDuration` consumers, `use-ledger` periods, lifecycle readers, scheduler round counters | PARTIAL |
+| U9 Provenance | `primitives/provenance.ts` | PARTIAL | `resolution-triggers` read, damage-ledger entry construction, movement-entry folds, reroll-save | PARTIAL |
+| U10 Fact | `primitives/facts.ts` | LANDED (T4) | executedStepIds/derivedTriggers → typed facts (flow bookkeeping, documented) | TRUE |
+| U11 Flow | `kernels/execute-flow.ts` | PARTIAL | per-resolver hand-sequenced code; phantom `choose` node (corrected — see §E) | PARTIAL |
+| U12 Continuation | `primitives/continuation.ts` + `continuation-runtime.ts` | PARTIAL | resolver end-of-turn effects (Polaris/Carnevale), save-window AST, held-damage records | PARTIAL |
+| U13 Window | `kernels/decision-window.ts` | AUTHORITATIVE (T5c.1) | DONE (window layer) | TRUE |
+| U14 Modifier | `primitives/modifiers.ts` | LANDED + `RuleModifier` stat bag unresolved | `RuleModifier` stat bag → typed query points; attack/mastery/bonus-damage/aura reads | PARTIAL |
+| U15 Transaction | `primitives/transaction.ts` | LANDED (T3) | cost-payment, `spatialBatchId`, `countMode:exact`, `requiresLegalSpatialBatch` (documented U15 instantiations) | TRUE |
+| U16 Usage | `primitives/usage.ts` + `use-ledger.ts` | PARTIAL | raw `interruptUses`/`interruptUsedThisTurn`/`attackedThisTurn`/`slashedTriggeredThisTurn`/`dangerousTerrainTriggeredThisTurn` | PARTIAL |
+| U17 Ordering | `primitives/ordering.ts` | PARTIAL (corrected) | same-owner simultaneous recorded decision via U4; hostile/active-owner/controller-choice turn-boundary consumers not landed | PARTIAL |
+
+**Only U10, U13, U15 meet the complete-contract bar.** Everything else has an
+outstanding §1 consumer migration or unbuilt seam. This is materially more
+conservative than `6591d5a`, and it is the honest code-and-§1 truth.
+
+---
+
+## C. Exhaustive acceptance matrix (criterion 3)
+
+For each §1 row, every named acceptance obligation → the exact test that
+satisfies it, or a classification. Obligation classes: **POSITIVE /
+NEGATIVE / BOUNDARY / REPLAY**. Status: **PASS** (exact test exists),
+**PASS (composed)** (proved by a composed tranche test), **MISSING** (no test
+proves the named obligation), **OBSOLETE** (authoritative contract validly
+changed, reason given).
+
+| U | §1 obligation | Exact test | Class | Result |
+| --- | --- | --- | --- | --- |
+| U1 | captured position stays exact after moving | `reference.test.ts` (positive captured-exactness; replay identical-literal + Binder purity) | POS/NEG/BOUND/REPLAY | PASS |
+| U1 | live ref re-resolves new position on later turn | `reference.test.ts` (live re-resolution; replay) | POS/REPLAY | PASS |
+| U1 | unbound name rejects; captured≠live as live | `reference.test.ts` (negative) | NEG | PASS |
+| U1 | empty collection ref / defeated-actor ref | `reference.test.ts` (boundary) | BOUND | PASS |
+| U2 | TARGET_CONTROLLER / owner≠carrier distinct controllers | `roles.test.ts`; `t2-choice-roles.test.ts` | POS | PASS (composed) |
+| U2 | underivable chooser rejects at command boundary | `roles.test.ts` (negative); `choiceEntitledPlayer` | NEG | PASS |
+| U2 | self-collapse; ROLE≠ANCHOR rebound | `roles.test.ts` (boundary); `t5c1` rebound | BOUND | PASS |
+| U2 | window responder replayed to same responder | `roles.test.ts` (replay same-frame-same-map) | REPLAY | PASS (composed) |
+| U2 | aura/targeting/save-window read roles through `roles.ts` | **MISSING** — aura/targeting/save-window still derive locally | POS (migration) | MISSING |
+| U3 | "all foes in range 3" == union of per-foe choices | `evaluate-query.test.ts`; `candidate.test.ts` | POS | PASS |
+| U3 | entity/position/terrain candidates resolve | `evaluate-query.test.ts`; `t2-query-extension.test.ts` | POS | PASS |
+| U3 | defeated/off-board/out-of-range/relation negative | `candidate.test.ts` / `evaluate-query.test.ts` | NEG | PASS |
+| U3 | at-range passes; one-past fails (footprint) | `evaluate-query.test.ts` | BOUND | PASS |
+| U3 | `selectActors` parity + `rangeOrigin` replay | existing fixture parity; `t2-query-extension.test.ts` | REPLAY | PASS |
+| U4 | required/optional/cardinality/distinct/bounds | `choice.test.ts` (23 tests) | POS/NEG/BOUND | PASS |
+| U4 | chooser-role derivation | `t2-choice-roles.test.ts` | POS | PASS |
+| U4 | position choice legality through U3 | `t2-choice-roles.test.ts` + teleport fixtures | POS/BOUND | PASS |
+| U4 | `abilityUseChoices`/`talentChoices` fold-through | `ability-use-choices.test.ts` exercises the fold directly, NOT through `resolveChoice` | POS (migration) | MISSING (not through shared validator) |
+| U4 | optional-decline never defaults (window timing) | `t5c-u13-decision-window.test.ts`; `t5c1` | BOUND | PASS (composed) |
+| U5 | count(query) / distance(ref,ref) / percent-base-max | `t2-expression-algebra.test.ts` | POS | PASS |
+| U5 | divide-by-zero/unknown-stat rejects | `t2-expression-algebra.test.ts` (negative) | NEG | PASS |
+| U5 | usage reads | **MISSING** — usage reads not landed (`usage(key,scope)` value absent) | POS | MISSING |
+| U5 | quarter-mark/0-count boundary; replay Finesse | `hp-threshold.test.ts`; `finesse.test.ts` (replay) | BOUND/REPLAY | PASS (composed) |
+| U6 | bloodied/quarter/compare-compound gates | `evaluate-predicate` via T2 fixtures / `t2-query-ext`; `hp-threshold.test.ts` | POS | PASS |
+| U6 | mark-exists / in-stance / inside-aura / acted-this-round / used-scope / effect-still-exists | `t3-usage.test.ts` (used-scope), `t4-effect-exists.test.ts`, `effect-exists` fixtures | POS | PASS (composed) |
+| U6 | range/area gate-body fold parity | **MISSING** — range.ts/area.ts gates still fold locally | POS (migration) | MISSING |
+| U7 | non-self `rangeOrigin` resolves | `evaluate-query.test.ts` / `t2-query-extension.test.ts` | POS | PASS |
+| U7 | teleport planned-path + rebound-origin replay | `spellblade.test.ts`; `t5c1` rebound | REPLAY | PASS (composed) |
+| U7 | aura/teleport/creation origins unified onto `SpatialAnchor` | **MISSING** — these remain specialists w/o shared-anchor parity | POS (migration) | MISSING |
+| U8 | durations / usage / lifecycle agree on one Clock | `scope.test.ts` covers the Clock surface; **use-ledger/lifecycle parity against Clock is MISSING** | POS/REPLAY | PARTIAL (migration missing) |
+| U8 | N-boundary / next-match / slow-turn boundary | `scope.test.ts` | POS/BOUND | PASS |
+| U8 | turn/round/combat reset via Clock reads | **MISSING** — reset recipes still re-key `ledger:*` strings / `expireBoundaryEffects` duration fields | REPLAY | MISSING |
+| U9 | Slay / Collide / Pacified-break provenance | `t4-facts-provenance.test.ts`; `t5c1` collide | POS | PASS (composed) |
+| U9 | provenance fields byte-identical on replay split | `t5c1`/`damage-ledger.test.ts` | REPLAY | PASS (composed) |
+| U9 | resolution-triggers read via recorded facts, not re-derivation | `t4-facts-provenance.test.ts`; `resolution-triggers.ts` still reconstructs — **MISSING** | POS (migration) | MISSING |
+| U10 | durable facts ride RMA event; replay consumes | `t4-final-contracts.test.ts`; `t4-closeout.test.ts` | POS/REPLAY | PASS |
+| U10 | overlapping routes fire once (resolution-scoped de-dup) | `t4-dedup.test.ts`; `t4-corrective.test.ts` | BOUND | PASS |
+| U10 | executedStepIds/derivedTriggers not a fact substitute | `t5c1` (documented flow bookkeeping) | NEG | PASS (composed) |
+| U11 | rush-then-damage / remove-then-place / teleport-adjacency | `t5a-u11-flow.test.ts` | POS | PASS |
+| U11 | repeat N+1 sees N; for-each; invoke; bind; emit-fact | `t5a-u11-flow.test.ts` | POS | PASS |
+| U11 | invalid intermediate leg rejects whole command | `t5a-u11-flow.test.ts` (negative) | NEG | PASS |
+| U11 | zero-repeat / empty for-each no-op; U15 swap simultaneous | `t5a-u11-flow.test.ts` | BOUND | PASS |
+| U11 | mid-flow player decision (`choose`) recorded + replayed | `t5a`/`t5c` prove `open-window`/`suspend` carry U4; **a distinct `choose` node has no source-backing** — OBSOLETE as a requirement (see §E) | REPLAY | PASS (composed, via open-window) |
+| U12 | deferred rule against THEN-CURRENT state | `t5b-u12-continuation.test.ts` | POS | PASS |
+| U12 | captured stays captured; live stays live | `t5b-u12-continuation.test.ts` | POS | PASS |
+| U12 | held result immutable; cancelled/expired never resume | `t5b-u12-continuation.test.ts` (negative/boundary) | NEG/BOUND | PASS |
+| U12 | multiple continuations use U17 ordering; full replay | `t5b`; `t5c1` ordering | REPLAY | PASS (composed) |
+| U12 | resolver end-of-turn effects (Polaris/Carnevale) on continuations | `polaris`/`carnevale` still use per-source delayed logic — **MISSING** | POS (migration) | MISSING |
+| U13 | when-damaged/defeated/save-rolled open exactly | `t5c-u13-decision-window.test.ts` | POS | PASS |
+| U13 | answer validates via U4 resolveChoice; decline legal | `t5c1`; `t5c-u13` | POS/NEG | PASS |
+| U13 | nested LIFO; same-trigger turn-order; owner ambiguity fail-closed | `t5c-u13`; `t5c1` H4 | BOUND | PASS |
+| U13 | replay byte-identical zero fresh RNG/decisions | `t5c-u13`; `t5c1` | REPLAY | PASS |
+| U14 | one ModifierRule shape drives range/area/cost/attack/damage/save | `t3-modifiers.test.ts`; `rue` parity | POS | PASS (composed) |
+| U14 | typed permission distinctness; wildcard impossible; unowned never folds | `t3-modifiers.test.ts` | POS/NEG | PASS |
+| U14 | conflicting rules deterministic winner; scope filter; predicate flips | `t3-modifiers.test.ts` | BOUND | PASS |
+| U14 | fold-dependent attack/damage replay byte-identical | `attack-modifiers.test.ts`/`mastery.test.ts` (replay) | REPLAY | PASS (composed) |
+| U14 | `RuleModifier` stat bag folded as typed query points | **MISSING** — `RuleModifier` still a stat/op bag consumed by `encounter-adapter`/mutations without a typed query point | POS (migration) | MISSING |
+| U15 | cost+swap+creation grouped commit; partial legality rejects whole | `t3-transaction.test.ts`; `spatial-authority.test.ts` | POS/NEG | PASS |
+| U15 | exact-count creation fails closed; never partial-apply denied group | `t3-transaction.test.ts`; `entity-creation` | NEG | PASS |
+| U15 | empty group / cap-reduced success boundary | `t3-transaction.test.ts` | BOUND | PASS |
+| U15 | swap + exact-creation replay byte-identical | `t3-transaction.test.ts`; `t5a` | REPLAY | PASS (composed) |
+| U16 | N-per-round cap; per-use magnitude; refresh at boundary | `t3-usage.test.ts`; `use-ledger.test.ts` | POS | PASS |
+| U16 | capped use rejected; unequipped never consumes | `t3-usage.test.ts` | NEG | PASS |
+| U16 | cap reduced by override; refresh-vs-combat; shared ledger across actors | `t3-usage.test.ts` | BOUND | PASS |
+| U16 | once-per-trigger across routes fires once; de-dup replay | `t4-dedup.test.ts`; `t5c1` | REPLAY | PASS |
+| U16 | raw `interruptUses`/`attackedThisTurn`/per-turn reaction flags on typed ledger | **MISSING** — raw durable fields remain (schema change required) | POS (migration) | MISSING |
+| U17 | source-order step ordering; turn-order | `t3-ordering.test.ts`; `t5c1` | POS | PASS |
+| U17 | LIFO nesting; controller-choice yields typed choice (never resolved) | `t3-ordering.test.ts`; `t5c-u13` | POS | PASS |
+| U17 | undefined/unorderable rejects, never silent iterate | `t3-ordering.test.ts` (negative) | NEG | PASS |
+| U17 | **same-owner simultaneous effects — recorded ordering decision + replay** | `t3-ordering` tests the primitive; **no end-to-end recorded-ordering consumer/replay exists — MISSING** | BOUND/REPLAY | MISSING |
+| U17 | hostile-before-beneficial / non-active-owner-first / controller-choice turn-boundary consumers | **MISSING** — not landed at a real turn-boundary call site | POS (migration) | MISSING |
+
+**Criterion 3 is NOT PASS**: MISSING rows remain for U2 (aura/targeting/
+save-window routing), U4/U5, U6 (gate-body fold), U7, U8 (Clock-read resets),
+U9, U12 (resolver end-of-turn), U14 (`RuleModifier`), U16 (raw fields), and
+U17 (recorded same-owner ordering + replay). Each is a named §1 obligation
+without a satisfying test.
+
+---
+
+## D. Actual remaining blocker set (derived, not inherited)
+
+Ranked by **dependency**, not census frequency. Foundations first; each is a
+real §1 consumer-migration or unbuilt seam, confirmed at code HEAD.
+
+1. **U8 — Scope/Clock consolidation.** The Clock vocabulary exists but
+   `RuleDuration`/`RuleTiming`/`use-ledger` periods/lifecycle readers/scheduler
+   counters still re-key temporal boundaries separately. Foundational: U5
+   round/turn reads, U12 Clock triggers, U13 window timing, U16 resets all
+   consume the Clock. Smallest genuine migration wins big.
+2. **U17 — same-owner recorded ordering.** The engine fails closed (throws)
+   on a same-owner simultaneous tie but has no U4-recorded ordering-decision
+   seam or replay. Required by the §1 contract's own boundary/replay
+   obligations. Feeds the U13 window-ordering path.
+3. **U16 — raw durable usage fields.** `interruptUses`,
+   `interruptUsedThisTurn`, `attackedThisTurn`, `slashedTriggeredThisTurn`,
+   `dangerousTerrainTriggeredThisTurn` are durable usage-restriction state
+   beside the ledger. Classification (per §16): `interruptUses` /
+   `interruptUsedThisTurn` / `attackedThisTurn` are usage entitlement →
+   U16; `slashed`/`dangerousTerrain` are once-per-turn reaction de-dup → U10
+   fact identity or a typed de-dup ledger. Then schema-visible migration +
+   save/load + replay proofs.
+4. **U2 — route role consumers.** Aura bearer/member, `targeting.ts` relation
+   reads, save-window ownership, and command-layer choice responder routing
+   onto `roles.ts` `deriveRoles`/`choiceEntitledPlayer`, with parity tests, OR
+   prove each is a disjoint retained specialist under the §3 four-part test.
+5. **U12 — resolver end-of-turn effects.** Polaris meteor / Carnevale
+   per-source delayed logic → armed continuations with Clock triggers.
+6. **U4 — ability-use-choices / talentChoices through `resolveChoice`** (or
+   proven closed-table parity with a boundary test).
+7. **U14 — `RuleModifier` stat bag → typed query points** (parity-proved
+   retained projection or migrated).
+8. **U6 — range/area gate-body fold migration** onto the U6 predicate/`U14`
+   algebra.
+9. **U3 — area / persistent-instance / rule-source query domains** (only when
+   a source unit needs them — do not build speculatively; narrow the contract
+   if source evidence does not justify).
+10. **U1 — legacy context slots → typed refs** across runtime/choice/
+    bonus-damage/resolvers.
+
+Within a single corrective tranche the **smallest dependency-coherent set is
+{U8, U17}**: both are foundations consumed downstream, both are contained in
+their own primitives + their two consumers (continuation/Clock, window
+ordering), and both have replay-verifiable surfaces. U16 is **not** the
+correct smallest-first blocker because U8 and U17 underlay it.
+
+---
+
+## E. Retained-specialist closure report (deliverable F) — §3 four-part test
+
+The §3 test: (1) semantically distinct responsibility; (2) stated boundary;
+(3) no overlapping input yields a divergent answer; (4) parity/boundary tests
+where drift is plausible. Applied to every surviving apparent duplicate.
+
+| Location | Responsibility | 1 sess. distinct? | 2 boundary written? | 3 divergent overlap? | 4 parity test? | Verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| `kernels/aura.ts` member/relation derivation | aura membership geometry + relation | Partial — relation read is U2-shaped | Documented in §1 U2 | Plausible (side vs role) | **No** | **NOT closed** → U2 blocker |
+| `primitives/targeting.ts` relation reads | direct-target eligibility | Partial — relation read is U2-live | Documented | Plausible | **No** | **NOT closed** → U2 blocker |
+| `primitives/save-window.ts` owner policy | save resolution priming | Partial — owner is U2 | Documented | Plausible | **No** | **NOT closed** → U2 blocker |
+| `ability-use-choices.ts` (kernel fold) | closed trait-table spend tables | Yes (candidate supply + spend) | Documented | No (data tables, not legality) | Existing fold tests, not vs U4 | **CLOSED as specialist** for candidate/supply; legality NOT routed through U4 → leave U4 item |
+| `RuleModifier` stat bag | persistent effect-instance projection | Yes (instance data, not a fold) | Documented | Plausible vs U14 | **No** | **NOT closed** → U14 item |
+| `range.ts` / `area.ts` gate bodies | range/area legality folds | Yes (domain legality) | Documented | Plausible vs U6/U14 | **No parity** | **NOT closed** → U6 item |
+| per-resolver hand-sequenced code | named ability sequencing | Yes | Documented (U11 sequencing) | No (resolvers are content) | covered by fixtures | **CLOSED** |
+| `resolution-triggers.ts` reconstruction | derived facts projection | Partial | Documented | Plausible vs recorded facts | **No** | **NOT closed** → U9 item |
+| `DamageWindowLedger.window` | replay handoff provenance | Yes | Documented | Differs from U13 (opens via ledger, never answers) | `t5c1`/`damage-ledger.test.ts` | **CLOSED** |
+| `RuleContinuationState` executedStepIds/derivedTriggers | reactive same-ability fold ledger | Yes (flow bookkeeping, not facts) | Documented | No (not a fact substitute; `t5c1`) | `t5c1` H3 | **CLOSED** |
+| `EncounterPendingInterrupt` compat alias | window schema alias | Yes (compat) | Documented | No | migration tests | **CLOSED** |
+| `kernels/mastery-fold.ts` | thin adapter over shared ModifierRule registry | Yes | Documented | No | `mastery.test.ts` | **CLOSED** |
+| cost-payment / `spatialBatchId` / `countMode:exact` / `requiresLegalSpatialBatch` | per-domain legality under U15 grouping | Yes (domain legality; U15 owns grouping) | Documented as instantiations | No if same-seam | `t3-transaction.test.ts`; `spatial-authority.test.ts` | **CLOSED** (parity via transaction tests) |
+| `teleport-choice` | position-domain choice | Yes | Documented | No (routes through shared legality) | `spellblade`/teleport fixtures | **CLOSED** |
+| `foe-recipes` dash / trait reactions | area-inclusion reads | Yes | Documented | No (read through `insideArea`) | fixtures | **CLOSED** |
+
+The specialists that are NOT closed to the four-part bar are exactly the
+consumers listed in §D blockers (U2, U6, U9, U14) — they are real residual
+items, not doc-able away.
+
+---
+
+## F. U18 / U19 decision (deliverable G)
+
+Reconfirmed from actual evidence, unchanged from `6591d5a`:
+
+- **U18 Attachment/Contribution — NOT PROMOTED.** After T5c.1 every named
+  contribution kind resolves onto an existing underlay (U14 `ModifierRule`
+  one-shape, U11 flow steps, U13 windows, U12 continuations, U4 choices, U3
+  queries, U1/U2 registration/ownership). The novel attachment/equipment
+  registry facet is content-registration glue, not new algebra. `mastery-fold.ts`
+  still reads the shared `ModifierRule` registry. No evidence of a common
+  authority eliminating duplication emerged in this audit.
 - **U19 Intent — NOT PROMOTED.** Command-boundary candidate/save/entity/
-  placement legality and reducer replay-safe state application have different
-  responsibilities; no same-typed-intent is validated by two drifting
-  implementations. The typed intents (`SpatialIntent`, `creationSpatial`,
-  `SaveWindowSpec`) are the domain authorities' validation contracts, not a
-  missing wrapper layer. Full decision recorded in §2.
+  placement legality and reducer replay-safe mutation application are
+  distinct responsibilities; the typed intents (`SpatialIntent`,
+  `creationSpatial`, `SaveWindowSpec`) are the domain authorities' validation
+  contracts. No same-typed intent is validated by two independently drifting
+  implementations. Creating U19 as a wrapper would add a layer, not closure.
 
-## D. Acceptance/replay mapping (spot, representative)
+---
 
-The named acceptance obligations in each §1 row map to real tranche suites:
-`t5a-u11-flow.test.ts` (U11 intermediate-state/repeat/invoke/bind/replay),
-`t5b-u12-continuation.test.ts` (U12 deferred/held/LIVE-CAPTURED/replay),
-`t5c-u13-decision-window.test.ts` (U13 held-result/replay/identity/order),
-`t5c1-adversarial-audit.test.ts` (the 17 demanded composed regressions),
-plus foundation suites (`choice.test.ts`, `modifiers.test.ts`,
-`usage.test.ts`, `ordering.test.ts`, `facts.test.ts`). **Only one §1 row**
-(U16 interrupt-uses/attacked-this-turn) names migration obligations whose
-completion is still pending — see E.
+## G. Final hard-gate verdict (deliverable H) — mirrors §4 exactly
 
-## E. Duplicate-authority closure report
-
-| Location | Final state |
-| --- | --- |
-| `kernels/trigger-window.ts` | removed (registry moved into `decision-window.ts`) |
-| `EncounterPendingInterrupt` / `pendingInterrupts` | removed; compat alias + migration only |
-| per-window `heldDamage`/`heldSave`/`heldResult` | removed; carried as U12 `heldPayload` |
-| `DamageWindowLedger.window` | retained handoff provenance (opens via `openDamageWindowFromLedger`, never independently answers) |
-| `RuleContinuationState` (`executedStepIds`/`derivedTriggers`) | documented flow bookkeeping, not a fact substitute |
-| `kernels/runtime.ts` | compatibility barrel; `effectsToMutations` moved to `execute-flow.ts` |
-| `interrupt-uses` / `attacked-this-turn` / `slashed` / `dangerous-terrain` flags | **UNRESOLVED duplicate usage-restriction surface (U16) — reopened** |
-| `ability-use-choices.ts` | retained specialist (closed trait tables); boundary documented but not U4-routed — parity not proven to the strict bar |
-| `kernels/mastery-fold.ts` | thin adapter over shared `ModifierRule` registry |
-| per-resolver hand-sequenced code | retained specialists with written boundaries (generic sequencing authority is U11) |
-
-## G. Hard-gate criteria verdict
+Evaluate each §4 criterion as written.
 
 | # | Criterion | Verdict | Evidence |
 | --- | --- | --- | --- |
-| 5 | Full required suite green | **PASS** | typecheck, 1731 tests, build, verify:source-artifacts, audit:architecture (0), audit:automation, audit:source-fidelity --strict, audit:outcome-triggers — all green |
-| 6 | U18/U19 decided | **PASS** | both decided from code evidence; neither promoted (§2) |
-| 7 | Generated docs regenerated (byte-stable) | **PASS** | `audit:class-job-census` regenerated; blocker-census.json/md byte-stable; no source promotion |
-| 1 | U1–U17 source-backed contracts current and true | **OPEN** | rows are honest; U11 drift corrected, but U16 raw usage flags + U14 `RuleModifier` + U4 `ability-use-choices` + U11 `choose` are still PARTIAL with pending migration items |
-| 2 | One clearly owned semantic authority each | **FAIL (U16)** | `interrupt-uses` / `attacked-this-turn` are a raw durable usage-restriction surface overlapping U16's declared scope; not migrated and not proven-parity |
-| 3 | Required acceptance tests exist and pass | **PASS** | named obligations map to real tranche + foundation suites |
-| 4 | No known duplicate competing authority | **FAIL** | the U16 typed-ledger migration is pending; `ability-use-choices`/`RuleModifier`/per-resolver boundaries are documented but not all proven to the four-part specialist-parity bar |
+| 1 | U1–U17 source-backed contracts current and true of code | **OPEN** | Many §1 rows are honest PARTIAL, but U17's row overstates ("landed" turn-boundary consumers not delivered) and several "Consumers to migrate" lists are unresolved; the corrected matrix (deliverable B) is now the code-true statement but the contract requires them to be **empty** of unresolved duplicates |
+| 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Unresolved: U2 role consumers, U8 temporal surfaces, U14 `RuleModifier`, U16 raw fields, U9 reconstruction, U6 gate-body folds, U12 resolver effects |
+| 3 | Required acceptance tests exist and pass | **FAIL (not established)** | Exhaustive matrix (deliverable C) has MISSING rows for U2, U4, U5, U6, U7, U8, U9, U12, U14, U16, U17 recorded-ordering+replay. A representative mapping cannot establish this |
+| 4 | No known duplicate competing authority | **FAIL** | U16 raw use fields beside the ledger; U2 role reads in aura/targeting/save-window; U8 legacy temporal surfaces beside Clock; U14 `RuleModifier` bag beside the fold |
+| 5 | Full suite green | **PASS** | typecheck / npm test (1731) / build / audits / source-artifacts green at baseline (see §I verification) |
+| 6 | U18/U19 decided | **PASS** | Both NOT promoted from code evidence (§F) |
+| 7 | Generated docs regenerated (byte-stable) | **PASS** | `audit:class-job-census` regenerates byte-stable; census unchanged; no source promotion |
 
-## Verdict
+**Verdict. UNDERLAY PHASE COMPLETE: NOT DECLARED. The gate remains OPEN.**
 
-**UNDERLAY PHASE COMPLETE: NOT DECLARED. The gate remains OPEN.**
+Failing / unestablished criteria: §4.1 (OPEN), §4.2 (FAIL), §4.3
+(FAIL—not established), §4.4 (FAIL). Prior `6591d5a` failed §4.2/§4.4 only;
+this correction additionally establishes that §4.3 was never proved and that
+§4.1 is OPEN on U17/U8/U2 — a strictly larger, honest reopening.
 
-Failed criteria: **§4.2 / §4.4** — primarily U16's typed-ledger migration of
-`interrupt-uses` / `interruptUsedThisTurn` / `attacked-this-turn` (and the
-once-per-turn reaction flags) is incomplete, leaving a raw usage-restriction
-surface beside the `primitives/usage.ts` authority; alongside the
-`RuleModifier` → typed-query-point and `ability-use-choices` → U4-validation
-rolls, several documented retained specialists have not been parity-proven
-to the strict four-part standard.
+**Corrected smallest next corrective tranche (T6.1):**
+1. **U8** — verify/migrate the Clock as the one temporal authority the
+   `use-ledger` periods, lifecycle resets, and `RuleDuration` consumers read;
+   schema-visible or at least reader migration + a Clock-parity/replay proof.
+2. **U17** — add the recorded same-owner ordering decision seam: identify the
+   owner entitled to order, open the ONE U4/U13 decision machinery, record the
+   selected order, replay that recorded order (no invented total order).
+3. Then **U16** raw-field classification/migration; then **U2** role-consumer
+   routing with parity tests; then U12 resolver effects; then U4/U14/U6/U9
+   closures; then U1/U3 residuals — each with a parity/replay proof.
 
-**Smallest next corrective tranche (T6.1):**
-1. Migrate the genuine usage-restriction reads (`interrupt-uses`,
-   `interruptUsedThisTurn`, `attacked-this-turn`, per-turn reaction flags)
-   onto the U16 ledger with schema-visible migration + replay tests, or
-   reclassify each as scheduler/domain or de-dup state with a written
-   boundary and parity proof.
-2. Route `ability-use-choices.ts` reads through `resolveChoice` (or prove
-   the closed-table boundary with a parity test).
-3. Classify/parity-prove the `RuleModifier` effect-instance boundary, and
-   finish the U6 range/area gate-body fold migration.
-4. Decide the U11 `choose` node: the U13 route already carries U4 decisions,
-   so confirm whether a distinct `choose` node is actually required or the
-   contract should name `open-window` as the sole decision carriage.
+No source promotion accompanies or precedes this gate; promotion stays
+delayed until the gate closes. This correction reopens U2, U8, U17 — per the
+T6 mandate that reopening an incomplete underlay is a successful audit result,
+not a failure of this tranche.
 
-No source promotion accompanies or precedes this gate; promotion is delayed
-until the gate closes.
+---
+
+## I. Verification discipline
+
+This is a documentation-correction pass; **no production code changed**, so
+the byte-stable engine behavior and the blocker census are unchanged. The
+documentation delta is verified by:
+- `git diff --check` (no whitespace errors);
+- the acceptance matrix (deliverable C) referencing only existing test files
+  and code seams read at HEAD;
+- §1 rows reconciled against the corrected matrix (below).
+
+If a later tranche changes code, run the full §4.5 suite and regenerate
+generated artifacts via their generators only.
