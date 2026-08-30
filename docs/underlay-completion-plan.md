@@ -1539,7 +1539,14 @@ command-layer reroll path (a reroll is a SEPARATELY recorded result caused
 by the interrupt, never a recomputation of the held result); the U12
 fact-trigger correlation seam records the specific fact `instanceId` on the
 window `openedBy` provenance so an unrelated same-kind fact can never
-satisfy the wrong window (T5c).
+satisfy the wrong window (T5c). T5c.1 (corrective 2026-08-31) made the
+HELD-result trigger explicit: a held result is gated by `{ kind: 'window',
+windowId }` — the exact owning U13 window's durable identity — NOT by a
+coarse same-kind fact. `continuationDue` never returns due for a `window`
+trigger at a Clock/Fact boundary, so a held result can never auto-fire from
+a coarse `save-resolved`/`damage-applied` fact; the U13 machinery drains it
+when the owning window resolves. Migrated held payloads are re-gated onto
+their owning window id.
 
 **Locations partially owning/duplicating.** `RuleContinuationState`
 (`primitives/types.ts`, `src/rules/encounter.ts`) — reactive fold ledger,
@@ -1659,7 +1666,14 @@ flow `resume`); `openDecisionWindow`/`closeDecisionWindow`;
 registry, p.107/p.128/p.138); `windowHeldDamage`/`windowHeldSave`
 (projections of the held payload — the payload is the authority).
 Dependencies: U2, U4, U10, U12, U17. Consumed by the interrupt/save
-command paths and the U11 flow-suspension seam.
+command paths and the U11 flow-suspension seam. T5c.1 (corrective
+2026-08-31): durable window ids are minted by `nextWindowId` from the
+per-encounter monotonic `windowSerial` (`EncounterState.windowSerial`, schema
+10, migrated, snapshot-validated) so a closed window's id is never reused in
+a revision (never the collection length); `when-damaged` (p.128 Righteous
+Disdain) answers for an ALLY in range — the interrupt owner is DISTINCT from
+the damaged character, and `windowHeldDamage`/the held payload carry the
+`targetId` the determined amount was decided against.
 
 **Typed vocabulary.** `DecisionWindowKind` (when-damaged, defeated,
 save-rolled, uses-ability, area-inclusion, targeted-by-ability, choice);

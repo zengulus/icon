@@ -25,7 +25,7 @@
  * mutations only.
  */
 import type { ArmedContinuation, ContinuationPayload, RuleChoice, RuleMutation } from '../primitives/types.js';
-import { resumeContinuation } from '../primitives/continuation.js';
+import { continuationOrderKey, resumeContinuation } from '../primitives/continuation.js';
 import type { ClockObservation } from '../primitives/scope.js';
 import type { Fact } from '../primitives/facts.js';
 import type { EncounterState } from '../../types.js';
@@ -109,6 +109,7 @@ export function resumeDueContinuations(
   facts: readonly Fact[] = [],
 ): void {
   const stillArmed: ArmedContinuation[] = [];
+  const due: ArmedContinuation[] = [];
   for (const continuation of state.continuations) {
     const decision = resumeContinuation(continuation, now, facts);
     if (!decision.ok) {
@@ -118,9 +119,32 @@ export function resumeDueContinuations(
     const payload = decision.payload;
     if (payload.kind === 'held-result') {
       // Held results waiting on a window are drained by the window machinery
-      // (U13); a held result never auto-resumes at a boundary. Keep it armed.
+      // (U13); a held result never auto-resumes at a boundary (a window-
+      // gated held result is never due at a Clock/Fact boundary at all).
+      // Keep it armed.
       stillArmed.push(continuation);
       continue;
+    }
+    due.push(continuation);
+  }
+  // U17 ordering identity: the RESUME sequence follows each continuation's
+  // declared ordering policy (else its durable identity) — NEVER the raw
+  // `state.continuations` iteration order. Permuting the collection cannot
+  // change the resume sequence.
+  due.sort((first, second) => {
+    const firstKey = continuationOrderKey(first);
+    const secondKey = continuationOrderKey(second);
+    if (firstKey !== secondKey) return firstKey < secondKey ? -1 : 1;
+    return first.id < second.id ? -1 : first.id > second.id ? 1 : 0;
+  });
+  for (const continuation of due) {
+    const payload = continuation.payload;
+    // Held results never reach this loop: window-gated held results are kept
+    // armed above (drained by U13 window machinery), and a boundary-resume
+    // of a held result is a wiring error — fail closed rather than resume
+    // an already-determined result outside its owning window.
+    if (payload.kind === 'held-result') {
+      throw new Error(`Cannot resume held-result continuation ${continuation.id} at a boundary: it is gated by its owning decision window.`);
     }
     // U13: a DECISION continuation opens a choice window at its trigger
     // instead of auto-resolving — the source's "may"/"can" language is

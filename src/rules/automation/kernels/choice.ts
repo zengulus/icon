@@ -202,6 +202,11 @@ function resolveBoolean(choice: RuleChoice, context: RuleExecutionContext): Chos
     if (!choice.required) return { kind: 'boolean', value: null };
     throw choiceViolation('choice.boolean-required', choice, 'requires a yes/no answer.');
   }
+  // A boolean choice is a strict yes/no — a malformed non-boolean (a string,
+  // a number) is NOT read as accept or decline, it is rejected.
+  if (typeof supplied !== 'boolean') {
+    throw choiceViolation('choice.boolean-invalid', choice, 'must be a literal yes/no (true or false).');
+  }
   return { kind: 'boolean', value: supplied };
 }
 

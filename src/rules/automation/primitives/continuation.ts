@@ -54,11 +54,24 @@ import type { RuleEffect, RuleMutation } from './types.js';
  * (`instanceId`) so an UNRELATED fact of the same kind can never satisfy the
  * continuation — two same-kind continuations in the same resolution never
  * cross-fire. Without a recorded instance the trigger matches by kind alone
- * (the documented coarse seam; window-held results are never fact-auto-fired
- * by the U12 boundary — U13 drains them by window identity). */
+ * (the documented coarse seam for DEFERRED rules that have no causal
+ * instance identity).
+ *
+ * HELD RESULTS are NOT gated by a Fact at all: they are gated by the U13
+ * decision window that carries them. `{ kind: 'window'; windowId }` records
+ * that truth explicitly — the owning window's resolution is what drains the
+ * held result, and no Clock/Fact boundary observation can EVER satisfy it
+ * (`continuationDue` returns false for a window trigger at every boundary).
+ * This replaces the earlier fake kind-only `save-resolved`/`damage-applied`
+ * triggers on held results, which could never fire but claimed coarse fact
+ * semantics — a silent kind-only cross-fire hazard. */
 export type ContinuationTrigger =
   | { kind: 'clock'; clock: ClockObservation['last'] extends never ? never : BoundaryRef; epoch?: ClockObservation }
-  | { kind: 'fact'; factKind: Extract<Fact, { instanceId: string }>['kind']; instanceId?: string };
+  | { kind: 'fact'; factKind: Extract<Fact, { instanceId: string }>['kind']; instanceId?: string }
+  /** The held result is gated by the U13 decision window that carries it
+   * (by exact window identity, never by a same-kind Fact). The boundary
+   * resume gate can never fire it; U13 drains it when the window resolves. */
+  | { kind: 'window'; windowId: string };
 
 /**
  * The U12 armed-continuation record. Durable, JSON-clean, deterministic.
@@ -274,6 +287,13 @@ export function continuationDue(
       // a recorded instance, match by kind (the documented coarse seam).
       return facts.some((fact) => fact.kind === trigger.factKind
         && (trigger.instanceId === undefined || fact.instanceId === trigger.instanceId));
+    case 'window':
+      // A window-gated held result is drained by the U13 window machinery by
+      // exact window identity — NEVER by a Clock/Fact boundary observation.
+      // The resume gate therefore never considers a window trigger due; a
+      // held result can never auto-fire merely because a coarse same-kind
+      // Fact exists in the history.
+      return false;
   }
 }
 
@@ -298,8 +318,9 @@ export function resumeContinuation(
  * p.143): the original save result already exists and is merely waiting for
  * the reroll window to close. The payload resumes EXACTLY as recorded —
  * a reroll is a separately recorded result caused by the interrupt, never a
- * recomputation of this held result. The window keeps its legacy public
- * shape; this record is the U12 representation riding beside it. */
+ * recomputation of this held result. The trigger names the OWNING window
+ * (`windowId`) — the held result is gated by the window's identity, never by
+ * a coarse `save-resolved` Fact (the boundary can never auto-fire it). */
 export function heldSaveContinuation(input: {
   id: string;
   sourceId: string;
@@ -309,8 +330,15 @@ export function heldSaveContinuation(input: {
   threshold: number;
   roll: number;
   success: boolean;
+  /** The owning U13 window's durable id — the exact identity that gates this
+   * held result (U13 drains it when the window resolves; no boundary fact
+   * can ever satisfy it). */
+  windowId: string;
+  /** The save record's OWN window id (legacy save-window provenance, kept on
+   * the payload for the reroll record — distinct from the owning U13 window
+   * id in the trigger). */
+  saveWindowId?: string;
   windowKind?: string;
-  windowId?: string;
   statusId?: string;
   sourceActorId: string;
   modifiers?: { sourceModifier: number; saveBoon: number; saveCurse: number; blessing: boolean };
@@ -321,11 +349,10 @@ export function heldSaveContinuation(input: {
     id: input.id,
     programId: input.sourceId,
     ownerRef: { kind: 'captured-actor', actorId: input.ownerActorId },
-    // The trigger is the window's close — represented here as the fact that
-    // recorded the save resolution; the window machinery (U13) drains it and
-    // NEVER auto-fires this held result at a boundary (held results resume
-    // only when the window that holds them resolves).
-    trigger: { kind: 'fact', factKind: 'save-resolved' },
+    // Gated by the owning window's exact identity: the window machinery
+    // (U13) drains it when the window resolves; no Clock/Fact boundary can
+    // ever satisfy it.
+    trigger: { kind: 'window', windowId: input.windowId },
     payload: {
       kind: 'held-result',
       result: {
@@ -336,7 +363,7 @@ export function heldSaveContinuation(input: {
         roll: input.roll,
         success: input.success,
         ...(input.windowKind !== undefined ? { windowKind: input.windowKind } : {}),
-        ...(input.windowId !== undefined ? { windowId: input.windowId } : {}),
+        ...(input.saveWindowId !== undefined ? { windowId: input.saveWindowId } : {}),
         ...(input.statusId !== undefined ? { statusId: input.statusId } : {}),
         sourceActorId: input.sourceActorId,
         ...(input.modifiers !== undefined ? { modifiers: input.modifiers } : {}),
@@ -350,7 +377,10 @@ export function heldSaveContinuation(input: {
 /** Build the U12 HELD-RESULT continuation for determined-but-unapplied
  * damage (ICON p.107): the final mitigated amount is held while the
  * when-damaged/defeated window is open. The payload resumes exactly as
- * recorded — replay never recalculates mitigation. */
+ * recorded — replay never recalculates mitigation. The trigger names the
+ * OWNING window (`windowId`) — the held result is gated by the window's
+ * identity, never by a coarse `damage-applied` Fact (the boundary can never
+ * auto-fire it). */
 export function heldDamageContinuation(input: {
   id: string;
   programId: string;
@@ -363,6 +393,9 @@ export function heldDamageContinuation(input: {
   instance: number;
   delivery: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain';
   ignoreCover: boolean;
+  /** The owning U13 window's durable id — the exact identity that gates this
+   * held result (U13 drains it when the window resolves). */
+  windowId: string;
   bypassVigor?: boolean;
   ignoreDefiance?: boolean;
   ignoreDodge?: boolean;
@@ -371,7 +404,10 @@ export function heldDamageContinuation(input: {
     id: input.id,
     programId: input.programId,
     ownerRef: { kind: 'captured-actor', actorId: input.ownerActorId },
-    trigger: { kind: 'fact', factKind: 'damage-applied' },
+    // Gated by the owning window's exact identity: the window machinery
+    // (U13) drains it when the window resolves; no Clock/Fact boundary can
+    // ever satisfy it.
+    trigger: { kind: 'window', windowId: input.windowId },
     payload: {
       kind: 'held-result',
       result: {

@@ -3,7 +3,7 @@ import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
+import type { EncounterActor, EncounterEvent, EncounterState, Position } from '../types.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 /**
@@ -21,9 +21,10 @@ interface WindowFixture {
   state: EncounterState;
   hero: EncounterActor;
   foe: EncounterActor;
+  ally: EncounterActor | null;
 }
 
-function windowEncounter(options: { interrupts?: Array<'righteous-disdain' | 'boiling-blood'>; heroHp?: number } = {}): WindowFixture {
+function windowEncounter(options: { interrupts?: Array<'righteous-disdain' | 'boiling-blood'>; heroHp?: number; ally?: Position | null } = {}): WindowFixture {
   let state = createEncounter('Trigger-window fixture');
   const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
   hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
@@ -37,11 +38,13 @@ function windowEncounter(options: { interrupts?: Array<'righteous-disdain' | 'bo
   if (armed.includes('boiling-blood')) hero.abilityIds.push('colossus:boiling-blood');
   if (options.heroHp !== undefined) hero.hp = options.heroHp;
   const foe = createFoe('Relict', { x: 2, y: 1 });
+  const ally = options.ally === null || options.ally === undefined ? null : actorFromCharacter(validCharacter('Mira'), options.ally);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+  if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
   state = startEncounterTo(state, hero.id);
   const foeTurn = endTurnTo(state, foe.id, scriptedDice());
-  return { state: foeTurn, hero: foeTurn.actors[hero.id], foe: foeTurn.actors[foe.id] };
+  return { state: foeTurn, hero: foeTurn.actors[hero.id], foe: foeTurn.actors[foe.id], ally: ally ? foeTurn.actors[ally.id] : null };
 }
 
 const attackOf = (result: ReturnType<typeof executeCommand>) => {
@@ -63,22 +66,25 @@ const vmDamageEvent = (sourceActorId: string, actorId: string, amount: number): 
 
 describe('F4 attack windows from the ledger', () => {
   it('records the when-damaged decision on the attack and opens the window from it at replay', () => {
-    const { state, hero, foe } = windowEncounter({ interrupts: ['righteous-disdain'] });
-    const result = executeCommand(state, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: hero.id, weight: 'light' }, scriptedDice(14, 3));
+    // p.128: the foe's attack targets the ALLY in range 2 of the owner; the
+    // window opens for the OWNER (hero) and the held blow applies to the ally.
+    const { state, hero, foe, ally } = windowEncounter({ interrupts: ['righteous-disdain'], ally: { x: 2, y: 0 } });
+    const result = executeCommand(state, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: ally!.id, weight: 'light' }, scriptedDice(14, 3));
     const attack = attackOf(result);
     // The window decision rides both levels of the attack record.
     expect(attack.attackResolution!.window).toEqual({ trigger: 'when-damaged', held: true, resolution: null });
     expect(attack.attackResolution!.damage.window).toEqual({ trigger: 'when-damaged', held: true, resolution: null });
     // Replay opens the window from the record: the blow is held, not applied.
-    expect(result.state.actors[hero.id].hp).toBe(40);
+    expect(result.state.actors[ally!.id].hp).toBe(40);
     const window = result.state.decisionWindows.find((pending) => pending.actorId === hero.id && pending.kind === 'when-damaged');
     expect(window).toBeDefined();
-    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
+    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id, targetId: ally!.id });
     // The recorded amount is the kernel's determined amount (6 raw - 2 armor).
     expect(windowHeldDamage(window!)!.amount).toBe(attack.attackResolution!.damage.amount);
-    // No interrupt answers, so the boundary resolves the held blow.
+    // No interrupt answers, so the boundary resolves the held blow — to the ALLY.
     const ended = executeCommand(result.state, { type: 'END_TURN', actorId: foe.id }, scriptedDice());
-    expect(ended.state.actors[hero.id].hp).toBe(36);
+    expect(ended.state.actors[ally!.id].hp).toBe(36);
+    expect(ended.state.actors[hero.id].hp).toBe(40);
     expect(ended.state.decisionWindows).toHaveLength(0);
     expect(applyEvents(result.state, ended.events)).toEqual(ended.state);
   });
@@ -107,16 +113,16 @@ describe('F4 attack windows from the ledger', () => {
   });
 
   it('the single-pass VM path opens the identical window through the shared registry decision', () => {
-    const { state, hero, foe } = windowEncounter({ interrupts: ['righteous-disdain'] });
-    const vm = applyEvents(state, [vmDamageEvent(foe.id, hero.id, 6)]);
-    expect(vm.actors[hero.id].hp).toBe(40); // held
+    const { state, hero, foe, ally } = windowEncounter({ interrupts: ['righteous-disdain'], ally: { x: 2, y: 0 } });
+    const vm = applyEvents(state, [vmDamageEvent(foe.id, ally!.id, 6)]);
+    expect(vm.actors[ally!.id].hp).toBe(40); // held
     const window = vm.decisionWindows.find((pending) => pending.actorId === hero.id && pending.kind === 'when-damaged');
     expect(window).toBeDefined();
-    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
+    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id, targetId: ally!.id });
 
     // The same blow through the split attack path holds the same amount —
     // both paths call decideDamageWindow with the same provenance.
-    const attackResult = executeCommand(state, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: hero.id, weight: 'light' }, scriptedDice(14, 3));
+    const attackResult = executeCommand(state, { type: 'BASIC_ATTACK', actorId: foe.id, targetId: ally!.id, weight: 'light' }, scriptedDice(14, 3));
     const attackWindow = attackResult.state.decisionWindows.find((pending) => pending.actorId === hero.id && pending.kind === 'when-damaged');
     expect(windowHeldDamage(attackWindow!)!.amount).toBe(windowHeldDamage(window!)!.amount);
   });

@@ -283,6 +283,39 @@ Dragonslayer distinct, same-kind windows never answer each other,
 byte-identical replay). Full suite green (1519 rule tests), census
 byte-stable at 427, no source-unit promotion, no unresolved-unit wiring.
 
+**T5c.1 corrective landed (2026-08-31): adversarial integrated audit of
+T5a–c as one composed system.** No source-unit promotion and no new underlay.
+`docs/t5c1-audit-report.md` records the finding-by-finding evidence. Fixes:
+(1) held results are gated by the exact owning U13 window (`ContinuationTrigger
+{ kind: 'window'; windowId }`) instead of a coarse same-kind `fact` trigger —
+a held result can never auto-fire at a Clock/Fact boundary, and migrated held
+payloads are re-gated onto their owning window id; (2) Righteous Disdain
+(p.128) is the OWNER-ALLY trigger — the when-damaged owner is DISTINCT from
+the damaged ally in Range 2, `EncounterHeldDamage` carries `targetId`, and
+the held blow applies to the ally's already-determined amount (the owner's
+armor/vigor/resistance never re-mitigate it; only a real re-dealt blow to the
+held target consumes it); (3) `ANSWER_DECISION_WINDOW` validates through the
+shared U4 `resolveChoice` kernel — an omitted REQUIRED answer rejects, an
+explicit `false` records a legal decline, option/number/actor/position/
+direction legality is enforced, and `resolveBoolean` rejects non-boolean
+input; (4) ordering rejects rather than inventing tie-breaks — the
+lexicographic same-instant kind sort and the registration-`order` fallback
+are removed, same-instant same-owner/same-side ambiguities reject until a
+recorded ordering decision exists, and `resumeDueContinuations` follows each
+continuation's U17 ordering identity (never raw collection order);
+(5) window ids are minted from a monotonic per-encounter `windowSerial`
+(schema 10, migrated, snapshot-validated) so an id once issued is never
+reused by a later window; (6) `FlowPlanner` frames `repeat`/`for-each` bodies so
+suspension inside a partially consumed loop resumes every remaining
+iteration/item exactly once (composed as existing `sequence`/`bind` nodes).
+`t5c1-adversarial-audit.test.ts` proves the 17 demanded regression cases
+(as well as the t5c/t5b suites and the RD-model corrections in the job
+suites). What remains staged for T6: the typed durable identity/persistence
+work, U4 `choose` as a flow node, `ability-use-choices.ts` (opaque specialist),
+and the exact owner-ordering decision recording for simultaneous windows.
+Full suite green (1731 rule tests), audit:architecture/automation/
+source-fidelity strict all pass, census byte-stable (no source promotion).
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

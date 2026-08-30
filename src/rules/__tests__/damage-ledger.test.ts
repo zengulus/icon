@@ -24,12 +24,14 @@ interface LedgerFixture {
   state: EncounterState;
   hero: EncounterActor;
   foe: EncounterActor;
+  ally: EncounterActor | null;
 }
 
 function ledgerEncounter(options: {
   foe?: Position;
   stripInterrupts?: boolean;
   terrain?: TerrainCell[];
+  ally?: Position | null;
 } = {}): LedgerFixture {
   let state = createEncounter('Damage ledger fixture');
   if (options.terrain) state.grid = { ...state.grid, terrain: options.terrain };
@@ -43,10 +45,12 @@ function ledgerEncounter(options: {
     hero.abilityIds = hero.abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain' && id !== 'colossus:boiling-blood');
   }
   const foe = createFoe('Relict', options.foe ?? { x: 2, y: 1 });
+  const ally = options.ally === null || options.ally === undefined ? null : actorFromCharacter(validCharacter('Mira'), options.ally);
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+  if (ally) state = executeCommand(state, { type: 'ADD_ACTOR', actor: ally }).state;
   state = startEncounterTo(state, hero.id);
-  return { state, hero, foe };
+  return { state, hero, foe, ally };
 }
 
 /** A VM damage mutation with a fixed source amount (the generic mutation shape). */
@@ -141,18 +145,21 @@ describe('F0 damage ledger (pp.89, 93–107)', () => {
   });
 
   it('a held when-damaged blow carries the same determined amount the kernel derives', () => {
-    const { state, hero, foe } = ledgerEncounter({ stripInterrupts: false });
-    const damaged = applyEvents(state, [vmDamageEvent(foe.id, hero.id, 6)]);
-    // The hero's when-damaged interrupt (Righteous Disdain) holds the blow:
-    // 6 raw - 2 armor = the same 4 the basic-attack ledger records.
-    expect(damaged.actors[hero.id].hp).toBe(40); // held, not applied
+    // p.128: the foe's blow targets the ALLY in range 2 of the owner; the
+    // hero (owner) holds the ally's determined 4 in its when-damaged window.
+    const { state, hero, foe, ally } = ledgerEncounter({ stripInterrupts: false, foe: { x: 4, y: 1 }, ally: { x: 2, y: 1 } });
+    const damaged = applyEvents(state, [vmDamageEvent(foe.id, ally!.id, 6)]);
+    // The hero's when-damaged interrupt (Righteous Disdain) holds the ally's
+    // blow: 6 raw - 2 armor = the same 4 the basic-attack ledger records.
+    expect(damaged.actors[ally!.id].hp).toBe(40); // held, not applied
     const window = damaged.decisionWindows.find((pending) => pending.actorId === hero.id && pending.kind === 'when-damaged');
     expect(window).toBeDefined();
-    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id });
+    expect(windowHeldDamage(window!)).toMatchObject({ amount: 4, damageType: 'normal', sourceActorId: foe.id, targetId: ally!.id });
     // No interrupt answers, so the turn boundary resolves the held 4 through
-    // the shared kernel — identical to an immediate blow.
+    // the shared kernel — identical to an immediate blow, to the ALLY.
     const endedResult = executeCommand(damaged, { type: 'END_TURN', actorId: hero.id }, scriptedDice());
-    expect(endedResult.state.actors[hero.id].hp).toBe(36);
+    expect(endedResult.state.actors[ally!.id].hp).toBe(36);
+    expect(endedResult.state.actors[hero.id].hp).toBe(40);
     expect(applyEvents(damaged, endedResult.events)).toEqual(endedResult.state);
   });
 
@@ -256,7 +263,7 @@ describe('F0 matrix: delayed and Slashed damage through the shared kernel', () =
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
     state = startEncounterTo(state, hero.id);
-    return { state, hero, foe };
+    return { state, hero, foe, ally: null };
   }
 
   it('a delayed effect (Great Giorgios rush) determines its raw damage through the shared kernel', () => {

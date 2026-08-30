@@ -113,25 +113,31 @@ const answerRush = (state: EncounterState, accept: boolean): CommandResult => {
 
 describe('U13 — Righteous Disdain (p.128): determined damage is held, never recomputed', () => {
   it('holds the determined post-mitigation amount in the window payload and replays it byte-for-byte', () => {
+    // p.128 trigger: a foe targets an ALLY in range 2 of the interrupt owner.
+    // The foe damages the ALLY (Mira); the window opens for the OWNER (the
+    // hero with Righteous Disdain) and the held blow applies to the ally.
     const { state, hero, foe, ally } = u13Encounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
-    // 20 raw normal against armor 2: determined ONCE as 18 at the command
-    // boundary, then held unapplied. Re-mitigating against the live state
-    // (or re-reading the raw 20) would produce a different amount.
-    const damaged = applyEvents(state, [damageEvent(foe.id, hero.id, 20)]);
-    expect(damaged.actors[hero.id].hp).toBe(40); // held: not applied yet
+    // 20 raw normal against the ally's armor 2: determined ONCE as 18 at the
+    // command boundary, then held unapplied. Re-mitigating against the live
+    // state (or re-reading the raw 20) would produce a different amount.
+    const damaged = applyEvents(state, [damageEvent(foe.id, ally!.id, 20)]);
+    expect(damaged.actors[ally!.id].hp).toBe(40); // held: not applied yet
+    expect(damaged.actors[hero.id].hp).toBe(40); // the owner was never damaged
     const window = damaged.decisionWindows.find((candidate) => candidate.actorId === hero.id && candidate.kind === 'when-damaged');
     expect(window).toBeDefined();
     // The window carries the U12 HELD-RESULT continuation — the determined
-    // amount is the durable authority (never the raw 20, never re-derived).
-    expect(windowHeldDamage(window!)).toMatchObject({ amount: 18, damageType: 'normal', sourceActorId: foe.id });
+    // amount is the durable authority (never the raw 20, never re-derived),
+    // and its TARGET is the damaged ally (never the window owner).
+    expect(windowHeldDamage(window!)).toMatchObject({ amount: 18, damageType: 'normal', sourceActorId: foe.id, targetId: ally!.id });
     expect(window!.heldPayload!.payload).toMatchObject({ kind: 'held-result' });
     // Replay reproduces the identical window from the identical event.
-    const replayed = applyEvents(state, [damageEvent(foe.id, hero.id, 20)]);
+    const replayed = applyEvents(state, [damageEvent(foe.id, ally!.id, 20)]);
     expect(replayed.decisionWindows).toEqual(damaged.decisionWindows);
     // Resolution (boundary drain, unanswered) applies exactly the determined
-    // amount — the drain consumes the payload, never re-mitigates.
+    // amount to the ALLY — the drain consumes the payload, never re-mitigates.
     const ended = endTurnTo(damaged, foe.id, scriptedDice());
-    expect(ended.actors[hero.id].hp).toBe(22); // 40 - 18, exactly the held amount
+    expect(ended.actors[ally!.id].hp).toBe(22); // 40 - 18, exactly the held amount
+    expect(ended.actors[hero.id].hp).toBe(40);
   });
 });
 
@@ -266,17 +272,24 @@ describe('U13 — Sucker Punch (p.143): the original save is a held result; a re
 describe('U13 — ordering (p.107): U17 is the one ordering authority', () => {
   it('nested interrupts resolve most-recently-triggered first (LIFO stack)', () => {
     const { state, hero, foe, ally } = u13Encounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
-    const first = applyEvents(state, [damageEvent(foe.id, hero.id, 4)]);
-    const second = applyEvents(first, [damageEvent(foe.id, hero.id, 4)]);
+    // p.128: both blows target the ALLY; the owner (hero) accumulates two
+    // when-damaged windows.
+    const first = applyEvents(state, [damageEvent(foe.id, ally!.id, 4)]);
+    const second = applyEvents(first, [damageEvent(foe.id, ally!.id, 4)]);
     const heroWindows = second.decisionWindows.filter((candidate) => candidate.actorId === hero.id);
     expect(heroWindows).toHaveLength(2);
     // An interrupt answers the NEWEST window (LIFO): the older held blow
-    // remains, the newer applies after the interrupt.
+    // remains, the newer applies after the interrupt — to the ALLY.
     const interrupt = executeCommand(second, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally!.id] }, scriptedDice());
     const remaining = interrupt.state.decisionWindows.filter((candidate) => candidate.actorId === hero.id);
     expect(remaining).toHaveLength(1);
     expect(remaining[0]!.triggeredAt).toBe(heroWindows[0]!.triggeredAt); // the OLDER window remains
-    expect(interrupt.state.actors[hero.id].hp).toBe(38); // only the newest held 2 applied
+    // The newest held blow (2) applies AFTER the interrupt's own mutations
+    // against the then-current ally: Catapult's collide reaction grants the
+    // ally 2 vigor, and the held 2 is absorbed by that fresh vigor (hp 40,
+    // vigor 0) — the held amount is applied, never recomputed.
+    expect(interrupt.state.actors[ally!.id]).toMatchObject({ hp: 40, vigor: 0 });
+    expect(interrupt.state.actors[hero.id].hp).toBe(40); // the owner was never damaged
   });
 
   it('same-trigger simultaneous windows resolve by turn order (turn character side first), never insertion order', () => {
@@ -424,9 +437,10 @@ describe('U13 — Great Giorgios (p.124): the "may rush" is a real decision; Dra
 describe('U13 — negative identity: same-kind windows/facts never answer each other', () => {
   it('two same-kind windows in one resolution are distinct records; answering one leaves the other untouched', () => {
     const { state, hero, foe, ally } = u13Encounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
-    // Two when-damaged windows on the SAME hero from two separate blows.
-    const first = applyEvents(state, [damageEvent(foe.id, hero.id, 4)]);
-    const second = applyEvents(first, [damageEvent(foe.id, hero.id, 4)]);
+    // Two when-damaged windows on the SAME owner (the hero answers for the
+    // ALLY's blows) from two separate blows against the ally.
+    const first = applyEvents(state, [damageEvent(foe.id, ally!.id, 4)]);
+    const second = applyEvents(first, [damageEvent(foe.id, ally!.id, 4)]);
     const windows = second.decisionWindows.filter((candidate) => candidate.actorId === hero.id && candidate.kind === 'when-damaged');
     expect(windows).toHaveLength(2);
     // The U12 held-damage continuations carry DISTINCT durable ids — the
@@ -444,11 +458,14 @@ describe('U13 — negative identity: same-kind windows/facts never answer each o
 describe('U13 — replay: byte-identical durable state with zero fresh decisions/RNG', () => {
   it('serializes/replays a scenario with a held damage window, a held save reroll, and ordered windows', () => {
     // The foe is ADJACENT (2,1) so Sucker Punch's p.143 "an enemy adjacent
-    // to you rolls a save" window can open for the hero.
-    const { state, hero, foe } = u13Encounter({ foe: { x: 2, y: 1 }, second: null });
-    // 1) A held damage window (Righteous Disdain determined amount).
-    const heldDamage = applyEvents(state, [damageEvent(foe.id, hero.id, 20)]);
-    expect(windowHeldDamage(heldDamage.decisionWindows.find((candidate) => candidate.actorId === hero.id)!)).toMatchObject({ amount: 18 });
+    // to you rolls a save" window can open for the hero. The ally is at
+    // (2,0) — within the owner's p.128 Range 2 — so the foe's damage to the
+    // ALLY opens the owner's when-damaged window.
+    const { state, hero, foe, ally } = u13Encounter({ foe: { x: 2, y: 1 }, second: null, ally: { x: 2, y: 0 } });
+    // 1) A held damage window (Righteous Disdain determined amount) on the
+    // ALLY's blow, owned by the hero.
+    const heldDamage = applyEvents(state, [damageEvent(foe.id, ally!.id, 20)]);
+    expect(windowHeldDamage(heldDamage.decisionWindows.find((candidate) => candidate.actorId === hero.id)!)).toMatchObject({ amount: 18, targetId: ally!.id });
     // 2) A held save reroll window (Sucker Punch).
     const heldSave = applyEvents(heldDamage, [saveAbilityEvent(hero.id, foe.id)]);
     expect(heldSave.decisionWindows.some((candidate) => candidate.kind === 'save-rolled')).toBe(true);
@@ -462,9 +479,10 @@ describe('U13 — replay: byte-identical durable state with zero fresh decisions
       input: { actorIds: { target: [foe.id] } },
     }, scriptedDice(3));
     // 4) The held damage resolves at the boundary (unanswered) with the
-    // exact determined amount; every interrupt window closes.
+    // exact determined amount to the ALLY; every interrupt window closes.
     const ended = endTurnTo(rerolled.state, foe.id, scriptedDice());
-    expect(ended.actors[hero.id].hp).toBe(22); // 40 - 18, the held amount
+    expect(ended.actors[ally!.id].hp).toBe(22); // 40 - 18, the held amount
+    expect(ended.actors[hero.id].hp).toBe(40);
     expect(ended.actors[foe.id].hp).toBe(24); // 32 - 8, the rerolled branch
     expect(ended.decisionWindows).toHaveLength(0);
 
@@ -473,23 +491,26 @@ describe('U13 — replay: byte-identical durable state with zero fresh decisions
     // events carry the reroll and the held amounts).
     let replayed = state;
     const history: EncounterEvent[] = [
-      damageEvent(foe.id, hero.id, 20),
+      damageEvent(foe.id, ally!.id, 20),
       saveAbilityEvent(hero.id, foe.id),
     ];
     replayed = applyEvents(replayed, history);
     const rerollEvents = rerolled.events;
     replayed = applyEvents(replayed, rerollEvents);
-    const endEvent = ended ? [] : [];
-    expect(endEvent).toEqual([]);
-    // Compare the fully-replayed state against the command-built state by
-    // re-applying the END_TURN events (a live TAKE_TURN/END_TURN pair is
-    // deterministic here — the scheduler records no ambient choice).
-    const replayedHeld = applyEvents(replayed, rerolled.state.decisionWindows.length > 0 ? [] : []);
-    expect(replayedHeld.actors[hero.id].hp).toBe(rerolled.state.actors[hero.id].hp);
     // The reducer replay of the recorded reroll event reproduces the exact
-    // window decision and damage outcome.
-    expect(replayed.actors[foe.id].hp).toBe(rerolled.state.actors[foe.id].hp);
+    // window decision and damage outcome: the foe took the rerolled 8, and
+    // the ally's held blow is STILL held (the boundary drain — a live
+    // command — applies it later; replay of the recorded events must not
+    // apply it early).
+    expect(replayed.actors[ally!.id].hp).toBe(rerolled.state.actors[ally!.id].hp);
+    expect(replayed.actors[ally!.id].hp).toBe(40); // still held after the recorded events
     expect(replayed.actors[foe.id].hp).toBe(24);
+    // Draining the replayed state through the same boundary command reaches
+    // the identical final state as the command-built path.
+    const replayedEnded = endTurnTo(replayed, foe.id, scriptedDice());
+    expect(replayedEnded.actors[ally!.id].hp).toBe(22);
+    expect(replayedEnded.actors[foe.id].hp).toBe(24);
+    expect(replayedEnded.decisionWindows).toHaveLength(0);
   });
 
   it('a recorded accept event replays to the identical state with no re-planning', () => {

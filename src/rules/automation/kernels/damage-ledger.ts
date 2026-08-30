@@ -149,6 +149,7 @@ export function applyDamageLedger(state: EncounterState, entry: DamageLedgerEntr
     return determineAndApplyEncounterDamage(state, intent);
   }
   return applyDeterminedEncounterDamage(state, target, source, {
+    targetId: entry.targetId,
     amount: entry.amount,
     damageType: entry.damageType,
     bypassVigor: entry.bypassVigor ?? entry.damageType === 'divine',

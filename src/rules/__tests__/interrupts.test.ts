@@ -74,48 +74,55 @@ describe('interrupt order (p.107)', () => {
   });
 
   it('holds determined foe damage in the when-damaged window and applies it after the interrupt resolves', () => {
+    // p.128: the foe's blow targets the ALLY in range of the owner; the
+    // window opens for the OWNER (hero) and the held blow applies to the ally.
     const { state, hero, foe, ally } = interruptEncounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
-    const damaged = applyEvents(state, [damageEvent(foe.id, hero.id, 4)]);
+    const damaged = applyEvents(state, [damageEvent(foe.id, ally!.id, 4)]);
     // The hero has an unused when-damaged interrupt (Righteous Disdain), so
-    // the determined damage (4 normal - 2 armor) is held unapplied.
-    expect(damaged.actors[hero.id].hp).toBe(40);
+    // the ally's determined damage (4 normal - 2 armor) is held unapplied.
+    expect(damaged.actors[ally!.id].hp).toBe(40);
     const heroWindow = damaged.decisionWindows.find((window) => window.actorId === hero.id && window.kind === 'when-damaged');
     expect(heroWindow).toBeDefined();
-    expect(windowHeldDamage(heroWindow!)).toMatchObject({ amount: 2, damageType: 'normal', sourceActorId: foe.id });
+    expect(windowHeldDamage(heroWindow!)).toMatchObject({ amount: 2, damageType: 'normal', sourceActorId: foe.id, targetId: ally!.id });
     expect(damaged.decisionWindows.every((window) => window.triggeredAt <= damaged.revision)).toBe(true);
 
     // An interrupt answers the most recently triggered window (LIFO); because
     // Catapult does not re-deal damage to the held target, the held damage
-    // applies after its own mutations resolve.
+    // applies after its own mutations resolve — to the ALLY.
     const interrupt = executeCommand(damaged, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally!.id] }, scriptedDice());
     expect(interrupt.state.decisionWindows.some((window) => window.actorId === hero.id)).toBe(false); // LIFO pop
-    expect(interrupt.state.actors[hero.id].hp).toBe(38); // 40 - held 2, applied after the interrupt
+    expect(interrupt.state.actors[ally!.id]).toMatchObject({ hp: 40, vigor: 0 }); // held 2 absorbed by the interrupt-granted vigor
+    expect(interrupt.state.actors[hero.id].hp).toBe(40); // the owner was never damaged
     expect(interrupt.state.actors[hero.id].interruptUses['bastion:catapult']).toBe(1);
     expect(applyEvents(damaged, interrupt.events)).toEqual(interrupt.state);
   });
 
   it('resolves the most recently triggered window first when an actor accumulates several (LIFO)', () => {
     const { state, hero, foe, ally } = interruptEncounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
-    const first = applyEvents(state, [damageEvent(foe.id, hero.id, 4)]);
-    const second = applyEvents(first, [damageEvent(foe.id, hero.id, 4)]);
+    const first = applyEvents(state, [damageEvent(foe.id, ally!.id, 4)]);
+    const second = applyEvents(first, [damageEvent(foe.id, ally!.id, 4)]);
     const heroWindows = second.decisionWindows.filter((window) => window.actorId === hero.id);
     expect(heroWindows).toHaveLength(2);
     expect(heroWindows[1]!.triggeredAt).toBeGreaterThan(heroWindows[0]!.triggeredAt);
-    expect(second.actors[hero.id].hp).toBe(40); // both blows still held
+    expect(second.actors[ally!.id].hp).toBe(40); // both blows still held
 
     const interrupt = executeCommand(second, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally!.id] }, scriptedDice());
     const remaining = interrupt.state.decisionWindows.filter((window) => window.actorId === hero.id);
     expect(remaining).toHaveLength(1);
     expect(remaining[0]!.triggeredAt).toBe(heroWindows[0]!.triggeredAt); // the older window remains
-    expect(interrupt.state.actors[hero.id].hp).toBe(38); // only the newest held 2 applied
+    expect(interrupt.state.actors[ally!.id]).toMatchObject({ hp: 40, vigor: 0 }); // the newest held 2 absorbed by the interrupt-granted vigor
+    expect(interrupt.state.actors[hero.id].hp).toBe(40); // the owner was never damaged
     expect(applyEvents(second, interrupt.events)).toEqual(interrupt.state);
   });
 
   it('Righteous Disdain resolves before the held damage applies and re-deals it instead (p.128)', () => {
+    // p.128: the foe's 20-damage ability targets the ALLY in range 2 of the
+    // owner; the blow is determined (18 after the ally's armor 2) and held
+    // while the owner may answer.
     const { state, hero, foe, ally } = interruptEncounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
-    // 20 normal damage: determined as 18 after the hero's armor 2.
-    const damaged = applyEvents(state, [damageEvent(foe.id, hero.id, 20)]);
-    expect(damaged.actors[hero.id].hp).toBe(40); // held: not applied yet
+    const damaged = applyEvents(state, [damageEvent(foe.id, ally!.id, 20)]);
+    expect(damaged.actors[ally!.id].hp).toBe(40); // held: not applied yet
+    expect(damaged.actors[hero.id].hp).toBe(40); // the owner was never damaged
     expect(damaged.decisionWindows.some((window) => window.actorId === hero.id && windowHeldDamage(window)?.amount === 18)).toBe(true);
 
     // The interrupt answers the window before the blow lands, splitting the
@@ -150,12 +157,14 @@ describe('interrupt order (p.107)', () => {
   });
 
   it('closes all interrupt windows at the end of the turn, resolving any held damage', () => {
-    const { state, hero, foe } = interruptEncounter({ second: null });
-    const damaged = applyEvents(state, [damageEvent(foe.id, hero.id, 4)]);
+    const { state, hero, foe, ally } = interruptEncounter({ foe: { x: 4, y: 1 }, second: null, ally: { x: 2, y: 1 } });
+    const damaged = applyEvents(state, [damageEvent(foe.id, ally!.id, 4)]);
     expect(damaged.decisionWindows.length).toBeGreaterThan(0);
     const ended = endTurnTo(damaged, foe.id, scriptedDice());
     expect(ended.decisionWindows).toHaveLength(0);
-    // No interrupt answered the window, so the held 2 resolves at the boundary.
-    expect(ended.actors[hero.id].hp).toBe(38);
+    // No interrupt answered the window, so the ally's held 2 resolves at the
+    // boundary — to the ALLY, never the owner.
+    expect(ended.actors[ally!.id].hp).toBe(38);
+    expect(ended.actors[hero.id].hp).toBe(40);
   });
 });

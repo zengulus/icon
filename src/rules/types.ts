@@ -18,7 +18,7 @@ export const CHARACTER_SCHEMA_VERSION = 5 as const;
 // Schema 9 (U13): the interrupt-window collection becomes the ONE typed U13
 // window record (`decisionWindows: DecisionWindowRecord[]`); the legacy
 // `decisionWindows` schema is migrated field-for-field (see migrateEncounter).
-export const ENCOUNTER_SCHEMA_VERSION = 9 as const;
+export const ENCOUNTER_SCHEMA_VERSION = 10 as const;
 
 export const ACTION_IDS = [
   'sneak',
@@ -543,6 +543,11 @@ export interface TerrainCell {
  * re-dealt damage to the held target (e.g. Righteous Disdain, p.128, splits
  * the held damage between two characters). */
 export interface EncounterHeldDamage {
+  /** The DAMAGED character (p.128: the when-damaged interrupt owner answers
+   * for an ALLY's blow — the held blow applies to the target, never to the
+   * window's owner). Always the target the determined amount was decided
+   * against. */
+  targetId: string;
   amount: number;
   damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice';
   /**
@@ -616,6 +621,13 @@ export interface EncounterState {
    * `choice` windows persist until answered or drained at a later boundary.
    * Schema-9 field: legacy `decisionWindows` checkpoints migrate onto it. */
   decisionWindows: DecisionWindowRecord[];
+  /** U13 (schema 10): the per-encounter MONOTONIC window serial — the durable
+   * identity source for window ids (`nextWindowId`). Never derived from the
+   * collection length, which closing a window permits to be reused; replay
+   * advances it exactly like every other recorded reduction, so window ids
+   * stay unique for the lifetime of the encounter and a closed window's id
+   * is never reused by a later window. */
+  windowSerial: number;
   /** U12 durable armed-continuation collection: deferred-rule and held-result
    * records waiting for their Clock/Fact trigger. Deterministically ordered
    * (arm order); resume consumes through the U17 ordering identity when one

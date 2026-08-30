@@ -330,11 +330,23 @@ describe('Chanter ability automation (p.174–181)', () => {
   });
 
   it('Chastise: a marked foe that damages a chosen character takes 1 divine three times', () => {
-    const { state, hero, foe } = chanterEncounter({ foe: { x: 3, y: 1 }, second: null });
-    const marked = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:chastise', targetIds: [foe.id] }, scriptedDice()).state;
-    // The foe damages the hero with an ability. The hero has an unused
-    // when-damaged interrupt (Righteous Disdain, p.107/p.128), so the 2
-    // piercing is held unapplied: the retribution mark has not fired yet.
+    const { state, hero, foe, ally } = chanterEncounter({ foe: { x: 3, y: 1 }, second: null, ally: { x: 2, y: 1 } });
+    // Chastise is attack-tagged (exactly one attack target), so the chosen
+    // characters beyond the foe ride EXECUTE_RULE's actorIds: the ALLY is a
+    // chosen character whose damage triggers the retribution.
+    const marked = executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'chanter:chastise',
+      actionId: 'default',
+      timing: 'use',
+      attackTargetId: foe.id,
+      input: { actorIds: { target: [foe.id, ally!.id] } },
+    }, scriptedDice()).state;
+    // The foe damages the chosen ALLY with an ability. The hero (RD owner) is
+    // within p.128 Range 2 of the ally and has an unused when-damaged
+    // interrupt (Righteous Disdain), so the ally's 2 piercing is held
+    // unapplied: the retribution mark has not fired yet.
     const triggered = applyEvents(marked, [{
       type: 'RULE_MUTATIONS_APPLIED',
       actorId: foe.id,
@@ -342,9 +354,10 @@ describe('Chanter ability automation (p.174–181)', () => {
       actionId: 'default',
       timing: 'use',
       tags: [],
-      mutations: [{ kind: 'damage', sourceId: 'fixture:foe-ability', sourceActorId: foe.id, actorId: hero.id, amount: 2, damageType: 'piercing', instance: 1, delivery: 'hit', ignoreCover: false }],
+      mutations: [{ kind: 'damage', sourceId: 'fixture:foe-ability', sourceActorId: foe.id, actorId: ally!.id, amount: 2, damageType: 'piercing', instance: 1, delivery: 'hit', ignoreCover: false }],
     }]);
-    expect(triggered.actors[hero.id].hp).toBe(40); // held, not applied
+    expect(triggered.actors[ally!.id].hp).toBe(40); // held, not applied
+    expect(triggered.actors[hero.id].hp).toBe(40); // the owner was never damaged
     expect(triggered.decisionWindows.some((window) => window.actorId === hero.id && windowHeldDamage(window)?.amount === 2)).toBe(true);
     expect(triggered.actors[foe.id].marks.find(({ markId }) => markId === 'chastise-retribution')?.state.triggered).toBeFalsy();
 
@@ -352,10 +365,13 @@ describe('Chanter ability automation (p.174–181)', () => {
     // damage now counts as applied, so the retribution triggers before the
     // foe's own turn end, where it is dealt.
     const heroTurn = endTurnTo(triggered, foe.id, scriptedDice());
-    expect(heroTurn.actors[hero.id].hp).toBe(38); // 40 - 2
+    expect(heroTurn.actors[ally!.id].hp).toBe(38); // 40 - 2, to the ALLY
+    expect(heroTurn.actors[hero.id].hp).toBe(40);
     expect(heroTurn.actors[foe.id].marks.find(({ markId }) => markId === 'chastise-retribution')?.state.triggered).toBe(true);
 
-    const resolved = endTurnTo(heroTurn, hero.id, scriptedDice());
+    // Ending the foe's own turn deals the retribution (the ally still owes a
+    // turn this round, so the encounter is left awaiting a hero selection).
+    const resolved = endTurnOnly(heroTurn, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(25); // 28 - 3 divine
     expect(resolved.actors[foe.id].marks.some(({ markId }) => markId === 'chastise-retribution')).toBe(false);
   });

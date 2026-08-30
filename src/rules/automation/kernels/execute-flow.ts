@@ -171,6 +171,16 @@ export interface FlowExecution {
  * pre-flow behavior — so VM-only consumers are behavior-preserved by
  * construction.
  */
+/** One enclosing execution frame of the walk stack. A LIST frame captures
+ * the rest of its node list; a LOOP frame (repeat/for-each) captures the
+ * loop's UNEXECUTED iterations/items so a suspension inside a partially
+ * consumed loop resumes the remaining executions, never just the innermost
+ * list tail. */
+type FlowWalkFrame =
+  | { kind: 'list'; list: readonly FlowNode[]; index: number }
+  | { kind: 'repeat'; body: readonly FlowNode[]; remainingIterations: number }
+  | { kind: 'for-each'; items: readonly Reference<'actor'>[]; bindName: string; body: readonly FlowNode[]; remainingItems: readonly Reference<'actor'>[] };
+
 export class FlowPlanner {
   private readonly base: RuleExecutionContext;
   private readonly simBase: EncounterState | null;
@@ -181,9 +191,13 @@ export class FlowPlanner {
   readonly facts: Fact[] = [];
   /** The U13 window request once the flow suspends; null while unsuspended. */
   window: FlowWindowRequest | null = null;
-  /** The enclosing node lists currently being walked (for remaining-node
-   * capture when a nested node suspends). */
-  private readonly stack: { list: readonly FlowNode[]; index: number }[] = [];
+  /** The enclosing execution frames currently being walked (for remaining-
+   * computation capture when a nested node suspends). A LIST frame captures
+   * the rest of its node list; a LOOP frame (repeat/for-each) captures the
+   * loop's UNEXECUTED iterations/items — a suspension inside a partially
+   * consumed loop must resume the remaining executions, never just the
+   * innermost list tail. */
+  private readonly stack: FlowWalkFrame[] = [];
 
   constructor(context: RuleExecutionContext) {
     this.base = context;
@@ -260,16 +274,60 @@ export class FlowPlanner {
         // The iteration count is decided ONCE at loop entry (a plan-time
         // decision, like any other recorded choice).
         const times = integer(node.times, this.opContext());
-        for (let iteration = 0; iteration < times; iteration += 1) this.nodes(node.nodes);
+        if (times <= 0) break;
+        // The loop frames itself so a suspension inside an iteration captures
+        // the UNEXECUTED iterations (not just the innermost list tail).
+        const loopFrame: Extract<FlowWalkFrame, { kind: 'repeat' }> = {
+          kind: 'repeat',
+          body: node.nodes,
+          remainingIterations: times,
+        };
+        const bodyFrame: Extract<FlowWalkFrame, { kind: 'list' }> = { kind: 'list', list: node.nodes, index: -1 };
+        this.stack.push(loopFrame, bodyFrame);
+        try {
+          for (let iteration = 0; iteration < times && !this.suspended; iteration += 1) {
+            loopFrame.remainingIterations = times - 1 - iteration;
+            bodyFrame.index = -1;
+            for (let index = 0; index < node.nodes.length && !this.suspended; index += 1) {
+              bodyFrame.index = index;
+              this.node(node.nodes[index]!);
+            }
+          }
+        } finally {
+          this.stack.pop();
+          this.stack.pop();
+        }
         break;
       }
       case 'for-each': {
         // Iterate an ALREADY-DERIVED CandidateSet deterministically: the
         // caller projected the set to references through the U3 authority;
         // this node never re-queries. Each item is bound (U1) for the body.
-        for (const item of node.items) {
-          this.binder = bind(this.binder, node.bindName, item);
-          this.nodes(node.nodes);
+        // The loop frames itself so a suspension inside an item captures the
+        // REMAINING items (each re-bound) — not just the innermost tail.
+        const loopFrame: Extract<FlowWalkFrame, { kind: 'for-each' }> = {
+          kind: 'for-each',
+          items: node.items,
+          bindName: node.bindName,
+          body: node.nodes,
+          remainingItems: node.items.slice(1),
+        };
+        const bodyFrame: Extract<FlowWalkFrame, { kind: 'list' }> = { kind: 'list', list: node.nodes, index: -1 };
+        this.stack.push(loopFrame, bodyFrame);
+        try {
+          for (let iteration = 0; iteration < node.items.length && !this.suspended; iteration += 1) {
+            const item = node.items[iteration]!;
+            loopFrame.remainingItems = node.items.slice(iteration + 1);
+            this.binder = bind(this.binder, node.bindName, item);
+            bodyFrame.index = -1;
+            for (let index = 0; index < node.nodes.length && !this.suspended; index += 1) {
+              bodyFrame.index = index;
+              this.node(node.nodes[index]!);
+            }
+          }
+        } finally {
+          this.stack.pop();
+          this.stack.pop();
         }
         break;
       }
@@ -283,15 +341,40 @@ export class FlowPlanner {
     }
   }
 
-  /** Suspend the flow at the current point: capture the remaining nodes from
-   * the walk stack (the rest of the current list PLUS the remaining parts of
-   * every enclosing list — the ENTIRE un-executed execution, never just the
-   * innermost tail), record the window request, and stop. */
+  /** Suspend the flow at the current point: capture the ENTIRE un-executed
+   * execution from the walk stack — the rest of the current list, PLUS every
+   * enclosing loop's unexecuted iterations/items (each re-bound for
+   * for-each), PLUS the remaining parts of every enclosing list — never just
+   * the innermost tail. The loop remainders compose EXISTING nodes
+   * (`sequence`/`bind`), so the resume re-enters the SAME flow authority
+   * with no new node vocabulary. Record the window request and stop. */
   private suspendAt(choice: RuleChoice | undefined, continuationPoint?: string): void {
     const remaining: FlowNode[] = [];
+    // Frames are pushed outer→inner; execution resumes inner→outer (finish
+    // the innermost list, then its enclosing loop's remaining iterations,
+    // then the enclosing list, and so on) — exactly the walk order below.
     for (let frame = this.stack.length - 1; frame >= 0; frame -= 1) {
       const current = this.stack[frame]!;
-      remaining.push(...current.list.slice(current.index + 1));
+      switch (current.kind) {
+        case 'list':
+          remaining.push(...current.list.slice(current.index + 1));
+          break;
+        case 'repeat':
+          // Every UNEXECUTED iteration of the loop body, as ordered
+          // sequences — the loop's count was decided once at entry, so the
+          // number of remaining executions is exact.
+          for (let iteration = 0; iteration < current.remainingIterations; iteration += 1) {
+            remaining.push({ kind: 'sequence', nodes: [...current.body] });
+          }
+          break;
+        case 'for-each':
+          // Every REMAINING item, each re-bound (U1) before its body runs.
+          for (const item of current.remainingItems) {
+            remaining.push({ kind: 'bind', name: current.bindName, reference: item });
+            remaining.push({ kind: 'sequence', nodes: [...current.body] });
+          }
+          break;
+      }
     }
     this.window = {
       ...(choice !== undefined ? { choice } : {}),
@@ -306,7 +389,7 @@ export class FlowPlanner {
    * list captures the whole remaining execution. */
   nodes(nodes: readonly FlowNode[]): void {
     if (this.suspended) return;
-    const frame = { list: nodes, index: -1 };
+    const frame: Extract<FlowWalkFrame, { kind: 'list' }> = { kind: 'list', list: nodes, index: -1 };
     this.stack.push(frame);
     try {
       for (let index = 0; index < nodes.length && !this.suspended; index += 1) {

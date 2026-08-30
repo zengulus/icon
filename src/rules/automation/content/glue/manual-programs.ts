@@ -105,10 +105,13 @@ const independentlyExecutableManualPrograms = new Set([
  * at the end of the turn). Each entry maps to its interrupt cost: the number
  * of uses the character has per round before the ability must refresh.
  */
-export const WHEN_DAMAGED_INTERRUPT_IDS: Readonly<Record<string, { usesPerRound: number }>> = {
-  // ICON p.128 Righteous Disdain (Demon Slayer): "damage to your ally has been
-  // determined on the foe's end but not applied yet".
-  'demon-slayer:righteous-disdain': { usesPerRound: 1 },
+export const WHEN_DAMAGED_INTERRUPT_IDS: Readonly<Record<string, { usesPerRound: number; allyRange?: number }>> = {
+  // ICON p.128 Righteous Disdain (Demon Slayer): "A foe uses an ability that
+  // targets an ally in range, and damage to your ally has been determined on
+  // the foe's end but not applied yet." The interrupt's Range 2 is the
+  // owner-to-ally bound the window scan enforces: the owner answers for an
+  // ALLY within range 2 — the owner is never the damaged character.
+  'demon-slayer:righteous-disdain': { usesPerRound: 1, allyRange: 2 },
 };
 
 /**

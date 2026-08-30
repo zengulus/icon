@@ -9,7 +9,7 @@ import type { RangeStateView } from './range.js';
 import type { AreaStateView } from './area.js';
 import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, type MasteryFoldStateView } from './mastery-fold.js';
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
-import { decideDamageWindow, openDecisionWindow } from './decision-window.js';
+import { decideDamageWindow, nextWindowId, openDecisionWindow } from './decision-window.js';
 import { entityKind, entityKindOf, validateEntityCreation } from './entity-creation.js';
 import { armContinuation, heldDamageContinuation, heldSaveContinuation } from '../primitives/continuation.js';
 import { capturedActor } from '../primitives/reference.js';
@@ -747,6 +747,7 @@ export function determineAndApplyEncounterDamage(
   const determination = determineEncounterDamage(state, intent);
   if (determination.amount <= 0) return null;
   return applyDeterminedEncounterDamage(state, target, source, {
+    targetId: target.id,
     amount: determination.amount,
     damageType: intent.damageType,
     bypassVigor: intent.bypassVigor ?? intent.damageType === 'divine',
@@ -822,6 +823,45 @@ export function hasAvailableWhenDamagedInterrupt(actor: EncounterActor): boolean
     if (actor.abilityIds.includes(interruptId) && (actor.interruptUses[interruptId] ?? 0) < usesPerRound) return true;
   }
   return false;
+}
+
+/** The declared maximum range of an actor's when-damaged interrupt (the
+ * source-required "ally in range" bound, e.g. Righteous Disdain's Range 2,
+ * p.128). The widest range among the actor's available when-damaged
+ * interrupts; 0 when the actor has none. */
+function whenDamagedInterruptRange(actor: EncounterActor): number {
+  let range = 0;
+  for (const [interruptId, entry] of Object.entries(INTERRUPT_ALLOWLISTS['when-damaged'] ?? {})) {
+    if (!actor.abilityIds.includes(interruptId)) continue;
+    range = Math.max(range, entry.allyRange ?? 0);
+  }
+  return range;
+}
+
+/** ICON p.128 Righteous Disdain: the when-damaged window opens for the
+ * interrupt OWNER whose trigger is satisfied — a foe's determined damage to
+ * an ALLY in range of an available when-damaged interrupt owner (the owner
+ * is DISTINCT from the damaged character). Returns the deterministic owner
+ * (first eligible in durable registration order — the single window per
+ * damage instance; multiple eligible owners are adjudication-needed, never
+ * a fabricated priority), or undefined when no owner is in range. The range
+ * is the source-declared interrupt range (RD: Range 2). */
+export function whenDamagedInterruptOwner(
+  state: EncounterState,
+  target: EncounterActor,
+  source: EncounterActor,
+): EncounterActor | undefined {
+  if (!target.position || !source.position) return undefined;
+  for (const candidate of Object.values(state.actors)) {
+    if (candidate.side !== target.side) continue;
+    if (candidate.id === target.id || candidate.defeated || !candidate.onBattlefield || !candidate.position) continue;
+    if (!hasAvailableWhenDamagedInterrupt(candidate)) continue;
+    const range = whenDamagedInterruptRange(candidate);
+    if (range <= 0) continue;
+    if (Math.max(Math.abs(candidate.position.x - target.position.x), Math.abs(candidate.position.y - target.position.y)) > range) continue;
+    return candidate;
+  }
+  return undefined;
 }
 
 /** ICON p.107/p.138: true when `actor` has an unused `defeated` interrupt
@@ -909,14 +949,12 @@ export function deferrableEffectWindow(
         && !hasUnlimitedRange(foldView, candidate.id, entry.programId)
         && Math.max(Math.abs(candidate.position.x - ally.position.x), Math.abs(candidate.position.y - ally.position.y)) > entry.allyRange) continue;
       if (!mutations.some((mutation) => 'actorId' in mutation && mutation.actorId === allyId)) continue;
-      return {
-        id: `uses-ability:${allyId}:${state.revision}:${state.decisionWindows.length}`,
+      return openDecisionWindow(state, {
+        id: nextWindowId(state, 'uses-ability', candidate.id),
         kind: 'uses-ability',
         actorId: candidate.id,
-        triggeredAt: state.revision,
-        order: state.decisionWindows.length,
         heldEffects: deferredEffects(mutations),
-      };
+      });
     }
   }
   // 2. Perseus — an allied area effect includes the character.
@@ -925,14 +963,12 @@ export function deferrableEffectWindow(
       if (candidate.side !== 'heroes' || candidate.id === source.id || candidate.defeated) continue;
       if (!interruptAvailable(candidate, 'bastion:perseus', (INTERRUPT_ALLOWLISTS['area-inclusion'] ?? {})['bastion:perseus']!.usesPerRound)) continue;
       if (!mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === candidate.id && mutation.delivery === 'area')) continue;
-      return {
-        id: `area-inclusion:${candidate.id}:${state.revision}:${state.decisionWindows.length}`,
+      return openDecisionWindow(state, {
+        id: nextWindowId(state, 'area-inclusion', candidate.id),
         kind: 'area-inclusion',
         actorId: candidate.id,
-        triggeredAt: state.revision,
-        order: state.decisionWindows.length,
         heldEffects: deferredEffects(mutations),
-      };
+      });
     }
   }
   // 3. Masquerade — a character uses an ability against the user, who swaps
@@ -974,7 +1010,7 @@ export function deferrableEffectWindow(
       });
       if (determined.amount <= 0) continue;
       const bypassVigor = foeDamage.bypassVigor ?? foeDamage.damageType === 'divine';
-      if (hasAvailableWhenDamagedInterrupt(candidate)) continue;
+      if (whenDamagedInterruptOwner(state, candidate, source) !== undefined) continue;
       if (hasAvailableDefeatedInterrupt(candidate)
         && prospectiveAppliedDefeat(candidate, determined.amount, bypassVigor, { ignoreDefiance: foeDamage.ignoreDefiance, damageType: foeDamage.damageType }, state)) continue;
     }
@@ -982,16 +1018,14 @@ export function deferrableEffectWindow(
     const ally = Object.values(state.actors).find((other) => other.side === 'heroes' && other.id !== candidate.id && !other.defeated && other.position
       && Math.max(Math.abs(other.position.x - candidate.position.x), Math.abs(other.position.y - candidate.position.y)) <= 3);
     if (!ally) continue;
-    return {
-      id: `targeted-by-ability:${candidate.id}:${state.revision}:${state.decisionWindows.length}`,
+    return openDecisionWindow(state, {
+      id: nextWindowId(state, 'targeted-by-ability', candidate.id),
       kind: 'targeted-by-ability',
       actorId: candidate.id,
-      triggeredAt: state.revision,
-      order: state.decisionWindows.length,
       heldEffects: deferredEffects(mutations),
       retarget: { fromActorId: candidate.id, toActorId: ally.id },
       retargetProgramId: masqueradeEntry.programId ?? 'fool:masquerade',
-    };
+    });
   }
   return null;
 }
@@ -1028,19 +1062,19 @@ export function saveRerollWindow(
       // The save's branch runs from the save record to the next save record.
       let end = index + 1;
       while (end < mutations.length && mutations[end]!.kind !== 'save') end += 1;
-      const windowId = `save-rolled:${saver.id}:${state.revision}:${state.decisionWindows.length}`;
+      const windowId = nextWindowId(state, 'save-rolled', candidate.id);
       // U13: the ONE window record, carrying the original save as a U12
       // HELD-RESULT continuation — the original result already exists and
       // waits for the reroll window to close; it resumes EXACTLY as recorded
       // (a reroll is a separately recorded command-boundary result). The
-      // legacy `heldSave` shape is gone: `windowHeldSave` projects the same
-      // surface from the held payload.
-      return {
+      // held continuation's trigger names this owning window's exact id — a
+      // coarse `save-resolved` Fact can never fire it. The legacy `heldSave`
+      // shape is gone: `windowHeldSave` projects the same surface from the
+      // held payload.
+      return openDecisionWindow(state, {
         id: windowId,
         kind: 'save-rolled',
         actorId: candidate.id,
-        triggeredAt: state.revision,
-        order: state.decisionWindows.length,
         heldPayload: heldSaveContinuation({
           id: `held:${windowId}`,
           sourceId: mutation.sourceId,
@@ -1050,8 +1084,9 @@ export function saveRerollWindow(
           threshold: mutation.branch.threshold,
           roll: mutation.roll,
           success: mutation.success,
+          windowId,
           windowKind: mutation.windowKind,
-          ...(mutation.windowId ? { windowId: mutation.windowId } : {}),
+          ...(mutation.windowId ? { saveWindowId: mutation.windowId } : {}),
           ...(mutation.statusId ? { statusId: mutation.statusId } : {}),
           sourceActorId,
           ...(mutation.modifiers ? { modifiers: mutation.modifiers } : {}),
@@ -1059,7 +1094,7 @@ export function saveRerollWindow(
           onFailure: mutation.branch.onFailure,
         }),
         heldEffects: mutations.slice(index, end),
-      };
+      });
     }
   }
   return null;
@@ -1197,16 +1232,21 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
     ignoreDefiance: mutation.ignoreDefiance,
   });
   if (window && state.decisionWindows) {
-    const id = `${window.kind}:${target.id}:${state.revision}:${state.decisionWindows.length}`;
+    // The window belongs to the responding interrupt owner (`actorId` — the
+    // damaged target for a defeated blow, the range-satisfying when-damaged
+    // OWNER for an ally's blow); the held payload's target is the damaged
+    // character. The id is minted from the monotonic window serial — never
+    // the collection length.
+    const id = nextWindowId(state, window.kind, window.actorId);
     openDecisionWindow(state, {
       id,
       kind: window.kind,
-      actorId: target.id,
+      actorId: window.actorId,
       provenance: { sourceId: mutation.sourceId, sourceActorId: mutation.sourceActorId },
       heldPayload: heldDamageContinuation({
         id: `held:${id}`,
         programId: mutation.sourceId,
-        ownerActorId: target.id,
+        ownerActorId: window.actorId,
         targetId: target.id,
         amount,
         damageType: mutation.damageType,
@@ -1215,6 +1255,7 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
         instance: mutation.instance,
         delivery: mutation.delivery,
         ignoreCover: mutation.ignoreCover,
+        windowId: id,
         ...(mutation.bypassVigor !== undefined ? { bypassVigor } : {}),
         ...(mutation.ignoreDodge ? { ignoreDodge: true } : {}),
         ...(mutation.ignoreDefiance ? { ignoreDefiance: true } : {}),
@@ -1223,6 +1264,7 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
     return;
   }
   applyDeterminedEncounterDamage(state, target, source, {
+    targetId: target.id,
     amount,
     damageType: mutation.damageType,
     bypassVigor,
@@ -1234,12 +1276,15 @@ function applyDamage(state: EncounterState, mutation: Extract<RuleMutation, { ki
     ...(mutation.ignoreDodge ? { ignoreDodge: true } : {}),
     ...(mutation.ignoreDefiance ? { ignoreDefiance: true } : {}),
   });
-  // ICON p.107: damage dealt opens a 'when-damaged' interrupt window for the
-  // target. Windows resolve most-recently-triggered first (LIFO by encounter
-  // revision) and close at the end of the turn.
+  // ICON p.107: every damage instance opens a plain `when-damaged` interrupt
+  // window for the target — the interrupt OPPORTUNITY record (an available
+  // when-damaged interrupt is what makes the window HOLD the blow; without
+  // one the blow applies directly and the empty window closes at the
+  // boundary, exactly as the deferred-window machinery drains it). The id is
+  // minted from the monotonic window serial — never the collection length.
   if (amount > 0 && !target.defeated && state.decisionWindows) {
     openDecisionWindow(state, {
-      id: `when-damaged:${target.id}:${state.revision}:${state.decisionWindows.length}`,
+      id: nextWindowId(state, 'when-damaged', target.id),
       kind: 'when-damaged',
       actorId: target.id,
       provenance: { sourceId: mutation.sourceId, sourceActorId: mutation.sourceActorId },

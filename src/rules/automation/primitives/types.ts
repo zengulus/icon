@@ -1,4 +1,5 @@
 import type { DiceSource } from '../../dice.js';
+import type { HeldResult } from './continuation.js';
 import type { AttackDamageProvenance } from './attack-resolution.js';
 import type { SaveWindowBranch, SaveWindowKind, SaveWindowModifiers } from './save-window.js';
 import type { Fact } from './facts.js';
@@ -469,6 +470,12 @@ export interface RuleExecutionContext {
    * neutral until U12 continuation records carry it across windows; when
    * absent, reference resolution treats every bound name as unbound. */
   boundNames?: Binder;
+  /** U13 carriage: the U12 HELD RESULT of the decision window this interrupt
+   * answers (the command/window boundary injects the window's held payload;
+   * the reducer pops the SAME window LIFO). An interrupt that answers a
+   * window consumes this already-determined result instead of asking the
+   * player a fresh question — a held result is NEVER re-supplied as input. */
+  heldResult?: HeldResult;
 }
 
 export type RuleMutation =

@@ -10,6 +10,7 @@ import { initialCharacterResources, perEncounterCharacterResourceIds } from './c
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
 import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
+import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
 import { applyOrdering } from './automation/primitives/ordering.js';
 import { validateTransaction } from './automation/primitives/transaction.js';
 import { closeDecisionWindow, decideDamageWindow, isInterruptWindowKind, openDecisionWindow, orderDecisionWindows, popDecisionWindowStack, windowHeldDamage, windowHeldSave } from './automation/kernels/decision-window.js';
@@ -178,6 +179,9 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
     // U12: the durable armed-continuation collection (deferred rules and held
     // results awaiting their Clock/Fact trigger).
     continuations: [],
+    // U13 (schema 10): the monotonic per-encounter window serial — the
+    // durable identity source for serial-minted window ids.
+    windowSerial: 0,
     revision: 0,
     resolutionSerial: 0,
     eventLog: [],
@@ -187,7 +191,7 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
 export function migrateEncounter(input: unknown): EncounterState {
   if (!input || typeof input !== 'object') throw new RuleViolation('encounter.invalid', 'Encounter data must be an object.');
   const candidate = input as Omit<Partial<EncounterState>, 'schemaVersion'> & { schemaVersion?: number };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== 7 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== 7 && candidate.schemaVersion !== 9 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
     throw new RuleViolation('encounter.schema', `Unsupported encounter schema version: ${String(candidate.schemaVersion)}`);
   }
   // There is no cross-rules-version converter in this release. Treat a
@@ -305,6 +309,15 @@ export function migrateEncounter(input: unknown): EncounterState {
     // continuations by definition (the Great Giorgios delayed recipe used to
     // live in the lifecycle registry, never in durable state).
     continuations: Array.isArray(candidate.continuations) ? clone(candidate.continuations) : [],
+    // U13 (schema 10): the monotonic window serial survives save/load (keep a
+    // present valid value; a legacy checkpoint starts at 0 — window ids are
+    // re-derived deterministically from the recorded events, and a migrated
+    // checkpoint's open windows keep their legacy ids, so no id can collide).
+    windowSerial: typeof (candidate as { windowSerial?: unknown }).windowSerial === 'number'
+      && Number.isSafeInteger((candidate as { windowSerial?: unknown }).windowSerial as number)
+      && ((candidate as { windowSerial?: unknown }).windowSerial as number) >= 0
+      ? (candidate as { windowSerial?: unknown }).windowSerial as number
+      : 0,
     // The durable resolution serial survives save/load: keep a present valid
     // value; derive the historical count only for legacy checkpoints.
     resolutionSerial: typeof candidate.resolutionSerial === 'number' && Number.isSafeInteger(candidate.resolutionSerial) && candidate.resolutionSerial >= 0
@@ -431,8 +444,11 @@ function migrateDecisionWindows(windows: unknown): DecisionWindowRecord[] {
         roll: 0,
         success: false,
         sourceActorId: String(heldSave.sourceActorId ?? ''),
+        // The migrated held save is gated by its OWNING window (this record's
+        // durable id) — the window trigger replaces the old coarse fact seam.
+        windowId: id,
         ...(typeof heldSave.windowKind === 'string' ? { windowKind: heldSave.windowKind } : {}),
-        ...(typeof heldSave.windowId === 'string' ? { windowId: heldSave.windowId } : {}),
+        ...(typeof heldSave.windowId === 'string' ? { saveWindowId: heldSave.windowId } : {}),
         ...(typeof heldSave.statusId === 'string' ? { statusId: heldSave.statusId } : {}),
         ...(typeof heldSave.modifiers === 'object' && heldSave.modifiers !== null ? { modifiers: heldSave.modifiers as { sourceModifier: number; saveBoon: number; saveCurse: number; blessing: boolean } } : {}),
         onSuccess: heldSave.onSuccess as RuleEffect[],
@@ -451,6 +467,10 @@ function migrateDecisionWindows(windows: unknown): DecisionWindowRecord[] {
         instance: heldDamage.instance,
         delivery: heldDamage.delivery,
         ignoreCover: heldDamage.ignoreCover,
+        // The migrated held damage is gated by its OWNING window (this
+        // record's durable id) — the window trigger replaces the old coarse
+        // fact seam.
+        windowId: id,
         ...(heldDamage.bypassVigor !== undefined ? { bypassVigor: heldDamage.bypassVigor } : {}),
         ...(heldDamage.ignoreDefiance !== undefined ? { ignoreDefiance: heldDamage.ignoreDefiance } : {}),
         ...(heldDamage.ignoreDodge !== undefined ? { ignoreDodge: heldDamage.ignoreDodge } : {}),
@@ -1946,9 +1966,32 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const input = command.input ?? {};
       // The recorded U4 decision: the choice spec names the input key; a pure
       // `suspend` gate (no choice) records the plain resume decision.
-      const decision: { key: string; value: WindowDecisionValue } = window.choice
-        ? { key: window.choice.key, value: decisionValueFor(window.choice, input) }
-        : { key: 'resume', value: true };
+      let decision: { key: string; value: WindowDecisionValue };
+      if (window.choice) {
+        // U4 validation at the window-answer boundary — the SAME choice
+        // kernel every command-side choice consumes. A REQUIRED answer must
+        // be present and valid (option membership, numeric bounds, and
+        // actor/position/direction legality through the shared U3/U7
+        // authorities); an omitted required boolean is NOT an implicit
+        // decline. An OPTIONAL answer omitted records the decline — the
+        // engine never invents a default. Malformed input rejects instead of
+        // being read as a decline. Replay consumes the recorded event; it
+        // never re-validates.
+        const choiceContext: RuleExecutionContext = {
+          state: encounterRuleState(state),
+          encounterState: state,
+          actorId: window.actorId,
+          sourceId: window.provenance?.sourceId ?? 'core:decision',
+          actionId: 'decision',
+          timing: 'interrupt',
+          input,
+          dice,
+        };
+        const validated = resolveChoice(window.choice, choiceContext);
+        decision = { key: window.choice.key, value: windowDecisionValueFor(window.choice, validated) };
+      } else {
+        decision = { key: 'resume', value: true };
+      }
       let mutations: RuleMutation[] = [];
       if (window.resume) {
         // U11 flow suspension: resume the REMAINING flow nodes through the
@@ -2468,26 +2511,19 @@ function resolveHeldEffects(state: EncounterState, window: DecisionWindowRecord,
   applyRuleMutations(state, effects);
 }
 
-/** The recorded U4 decision value for a choice kind, read from the command's
- * input surface under the choice key — the same seam every other recorded
- * choice consumes (booleans for boolean choices, options for option
- * choices, etc.). The engine never invents a default: an absent value is
- * recorded as-is (false / 0 / empty), which for a boolean choice is the
- * decline. */
-function decisionValueFor(choice: RuleChoice, input: StatusSaveCommandInput): WindowDecisionValue {
-  switch (choice.kind) {
-    case 'boolean': return input.booleans?.[choice.key] === true;
-    case 'number': return input.numbers?.[choice.key] ?? 0;
-    case 'option': return input.options?.[choice.key] ?? '';
-    case 'actors': return input.actorIds?.[choice.key]?.[0] ?? '';
-    case 'positions': {
-      const position = input.positions?.[choice.key]?.[0];
-      return position ? JSON.stringify(position) : '';
-    }
-    case 'direction': {
-      const direction = input.directions?.[choice.key];
-      return direction ? JSON.stringify(direction) : '';
-    }
+/** The recorded U4 decision value for a VALIDATED `ChosenValue` (the output
+ * of the shared choice kernel — never raw input). A required choice always
+ * resolves to a present value; the fallbacks here fire only for an OPTIONAL
+ * choice the player declined (`null` from the kernel), never for malformed
+ * or missing required input (which the kernel rejected). */
+function windowDecisionValueFor(choice: RuleChoice, validated: ChosenValue): WindowDecisionValue {
+  switch (validated.kind) {
+    case 'boolean': return validated.value ?? false;
+    case 'number': return validated.value ?? 0;
+    case 'option': return validated.value ?? '';
+    case 'actors': return validated.ids[0] ?? '';
+    case 'positions': return validated.positions[0] ? JSON.stringify(validated.positions[0]) : '';
+    case 'direction': return validated.direction ? JSON.stringify(validated.direction) : '';
   }
 }
 
@@ -2554,7 +2590,10 @@ function resolveHeldInterruptWindows(state: EncounterState) {
   while (index >= 0) {
     const window = state.decisionWindows.splice(index, 1)[0]!;
     const heldDamage = windowHeldDamage(window);
-    if (heldDamage) applyHeldDamage(state, window.actorId, heldDamage);
+    // The held payload's target is the DAMAGED character (p.128: the owner
+    // answers for an ALLY's blow) — never the window owner. The window's
+    // `actorId` is the interrupt owner who could have answered.
+    if (heldDamage) applyHeldDamage(state, heldDamage.targetId, heldDamage);
     resolveHeldEffects(state, window);
     index = state.decisionWindows.findIndex((candidate) => isInterruptWindowKind(candidate.kind));
   }
@@ -3075,6 +3114,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         if (event.attackResolution) applyDamageLedger(state, event.attackResolution.damage);
         else {
           applyDeterminedEncounterDamage(state, target, actor, {
+            targetId: target.id,
             amount: event.appliedDamage,
             damageType: 'normal',
             sourceActorId: actor.id,
@@ -3114,6 +3154,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           if (event.attack.ledger) applyDamageLedger(state, event.attack.ledger);
           else {
             applyDeterminedEncounterDamage(state, target, actor, {
+              targetId: target.id,
               amount: event.attack.appliedDamage,
               damageType: event.attack.bypassVigor ? 'divine' : 'normal',
               sourceActorId: actor.id,
@@ -3137,12 +3178,16 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // interrupt answers the window), retargeted when the interrupt
         // redirects them. A rolled save held for a save-reroll interrupt
         // (Sucker Punch, p.143) is its own window carrying the save's branch.
+        // The window builders OPEN the window themselves (they push the
+        // record through `openDecisionWindow` so the serial-minted id is the
+        // single durable identity) and return it for the held-mutation
+        // projection — the caller must NOT push again (a second push would
+        // duplicate the window record under the same id).
         const deferredWindow = deferrableEffectWindow(state, event.actorId, event.mutations);
         const saveWindow = saveRerollWindow(state, event.actorId, event.mutations);
         const held = new Set<RuleMutation>();
         for (const window of [deferredWindow, saveWindow]) {
           if (!window) continue;
-          state.decisionWindows.push(window);
           for (const mutation of window.heldEffects ?? []) held.add(mutation);
         }
         // U13/U11: a planned flow that suspended at an `open-window`/`suspend`
@@ -3215,8 +3260,15 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           // the held blow between two characters, consuming it). The held
           // damage is the window's U12 held-result payload — never recomputed.
           const heldDamage = window ? windowHeldDamage(window) : undefined;
-          if (heldDamage && !event.mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === window!.actorId)) {
-            applyHeldDamage(state, window!.actorId, heldDamage);
+          // The held payload's target is the DAMAGED character (p.128: the
+          // owner answers for an ALLY's blow) — never the window owner. The
+          // interrupt CONSUMES the held blow only when it re-deals real
+          // damage to that target (e.g. Righteous Disdain splits the held
+          // blow). An explicit no-op (`determined.amount === 0` — a fully
+          // absorbed incidental hit, e.g. a Collide trait reaction) did NOT
+          // re-deal the blow, so the held damage still applies.
+          if (heldDamage && !event.mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === heldDamage.targetId && (mutation.determined?.amount ?? mutation.amount) > 0)) {
+            applyHeldDamage(state, heldDamage.targetId, heldDamage);
           }
           // ICON p.107 deferred-effect windows: the ability resolves after the
           // interrupt (Heroic Intervention repositions the stance user before
@@ -3300,6 +3352,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         if (event.ledger) applyDamageLedger(state, event.ledger);
         else {
           applyDeterminedEncounterDamage(state, target, actor, {
+            targetId: target.id,
             amount: event.appliedDamage,
             damageType: 'normal',
             sourceActorId: actor.id,

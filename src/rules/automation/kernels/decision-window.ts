@@ -38,24 +38,33 @@
  *     stores and gates them).
  *
  * ORDERING (U17): nesting is the p.107 stack rule (most recent trigger
- * first) — implemented as triggeredAt-desc grouping; same-time windows of
+ * first) — implemented as triggeredAt-desc grouping. Same-time windows of
  * the SAME trigger resolve "in the same order as turns (player
  * character/npc, alternating)" — the turn character's side first, then the
- * other side (the alternation's first step), with same-side windows keeping
- * their recorded registration `order` as the deterministic stand-in for the
- * owner's ordering choice (p.107: "If a character owns multiple effects, and
- * there's ambiguity in the order in which they trigger, they can determine
- * the order" — a recorded player ordering decision routes through the U17
- * `controller-choice` policy instead when content declares one). Different
- * triggers at the same moment keep a deterministic listing order by kind.
- * Incidental array insertion order, object-key order, and actor-id sorting
- * are never game rules.
+ * other side (the alternation's first step). When the source grants an
+ * ORDERING CHOICE (p.107: "If a character owns multiple effects, and there's
+ * ambiguity in the order in which they trigger, they can determine the
+ * order"), the engine FAILS CLOSED instead of silently substituting
+ * registration order: a same-instant same-owner ambiguity in the interrupt
+ * pop path, or a tie the projection cannot resolve from a source authority,
+ * REJECTS as unrepresentable until a recorded player ordering decision
+ * (U17 `controller-choice`) exists. Different trigger kinds at the same
+ * instant have NO source-defined total order — the engine never invents a
+ * lexicographic kind ordering. The recorded `order` field is durable
+ * registration metadata only — never a game rule. Incidental array
+ * insertion order, object-key order, and actor-id sorting are never game
+ * rules.
+ *
+ * WINDOW IDENTITY: durable window ids are minted from the per-encounter
+ * monotonic `windowSerial` (never the collection length — closing a window
+ * permits length reuse, which would let a later window reuse a closed
+ * window's durable id within the same revision).
  *
  * No source IDs, no per-source branches: content opens windows through
  * `openDecisionWindow` with its own kind/choice; the engine never branches
  * on a source id here.
  */
-import type { ArmedContinuation } from '../primitives/continuation.js';
+import type { ArmedContinuation, HeldResult } from '../primitives/continuation.js';
 import { heldDamageContinuation, heldSaveContinuation } from '../primitives/continuation.js';
 import type { Binder } from '../primitives/reference.js';
 import type { OrderingPolicy } from '../primitives/ordering.js';
@@ -64,7 +73,7 @@ import type { RuleChoice, RuleEffect, RuleMutation } from '../primitives/types.j
 import type { FlowNode } from './execute-flow.js';
 import type { DamageLedgerEntry } from './damage-ledger.js';
 import type { EncounterActor, EncounterHeldDamage, EncounterState } from '../../types.js';
-import { hasAvailableDefeatedInterrupt, hasAvailableWhenDamagedInterrupt, prospectiveAppliedDefeat } from './encounter-adapter.js';
+import { hasAvailableDefeatedInterrupt, prospectiveAppliedDefeat, whenDamagedInterruptOwner } from './encounter-adapter.js';
 
 /** The closed set of window natures. `choice` is a genuine player/GM
  * decision window (U4 choice); every other kind is an interrupt window that
@@ -153,10 +162,22 @@ export function isInterruptWindowKind(kind: DecisionWindowKind): boolean {
   return kind !== 'choice';
 }
 
+/** Mint the durable id for a window opened from the per-encounter monotonic
+ * `windowSerial` — NEVER from the collection length (closing a window
+ * permits length reuse, so a length-derived id could be REUSED by a later
+ * window in the same revision). Deterministic: the serial advances in the
+ * reducer, so replay mints the identical ids from the identical events. */
+export function nextWindowId(state: EncounterState, kind: DecisionWindowKind, actorId: string): string {
+  const serial = state.windowSerial;
+  state.windowSerial += 1;
+  return `${kind}:${actorId}:${serial}`;
+}
+
 /** Push one typed window record onto the durable collection with the
  * deterministic identity/order fields. The caller supplies the stable `id`
- * (content provenance); `triggeredAt`/`order` are derived deterministically
- * from the current state — never from ambient call-site order. */
+ * (content provenance — `nextWindowId` for windows without a natural durable
+ * identity); `triggeredAt`/`order` are derived deterministically from the
+ * current state — never from ambient call-site order. */
 export function openDecisionWindow(
   state: EncounterState,
   input: {
@@ -212,6 +233,7 @@ export function windowHeldDamage(window: DecisionWindowRecord): EncounterHeldDam
   const result = payload.payload.result;
   if (result.kind !== 'damage') return undefined;
   return {
+    targetId: result.targetId,
     amount: result.amount,
     damageType: result.damageType,
     sourceActorId: result.sourceActorId,
@@ -266,38 +288,90 @@ export function windowHeldSave(window: DecisionWindowRecord): WindowHeldSave | u
   };
 }
 
+/** The LIFO window selection for `actorId` through the U17 stack rule — the
+ * recorded `triggeredAt` decides, never array construction order. FAILS
+ * CLOSED on a same-instant same-owner ambiguity: p.107 grants the owner the
+ * RIGHT to determine the order of their own simultaneously triggered
+ * effects, which is a RECORDED player decision this tranche cannot carry —
+ * the engine therefore rejects instead of silently substituting the
+ * registration `order` (an incidental array stand-in). Returns the single
+ * most-recently-triggered candidate. */
+function topDecisionWindowStack(state: EncounterState, actorId: string, heldOnly: boolean): DecisionWindowRecord | undefined {
+  // Choice windows are player decisions — an interrupt execution NEVER pops
+  // them; they are answered by id through ANSWER_DECISION_WINDOW.
+  const candidates = state.decisionWindows.filter((window) => window.actorId === actorId && isInterruptWindowKind(window.kind) && (!heldOnly || window.heldPayload !== undefined));
+  if (candidates.length === 0) return undefined;
+  const latest = Math.max(...candidates.map((window) => window.triggeredAt));
+  const atLatest = candidates.filter((window) => window.triggeredAt === latest);
+  if (atLatest.length > 1) {
+    throw new Error(`decision-window.ambiguous-order: ${actorId} owns ${atLatest.length} simultaneously triggered windows (triggeredAt ${latest}); ICON p.107 grants the owner the ordering choice, which must be a recorded decision — no incidental registration order is used.`);
+  }
+  return atLatest[0]!;
+}
+
 /** Pop (LIFO) the most recently triggered window for `actorId` (matching
  * `heldOnly`), through the U17 stack rule — the recorded `triggeredAt`
  * decides, never array construction order. Used by the interrupt command
  * path: an interrupt answers the most recently triggered window still
  * holding damage (falls back to a plain window for triggers with no
- * deferral). */
+ * deferral). Fails closed on a same-instant same-owner ambiguity (see
+ * `topDecisionWindowStack`). */
 export function popDecisionWindowStack(state: EncounterState, actorId: string, heldOnly: boolean): DecisionWindowRecord | undefined {
-  // Choice windows are player decisions — an interrupt execution NEVER pops
-  // them; they are answered by id through ANSWER_DECISION_WINDOW.
-  const candidates = state.decisionWindows.filter((window) => window.actorId === actorId && isInterruptWindowKind(window.kind) && (!heldOnly || window.heldPayload !== undefined));
-  if (candidates.length === 0) return undefined;
-  candidates.sort((first, second) => {
-    if (first.triggeredAt !== second.triggeredAt) return second.triggeredAt - first.triggeredAt;
-    return second.order - first.order;
-  });
-  const top = candidates[0]!;
+  const top = topDecisionWindowStack(state, actorId, heldOnly);
+  if (!top) return undefined;
   return closeDecisionWindow(state, top.id);
 }
 
-/** The deterministic total order for simultaneous windows (ICON p.107). See
- * the module doc for the U17 policy mapping. Returns a NEW array; never
- * mutates the input or the state. */
+/** Non-mutating twin of `popDecisionWindowStack`: the same LIFO selection
+ * (and the same fail-closed ambiguity) WITHOUT closing the window. The
+ * command boundary uses it to inject the window's held payload into an
+ * interrupt's planning context — the reducer pops the SAME window.
+ * Choice windows are never selected (they are answered by id). */
+export function peekDecisionWindowStack(state: EncounterState, actorId: string, heldOnly: boolean): DecisionWindowRecord | undefined {
+  return topDecisionWindowStack(state, actorId, heldOnly);
+}
+
+/** The U12 held-result of a window's held payload (the determined save or
+ * damage) — the durable authority the command boundary injects into an
+ * interrupt's planning context. Absent for windows that hold nothing. */
+export function windowHeldResult(window: DecisionWindowRecord): HeldResult | undefined {
+  const payload = window.heldPayload;
+  if (!payload || payload.payload.kind !== 'held-result') return undefined;
+  return payload.payload.result;
+}
+
+/** The deterministic total order for simultaneous windows (ICON p.107):
+ * most-recently-triggered first, then — for windows of the SAME trigger at
+ * the same instant — the turn-order rule (the turn character's side first).
+ * FAILS CLOSED wherever the source grants a choice or defines no total
+ * order: a same-instant tie across DIFFERENT trigger kinds (no source
+ * order — never an invented lexicographic kind order), or a same-side tie
+ * (the owner/characters' ordering right — a recorded decision, never the
+ * incidental registration `order`) REJECTS as unrepresentable until the
+ * correct ordering policy exists. Returns a NEW array; never mutates the
+ * input or the state. */
 export function orderDecisionWindows(state: EncounterState, turnActorId: string, pending: DecisionWindowRecord[]): DecisionWindowRecord[] {
   const turnSide = state.actors[turnActorId]?.side;
   const sideRank = (actorId: string): number => (state.actors[actorId]?.side === turnSide ? 0 : 1);
-  return [...pending].sort((first, second) => {
+  const sorted = [...pending].sort((first, second) => {
     if (first.triggeredAt !== second.triggeredAt) return second.triggeredAt - first.triggeredAt;
-    if (first.kind !== second.kind) return first.kind.localeCompare(second.kind);
     const bySide = sideRank(first.actorId) - sideRank(second.actorId);
     if (bySide !== 0) return bySide;
-    return first.order - second.order;
+    return 0;
   });
+  // Verify the sort is actually a TOTAL order derivable from source
+  // authorities: any remaining tie (same instant + same side) is either a
+  // same-side turn-order ambiguity or a different-trigger instant tie —
+  // neither has a source-defined order, so the projection rejects instead of
+  // inventing one.
+  for (let index = 0; index < sorted.length - 1; index += 1) {
+    const first = sorted[index]!;
+    const second = sorted[index + 1]!;
+    if (first.triggeredAt === second.triggeredAt && sideRank(first.actorId) === sideRank(second.actorId)) {
+      throw new Error(`decision-window.ordering-unrepresentable: windows ${first.id} and ${second.id} are simultaneous and same-side; ICON p.107 grants an ordering choice here (and defines no order across different trigger kinds) — a recorded decision is required, never an invented tie-break.`);
+    }
+  }
+  return sorted;
 }
 
 // ── Damage-window eligibility (migrated from the F4 trigger-window
@@ -316,24 +390,32 @@ export interface DamageWindowProvenance {
 
 interface DamageWindowRecipe {
   kind: 'when-damaged' | 'defeated';
-  /** The authority decision, evaluated from provenance only. */
-  opens(state: EncounterState, target: EncounterActor, provenance: DamageWindowProvenance): boolean;
+  /** The authority decision, evaluated from provenance only. Returns the
+   * responding owner's actor id when the window opens (null = no window). */
+  opens(state: EncounterState, target: EncounterActor, provenance: DamageWindowProvenance): string | null;
 }
 
 /** The closed damage-window eligibility registry. The rows are ordered:
  * when both triggers are armed the more specific one wins (when-damaged —
  * the blow is determined but not applied — before defeated — the blow would
- * defeat the target), matching p.107. */
+ * defeat the target), matching p.107. Each row answers WHO the window
+ * belongs to: the responding interrupt owner (the window's `actorId`), or
+ * null when the row does not open. */
 export const DAMAGE_WINDOW_RECIPES: readonly DamageWindowRecipe[] = [
   {
-    // ICON p.107/p.128 Righteous Disdain: foe damage is determined but not yet
-    // applied while the target's when-damaged interrupt remains available.
+    // ICON p.107/p.128 Righteous Disdain: a foe's determined damage to an
+    // ALLY (in range of an available when-damaged interrupt owner) is held
+    // while that owner's interrupt remains available. The trigger is the
+    // OWNER-ALLY relationship (the interrupt owner is distinct from the
+    // damaged character — the owner answers for the ally's blow).
     kind: 'when-damaged',
     opens: (state, target, provenance) => {
       const source = provenance.sourceActorId ? state.actors[provenance.sourceActorId] : undefined;
-      return provenance.determinedAmount > 0
-        && Boolean(source && source.side !== target.side)
-        && hasAvailableWhenDamagedInterrupt(target);
+      if (provenance.determinedAmount <= 0) return null;
+      if (!source || source.side === target.side) return null;
+      // The eligible when-damaged interrupt OWNER within the source-required
+      // range of the damaged ally (owner ≠ target), or null when none.
+      return whenDamagedInterruptOwner(state, target, source)?.id ?? null;
     },
   },
   {
@@ -341,6 +423,8 @@ export const DAMAGE_WINDOW_RECIPES: readonly DamageWindowRecipe[] = [
     // target's defeated interrupt remains available. The prospective-defeat
     // test shares the Defiance/Defy Death application floors with the damage
     // pipeline, so the window gate and the blow that would be held agree.
+    // The defeated window belongs to the TARGET ("Trigger: You are
+    // defeated").
     kind: 'defeated',
     opens: (state, target, provenance) => {
       const source = provenance.sourceActorId ? state.actors[provenance.sourceActorId] : undefined;
@@ -349,22 +433,26 @@ export const DAMAGE_WINDOW_RECIPES: readonly DamageWindowRecipe[] = [
         && prospectiveAppliedDefeat(target, provenance.determinedAmount, provenance.bypassVigor, {
           ignoreDefiance: provenance.ignoreDefiance,
           damageType: provenance.damageType,
-        }, state);
+        }, state)
+        ? target.id
+        : null;
     },
   },
 ];
 
 /** Decide, from durable provenance, whether a damage instance is held by an
- * interrupt window and which kind holds it. The first applicable recipe wins
- * (registry order = the p.107 priority). Never re-evaluates availability
- * against live state on the replay side. */
+ * interrupt window, which kind holds it, and WHO the window belongs to (the
+ * responding interrupt owner). The first applicable recipe wins (registry
+ * order = the p.107 priority). Never re-evaluates availability against live
+ * state on the replay side. */
 export function decideDamageWindow(
   state: EncounterState,
   target: EncounterActor,
   provenance: DamageWindowProvenance,
-): { kind: 'when-damaged' | 'defeated' } | null {
+): { kind: 'when-damaged' | 'defeated'; actorId: string } | null {
   for (const recipe of DAMAGE_WINDOW_RECIPES) {
-    if (recipe.opens(state, target, provenance)) return { kind: recipe.kind };
+    const actorId = recipe.opens(state, target, provenance);
+    if (actorId !== null) return { kind: recipe.kind, actorId };
   }
   return null;
 }
@@ -381,16 +469,33 @@ export function openDamageWindowFromLedger(state: EncounterState, entry: DamageL
   if (entry.handoff !== 'determined') return false;
   const kind = entry.window.trigger;
   if (!DAMAGE_WINDOW_RECIPES.some((recipe) => recipe.kind === kind)) return false;
-  const id = `${kind}:${entry.targetId}:${state.revision}:${state.decisionWindows.length}`;
+  const target = state.actors[entry.targetId];
+  const source = entry.sourceActorId ? state.actors[entry.sourceActorId] : undefined;
+  // The window's owner is re-derived deterministically from the SAME
+  // pre-event state the command boundary decided against (the recipe is a
+  // pure function of state + provenance), so replay reproduces the identical
+  // responding owner: the damaged target for a `defeated` blow, the
+  // range-satisfying when-damaged interrupt OWNER for a `when-damaged` blow.
+  // A held `when-damaged` entry whose owner cannot be re-derived is replay
+  // corruption — fail closed, never fall back to the recipient.
+  const actorId = kind === 'defeated'
+    ? entry.targetId
+    : (() => {
+      if (!target || !source) throw new Error(`decision-window.ledger-owner: cannot re-derive the when-damaged interrupt owner for held entry ${entry.targetId}.`);
+      const owner = whenDamagedInterruptOwner(state, target, source);
+      if (!owner) throw new Error(`decision-window.ledger-owner: recorded held when-damaged entry for ${entry.targetId} has no eligible interrupt owner at replay.`);
+      return owner.id;
+    })();
+  const id = nextWindowId(state, kind, actorId);
   openDecisionWindow(state, {
     id,
     kind,
-    actorId: entry.targetId,
+    actorId,
     provenance: { sourceId: entry.sourceRuleId, sourceActorId: entry.sourceActorId ?? undefined },
     heldPayload: heldDamageContinuation({
       id: `held:${id}`,
       programId: entry.sourceRuleId,
-      ownerActorId: entry.targetId,
+      ownerActorId: actorId,
       targetId: entry.targetId,
       amount: entry.amount,
       damageType: entry.damageType,
@@ -399,6 +504,7 @@ export function openDamageWindowFromLedger(state: EncounterState, entry: DamageL
       instance: entry.instance,
       delivery: entry.delivery,
       ignoreCover: entry.ignoreCover,
+      windowId: id,
       ...(entry.bypassVigor !== undefined ? { bypassVigor: entry.bypassVigor } : {}),
       ...(entry.ignoreDefiance !== undefined ? { ignoreDefiance: entry.ignoreDefiance } : {}),
       ...(entry.ignoreDodge !== undefined ? { ignoreDodge: entry.ignoreDodge } : {}),
