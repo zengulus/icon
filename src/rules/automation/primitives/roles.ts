@@ -178,6 +178,7 @@ export function resolveRoleSelector(selector: RoleSelector, map: RoleMap): strin
 export function roleFrameFromContext(context: RuleExecutionContext): RoleFrame {
   return {
     sourceId: context.actorId,
+    ...(context.ownerId !== undefined ? { ownerId: context.ownerId } : {}),
     targetId: context.attackTargetId,
     recipientId: context.damageRecipientId,
     triggerSourceId: context.triggerSourceId,

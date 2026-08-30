@@ -67,7 +67,8 @@
 import type { ArmedContinuation, HeldResult } from '../primitives/continuation.js';
 import { heldDamageContinuation, heldSaveContinuation } from '../primitives/continuation.js';
 import type { Binder } from '../primitives/reference.js';
-import type { OrderingPolicy } from '../primitives/ordering.js';
+import { sameOwnerOrderingDecision, type OrderingCandidate, type OrderingPolicy } from '../primitives/ordering.js';
+import { deriveRoles, resolveRoleSelector, type RoleFrame } from '../primitives/roles.js';
 import type { SaveWindowKind } from '../primitives/save-window.js';
 import type { RuleChoice, RuleEffect, RuleMutation } from '../primitives/types.js';
 import type { FlowNode } from './execute-flow.js';
@@ -111,8 +112,10 @@ export type WindowResponse =
   | { kind: 'declined' }
   | { kind: 'accepted'; sourceId: string; decision?: WindowDecisionValue };
 
-/** A recorded U4 decision value for a `choice` window. */
-export type WindowDecisionValue = string | number | boolean;
+/** A recorded U4 decision value for a `choice` window. An ordering decision
+ * (T6.2) records the ORDERED candidate ids — the durable order the U17 pop /
+ * projection consume on replay (never re-derived, never re-sorted). */
+export type WindowDecisionValue = string | number | boolean | readonly string[];
 
 /** The one U13 window record. Durable, JSON-clean, deterministic. */
 export interface DecisionWindowRecord {
@@ -147,6 +150,13 @@ export interface DecisionWindowRecord {
   choice?: RuleChoice;
   /** U17 ordering identity/policy. */
   ordering?: OrderingPolicy;
+  /** T6.2 U17 recorded-ordering rank: the durable position of THIS window
+   * among the owner's same-instant windows, stamped ONLY by a recorded
+   * ordering decision (the U13 ordering window's DECISION_ANSWERED). Absent
+   * = unresolved — the LIFO pop and the boundary projection FAIL CLOSED on
+   * a same-instant tie without a recorded order, never an invented
+   * tie-break and never the incidental registration `order`. */
+  resolvedOrder?: number;
   /** U11 flow suspension: the remaining flow nodes + bound names resume
    * when the window is answered (the FLOW → U13 → U12 → answer → resume
    * composition). */
@@ -224,6 +234,163 @@ export function closeDecisionWindow(state: EncounterState, id: string): Decision
   return state.decisionWindows.splice(index, 1)[0];
 }
 
+/** T6.2 — the recorded SAME-OWNER ORDERING decision seam (p.107: "If a
+ * character owns multiple effects, and there's ambiguity in the order in
+ * which they trigger, they can determine the order"). At a simultaneous
+ * ordering point where the U17 authority cannot produce a unique
+ * source-defined order AND the tie is one where a SINGLE owner is entitled
+ * to choose, this composes the existing underlays:
+ *
+ *   1. U17 (`sameOwnerOrderingDecision`) classifies the tie and builds the
+ *      typed U4 ordering choice over the EXACT candidate set;
+ *   2. U2 (`resolveRoleSelector` over the durable `RoleFrame`) derives the
+ *      entitled chooser from the choice's declared `chooser: owner` role —
+ *      never an ad-hoc actor-id assumption (an underivable chooser FAILS
+ *      CLOSED);
+ *   3. U13 (`openDecisionWindow`) opens the ONE choice-window record
+ *      carrying the ordering choice; the answer (ANSWER_DECISION_WINDOW,
+ *      validated through U4) records the order durably and the reducer
+ *      (`recordOrderingDecision`) stamps the `resolvedOrder` ranks the U17
+ *      pop / projection consume on replay.
+ *
+ * No second decision system: this is the existing choice window + U4
+ * validation + recorded event. The caller suspends whatever resolution
+ * must wait for the answer (the pending windows stay open; an interrupt use
+ * that would pop them FAILS CLOSED until the order is recorded). */
+export function openOrderingDecisionWindow(
+  state: EncounterState,
+  input: {
+    /** Durable window identity (serial-minted via `nextWindowId` or a
+     * command-boundary deterministic id). */
+    id: string;
+    /** The tied candidates, each carrying its owner (the p.107 same-owner
+     * read). */
+    candidates: readonly OrderingCandidate[];
+    /** The durable U2 role frame (the owner + any recorded controllers).
+     * Defaults to the shared owner, so a declared `chooser: owner` role
+     * resolves to the owner itself — the owner's CONTROLLER authorizes the
+     * answer at the network boundary (window.actorId's controllerId). */
+    frame?: RoleFrame;
+    provenance?: WindowProvenance;
+    /** Optional U12 held payload / U11 flow resume the ordering gates. */
+    heldPayload?: ArmedContinuation;
+    resume?: DecisionWindowRecord['resume'];
+    key?: string;
+    label?: string;
+  },
+): DecisionWindowRecord {
+  const decision = sameOwnerOrderingDecision(input.candidates, {
+    key: input.key ?? 'ordering',
+    label: input.label ?? 'Order your simultaneous effects',
+  });
+  if (decision.kind === 'unresolved') {
+    throw new Error(`decision-window.ordering: the candidate set cannot yield a same-owner ordering decision (${decision.problem}) — never an invented order.`);
+  }
+  const frame: RoleFrame = input.frame ?? { sourceId: decision.ownerId, ownerId: decision.ownerId };
+  // The entitled chooser through the U2 role authority: the choice declares
+  // `chooser: owner`; an underivable owner role fails closed (never a guess
+  // such as the active actor).
+  const selector = decision.choice.chooser;
+  if (!selector) throw new Error('decision-window.ordering: the same-owner ordering choice must declare its owner chooser role.');
+  const chooserId = resolveRoleSelector(selector, deriveRoles(frame));
+  if (chooserId === null) {
+    throw new Error('decision-window.ordering: the entitled chooser for the same-owner ordering decision cannot be derived from the durable role frame — fail closed, never guess.');
+  }
+  return openDecisionWindow(state, {
+    id: input.id,
+    kind: 'choice',
+    actorId: chooserId,
+    ...(input.provenance !== undefined ? { provenance: input.provenance } : {}),
+    ...(input.heldPayload !== undefined ? { heldPayload: input.heldPayload } : {}),
+    ...(input.resume !== undefined ? { resume: input.resume } : {}),
+    choice: decision.choice,
+  });
+}
+
+/** T6.2 — apply a RECORDED ordering decision to the tied windows: stamp the
+ * durable `resolvedOrder` rank on each candidate window exactly as the
+ * player recorded it. The DECISION_ANSWERED reducer consumes this for an
+ * ordering window; replay re-stamps the identical ranks from the recorded
+ * event (zero fresh choice, zero re-sorting, zero array-order dependence).
+ * FAILS CLOSED on a corrupt recorded value: the order must be a permutation
+ * of the exact candidate set the window offered, and every named window
+ * must still be open. */
+export function recordOrderingDecision(state: EncounterState, window: DecisionWindowRecord, value: WindowDecisionValue): void {
+  if (window.choice?.kind !== 'ordering') {
+    throw new Error('decision-window.ordering: a recorded ordering decision requires the answered window to carry an ordering choice.');
+  }
+  if (!Array.isArray(value)) {
+    throw new Error('decision-window.ordering: the recorded ordering decision must carry the ordered candidate ids.');
+  }
+  const ordered = value as readonly string[];
+  const candidates = window.choice.candidateIds ?? [];
+  if (candidates.length !== ordered.length) {
+    throw new Error('decision-window.ordering: the recorded ordering is not a permutation of the exact candidate set.');
+  }
+  if (new Set(ordered).size !== ordered.length) {
+    throw new Error('decision-window.ordering: the recorded ordering repeats a candidate.');
+  }
+  const expected = new Set(candidates);
+  for (const id of ordered) {
+    if (!expected.has(id)) throw new Error(`decision-window.ordering: the recorded ordering names a candidate that is not in the pending set (${id}).`);
+  }
+  ordered.forEach((id, rank) => {
+    const target = state.decisionWindows.find((candidate) => candidate.id === id);
+    if (!target) throw new Error(`decision-window.ordering: candidate window ${id} is no longer open when its recorded ordering is applied.`);
+    target.resolvedOrder = rank;
+  });
+}
+
+/** T6.2 — reducer-side same-owner tie detection: when ONE event opens two or
+ * more interrupt windows for the SAME responder at the same instant (e.g. an
+ * area blast that opens two when-damaged windows for one owner), the owner
+ * is entitled to determine their order (p.107). Opens the U13 ordering
+ * decision window (once) so the owner can record their order; while the
+ * decision is pending the LIFO pop / boundary projection FAIL CLOSED
+ * (never an invented order), and once recorded the pop consumes the ranks.
+ *
+ * Deterministic and replay-safe: a pure function of the durable window set
+ * (the reducer opens it identically on replay); window identity is
+ * serial-minted. A tie whose ordering decision is already recorded, or an
+ * ordering window already open for the exact tied set, is never reopened. */
+export function openOrderingDecisionForSameOwnerTies(state: EncounterState): void {
+  const byActor = new Map<string, DecisionWindowRecord[]>();
+  for (const window of state.decisionWindows) {
+    if (!isInterruptWindowKind(window.kind)) continue;
+    if (window.triggeredAt !== state.revision) continue;
+    const group = byActor.get(window.actorId) ?? [];
+    group.push(window);
+    byActor.set(window.actorId, group);
+  }
+  for (const [actorId, windows] of byActor) {
+    if (windows.length < 2) continue;
+    // The decision is already recorded — nothing to open.
+    if (windows.every((window) => typeof window.resolvedOrder === 'number')) continue;
+    // An ordering window for the EXACT tied set is already open — never
+    // duplicate the decision (two simultaneous-order decisions must never
+    // alias one durable window/choice identity).
+    const alreadyOpen = state.decisionWindows.some((window) =>
+      window.kind === 'choice'
+      && window.choice?.kind === 'ordering'
+      && window.choice.candidateIds?.length === windows.length
+      && window.choice.candidateIds.every((id) => windows.some((candidate) => candidate.id === id)));
+    if (alreadyOpen) continue;
+    const decision = sameOwnerOrderingDecision(
+      windows.map((window) => ({ id: window.id, ownerId: window.actorId })),
+      { key: 'ordering', label: 'Order your simultaneous effects' },
+    );
+    if (decision.kind === 'unresolved') continue; // not a same-owner tie — fail closed at the pop, never a guess
+    const id = nextWindowId(state, 'choice', actorId);
+    openDecisionWindow(state, {
+      id,
+      kind: 'choice',
+      actorId: decision.ownerId,
+      provenance: { sourceActorId: actorId },
+      choice: decision.choice,
+    });
+  }
+}
+
 /** The U12 held-damage projection of a window's held payload. The payload is
  * the authority: the determined post-mitigation amount, never recomputed.
  * Absent for windows that hold no damage. */
@@ -289,13 +456,14 @@ export function windowHeldSave(window: DecisionWindowRecord): WindowHeldSave | u
 }
 
 /** The LIFO window selection for `actorId` through the U17 stack rule — the
- * recorded `triggeredAt` decides, never array construction order. FAILS
- * CLOSED on a same-instant same-owner ambiguity: p.107 grants the owner the
- * RIGHT to determine the order of their own simultaneously triggered
- * effects, which is a RECORDED player decision this tranche cannot carry —
- * the engine therefore rejects instead of silently substituting the
- * registration `order` (an incidental array stand-in). Returns the single
- * most-recently-triggered candidate. */
+ * recorded `triggeredAt` decides, never array construction order. A
+ * same-instant same-owner ambiguity (p.107: the owner may determine the
+ * order of their own simultaneously triggered effects) consumes the
+ * RECORDED ordering decision when one exists (the `resolvedOrder` ranks a
+ * U13 ordering window's answer stamped — never the incidental registration
+ * `order`); when the decision is pending or absent the engine FAILS CLOSED
+ * instead of silently substituting the registration order (an incidental
+ * array stand-in). Returns the single most-recently-triggered candidate. */
 function topDecisionWindowStack(state: EncounterState, actorId: string, heldOnly: boolean): DecisionWindowRecord | undefined {
   // Choice windows are player decisions — an interrupt execution NEVER pops
   // them; they are answered by id through ANSWER_DECISION_WINDOW.
@@ -304,7 +472,17 @@ function topDecisionWindowStack(state: EncounterState, actorId: string, heldOnly
   const latest = Math.max(...candidates.map((window) => window.triggeredAt));
   const atLatest = candidates.filter((window) => window.triggeredAt === latest);
   if (atLatest.length > 1) {
-    throw new Error(`decision-window.ambiguous-order: ${actorId} owns ${atLatest.length} simultaneously triggered windows (triggeredAt ${latest}); ICON p.107 grants the owner the ordering choice, which must be a recorded decision — no incidental registration order is used.`);
+    // Same-instant same-owner tie (the pop path is per-owner by
+    // construction): consume the RECORDED ordering decision when every tied
+    // window carries a DISTINCT rank; a pending/absent or inconsistent
+    // recording is UNRESOLVED — the engine rejects rather than invent an
+    // order (duplicate ranks are corruption — fail closed, never an
+    // incidental stable-sort pick).
+    const ranks = atLatest.map((window) => window.resolvedOrder);
+    if (ranks.every((rank): rank is number => typeof rank === 'number') && new Set(ranks).size === ranks.length) {
+      return [...atLatest].sort((first, second) => (first.resolvedOrder ?? 0) - (second.resolvedOrder ?? 0))[0]!;
+    }
+    throw new Error(`decision-window.ambiguous-order: ${actorId} owns ${atLatest.length} simultaneously triggered windows (triggeredAt ${latest}); ICON p.107 grants the owner the ordering choice — the recorded ordering decision is pending, absent, or inconsistent (route through openOrderingDecisionWindow / the U13 ordering window), and no incidental registration order is used.`);
   }
   return atLatest[0]!;
 }
@@ -342,14 +520,18 @@ export function windowHeldResult(window: DecisionWindowRecord): HeldResult | und
 
 /** The deterministic total order for simultaneous windows (ICON p.107):
  * most-recently-triggered first, then — for windows of the SAME trigger at
- * the same instant — the turn-order rule (the turn character's side first).
- * FAILS CLOSED wherever the source grants a choice or defines no total
- * order: a same-instant tie across DIFFERENT trigger kinds (no source
- * order — never an invented lexicographic kind order), or a same-side tie
- * (the owner/characters' ordering right — a recorded decision, never the
- * incidental registration `order`) REJECTS as unrepresentable until the
- * correct ordering policy exists. Returns a NEW array; never mutates the
- * input or the state. */
+ * the same instant — the turn-order rule (the turn character's side first),
+ * and within a same-owner tie the RECORDED ordering decision (T6.2: p.107
+ * grants the owning character the right to determine the order of their own
+ * simultaneously triggered effects). FAILS CLOSED wherever the source
+ * grants a choice that has not been recorded or defines no total order: a
+ * same-instant same-owner tie WITHOUT a recorded order is a PENDING
+ * recorded decision (`ordering.decision-required` — route through the U13
+ * ordering window, never an invented tie-break), and a same-instant
+ * same-side tie across DIFFERENT owners (no single entitled chooser; no
+ * source-defined total order — never an invented lexicographic kind order)
+ * REJECTS as unrepresentable. Returns a NEW array; never mutates the input
+ * or the state. */
 export function orderDecisionWindows(state: EncounterState, turnActorId: string, pending: DecisionWindowRecord[]): DecisionWindowRecord[] {
   const turnSide = state.actors[turnActorId]?.side;
   const sideRank = (actorId: string): number => (state.actors[actorId]?.side === turnSide ? 0 : 1);
@@ -357,18 +539,38 @@ export function orderDecisionWindows(state: EncounterState, turnActorId: string,
     if (first.triggeredAt !== second.triggeredAt) return second.triggeredAt - first.triggeredAt;
     const bySide = sideRank(first.actorId) - sideRank(second.actorId);
     if (bySide !== 0) return bySide;
+    // Same-instant same-side: the RECORDED owner-ordering rank when both
+    // windows carry one (a recorded decision — never the incidental
+    // registration `order`).
+    const firstRank = first.resolvedOrder;
+    const secondRank = second.resolvedOrder;
+    if (typeof firstRank === 'number' && typeof secondRank === 'number') return firstRank - secondRank;
     return 0;
   });
   // Verify the sort is actually a TOTAL order derivable from source
   // authorities: any remaining tie (same instant + same side) is either a
-  // same-side turn-order ambiguity or a different-trigger instant tie —
-  // neither has a source-defined order, so the projection rejects instead of
-  // inventing one.
+  // same-owner tie whose RECORDED decision is pending/absent, or a
+  // different-owner tie (no single chooser; different trigger kinds define
+  // no order) — neither has a source-defined order, so the projection
+  // rejects instead of inventing one.
   for (let index = 0; index < sorted.length - 1; index += 1) {
     const first = sorted[index]!;
     const second = sorted[index + 1]!;
     if (first.triggeredAt === second.triggeredAt && sideRank(first.actorId) === sideRank(second.actorId)) {
-      throw new Error(`decision-window.ordering-unrepresentable: windows ${first.id} and ${second.id} are simultaneous and same-side; ICON p.107 grants an ordering choice here (and defines no order across different trigger kinds) — a recorded decision is required, never an invented tie-break.`);
+      // A pair BOTH of whose windows carry a DISTINCT recorded rank was
+      // resolved by the sort above — the recorded decision, never the
+      // incidental registration `order`. Duplicate ranks at the same instant
+      // are corruption — fail closed, never a stable-sort pick.
+      if (typeof first.resolvedOrder === 'number' && typeof second.resolvedOrder === 'number') {
+        if (first.resolvedOrder === second.resolvedOrder) {
+          throw new Error(`decision-window.ordering.conflict: windows ${first.id} and ${second.id} carry conflicting recorded ranks (${first.resolvedOrder}) — a recorded ordering decision stamps each window exactly once.`);
+        }
+        continue;
+      }
+      const sameOwner = first.actorId === second.actorId;
+      throw new Error(sameOwner
+        ? `decision-window.ordering.decision-required: windows ${first.id} and ${second.id} are simultaneous and owned by one character; ICON p.107 grants the owner the ordering choice — record it through the U13 ordering decision window (openOrderingDecisionWindow), never an invented tie-break.`
+        : `decision-window.ordering-unrepresentable: windows ${first.id} and ${second.id} are simultaneous and same-side with DIFFERENT owners; ICON p.107 grants no single character the choice here and defines no total order across different trigger kinds — a recorded decision is required, never an invented tie-break.`);
     }
   }
   return sorted;

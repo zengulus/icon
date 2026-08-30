@@ -567,6 +567,16 @@ export class RoomManager {
       // for their controlled actors, rather than gaining a loophole through
       // an arbitrary sourceId/actionId payload.
       if (encounter.type === 'EXECUTE_RULE') return false;
+      if (encounter.type === 'ANSWER_DECISION_WINDOW') {
+        // T6.2: only the window's responder — the entitled chooser recorded
+        // on the window (`actorId`, derived through the U2 role/choice
+        // authority at open time) — may answer. A wrong player/actor is
+        // rejected here; the reducer still validates the answer itself.
+        const window = room.state.encounter.decisionWindows.find((candidate) => candidate.id === encounter.windowId);
+        if (!window) return true; // the reducer produces the authoritative error
+        const actor = room.state.encounter.actors[window.actorId];
+        return Boolean(actor && actor.controllerId === client.userId);
+      }
       if (!('actorId' in encounter)) return false;
       const actor = room.state.encounter.actors[encounter.actorId];
       if (!actor || actor.controllerId !== client.userId) return false;

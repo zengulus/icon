@@ -182,8 +182,15 @@ export type RulePredicate =
 export interface RuleChoice {
   key: string;
   label: string;
-  kind: 'actors' | 'positions' | 'direction' | 'option' | 'number' | 'boolean';
+  kind: 'actors' | 'positions' | 'direction' | 'option' | 'number' | 'boolean' | 'ordering';
   required: boolean;
+  /** U17 same-owner ordering (T6.2): the EXACT pending candidate set an
+   * `ordering` choice orders. The U4 validator requires the answer to be a
+   * full permutation of these ids — duplicates, unknown ids, missing
+   * candidates, and extra candidates all reject. The recorded order is the
+   * durable decision (p.107 "If a character owns multiple effects … they can
+   * determine the order"). */
+  candidateIds?: readonly string[];
   minimum?: number;
   maximum?: number;
   relation?: RuleRelation;
@@ -476,6 +483,12 @@ export interface RuleExecutionContext {
    * window consumes this already-determined result instead of asking the
    * player a fresh question — a held result is NEVER re-supplied as input. */
   heldResult?: HeldResult;
+  /** U2 OWNER role carriage (T6.2): the actor who owns the effects a
+   * resolution orders (p.107 same-owner ordering — the owner determines the
+   * order). Legacy-slot migration seam: `roleFrameFromContext` maps it onto
+   * the frame's `ownerId` so a declared `chooser: { role: 'owner' }` role
+   * selector resolves through the existing role authority. */
+  ownerId?: string;
 }
 
 export type RuleMutation =

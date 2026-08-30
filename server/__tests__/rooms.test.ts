@@ -2,6 +2,8 @@ import type { WebSocket } from 'ws';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, createEncounter, createFoe } from '../../src/rules/encounter.js';
 import { ENCOUNTER_SCHEMA_VERSION } from '../../src/rules/types.js';
+import { heldDamageContinuation } from '../../src/rules/automation/primitives/continuation.js';
+import type { RuleMutation } from '../../src/rules/automation/primitives/types.js';
 import { parseClientMessage, type ServerMessage } from '../../src/rules/protocol.js';
 import { createVttRoom, currentStateForPersistence, type RoomCommand, type VttRoomState } from '../../src/rules/vtt-room.js';
 import type { ServerConfig } from '../config.js';
@@ -855,6 +857,101 @@ describe('RoomManager authoritative VTT integration', () => {
     expect(manager.inspect('room-hidden-control')?.revision).toBe(4);
 
     await settleAndLeave(manager, gm, [gm, player.client]);
+  });
+
+  it('authorizes a same-owner ordering-window answer by the owner’s controller only (T6.2)', async () => {
+    // Seed a room whose encounter already carries two same-instant windows and
+    // the U13 ordering decision window over them (the same seam the reducer
+    // opens automatically on a simultaneous double-damage event).
+    const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 }, 'player-one');
+    const foe = createFoe('Relict', { x: 4, y: 1 });
+    const checkpoint = persistedRoom('room-ordering-auth', 3);
+    checkpoint.state.encounter.phase = 'active';
+    checkpoint.state.encounter.activeActorId = hero.id;
+    checkpoint.state.encounter.actors = { [hero.id]: hero, [foe.id]: foe };
+    const windowIds = ['when-damaged:hero:0', 'when-damaged:hero:1'];
+    const openedBy = { factKind: 'when-damaged', instanceId: undefined };
+    const provenance = { sourceId: 'fixture:foe-blast', sourceActorId: foe.id };
+    // The room validator requires every durable window key to be present
+    // (absent = undefined), so seed the full key surface explicitly.
+    const windowBase = {
+      openedBy,
+      provenance,
+      resolvedOrder: undefined,
+      retarget: undefined,
+      retargetProgramId: undefined,
+      ordering: undefined,
+      resume: undefined,
+      choice: undefined,
+      heldPayload: undefined,
+      heldEffects: [] as RuleMutation[],
+    } as const;
+    const heldDamage = (id: string, instance: number) => heldDamageContinuation({
+      id: `held:${id}`,
+      programId: 'fixture',
+      ownerActorId: hero.id,
+      targetId: hero.id,
+      amount: 4,
+      damageType: 'normal',
+      sourceActorId: foe.id,
+      sourceId: 'fixture',
+      instance,
+      delivery: 'hit',
+      ignoreCover: false,
+      windowId: id,
+    });
+    checkpoint.state.encounter.decisionWindows = [
+      { id: windowIds[0]!, kind: 'when-damaged', actorId: hero.id, triggeredAt: 3, order: 0, ...windowBase, heldPayload: heldDamage(windowIds[0]!, 1) },
+      { id: windowIds[1]!, kind: 'when-damaged', actorId: hero.id, triggeredAt: 3, order: 1, ...windowBase, heldPayload: heldDamage(windowIds[1]!, 2) },
+      {
+        id: 'choice:hero:2',
+        kind: 'choice',
+        actorId: hero.id,
+        triggeredAt: 3,
+        order: 2,
+        ...windowBase,
+        openedBy: { factKind: 'ordering', instanceId: undefined },
+        choice: {
+          key: 'ordering',
+          label: 'Order your simultaneous effects',
+          kind: 'ordering',
+          required: true,
+          candidateIds: windowIds,
+          chooser: { kind: 'role', role: 'owner' },
+        },
+      },
+    ];
+    const manager = new RoomManager(config, { persistence: new RecordingCheckpointPersistence(checkpoint) });
+    await join(manager, 'room-ordering-auth', 'dev:gm-user:gm');
+    const owner = await join(manager, 'room-ordering-auth', 'dev:player-one:player');
+    const outsider = await join(manager, 'room-ordering-auth', 'dev:player-two:player');
+
+    // A wrong player (not the owner's controller) cannot answer the ordering.
+    await manager.command(outsider.client, 3, {
+      domain: 'encounter',
+      command: { type: 'ANSWER_DECISION_WINDOW', windowId: 'choice:hero:2', input: { actorIds: { ordering: windowIds } } },
+    });
+    expect(last(outsider.socket, 'error')).toMatchObject({ code: 'permission.denied' });
+    expect(manager.inspect('room-ordering-auth')?.revision).toBe(3);
+
+    // The entitled chooser (the owner's controller) may record their order.
+    await manager.command(owner.client, 3, {
+      domain: 'encounter',
+      command: { type: 'ANSWER_DECISION_WINDOW', windowId: 'choice:hero:2', input: { actorIds: { ordering: [windowIds[1]!, windowIds[0]!] } } },
+    });
+    // eslint-disable-next-line no-console
+    console.log('ERR', JSON.stringify(owner.socket.messages.filter((message) => message.type === 'error')));
+    expect(manager.inspect('room-ordering-auth')?.revision).toBe(4);
+    expect(manager.inspect('room-ordering-auth')?.encounter.decisionWindows).toMatchObject([
+      { id: windowIds[0]!, resolvedOrder: 1 },
+      { id: windowIds[1]!, resolvedOrder: 0 },
+    ]);
+    // The ordering window closed; the recorded ranks ride the durable event.
+    const answered = manager.inspect('room-ordering-auth')!;
+    expect(answered.encounter.decisionWindows.find((window) => window.kind === 'choice')).toBeUndefined();
+    expect(answered.encounter.revision).toBe(4);
+
+    await settleAndLeave(manager, owner.client, [owner.client, outsider.client]);
   });
 
   it('rejects player targets omitted from the player-visible projection without leaking their rule details', async () => {

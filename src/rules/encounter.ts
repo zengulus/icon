@@ -13,7 +13,7 @@ import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
 import { applyOrdering } from './automation/primitives/ordering.js';
 import { validateTransaction } from './automation/primitives/transaction.js';
-import { closeDecisionWindow, decideDamageWindow, isInterruptWindowKind, openDecisionWindow, orderDecisionWindows, popDecisionWindowStack, windowHeldDamage, windowHeldSave } from './automation/kernels/decision-window.js';
+import { closeDecisionWindow, decideDamageWindow, isInterruptWindowKind, openDecisionWindow, openOrderingDecisionForSameOwnerTies, orderDecisionWindows, popDecisionWindowStack, recordOrderingDecision, windowHeldDamage, windowHeldSave } from './automation/kernels/decision-window.js';
 import { heldDamageContinuation, heldSaveContinuation } from './automation/primitives/continuation.js';
 import { decisionContinuationFor } from './automation/kernels/continuation-runtime.js';
 import { executeFlowResume } from './automation/kernels/execute-flow.js';
@@ -1993,7 +1993,13 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         decision = { key: 'resume', value: true };
       }
       let mutations: RuleMutation[] = [];
-      if (window.resume) {
+      if (window.choice?.kind === 'ordering') {
+        // T6.2 recorded same-owner ordering: the answer IS the order (the
+        // validated permutation of the pending candidate windows). No
+        // mutations are emitted — the reducer stamps the recorded order as
+        // durable `resolvedOrder` ranks and closes the window. Replay
+        // consumes the recorded order; it never re-derives or re-sorts it.
+      } else if (window.resume) {
         // U11 flow suspension: resume the REMAINING flow nodes through the
         // SAME flow authority against THEN-CURRENT state, with the recorded
         // decision on the input surface. The resumed mutations are the new
@@ -2524,6 +2530,9 @@ function windowDecisionValueFor(choice: RuleChoice, validated: ChosenValue): Win
     case 'actors': return validated.ids[0] ?? '';
     case 'positions': return validated.positions[0] ? JSON.stringify(validated.positions[0]) : '';
     case 'direction': return validated.direction ? JSON.stringify(validated.direction) : '';
+    // T6.2: the recorded ordering IS the ordered candidate list — the
+    // durable order replay consumes (never re-derived, never re-sorted).
+    case 'ordering': return validated.ids;
   }
 }
 
@@ -3233,6 +3242,13 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // the newly granted stealth.
         if (event.tags.includes('attack')) breakStealth(actor);
         applyRuleMutations(state, appliedMutations);
+        // T6.2: ONE event that opens two or more interrupt windows for the
+        // same responder at the same instant (e.g. an area blast opening two
+        // when-damaged windows for one owner) is a p.107 same-owner ordering
+        // decision — open the U13 ordering decision window (once) so the
+        // owner records their order; the LIFO pop below consumes the recorded
+        // ranks and fails closed while the decision is pending.
+        openOrderingDecisionForSameOwnerTies(state);
         if (event.timing === 'use' || event.timing === 'interrupt') actor.usedAbilityIds.push(event.sourceId);
         actor.attackedThisTurn ||= event.tags.includes('attack');
         if (event.mutations.some((mutation) => mutation.kind === 'attack' && mutation.hit)) discardWickedSheathDie(actor);
@@ -3317,7 +3333,14 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // re-decides (a declined window applies nothing; the trigger was
         // already consumed at window-open).
         applyRuleMutations(state, event.mutations);
-        closeDecisionWindow(state, event.windowId);
+        const window = closeDecisionWindow(state, event.windowId);
+        // T6.2 recorded same-owner ordering: the answered ordering window's
+        // recorded order stamps the durable `resolvedOrder` ranks on the tied
+        // windows (exactly the recorded permutation — fail closed on a
+        // corrupt recorded value, never an invented or partial order).
+        if (window?.kind === 'choice' && window.choice?.kind === 'ordering') {
+          recordOrderingDecision(state, window, event.decision.value);
+        }
         break;
       }
       case 'ACTOR_INTERACTED': {

@@ -377,6 +377,9 @@ const eventTypes = new Set([
   'ACTOR_RESCUED', 'STATUS_REMOVED', 'ACTOR_RECOVERED', 'STATUS_APPLIED',
   'TURN_ENDED', 'TURN_STARTED', 'ACTOR_WENT_SLOW', 'ACTOR_DEFEATED',
   'VIGILANCE_SPENT', 'ENCOUNTER_ENDED', 'RULE_MUTATIONS_APPLIED',
+  // T5c/T6.2: a decision-window answer (including a recorded same-owner
+  // ordering) is a durable encounter event and must survive a room snapshot.
+  'DECISION_ANSWERED',
 ]);
 
 function invalidSnapshot(path: string, message: string): never {
@@ -774,13 +777,16 @@ function strictEncounter(value: unknown): EncounterState {
   encounter.decisionWindows.forEach((window, index) => {
     const windowPath = `room.encounter.decisionWindows[${index}]`;
     const item = strictRecord(window, windowPath);
-    assertExactKeys(item, windowPath, ['id', 'kind', 'actorId', 'triggeredAt', 'order', 'openedBy', 'provenance', 'heldPayload', 'heldEffects', 'retarget', 'retargetProgramId', 'choice', 'ordering', 'resume']);
+    assertExactKeys(item, windowPath, ['id', 'kind', 'actorId', 'triggeredAt', 'order', 'resolvedOrder', 'openedBy', 'provenance', 'heldPayload', 'heldEffects', 'retarget', 'retargetProgramId', 'choice', 'ordering', 'resume']);
     strictIdentifier(item.id, `${windowPath}.id`);
     const windowActorId = strictIdentifier(item.actorId, `${windowPath}.actorId`);
     if (!actors[windowActorId]) invalidSnapshot(`${windowPath}.actorId`, 'must identify a current actor.');
     strictEnum(item.kind, `${windowPath}.kind`, new Set(['when-damaged', 'defeated', 'save-rolled', 'uses-ability', 'area-inclusion', 'targeted-by-ability', 'choice']));
     strictInteger(item.triggeredAt, `${windowPath}.triggeredAt`, 0);
     strictInteger(item.order, `${windowPath}.order`, 0);
+    // T6.2: the recorded owner-ordering rank (written only by a recorded
+    // ordering decision) — a non-negative integer when present.
+    if (item.resolvedOrder !== undefined) strictInteger(item.resolvedOrder, `${windowPath}.resolvedOrder`, 0);
     if (item.openedBy !== undefined) {
       const openedByPath = `${windowPath}.openedBy`;
       const openedBy = strictRecord(item.openedBy, openedByPath);

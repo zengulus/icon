@@ -50,7 +50,8 @@ export type ChosenValue =
   | { kind: 'direction'; direction: Position | null }
   | { kind: 'option'; value: string | null }
   | { kind: 'number'; value: number | null }
-  | { kind: 'boolean'; value: boolean | null };
+  | { kind: 'boolean'; value: boolean | null }
+  | { kind: 'ordering'; ids: string[] };
 
 function choiceViolation(code: string, choice: RuleChoice, detail: string): RuleProgramViolation {
   return new RuleProgramViolation(code, `${choice.label}: ${detail}`);
@@ -69,6 +70,7 @@ export function resolveChoice(choice: RuleChoice, context: RuleExecutionContext)
     case 'option': return resolveOption(choice, context);
     case 'number': return resolveNumber(choice, context);
     case 'boolean': return resolveBoolean(choice, context);
+    case 'ordering': return resolveOrdering(choice, context);
   }
 }
 
@@ -208,6 +210,41 @@ function resolveBoolean(choice: RuleChoice, context: RuleExecutionContext): Chos
     throw choiceViolation('choice.boolean-invalid', choice, 'must be a literal yes/no (true or false).');
   }
   return { kind: 'boolean', value: supplied };
+}
+
+/** A U17 same-owner ORDERING decision (T6.2): the player supplies the full
+ * order of the pending candidate effects as an ordered id list (p.107 "If a
+ * character owns multiple effects, and there's ambiguity in the order in
+ * which they trigger, they can determine the order"). The answer must be an
+ * EXACT PERMUTATION of the choice's `candidateIds` — the engine never
+ * accepts a plausible-looking subset, a foreign id, a duplicate, or an
+ * extra candidate. The returned ids are exactly the recorded order — the
+ * durable decision; replay consumes them, never re-derives or re-sorts. */
+function resolveOrdering(choice: RuleChoice, context: RuleExecutionContext): ChosenValue {
+  const supplied = context.input.actorIds?.[choice.key];
+  if (!supplied || supplied.length === 0) {
+    if (!choice.required) return { kind: 'ordering', ids: [] };
+    throw choiceViolation('choice.ordering-required', choice, 'requires an ordering of the pending effects.');
+  }
+  const candidates = choice.candidateIds ?? [];
+  // The pending set is EXACT: a different-length answer is never accepted,
+  // so a partial permutation and an extra-candidate answer both reject here.
+  if (candidates.length !== supplied.length) {
+    throw choiceViolation('choice.ordering-set', choice, `must order exactly ${candidates.length} pending effects (got ${supplied.length}).`);
+  }
+  // Each pending effect may be ordered exactly once.
+  if (new Set(supplied).size !== supplied.length) {
+    throw choiceViolation('choice.ordering-distinct', choice, 'each pending effect may be ordered exactly once.');
+  }
+  const expected = new Set(candidates);
+  for (const id of supplied) {
+    if (!expected.has(id)) {
+      throw choiceViolation('choice.ordering-unknown', choice, `"${id}" is not one of the pending effects.`);
+    }
+  }
+  // Length equality + distinctness + membership ⇒ the supplied list is a
+  // permutation of the exact pending set (every candidate appears).
+  return { kind: 'ordering', ids: [...supplied] };
 }
 
 /**

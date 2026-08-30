@@ -2110,16 +2110,23 @@ first) and same-trigger turn-order rules (p.107); turn-boundary ordering
 player determines order — p.107); Delay ordering at slow-turn start (p.87);
 turn alternation; player ordering choices (p.107).
 
-**Current state.** `PARTIAL (T3 policies landed; corrected 2026-08-31 by the T6 audit)` — typed policies + the
+**Current state.** `PARTIAL (T3 policies landed; recorded same-owner
+ordering decision LANDED T6.2, 2026-08-31)` — typed policies + the
 policy→CHOICE seam exist and the recorded orders that are wired (source-order
-step ordering, stack LIFO pops) route through them. The §1 acceptance
-obligations that remain unbuilt: a SAME-OWNER simultaneous ordering decision
-recorded through the U4 `controller-choice` seam and replayed, and the
+step ordering, stack LIFO pops) route through them. **T6.2 landed the
+recorded SAME-OWNER simultaneous ordering decision**: `sameOwnerOrderingDecision`
+classifies a tie as determined / unresolved / yields a chooser decision;
+U4 validates the answer as a FULL PERMUTATION of the exact pending set
+(`resolveChoice` `ordering` kind); U13 opens the ONE ordering decision window
+(`openOrderingDecisionWindow`, chooser derived through U2); the recorded
+order stamps durable `resolvedOrder` ranks (`recordOrderingDecision`) and
+the U17 LIFO pop / boundary projection consume exactly that order on replay
+— zero fresh choice, zero inferred tie-break, zero array-order dependence
+(`t6-2-u17-recorded-ordering.test.ts`, 30 cases; room responder
+authorization in `rooms.test.ts`). The remaining §1 obligations are the
 hostile-before-beneficial / non-active-owner-first / controller-choice
 turn-boundary consumers (landed as vocabulary + unit tests, with NO engineered
-turn-boundary call site). A same-instant same-owner window tie currently
-throws (`ambiguous-order`/`ordering-unrepresentable`) rather than offering the
-recorded owner decision the contract names. `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
+turn-boundary call site). `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
 (source-order | stack | turn-order | hostile-before-beneficial |
 non-active-owner-first | controller-choice | explicit-list),
 `applyOrdering(policy, candidates, context)` (pure — a function of the
@@ -2567,8 +2574,32 @@ turn-end / round-end / combat-end refresh nothing, and the recorded
 turn-boundary transition replays to an identical ledger). U8 stays
 PARTIAL on its remaining duplicates: `RuleDuration` consumers,
 `RuleTiming` boundary reads, lifecycle phase-duration expiry, and the
-scheduler's round counters. **T6.2** is the recorded same-owner ordering
-seam (U17), a separate, independent decision-arbitration surface.
+scheduler's round counters.
+
+**Phase T6.2 — recorded same-owner ordering seam (U17).** — **LANDED
+(2026-08-31).** The §1 contract's recorded-decision obligation is now wired
+end-to-end: `primitives/ordering.ts` `sameOwnerOrderingDecision` answers
+whether a simultaneous tie is determined / unresolved / yields a same-owner
+chooser decision (problems: `missing-candidate-owner`, `cross-owner`,
+`not-a-tie` — unknown ownership never silently means same-owner); U4
+validates the answer through `resolveChoice` as a FULL PERMUTATION of the
+exact pending set (omitted/duplicate/unknown/partial/extra candidates
+reject with typed violation codes); U13 opens the ONE ordering decision
+window (`openOrderingDecisionWindow` — the entitled chooser is derived
+through U2 `resolveRoleSelector` over the durable role frame, underivable
+choosers FAIL CLOSED, cross-owner groups never open a same-owner window);
+the recorded order rides the `DECISION_ANSWERED` event and stamps durable
+`resolvedOrder` ranks (`recordOrderingDecision` — corrupt recordings fail
+closed); the U17 LIFO pop and `orderDecisionWindows` projection consume
+exactly the recorded ranks on replay — zero fresh choice, zero inferred
+tie-break, zero array/registration-order dependence. The room boundary
+authorizes the answer by the window responder's recorded controller
+(`server/rooms.ts`). Suite: `t6-2-u17-recorded-ordering.test.ts` (30
+adversarial cases: positive, permutation validation, boundaries,
+suspension/state, stack-policy, replay), `rooms.test.ts` responder
+authorization, `t5c1` pinned cases. U17 stays PARTIAL on its turn-boundary
+consumers (hostile-before-beneficial / non-active-owner-first /
+controller-choice at a real turn-boundary call site).
 
 ---
 

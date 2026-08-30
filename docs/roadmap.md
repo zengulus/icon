@@ -347,10 +347,24 @@ recorded same-owner ordering seam (U17)** — is scoped in the gate report;
 U16 is not the correct smallest-first blocker because U8 and U17 underlay
 it.
 
+**T6.2 landed (2026-08-31): U17 recorded same-owner ordering seam.**
+`primitives/ordering.ts` now classifies a simultaneous tie as determined /
+unresolved / yields a same-owner chooser decision; U4 validates the answer
+as a full permutation of the exact pending set; U13 opens the ONE ordering
+decision window (chooser derived through U2, underivable choosers fail
+closed); the recorded order stamps durable `resolvedOrder` ranks and the
+U17 LIFO pop / boundary projection consume exactly that order on replay —
+zero fresh choice, zero inferred tie-break, zero array-order dependence.
+U17 remains PARTIAL on its turn-boundary consumers (hostile-before-
+beneficial / non-active-owner-first / controller-choice at a real turn-
+boundary call site). Next smallest-first blocker: the U17 turn-boundary
+consumers, then U16 raw-field classification/migration.
+
 **T6.1 scope note (per the T6.1 §3 split mandate).** U8 (temporal
 consolidation) and U17 (simultaneous-order arbitration / U4-U13 decision
 recording) were deliberately split: they are independent seams with no real
-implementation dependency. T6.1 did U8 only; U17 is T6.2.
+implementation dependency. T6.1 did U8 only; T6.2 landed the U17
+recorded-decision seam.
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

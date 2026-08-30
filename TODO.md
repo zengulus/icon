@@ -657,6 +657,75 @@ assumption here, document the evidence and update this list before proceeding.
   ability-use-choices fold, the U4 `choose` flow node, and the remaining
   delayed-lifecycle consumers (Polaris/Carnevale) are still staged.
 
+- **T6.2 — U17 recorded same-owner ordering — LANDED (2026-08-31).**
+  Closed the U17 gap where multiple effects owned by the same character
+  resolve at the same time and ICON grants that character the right to
+  choose their order: the engine now routes that ordering through the
+  existing U4 Choice + U13 Decision Window machinery and records the
+  selected order durably, instead of failing closed or inventing a
+  deterministic order. Full suite green (1771 tests), census
+  byte-stable at 427 (no source-unit promotion), all audits green.
+  1. **U17 (`primitives/ordering.ts`) stays the ONE ordering
+     authority.** New `orderingIdentity` (canonical per-candidate key:
+     effect instance id, else source id + owner id), `sameOwnerOrderingDecision`
+     (     the minimal pending-candidate set whose ordering is a same-owner
+     controller decision; `ownerId` derived from the U2 role frame —
+     never ad-hoc actor-id assumptions) and the problems it reports
+     (`not-a-tie`, `missing-candidate-owner`, `cross-owner` — unknown
+     ownership never silently means same-owner);
+     the raw ordering policy vocabulary (`OrderingPolicy`/`applyOrdering`/
+     `policyYieldsChoice`) is untouched, and every existing source-defined
+     policy (source-order, stack, turn-order, hostile-before-beneficial,
+     non-active-owner-first) still resolves automatically without opening
+     a choice window.
+  2. **U4 (`kernels/choice.ts` + `primitives/types.ts`) owns decision
+     legality.** `RuleChoice` gains the typed `ordering` kind with
+     `candidates`/`ownerId`; `resolveChoice` validates it as a strict
+     permutation of the exact pending candidate set — missing, duplicate,
+     unknown, extra, or non-permutation answers reject with typed codes
+     (`choice.ordering.required` / `.duplicate` / `.unknown` /
+     `.incomplete` / `.extra`); the responder is authorized through the
+     existing `choiceEntitledPlayer` U2 role machinery (declared chooser,
+     else controller, else source).
+  3. **U13 (`kernels/decision-window.ts`) owns the window.** One generic
+     `resolvedOrder` field on `DecisionWindowRecord` (no quasi-window
+     `pendingOrdering` record); `openOrderingDecisionWindow`
+     (`openedBy`/`triggeredAt` stamped like every other window),
+     `recordOrderingDecision` (validates via `resolveChoice`, stamps the
+     window, and drains it — the answer is consumed exactly once, then
+     the window closes), `pendingSameOwnerOrdering` (the live seam the
+     reducer consults), and `consumeOrderingDecision` (turns the
+     recorded order into a concrete total order of the pending set with
+     NO re-derivation); ordering windows ride the existing LIFO
+     stack/turn-order discipline (a same-owner decision never bypasses
+     an earlier pending interrupt window).
+  4. **`encounter.ts` wires the seam.** The reactive-trigger fold
+     detects the same-owner simultaneous set (all pending effects of
+     one owner, no unique source-defined order), opens the ordering
+     window instead of failing closed, and the `ANSWER_DECISION_WINDOW`
+     boundary stamps `resolvedOrder` durably (schema 10). While the
+     window is pending, dependent resolution suspends at the decision
+     point (nothing partially executes); after answering, each pending
+     effect resolves exactly once; re-answering a closed window rejects;
+     replay consumes the recorded order with zero fresh choice and zero
+     dependence on array/registration order.
+  5. **Room boundary (`src/rules/vtt-room.ts` + `server/rooms.ts`).**
+     The `DECISION_ANSWERED` event joined the room validator's
+     `eventTypes` (a genuine pre-existing gap: T5c choice answers emit
+     it durably but no room-level test exercised that path, so such
+     checkpoints were invalid); `resolvedOrder` rides the canonical
+     window projection; the server answers authorize the responder
+     through the same U2 chooser derivation (wrong player rejects).
+  Acceptance: `t6-2-u17-recorded-ordering.test.ts` (30 cases: positive
+  A→B/B→A distinct outcomes, choice validation incl. responder + partial /
+  duplicate / unknown / extra permutation rejects, boundaries 12–15 incl.
+  3+ candidate full-permutation, suspension 16–19, replay 20–22 with
+  permuted-input invariance) + a room-level responder-authorization test.
+  Residual (honest, staged — NOT claimed by T6.2): turn-boundary ordering
+  consumers (hostile-before-beneficial / non-active-owner-first) still
+  route through the scheduler/lifecycle authority rather than the recorded
+  U13 seam; U17 remains PARTIAL with exactly that residual.
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

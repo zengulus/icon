@@ -487,7 +487,19 @@ covered by its declared authority, is UNRESOLVED and the command/window
 boundary rejects; an unresolved ordering is a rejection, never the
 caller's supplied array order.
 `controller-choice` is never resolved by `applyOrdering` (it returns
-`yields-choice` carrying the typed choice for U4 routing). Wired consumers: `orderedSelectedSteps` (the engine's
+`yields-choice` carrying the typed choice for U4 routing). **T6.2 (2026-08-31)
+landed the recorded same-owner ordering decision** (p.107 "If a character
+owns multiple effects, and there's ambiguity in the order in which they
+trigger, they can determine the order"): `sameOwnerOrderingDecision`
+classifies a same-instant tie and builds the typed U4 `ordering` choice
+over the EXACT candidate set; `resolveChoice` validates the answer as a
+full permutation; U13 opens the ONE ordering decision window
+(`openOrderingDecisionWindow` — chooser derived through U2, underivable
+choosers fail closed, cross-owner groups never open a same-owner window);
+the recorded order rides the `DECISION_ANSWERED` event, stamps durable
+`resolvedOrder` ranks, and the LIFO pop / boundary projection consume
+exactly that order on replay — never an invented tie-break and never the
+incidental registration `order`. Wired consumers: `orderedSelectedSteps` (the engine's
 ability-step order, p.85/p.107 §4) applies the `source-order` policy;
 `decideDamageWindow` applies it to `DAMAGE_WINDOW_RECIPES`
 (`kernels/decision-window.ts`, U13); the decision-window LIFO pop
@@ -497,7 +509,9 @@ turn-order rule. The lifecycle registry order remains the recorded boundary
 contract and the scheduler's turn election stays the scheduler authority
 (both documented U17 consumers); hostile-before-beneficial /
 non-active-owner-first land their turn-boundary consumers in T6. Tests:
-`t3-ordering.test.ts`, `t5c-u13-decision-window.test.ts`.
+`t3-ordering.test.ts`, `t5c-u13-decision-window.test.ts`,
+`t6-2-u17-recorded-ordering.test.ts`, `rooms.test.ts` (responder
+authorization).
 
 ### Command/event purity — AUTHORITATIVE + REPLAY-TESTED
 

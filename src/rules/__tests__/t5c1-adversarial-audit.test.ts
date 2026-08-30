@@ -186,15 +186,38 @@ describe('T5c.1 H1 — trigger identity is the exact causal instance', () => {
 });
 
 describe('T5c.1 H4 — ordering: one authority, no invented tie-breaks', () => {
-  it('permuting simultaneous windows of DIFFERENT kinds cannot invoke a lexicographic kind order', () => {
+  it('same-owner simultaneous windows are a RECORDED ordering decision, never a lexicographic kind order (T6.2)', () => {
     const { state, hero } = t5Encounter({});
-    // Both owned by the SAME side (the hero): with different trigger kinds at
-    // the same instant there is no source-defined total order (the owner's
-    // ordering right per p.107) — the projection must reject, never sort by
-    // kind name.
+    // Both owned by the SAME character (the hero): with different trigger
+    // kinds at the same instant there is no source-defined total order, and
+    // p.107 grants the OWNER the ordering choice — a recorded decision, never
+    // a kind-name sort. Without a recorded order the projection rejects with
+    // the decision-required error (the seam is `openOrderingDecisionWindow`).
     const heroWindow = { id: 'h', kind: 'when-damaged' as const, actorId: hero.id, triggeredAt: 7, order: 0 } as DecisionWindowRecord;
     const saveWindow = { id: 's', kind: 'save-rolled' as const, actorId: hero.id, triggeredAt: 7, order: 1 } as DecisionWindowRecord;
-    expect(() => orderDecisionWindows(state, hero.id, [saveWindow, heroWindow])).toThrow(/ordering-unrepresentable/);
+    expect(() => orderDecisionWindows(state, hero.id, [saveWindow, heroWindow])).toThrow(/decision-required/);
+    // With a RECORDED order the projection consumes exactly it.
+    const orderedWindows = orderDecisionWindows(state, hero.id, [
+      { ...saveWindow, resolvedOrder: 0 },
+      { ...heroWindow, resolvedOrder: 1 },
+    ]);
+    expect(orderedWindows.map((window) => window.id)).toEqual(['s', 'h']);
+    const reversed = orderDecisionWindows(state, hero.id, [
+      { ...saveWindow, resolvedOrder: 1 },
+      { ...heroWindow, resolvedOrder: 0 },
+    ]);
+    expect(reversed.map((window) => window.id)).toEqual(['h', 's']);
+  });
+
+  it('same-instant same-side windows with DIFFERENT owners have no single chooser and stay unrepresentable', () => {
+    const { state, hero, ally } = t5Encounter({ ally: { x: 3, y: 1 } });
+    // Same side, same instant, DIFFERENT owners (the hero and an ally): no
+    // single character owns both effects, so p.107 grants nobody the choice;
+    // the projection must reject — never a kind-name sort, never a same-owner
+    // decision.
+    const heroWindow = { id: 'h', kind: 'when-damaged' as const, actorId: hero.id, triggeredAt: 7, order: 0 } as DecisionWindowRecord;
+    const allyWindow = { id: 'a', kind: 'save-rolled' as const, actorId: ally!.id, triggeredAt: 7, order: 1 } as DecisionWindowRecord;
+    expect(() => orderDecisionWindows(state, hero.id, [allyWindow, heroWindow])).toThrow(/ordering-unrepresentable/);
   });
 
   it('same-instant same-owner ambiguity fails closed instead of using registration order', () => {

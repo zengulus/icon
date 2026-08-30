@@ -610,7 +610,7 @@ export function executeFlow(
 export function executeFlowResume(
   resume: { remaining: FlowNode[]; binder: Binder },
   context: RuleExecutionContext,
-  options: { decision?: { key: string; value: string | number | boolean }; preEmitted?: readonly RuleMutation[] } = {},
+  options: { decision?: { key: string; value: string | number | boolean | readonly string[] }; preEmitted?: readonly RuleMutation[] } = {},
 ): FlowExecution {
   // The recorded U4 decision rides the input surface under the choice key
   // (the same seam every other recorded choice consumes — booleans for
@@ -621,7 +621,14 @@ export function executeFlowResume(
     const value = options.decision.value;
     if (typeof value === 'boolean') input = { ...input, booleans: { ...(input.booleans ?? {}), [key]: value } };
     else if (typeof value === 'number') input = { ...input, numbers: { ...(input.numbers ?? {}), [key]: value } };
-    else input = { ...input, options: { ...(input.options ?? {}), [key]: value } };
+    else if (typeof value === 'string') input = { ...input, options: { ...(input.options ?? {}), [key]: value } };
+    else {
+      // T6.2: a recorded ORDERING decision (the ordered candidate id list)
+      // never resumes a suspended flow — an ordering window gates the U17
+      // pop/projection, not a flow. Reject rather than misroute the ids into
+      // a scalar bucket.
+      throw new Error('flow.resume: an ordering decision cannot resume a suspended flow.');
+    }
   }
   // Re-run the remaining nodes through the SAME flow authority against
   // THEN-CURRENT state, with the recorded binder restored and the recorded

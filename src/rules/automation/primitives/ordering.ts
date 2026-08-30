@@ -39,6 +39,12 @@ export interface OrderingCandidate {
   /** Whether this candidate IS the active owner's (the
    * non-active-owner-first read). */
   isActiveOwner?: boolean;
+  /** The actor who OWNS the effect/candidate (p.107 same-owner ordering: "If
+   * a character owns multiple effects, and there's ambiguity in the order in
+   * which they trigger, they can determine the order"). The same-owner read
+   * (T6.2) requires EVERY candidate to derive an owner — unknown ownership
+   * must never be assumed to be the same owner. */
+  ownerId?: string;
 }
 
 /** The context an ordering policy reads: the active actor (whose turn/state
@@ -108,6 +114,64 @@ export function policyYieldsChoice(policy: OrderingPolicy): RuleChoice | null {
   return policy.kind === 'controller-choice' ? policy.choice : null;
 }
 
+/** T6.2 — the same-owner ordering decision (p.107): "If a character owns
+ * multiple effects, and there's ambiguity in the order in which they
+ * trigger, they can determine the order." When the ordering authority
+ * cannot produce a unique source-defined order AND the tie is specifically
+ * one where a SINGLE character owns every tied candidate, the source grants
+ * THAT character the right to choose the order — a RECORDED U4 decision,
+ * never an invented deterministic tie-break. This is the U17 answer to
+ * "whether the source semantics yield a chooser decision":
+ *
+ *   - every candidate must derive an owner (`missing-candidate-owner` —
+ *     unknown ownership never silently means same-owner);
+ *   - all owners must be the SAME character (`cross-owner` — a tie across
+ *     different characters has no single entitled chooser and stays
+ *     unresolved, never a same-owner choice);
+ *   - a single owner yields the typed U4 ORDERING choice over the EXACT
+ *     candidate set, carrying the owner's chooser role (`chooser: owner`)
+ *     so the caller derives the entitled chooser through the existing
+ *     role/choice authority (U2 `deriveRoles`/`resolveRoleSelector`, U4
+ *     `choiceEntitledPlayer`) rather than an ad-hoc actor-id assumption.
+ *
+ * Pure and replay-deterministic: a function of the candidates alone. */
+export type SameOwnerOrderingDecision =
+  | { kind: 'choice'; ownerId: string; choice: RuleChoice }
+  | { kind: 'unresolved'; problem: OrderingProblem };
+
+/** The same-owner ordering decision for a tied candidate set (see
+ * `SameOwnerOrderingDecision`). The returned choice is `kind: 'ordering'`
+ * with `candidateIds` = the EXACT pending set — the U4 validator requires a
+ * full permutation, so an answer can never be a plausible-looking subset or
+ * a foreign id list. */
+export function sameOwnerOrderingDecision(
+  candidates: readonly OrderingCandidate[],
+  spec: { key: string; label: string },
+): SameOwnerOrderingDecision {
+  if (candidates.length < 2) return { kind: 'unresolved', problem: 'not-a-tie' };
+  const ownerId = candidates[0]!.ownerId;
+  if (ownerId === undefined) return { kind: 'unresolved', problem: 'missing-candidate-owner' };
+  for (const candidate of candidates) {
+    if (candidate.ownerId === undefined) return { kind: 'unresolved', problem: 'missing-candidate-owner' };
+    if (candidate.ownerId !== ownerId) return { kind: 'unresolved', problem: 'cross-owner' };
+  }
+  return {
+    kind: 'choice',
+    ownerId,
+    choice: {
+      key: spec.key,
+      label: spec.label,
+      kind: 'ordering',
+      required: true,
+      candidateIds: candidates.map((candidate) => candidate.id),
+      // U2 role carriage: the OWNER decides (p.107) — the caller derives the
+      // entitled chooser through the role/choice authority (the owner, or
+      // the owner's recorded controller at the network boundary).
+      chooser: { kind: 'role', role: 'owner' },
+    },
+  };
+}
+
 /** The durable identity of a policy (for ordering records / replay):
  * deterministic, JSON-clean. */
 export function orderingKey(policy: OrderingPolicy): string {
@@ -157,7 +221,19 @@ export type OrderingProblem =
    * (sourceOrder / turnOrder / explicit-list). The policy cannot order what
    * it does not know; the incoming array order is never used as an
    * accidental tie-break. */
-  | 'unknown-candidate';
+  | 'unknown-candidate'
+  /** T6.2 same-owner decision: a candidate carries no derivable owner — the
+   * tie can never be classified as same-owner (unknown ownership must not
+   * silently mean "same owner"). */
+  | 'missing-candidate-owner'
+  /** T6.2 same-owner decision: the tied candidates have DIFFERENT owners —
+   * no single character is entitled to determine their order (p.107 grants
+   * the choice only to the character who owns ALL the effects; a
+   * cross-owner tie has no same-owner chooser and follows no invented
+   * order). */
+  | 'cross-owner'
+  /** T6.2 same-owner decision: fewer than two candidates — nothing to order. */
+  | 'not-a-tie';
 
 /** The result of an ordering application. `ok: true` is the ordered
  * candidates; `ok: false` is the unresolved problem — the caller MUST
