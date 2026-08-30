@@ -1,4 +1,4 @@
-import type { RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
+import type { ArmedContinuation, RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
 import type { Fact } from './automation/primitives/facts.js';
 import type { SaveWindowKind, SaveWindowModifiers } from './automation/primitives/save-window.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
@@ -13,7 +13,7 @@ export const CHARACTER_SCHEMA_VERSION = 5 as const;
 // Schema 6 records ownership for every persisted mechanic produced by
 // automation. Player projections use that provenance to withhold mechanics
 // created by a GM-hidden actor without leaking the source id.
-export const ENCOUNTER_SCHEMA_VERSION = 7 as const;
+export const ENCOUNTER_SCHEMA_VERSION = 8 as const;
 
 export const ACTION_IDS = [
   'sneak',
@@ -601,6 +601,12 @@ export interface EncounterPendingInterrupt {
    * allowlist row). The reducer honors the redirect only when the closing
    * interrupt event carries this exact source id. */
   retargetProgramId?: string;
+  /** U12 representation of the held save (see `heldSave`): the original save
+   * result is an already-determined HELD RESULT — it resumes exactly as
+   * recorded unless an explicitly recorded interrupt reroll replaces it with
+   * a separately recorded result. The window keeps its legacy public shape;
+   * this record is the durable U12 vocabulary riding beside it. */
+  heldResult?: ArmedContinuation;
   /** Present when the window opened on a rolled save (Sucker Punch, p.143: an
    * enemy adjacent to the interrupt user rolled a save). `heldEffects` carries
    * the save's original branch; the interrupt re-rolls it, keeping the second
@@ -659,6 +665,11 @@ export interface EncounterState {
   /** ICON p.107: interrupt windows opened by effects (e.g. damage dealt). They
    * resolve most-recently-triggered first (LIFO) and close at turn end. */
   pendingInterrupts: EncounterPendingInterrupt[];
+  /** U12 durable armed-continuation collection: deferred-rule and held-result
+   * records waiting for their Clock/Fact trigger. Deterministically ordered
+   * (arm order); resume consumes through the U17 ordering identity when one
+   * is declared. Schema-8 field: legacy checkpoints migrate to `[]`. */
+  continuations: ArmedContinuation[];
   revision: number;
   /** The durable, UNBOUNDED monotonic resolution serial — the count of
    * RULE_MUTATIONS_APPLIED events this encounter has recorded, independent of

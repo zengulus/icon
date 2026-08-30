@@ -16,6 +16,7 @@
 import './classes/trait-condition-recipes.js';
 import './jobs/trait-condition-recipes.js';
 import './jobs/lifecycle-recipes.js';
+import './jobs/continuation-resolvers.js';
 import './jobs/attack-modifier-recipes.js';
 import './jobs/ability-use-choice-recipes.js';
 import './jobs/talent-recipes.js';

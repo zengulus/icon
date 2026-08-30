@@ -23,6 +23,7 @@ export * from './transaction.js';
 export * from './ordering.js';
 export * from './provenance.js';
 export * from './facts.js';
+export * from './continuation.js';
 
 export const RULE_PROGRAM_SCHEMA_VERSION = 1 as const;
 

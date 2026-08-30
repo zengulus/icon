@@ -849,73 +849,12 @@ registerLifecycleRecipe({
   },
 });
 
-// --- delayed (after the per-actor turn-flag reset — historical
-// resolveDelayedMarkEffects position) ---
-
-/** ICON p.124 Great Giorgios: when the marked foe's turn ends, its user may
- * rush up to 4 spaces (each strictly closer), then the foe is shoved that many
- * spaces and takes that many + 2 damage. The mark is consumed either way.
- * Runs in the `delayed` phase (after the per-actor turn-flag reset), matching
- * the historical resolveDelayedMarkEffects position: the rush is a fresh
- * ability-move on the *next* turn's clock, so Slashed may trigger again and
- * the flag it sets must survive the boundary. */
-registerLifecycleRecipe({
-  sourceId: 'bastion:great-giorgios',
-  phase: 'delayed',
-  applies: (actor) => actor.marks.some((mark) => mark.markId === 'great-giorgios'),
-  resolve: (state, actor) => {
-    const pending = actor.marks.filter((mark) => mark.markId === 'great-giorgios');
-    if (pending.length === 0) return;
-    actor.marks = actor.marks.filter((mark) => mark.markId !== 'great-giorgios');
-    const distanceTo = (position: Position) => Math.max(Math.abs(position.x - actor.position.x), Math.abs(position.y - actor.position.y));
-    const blockedCell = (position: Position, moverId: string) => position.x < 0 || position.y < 0
-      || position.x >= state.grid.width || position.y >= state.grid.height
-      || Object.values(state.actors).some((candidate) => candidate.id !== moverId && candidate.onBattlefield && !candidate.defeated && samePosition(candidate.position, position))
-      || state.grid.terrain.some((cell) => samePosition(cell.position, position) && cell.type === 'impassable');
-    for (const mark of pending) {
-      const owner = mark.ownerId ? state.actors[mark.ownerId] : undefined;
-      if (!owner || owner.defeated || !owner.onBattlefield) continue;
-      const startPosition = { ...owner.position };
-      let position = { ...owner.position };
-      let steps = 0;
-      while (steps < 4) {
-        const dx = actor.position.x - position.x;
-        const dy = actor.position.y - position.y;
-        const next = Math.abs(dx) >= Math.abs(dy)
-          ? { x: position.x + Math.sign(dx), y: position.y }
-          : { x: position.x, y: position.y + Math.sign(dy) };
-        if (distanceTo(next) >= distanceTo(position)) break;
-        if (blockedCell(next, owner.id)) break;
-        position = next;
-        steps += 1;
-      }
-      applyLifecycleAbilityMove(state, owner, 'stalwart:great-giorgios', 'rush', position);
-      const rushed = distance(startPosition, owner.position);
-      if (owner.defeated || distanceTo(owner.position) > 1 || actor.defeated) continue;
-      const dx = actor.position.x - owner.position.x;
-      const dy = actor.position.y - owner.position.y;
-      const direction = Math.abs(dx) >= Math.abs(dy) ? { x: Math.sign(dx) || 0, y: 0 } : { x: 0, y: Math.sign(dy) || 0 };
-      let shoved = 0;
-      while (shoved < rushed) {
-        const next = { x: actor.position.x + direction.x, y: actor.position.y + direction.y };
-        if (blockedCell(next, actor.id)) break;
-        actor.position = next;
-        shoved += 1;
-      }
-      const damage = rushed + 2;
-      determineAndApplyEncounterDamage(state, {
-        targetId: actor.id,
-        sourceActorId: owner.id,
-        sourceRuleId: 'stalwart:great-giorgios',
-        amount: damage,
-        damageType: 'normal',
-        instance: 1,
-        delivery: 'effect',
-        ignoreCover: true,
-      });
-    }
-  },
-});
+// --- delayed phase ---
+// The Great Giorgios delayed mark effect moved to the U12 armed-continuation
+// authority (content/jobs/continuation-resolvers.ts): the reducer arms the
+// deferred-rule continuation when the mark is applied, and the deferred-rule
+// resolver fires at the marked foe's turn-end against then-current state.
+// The lifecycle registry no longer owns any `delayed`-phase recipe.
 
 // --- turn-start (in boundary order) ---
 

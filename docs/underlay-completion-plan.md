@@ -1484,51 +1484,92 @@ the chosen space" (captured position); Sucker Punch holds a determined save
 for the reroll window (p.143 — HELD RESULT prior art in
 `rerollSaveMutations`).
 
-**Current state.** `SKELETON`. `RuleContinuationState` (executedStepIds/
-derivedTriggers) covers monotonic same-ability reactive continuation only;
-lifecycle `delayed` phase handles a few delayed effects; save records carry
-a continuation branch AST; trigger-window holds damage. No generic
-armed-continuation record; no LIVE/CAPTURED refs; no expiry/cancellation;
-no deferred-rule-vs-held-result distinction (the terrain retraction
-incident `554d8ca` is the recorded lesson).
+**Current state.** `PARTIAL` — the CORE landed (T5b, 2026-08-30).
+`primitives/continuation.ts` (barrel re-exported) owns the typed
+`ArmedContinuation` record and the pure, replay-safe operations:
+`armContinuation`, `continuationDue`/`resumeContinuation` (the resume gate),
+`clockObservationForBoundary`, `continuationExpired`/`continuationOrderKey`,
+and the `heldSaveContinuation`/`heldDamageContinuation` factories. The
+record carries the explicit **deferred-rule vs held-result** payload
+discriminant, U1 refs with LIVE/CAPTURED semantics (captured kinds are
+self-describing literals), a captured-value map, the U2 owner role, a
+U8 Clock / U10 Fact trigger spec (with the epoch recorded at arm time for
+relative clocks), a U8 expiry scope, and the U17 ordering identity.
+`EncounterState.continuations` (schema 8, migrated to `[]`) is the durable
+collection; the reducer is the SINGLE arming point (a mark application arms
+its registered continuation; a mark removal by any path cancels it).
+`kernels/continuation-runtime.ts` owns the deferred-rule EXECUTION seam:
+content rows register resolvers against a program id and
+`resumeDueContinuations` fires due continuations at the boundary through the
+shared mutation authority. Wired migration: Great Giorgios (p.124) moved
+from a `delayed`-phase lifecycle recipe to an armed continuation — the mark
+arms it, the deferred-rule resolver fires at the marked foe's turn-end
+against THEN-CURRENT state (the owner is a LIVE re-resolution; the mark id
+is the CAPTURED value), and the rush/shove/damage apply through
+`applyRuleMutations`. The save-rolled window (Sucker Punch, p.143) now also
+carries the held save as a U12 `held-result` continuation (`heldResult`)
+beside its legacy public shape.
+
+Documented boundaries: `RuleContinuationState` (executedStepIds/
+derivedTriggers) remains the reactive same-ability fold's ledger — the two
+records are distinct authorities; the other pending-interrupt specialists
+(trigger-window held damage, held effects, retarget) keep their shapes —
+U13 unifies the windows; the held-damage U12 factory exists but no window
+carries it yet (U13 work); `rerollSaveMutations` remains the command-layer
+reroll path (a reroll is a SEPARATELY recorded result caused by the
+interrupt, never a recomputation of the held result).
 
 **Locations partially owning/duplicating.** `RuleContinuationState`
-(`primitives/types.ts`, `src/rules/encounter.ts:1106-1154`); lifecycle
-`delayed` phase (`kernels/lifecycle.ts`, `content/jobs/lifecycle-recipes.ts`);
-save branch (`primitives/save-window.ts`); held damage (`encounter-adapter.ts`);
-per-source delayed logic in resolvers (Polaris meteor, Carnevale,
-end-of-turn effects).
+(`primitives/types.ts`, `src/rules/encounter.ts`) — reactive fold ledger,
+NOT the armed record; lifecycle `delayed` phase (`kernels/lifecycle.ts`)
+still runs (no `delayed` recipes remain — the phase now feeds
+`resumeDueContinuations`); save branch (`primitives/save-window.ts`) — the
+branch AST stays, the held-result continuation rides the window;
+held damage (`encounter-adapter.ts`) — represented through the U12
+factory but not yet carried by windows; per-source delayed logic in
+resolvers (Polaris meteor, Carnevale, end-of-turn effects) — REMAINS.
 
-**Intended authority.** `primitives/continuation.ts` (barrel re-exported):
-`ArmedContinuation` record (program/action/step refs, roles, trigger
-Clock/Fact spec, refs with LIVE/CAPTURED, captured values, expiry/
-cancellation, ordering identity); `armContinuation` / `resumeContinuation`
-(replay-exact). Dependencies: U1, U2, U8, U10, U17. Consumed by U11
-(suspend/continue), U13 (windows hold/resume continuations), delayed/
-terrain/entity lifecycle.
+**Intended authority.** `primitives/continuation.ts` (barrel re-exported)
++ `kernels/continuation-runtime.ts`: `ArmedContinuation` record
+(program/action/step refs, roles, trigger Clock/Fact spec, refs with
+LIVE/CAPTURED, captured values, expiry/cancellation, ordering identity);
+`armContinuation` / `resumeContinuation` (replay-exact). Dependencies: U1,
+U2, U8, U10, U17. Consumed by U11 (suspend/continue), U13 (windows
+hold/resume continuations), delayed/terrain/entity lifecycle.
 
 **Typed vocabulary.** `ArmedContinuation`; deferred-rule vs held-result
 discriminant; captured-value map; expiry/cancellation spec; LIVE/CAPTURED
-refs (U1) inside the record; continuation storage on encounter state
-(currently `RuleContinuationState` on events — grows into the durable
-record).
+refs (U1) inside the record; `EncounterState.continuations` (schema 8).
+`RuleContinuationState` on events stays the reactive fold's ledger.
 
 **Replay semantics.** Replay resumes the record exactly; captured values
 are literals; live refs re-resolve against then-current state; never
 re-place A with B (held-result fixture from the terrain retraction lesson).
+The resume gate is pure — no RNG, no decisions, no mutable-availability
+re-checks; a due deferred rule resolves through the same `applyRuleMutations`
+reducer path the event itself used.
 
-**Acceptance tests.** Positive: deferred rule (delay resolves at slow-turn
-start, then-current state); held result (determined save held through the
-reroll window, same result if the window closes without action); captured
-position explodes at the original cell after movement. Negative: expired/
-cancelled continuation never resumes. Boundary: nested continuations;
-continuation whose trigger fact never arrives (drains). Replay: a delayed
-terrain + end-of-turn explosion + Sucker Punch reroll replay byte-identical.
+**Acceptance tests.** LANDED (2026-08-30, `t5b-u12-continuation.test.ts`,
+10 adversarial cases): deferred rule resolves against THEN-CURRENT state
+(the Great Giorgios rush reads the owner's post-move position — the arming-
+position outcome differs observably); captured value stays captured (a
+captured landing survives the actor moving elsewhere); live reference stays
+live (a referenced actor resolves through current state); held result is
+immutable (a determined save survives suspension and resumes byte-for-byte;
+Sucker Punch reroll is a separately recorded result that REPLACES the held
+one, closing/no-op preserves the original); held damage represented through
+the held-result vocabulary; a cancelled continuation never resumes; an
+expired continuation never resumes; a missing trigger fact does not fire;
+multiple continuations use their U17 ordering identity (the adversarial
+array order differs from the ordering identity); full Great Giorgios flow
+replays byte-identical with zero new decisions/RNG.
 
-**Consumers to migrate.** Lifecycle `delayed` recipes → armed
-continuations; save-window branch AST → continuation records; held damage →
-held-result continuations; resolver end-of-turn effects (Polaris/Carnevale)
-→ armed continuations with Clock triggers.
+**Consumers to migrate (REMAINS).** Lifecycle `delayed` recipes → armed
+continuations (DONE for Great Giorgios, the only one); save-window branch
+AST → continuation records (the held-result record now rides the window;
+full branch migration is U13); held damage → held-result continuations
+(factory landed, windows not yet carrying it — U13); resolver end-of-turn
+effects (Polaris/Carnevale) → armed continuations with Clock triggers.
 
 **Blocker families enabled (information only).** delay-*, delayed-terrain,
 triggered-terrain-creation, zone-regeneration, terrain-move-lifecycle,
@@ -2330,15 +2371,32 @@ tests green; census byte-stable at 427; no source-unit promotion.
 **T5a landed (2026-08-30): U11 core FLOW / SEQUENCE.**
 `kernels/execute-flow.ts` (simulated intermediate state, bind/for-each/
 invoke/emit-fact — the U11 row above states exactly what landed and the
-documented boundaries); `primitives/continuation.ts` (armed records, LIVE/
-CAPTURED, deferred-rule vs held-result, expiry); `kernels/decision-window.ts`
-(one record; trigger-window/save-window/gamble-window/pending-interrupts
-become instantiations); `rerollSaveMutations` → resume path. Exit:
-suspend/resume replay-exact; windows are one record shape; the terrain
-retraction lesson (`554d8ca`) is covered by fixtures. The remaining T5 work
-(U12 armed continuations, then U13 unified windows, then U11's
-`open-window`/`suspend` wired through them) is unchanged; T5a did NOT
-begin it.
+documented boundaries); the remaining T5 work was U12 armed continuations,
+then U13 unified windows, then U11's `open-window`/`suspend` wired through
+them.
+
+**T5b landed (2026-08-30): U12 CONTINUATION / SUSPENSION core.**
+`primitives/continuation.ts` (barrel re-exported) owns the typed
+`ArmedContinuation` record with the explicit deferred-rule vs held-result
+payload discriminant, LIVE/CAPTURED refs (U1), captured values, the U2
+owner role, the U8 Clock / U10 Fact trigger spec, expiry, and the U17
+ordering identity; `armContinuation` / `resumeContinuation` are pure and
+replay-exact. `EncounterState.continuations` (schema 8) is the durable
+collection; the reducer is the single arming point (mark apply arms,
+mark remove cancels). `kernels/continuation-runtime.ts` dispatches
+deferred-rule resolvers (content rows keyed by program id) through the
+shared mutation authority. Wired migrations: Great Giorgios (p.124) is a
+deferred-rule continuation (the marked foe's turn-end resolves the
+rush/shove/damage against THEN-CURRENT state — the old `delayed` lifecycle
+recipe is gone); the save-rolled window (Sucker Punch, p.143) carries the
+held save as a U12 held-result continuation. NOT landed: U13
+`kernels/decision-window.ts` (the window kernels stay separate; they may
+temporarily adapt to U12 payloads), `rerollSaveMutations` → resume path
+(the command-layer reroll remains), U11 `open-window`/`suspend` (their
+dependency order is unchanged: U12 core → U13 → wire them). The terrain
+retraction lesson (`554d8ca`) stays the held-result fixture's recorded
+lesson. Full suite green (1693 tests), census byte-stable at 427, no
+source-unit promotion.
 
 **Phase T6 — Consolidation and gate: U18/U19 decision, migration
 completion, gate.**

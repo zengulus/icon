@@ -703,7 +703,7 @@ function strictEncounter(value: unknown): EncounterState {
   assertExactKeys(encounter, 'room.encounter', [
     'schemaVersion', 'rulesVersion', 'id', 'name', 'phase', 'grid', 'actors',
     'round', 'activeActorId', 'turnPhase', 'eligibleSide', 'lastSide', 'partyResolve', 'entities',
-    'terrainEffects', 'pendingInterrupts', 'revision', 'resolutionSerial', 'eventLog',
+    'terrainEffects', 'pendingInterrupts', 'continuations', 'revision', 'resolutionSerial', 'eventLog',
   ]);
   if (encounter.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) invalidSnapshot('room.encounter.schemaVersion', `must be ${ENCOUNTER_SCHEMA_VERSION}.`);
   if (encounter.rulesVersion !== RULES_VERSION) invalidSnapshot('room.encounter.rulesVersion', `must be ${RULES_VERSION}.`);
@@ -773,7 +773,7 @@ function strictEncounter(value: unknown): EncounterState {
   encounter.pendingInterrupts.forEach((window, index) => {
     const windowPath = `room.encounter.pendingInterrupts[${index}]`;
     const item = strictRecord(window, windowPath);
-    assertExactKeys(item, windowPath, ['id', 'actorId', 'trigger', 'triggeredAt', 'order', 'heldDamage', 'heldEffects', 'retarget', 'heldSave']);
+    assertExactKeys(item, windowPath, ['id', 'actorId', 'trigger', 'triggeredAt', 'order', 'heldDamage', 'heldEffects', 'retarget', 'heldSave', 'heldResult']);
     strictIdentifier(item.id, `${windowPath}.id`);
     const windowActorId = strictIdentifier(item.actorId, `${windowPath}.actorId`);
     if (!actors[windowActorId]) invalidSnapshot(`${windowPath}.actorId`, 'must identify a current actor.');
@@ -839,7 +839,16 @@ function strictEncounter(value: unknown): EncounterState {
         heldSave[branch]!.forEach((effect, effectIndex) => strictJson(effect, `${heldSavePath}.${branch}[${effectIndex}]`));
       }
     }
+    if (item.heldResult !== undefined) {
+      // The U12 held-result continuation is bounded JSON (the same durable
+      // surface as the held save / held effects it rides beside).
+      strictJson(item.heldResult, `${windowPath}.heldResult`);
+    }
   });
+  // U12 (schema 8): the durable armed-continuation collection — bounded JSON
+  // records, deterministic order (arm order).
+  if (!Array.isArray(encounter.continuations) || encounter.continuations.length > 10_000) invalidSnapshot('room.encounter.continuations', 'contains too many armed continuations.');
+  encounter.continuations.forEach((continuation, index) => strictJson(continuation, `room.encounter.continuations[${index}]`));
   const encounterRevision = strictInteger(encounter.revision, 'room.encounter.revision', 0);
   strictInteger(encounter.resolutionSerial, 'room.encounter.resolutionSerial', 0);
   if (!Array.isArray(encounter.eventLog) || encounter.eventLog.length > MAX_ENCOUNTER_EVENT_LOG) invalidSnapshot('room.encounter.eventLog', `contains more than ${MAX_ENCOUNTER_EVENT_LOG} recent events.`);

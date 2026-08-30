@@ -206,6 +206,35 @@ passed the range check because it re-validated against the pre-shove state).
 Full suite green (1683 tests), census byte-stable at 427, no source-unit
 promotion, no unresolved-unit wiring.
 
+**T5b landed (2026-08-30): U12 CONTINUATION / SUSPENSION core.**
+`primitives/continuation.ts` is the single durable authority for
+suspended/future execution: the typed `ArmedContinuation` record with the
+explicit **deferred-rule vs held-result** payload discriminant, U1
+LIVE/CAPTURED refs, captured values, the U2 owner role, the U8 Clock /
+U10 Fact trigger spec, expiry/cancellation, and the U17 ordering identity;
+`armContinuation`/`resumeContinuation` are pure and replay-exact (zero
+fresh decisions/RNG; captured data is literal, LIVE refs re-resolve,
+held results resume exactly as recorded). `EncounterState.continuations`
+(schema 8, migrated to `[]`) is the durable collection; the reducer is the
+single arming point. `kernels/continuation-runtime.ts` owns the
+deferred-rule execution seam (content resolver rows keyed by program id,
+applied through the shared mutation authority). Wired migrations proving
+the abstraction: Great Giorgios (p.124) moved off the `delayed` lifecycle
+recipe onto a deferred-rule continuation that resolves the rush/shove/damage
+at the marked foe's turn-end against THEN-CURRENT state; the save-rolled
+window (Sucker Punch, p.143) carries the held save as a U12 held-result
+continuation beside its legacy shape. Deliberately NOT landed: U13 unified
+decision windows (trigger-window/save-window/gamble-window/pendingInterrupts
+stay separate records; they may temporarily adapt to U12 payloads),
+`rerollSaveMutations` → resume path, and U11 `open-window`/`suspend` (the
+remaining T5 order is U13, then wiring those nodes through it).
+`t5b-u12-continuation.test.ts` (10 adversarial cases: live deferred state,
+captured literals, live refs, held-result immutability + Sucker Punch
+reroll-as-new-result, held damage representation, cancelled/expired never
+resumes, missing trigger fact, U17 ordering identity, byte-identical
+replay). Full suite green (1693 tests), census byte-stable at 427, no
+source-unit promotion, no unresolved-unit wiring.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

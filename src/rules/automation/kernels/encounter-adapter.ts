@@ -11,11 +11,24 @@ import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, t
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, openDamageWindow } from './trigger-window.js';
 import { entityKind, entityKindOf, validateEntityCreation } from './entity-creation.js';
+import { armContinuation, heldSaveContinuation } from '../primitives/continuation.js';
+import { capturedActor } from '../primitives/reference.js';
 import type { RuleActorView, RuleExecutionContext, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
 
 const statusIds = new Set<StatusId>(['slashed', 'blind', 'dazed', 'hatred', 'pacified', 'sealed', 'shattered', 'stunned', 'weakened', 'vulnerable']);
 const samePosition = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
 const clone = <T>(value: T): T => structuredClone(value);
+
+/** Program ids whose applied marks arm a U12 deferred-rule continuation
+ * (content registers through `registerMarkContinuationProgramId`; the
+ * reducer arms at mark-apply). The kernel dispatches on the recorded program
+ * id — never on a source semantic here. */
+const markContinuationProgramIds = new Set<string>();
+/** Register a program id whose source mark applies arm a deferred-rule
+ * continuation (content/jobs/continuation-resolvers.ts). */
+export function registerMarkContinuationProgramId(programId: string): void {
+  markContinuationProgramIds.add(programId);
+}
 
 // ---------------------------------------------------------------------------
 // Content hook registries (content/ registers source-specific behavior into
@@ -334,6 +347,40 @@ export function encounterQueryContext(state: EncounterState, actorId: string, so
  * legacy fallback for mutations (historical events) that carry no stamp. */
 export function generatedId(state: EncounterState, sourceId: string, mutationIndex: number, suffix: string) {
   return `${sourceId}:${state.revision}:${mutationIndex}:${suffix}`;
+}
+
+/** U12: arm a deferred-rule continuation when its source mark is applied by
+ * the reducer — the reducer is the SINGLE arming point (command planning and
+ * event replay both flow through `applyRuleMutation`), so the armed record is
+ * a deterministic projection of the recorded mutation list, never a second
+ * ad-hoc path. The continuation's trigger is the marked target's turn-end; at
+ * resume time the content resolver row re-resolves LIVE refs (the owner) and
+ * consumes the CAPTURED mark id against THEN-CURRENT state. */
+export function armMarkContinuation(
+  state: EncounterState,
+  mutation: Extract<RuleMutation, { kind: 'mark' }>,
+  markId: string,
+  ownerActorId: string,
+  targetId: string,
+  programId: string,
+  instanceId?: string,
+): void {
+  if (state.continuations.some((candidate) => candidate.id === `cont:${programId}:${instanceId ?? markId}:${targetId}`)) return;
+  state.continuations.push(armContinuation({
+    id: `cont:${programId}:${instanceId ?? markId}:${targetId}`,
+    programId,
+    ownerRef: capturedActor(ownerActorId),
+    // The trigger: the marked target's turn-end (ICON p.87 delayed phase —
+    // Delay resolves at the start of the slow turn; this mark resolves when
+    // the marked character ends its turn).
+    trigger: {
+      kind: 'clock',
+      clock: { kind: 'boundary', boundary: 'turn', edge: 'end', subject: capturedActor(targetId) },
+    },
+    refs: [capturedActor(ownerActorId), capturedActor(targetId)],
+    capturedValues: { markId },
+    payload: { kind: 'deferred-rule' },
+  }));
 }
 
 function removeOwnedEphemera(state: EncounterState, ownerId: string) {
@@ -981,12 +1028,32 @@ export function saveRerollWindow(
       // The save's branch runs from the save record to the next save record.
       let end = index + 1;
       while (end < mutations.length && mutations[end]!.kind !== 'save') end += 1;
+      const windowId = `save-rolled:${saver.id}:${state.revision}:${state.pendingInterrupts.length}`;
       return {
-        id: `save-rolled:${saver.id}:${state.revision}:${state.pendingInterrupts.length}`,
+        id: windowId,
         actorId: candidate.id,
         trigger: 'save-rolled',
         triggeredAt: state.revision,
         order: state.pendingInterrupts.length,
+        // U12 held-result representation: the original save result already
+        // exists and waits for the reroll window to close — it resumes
+        // EXACTLY as recorded; a reroll is a separately recorded result.
+        // The window keeps its legacy `heldSave` shape for the command layer.
+        heldResult: heldSaveContinuation({
+          id: `held:${windowId}`,
+          sourceId: mutation.sourceId,
+          ownerActorId: candidate.id,
+          targetId: saver.id,
+          boon: mutation.branch.boon,
+          threshold: mutation.branch.threshold,
+          roll: mutation.roll,
+          success: mutation.success,
+          windowKind: mutation.windowKind,
+          ...(mutation.windowId ? { windowId: mutation.windowId } : {}),
+          ...(mutation.statusId ? { statusId: mutation.statusId } : {}),
+          onSuccess: mutation.branch.onSuccess,
+          onFailure: mutation.branch.onFailure,
+        }),
         heldSave: {
           targetId: saver.id,
           // The evaluated modifier (branch.boon), so the command layer
@@ -1495,6 +1562,12 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
         // without the stamp keep the historical markId-scoped removal.
         if (mutation.instanceId !== undefined) actor.marks = actor.marks.filter(({ id }) => id !== mutation.instanceId);
         else actor.marks = actor.marks.filter(({ markId }) => markId !== mutation.markId);
+        // U12: a mark removed by any path CANCELS the deferred continuation
+        // armed for it (expired/cancelled continuations never resume). The
+        // cancellation key is the continuation's deterministic id — the same
+        // key the mark-apply arming minted.
+        const continuationKey = `cont:${mutation.sourceId}:${mutation.instanceId ?? mutation.markId}:${mutation.actorId}`;
+        state.continuations = state.continuations.filter((candidate) => candidate.id !== continuationKey);
       } else {
         // Replacement rule (ICON: a source places its own mark on a target —
         // the previous instance of THAT owner is replaced, other owners' marks
@@ -1504,6 +1577,14 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
         // Reviewed Rot mark state (noDefiance suppression, REGENERATE ally
         // regeneration) is interpreted by the closed source-ID projection in
         // passive-projection.ts; arbitrary mark state is never mechanical.
+        // U12: marks whose content registers a deferred-rule continuation are
+        // armed here by the REDUCER (the single arming point — replay arms
+        // the identical record from the identical mutation). Registered
+        // continuations are keyed by program id in content, never branched on
+        // in this module.
+        if (markContinuationProgramIds.has(mutation.sourceId)) {
+          armMarkContinuation(state, mutation, mutation.markId, mutation.ownerId, mutation.actorId, mutation.sourceId, mutation.instanceId);
+        }
       }
       break;
     }

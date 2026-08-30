@@ -16,6 +16,9 @@ import { decideDamageWindow } from './automation/kernels/trigger-window.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
 import { bonusDamageDiceForUse } from './automation/kernels/bonus-damage.js';
 import { applyCombatStartTraitEffects, planTurnStartParticipants, planTurnTransition, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
+import { resumeDueContinuations } from './automation/kernels/continuation-runtime.js';
+import { clockObservationForBoundary } from './automation/primitives/continuation.js';
+import { capturedActor } from './automation/primitives/reference.js';
 import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
@@ -169,6 +172,9 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
     entities: {},
     terrainEffects: [],
     pendingInterrupts: [],
+    // U12: the durable armed-continuation collection (deferred rules and held
+    // results awaiting their Clock/Fact trigger).
+    continuations: [],
     revision: 0,
     resolutionSerial: 0,
     eventLog: [],
@@ -178,7 +184,7 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
 export function migrateEncounter(input: unknown): EncounterState {
   if (!input || typeof input !== 'object') throw new RuleViolation('encounter.invalid', 'Encounter data must be an object.');
   const candidate = input as Omit<Partial<EncounterState>, 'schemaVersion'> & { schemaVersion?: number };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== 7 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
     throw new RuleViolation('encounter.schema', `Unsupported encounter schema version: ${String(candidate.schemaVersion)}`);
   }
   // There is no cross-rules-version converter in this release. Treat a
@@ -292,6 +298,11 @@ export function migrateEncounter(input: unknown): EncounterState {
     // durable current-state shape is already schema 7; this boundary
     // upgrades the audit/display event history to the same representation.
     pendingInterrupts: normalizeInterruptWindows(clone(candidate.pendingInterrupts ?? [])),
+    // U12 (schema 8): the durable armed-continuation collection defaults to
+    // empty for legacy checkpoints — a pre-U12 state has no armed
+    // continuations by definition (the Great Giorgios delayed recipe used to
+    // live in the lifecycle registry, never in durable state).
+    continuations: Array.isArray(candidate.continuations) ? clone(candidate.continuations) : [],
     // The durable resolution serial survives save/load: keep a present valid
     // value; derive the historical count only for legacy checkpoints.
     resolutionSerial: typeof candidate.resolutionSerial === 'number' && Number.isSafeInteger(candidate.resolutionSerial) && candidate.resolutionSerial >= 0
@@ -2675,6 +2686,13 @@ function applyTurnTransition(
   // after the per-actor flag reset so its fresh ability-moves (Great Giorgios
   // rush) are on the next turn's clock and their triggers survive the boundary.
   runLifecyclePhase(state, actor, 'delayed', intent);
+  // U12: deferred-rule continuations whose Clock trigger is THIS actor's
+  // turn-end resolve now, against then-current state. The observation is the
+  // deterministic turn-end boundary; the resume gate is pure (no RNG, no
+  // decisions — replay resumes the identical record from the identical
+  // boundary). Armed continuations without a due trigger stay pending and
+  // drain deterministically at the boundary without firing.
+  resumeDueContinuations(state, clockObservationForBoundary({ kind: 'boundary', boundary: 'turn', edge: 'end', subject: capturedActor(actor.id) }));
   state.round = event.round;
   // F6 round-start phase: every living actor's round-start recipes run (True
   // Horn sturdy, round-5 rages, mantra die tick) with the new round number
