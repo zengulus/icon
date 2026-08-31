@@ -1,7 +1,7 @@
 # Rules & content coverage
 
 What "coverage" means here, and the verified numbers per content family.
-Counts below were measured 2026-08-25 from `npm run audit:automation`,
+Counts below were reconciled 2026-09-01 from `npm run audit:automation`,
 `npm run audit:class-job-census`, and the catalog; anything not verifiable is
 marked **NEEDS RECOUNT** rather than copied from older documents.
 
@@ -30,10 +30,10 @@ separately and are not counted as VM coverage.
 | Measure | Count |
 | --- | ---: |
 | Traceable source programs | 3,275 |
-| Traceable clauses | 4,700 |
-| Programs with no unsupported clause | 471 |
-| Clauses with no unsupported text | 1,611 |
-| Explicitly unsupported clauses | 3,089 |
+| Traceable clauses | 4,701 |
+| Programs with no unsupported clause | 467 |
+| Clauses with no unsupported text | 1,604 |
+| Explicitly unsupported clauses | 3,097 |
 
 `audit --strict` intentionally fails while any clause remains unresolved; it
 is a release gate, not a CI threshold. A compiler result is never an
@@ -50,11 +50,11 @@ the family's *typical* ceiling.
 | Core tactical rules | all | all | reducer-backed; 70 units without full VM programs | 70 | 5–7 for wired paths; remainder table-facing/pending |
 | Bonds / powers | 12 / 120 | ✔ | rolls only | — | 5–6 deterministic parts; outcomes 3 (table-facing) |
 | Jobs | 16 | ✔ | — | — | n/a (container) |
-| Job abilities | 144 | ✔ | **144** | 0 | 7 (source+replay fixtures per suite) |
+| Job abilities | 144 | ✔ | **143** | 1 | 7 for the wired rows; one row remains explicitly unsupported |
 | Class traits | NEEDS RECOUNT | ✔ | Mendicant slice (Diaga, Bless, Succor) + Vagabond Finesse | 6 | mixed 3–6 |
 | Job traits | 65 | ✔ | 27 | 38 | wired rows 6–7; rest 3 with kernel need recorded |
-| Talents | 288 | ✔ | 56 | 232 | wired 6–7; rest 3 |
-| Masteries | 144 (assumed; NEEDS RECOUNT) | ✔ (validated surface) | 4 (3 via the K-P5 modifier fold + 1 program-level RAGING DEMON, 2026-08-27) | 132 | wired 6–7; rest 3 pending further fold families |
+| Talents | 288 | ✔ | 50 | 238 | wired 6–7; rest 3 |
+| Masteries | 144 | ✔ (validated surface) | 15 | 129 | wired 6–7; rest 3 pending further fold families |
 | Limit Breaks | 16 | ✔ (costs pay) | 0 effect bodies | 16 | 3–4 (payment) |
 | Relics | 40 (+120 ranks, 40 aspects) | ✔ | 0 effects | 160 | 2–3; character-engine infusion/refocus transitions DONE |
 | Foe profiles | 449 | ✔ | construction works | — | 5 for construction |
@@ -90,8 +90,8 @@ the family's *typical* ceiling.
 The machine-generated dependency graph lives in
 [`blocker-census.md`](blocker-census.md) /
 [`blocker-census.json`](blocker-census.json) (**generated** by
-`npm run audit:class-job-census`; never hand-edit). Current shape: baseline 416 unresolved Class/Job units
-(6 class-trait, 38 job-trait, 227 talent, 129 mastery, 16 limit-break); the
+`npm run audit:class-job-census`; never hand-edit). Current shape: baseline 427 unresolved Class/Job units
+(6 class-trait, 38 job-trait, 238 talent, 129 mastery, 16 limit-break); the
 highest-frequency shared blockers and the marginal table are in the generated
 `blocker-census.md` (see the "Marginal" tables there — this summary defers to
 that generated authority rather than hand-listing frequencies that drift). The former

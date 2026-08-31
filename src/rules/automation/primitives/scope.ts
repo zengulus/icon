@@ -406,3 +406,22 @@ export function scopeForDuration(duration: RuleDuration): Scope {
       return { kind: 'until-event', event: duration.event };
   }
 }
+
+/** Whether a legacy duration survives the combat-end cleanup boundary.
+ *
+ * This is a U8 temporal-extent question, not reducer-owned membership logic:
+ * turn/round/combat/named-event durations are encounter-scoped and end no
+ * later than combat cleanup, while an expedition duration explicitly crosses
+ * combat boundaries and ends only with the expedition. The reducer owns WHICH
+ * effect records remain; this authority owns HOW their typed duration maps to
+ * the enclosing Clock scope.
+ *
+ * The decision composes through `scopeForDuration` and structural boundary
+ * equality rather than re-reading `duration.kind` at the consumer. That keeps
+ * the legacy storage byte-identical while preventing a second interpreter of
+ * the duration vocabulary in encounter.ts. */
+export function durationSurvivesCombatEnd(duration: RuleDuration): boolean {
+  const scope = scopeForDuration(duration);
+  const expeditionEnd: BoundaryRef = { kind: 'boundary', boundary: 'expedition', edge: 'end' };
+  return scope.kind === 'until-next' && boundaryEquals(scope.boundary, expeditionEnd);
+}

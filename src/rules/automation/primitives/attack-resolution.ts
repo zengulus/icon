@@ -1,5 +1,6 @@
 import { rollBoonOrCurse, type DiceSource } from '../../dice.js';
 import type { RuleExecutionContext } from './types.js';
+import { liveActorSlot, liveRef, resolveReference } from './reference.js';
 
 /**
  * Framework-free attack-roll kernel shared by basic attacks, declarative VM
@@ -116,8 +117,10 @@ export function directAttackDamageProvenance(
   if (delivery !== 'hit' && delivery !== 'miss') return undefined;
   const remembered = resolvedAttackDamage.get(context)?.get(targetId);
   if (remembered) return remembered;
-  const source = context.state.actors[context.actorId];
-  const target = context.state.actors[targetId];
+  const sourceRef = resolveReference(liveActorSlot('source'), context);
+  const targetRef = resolveReference(liveRef('actor', { kind: 'id', id: targetId }), context);
+  const source = sourceRef.ok && sourceRef.value.kind === 'actor' ? sourceRef.value.actor : undefined;
+  const target = targetRef.ok && targetRef.value.kind === 'actor' ? targetRef.value.actor : undefined;
   if (!source?.position || !target?.position) return undefined;
   return attackDamageProvenance({
     elevationModifier: context.state.elevationAt(source.position) - context.state.elevationAt(target.position),

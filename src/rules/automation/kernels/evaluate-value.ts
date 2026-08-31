@@ -26,7 +26,7 @@
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import { rollDamageDice } from '../primitives/job-kit.js';
 import type { DistanceEndpoint, RuleActorView, RuleExecutionContext, RuleNumber, RuleSelector } from '../primitives/types.js';
-import { domainOf, EMPTY_BINDER, lookupBound, resolveReference, type Reference } from '../primitives/reference.js';
+import { liveActorSlot, resolveActorSelectorReference, resolveReference } from '../primitives/reference.js';
 import type { SpatialOrigin } from '../primitives/anchor.js';
 import { resolveSpatialAnchor } from './candidate.js';
 import { evaluateActorQuery, evaluateValueQuery } from './evaluate-query.js';
@@ -50,25 +50,41 @@ export function actor(context: RuleExecutionContext, id: string) {
   return value;
 }
 
+/** Resolve the reference-shaped selector subset through U1. U3/U4 policy is
+ * deliberately applied by the caller after this identity/binding step. */
+function referenceSelectorActors(selector: RuleSelector, context: RuleExecutionContext): RuleActorView[] {
+  const resolution = resolveActorSelectorReference(selector, context);
+  if (!resolution.ok) {
+    if (resolution.problem === 'missing-slot'
+      && (selector.kind === 'attack-target' || selector.kind === 'trigger-source')) return [];
+    const code = selector.kind === 'bound' ? 'selector.bound' : 'selector.actor-missing';
+    throw new RuleProgramViolation(code, `Actor reference selector "${selector.kind}" failed to resolve: ${resolution.problem}.`);
+  }
+  if (resolution.value.kind === 'actor') return [resolution.value.actor];
+  if (resolution.value.kind === 'collection') {
+    return resolution.value.items.flatMap((item) => item.kind === 'actor' ? [item.actor] : []);
+  }
+  throw new RuleProgramViolation('selector.actor-missing', `Actor reference selector "${selector.kind}" resolved to a non-actor value.`);
+}
+
 export function selectActors(selector: RuleSelector, context: RuleExecutionContext): RuleActorView[] {
-  const source = actor(context, context.actorId);
   let selected: RuleActorView[];
   switch (selector.kind) {
     // Reference selectors — a named referent, not a candidate query. The
     // `attack-target` referent is still gated by the shared U3 eligibility
     // (alive + on-battlefield) so a defeated/removed target yields nothing.
-    case 'self': selected = [source]; break;
+    case 'self': selected = referenceSelectorActors(selector, context); break;
     case 'attack-target': {
-      const target = context.attackTargetId ? actor(context, context.attackTargetId) : undefined;
+      const target = referenceSelectorActors(selector, context)[0];
       if (!target) { selected = []; break; }
       const eligible = new Set(evaluateActorQuery({ relation: 'any' }, context).map((entry) => entry.id));
       selected = eligible.has(target.id) ? [target] : [];
       break;
     }
-    case 'trigger-source': selected = context.triggerSourceId ? [actor(context, context.triggerSourceId)] : []; break;
-    case 'trigger-targets': selected = (context.triggerTargetIds ?? []).map((id) => actor(context, id)); break;
+    case 'trigger-source': selected = referenceSelectorActors(selector, context); break;
+    case 'trigger-targets': selected = referenceSelectorActors(selector, context); break;
     case 'input': {
-      const supplied = (context.input.actorIds?.[selector.key] ?? []).map((id) => actor(context, id));
+      const supplied = referenceSelectorActors(selector, context);
       // p.92: `ally` means another ally; generic input selectors also reject
       // defeated/off-board actors before a resolver can mutate them — through
       // the same U3 eligibility authority automatic targeting uses.
@@ -111,14 +127,7 @@ export function selectActors(selector: RuleSelector, context: RuleExecutionConte
     // (`for-each` items, `BIND … AS …`). Domain-checked — a bound name that
     // resolves to a non-actor reference rejects, never silently reinterprets.
     case 'bound': {
-      const boundRef = lookupBound(context.boundNames ?? EMPTY_BINDER, selector.name);
-      if (boundRef === undefined) throw new RuleProgramViolation('selector.bound', `No reference named "${selector.name}" is bound in this resolution.`);
-      if (domainOf(boundRef) !== 'actor') throw new RuleProgramViolation('selector.bound', `Bound reference "${selector.name}" is not an actor reference.`);
-      const resolution = resolveReference(boundRef as Reference<'actor'>, context);
-      if (!resolution.ok) throw new RuleProgramViolation('selector.bound', `Bound reference "${selector.name}" failed to resolve: ${resolution.problem}.`);
-      if (resolution.value.kind === 'collection') selected = resolution.value.items.flatMap((item) => item.kind === 'actor' ? [item.actor] : []);
-      else if (resolution.value.kind === 'actor') selected = [resolution.value.actor];
-      else throw new RuleProgramViolation('selector.bound', `Bound reference "${selector.name}" resolved to a non-actor value.`);
+      selected = referenceSelectorActors(selector, context);
       break;
     }
   }
@@ -222,9 +231,15 @@ export function evaluateNumber(expression: RuleNumber, context: RuleExecutionCon
       // per-target recipient (`damageRecipientId`) through the damage effect,
       // so a bloodied recipient gets its own bonus die and a healthy one does
       // not, regardless of the primary attack target's state.
-      const recipientDice = context.damageRecipientId && context.encounterState
-        ? recipientBonusDamageDice(context.encounterState, context.actorId, context.sourceId, context.damageRecipientId)
-        : 0;
+      let recipientDice = 0;
+      if (context.encounterState) {
+        const recipient = resolveReference(liveActorSlot('damage-recipient'), context);
+        if (recipient.ok && recipient.value.kind === 'actor') {
+          recipientDice = recipientBonusDamageDice(context.encounterState, context.actorId, context.sourceId, recipient.value.actor.id);
+        } else if (!recipient.ok && recipient.problem !== 'missing-slot') {
+          throw new RuleProgramViolation('value.damage-recipient', `Damage-recipient reference failed to resolve: ${recipient.problem}.`);
+        }
+      }
       // F6a bonus-damage grants (content/jobs/bonus-damage-recipes.ts) fold
       // their dice at the USE_ABILITY boundary into abilityUseModifiers, so
       // this roll carries exactly what the command decided. The roll itself

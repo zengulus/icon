@@ -27,7 +27,7 @@ import { capturedActor } from './automation/primitives/reference.js';
 // U8 boundary authority: the reducer composes the Clock for the boundary
 // MEANING of an active-effect expiry (which timing token = which boundary),
 // while keeping its recorded remaining-count storage on the durable record.
-import { boundaryEquals, clockForTiming } from './automation/primitives/scope.js';
+import { boundaryEquals, clockForTiming, durationSurvivesCombatEnd } from './automation/primitives/scope.js';
 import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
@@ -3720,8 +3720,11 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         for (const actor of Object.values(state.actors)) {
           actor.vigor = 0;
           actor.statuses = [];
-          actor.conditions = actor.conditions.filter(({ duration }) => duration?.kind === 'expedition');
-          actor.activeEffects = actor.activeEffects.filter(({ duration }) => duration.kind === 'expedition');
+          // U8 owns whether a typed duration crosses the enclosing combat-end
+          // boundary. The reducer owns only record membership; it never
+          // re-interprets the legacy duration discriminant locally.
+          actor.conditions = actor.conditions.filter(({ duration }) => duration !== null && durationSurvivesCombatEnd(duration));
+          actor.activeEffects = actor.activeEffects.filter(({ duration }) => durationSurvivesCombatEnd(duration));
           actor.marks = [];
           actor.stance = null;
           // Shared per-encounter resources are discarded at the end of combat;

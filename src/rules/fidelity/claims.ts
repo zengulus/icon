@@ -619,6 +619,14 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     binding: legacy('U2 status re-certified at T8c by roles.ts + candidate/aura/choice/decision-window routing; no strict fidelity scope'),
   },
   {
+    id: 'claim:foundations:u8-authoritative',
+    file: 'docs/rules-foundations.md',
+    anchor: '### Scope / Clock (U8 underlay) — AUTHORITATIVE (residual audit + combat-cleanup repair, 2026-09-01)',
+    strength: 'authoritative',
+    subject: 'Scope / Clock (U8 underlay)',
+    binding: legacy('U8 re-certified after a whole-consumer residual audit, combat-cleanup routing repair, replay proof, and u8-scope-clock-routing mutation guard; no strict fidelity scope'),
+  },
+  {
     id: 'claim:foundations:u17-complete',
     file: 'docs/rules-foundations.md',
     anchor: '### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)',

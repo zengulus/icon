@@ -1,7 +1,8 @@
 # U8 Scope / Clock — Fresh-HEAD Audit, Contract, and Landed Tranche
 
-Status: PARTIAL (lifecycle-identity gap closed; reducer duration + scheduler
-cadence remain executing specialist surfaces; exact residual below).
+Historical checkpoint status: PARTIAL. Superseded by the later whole-consumer
+audit and combat-cleanup repair in `u8-u1-underlay-census.md`; the residual
+analysis below describes this tranche's pre-closure state.
 
 Authority: ICON 1.5.pdf (semantic), implementation@HEAD (execution), this +
 `underlay-completion-plan.md`/`generic-underlays.md` (planning only).

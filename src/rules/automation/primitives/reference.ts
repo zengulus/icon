@@ -41,7 +41,7 @@
  * records (U12).
  */
 import type { Position } from '../../types.js';
-import type { RuleActorView, RuleEntityView, RuleExecutionContext } from './types.js';
+import type { RuleActorView, RuleEntityView, RuleExecutionContext, RuleSelector } from './types.js';
 
 /** The domains a Reference can name. */
 export type ReferenceDomain =
@@ -112,6 +112,12 @@ export type ResolvedReference<D extends ReferenceDomain> =
 export type ReferenceResolution<D extends ReferenceDomain = ReferenceDomain> =
   | { ok: true; value: ResolvedReference<D> }
   | { ok: false; problem: ReferenceProblem };
+
+/** Result of adapting a reference-shaped actor selector onto U1. Query-shaped
+ * selectors deliberately reject here: U3, not U1, owns candidate queries. */
+export type ActorSelectorReferenceResolution =
+  | ReferenceResolution<'actor'>
+  | { ok: false; problem: 'selector-not-reference' };
 
 /** Immutable name→Reference binding map. */
 export interface Binder {
@@ -368,4 +374,37 @@ export function liveTriggerTargets(): Reference<'actor'> {
  * Element domain is preserved by the type (`Reference<D>[]`). */
 export function referenceCollection<D extends ReferenceDomain = ReferenceDomain>(refs: readonly Reference<D>[]): Reference<D> {
   return { kind: 'collection', refs };
+}
+
+/** Adapt the reference-shaped subset of `RuleSelector` onto the ONE U1 actor
+ * reference vocabulary. `input` identities are CAPTURED because command
+ * choices are already-recorded durable input; slots and bound names stay LIVE
+ * and therefore re-resolve against current state. Returns null for U3 query
+ * selectors rather than pretending a candidate query is a reference. */
+export function actorReferenceForSelector(
+  selector: RuleSelector | undefined,
+  context: RuleExecutionContext,
+): Reference<'actor'> | null {
+  if (selector === undefined || selector.kind === 'self') return liveActorSlot('source');
+  switch (selector.kind) {
+    case 'attack-target': return liveActorSlot('attack-target');
+    case 'trigger-source': return liveActorSlot('trigger-source');
+    case 'trigger-targets': return liveTriggerTargets();
+    case 'input': return referenceCollection((context.input.actorIds?.[selector.key] ?? []).map(capturedActor));
+    case 'bound': return liveActorBound(selector.name);
+    default: return null;
+  }
+}
+
+/** Resolve a reference-shaped actor selector through U1. Consumers retain
+ * their own policy (U3 eligibility, U4 cardinality, U7 exactly-one anchor),
+ * while all identity/binding/LIVE-vs-CAPTURED meaning is decided here. */
+export function resolveActorSelectorReference(
+  selector: RuleSelector | undefined,
+  context: RuleExecutionContext,
+): ActorSelectorReferenceResolution {
+  const ref = actorReferenceForSelector(selector, context);
+  return ref === null
+    ? { ok: false, problem: 'selector-not-reference' }
+    : resolveReference(ref, context);
 }

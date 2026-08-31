@@ -45,6 +45,7 @@ import {
   type SpatialAnchor,
   type SpatialOrigin,
 } from '../primitives/anchor.js';
+import { resolveActorSelectorReference } from '../primitives/reference.js';
 import { RuleProgramViolation } from './violations.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,16 +99,13 @@ export function resolveSpatialAnchor(
       return { position: { ...entity.position }, size: 1 };
     }
     case 'actor': {
-      const ids = anchorSelectorIds(anchor.selector, context);
-      if (ids.length !== 1) {
-        throw new RuleProgramViolation('selector.origin-invalid', `SpatialAnchor resolved to ${ids.length} actor(s); expected exactly one.`);
+      const views = anchorSelectorActors(anchor.selector, context);
+      if (views.length !== 1) {
+        throw new RuleProgramViolation('selector.origin-invalid', `SpatialAnchor resolved to ${views.length} actor(s); expected exactly one.`);
       }
-      const view = context.state.actors[ids[0]];
-      if (!view) {
-        throw new RuleProgramViolation('selector.actor-missing', `Anchor actor ${ids[0]} does not exist.`);
-      }
+      const view = views[0]!;
       if (!view.position) {
-        throw new RuleProgramViolation('selector.origin-invalid', `Anchor actor ${ids[0]} has no battlefield position.`);
+        throw new RuleProgramViolation('selector.origin-invalid', `Anchor actor ${view.id} has no battlefield position.`);
       }
       return { position: view.position, size: view.size };
     }
@@ -118,20 +116,24 @@ export function resolveSpatialAnchor(
  * `within`, `adjacent`, `condition`, `marked`, `summons`) cannot name a
  * single spatial origin and are rejected — the anchor vocabulary is
  * REFERENCE-shaped, not QUERY-shaped (U1 vs U3). */
-function anchorSelectorIds(
+function anchorSelectorActors(
   selector: RuleSelector | undefined,
   context: RuleExecutionContext,
-): string[] {
-  if (!selector) return [context.actorId];
-  switch (selector.kind) {
-    case 'self': return [context.actorId];
-    case 'attack-target': return context.attackTargetId ? [context.attackTargetId] : [];
-    case 'trigger-source': return context.triggerSourceId ? [context.triggerSourceId] : [];
-    case 'trigger-targets': return [...(context.triggerTargetIds ?? [])];
-    case 'input': return [...(context.input.actorIds?.[selector.key] ?? [])];
-    default:
-      throw new RuleProgramViolation('selector.origin-invalid', `Selector kind "${selector.kind}" cannot name a single spatial origin.`);
+): RuleActorView[] {
+  const resolution = resolveActorSelectorReference(selector, context);
+  if (!resolution.ok) {
+    if (resolution.problem === 'missing-slot') return [];
+    if (resolution.problem === 'missing-actor') {
+      throw new RuleProgramViolation('selector.actor-missing', 'A SpatialAnchor actor reference does not exist.');
+    }
+    const kind = selector?.kind ?? 'self';
+    throw new RuleProgramViolation('selector.origin-invalid', `Selector kind "${kind}" cannot resolve as a single spatial origin: ${resolution.problem}.`);
   }
+  if (resolution.value.kind === 'actor') return [resolution.value.actor];
+  if (resolution.value.kind === 'collection') {
+    return resolution.value.items.flatMap((item) => item.kind === 'actor' ? [item.actor] : []);
+  }
+  throw new RuleProgramViolation('selector.origin-invalid', 'SpatialAnchor resolved to a non-actor reference.');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

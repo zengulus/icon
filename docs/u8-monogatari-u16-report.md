@@ -121,19 +121,16 @@ Each command's recorded events rebuild the exact resulting state
 the once-per-song U16 consume. No lifecycle/usage eligibility decision is
 re-derived on replay.
 
-## Fresh U8 residual census
+## U8 residual census at this checkpoint (later corrected)
 
-The substantive question was applied to the reducer's durable turns/rounds
-counters and the scheduler cadence: do they independently interpret source
-temporal semantics, or merely store/advance state whose boundary meaning already
-comes from U8? Finding: they are specialist recorded-state/cadence authorities —
-the reducer stores the elapsed boundary count and the scheduler advances turn
-cadence; neither re-interprets a U8 duration/scope. No competing temporal
-interpretation remains inside U8's declared contract. So **U8 is NOT churned**
-into scope.ts for durable counters (no schema churn for its own sake). U8
-remains a PARTIAL/composition authority whose vocabulary + reducer boundary
-router are proven, and whose remaining specialist recorded-state surfaces are
-attested residual, not inconsistency.
+This checkpoint correctly classified the reducer's durable turns/rounds
+counters and scheduler cadence as specialist recorded-state/cadence
+authorities. It did not inspect combat-end collection membership closely
+enough: a later whole-consumer audit found combat cleanup directly interpreting
+`duration.kind === 'expedition'`. That omission invalidates this report's
+then-current "no competing temporal interpretation" conclusion. The follow-up
+routes combat cleanup through `durationSurvivesCombatEnd` and records the final
+U8 result in `docs/u8-u1-underlay-census.md`.
 
 ## Fresh U16 residual census
 
@@ -166,21 +163,16 @@ did not promote, migrate, or rewire unrelated unresolved content.
 
 ## Status justification
 
-- **U8**: PARTIAL — source-defined lifecycle identity + reducer boundary router
-  landed and proven, but the scheduler cadence and the reducer's elapsed-count
-  recorded storage remain specialist recorded-state surfaces (deliberately not
-  folded into scope.ts).
+- **U8 at this checkpoint**: PARTIAL — this status is superseded by the later
+  whole-consumer audit and combat-cleanup repair in
+  `docs/u8-u1-underlay-census.md`.
 - **U16**: COMPLETE — the sole unresolved consumer is integrated and the fresh
   residual census shows no remaining consumer or competing authority.
 
 ## Strongest next tranche implied by the fresh post-integration residual graph
 
-Now that the proof consumer is landed, the residual dependency graph points back
-at **U8 closure**: the remaining U8-relevant surfaces are the scheduler
-turn/round cadence and the reducer's durable turns/rounds counters. If a fresh
-audit confirms those only store/advance state whose boundary meaning is already
-U8-composed (no competing interpretation), the residual work is a U8
-recertification audit rather than new substrate; if it surfaces a genuine
-competing temporal reader, that becomes the repair. Either way the next tranche
-is the U8 residual-migration/recertification audit, not more fidelity
-infrastructure.
+This recommendation was executed by the later U8 whole-consumer audit. It
+confirmed the scheduler/counter specialist classification, found and repaired
+the combat-cleanup duplicate, then ran the fresh U1–U17 census. The selected
+dependency-root tranche is U1; its generic-consumer slice is recorded in
+`docs/u8-u1-underlay-census.md`.

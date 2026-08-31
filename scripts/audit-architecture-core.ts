@@ -242,6 +242,75 @@ export function nonAuthorityAuraPerspectiveProducers(code: string): string[] {
   return bad;
 }
 
+/** U8 combat-cleanup routing guard. The reducer may own durable record
+ * membership, but it must ask the U8 authority whether a duration crosses the
+ * combat-end boundary. A direct `duration.kind === 'expedition'` comparison is
+ * the exact competing temporal interpreter removed by the U8 closure tranche.
+ * Comments are excluded so contract prose cannot satisfy or trip the check. */
+export function u8EncounterRoutingProblems(code: string): string[] {
+  const executable = code.split('\n').filter((line) => {
+    const trimmed = line.trimStart();
+    return trimmed.length > 0 && !trimmed.startsWith('//') && !trimmed.startsWith('*');
+  }).join('\n');
+  const problems: string[] = [];
+  if (!/durationSurvivesCombatEnd\s*\(/.test(executable)) {
+    problems.push('combat cleanup does not call durationSurvivesCombatEnd');
+  }
+  if (/duration\??\.kind\s*={2,3}\s*['"]expedition['"]/.test(executable)) {
+    problems.push('combat cleanup re-interprets duration.kind === expedition locally');
+  }
+  if (!/function\s+durationExpiresAtBoundary[\s\S]*?clockForTiming\s*\([\s\S]*?boundaryEquals\s*\(/.test(executable)) {
+    problems.push('boundary expiry no longer routes through clockForTiming and boundaryEquals');
+  }
+  return problems;
+}
+
+/** U1 reference-routing guard. Legacy context fields remain serialized input
+ * slots, but only `primitives/reference.ts` may interpret them as references;
+ * `roles.ts` may project the same facts into the disjoint U2 role frame.
+ * Actor-choice bucket reads in `choice.ts` are retained U4 validation, not a
+ * second reference resolver. Every migrated generic consumer must keep calling
+ * the U1 surface, and raw slot/self lookups elsewhere are competing authority. */
+export function u1ReferenceRoutingProblems(
+  files: Readonly<Record<string, string>>,
+): Array<{ file: string; detail: string }> {
+  const requiredCalls: Readonly<Record<string, readonly string[]>> = {
+    'kernels/candidate.ts': ['resolveActorSelectorReference'],
+    'kernels/evaluate-value.ts': ['resolveActorSelectorReference', 'liveActorSlot'],
+    'kernels/execute-flow.ts': ['resolveReference', 'liveActorSlot', 'capturedActor'],
+    'kernels/foe-recipes.ts': ['resolveActorSelectorReference'],
+    'kernels/core-resolvers.ts': ['resolveActorSelectorReference'],
+    'kernels/evaluate-query.ts': ['resolveActorSelectorReference'],
+    'primitives/attack-resolution.ts': ['resolveReference', 'liveActorSlot'],
+  };
+  const problems: Array<{ file: string; detail: string }> = [];
+  for (const [file, code] of Object.entries(files)) {
+    const executable = code.split('\n').filter((line) => {
+      const trimmed = line.trimStart();
+      return trimmed.length > 0 && !trimmed.startsWith('//') && !trimmed.startsWith('*');
+    }).join('\n');
+    for (const symbol of requiredCalls[file] ?? []) {
+      if (!new RegExp(`\\b${symbol}\\s*\\(`).test(executable)) {
+        problems.push({ file, detail: `migrated consumer no longer calls U1 surface ${symbol}` });
+      }
+    }
+    if (file !== 'primitives/reference.ts' && file !== 'primitives/roles.ts') {
+      const rawSlot = /context\s*(?:\.\s*(?:attackTargetId|triggerSourceId|triggerTargetIds|damageRecipientId)|\[\s*['"](?:attackTargetId|triggerSourceId|triggerTargetIds|damageRecipientId)['"]\s*\])/;
+      if (rawSlot.test(executable)) {
+        problems.push({ file, detail: 'interprets a legacy reference slot outside the U1 authority' });
+      }
+      if (/context\.state\.actors\s*\[\s*context\.actorId\s*\]|sourceActor\s*\(\s*context\s*,\s*context\.actorId\s*\)/.test(executable)) {
+        problems.push({ file, detail: 'resolves the implicit source-actor reference outside U1' });
+      }
+    }
+    if (file !== 'primitives/reference.ts' && file !== 'kernels/choice.ts'
+      && /context\.input\.actorIds/.test(executable)) {
+      problems.push({ file, detail: 'resolves recorded actor-input identities outside U1 (or U4 choice validation)' });
+    }
+  }
+  return problems;
+}
+
 // U2-M4 (aura membership bypass): even with `perspectiveActorId` correctly
 // U2-derived, membership must compare the side of the actor looked up by THAT
 // U2-derived perspective. If membership instead derives an anchor/owner actor's
@@ -766,6 +835,40 @@ export function auditArchitecture(automationRoot: string): AuditResult {
         detail: `migrated U16 consumer does not CALL the U16 core surfaces used for its usage/entitlement gate (uncalled or missing: ${missing.join(', ')})${presentButUnused.length > 0 ? `. Imported-but-unused: ${presentButUnused.join(', ')} — likely a hand-rolled availability/consume/key that bypasses the U16 authority.` : ''}; the F9 fold must route key+availability+consume through primitives/usage.ts, never rebuild them locally.`,
       });
     }
+  }
+
+  // ---- Check 11: U8 temporal consumers keep routing through Scope/Clock ----
+  // encounter.ts lives one level above automation/. It owns durable reducer
+  // membership and lifecycle application, but not duration interpretation.
+  // Pin both executing U8 seams: ordinary boundary expiry and combat cleanup.
+  const encounterPath = join(automationRoot, '..', 'encounter.ts');
+  try {
+    const encounterCode = readFileSync(encounterPath, 'utf8');
+    for (const problem of u8EncounterRoutingProblems(encounterCode)) {
+      violations.push({
+        check: 'u8-scope-clock-routing',
+        file: 'rules/encounter.ts',
+        detail: `${problem}; route temporal extent through primitives/scope.ts instead of interpreting RuleDuration in the reducer.`,
+      });
+    }
+  } catch {
+    // A unit fixture may omit encounter.ts. The pure guard is mutation-tested
+    // directly; the real-repository audit always supplies this file.
+  }
+
+  // ---- Check 12: U1 reference consumers keep routing through reference.ts ----
+  const automationCode = Object.fromEntries(files
+    .filter((file) => {
+      const layer = layerFor(file, automationRoot);
+      return layer === 'primitives' || layer === 'kernels';
+    })
+    .map((file) => [posixRelative(automationRoot, file), readFileSync(file, 'utf8')]));
+  for (const problem of u1ReferenceRoutingProblems(automationCode)) {
+    violations.push({
+      check: 'u1-reference-routing',
+      file: problem.file,
+      detail: `${problem.detail}; route identity/binding/LIVE-vs-CAPTURED semantics through primitives/reference.ts.`,
+    });
   }
 
   return {

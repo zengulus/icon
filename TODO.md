@@ -94,11 +94,28 @@ assumption here, document the evidence and update this list before proceeding.
 > one Chanter's song leaves the other's usage untouched). `monogatari:granted`
 > has no remaining production reader. Fresh U16 residual census: no remaining
 > unresolved U16 consumer and no competing usage authority → U16 recertified
-> COMPLETE (registered source-fidelity claim). U8 stays PARTIAL: the reducer's
+> COMPLETE (registered source-fidelity claim). At this proof-consumer
+> checkpoint U8 stayed PARTIAL pending its whole-consumer residual audit: the reducer's
 > durable turns/rounds counters and the scheduler cadence are specialist
 > recorded-state/cadence authorities whose boundary meaning already comes from
 > U8 — deliberately NOT folded into scope.ts. Census byte-stable at 427; zero
 > source promotion. See `docs/u8-monogatari-u16-report.md`.
+>
+> **U8 residual closure + fresh U1–U17 census (2026-09-01).** A whole-consumer
+> temporal audit found one real U8 bypass: combat cleanup locally kept only
+> `duration.kind === 'expedition'`. Cleanup now asks
+> `durationSurvivesCombatEnd` (U8 Scope projection + combat-end boundary),
+> with encounter-level combat/expedition parity and event-replay proof; the
+> architecture guard pins cleanup and ordinary boundary expiry to U8. The
+> scheduler cadence and durable remaining counters are documented retained
+> specialists. The fresh matrix has five strict-authority rows and twelve
+> partial rows; U1 is the dependency root. Its generic consumers now route
+> reference-shaped selectors, flow outcomes, target positions, core/foe reads,
+> attack provenance, and damage recipients through `reference.ts`, guarded by
+> `u1-reference-routing`. U1 remains PARTIAL on named content resolvers; the
+> next slice is a shared content-authoring adapter plus parity migration. Zero
+> source promotion; census remains 427. See
+> `docs/u8-u1-underlay-census.md`.
 >
 > **T9g — U16/F9 operation-boundary repair (2026-08-31).** The F9
 > once-per-round reactive entitlement is now ONE U16 COMMIT operation
@@ -106,7 +123,7 @@ assumption here, document the evidence and update this list before proceeding.
 > U16 remains the single executing usage authority.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
-> (2026-08-31).** Landed + corrected. Migrated the last actor-local
+> (2026-08-31; lifecycle follow-up 2026-09-01).** Migrated the last actor-local
 > once-per-scope marks onto typed U16 ledger keys
 > (`chainReactionOncePerRoundKey`, `incubusOncePerRoundKey`,
 > `stampedeOncePerRoundKey`, `vigilanceRushOncePerTurnKey`,
@@ -114,11 +131,11 @@ assumption here, document the evidence and update this list before proceeding.
 > a per-recipient `any-turn` gate: the restriction belongs to the character
 > RECEIVING the damage, owner = the Bastion's ledger storage, target = the
 > U16 key suffix); `damage-immune` and armed/charged/pending flags proven
-> content MODE or recorded fact, never a usage gate. `monogatari:granted` is
-> an UNRESOLVED U16 consumer (once-per-song entitlement) blocked on the U8
-> source-defined lifecycle scope, NOT approximated onto turn/round/combat.
-> U16 remains **PARTIAL**. Census byte-stable at 427; zero source promotion;
-> the phase gate stays OPEN on U8/U14/U9/U6/U12/U4/U5/U7.
+> content MODE or recorded fact, never a usage gate. The once-per-song
+> Monogatari gap was subsequently migrated onto U8's source-defined lifecycle
+> identity and recertified by the proof-consumer entry above. Census
+> byte-stable at 427; zero source promotion; the phase gate remains open on
+> the twelve partial underlays in the fresh matrix.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
@@ -943,7 +960,8 @@ assumption here, document the evidence and update this list before proceeding.
   `aria:pending`, `eclipse:pending`, `implode:pending`). `monogatari:granted`
   is reclassified **UNRESOLVED U16 CONSUMER** (once-per-song entitlement),
   blocked on the U8 source-defined lifecycle scope — not approximated onto
-  turn/round/combat; U16 stays PARTIAL. Governance:
+  turn/round/combat; U16 stayed PARTIAL at this checkpoint (the later
+  Monogatari lifecycle follow-up supersedes this residual). Governance:
   architecture-audit test pins the six migrated keys + a ban on the raw
   fields, and the kernel source-id exemption allowlist includes the new gate
   provenance. Verification: `u16-residual-census.test.ts` (+1, 6 cases),
@@ -966,7 +984,8 @@ assumption here, document the evidence and update this list before proceeding.
   content state: it answers "may this character receive the Monogatari
   fulfillment reward again during the current song?" — an UNRESOLVED U16
   CONSUMER blocked on the U8 source-defined lifecycle scope, deliberately
-  NOT migrated onto turn/round/combat. U16 stays **PARTIAL**; adversarial
+  NOT migrated onto turn/round/combat. U16 stayed **PARTIAL** at this
+  checkpoint; the later lifecycle proof-consumer closes this gap. Adversarial
   matrix (same-target once, two-targets each, target isolation, two owners
   no alias, next-actor turn-start refresh, same-command no double-consume,
   replay) green; census byte-stable at 427; zero promotion. See
@@ -994,9 +1013,10 @@ assumption here, document the evidence and update this list before proceeding.
   Verification: typecheck/build green, 1899 tests green, architecture /
   automation / strict-fidelity audits clean, source artifacts verified, census
   byte-stable at 427, zero source promotion (substrate/migration only). See
-  `docs/u8-scope-clock-tranche.md`. **U8 remains PARTIAL** on its
-  `RuleDuration`/`RuleTiming` lifecycle/scheduler surfaces; those recorded-
-  state specialists are the residual (see the tranche report §6).
+  `docs/u8-scope-clock-tranche.md`. **At this substrate checkpoint U8 remained
+  PARTIAL** pending a whole-consumer audit; the later residual-closure entry
+  above supersedes that status after classifying the recorded-state
+  specialists and repairing combat cleanup.
 
 - **T7 — U2 role-consumer consolidation (this tranche).** `DONE`. Made
   `primitives/roles.ts` the single semantic authority for "relative to whom is

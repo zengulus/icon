@@ -77,6 +77,16 @@ import type {
 } from '../primitives/query.js';
 import { evaluateActorCandidates, resolveSpatialAnchor } from './candidate.js';
 import { RuleProgramViolation } from './violations.js';
+import { resolveActorSelectorReference } from '../primitives/reference.js';
+
+function sourceActorReference(context: RuleExecutionContext): RuleActorView {
+  const resolution = resolveActorSelectorReference({ kind: 'self' }, context);
+  if (!resolution.ok || resolution.value.kind !== 'actor') {
+    const problem = resolution.ok ? 'non-actor' : resolution.problem;
+    throw new RuleProgramViolation('selector.actor-missing', `Source actor reference failed to resolve: ${problem}.`);
+  }
+  return resolution.value.actor;
+}
 
 // The query typed vocabulary lives in `primitives/query.ts` (U3 QUERY
 // vocabulary, barrel re-exported); this kernel owns the evaluation. Kept
@@ -184,7 +194,7 @@ export function evaluateActorQuery(query: ActorQuery, context: RuleExecutionCont
   // always behaved.
   if (query.summon !== undefined) {
     const ownerId = query.summon.owner === 'self'
-      ? context.actorId
+      ? sourceActorReference(context).id
       : query.summon.owner === 'any'
         ? null
         : query.summon.owner.actorId;
@@ -332,7 +342,7 @@ export function nearestCandidates<T extends { position: Position | null }>(candi
  * closed instead of picking one; the +x default applies only to the
  * degenerate no-foe case. */
 export function rushTowardFoes(context: RuleExecutionContext, position: Position): Position {
-  const selfView = context.state.actors[context.actorId];
+  const selfView = sourceActorReference(context);
   const foes = Object.values(context.state.actors)
     .filter((candidate) => selfView && candidate.side !== selfView.side && candidate.position);
   const nearest = nearestCandidates(foes, position);
@@ -359,7 +369,7 @@ export function evaluateEntityQuery(query: EntityQuery, context: RuleExecutionCo
   const candidates = Object.values(context.state.entities).filter((entity) => {
     if (query.owner !== undefined) {
       const ownerId = query.owner.kind === 'self'
-        ? context.actorId
+        ? sourceActorReference(context).id
         : query.owner.kind === 'any'
           ? null
           : query.owner.actorId;

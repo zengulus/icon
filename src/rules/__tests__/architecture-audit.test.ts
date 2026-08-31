@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import {
   auditArchitecture,
   isBespokeU16FieldName,
+  u1ReferenceRoutingProblems,
+  u8EncounterRoutingProblems,
   parseImports,
   resolveImport,
   layerFor,
@@ -112,6 +114,75 @@ describe('auditArchitecture (real codebase)', () => {
     expect(isBespokeU16FieldName('attackedThisTurn')).toBe(false);
     expect(isBespokeU16FieldName('turnTaken')).toBe(false);
     expect(isBespokeU16FieldName('turnsTakenThisRound')).toBe(false);
+  });
+});
+
+describe('U1 Reference/Binding routing guard', () => {
+  const valid = {
+    'kernels/candidate.ts': 'resolveActorSelectorReference({ kind: \'self\' }, context);',
+    'kernels/evaluate-value.ts': 'resolveActorSelectorReference(selector, context); liveActorSlot(\'damage-recipient\');',
+    'kernels/execute-flow.ts': 'resolveReference(liveActorSlot(\'attack-target\'), context); capturedActor(id);',
+    'kernels/foe-recipes.ts': 'resolveActorSelectorReference(selector, context);',
+    'kernels/core-resolvers.ts': 'resolveActorSelectorReference(selector, context);',
+    'kernels/evaluate-query.ts': 'resolveActorSelectorReference({ kind: \'self\' }, context);',
+    'primitives/attack-resolution.ts': 'resolveReference(liveActorSlot(\'source\'), context);',
+    'primitives/reference.ts': 'context.attackTargetId; context.input.actorIds;',
+    'primitives/roles.ts': 'context.triggerSourceId;',
+    'kernels/choice.ts': 'context.input.actorIds;',
+  };
+
+  it('accepts migrated consumers plus the U1/U2/U4 retained boundaries', () => {
+    expect(u1ReferenceRoutingProblems(valid)).toEqual([]);
+  });
+
+  it('catches a decoy U1 call beside a restored raw slot interpreter', () => {
+    expect(u1ReferenceRoutingProblems({
+      ...valid,
+      'kernels/candidate.ts': `${valid['kernels/candidate.ts']}\nconst target = context.attackTargetId;`,
+    })).toContainEqual(expect.objectContaining({
+      file: 'kernels/candidate.ts',
+      detail: 'interprets a legacy reference slot outside the U1 authority',
+    }));
+  });
+
+  it('catches dropped routing calls and raw source/input actor resolution', () => {
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      'kernels/evaluate-value.ts': 'const source = context.state.actors[context.actorId];',
+      'kernels/core-resolvers.ts': 'const target = context.input.actorIds?.target?.[0];',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'kernels/evaluate-value.ts', detail: 'migrated consumer no longer calls U1 surface resolveActorSelectorReference' }),
+      expect.objectContaining({ file: 'kernels/evaluate-value.ts', detail: 'resolves the implicit source-actor reference outside U1' }),
+      expect.objectContaining({ file: 'kernels/core-resolvers.ts', detail: 'resolves recorded actor-input identities outside U1 (or U4 choice validation)' }),
+    ]));
+  });
+});
+
+describe('U8 Scope/Clock routing guard', () => {
+  const valid = [
+    'function durationExpiresAtBoundary(duration, boundary) {',
+    '  const kindRef = clockForTiming(duration.kind);',
+    '  return boundaryEquals(kindRef, boundary);',
+    '}',
+    'const kept = records.filter(({ duration }) => durationSurvivesCombatEnd(duration));',
+  ].join('\n');
+
+  it('accepts reducer membership that consumes the U8 authority', () => {
+    expect(u8EncounterRoutingProblems(valid)).toEqual([]);
+  });
+
+  it('catches a retained decoy call plus a restored local expedition-kind interpreter', () => {
+    const mutated = `${valid}\nconst kept = records.filter(({ duration }) => duration.kind === 'expedition');`;
+    expect(u8EncounterRoutingProblems(mutated)).toContain('combat cleanup re-interprets duration.kind === expedition locally');
+  });
+
+  it('catches expiry or cleanup dropping its U8 call path', () => {
+    expect(u8EncounterRoutingProblems("function durationExpiresAtBoundary(d, b) { return d.kind === b; }"))
+      .toEqual(expect.arrayContaining([
+        'combat cleanup does not call durationSurvivesCombatEnd',
+        'boundary expiry no longer routes through clockForTiming and boundaryEquals',
+      ]));
   });
 });
 

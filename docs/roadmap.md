@@ -457,12 +457,29 @@ again" representation with NO hard-coded period-enum member, no magic-string
 identity, and no aliasing between two owners. The reducer's active-effect
 expiry (`expireBoundaryEffects` / `expireOneBoundaryRecord`) now routes its
 boundary meaning through `clockForTiming`/`boundaryEquals` (durable storage
-byte-identical). Per the U16 boundary, U8 supplied the generic scope;
-Monogatari content and U16 are untouched. New adversarial tests
+byte-identical). At this substrate checkpoint, U8 supplied the generic scope
+without changing Monogatari content or U16; the later proof-consumer tranche
+integrated Monogatari and completed U16. New adversarial tests
 (`u8-lifecycle-identity.test.ts`, +8). 1899 tests green, audits/typecheck/
 build/extraction/replay clean, census byte-stable at 427, zero source
-promotion. U8 stays PARTIAL on its `RuleDuration`/`RuleTiming` lifecycle/
-scheduler surfaces.
+promotion. The residual status at this checkpoint was PARTIAL pending the
+whole-consumer audit below.
+
+**U8 residual closure + U1 dependency-root tranche (2026-09-01).** The
+whole-consumer U8 audit classified scheduler cadence and durable duration
+counters as retained specialists and found one real competing interpreter:
+combat cleanup's local expedition-duration discriminant. Cleanup now calls
+`durationSurvivesCombatEnd`; ordinary boundary expiry remains routed through
+`clockForTiming`/`boundaryEquals`. Combat-vs-expedition cleanup and replay are
+proved at encounter level, and `u8-scope-clock-routing` mutation-tests both
+paths. The fresh U1–U17 census records five strict-authority rows and twelve
+partial rows, selecting dependency-root U1. Its generic consumers now resolve
+reference-shaped selectors, flow outcomes, target positions, core/foe reads,
+attack provenance, and damage recipients through `reference.ts`, with a new
+architecture guard. U1 remains PARTIAL on named content resolvers; next is a
+shared content-authoring adapter and parity migration. No source unit changed;
+the canonical census remains 427. Evidence:
+`docs/u8-u1-underlay-census.md`.
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

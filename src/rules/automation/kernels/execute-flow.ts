@@ -70,7 +70,16 @@ import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { applyRuleMutation, coMovedActorIdsForMove, deniedAtomicSpatialLegIndices, encounterRuleState } from './encounter-adapter.js';
 import { actor, evaluateNumber, integer, selectActors } from './evaluate-value.js';
 import { evaluatePredicate } from './evaluate-predicate.js';
-import { bind, EMPTY_BINDER, type Binder, type Reference } from '../primitives/reference.js';
+import {
+  bind,
+  capturedActor,
+  EMPTY_BINDER,
+  liveActorSlot,
+  referenceCollection,
+  resolveReference,
+  type Binder,
+  type Reference,
+} from '../primitives/reference.js';
 import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { RuleProgramViolation } from './violations.js';
@@ -418,11 +427,23 @@ export class FlowPlanner {
       const targets = 'target' in effect ? selectActors(effect.target, context) : [];
       switch (effect.kind) {
         case 'resolution-targets': {
-          const ids = effect.outcome === 'attack-targets'
-            ? (context.attackTargetId ? [context.attackTargetId] : [])
-            : effect.outcome === 'collided'
-              ? (context.resolutionFacts?.collidedActorIds ?? [])
-              : (context.resolutionFacts?.slainActorIds ?? []);
+          const outcomeIds = effect.outcome === 'collided'
+            ? context.resolutionFacts?.collidedActorIds
+            : context.resolutionFacts?.slainActorIds;
+          const refs = effect.outcome === 'attack-targets'
+            ? liveActorSlot('attack-target')
+            : referenceCollection((outcomeIds ?? []).map((id) => capturedActor(id)));
+          const resolution = resolveReference(refs, context);
+          if (!resolution.ok && resolution.problem !== 'missing-slot') {
+            throw new RuleProgramViolation('flow.resolution-reference', `Resolution target reference failed: ${resolution.problem}.`);
+          }
+          const ids = !resolution.ok
+            ? []
+            : resolution.value.kind === 'actor'
+              ? [resolution.value.actor.id]
+              : resolution.value.kind === 'collection'
+                ? resolution.value.items.flatMap((item) => item.kind === 'actor' ? [item.actor.id] : [])
+                : [];
           for (const id of ids) this.effects(effect.effects, { triggerTargetIds: [...ids] });
           break;
         }
@@ -504,8 +525,14 @@ export class FlowPlanner {
         case 'resource': for (const target of targets) this.emit({ kind: 'resource', sourceId: context.sourceId, actorId: target.id, resourceId: effect.resourceId, operation: effect.operation, amount: integer(effect.amount, context), minimum: effect.minimum ?? null, maximum: effect.maximum ?? null }); break;
         case 'actions': for (const target of targets) this.emit({ kind: 'actions', sourceId: context.sourceId, actorId: target.id, operation: effect.operation, amount: integer(effect.amount, context) }); break;
         case 'terrain': {
-          const positions = effect.positionInput === 'target-position' && context.attackTargetId
-            ? [actor(context, context.attackTargetId).position].filter((position): position is NonNullable<typeof position> => position !== null)
+          const target = effect.positionInput === 'target-position'
+            ? resolveReference(liveActorSlot('attack-target'), context)
+            : null;
+          if (target && !target.ok && target.problem !== 'missing-slot') {
+            throw new RuleProgramViolation('flow.terrain-reference', `Terrain target reference failed: ${target.problem}.`);
+          }
+          const positions = target?.ok && target.value.kind === 'actor'
+            ? [target.value.actor.position].filter((position): position is NonNullable<typeof position> => position !== null)
             : [...(context.input.positions?.[effect.positionInput] ?? [])];
           const count = effect.count ? integer(effect.count, context) : positions.length;
           if (positions.length < count) throw new RuleProgramViolation('choice.position-count', `${effect.positionInput} requires ${count} positions.`);

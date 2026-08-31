@@ -15,13 +15,14 @@ import type {
 } from '../primitives/types.js';
 import {
   axisDirection, sameCell, squareArea,
-  constant, distance, sourceActor, walk,
+  constant, distance, walk,
   conditionMutation, markMutation, rushMutation, shoveMutation, terrainMutation, vigorMutation, swapMutations,
   action, compilation,
 } from '../primitives/foe-kit.js';
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { footprintCells, footprintDistance, footprintsOverlap } from '../primitives/spatial-intent.js';
 import { adjacentActors } from '../primitives/foe-kit.js';
+import { resolveActorSelectorReference } from '../primitives/reference.js';
 
 /**
  * kernels/foe-recipes.ts — the genericised foe ability kernel.
@@ -192,8 +193,28 @@ export type FoeRecipe =
 const blastRadius: Record<'small' | 'medium' | 'large', number> = { small: 1, medium: 2, large: 3 };
 
 function chosenTarget(context: RuleExecutionContext): RuleActorView | undefined {
-  const targetId = context.attackTargetId ?? context.input.actorIds?.target?.[0];
-  return targetId ? context.state.actors[targetId] : undefined;
+  for (const selector of [{ kind: 'attack-target' } as const, { kind: 'input', key: 'target' } as const]) {
+    const resolution = resolveActorSelectorReference(selector, context);
+    if (!resolution.ok) {
+      if (resolution.problem === 'missing-slot') continue;
+      throw new RuleProgramViolation('selector.actor-missing', `Foe target reference failed: ${resolution.problem}.`);
+    }
+    if (resolution.value.kind === 'actor') return resolution.value.actor;
+    if (resolution.value.kind === 'collection') {
+      const first = resolution.value.items[0];
+      return first?.kind === 'actor' ? first.actor : undefined;
+    }
+  }
+  return undefined;
+}
+
+function referencedSource(context: RuleExecutionContext): RuleActorView {
+  const resolution = resolveActorSelectorReference({ kind: 'self' }, context);
+  if (!resolution.ok || resolution.value.kind !== 'actor') {
+    const problem = resolution.ok ? 'non-actor' : resolution.problem;
+    throw new RuleProgramViolation('selector.actor-missing', `Foe source reference failed: ${problem}.`);
+  }
+  return resolution.value.actor;
 }
 
 /** Positional gate shared by every foe recipe that targets another actor:
@@ -292,7 +313,7 @@ function sortedActors(context: RuleExecutionContext): RuleActorView[] {
 // ── Generic resolver factories ───────────────────────────────────────────────
 function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     const target = chosenTarget(context);
     if (!source?.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} targets a foe.`);
     if (target.side === source.side) throw new RuleProgramViolation('choice.actor-range', `${context.sourceId} targets a foe.`);
@@ -370,7 +391,7 @@ function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
 
 function shoveResolver(recipe: FoeShoveRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     const target = requireFoeInRange(context, source, chosenTarget(context), context.sourceId, recipe.range ?? 1);
     const mutations: RuleMutation[] = [];
     if (recipe.damage) mutations.push(foeDamage(context, target.id, rollAmount(context, source, recipe.damage), 'effect'));
@@ -385,7 +406,7 @@ function shoveResolver(recipe: FoeShoveRecipe): RuleResolver {
 
 function rushResolver(recipe: FoeRushRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     if (!source?.position) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires a position.`);
     const { direction: chosenDirection } = recipe;
     const towardNearest = chosenDirection === undefined || chosenDirection === 'toward-nearest-foe';
@@ -403,7 +424,7 @@ function rushResolver(recipe: FoeRushRecipe): RuleResolver {
 
 function vigorResolver(recipe: FoeVigorRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     if (!source) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires the source actor.`);
     const bloodied = source.hp <= source.maxHp / 2;
     const amount = bloodied && recipe.bloodiedAmount !== undefined ? recipe.bloodiedAmount : recipe.amount;
@@ -413,7 +434,7 @@ function vigorResolver(recipe: FoeVigorRecipe): RuleResolver {
 
 function markResolver(recipe: FoeMarkRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     const target = requireFoeInRange(context, source, chosenTarget(context), context.sourceId, recipe.range ?? 1);
     return [markMutation(context, target.id, recipe.markId, {})];
   };
@@ -421,7 +442,7 @@ function markResolver(recipe: FoeMarkRecipe): RuleResolver {
 
 function swapResolver(): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     const target = requireAllyInRange(context, source, chosenTarget(context), context.sourceId, 1);
     // The source text removes and places the two characters — a REMOVE/PLACE
     // swap through the shared Swap primitive, not a teleport: no rampart
@@ -435,7 +456,7 @@ function swapResolver(): RuleResolver {
 
 function dashStrikeResolver(recipe: FoeDashStrikeRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     const chosen = chosenTarget(context);
     if (!source?.position) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires a position.`);
     const direction = chosen?.position ? axisDirection(source.position, chosen.position) : { x: 1, y: 0 };
@@ -453,7 +474,7 @@ function dashStrikeResolver(recipe: FoeDashStrikeRecipe): RuleResolver {
 
 function blastResolver(recipe: FoeBlastRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     const center = requireFoeInRange(context, source, chosenTarget(context), context.sourceId, recipe.range);
     const centerPosition = center.position;
     if (!centerPosition) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} needs a blast center.`);
@@ -497,7 +518,7 @@ function blastResolver(recipe: FoeBlastRecipe): RuleResolver {
 
 function terrainResolver(recipe: FoeTerrainRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     if (!source?.position) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires a position.`);
     const cell = evaluatePositions({ origin: source.position, radius: recipe.range, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
     if (!cell) throw new RuleProgramViolation('choice.no-space', `${context.sourceId} needs a free space in range.`);
@@ -507,7 +528,7 @@ function terrainResolver(recipe: FoeTerrainRecipe): RuleResolver {
 
 function endTurnStealthResolver(recipe: FoeEndTurnStealthRecipe): RuleResolver {
   return (context) => {
-    const source = sourceActor(context, context.actorId);
+    const source = referencedSource(context);
     if (!source?.position) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires a position.`);
     const direction = rushTowardFoes(context, source.position);
     const landing = walk(context, source.position, direction, recipe.dash, false, source.id);

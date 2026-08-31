@@ -21,7 +21,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { RuleExecutionContext } from '../automation/primitives/types.js';
-import { boundaryKey, boundaryEquals, boundaryReached, clockForTiming, currentClock, scopeForDuration, scopeSatisfied, type BoundaryRef, type ClockObservation } from '../automation/primitives/scope.js';
+import { boundaryKey, boundaryEquals, boundaryReached, clockForTiming, currentClock, durationSurvivesCombatEnd, scopeForDuration, scopeSatisfied, type BoundaryRef, type ClockObservation } from '../automation/primitives/scope.js';
 import { liveActorSlot } from '../automation/primitives/reference.js';
 
 function ctx(timing: RuleExecutionContext['timing'], round = 3): RuleExecutionContext {
@@ -174,6 +174,15 @@ describe('U8 SCOPE/CLOCK — scopeForDuration preserves temporal semantics', () 
     const targetEnd = scopeForDuration({ kind: 'turn-end', actor: { kind: 'attack-target' }, turns: 1 });
     expect((selfEnd as { kind: 'for-n'; boundary: BoundaryRef }).boundary)
       .not.toEqual((targetEnd as { kind: 'for-n'; boundary: BoundaryRef }).boundary);
+  });
+
+  it('routes combat cleanup through U8: only expedition scope survives', () => {
+    expect(durationSurvivesCombatEnd({ kind: 'expedition' })).toBe(true);
+    expect(durationSurvivesCombatEnd({ kind: 'combat' })).toBe(false);
+    expect(durationSurvivesCombatEnd({ kind: 'round-end', rounds: 3 })).toBe(false);
+    expect(durationSurvivesCombatEnd({ kind: 'turn-end', actor: { kind: 'self' }, turns: 2 })).toBe(false);
+    expect(durationSurvivesCombatEnd({ kind: 'until', event: 'some-later-event' })).toBe(false);
+    expect(durationSurvivesCombatEnd({ kind: 'instant' })).toBe(false);
   });
 
   it('counted rounds are relative N-forms, never absolute round 3', () => {

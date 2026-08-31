@@ -212,7 +212,7 @@ and U7 remain honestly PARTIAL. The tracked completion task is TODO.md
 algebra). Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
-### Reference / Binding (U1 underlay) — PARTIAL: typed vocabulary landed (T1, 2026-08-30)
+### Reference / Binding (U1 underlay) — PARTIAL: generic consumers consolidated (2026-09-01)
 
 `primitives/reference.ts` owns the typed `Reference<D>` vocabulary —
 corrected (2026-08-30) for domain + collection type safety: LIVE refs
@@ -233,17 +233,28 @@ bound names resolve the bound reference but are DOMAIN-CHECKED
 (`domainOf(boundRef) === declared domain` — a bound actor ref resolving to
 a bound position is `domain-mismatch`, reject); missing actor/entity/
 slot/position REJECT rather than defaulting; a captured defeated-actor
-ref stays resolvable (identity captured). The legacy context slots (`actorId`,
-`attackTargetId`, `triggerSourceId`, `triggerTargetIds`,
-`damageRecipientId`) remain the LIVE refs' resolution sources — migrating
-consumers onto typed refs is the T2+ de-dup work; the U12
+ref stays resolvable (identity captured). The 2026-09-01 dependency-root
+tranche added `actorReferenceForSelector` /
+`resolveActorSelectorReference`: reference-shaped selectors now map once
+onto U1 (LIVE source/attack/trigger/bound refs; CAPTURED recorded input
+identities), while query-shaped selectors reject and stay with U3. The
+generic candidate/anchor, selector/value, query, flow outcome/target-position,
+core/foe recipe, attack-provenance, and damage-recipient consumers now route
+through that surface. `u1-reference-routing` prevents a generic consumer from
+re-reading the legacy slots, the implicit source actor, or actor-input
+identities outside U1 (with `roles.ts` U2 projection and `choice.ts` U4
+validation retained as disjoint boundaries). U1 stays PARTIAL because named
+content resolvers still contain direct slot/input reads; they require a shared
+content-authoring adapter and behavior-preserving migration before the
+single-authority claim can be made. The U12
 `ArmedContinuation` carries its refs with explicit LIVE/CAPTURED semantics
 (T5b) and the U13 windows carry the continuation as their held payload
 (T5c). Tests:
 `reference.test.ts` (positive captured-exactness + live re-resolution +
 binder/collection + ordered plural targets, negative unbound/missing +
 domain-mismatch, boundary empty-collection + defeated-actor-captured,
-replay identical-literal + Binder purity).
+selector-adapter LIVE/CAPTURED/bound/query-negative cases, replay
+identical-literal + Binder purity).
 
 ### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31; T8c branded-seam + owner-contract re-cert, 2026-08-31)
 
@@ -310,7 +321,7 @@ perspective, aura entity-origin owner≠origin, ownerless-neutral reject,
 ROLE≠ANCHOR geometry, source≠target controller, underivable responder
 rejects, replay determinism).
 
-### Scope / Clock (U8 underlay) — PARTIAL: vocabulary + boundary-read surface landed (T1, 2026-08-30); source-defined lifecycle identity + reducer boundary-router landed (2026-09-01)
+### Scope / Clock (U8 underlay) — AUTHORITATIVE (residual audit + combat-cleanup repair, 2026-09-01)
 
 `primitives/scope.ts` defines the ONE `Clock`/`Scope` vocabulary with FULL
 temporal fidelity (corrected 2026-08-30): `BoundaryRef` carries an EDGE
@@ -331,16 +342,12 @@ null (they name a moment inside a resolution, not a boundary);
 `currentClock(context)` returns null for non-boundary timings (a command at
 `use` is never "at the round boundary"); `scopeForDuration` maps the legacy
 `RuleDuration` onto Scopes, preserving EDGE + ACTOR SUBJECT for turn-start/
-end durations (behavior-neutral). The legacy surfaces remain the executing
-authority — `RuleDuration`/`RuleTiming`/`use-ledger`/lifecycle readers
-still re-key "round" separately; migrating them onto the Clock (the U8
-completion, including the scheduler's turn record for turn-level
-`boundaryReached`) is a later phase. Tests: `scope.test.ts` (the 11
+end durations (behavior-neutral). Tests: `scope.test.ts` (the 11
 required temporal-fidelity cases: turn-start≠end, round-start≠end,
 source-turn≠target-turn, relative-3-rounds-from-round-5-origin, next-target-
 turn not on source turn, slow-turn≠ordinary-turn, non-boundary-null,
 permanent-never, named-event, replay; plus edge/subject preservation in
-`scopeForDuration`) — 17 tests.
+`scopeForDuration`, plus combat-boundary survival) — 18 tests.
 
 **Landed 2026-09-01 — U8 tranche (substrate only, zero source promotion):**
 
@@ -359,8 +366,8 @@ permanent-never, named-event, replay; plus edge/subject preservation in
   (  never another's). An observation that records no lifecycles is never
   treated as replaced (it declines to report a replacement). Per the U16 boundary,
   this supplies the generic U8 scope that was the blocking gap for
-  `monogatari:granted`; the Monogatari content is intentionally NOT rewired
-  and U16 is NOT recertified here.
+  `monogatari:granted`; Monogatari now consumes the lifecycle instance and
+  U16 is recertified separately by its own residual census.
 - **Reducer boundary router.** `encounter.ts` `expireBoundaryEffects` /
   `expireOneBoundaryRecord` now interpret WHICH boundary a recorded
   `RuleDuration` expires at through the ONE U8 authority
@@ -372,7 +379,18 @@ permanent-never, named-event, replay; plus edge/subject preservation in
   replace-A-not-B, active-song-not-satisfied, malformed-identity-fails,
   unobserved-lifecycle-declines, determinism/replay.
 
-### Provenance / Delivery Dimensions (U9 underlay) — LANDED (T4, 2026-08-30)
+**Residual audit and closure (2026-09-01).** Every executing temporal reader
+was reclassified by semantic question. Lifecycle phases and continuation
+gates already consume `clockForTiming` / `scopeSatisfied`; the use ledger
+consumes U8 reset boundaries; the scheduler's turn/round cadence and durable
+remaining counters are retained state/cadence authorities, not competing
+scope interpreters. The audit found one real duplicate: combat cleanup kept
+only `duration.kind === 'expedition'` locally. That decision now routes
+through `durationSurvivesCombatEnd`, which composes `scopeForDuration` with
+the combat-end boundary. An encounter-level test proves combat state expires,
+expedition state survives, and the cleanup event replays exactly. The
+`u8-scope-clock-routing` architecture guard pins both boundary expiry and
+combat cleanup to U8. No unresolved competing temporal authority remains.
 
 ### Provenance / Delivery Dimensions (U9 underlay) — LANDED (T4, 2026-08-30)
 

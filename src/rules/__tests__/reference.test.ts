@@ -20,8 +20,8 @@
 import { describe, expect, it } from 'vitest';
 import type { RuleExecutionContext } from '../automation/primitives/types.js';
 import {
-  bind, capturedActor, capturedEntity, capturedPosition, capturedValue, EMPTY_BINDER, liveActorBound, liveActorSlot,
-  liveRef, liveTriggerTargets, referenceCollection, resolveReference,
+  actorReferenceForSelector, bind, capturedActor, capturedEntity, capturedPosition, capturedValue, EMPTY_BINDER, liveActorBound, liveActorSlot,
+  liveRef, liveTriggerTargets, referenceCollection, resolveActorSelectorReference, resolveReference,
 } from '../automation/primitives/reference.js';
 
 function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContext {
@@ -221,6 +221,43 @@ describe('U1 REFERENCE — plural trigger-targets resolve as an ordered collecti
     const singular = resolveReference(liveActorSlot('attack-target'), noTargets);
     expect(singular.ok).toBe(false);
     if (!singular.ok) expect(singular.problem).toBe('missing-slot');
+  });
+});
+
+describe('U1 REFERENCE — RuleSelector adapter is the single actor-reference route', () => {
+  it('maps LIVE slot selectors through U1 and preserves missing-slot semantics', () => {
+    const context = ctx({ attackTargetId: 'foe' });
+    const selected = resolveActorSelectorReference({ kind: 'attack-target' }, context);
+    expect(selected.ok).toBe(true);
+    if (selected.ok && selected.value.kind === 'actor') expect(selected.value.actor.id).toBe('foe');
+
+    const missing = resolveActorSelectorReference({ kind: 'trigger-source' }, context);
+    expect(missing).toEqual({ ok: false, problem: 'missing-slot' });
+  });
+
+  it('captures recorded input identities in order instead of re-reading later input', () => {
+    const context = ctx({ input: { actorIds: { targets: ['foe', 'hero'] } } });
+    const ref = actorReferenceForSelector({ kind: 'input', key: 'targets' }, context);
+    expect(ref).toEqual(referenceCollection([capturedActor('foe'), capturedActor('hero')]));
+    context.input = { actorIds: { targets: ['hero'] } };
+    const resolution = resolveReference(ref!, context);
+    expect(resolution.ok).toBe(true);
+    if (resolution.ok && resolution.value.kind === 'collection') {
+      expect(resolution.value.items.map((item) => item.kind === 'actor' ? item.actor.id : '?'))
+        .toEqual(['foe', 'hero']);
+    }
+  });
+
+  it('routes bound selectors through domain-checked U1 binding', () => {
+    const context = ctx({ boundNames: bind(EMPTY_BINDER, 'target', capturedActor('foe')) });
+    const resolution = resolveActorSelectorReference({ kind: 'bound', name: 'target' }, context);
+    expect(resolution.ok).toBe(true);
+    if (resolution.ok && resolution.value.kind === 'actor') expect(resolution.value.actor.id).toBe('foe');
+  });
+
+  it('rejects query-shaped selectors instead of treating a CandidateSet as a reference', () => {
+    expect(resolveActorSelectorReference({ kind: 'all', relation: 'foe' }, ctx()))
+      .toEqual({ ok: false, problem: 'selector-not-reference' });
   });
 });
 

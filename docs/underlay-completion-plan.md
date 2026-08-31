@@ -280,7 +280,8 @@ Play; p.300 Redondo) captures a position; marks/stances/terrain effects
 terrain entry effects p.151/p.353). The proliferation of bespoke context
 fields is the warning this underlay removes.
 
-**Current state.** `PARTIAL` (T1 landed 2026-08-30; corrected 2026-08-30):
+**Current state.** `PARTIAL` (T1 landed 2026-08-30; generic-consumer
+consolidation landed 2026-09-01):
 `primitives/reference.ts` defines the typed `Reference<D>` vocabulary —
 LIVE refs named by legacy slot / direct id / bound name; CAPTURED refs are
 SELF-DESCRIBING discriminated kinds (`captured-actor` carries only an
@@ -296,25 +297,32 @@ distinct from a missing singular slot). `Binder`/`bind`/
 bound reference but are DOMAIN-CHECKED via `domainOf` — a bound actor ref
 resolving to a bound position is `domain-mismatch`, reject; missing actor/
 entity/slot/position reject fail-closed), plus `domainOf`/`referenceKey`.
-`RuleExecutionContext.boundNames` carries the Binder
-(optional, behavior-neutral). Tests: `reference.test.ts` (positive
+`RuleExecutionContext.boundNames` carries the Binder. U12
+`ArmedContinuation` records typed refs and the Binder across suspension.
+The 2026-09-01 tranche added `actorReferenceForSelector` /
+`resolveActorSelectorReference`: reference-shaped selectors map once onto
+U1, while query-shaped selectors reject and remain U3. The generic
+candidate/anchor, selector/value, query, flow, core/foe-recipe,
+attack-provenance, and damage-recipient consumers now call that authority.
+`u1-reference-routing` prevents those generic consumers from restoring
+direct legacy-slot/input/source-actor reads; `roles.ts` U2 role-frame
+projection and `choice.ts` U4 decision validation are disjoint retained
+boundaries. Tests: `reference.test.ts` (positive
 captured-exactness + live re-resolution + binder/collection + ordered
 plural targets, negative unbound/missing-slot/domain-mismatch, boundary
 empty-collection + defeated-actor-captured, replay identical-literal +
-Binder purity). The legacy slots (`context.actorId`/`attackTargetId`/
-`triggerSourceId`/`triggerTargetIds`/`damageRecipientId`) remain the
-LIVE refs' resolution sources — migrating consumers onto typed refs is the
-T2+ de-dup work. `RuleContinuationState` still carries no refs across
-continuations (U12).
+Binder purity plus LIVE/CAPTURED/bound/query-negative selector adaptation).
+The serialized context slots remain the U1 authority's LIVE reference input,
+not consumer-owned interpreters. U1 remains PARTIAL because named content
+resolvers still read those slots/input buckets directly; they require a
+shared content-authoring adapter plus behavior-preserving migration.
 
-**Locations partially owning/duplicating.** `context.actorId`,
-`context.attackTargetId`, `context.triggerSourceId`, `context.triggerTargetIds`,
-`context.damageRecipientId`, `RuleExecutionInput` buckets
-(`primitives/types.ts`); `RuleSelector` kinds (`primitives/types.ts`);
-`resolutionFacts` (`primitives/types.ts`); `RuleContinuationState`
-(`primitives/types.ts`, `src/rules/encounter.ts:1106-1154`);
-`RuleRuntimeState` keys; mark/terrain/entity ids referenced ad hoc in
-resolvers and kernels.
+**Locations partially owning/duplicating.** Named content resolvers under
+`automation/content/classes/` and `automation/content/jobs/programs/` still
+interpret the implicit source/direct-target/trigger slots and actor-input
+buckets. Generic kernels/primitives are migrated and guarded. Explicit
+actor/entity ids passed as already-resolved domain-operation parameters are
+retained facts, not implicit-reference interpreters.
 
 **Intended authority.** `primitives/reference.ts` (barrel re-exported from
 `primitives/types.ts`): `Reference<T>` with `{ kind, live | captured }`,
@@ -346,11 +354,12 @@ captured value from later state. No hidden resolution paths.
   continuation explodes at the captured cell — replay produces the identical
   mutation sequence.
 
-**Consumers to migrate (de-dup, not wiring).** Replace ad hoc reads of
-`attackTargetId`/`triggerSourceId`/`triggerTargetIds`/`damageRecipientId` in
-`kernels/runtime.ts`, `kernels/bonus-damage.ts`, `kernels/choice.ts` and
-resolvers with typed refs once the vocabulary lands; `RuleContinuationState`
-gains a typed refs map.
+**Consumers to migrate (de-dup, not wiring).** Generic consumers — migrated
+2026-09-01 and guarded. Remaining: introduce one shared content-authoring
+adapter over U1, migrate named class/job resolver slot and actor-input reads,
+then run a fresh content residual scan. `choice.ts` retains direct input
+access solely to validate the U4 decision record; U2 retains slot facts solely
+to derive its role frame.
 
 **Blocker families enabled (information only).** mark-gated-modifier,
 mark-transfer, mark-stacking, mark-detonation-window, mark-activation-gate,
@@ -446,8 +455,9 @@ AUTHORITY CALLED. See `docs/t8c-authority-proof-report.md`. Still NOT a global
 ban on `.side`/`ownerId`/`actorId`.
 **U2 is AUTHORITATIVE** (completion criteria §8 met; all eight adversarial
 U2-M1..M4 / U16-M1..M4 mutations CAUGHT; suite green; no source promotion;
-census unchanged). The UNDERLAY PHASE gate stays OPEN on
-U8/U14/U9/U6/U12/U4/U5/U7.
+census unchanged). After the 2026-09-01 fresh census, the UNDERLAY PHASE gate
+stays OPEN on U1/U3/U4/U5/U6/U7/U9/U10/U11/U12/U14/U15; U8 and U16 have
+since joined U2/U13/U17 at the strict authority bar.
 
 **Locations partially owning/duplicating.** (post-T7 residual audit)
 `RuleExecutionContext.actorId` legacy-slot abuse across `kernels/runtime.ts`
@@ -1087,8 +1097,8 @@ Special); Delay resolves at the start of the slow turn before ordinary
 activity (p.87 slow rounds; scheduler `delayed` phase); "at the end of your
 next turn" N-boundary forms; camp/expedition reset boundaries (p.56, p.113).
 
-**Current state.** `PARTIAL` (T1 landed 2026-08-30; corrected 2026-08-30):
-`primitives/scope.ts` defines the ONE `Clock`/`Scope` vocabulary with FULL
+**Current state.** `AUTHORITATIVE` (residual audit + combat-cleanup repair,
+2026-09-01): `primitives/scope.ts` defines the ONE `Clock`/`Scope` vocabulary with FULL
 temporal fidelity: `BoundarySpan` + `BoundaryEdge` (`start`/`end` —
 turn-start ≠ turn-end, round-/combat-start ≠ end, slow-turn start ≠
 ordinary turn start) carrying an optional U1 `Reference` `subject` for
@@ -1107,7 +1117,7 @@ legacy `RuleDuration` onto Scopes PRESERVING edge + actor subject
 (turn-start/end durations keep their Reference; behavior-neutral);
 `boundaryReached`/`scopeSatisfied` require an observed boundary record and
 FAIL CLOSED (return false) on relative reads with no recorded epoch — they
-never invent absolute-round answers. Tests: `scope.test.ts` (17 tests: the
+never invent absolute-round answers. Tests: `scope.test.ts` (18 tests: the
 11 required temporal-fidelity cases — turn-start≠end, round-start≠end,
 source≠target turn, relative-3-rounds-from-round-5-origin, next-target-not-
 on-source-turn, slow≠ordinary, non-boundary-null, permanent-never, named-
@@ -1133,26 +1143,29 @@ active-effect expiry (`expireBoundaryEffects` / `expireOneBoundaryRecord`)
 now interprets its boundary through `clockForTiming`/`boundaryEquals`
 instead of re-keyed boundary-name literals (durable remaining-count storage
 was unchanged). Per the U16 boundary, U8 supplied the generic scope
-Monogatari's `monogatari:granted` consumer needed but did NOT rewire
-Monogatari content nor recertify U16. Tests: `u8-lifecycle-identity.test.ts`
+Monogatari's `monogatari:granted` consumer needed; Monogatari now consumes
+that lifecycle identity and U16 is recertified by its own residual census.
+Tests: `u8-lifecycle-identity.test.ts`
 (+8 adversarial: two-owner no-alias, replace-A-not-B, active-song-
 not-satisfied, malformed-identity-no-fallback, no-lifecycle-observation-fails-
-closed, determinism/replay, stable keys). The remaining legacy surfaces still
-decide temporal semantics independently and keep U8 PARTIAL: `RuleDuration`
-consumers, `RuleTiming` boundary reads, lifecycle phase-duration expiry, and
-the scheduler's round/turn counters (still the scheduling authority, but
-re-key "round" for rule-level reads). Migrating those is the remaining U8
-work.
+closed, determinism/replay, stable keys). A fresh residual audit classified
+lifecycle execution, continuations, U16 resets, duration remaining-count
+storage, and scheduler cadence by semantic question. The scheduler owns turn
+election/cadence and the reducer owns recorded remaining counts; neither
+decides Scope meaning. The one genuine duplicate was combat cleanup's local
+`duration.kind === 'expedition'` interpreter. It now calls
+`durationSurvivesCombatEnd` (U8 `scopeForDuration` + combat-end boundary).
+`settlement.test.ts` proves combat-scoped state expires, expedition-scoped
+state survives, and replay is exact; `u8-scope-clock-routing` prevents either
+the boundary-expiry or combat-cleanup path from bypassing U8. No competing
+temporal interpreter remains.
 
-**Locations partially owning/duplicating.** `RuleDuration`
-(`primitives/types.ts`); lifecycle phases (`kernels/lifecycle.ts`);
-`useLedgerKey` brute-force prefix keys in legacy recipes
-(`kernels/use-ledger.ts` — reset now routed through U8, see above);
-`RuleTiming` (`primitives/types.ts`); scheduler round/slow logic
-(`turn-scheduler.ts`); `RuleContinuationState`-adjacent timing reads. After
-T6.1 the use-ledger reset recipes no longer independently interpret period
-strings; they call the U8-backed `resetUsageForBoundary`/
-`usagePeriodForResetBoundary`.
+**Retained specialists (not duplicate authority).** `turn-scheduler.ts` owns
+turn/round election and slow-turn cadence; reducer duration records own only
+the durable remaining occurrence count; lifecycle phases execute work already
+classified against a U8 boundary. `RuleDuration`/`RuleTiming` remain wire
+vocabulary projected through `scopeForDuration`/`clockForTiming`. The use
+ledger calls the U8-backed reset mapping.
 
 **Intended authority.** `primitives/scope.ts` (barrel re-exported):
 `Scope`/`Clock` types (`action|resolution|turn|between-turns|slow|round|
@@ -1184,13 +1197,12 @@ reset recipes actually route turn/round/combat reset through U8 (`scope.test.ts`
 proves it matches a boundary and refreshes the right `ledger:period:*`
 keys), that non-matching boundaries refresh nothing, and that a recorded
 turn-boundary transition replays to an identical ledger (never
-re-deciding). The `RuleDuration`/`lifecycle-duration`/`scheduler`
-consumers keep their own migration as remaining items.
+re-deciding). Combat cleanup parity/replay is proved by
+`settlement.test.ts`.
 
-**Consumers to migrate.** Use-ledger reset periods — **migrated (T6.1)**, now
-route through U8. Remaining: `RuleDuration` consumers, lifecycle phase-
-duration expiry reads, `RuleTiming` boundary interpretation, scheduler
-round counters (read the Clock, keep the scheduler).
+**Consumers to migrate.** None for the declared U8 contract. The scheduler
+and recorded duration counters are retained specialists; all rule-level
+boundary/scope interpretations route through U8 and are guarded.
 
 **Blocker families enabled (information only).** duration-modifier,
 duration-fly-state, once-per-round-fly-grant, use-count-override (scope
@@ -2056,44 +2068,18 @@ once per turn; slashed once per turn; one attack-tag ability per turn
 once per trigger (p.105); interrupt refresh; per-use magnitude ("2nd/3rd use
 dashes 3/2/1").
 
-**Current state.** `PARTIAL` (single executing usage authority, but the
-declared contract stays open on a source-defined lifecycle scope). Core
-Landed T3 (2026-08-30), U10 de-dup T4, raw-field consolidation T6.4, and
-the T6.4a corrective closure (2026-08-31) met their gates. The
-**U16 residual-usage-state census (2026-08-31)** then migrated the last
-actor-local once-per-scope marks off raw booleans/counters onto typed U16
-ledger keys: `chain-reaction-used` → `chainReactionOncePerRoundKey` (round),
-`incubus:triggered` → `incubusOncePerRoundKey` (round, mark owner),
-`stampede:triggered` → `stampedeOncePerRoundKey` (round, mark owner),
-`gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (any-turn),
-`midas:used` → `midasOncePerCombatKey` (combat, cap 2), and
-`bull-s-strength:collided` → `bullStrengthCollideKey(targetId)` — corrected
-by the **U16 semantic correction (2026-08-31)** from an owner-relative `turn`
-gate to the per-RECIPIENT identity: "Characters can't take this damage more
-than once a turn" (p.149) restricts the character RECEIVING the damage
-(owner = Bastion ledger storage, target = U16 `:target:` suffix, scope =
-the battlefield `any-turn` window reopened at every actor's turn start).
-`damage-immune` is proven disjoint (MODE/immune state, never a usage count)
-and the remaining armed/charged/pending flags record content mode or
-historical fact, not entitlement. `monogatari:granted` is an UNRESOLVED U16
-consumer (once-per-song entitlement) blocked on the U8 source-defined
-lifecycle scope — "song" is not yet a generic U16 UsagePeriod and is NOT
-approximated onto turn/round/combat, so U16 stays PARTIAL until U8 supplies
-the generic boundary and a later U16 follow-up can migrate the grant and
-re-audit. See `docs/u16-semantic-correction-report.md`.
-actor-local one-interrupt-per-turn; `usedAbilityIds` (No Repeats) +
-`standardMoveUsed` migrated to typed `ledger:*` keys (schema 12); the
-dangerous-terrain damage-cadence contradiction recorded as adopted
-adjudication `icon-1.5:dangerous-terrain:damage-cadence`; no competing
-executing authority; the full named acceptance suite green. T6.4b
-(2026-08-31) closed the remaining command/window seams without any durable
-shape change (schema stays 12): generic `EXECUTE_RULE` interrupts authorize
-through the ONE `interruptLegality` gate; p.290 Repeatable is an
-ACTION-TAG decision (`noRepeatsApplies`) with a generic `repeatable`
-mastery-modifier family (foe Bull Rush/Bash/Hurl + mastered Phantom Bolts),
-command- and reducer-consistent; reactive window discovery keys No Repeats
-by the interrupt's own sub-action id; Black Rock Vanguard lifts only its
-actor's per-turn cap (No Repeats and each pool remain independent).
+**Current state.** `COMPLETE/AUTHORITATIVE` (2026-09-01). Core landed in T3,
+U10 de-dup in T4, and the T6.4/T6.4a/T6.4b repairs migrated raw usage fields,
+No Repeats, standard-move, interrupt, movement, terrain, and residual
+once-per-scope marks onto typed ledger identities. The residual-state census
+proved `damage-immune` and armed/charged/pending fields are mode or fact state,
+not entitlement. The last unresolved consumer, Monogatari's once-per-song
+grant, now composes U16 `applyLifecycleScopedUsage` with U8's generic
+source-defined lifecycle identity; re-singing opens a new instance and two
+owners never alias. `monogatari:granted` has no production reader. A fresh
+residual census found no competing usage authority. See
+`docs/u8-monogatari-u16-report.md`.
+
 `primitives/usage.ts` (barrel re-exported) owns the core ledger:
 `UsageKeySpec`/`usageKey` (byte-identical `ledger:<scope>:<sourceId>`
 format, extended per-target — the STORAGE key, actor-local by design), and
@@ -2154,14 +2140,11 @@ adopted adjudication `icon-1.5:dangerous-terrain:damage-cadence`. The
 specialist (onset resolution record, read by Soul Blade / Carnevale /
 Hissatsu / Monogatari / VM).
 
-**Locations partially owning/duplicating.** `kernels/use-ledger.ts`;
-`kernels/trait-reactions.ts` (F9 fold routes its once-per-round gate
-through U16's `applyOncePerRoundUsage` COMMIT operation; de-dup ledger);
-`RuleContinuationState.executedStepIds` + `derivedTriggers`
-(`src/rules/encounter.ts`); F9 once-per-ability registries; `ruleState`
-`end-turn` flag (retained scheduler flag; `attackedThisTurn` is the
-retained U10 fact specialist);
-`content/jobs/*` gated rows.
+**Retained specialists (not duplicate authority).** `kernels/use-ledger.ts`
+is the adapter over U16; `trait-reactions.ts` consumes U16's atomic
+`applyOncePerRoundUsage` result. `RuleContinuationState` is U11 flow
+bookkeeping, `attackedThisTurn` is a U10 fact, and `end-turn` is scheduler
+state; none can authorize or consume a use.
 
 **Intended authority.** `primitives/usage.ts` (barrel re-exported):
 `UsageLedger` record (key/source/owner/target ref/scope/count/cap/reset
@@ -2188,13 +2171,9 @@ unequipped source never consumes. Boundary: cap reduced by an override;
 refresh-vs-combat boundary; shared-turn-ledger across two actors. Replay:
 reactive-trigger de-dup + interrupt-use fixtures replay byte-identical.
 
-**Consumers to migrate.** `trait-reactions.ts` de-dup → shared identity;
-`executedStepIds`/`derivedTriggers` de-dup → U16 identity + U10 facts;
-`interrupt-uses` → ledger; movement/terrain once-per-turn gates → ledger
-(RAW-FIELD migrations from T6.4/T6.4a are already DONE: the four usage
-fields via schema 11 and `usedAbilityIds`/`standardMoveUsed` via
-schema 12; `attackedThisTurn` is the retained U10 fact specialist and
-`end-turn` the retained scheduler flag).
+**Consumers to migrate.** None for the declared U16 contract. All known
+entitlement gates route through typed U16 operations; U10/U11/scheduler
+records remain documented disjoint facts/bookkeeping.
 
 **Blocker families enabled (information only).** use-count-override,
 interrupt-use-scaling, first-use-gate, auto-refresh, shared-turn-ledger,

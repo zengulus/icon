@@ -31,6 +31,25 @@ function settlementFixture(): { state: EncounterState; character: IconCharacter;
 }
 
 describe('combat settlement — personal Resolve grant (p.99)', () => {
+  it('expires combat-scoped state, preserves expedition-scoped state, and replays the cleanup exactly', () => {
+    const { state, heroId } = settlementFixture();
+    const started = startEncounterTo(state, heroId, scriptedDice());
+    started.actors[heroId].conditions = [
+      { id: 'combat-condition', sourceId: 'fixture:combat', ownerId: heroId, potency: 'normal', duration: { kind: 'combat' } },
+      { id: 'expedition-condition', sourceId: 'fixture:expedition', ownerId: heroId, potency: 'normal', duration: { kind: 'expedition' } },
+    ];
+    started.actors[heroId].activeEffects = [
+      { id: 'combat-effect', sourceId: 'fixture:combat', effectId: 'combat-aura', ownerId: heroId, duration: { kind: 'combat' }, modifiers: [], triggers: [], state: {} },
+      { id: 'expedition-effect', sourceId: 'fixture:expedition', effectId: 'expedition-aura', ownerId: heroId, duration: { kind: 'expedition' }, modifiers: [], triggers: [], state: {} },
+    ];
+
+    const result = expectCommandPurity(started, { type: 'END_ENCOUNTER' });
+
+    expect(result.state.actors[heroId].conditions.map(({ id }) => id)).toEqual(['expedition-condition']);
+    expect(result.state.actors[heroId].activeEffects.map(({ id }) => id)).toEqual(['expedition-effect']);
+    expect(applyEvents(started, result.events)).toEqual(result.state);
+  });
+
   it('grants each surviving PC exactly +1 personal resolve at END_ENCOUNTER', () => {
     const { state, heroId, foeId } = settlementFixture();
     const started = startEncounterTo(state, heroId, scriptedDice());
