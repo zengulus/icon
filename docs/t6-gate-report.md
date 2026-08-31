@@ -178,6 +178,39 @@ interpreted?", and these modules answer that question with their own side /
 relation reads. Under the strict retained-specialist test they do not
 currently prove disjointness.
 
+### A.4a T7 (this tranche, 2026-08-31): U2 DOWNSTREAM CONSUMERS CONSOLIDATED
+
+The §A.4 unresolved consumers are now routed onto `roles.ts` (the ONE U2
+vocabulary/derivation authority), so no executing duplicate perspective path
+remains:
+
+- **Candidate relation perspective** — `kernels/candidate.ts` now derives
+  the self/ally/foe PERSPECTIVE through `relationPerspectiveIdFromContext`
+  (U2; fail closed on underivable) and only then feeds U3
+  `matchesTargetRelation`. `targeting.ts` remains a PARAMETERIZED eligibility
+  specialist (it takes the perspective actor as `source`; it neither owns nor
+  guesses whose side establishes the relation).
+- **Aura member perspective** — `kernels/aura.ts` separates the SEMANTIC
+  `perspectiveActorId` (U2) from the SPATIAL anchor `actorId`/`entityId`
+  (U7): for an actor origin the bearer is the perspective; for an
+  entity-origin aura the perspective is the entity's CREATOR/OWNER; an
+  ownerless/neutral origin has NO derivable ally/foe (only `characters`
+  relations apply, never a manufactured side).
+- **Window/choice responder** — decision-window and `choiceEntitledPlayer`
+  already resolve the entitled responder through `resolveRoleSelector` over
+  the durable frame (subject-relative, fail closed, replay-exact); the
+  save-rolled window responder is the U16 interrupt entitlement (retained
+  specialist, disjoint from U2).
+
+Architecture guard `u2-perspective-authority` (audit-architecture-core.ts)
+forbids reintroducing a dropped U2 symbol or the anchor/owner-derived side
+relation (`origin.side`, `.side ?? null`) in the migrated consumers — a
+structural/allowlist guard, NOT a global ban on `.side`/`ownerId`/`actorId`.
+
+**Verdict: U2 = AUTHORITATIVE** (completion criteria §8 met; suite green;
+no source promotion; census unchanged). The UNDERLAY PHASE gate remains OPEN:
+U8/U14/U9/U6/U12/U4/U5/U7 stay partial.
+
 ### A.5 The "only one §1 row remains" claim — FALSE
 
 `6591d5a` §D claims only U16 has pending migration obligations. Its own
@@ -368,12 +401,15 @@ real §1 consumer-migration or unbuilt seam, confirmed at code HEAD.
    `usedAbilityIds` (No Repeats) and `standardMoveUsed` are re-audited and
    migrated to typed `ledger:*` keys (schema 12), and the dangerous-terrain
    damage-cadence contradiction is recorded as adopted adjudication
-   `icon-1.5:dangerous-terrain:damage-cadence`. U2 role-consumer routing is
-   the next smallest blocker.**
-4. **U2 — route role consumers.** Aura bearer/member, `targeting.ts` relation
-   reads, save-window ownership, and command-layer choice responder routing
-   onto `roles.ts` `deriveRoles`/`choiceEntitledPlayer`, with parity tests, OR
-   prove each is a disjoint retained specialist under the §3 four-part test.
+   `icon-1.5:dangerous-terrain:damage-cadence`. U8 `RuleDuration`/lifecycle
+   expiry is the next smallest blocker.**
+4. **U2 — route role consumers.** **DONE (T7, 2026-08-31):** candidate
+   relation perspective derives through `relationPerspectiveIdFromContext`
+   (U2), aura separates `perspectiveActorId` (U2) from the spatial anchor
+   (U7), decision-window/`choiceEntitledPlayer` responders resolve through
+   `resolveRoleSelector` (fail closed), `targeting.ts` is proven a
+   parameterized retained specialist, and the `u2-perspective-authority`
+   guard prevents regression (§A.4a). No longer outstanding.
 5. **U12 — resolver end-of-turn effects.** Polaris meteor / Carnevale
    per-source delayed logic → armed continuations with Clock triggers.
 6. **U4 — ability-use-choices / talentChoices through `resolveChoice`** (or
@@ -455,9 +491,9 @@ Evaluate each §4 criterion as written.
 | # | Criterion | Verdict | Evidence |
 | --- | --- | --- | --- |
 | 1 | U1–U17 source-backed contracts current and true of code | **PASS** | Every §1 row is now current and code-true: PARTIAL underlays truthfully state their unfinished migrations (U2, U3, U4, U5, U6, U7, U8, U9, U11, U12, U14) and LANDED/AUTHORITATIVE rows match code (U10, U13, U15, U16, U17). The U11 `choose` contract and the U8 `use-ledger` reset row were reconciled; U16 reached AUTHORITATIVE in T6.4a once all six closure gates were met (actor-local interrupts, `usedAbilityIds`/`standardMoveUsed` migrated, the dangerous-terrain adjudication recorded, no competing authority, acceptance suite green) — see §B/§D. Note: a contract truthfully stating `PARTIAL` still satisfies §4.1; incompleteness is judged under §4.2/§4.3/§4.4, not §4.1 |
-| 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Unresolved: U2 role consumers, U8 `RuleDuration`/`RuleTiming`/lifecycle/scheduler surfaces (use-ledger reset migrated in T6.1), U14 `RuleModifier`, U9 reconstruction, U6 gate-body folds, U12 resolver effects. U16 raw fields REMOVED (T6.4 schema 11 + T6.4a schema 12); the one-interrupt-per-turn window is ACTOR-LOCAL; `usedAbilityIds`/`standardMoveUsed` are gone; `attackedThisTurn` retained as a documented U10 fact specialist. U17's lifecycle registration-order and expiry misfiring-order duplicate authorities are REMOVED (T6.3) |
+| 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Resolved: U2 role consumers (T7: candidate perspective via `relationPerspectiveIdFromContext`; aura `perspectiveActorId`; decision-window/`choiceEntitledPlayer` responders via `resolveRoleSelector`; `targeting.ts` parameterized retained specialist; `u2-perspective-authority` guard). Unresolved: U8 `RuleDuration`/`RuleTiming`/lifecycle/scheduler surfaces (use-ledger reset migrated in T6.1), U14 `RuleModifier`, U9 reconstruction, U6 gate-body folds, U12 resolver effects. U16 raw fields REMOVED (T6.4 schema 11 + T6.4a schema 12); the one-interrupt-per-turn window is ACTOR-LOCAL; `usedAbilityIds`/`standardMoveUsed` are gone; `attackedThisTurn` retained as a documented U10 fact specialist. U17's lifecycle registration-order and expiry misfiring-order duplicate authorities are REMOVED (T6.3) |
 | 3 | Required acceptance tests exist and pass | **FAIL (not established)** | Exhaustive matrix (deliverable C) has MISSING rows for U2, U4, U5, U6, U7, U8 (duration/lifecycle expiry), U9, U12, U14. The U17 recorded same-owner ordering + replay obligation is PASS (T6.2) and the U17 turn-boundary consumers obligation is PASS (T6.3); the U16 usage/entitlement acceptance rows are PASS (T6.4 + T6.4a). The remaining PARTIAL rows (U2/U4/U5/U6/U7/U8/U9/U12/U14) lack a closed acceptance suite, so the criterion as a whole is NOT ESTABLISHED |
-| 4 | No known duplicate competing authority | **FAIL** | U2 role reads in aura/targeting/save-window; U8 `RuleDuration`/`RuleTiming`/scheduler temporal surfaces beside Clock (use-ledger reset now routes through U8); U14 `RuleModifier` bag beside the fold. U16 no longer duplicates the ledger on raw actor fields (T6.4 + T6.4a; the architecture `bespoke-u16-entitlement-field` guard forbids reintroducing them). The U17 duplicate ordering authority is REMOVED (T6.3) |
+| 4 | No known duplicate competing authority | **FAIL** | U2 role/perspective reads NO LONGER DUPLICATE roles.ts (T7: candidate + aura migrated; targeting/save-rolled-of the U16/`matchesTargetRelation` retained specialists; `u2-perspective-authority` guard). Remaining duplicates: U8 `RuleDuration`/`RuleTiming`/scheduler temporal surfaces beside Clock (use-ledger reset now routes through U8); U14 `RuleModifier` bag beside the fold. U16 no longer duplicates the ledger on raw actor fields (T6.4 + T6.4a; the architecture `bespoke-u16-entitlement-field` guard forbids reintroducing them). The U17 duplicate ordering authority is REMOVED (T6.3) |
 | 5 | Full suite green | **PASS** | typecheck / npm test (1824) / build / audits / source-artifacts / e2e green at this commit (see §I verification) |
 | 6 | U18/U19 decided | **PASS** | Both NOT promoted from code evidence (§F) |
 | 7 | Generated docs regenerated (byte-stable) | **PASS** | `audit:class-job-census` regenerates byte-stable; census unchanged; no source promotion |

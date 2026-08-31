@@ -38,6 +38,7 @@ import type { ActorCandidateQuery } from '../primitives/query.js';
 import {
   matchesTargetRelation,
 } from '../primitives/targeting.js';
+import { relationPerspectiveIdFromContext } from '../primitives/roles.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import {
   anchorFromActorSelector,
@@ -138,11 +139,22 @@ function anchorSelectorIds(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The acting actor — the relation source ("ally of the user"). Distinct
- * from the range origin: relation never moves with the anchor. */
+ * from the range origin: relation never moves with the anchor.
+ *
+ * U2: the RELATION PERSPECTIVE is the actor whose SIDE establishes the
+ * self/ally/foe relation (p.92 "another living ally" is relative to the
+ * source). It is derived through the durable role frame
+ * (`relationPerspectiveIdFromContext` → the source role), never inferred
+ * from an incidental actor id — an underivable perspective fails closed.
+ */
 function actingActor(context: RuleExecutionContext): RuleActorView {
-  const source = context.state.actors[context.actorId];
+  const perspectiveId = relationPerspectiveIdFromContext(context);
+  if (perspectiveId === null) {
+    throw new RuleProgramViolation('selector.actor-missing', 'The relation perspective cannot be derived from the durable role frame.');
+  }
+  const source = context.state.actors[perspectiveId];
   if (!source) {
-    throw new RuleProgramViolation('selector.actor-missing', `Actor ${context.actorId} does not exist.`);
+    throw new RuleProgramViolation('selector.actor-missing', `Actor ${perspectiveId} does not exist.`);
   }
   return source;
 }

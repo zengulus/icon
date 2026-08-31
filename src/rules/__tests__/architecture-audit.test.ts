@@ -271,6 +271,49 @@ describe('auditArchitecture (violation detection)', () => {
     rmSync(tmpDir, { recursive: true });
   });
 
+  it('U2 guard detects anchor-derived side relation restored in aura.ts', () => {
+    setup();
+    // aura.ts keeps the U2 symbol (so the presence check passes) but re-derives
+    // ally/foe from the spatial anchor/owner side — the ROLE ≠ ANCHOR regression.
+    writeFileSync(
+      join(tmpDir, 'kernels', 'aura.ts'),
+      [
+        'perspectiveActorId',
+        'const bad = origin.side;',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u2-perspective-authority',
+          file: 'kernels/aura.ts',
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U2 guard flags a migrated consumer that dropped its U2 perspective symbol', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'candidate.ts'),
+      'const src = context.actorId;\n',
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u2-perspective-authority',
+          file: 'kernels/candidate.ts',
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
   it('detects unmapped registration modules', () => {
     setup();
     // A content file that calls registerFoo() but is NOT imported by registry.ts
@@ -320,6 +363,40 @@ describe('auditArchitecture (violation detection)', () => {
     const result = auditArchitecture(tmpDir);
     expect(result.violations.filter((v) => v.check === 'registry-completeness')).toEqual([]);
     rmSync(tmpDir, { recursive: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: single U2 perspective authority (T7 consumer consolidation guard)
+// ---------------------------------------------------------------------------
+
+describe('single U2 perspective authority', () => {
+  const dir = import.meta.dirname;
+  const srcDir = join(dir, '..', '..');
+  const read = (rel: string) => {
+    const { readFileSync } = require('node:fs');
+    const path = require('node:path');
+    return readFileSync(path.join(srcDir, 'rules', 'automation', rel), 'utf8');
+  };
+
+  it('candidate.ts routes the relation perspective through roles.ts (U2), not an incidental field', () => {
+    expect(read('kernels/candidate.ts')).toContain('relationPerspectiveIdFromContext');
+  });
+
+  it('aura.ts separates the U2 perspective role from the spatial anchor', () => {
+    expect(read('kernels/aura.ts')).toContain('perspectiveActorId');
+    // ROLE ≠ ANCHOR: the ally/foe relation must never re-derive from the
+    // spatial anchor/owner side again (`origin.side`, `side: owner?.side ?? null`).
+    // (The legit `AuraActorView.side = actor.side` factual projection is fine.)
+    expect(read('kernels/aura.ts')).not.toMatch(/origin\.side\b|\.side\s*\?\?\s*null/);
+  });
+
+  it('roles.ts is the typed U2 vocabulary authority (no kernel/content imports)', () => {
+    const { readFileSync } = require('node:fs');
+    const path = require('node:path');
+    const code = readFileSync(path.join(srcDir, 'rules', 'automation', 'primitives', 'roles.ts'), 'utf8');
+    expect(code).not.toMatch(/from '[.][^']*\/kernels\//);
+    expect(code).not.toMatch(/from '[.][^']*\/content\//);
   });
 });
 

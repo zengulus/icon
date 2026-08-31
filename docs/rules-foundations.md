@@ -245,7 +245,7 @@ binder/collection + ordered plural targets, negative unbound/missing +
 domain-mismatch, boundary empty-collection + defeated-actor-captured,
 replay identical-literal + Binder purity).
 
-### Role / Perspective (U2 underlay) — PARTIAL: typed vocabulary landed (T1, 2026-08-30)
+### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7, 2026-08-31)
 
 `primitives/roles.ts` owns the `Role` vocabulary: source/owner/controller/
 chooser/payer/target/recipient/carrier/creator/trigger-source/
@@ -264,13 +264,24 @@ controller-of rejects there). `RuleChoice` gains typed optional
 `chooser`/`controller` role carriage (behavior-neutral until U4 consumes
 it). ROLE ≠ REFERENCE (U1 names things) ≠ ANCHOR (U7 measures spaces): the
 original-user role survives a rebound where the spatial origin moved. The
-aura kernel's bearer-vs-member and `targeting.ts`'s hard-coded relation
-reads still derive roles locally — the de-dup migration is T2+. Tests:
-`roles.test.ts` (positive owner≠carrier + TARGET_CONTROLLER +
-source−target and owner−carrier differing controllers, negative
-underivable-chooser/unknown-role + missing-controller-for-valid-subject +
-missing-subject, boundary self-collapse + ROLE≠ANCHOR, replay
-same-frame-same-map).
+DOWNSTREAM CONSUMERS route their perspective through this authority (T2 +
+T7, 2026-08-31), so no independent role-derivation path remains:
+`candidate.ts` derives the RELATION PERSPECTIVE through
+`relationPerspectiveIdFromContext` (U2) and only then feeds U3
+`matchesTargetRelation`, which stays a parameterized eligibility specialist.
+The aura kernel separates the SEMANTIC perspective (`perspectiveActorId`,
+U2) from the SPATIAL anchor (`actorId`/`entityId`, U7); an ownerless/neutral
+origin has no derivable ally/foe — only `characters` relations apply. Choice
+and decision-window responders resolve through `resolveRoleSelector` /
+`choiceEntitledPlayer` over the durable frame (subject-relative, reject on
+underivable); the save-rolled window responder is the U16 interrupt
+entitlement (retained specialist, disjoint from U2).
+`windowResponderId(selector, frame)` is the U2 responder projection (thin
+facade over `resolveRoleSelector`).
+Tests: `roles.test.ts` + `t7-u2-role-consumers.test.ts` (relation
+perspective, aura entity-origin owner≠origin, ownerless-neutral reject,
+ROLE≠ANCHOR geometry, source≠target controller, underivable responder
+rejects, replay determinism).
 
 ### Scope / Clock (U8 underlay) — PARTIAL: vocabulary + boundary-read surface landed (T1, 2026-08-30)
 

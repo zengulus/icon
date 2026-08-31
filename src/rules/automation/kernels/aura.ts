@@ -206,14 +206,36 @@ export function auraEffectRadius(effect: NonNullable<AuraActorView['activeEffect
 }
 
 /** One concrete origin of an aura in current state, with its effective
- * radius and the side used for relation checks. */
+ * radius and the SPATIAL anchor (the footprint cells membership is measured
+ * from).
+ *
+ * The SEMANTIC PERSPECTIVE (whose side establishes ally/foe) is deliberately
+ * SEPARATE from the spatial anchor (U2 ROLE ≠ U7 ANCHOR): `actorId`/
+ * `entityId` are the spatial origin (whose square emits the aura), while
+ * `perspectiveActorId` is the actor relative to whom "ally" / "foe" is
+ * interpreted — for an actor origin the bearer itself, for an entity-origin
+ * aura (Spirit Shrine, Rampant Nail's lightning spike, p.227) the entity's
+ * CREATOR/OWNER. This keeps an entity-origin aura representable without
+ * collapsing entity, creator/owner, spatial origin, and affected member. A
+ * null perspective (an ownerless entity, or a neutral origin) means no
+ * ally/foe relation is semantically derivable — only `characters` relations
+ * apply, never a manufactured side.
+ */
 export interface AuraOriginRef {
+  /** The spatial anchor actor whose footprint emits the aura (null for an
+   * entity-origin aura). */
   actorId: string | null;
+  /** The spatial anchor entity (null for an actor-origin aura). */
   entityId: string | null;
+  /** The spatial origin position — the U7 anchor membership is measured
+   * from, never the semantic perspective. */
   position: Position;
   size: number;
   radius: number;
-  side: string | null;
+  /** The semantic perspective actor whose side establishes ally/foe relations
+   * (U2 role, distinct from the spatial anchor). Null = neutral/ownerless
+   * origin: only `characters` relations apply. */
+  perspectiveActorId: string | null;
 }
 
 /** Resolve every concrete origin of the aura in current state. Pure — no
@@ -235,11 +257,11 @@ export function auraOriginRefs(state: AuraStateView, definition: AuraDefinition)
       : Number.NaN;
     const radius = Number.isFinite(radiusOverride) && radiusOverride > 0 ? radiusOverride : definition.radius;
     if (origin.kind === 'actor-trait' && (actor.traitIds?.includes(origin.traitId) ?? false)) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, side: actor.side });
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: actor.id });
     } else if (origin.kind === 'actor-state' && actor.state?.[origin.stateKey]) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, side: actor.side });
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: actor.id });
     } else if (origin.kind === 'stance' && actor.stance?.stanceId === origin.stanceId) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, side: actor.side });
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: actor.id });
     } else if (origin.kind === 'aura-effect') {
       for (const effect of actor.activeEffects ?? []) {
         // The durable aura effect is the lifetime record; provenance pairs it
@@ -249,15 +271,18 @@ export function auraOriginRefs(state: AuraStateView, definition: AuraDefinition)
         if (effect.sourceId !== (origin.sourceId ?? definition.sourceId)) continue;
         const effectRadius = auraEffectRadius(effect);
         if (effectRadius === null) continue;
-        origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius: effectRadius, side: actor.side });
+        origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius: effectRadius, perspectiveActorId: actor.id });
       }
     }
   }
   if (origin.kind === 'entity-type') {
     for (const entity of Object.values(state.entities ?? {})) {
       if (entity.type !== origin.entityType || !entity.position) continue;
-      const owner = entity.ownerId ? state.actors[entity.ownerId] : undefined;
-      origins.push({ actorId: null, entityId: entity.id, position: entity.position, size: 1, radius: definition.radius, side: owner?.side ?? null });
+      // The entity's spatial origin is the entity; the ally/foe perspective is
+      // the entity's CREATOR/OWNER (an entity has no side of its own). An
+      // ownerless entity has no derivable perspective — only `characters`
+      // relations apply (a neutral origin never manufactures an ally/foe side).
+      origins.push({ actorId: null, entityId: entity.id, position: entity.position, size: 1, radius: definition.radius, perspectiveActorId: entity.ownerId ?? null });
     }
   }
   return origins;
@@ -278,13 +303,17 @@ export function isAuraMember(
   if (origin.actorId !== null && actor.id === origin.actorId) return definition.includesOrigin;
   if (footprintDistance({ position: origin.position, size: origin.size }, { position: actor.position, size: actor.size ?? 1 }) > origin.radius) return false;
   if (definition.relations.length === 0) return false;
-  // The origin is never its own ally/foe (covered by includesOrigin above).
-  if (origin.side === null) return definition.relations.includes('characters');
+  // The ally/foe relation is interpreted from the SEMANTIC PERSPECTIVE actor's
+  // side (U2 role), never from the spatial anchor. A null perspective (an
+  // ownerless entity-origin aura, or a neutral origin) has no derivable side:
+  // only `characters` relations apply — no manufactured ally/foe.
+  const perspective = origin.perspectiveActorId !== null ? state.actors[origin.perspectiveActorId] : undefined;
+  if (!perspective) return definition.relations.includes('characters');
   return definition.relations.some((relation) => relation === 'characters'
     ? true
     : relation === 'allies'
-      ? actor.side === origin.side
-      : actor.side !== origin.side);
+      ? actor.side === perspective.side
+      : actor.side !== perspective.side);
 }
 
 /** The member actor ids of one aura definition, deterministic by id. */

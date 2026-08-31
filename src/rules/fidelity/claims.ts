@@ -155,6 +155,8 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'TODO.md', linePrefix: '     FAILS CLOSED. Never one numeric priority; never array/registration', reason: 'implementation-pattern description (U17 turn-boundary fail-closed semantics), not an authority claim' },
   { file: 'TODO.md', linePrefix: '  responder, permutation validation, fail-closed cross-owner +', reason: 'implementation-pattern description in the T6.3 changelog, not an authority claim' },
   { file: 'TODO.md', linePrefix: '  audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.', reason: 'tranche-changelog status sentence (fresh-audit conclusion), not a subsystem authority claim' },
+  // --- T7 (U2 downstream consumers, 2026-08-31) ----------------------------
+  { file: 'docs/rules-foundations.md', linePrefix: '### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7, 2026-08-31)', reason: 'tranche-status heading naming the landed U2 consumer-consolidation state, not a standalone subsystem claim (backed by roles.ts + candidate/aura/choice/decision-window routing)' },
 ];
 
 // ---------------------------------------------------------------------------

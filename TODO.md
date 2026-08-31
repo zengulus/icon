@@ -843,6 +843,31 @@ assumption here, document the evidence and update this list before proceeding.
   source promotion). U16 remains the single executing usage/entitlement
   authority. Next smallest-first blocker: U2 role-consumer routing.
 
+- **T7 — U2 role-consumer consolidation (this tranche).** `DONE`. Made
+  `primitives/roles.ts` the single semantic authority for "relative to whom is
+  this clause interpreted?" by migrating the remaining executing duplicate
+  authorities instead of inventing a new abstraction. Classification:
+  migrated — `kernels/candidate.ts` (relation perspective via
+  `relationPerspectiveIdFromContext`, rejects on underivable),
+  `kernels/aura.ts` (separated SEMANTIC `perspectiveActorId` (U2) from the
+  SPATIAL anchor `actorId`/`entityId` (U7); an ownerless/neutral entity-origin
+  aura has NO derivable ally/foe — only `characters` relations apply),
+  content `chanter-programs.ts` stance-aura seam; retained specialists with
+  disjoint responsibility — `targeting.ts` `matchesTargetRelation` is
+  parameterized U3 eligibility (the caller supplies the U2-derived
+  perspective), decision-window/choice responders already routed through
+  `resolveRoleSelector`/`choiceEntitledPlayer` subject-relative and reject,
+  the save-rolled window responder is the U16 interrupt entitlement. `roles.ts`
+  gains `relationPerspectiveId`/`windowResponderId` (the latter a thin facade
+  over `resolveRoleSelector`, pinned by tests). Architecture guard added:
+  `u2-perspective-authority` detects a migrated consumer dropping its U2
+  symbol or aura.ts re-deriving ally/foe from the anchor/owner side (`origin.side`,
+  `.side ?? null`) — deliberately NOT a global ban on `.side`/`ownerId`/`actorId`.
+  No durable shape changed; census stays 427; address the UNDERLAY PHASE gate
+  verdict (still OPEN on U8/U14/U9/U6/U12/U4/U5/U7). Tests:
+  `t7-u2-role-consumers.test.ts` (12 adversarial) + architecture-audit U2
+  guard cases; full suite green.
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

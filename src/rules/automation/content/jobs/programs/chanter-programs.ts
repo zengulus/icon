@@ -353,8 +353,10 @@ const gentlenessEffects: RuleResolver = (context) => {
       const definition = auraDefinitionFor('chanter:gentleness');
       if (definition && source.position) {
         const view = auraRuntimeView(context.state);
+        // The spatial anchor is the stance holder (source); the ally/foe
+        // perspective (U2) is the same actor for a character-stance aura.
         const origin = {
-          actorId: source.id, entityId: null, position: source.position, size: source.size ?? 1, radius: next, side: source.side,
+          actorId: source.id, entityId: null, position: source.position, size: source.size ?? 1, radius: next, perspectiveActorId: source.id,
         };
         for (const foe of Object.values(context.state.actors)) {
           if (foe.side === source.side || foe.defeated) continue;

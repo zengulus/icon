@@ -387,8 +387,8 @@ the source/controller's position (Masquerade, p.151); the aura kernel's
 bearer-vs-member boundary (`kernels/aura.ts`) is a role the engine must
 derive, never string-match.
 
-**Current state.** `PARTIAL` (T1 landed 2026-08-30; corrected 2026-08-30):
-`primitives/roles.ts` defines the `Role` union (source/owner/controller/
+**Current state (historic snapshot, T1 — superseded by the T7 update below).**
+`PARTIAL` as of T1/2026-08-30: `primitives/roles.ts` defines the `Role` union (source/owner/controller/
 chooser/payer/target/recipient/carrier/creator/trigger-source/
 trigger-recipient/attacker/defender/original-user/current-origin),
 `RoleFrame` + deterministic `deriveRoles` producing a SUBJECT-RELATIVE
@@ -408,17 +408,48 @@ consumer migration. Tests: `roles.test.ts` (positive owner≠carrier,
 TARGET_CONTROLLER, source−target and owner−carrier differing controllers;
 negative underivable-chooser/unknown-role, missing-controller-for-valid-
 subject, missing-subject; boundary self-collapse + ROLE≠ANCHOR rebound;
-replay same-frame-same-map). The aura kernel's bearer-vs-member
-and `targeting.ts`'s hard-coded relation reads still derive roles
-locally — the de-dup migration is T2+.
+replay same-frame-same-map). The aura kernel's bearer-vs-member and
+`targeting.ts`'s relation reads were the T2+/T7 de-dup migration targets —
+resolved in the T7 current-state update below.
 
-**Locations partially owning/duplicating.** `kernels/aura.ts`
-(bearer/member/origin derivation); `primitives/targeting.ts`
-(`matchesTargetRelation` hard-codes self/ally/foe relative to a passed
-source); `RuleExecutionContext.actorId` abuse across `kernels/runtime.ts`;
-`ownerId` fields on mark/stance/entity/persistent mutations
-(`primitives/types.ts`); `abilityUseChoices`/`talentChoices` opaque folds;
-`save-window.ts` actor-is-saved policy reads.
+**Current state (T7 update, 2026-08-31):** the downstream consumers are now
+CONSOLIDATED onto this authority (candidate + aura migrated; the rest proved
+retained specialists), so no executing duplicate perspective path remains:
+- `kernels/candidate.ts` derives the relation PERSPECTIVE through
+  `relationPerspectiveIdFromContext` (U2; fail closed on underivable) and
+  only then feeds U3 `matchesTargetRelation` — `targeting.ts` stays a
+  parameterized eligibility specialist (takes the perspective actor as
+  `source`; neither owns nor guesses whose side establishes the relation).
+- `kernels/aura.ts` separates the SEMANTIC `perspectiveActorId` (U2) from the
+  SPATIAL anchor `actorId`/`entityId` (U7): actor origin → bearer is the
+  perspective; entity-origin aura → the entity's CREATOR/OWNER is the
+  perspective; an ownerless/neutral origin has NO derivable ally/foe — only
+  `characters` relations apply (ROLE ≠ ANCHOR, entity ≠ creator ≠ origin ≠
+  member represented without collapse).
+- Choice/decision-window responders already resolve through
+  `resolveRoleSelector` / `choiceEntitledPlayer` over the durable frame
+  (subject-relative, fail closed, replay-exact); the save-rolled window
+  responder is the U16 interrupt entitlement (retained specialist). `roles.ts`
+  adds `relationPerspectiveId` + the `windowResponderId` responder projection
+  (thin facade over `resolveRoleSelector`, pinned by tests).
+
+The architecture `u2-perspective-authority` guard (audit-architecture-core.ts)
+forbids a migrated consumer dropping its U2 symbol or aura re-deriving
+ally/foe from the anchor/owner side (`origin.side`, `.side ?? null`) — a
+structural/allowlist guard, NOT a global ban on `.side`/`ownerId`/`actorId`.
+**U2 is AUTHORITATIVE** (completion criteria §8 met; suite green; no source
+promotion; census unchanged). The UNDERLAY PHASE gate stays OPEN on
+U8/U14/U9/U6/U12/U4/U5/U7.
+
+**Locations partially owning/duplicating.** (post-T7 residual audit)
+`RuleExecutionContext.actorId` legacy-slot abuse across `kernels/runtime.ts`
+— the `roleFrameFromContext` seam maps it onto the source role, but the
+legacy slots carry no per-subject controller facts (every `controller-of`
+resolution fails closed there); `ownerId` fields on mark/stance/entity/
+persistent mutations (`primitives/types.ts`) remain factual ownership record;
+`abilityUseChoices`/`talentChoices` opaque folds are a U4 concern, not U2;
+`save-window.ts` actor-is-saved policy reads are the U3 saved-recipient
+specialist, disjoint from U2 responder authority.
 
 **Intended authority.** `primitives/roles.ts` (barrel re-exported):
 `Role` vocabulary + `deriveRoles(context)` producing the semantic role map

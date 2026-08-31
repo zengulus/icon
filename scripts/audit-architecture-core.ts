@@ -180,9 +180,36 @@ export function isBespokeU16FieldName(name: string): boolean {
     || /^[a-zA-Z0-9_]*(?:UsedThisTurn)$/.test(name);
 }
 
+// U2 (role/perspective) single-authority guard details.
+//
+// These are the CONSUMERS migrated to derive semantic relation / controller /
+// chooser perspective through `primitives/roles.ts` (the U2 authority). Each
+// must keep importing/using its U2 symbol; a contributor who re-derives the
+// perspective from an incidental field (e.g. `context.actorId`) must drop the
+// import, which this structural allowlist catches. This is NOT a global ban on
+// `.side` / `ownerId` / `actorId` — those remain legitimate underlying facts
+// for many non-U2 responsibilities.
+const U2_PERSPECTIVE_SYMBOLS: ReadonlyMap<string, string> = new Map([
+  // candidate.ts must resolve the relation perspective (whose SIDE establishes
+  // self/ally/foe) through roles.ts, never straight off `context.actorId`.
+  ['kernels/candidate.ts', 'relationPerspectiveIdFromContext'],
+  // aura.ts must separate SEMANTIC perspective (`perspectiveActorId`, the U2
+  // role) from the SPATIAL anchor (`actorId`/`entityId`, the U7 origin).
+  ['kernels/aura.ts', 'perspectiveActorId'],
+]);
+
+// The precise removed independent-perspective patterns in aura.ts: the old
+// `AuraOriginRef#side` field derived ally/foe directly from the spatial anchor
+// or owner (`side: owner?.side ?? null`) and the member relation compared
+// `actor.side === origin.side`. The migrated authority reads
+// `perspectiveActorId`, then compares `actor.side === perspective.side`. Any
+// reintroduction of the anchor-derived side relation is a U2 duplicate. The legit
+// `AuraActorView.side = actor.side` factual projection in the view adapters is
+// NOT matched — the actor's own side is a property, not the U2 member perspective.
+const AURA_ANCHOR_SIDE_RESTORE_RE = /origin\.side\b|\.side\s*\?\?\s*null/;
+
 // Patterns that indicate side-effect registration at module scope
 const REGISTER_CALL_RE = /^\s*(?:register\w+|Object\.assign)\s*\(/;
-
 // ---------------------------------------------------------------------------
 // Main audit
 // ---------------------------------------------------------------------------
@@ -357,6 +384,40 @@ export function auditArchitecture(automationRoot: string): AuditResult {
   } catch {
     // types.ts not readable from this automation root (e.g. a unit fixture) —
     // the structural/type gate still applies at build time.
+  }
+
+  // ---- Check 6: no independent U2 perspective authority in migrated consumers ----
+  // U2 (`primitives/roles.ts`) is the ONE authority for "relative to whom a
+  // clause is interpreted". These consumers were migrated to route their
+  // semantic relation / controller / chooser / member perspective through it.
+  // This guard is narrowly scoped to those allowlisted files: it requires the
+  // target U2 symbol to remain (a contributor re-deriving the perspective from
+  // an incidental field has to drop the import), and forbids the exact removed
+  // anchor-derived side relation in aura.ts. It is deliberately NOT a global
+  // ban on `.side` / `ownerId` / `actorId` / equality compares — those facts
+  // remain legitimate for many non-U2 responsibilities.
+  for (const [relFile, symbol] of U2_PERSPECTIVE_SYMBOLS) {
+    const file = join(automationRoot, relFile);
+    let code: string;
+    try {
+      code = readFileSync(file, 'utf8');
+    } catch {
+      continue; // fixture root may omit the file
+    }
+    if (!code.includes(symbol)) {
+      violations.push({
+        check: 'u2-perspective-authority',
+        file: relFile,
+        detail: `migrated U2 consumer no longer routes its relation/controller perspective through roles.ts ('${symbol}'); restore the U2 authority instead of re-deriving from an incidental field.`,
+      });
+    }
+    if (relFile === 'kernels/aura.ts' && AURA_ANCHOR_SIDE_RESTORE_RE.test(code)) {
+      violations.push({
+        check: 'u2-perspective-authority',
+        file: relFile,
+        detail: `aura.ts re-derives ally/foe from the spatial anchor/owner side instead of the U2 perspective role (perspectiveActorId); ROLE ≠ ANCHOR — only the U2 authority establishes the member relation.`,
+      });
+    }
   }
 
   return {

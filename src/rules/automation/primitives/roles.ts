@@ -189,3 +189,35 @@ export function roleFrameFromContext(context: RuleExecutionContext): RoleFrame {
     currentOriginId: context.actorId,
   };
 }
+
+/** The U2 authority for "relative to whom is a self/ally/foe relation
+ * established": the actor whose SIDE is compared. ICON defines "ally"
+ * relative to the source ("another living ally", p.92), so the default
+ * relation perspective is the SOURCE role. Side/faction remains the
+ * underlying factual property (U3 eligibility compares it); U2 decides WHO
+ * is the perspective subject. Returns null only for a genuinely underivable
+ * frame (no source) — callers fail closed rather than guessing an actor.
+ */
+export function relationPerspectiveId(frame: RoleFrame): string | null {
+  return frame.sourceId ?? null;
+}
+
+/** Convenience over the legacy context slots: the relation perspective for a
+ * resolution is the source role it records, so candidate/aura/choice relation
+ * reads never independently infer the perspective from an incidental field.
+ */
+export function relationPerspectiveIdFromContext(context: RuleExecutionContext): string | null {
+  return relationPerspectiveId(roleFrameFromContext(context));
+}
+
+/** The durable RESPONDER role a window/decision resolves to (U2 narrator for
+ * U13): the window's actorId is the responder whose interrupt entitlement or
+ * choice this is, and the recorded per-SUBJECT controller map is the network
+ * responder authority. A window responder is a pure function of the durable
+ * frame (never ambient connection state), so replay derives the same actor
+ * and the network boundary maps it through the recorded controller. Returns
+ * null when the frame cannot derive the responder role.
+ */
+export function windowResponderId(selector: RoleSelector, frame: RoleFrame): string | null {
+  return resolveRoleSelector(selector, deriveRoles(frame));
+}
