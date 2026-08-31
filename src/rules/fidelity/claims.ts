@@ -216,14 +216,42 @@ function headingStatusSlot(line: string): string | null {
 const STATE_VERB_RE = /\b(?:is|are|was|were|be|been|being|remains?|remain|becomes?|stays?|stay)\s+(?:still\s+|no\s+longer\s+)?(authoritative|complete|closed)\b/i;
 const SUBJECT_ELLIPSIS_RE = /\b(?:U\d+|P\d+|Slice\s+[A-Z])\s+(?:now|already|currently|is\s+now)?\s*(?:authoritative|complete|closed|done)(?:\s*[/.,;:)\]—]|$)/i;
 
-/** A state-verb predicate over a named subject ("U17 is COMPLETE", "the
- * summon engine is complete", "U2/U13/U17 remain AUTHORITATIVE") is a genuine
- * status surface. It is ordinary prose/definition when the subject is a
- * generic class ("A phase is complete"), when a conditional/definitional
- * qualifier follows ("closed only when…", "closed by design"), or when it is a
- * negation. THIS treats "X re-certified AUTHORITATIVE" as a narrated event,
- * not a current-state claim: the guard protects current-state authority, not
- * descriptions of certification actions or of closed local operations. */
+/** Whether the SUBJECT POSITION (the noun phrase immediately preceding the
+ * state verb) names a PARTICULAR, project-bearing subject — a U#/P# underlay
+ * or phase id, a backticked/ALL-CAPS code name, or a noun headed by a DEFINING
+ * determiner/possessive/demonstrative ("the advancement rules", "this
+ * subsystem", "our space kernel"). Only the IMMEDIATE subject decides, so a
+ * sentence-leading capitalized common word elsewhere in the line ("Encounter
+ * and table commands are authoritative…") never counts. A BARE common noun
+ * right before the verb ("…commands are authoritative", "…result) are
+ * closed") names no particular project artifact and is ordinary prose.
+ *
+ * The indefinite/generic determiners (a/an/each/every/any/some) are excluded
+ * — they make a class-generic definition, handled before this test. */
+function isProjectStatusSubject(before: string): boolean {
+  const tail = before.slice(-64);
+  // Underlay/phase ids and backticked code names.
+  if (/\b[Uu]\d+\b|\b[Pp]\d+\b|`[A-Za-z0-9_:/.#-]+`/.test(tail)) return true;
+  // ALL-CAPS acronym/identifier (VTT, README, DONE is not here). Case-sensitive:
+  // "Encounter"/"Spells" (initial-cap only) never match.
+  if (/\b[A-Z][A-Z0-9]{1,}\b/.test(tail)) return true;
+  // A noun headed by a DEFINING determiner.
+  if (/\b(?:the|this|that|these|those|our|my|its|his|her|their)\s+\w[\w .-]{0,50}$/i.test(tail)) return true;
+  return false;
+}
+
+/** A state-verb predicate over a project-bearing subject ("U17 is COMPLETE",
+ * "the summon engine is complete", "U2/U13/U17 remain AUTHORITATIVE") is a
+ * genuine status surface. It is NOT a claim when the subject is a generic
+ * class ("A phase is complete"), when a conditional/definitional qualifier
+ * follows ("closed only when…"), when it is a negation, or when the subject is
+ * a BARE common noun ("results are closed") that names no particular project
+ * artifact. There is NO blanket "by design"/"architecturally" qualifier
+ * exemption: "U8 is AUTHORITATIVE by design" is a claim because the SUBJECT
+ * (a project underlay id) is the meaning-bearing surface. THIS treats
+ * "X re-certified AUTHORITATIVE" as a narrated event, not a current-state
+ * claim: the guard protects current-state authority, not descriptions of
+ * certification actions or of closed local operations. */
 function isSubjectPredicateClaim(line: string): boolean {
   const s = line.trim();
   const pred = s.match(STATE_VERB_RE);
@@ -234,7 +262,6 @@ function isSubjectPredicateClaim(line: string): boolean {
     // A continuation/definitional qualifier means the token is explanatory,
     // not a bare status declaration.
     if (/\b(only when|only if|whenever|\bwhen\b|\bif\b|by itself|means|provided|is defined as)\b/i.test(after)) return false;
-    if (/(architecturally|by design|in the \w+\s+(?:architecture|topology))/i.test(after)) return false;
     // The subject must actually appear on this line (a continuation fragment
     // like "> remain AUTHORITATIVE" whose subject is on the previous line is
     // prose, not a claim).
@@ -242,7 +269,9 @@ function isSubjectPredicateClaim(line: string): boolean {
     // A generic-class definition with an indefinite determiner subject
     // ("A phase is complete", "a slice is closed") — explanatory, not a claim.
     if (/(?:a|an|each|every|any|some)\s+\w+[\w .-]{0,60}\s*$/i.test(before)) return false;
-    return true;
+    // The surface meaning comes from the SUBJECT: a bare common noun does not
+    // assert project authority. No blanket by-design/architecturally bypass.
+    return isProjectStatusSubject(before);
   }
   if (SUBJECT_ELLIPSIS_RE.test(s)) return true;
   return false;
@@ -260,13 +289,18 @@ export function classifyStrongLine(line: string): StrongLineClass {
 
   const lower = line.toLowerCase();
   if (!CORE_STRONG_RE.test(lower)) return 'none';
-  if (isModifierOrCompoundUsage(line)) return 'prose';
 
+  // A genuine claim SURFACE must WIN over unrelated ordinary prose on the same
+  // line: "U8 is AUTHORITATIVE; the reducer fails closed on malformed state"
+  // is a claim despite also containing "fails closed". Only when NO occurrence
+  // on the line is a claim surface do the modifier/legend/prose fast-outs
+  // decide how the strong vocabulary reads.
+  if (isSubjectPredicateClaim(line)) return 'claim';
   const table = classifyTableRow(line);
   if (table !== null) return table;
 
+  if (isModifierOrCompoundUsage(line)) return 'prose';
   if (isDefinitionLegend(line)) return 'definition';
-  if (isSubjectPredicateClaim(line)) return 'claim';
 
   return 'prose';
 }

@@ -44,6 +44,22 @@ describe('strong-claim surface classifier: claims are guarded', () => {
   it('a named-subject copula over project vocabulary stays a claim', () => {
     expect(classifyStrongLine('The fake subsystem rules are AUTHORITATIVE.')).toBe('claim');
   });
+
+  it('a genuine claim surface wins over unrelated prose ON THE SAME LINE', () => {
+    expect(classifyStrongLine('U8 is AUTHORITATIVE; the reducer fails closed on malformed state.')).toBe('claim');
+    expect(classifyStrongLine('U8 is AUTHORITATIVE; this is a closed set.')).toBe('claim');
+    expect(classifyStrongLine('U8 is AUTHORITATIVE; this helper provides a complete mapping.')).toBe('claim');
+    expect(classifyStrongLine('U17 is COMPLETE; setters fail closed on bad input.')).toBe('claim');
+  });
+
+  it('the by-design/architecturally qualifier is NOT a bypass (subject defines surface)', () => {
+    expect(classifyStrongLine('U8 is AUTHORITATIVE by design.')).toBe('claim');
+    expect(classifyStrongLine('U8 remains complete by design.')).toBe('claim');
+    expect(classifyStrongLine('this subsystem is CLOSED architecturally.')).toBe('claim');
+    // …but a BARE-COMMON-NOUN predicate still reads as ordinary prose, not a claim.
+    expect(classifyStrongLine('...spread/alias replacement of a genuine result) are closed architecturally:')).toBe('prose');
+    expect(classifyStrongLine('results are closed by design.')).toBe('prose');
+  });
 });
 
 describe('strong-claim surface classifier: vocabulary definitions and prose pass', () => {
