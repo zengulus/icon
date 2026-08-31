@@ -84,6 +84,23 @@ assumption here, document the evidence and update this list before proceeding.
 > evidence still fail. U8 remains PARTIAL; census byte-stable at 427; zero
 > source promotion. See `docs/strong-claim-surface-repair.md`.
 >
+> **Multi-owner Monogatari correction (2026-09-01).** Fresh audit of the
+> production consumer found the grant branch selected the active song by a
+> first-match `Object.values(state.actors).find(...)` over tale holders — with
+> two simultaneous Chanters a recipient was evaluated against ONE arbitrary
+> song (consuming the wrong entitlement or nothing, and never both). The
+> correct p.179 semantics: every use establishes THAT Chanter's song; each
+> song persists until used again; a character may fulfill each song once. The
+> consumer now enumerates EVERY active song owner (deterministic order) and
+> runs the SAME generic U8×U16 `applyLifecycleScopedUsage` transaction per
+> lifecycle identity (owner × source × instance): consuming A never marks B
+> consumed, satisfying both yields both rewards, replacing A reopens only A,
+> identical tales stay separate identities, and actor iteration order cannot
+> change the outcome. Multi-owner adversarial + replay matrix added; U8/U16
+> architecture, claims, census, and status unchanged (re-audited truthful).
+> The rest of Monogatari (Charge player-choice seam, tales 1/6, talents/
+> masteries) remains unresolved; zero source promotion; census 427.
+>
 > **U8 → Monogatari/U16 proof consumer (2026-09-01).** The generic U8
 > source-defined lifecycle identity (`scope.ts` `LifecycleIdentity`, "until
 > this source is used/replaced again") is proven with its first real consumer:

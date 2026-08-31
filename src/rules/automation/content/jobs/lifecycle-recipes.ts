@@ -708,6 +708,26 @@ function mintMonogatariSongInstance(state: EncounterState, chanterId: string): s
   return `song:${state.revision}:${chanterId}`;
 }
 
+/** EVERY actor with a DURABLY active Monogatari tale — each is ONE independent
+ * song owner (ICON p.179: each use of Monogatari establishes THAT Chanter's
+ * song, which resonates until that ability is used again, and a character may
+ * fulfill the condition once per THAT song). A recipient must be evaluated
+ * independently against every active song, never against whichever active
+ * Chanter happens to appear first in `Object.values(state.actors)` iteration
+ * — the FIRST-MATCH read is semantically wrong for simultaneous Chanters.
+ *
+ * Deterministic enumeration (sorted by actor id), so reversing actor
+ * insertion/iteration order can never change which songs a recipient is
+ * evaluated against. The grants themselves are independent transactions on
+ * disjoint U16 ledger keys and commute, so this ordering is a stable
+ * enumeration, never a p.108 ordering arbitration.
+ */
+function activeMonogatariSongOwners(state: EncounterState): EncounterActor[] {
+  return Object.values(state.actors)
+    .filter((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 /** ICON p.179 Monogatari turn end: a hero that completed the active tale is
  * blessed once per CURRENT song (U16 entitlement keyed by the U8 song lifecycle
  * instance), and the boundary that used the song sets the new tale (pre-rolled
@@ -727,14 +747,20 @@ registerLifecycleRecipe({
     : null,
   resolve: (state, actor, diceWindows) => {
     // 1) GRANT branch FIRST — a hero that completes the described course is
-    //    blessed ONCE PER CURRENT SONG. The check reads the DURABLY established
-    //    song lifecycle instance (U8) and gates the blessing through U16.
-    const owner = Object.values(state.actors).find((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined);
-    if (owner && actor.side === 'heroes' && !actor.defeated && actor.position) {
-      const chanterRef = capturedActor(owner.id);
-      const sourceRef = monogatariSongSourceRef();
-      const current = currentLifecycleInstanceFor(owner, chanterRef, sourceRef);
-      if (current !== undefined && monogatariTaleMet(state, actor, Number(owner.ruleState['monogatari:tale']))) {
+    //    blessed ONCE PER CURRENT SONG. The recipient is evaluated
+    //    INDEPENDENTLY against EVERY active song (each is a separate U8
+    //    lifecycle identity owned by its own Chanter), and each fulfillment
+    //    runs its OWN generic U8×U16 transaction: consuming song A's
+    //    entitlement never marks song B consumed, satisfying both songs
+    //    yields both rewards, and two songs whose tales happen to be
+    //    identical still remain separate lifecycle/usage identities.
+    if (actor.side === 'heroes' && !actor.defeated && actor.position) {
+      for (const owner of activeMonogatariSongOwners(state)) {
+        const chanterRef = capturedActor(owner.id);
+        const sourceRef = monogatariSongSourceRef();
+        const current = currentLifecycleInstanceFor(owner, chanterRef, sourceRef);
+        if (current === undefined) continue;
+        if (!monogatariTaleMet(state, actor, Number(owner.ruleState['monogatari:tale']))) continue;
         const identity: LifecycleIdentity = { owner: chanterRef, source: sourceRef, instance: current };
         const txn = applyLifecycleScopedUsage({
           recipient: actor,
@@ -749,7 +775,9 @@ registerLifecycleRecipe({
     // 2) Song-ESTABLISHMENT branch — a new tale was gambled, so this IS a new
     //    song: set the tale and ADVANCE the Chanter's U8 lifecycle instance.
     //    The new discriminator yields a fresh U16 ledger key, so every eligible
-    //    hero's once-per-song entitlement reopens WITHOUT a global clear.
+    //    hero's once-per-song entitlement reopens WITHOUT a global clear (and
+    //    only for the singer's OWN song — other Chanters' instances are
+    //    untouched).
     if (diceWindows.monogatariGamble !== undefined) {
       actor.ruleState['monogatari:tale'] = diceWindows.monogatariGamble;
       actor.ruleStateOwners['monogatari:tale'] = actor.id;

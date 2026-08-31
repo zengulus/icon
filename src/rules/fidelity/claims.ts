@@ -30,7 +30,20 @@ import type { FidelityAuditResult } from './types.js';
 import { SCOPE_STATUS_RANK, type ScopeStatus } from './types.js';
 import { PHASE_GATES, type PhaseGateId } from '../phase-gates.js';
 
-export type ClaimStrength = 'authoritative' | 'complete' | 'closed';
+export type ClaimStrength =
+  /** "Execution matches source semantics" — the highest claim. */
+  | 'authoritative'
+  /** "Semantically complete" — the underlay/shared authority fully represents
+   * the declared scope. Stronger than `landed`: a LANDED slice is NOT an
+   * underlay-completeness claim. */
+  | 'complete'
+  /** Slice/closure marker. */
+  | 'closed'
+  /** EXPLICIT SLICE-PROGRESS, never completeness: "a slice of this subsystem
+   * landed", deliberately weaker than `complete`. The claim machinery must
+   * never reinterpret a LANDED status heading as a COMPLETE-strength
+   * semantic-authority claim — the underlay itself may remain PARTIAL. */
+  | 'landed';
 
 /** One machine-audited input of a compound (phase-gate) claim. The
  * requirement LIST is not maintained here: it is projected from the single
@@ -76,11 +89,15 @@ export interface ProjectClaim {
 
 /** Minimum computed scope rank each claim strength demands when bound to a
  * fidelity scope. `authoritative` ("execution matches source semantics") maps
- * to source-tested; complete/closed demand full closure. */
+ * to source-tested; complete/closed demand full closure. `landed` is a
+ * slice-progress marker, NOT a completeness/authority claim — bound to a
+ * fidelity scope it demands only the minimum progress rank, so a PARTIAL
+ * underlay with a landed slice never over-claims. */
 const REQUIRED_RANK: Readonly<Record<ClaimStrength, ScopeStatus>> = {
   authoritative: 'source-tested',
   complete: 'closed',
   closed: 'closed',
+  landed: 'partial',
 };
 
 /** Canonical documents the secondary guard scans for strong claims. Every
@@ -624,7 +641,7 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     anchor: '### Scope / Clock (U8 underlay) — AUTHORITATIVE (residual audit + combat-cleanup repair, 2026-09-01)',
     strength: 'authoritative',
     subject: 'Scope / Clock (U8 underlay)',
-    binding: legacy('U8 re-certified after a whole-consumer residual audit, combat-cleanup routing repair, replay proof, and u8-scope-clock-routing mutation guard; no strict fidelity scope'),
+    binding: legacy('U8 HUMAN-CERTIFIED re-audit 2026-09-01 (whole-consumer residual audit + combat-cleanup routing repair + replay proof + u8-scope-clock-routing mutation guard; multi-owner Monogatari correction re-verified the declared contract — no competing Scope/Clock interpreter, retained counters are specialist state, source-defined lifecycle routes through U8). NOT machine-verified: no strict fidelity scope.'),
   },
   {
     id: 'claim:foundations:u17-complete',
@@ -649,23 +666,28 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     ],
     strength: 'complete',
     subject: 'Usage / Entitlement Ledger (U16 underlay)',
-    binding: legacy('U16 recertified 2026-09-01: fresh residual census found no remaining unresolved U16 consumer and no competing usage authority after the Monogatari once-per-song consumer was integrated onto the U8 lifecycle scope (proven by monogatari-u8-u16.test.ts)'),
+    binding: legacy('U16 HUMAN-CERTIFIED recertification 2026-09-01: fresh residual census found no remaining unresolved U16 consumer and no competing usage authority after the Monogatari once-per-song consumer was integrated onto the U8 lifecycle scope (proven by monogatari-u8-u16.test.ts); 2026-09-01 multi-owner correction re-audited the same contract — every active song runs its own U16 applyLifecycleScopedUsage transaction, multiple simultaneous Chanters stay independent ledger identities, and no content path reconstructs a lifecycle ledger key. NOT machine-verified: no strict fidelity scope.'),
   },
+  // LANDED is explicitly SLICE-PROGRESS, deliberately weaker than 'complete':
+  // a landed slice is NOT an underlay-completeness claim, and the fresh
+  // U1–U17 underlay census keeps U9/U14 PARTIAL. The strength below says
+  // exactly that — the claim machinery never reinterprets the LANDED heading
+  // as a COMPLETE-strength semantic-authority claim.
   {
     id: 'claim:foundations:u9-landed',
     file: 'docs/rules-foundations.md',
-    anchor: '### Provenance / Delivery Dimensions (U9 underlay) — LANDED (T4, 2026-08-30)',
-    strength: 'complete',
-    subject: 'Provenance / Delivery Dimensions (U9 underlay)',
-    binding: legacy('U9 landed-status heading (T4 seam); not bound to a strict fidelity scope'),
+    anchor: '### Provenance / Delivery Dimensions (U9 underlay) — LANDED slice (T4, 2026-08-30); underlay remains PARTIAL',
+    strength: 'landed',
+    subject: 'Provenance / Delivery Dimensions (U9 underlay) — LANDED slice (T4 seam), not an underlay-completeness claim',
+    binding: legacy('U9 landed-status heading (T4 seam): a landed slice is NOT underlay completeness — the fresh underlay census keeps U9 PARTIAL; not bound to a strict fidelity scope, human-audited only'),
   },
   {
     id: 'claim:foundations:u14-landed',
     file: 'docs/rules-foundations.md',
-    anchor: '### Modifier / Policy (U14 underlay) — LANDED (T3, 2026-08-30)',
-    strength: 'complete',
-    subject: 'Modifier / Policy (U14 underlay)',
-    binding: legacy('U14 landed-status heading (T3 seam); not bound to a strict fidelity scope'),
+    anchor: '### Modifier / Policy (U14 underlay) — LANDED slice (T3, 2026-08-30); underlay remains PARTIAL',
+    strength: 'landed',
+    subject: 'Modifier / Policy (U14 underlay) — LANDED slice (T3 seam), not an underlay-completeness claim',
+    binding: legacy('U14 landed-status heading (T3 seam): a landed slice is NOT underlay completeness — the fresh underlay census keeps U14 PARTIAL; not bound to a strict fidelity scope, human-audited only'),
   },
   {
     id: 'claim:roadmap:p1-settlement-done',

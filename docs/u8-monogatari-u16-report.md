@@ -91,6 +91,67 @@ test now asserts its absence); the blessed resource mutation and the U16
 consume ride the recorded TURN_ENDED event, so replay applies the recorded mint
 + grant decisions byte-identically and never re-decides entitlement.
 
+### Multi-owner correction (2026-09-01) — the first-match song owner was wrong
+
+**Bug found:** the grant branch selected the active song by a FIRST-MATCH read
+— `Object.values(state.actors).find(...)` over actors with a durable
+`monogatari:tale` — equivalent to "whichever active Chanter happens to appear
+first in actor iteration". With two simultaneous Chanters, a recipient was
+ evaluated against ONE arbitrary song: a recipient who fulfilled B's course
+ but not A's either consumed A's entitlement (when A's tale happened to be met
+ by the same state) or received nothing (when A's tale was unmet), and a
+ recipient who fulfilled both songs received only one blessing. Iteration
+ order changed the outcome.
+
+**Source reading (ICON 1.5 p.179, exact cursor):** each use of Monogatari
+establishes THAT Chanter's song ("The song resonates in the air until this
+ability is used again"); characters completing the described course are
+"blessed at the end of their turn"; "Characters can only fulfill this
+condition once per song". Nothing in the passage collapses songs across
+users — each Chanter's song is its own lifecycle, so the recipient must be
+evaluated INDEPENDENTLY against every active applicable song.
+
+**Fix (unchanged architecture):** the grant branch now enumerates EVERY active
+song owner (`activeMonogatariSongOwners`, deterministically sorted) and runs
+the SAME generic U8×U16 `applyLifecycleScopedUsage` transaction per lifecycle
+identity `{ owner × source × instance }`. U8 still owns lifecycle identity and
+currentness (`currentLifecycleInstanceFor` / `lifecycleInstanceCurrent`); U16
+still owns availability / consume / key grouping. Content owns the concrete
+song condition and reward. Identity: song A = owner A × Monogatari source ×
+instance A; song B = owner B × source × instance B; entitlement =
+recipient × song lifecycle identity. Consuming A never marks B consumed;
+satisfying both yields both rewards; replacing A reopens only A; two songs
+whose tale happens to be identical remain separate lifecycle/usage identities;
+iteration order of `state.actors` cannot affect the outcome (grants commute
+onto disjoint ledger keys, and enumeration is sorted). No Monogatari-specific
+exception was added to U8 or U16; no second reference/usage system was built.
+
+**Multi-owner adversarial matrix added to `monogatari-u8-u16.test.ts`:**
+1. A and B both have ACTIVE songs with distinct lifecycle instances.
+2. Recipient satisfies B only → receives B only (first-match read granted
+   nothing when A was first).
+3. Recipient satisfies both → independently consumes both entitlements (the
+   pre-fix consumer granted one).
+4. Consuming A does not mark B consumed, and vice versa.
+5. Same recipient cannot fulfill A twice during the same A instance (even
+   with B active).
+6. Replacing A reopens A for that recipient without reopening or otherwise
+   changing B (B's instance and B-entitlement history untouched).
+7. Two Chanters singing the SAME tale still remain independent
+   lifecycle/usage identities (distinct instances, distinct recipient ledger
+   keys, both consumed).
+8. Reversing actor insertion/iteration order produces the same semantic
+   outcome.
+9. Exact command replay reproduces the simultaneous two-song mint + grant
+   mutations byte-identically without re-deciding eligibility.
+
+**Scope boundary preserved:** this fixes the U8×U16 proof consumer only. The
+rest of the Monogatari source unit stays unresolved exactly as before — the
+Charge "roll one extra d6 and choose any result" player-choice seam, tale 1 /
+6 reactive windows, and the talent/mastery clauses are NOT promoted by this
+correction. `monogatari:granted`'s replacement is complete; the unit's
+remaining clauses are not.
+
 ### Adversarial test matrix (`src/rules/__tests__/monogatari-u8-u16.test.ts`)
 
 1. One recipient fulfills one song once → blessed exactly once; same-song

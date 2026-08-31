@@ -12,7 +12,7 @@ import {
 } from '../automation/kernels/use-ledger.js';
 import type { LifecycleIdentity } from '../automation/primitives/scope.js';
 import type { EncounterActor, EncounterState } from '../types.js';
-import { endTurnTo, scriptedDice, startEncounterTo, validCharacter } from './fixtures.js';
+import { endTurnOnly, endTurnTo, scriptedDice, startEncounterTo, validCharacter } from './fixtures.js';
 
 /**
  * Stage B proof: Monogatari is the FIRST real U8 source-defined-lifecycle
@@ -71,7 +71,12 @@ interface Fixture {
   chanterB: EncounterActor | null;
 }
 
-function mmFixture(options: { ally?: boolean; chanterB?: boolean } = {}): Fixture {
+/** Insertion order is deliberately configurable: `bFirst` adds the second
+ * Chanter BEFORE the first, so `Object.values(state.actors)` iteration order
+ * reverses while every semantic identity (owner × song instance) is
+ * unchanged. The multi-owner grant path must produce the identical outcome in
+ * both orders. */
+function mmFixture(options: { ally?: boolean; chanterB?: boolean; bFirst?: boolean } = {}): Fixture {
   let state = createEncounter('Monogatari fixture');
   const hero = actorFromCharacter(validCharacter('Flying Skald'), { x: 1, y: 1 });
   hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
@@ -88,12 +93,46 @@ function mmFixture(options: { ally?: boolean; chanterB?: boolean } = {}): Fixtur
     b.chapter = 3;
     return b;
   })() : null;
-  for (const actor of [hero, foe, ally, chanterB]) {
+  const inserted = options.bFirst ? [chanterB, hero, foe, ally] : [hero, foe, ally, chanterB];
+  for (const actor of inserted) {
     if (!actor) continue;
     state = executeCommand(state, { type: 'ADD_ACTOR', actor }).state;
   }
   state = startEncounterTo(state, hero.id);
   return { state, hero, foe, ally, chanterB };
+}
+
+/** Two independently active songs: `hero` (Chanter A) sings `aTale`, `chanterB`
+ * (Chanter B) sings `bTale`, both established before the recipient (the ally)
+ * is selected at round 1. Returns the state with the ALLY selected as the
+ * pending recipient (both songs active) plus each song's durable U8 instance.
+ * `bFirst` reverses ADD_ACTOR insertion order for the actor map.
+ *
+ * Cadence (3 heroes + 1 foe): round 1 = hero A, foe, hero B, ally; the round
+ * advances only when every actor's round entitlement is spent, so the foe is
+ * NOT selectable after B ends — the ally is. The recipient's turn is therefore
+ * the state returned; tests end it with `endTurnOnly`/`executeCommand END_TURN`. */
+function twoSongFixture(aTale: number, bTale: number, options: { bFirst?: boolean } = {}): {
+  state: EncounterState;
+  hero: EncounterActor;
+  foe: EncounterActor;
+  ally: EncounterActor;
+  chanterB: EncounterActor;
+  aInstance: string;
+  bInstance: string;
+} {
+  const { state, hero, foe, ally, chanterB } = mmFixture({ ally: true, chanterB: true, bFirst: options.bFirst });
+  const usedA = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: MONOGATARI, targetIds: [] }, scriptedDice()).state;
+  const aEst = endTurnTo(usedA, foe.id, scriptedDice(aTale)); // A ends -> foe (round 1)
+  const aInstance = currentSong(aEst.actors[hero.id])!;
+  const olinTurn = endTurnTo(aEst, chanterB!.id, scriptedDice()); // foe ends -> B (round 1)
+  const usedB = executeCommand(olinTurn, { type: 'USE_ABILITY', actorId: chanterB!.id, abilityId: MONOGATARI, targetIds: [] }, scriptedDice()).state;
+  const bEst = endTurnTo(usedB, ally!.id, scriptedDice(bTale)); // B ends -> ally (round 1)
+  const bInstance = currentSong(bEst.actors[chanterB!.id])!;
+  expect(bEst.activeActorId).toBe(ally!.id);
+  expect(typeof aInstance).toBe('string');
+  expect(typeof bInstance).toBe('string');
+  return { state: bEst, hero, foe, ally: ally!, chanterB: chanterB!, aInstance, bInstance };
 }
 
 function blessingOf(state: EncounterState, actorId: string): number {
@@ -227,5 +266,129 @@ describe('Monogatari as U8 source-defined-lifecycle × U16 entitlement (p.179)',
     const end2 = executeCommand(heroTake.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice()); // hero fulfills -> grant
     expect(applyEvents(heroTake.state, end2.events)).toEqual(end2.state);
     expect(blessingOf(end2.state, hero.id)).toBe(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // MULTI-OWNER adversarial matrix: two independent ACTIVE songs, every
+  // recipient evaluated independently against each, never a first-match
+  // `Object.values(state.actors).find(...)` owner selection.
+  // ---------------------------------------------------------------------------
+
+  it('a recipient that fulfills ONLY song B receives exactly B\'s blessing (no first-match aliasing onto A)', () => {
+    // A sings Tale 2 (Travels: move 4+ from start); B sings Tale 3 (Green: do
+    // not attack). The recipient stays put and does not attack → satisfies B
+    // only. The pre-fix first-match read found A (inserted first) and granted
+    // nothing; the correct result is B's independent blessing.
+    const { state, ally, hero, chanterB, aInstance, bInstance } = twoSongFixture(2, 3);
+    const grant = endTurnOnly(state, scriptedDice());
+    expect(blessingOf(grant, ally.id)).toBe(1);
+    // B's entitlement consumed under B's song instance; A's untouched.
+    expect(usageCount(grant.actors[ally.id], songLedgerKey(chanterB.id, ally.id, bInstance))).toBe(1);
+    expect(usageCount(grant.actors[ally.id], songLedgerKey(hero.id, ally.id, aInstance))).toBe(0);
+  });
+
+  it('a recipient that fulfills both songs is blessed once per song — independent simultaneous consumes', () => {
+    const { state, ally, hero, chanterB, aInstance, bInstance } = twoSongFixture(3, 3); // both Green
+    const grant = endTurnOnly(state, scriptedDice());
+    expect(blessingOf(grant, ally.id)).toBe(2); // both songs' rewards, not one
+    expect(usageCount(grant.actors[ally.id], songLedgerKey(hero.id, ally.id, aInstance))).toBe(1);
+    expect(usageCount(grant.actors[ally.id], songLedgerKey(chanterB.id, ally.id, bInstance))).toBe(1);
+  });
+
+  it('consuming song A never marks song B consumed (and vice versa)', () => {
+    // Two active songs with DIFFERENT tales; the recipient satisfies A (Green:
+    // no attack) but never B (Travels: move 4+). Only A's ledger key exists.
+    const { state, ally, hero, chanterB, aInstance, bInstance } = twoSongFixture(3, 2);
+    const grant = endTurnOnly(state, scriptedDice());
+    expect(blessingOf(grant, ally.id)).toBe(1);
+    expect(usageCount(grant.actors[ally.id], songLedgerKey(hero.id, ally.id, aInstance))).toBe(1);
+    expect(usageCount(grant.actors[ally.id], songLedgerKey(chanterB.id, ally.id, bInstance))).toBe(0); // B clean
+    // The symmetric trace (satisfy B only) left A clean — asserted above.
+  });
+
+  it('a same recipient cannot fulfill song A twice during the same A instance, even with B active', () => {
+    const { state, ally, hero, chanterB, aInstance, bInstance } = twoSongFixture(3, 3);
+    const granted = endTurnOnly(state, scriptedDice());
+    expect(blessingOf(granted, ally.id)).toBe(2);
+    // Round 1 is exhausted (all four actors took their turn), so round 2 opens
+    // with the foe; after the foe, the heroes side selects the ally again. She
+    // ends WITHOUT attacking again → no third grant, neither key advances.
+    const foeId = Object.values(granted.actors).find((candidate) => candidate.side === 'foes')!.id;
+    const foeTake = executeCommand(granted, { type: 'TAKE_TURN', actorId: foeId }).state;
+    const foeEnd = endTurnOnly(foeTake, scriptedDice());
+    const allyTake = executeCommand(foeEnd, { type: 'TAKE_TURN', actorId: ally.id }).state;
+    const again = endTurnOnly(allyTake, scriptedDice());
+    expect(blessingOf(again, ally.id)).toBe(2); // no third grant
+    expect(usageCount(again.actors[ally.id], songLedgerKey(hero.id, ally.id, aInstance))).toBe(1);
+    expect(usageCount(again.actors[ally.id], songLedgerKey(chanterB.id, ally.id, bInstance))).toBe(1);
+    void hero;
+    void chanterB;
+  });
+
+  it('replacing song A reopens A for the recipient without reopening or otherwise changing B', () => {
+    const { state, hero, ally, chanterB, aInstance, bInstance } = twoSongFixture(2, 3);
+    // The ally satisfies B's Green tale only, once.
+    const granted = endTurnOnly(state, scriptedDice());
+    expect(blessingOf(granted, ally.id)).toBe(1);
+    // Round 2: the foe opens, then the heroes side selects A, who RE-SINGS →
+    // A's instance ADVANCES; B's instance is untouched.
+    const foeId = Object.values(granted.actors).find((candidate) => candidate.side === 'foes')!.id;
+    const foeTake = executeCommand(granted, { type: 'TAKE_TURN', actorId: foeId }).state;
+    const foeEnd = endTurnOnly(foeTake, scriptedDice());
+    const heroTake = executeCommand(foeEnd, { type: 'TAKE_TURN', actorId: hero.id }).state;
+    const reusedA = executeCommand(heroTake, { type: 'USE_ABILITY', actorId: hero.id, abilityId: MONOGATARI, targetIds: [] }, scriptedDice()).state;
+    const afterReuse = endTurnOnly(reusedA, scriptedDice(3)); // new A song, Green
+    const aNew = currentSong(afterReuse.actors[hero.id])!;
+    expect(aNew).not.toBe(aInstance); // A's instance advanced
+    expect(currentSong(afterReuse.actors[chanterB.id])).toBe(bInstance); // B untouched
+    // B's remaining round-2 hero still acts (no assertion), then the ally is
+    // selected and fulfills A's NEW Green tale: blessed under A-new only; B's
+    // entitlement stays consumed under the ORIGINAL B instance (not reopened).
+    const olinTake = executeCommand(afterReuse, { type: 'TAKE_TURN', actorId: chanterB.id }).state;
+    const olinEnd = endTurnOnly(olinTake, scriptedDice());
+    const allyTake = executeCommand(olinEnd, { type: 'TAKE_TURN', actorId: ally.id }).state;
+    const granted2 = endTurnOnly(allyTake, scriptedDice());
+    expect(blessingOf(granted2, ally.id)).toBe(2); // B's old grant + A-new grant
+    expect(usageCount(granted2.actors[ally.id], songLedgerKey(hero.id, ally.id, aNew))).toBe(1);
+    expect(usageCount(granted2.actors[ally.id], songLedgerKey(hero.id, ally.id, aInstance))).toBe(0);
+    expect(usageCount(granted2.actors[ally.id], songLedgerKey(chanterB.id, ally.id, bInstance))).toBe(1); // B still spent
+  });
+
+  it('two Chanters singing the same tale still remain independent lifecycle/usage identities', () => {
+    const { state, ally, hero, chanterB, aInstance, bInstance } = twoSongFixture(3, 3);
+    expect(aInstance).not.toBe(bInstance); // distinct song instances
+    expect(songLedgerKey(hero.id, ally.id, aInstance)).not.toBe(songLedgerKey(chanterB.id, ally.id, bInstance));
+    const grant = endTurnOnly(state, scriptedDice());
+    expect(blessingOf(grant, ally.id)).toBe(2);
+    expect(usageCount(grant.actors[ally.id], songLedgerKey(hero.id, ally.id, aInstance))).toBe(1);
+    expect(usageCount(grant.actors[ally.id], songLedgerKey(chanterB.id, ally.id, bInstance))).toBe(1);
+  });
+
+  it('reversing actor insertion/iteration order produces the same semantic outcome', () => {
+    // A: Travels (2), B: Green (3); the recipient satisfies B only. Under the
+    // first-match read the outcome depended on which Chanter happened to be
+    // first in `Object.values(state.actors)` (grant vs no grant); the corrected
+    // per-song enumeration grants B in BOTH insertion orders.
+    const run = (bFirst: boolean) => {
+      const { state, ally, hero, chanterB, aInstance, bInstance } = twoSongFixture(2, 3, { bFirst });
+      const grant = endTurnOnly(state, scriptedDice());
+      return {
+        blessing: blessingOf(grant, ally.id),
+        aCount: usageCount(grant.actors[ally.id], songLedgerKey(hero.id, ally.id, aInstance)),
+        bCount: usageCount(grant.actors[ally.id], songLedgerKey(chanterB.id, ally.id, bInstance)),
+      };
+    };
+    const forward = run(false);
+    const reversed = run(true);
+    expect(reversed).toEqual(forward);
+    expect(forward).toEqual({ blessing: 1, aCount: 0, bCount: 1 });
+  });
+
+  it('exact command replay reproduces the simultaneous two-song grant byte-identically without re-deciding eligibility', () => {
+    const { state, ally } = twoSongFixture(3, 3);
+    // The current actor is the allly, both songs active, no grants yet.
+    const allyEnd = executeCommand(state, { type: 'END_TURN', actorId: ally.id }, scriptedDice());
+    expect(applyEvents(state, allyEnd.events)).toEqual(allyEnd.state);
+    expect(blessingOf(allyEnd.state, ally.id)).toBe(2);
   });
 });

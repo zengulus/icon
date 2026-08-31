@@ -392,7 +392,7 @@ expedition state survives, and the cleanup event replays exactly. The
 `u8-scope-clock-routing` architecture guard pins both boundary expiry and
 combat cleanup to U8. No unresolved competing temporal authority remains.
 
-### Provenance / Delivery Dimensions (U9 underlay) — LANDED (T4, 2026-08-30)
+### Provenance / Delivery Dimensions (U9 underlay) — LANDED slice (T4, 2026-08-30); underlay remains PARTIAL
 
 `primitives/provenance.ts` owns the typed provenance vocabulary:
 `DeliverySourceKind` (`actor`/`terrain`/`entity`/`environment`),
@@ -454,7 +454,7 @@ save ledgers remain domain-specific authorities whose fuller fact
 composition is U12-scoped. Tests: `t4-facts-provenance.test.ts` +
 `t4-effect-exists.test.ts` + `t4-dedup.test.ts` + `t4-corrective.test.ts`.
 
-### Modifier / Policy (U14 underlay) — LANDED (T3, 2026-08-30)
+### Modifier / Policy (U14 underlay) — LANDED slice (T3, 2026-08-30); underlay remains PARTIAL
 
 One recipe shape for "how an attached rule alters a typed query point":
 `primitives/modifiers.ts` (barrel re-exported) owns `ModifierRule`
@@ -692,11 +692,17 @@ entitlement keyed by that identity (so it reopens only under a NEW song,
 never a global clear; two Chanters never alias and replacing one Chanter's
 song leaves the other's usage untouched — proven by
 `monogatari-u8-u16.test.ts`). `monogatari:granted` has no remaining
-production reader (the chanter test now asserts its absence). A fresh U16
-residual census finds NO remaining unresolved U16 consumer and NO competing
+production reader (the chanter test now asserts its absence). A freshU16 residual census finds NO remaining unresolved U16 consumer and NO competing
 usage/entitlement authority: every once-per-X gate lives on typed U16 ledger
 keys, and the sole former gap is now a generic U8×U16 lifecycle-scoped
-entitlement. U16 is therefore recertified **COMPLETE** (2026-09-01). See `docs/u8-monogatari-u16-report.md`.
+entitlement. U16 is therefore recertified **COMPLETE** (2026-09-01). See `docs/u8-monogatari-u16-report.md`. A multi-owner correction (2026-09-01)
+re-audited the same contract: the once-per-song consumer enumerates EVERY
+active song owner and runs an independent U16 `applyLifecycleScopedUsage`
+transaction per song lifecycle identity (owner × source × instance), so two
+simultaneous Chanters' songs never alias, consuming one song never marks the
+other consumed, and replacing one song reopens only that song — iteration
+order of `state.actors` cannot change the outcome (proven by the multi-owner
+matrix in `monogatari-u8-u16.test.ts`).
 
 ### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)
 
