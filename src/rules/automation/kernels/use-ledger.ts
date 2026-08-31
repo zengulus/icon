@@ -78,29 +78,65 @@ export function holdsUseLedgerKey(actor: Pick<EncounterActor, 'ruleState'>, peri
   return holdsUsageKey(actor, period);
 }
 
-/** Reserved provenance for the battlefield ONE-INTERRUPT-during-any-turn
- * window (p.91 "only one interrupt during any turn, (yours or another
- * character's)"). Opaque content-owned gate key, never parsed. */
+/** Reserved provenance for the actor-local ONE-INTERRUPT-during-any-turn
+ * restriction (p.91 "only one interrupt during any turn, (yours or another
+ * character's)"). The grammatical subject of the passage is the CHARACter:
+ * each character may normally use at most one interrupt during a particular
+ * turn (yours or anyone else's). It is NOT battlefield-global. The mark
+ * therefore lives on the ACTING actor's own `any-turn` window and is read
+ * actor-locally (never a battlefield scan). Opaque content-owned gate key,
+ * never parsed. */
 const ONE_INTERRUPT_PER_TURN = 'core:one-interrupt-per-turn';
 
 /** The typed KEY for an interrupt's per-interrupt use bucket. The per-source
  * count lives on the OWNER in the owner-relative `turn` period (refreshes at
  * the owner's own turn-start — p.91 "get them all back at the start of any of
- * your turns"), cap = the interrupt's rank. DISTINCT from the global
- * one-interrupt-during-any-turn window: a per-interrupt cap and a
- * turn-global restriction must never share a counter. */
+ * your turns"), cap = the interrupt's rank. DISTINCT from the actor-local
+ * one-interrupt-during-any-turn mark: a per-interrupt cap and a per-turn
+ * restriction must never share a counter. */
 export function interruptUseKey(ownerId: string, interruptSourceId: string): string {
   return usageKey({ sourceId: interruptSourceId, ownerId, scope: 'turn' });
 }
 
-/** The typed KEY for the GLOBAL one-interrupt-during-any-turn window. It is
- * scoped to the `any-turn` period: it refreshes at EVERY turn start for ALL
- * actors (`refreshAnyTurnLedgersForAll`), so actor A using an interrupt
- * during hero B's turn does NOT consume or reset actor C's per-interrupt
- * pools, and a new turn reopens the single window. This is distinct from the
- * per-interrupt cap (`interruptUseKey`). */
+/** The typed KEY for the actor-local one-interrupt-during-any-turn mark. It
+ * is scoped to the `any-turn` period (refreshes at EVERY turn start for ALL
+ * actors via `refreshAnyTurnLedgersForAll`), but it is read and written
+ * ACTOR-LOCALLY: the key lives on the acting actor's own ruleState, and
+ * `interruptAvailable` checks only that actor's own mark. So Alice's use of
+ * one interrupt during Bob's turn never closes Carol's independent window, and
+ * a new turn reopens every actor's mark. DISTINCT from the per-interrupt cap
+ * (`interruptUseKey`). */
 export function oneInterruptPerTurnWindowKey(): string {
   return usageKey({ sourceId: ONE_INTERRUPT_PER_TURN, ownerId: '', scope: 'any-turn' });
+}
+
+/** Reserved provenance for ICON's No Repeats rule (p.91 "When you use any
+ * ability with a cost, you can't repeat it in the same turn. This includes
+ * free actions or abilities you can use off your turn, such as interrupts").
+ * The no-repeat restriction is itself U16-shaped: "has/may THIS ability be
+ * used again within the current turn?" — actor-local, per-source, refreshed
+ * at every turn start. The per-ability mark is keyed by the ability's own
+ * source id (never a shared `core:` namespace) so it cannot alias two
+ * different abilities or two different actors (storage is actor-local). */
+export function noRepeatKey(sourceId: string): string {
+  return usageKey({ sourceId, ownerId: '', scope: 'any-turn' });
+}
+
+/** Reserved provenance for the standard move (p.91 "The most basic Free
+ * Action is a standard move"). The single standard move per own turn is an
+ * OWNER-RELATIVE once-per-turn entitlement (`turn` period — refreshed only at
+ * the OWNER's own turn-start via the lifecycle turn-ledger-reset recipe),
+ * distinct from Dash (a costed basic ability subject to No Repeats). Opaque
+ * content-owned gate key, never parsed. */
+const STANDARD_MOVE_ONCE_PER_TURN = 'core:standard-move';
+
+/** The typed KEY for the owner-relative once-per-own-turn standard move gate.
+ * `turn` period (resets at the owner's own turn-start), NOT `any-turn` — a
+ * standard move can only ever be taken on the owner's own turn, so another
+ * actor's turn-start must never reset it. DISTINCT from the no-repeat Dash
+ * key (`noRepeatKey('basic:dash')`). */
+export function standardMoveOncePerTurnKey(ownerId: string): string {
+  return usageKey({ sourceId: STANDARD_MOVE_ONCE_PER_TURN, ownerId, scope: 'turn' });
 }
 
 /** Reserved provenance for the once-per-turn attack-tag entitlement (p.129
@@ -193,31 +229,54 @@ export function recordUsageKey(
   else actor.ruleStateOwners[key] = null;
 }
 
-/** Whether the ONE-interrupt-during-any-turn window has already been used this
- * turn (p.91): the acting actor consults the whole battlefield, because the
- * restriction is "only one interrupt during any turn". Returns the actor id
- * that fired it (durable, deterministic), or null when no interrupt has fired
- * this turn. Replay reads the same recorded keys. */
-export function interruptWindowUsedBy(state: EncounterState): string | null {
-  for (const candidate of Object.values(state.actors)) {
-    if (usageCount(candidate, oneInterruptPerTurnWindowKey()) >= 1) return candidate.id;
-  }
-  return null;
+/** A content source that raises (or lowers) how many interrupts an actor may
+ * take per turn, KEYED ON THE ACTOR ITSELF (never a battlefield claim).
+ * Black Rock Vanguard (p.124) returns `Infinity` for its own Bastion;
+ * the normal restriction is 1 (p.91 "only one interrupt during any turn").
+ * Returning undefined means "no override — keep the default". */
+export type InterruptsPerTurnCapSource = (actor: Pick<EncounterActor, 'traitIds' | 'id'>) => number | undefined;
+const interruptsPerTurnCapSources: InterruptsPerTurnCapSource[] = [];
+
+/** Register a content source that overrides an actor's per-turn interrupt
+ * allowance (content/jobs registers Black Rock Vanguard). The kernel answers
+ * the cap; it never branches on a source id. */
+export function registerInterruptsPerTurnCapSource(source: InterruptsPerTurnCapSource): void {
+  interruptsPerTurnCapSources.push(source);
 }
 
-/** Whether the actor can use an interrupt at all: the global one-per-turn
- * window is open for the acting actor (no interrupt has fired this turn), and
- * the named source's own per-interrupt pool has remaining uses. Cap = the
- * per-interrupt rank. Distinct identities: the battlefield window and the
- * per-source pool are different U16 entries. */
+/** The actor's per-turn interrupt allowance: the p.91 default of 1, raised
+ * only by an actor-specific registered override (Black Rock Vanguard). PURE
+ * over the actor — no battlefield scan, so one actor's allowance can never
+ * couple to another actor's. */
+export function interruptsPerTurnCap(actor: Pick<EncounterActor, 'traitIds' | 'id'>): number {
+  let cap = 1;
+  for (const source of interruptsPerTurnCapSources) {
+    const override = source(actor);
+    if (override !== undefined) cap = Math.max(cap, override);
+  }
+  return cap;
+}
+
+/** Whether the ACTING actor's OWN one-interrupt-per-turn window still has
+ * allowance this turn (p.91). Actor-local by design: reads only this actor's
+ * own mark, so Carol's independent window is never consumed by Alice's use. */
+export function interruptWindowAvailableFor(actor: Pick<EncounterActor, 'ruleState' | 'traitIds' | 'id'>): boolean {
+  return usageCount(actor, oneInterruptPerTurnWindowKey()) < interruptsPerTurnCap(actor);
+}
+
+/** Whether the actor can use an interrupt at all: the actor's OWN
+ * one-per-turn window is open, AND the named source's owner-relative
+ * between-turn pool has remaining uses. Cap = the per-interrupt rank.
+ * Distinct identities: the actor-local per-turn window and the per-source
+ * between-turn pool are different U16 entries. No battlefield coupling. */
 export function interruptAvailable(
   state: EncounterState,
-  actor: Pick<EncounterActor, 'id' | 'ruleState' | 'abilityIds'>,
+  actor: Pick<EncounterActor, 'id' | 'ruleState' | 'abilityIds' | 'traitIds'>,
   interruptSourceId: string,
   cap: number,
 ): boolean {
-  if (interruptWindowUsedBy(state) !== null) return false;
   if (!actor.abilityIds.includes(interruptSourceId)) return false;
+  if (!interruptWindowAvailableFor(actor)) return false;
   return usageCount(actor, interruptUseKey(actor.id, interruptSourceId)) < cap;
 }
 

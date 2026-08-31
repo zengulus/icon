@@ -563,8 +563,8 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
     'vitality', 'baseMaxHp', 'hp', 'vigor', 'wounds', 'defense', 'armor', 'speed',
     'dash', 'fray', 'damageDie', 'basicAttackRange', 'statuses', 'conditions',
     'resources', 'ruleState', 'ruleStateOwners', 'activeEffects', 'marks', 'stance', 'traitIds', 'talents', 'masteredAbilityIds',
-    'onBattlefield', 'defeated', 'actionsRemaining', 'standardMoveUsed',
-    'attackedThisTurn', 'usedAbilityIds', 'turnTaken',
+    'onBattlefield', 'defeated', 'actionsRemaining',
+    'attackedThisTurn', 'turnTaken',
     'turnsRemaining', 'turnsTakenThisRound', 'slow',
   ], ['foeKind']);
   const actorId = strictIdentifier(actor.id, `${path}.id`);
@@ -677,9 +677,7 @@ function strictActor(value: unknown, path: string, expectedId: string, gridWidth
   strictBoolean(actor.onBattlefield, `${path}.onBattlefield`);
   strictBoolean(actor.defeated, `${path}.defeated`);
   strictInteger(actor.actionsRemaining, `${path}.actionsRemaining`, 0);
-  strictBoolean(actor.standardMoveUsed, `${path}.standardMoveUsed`);
   strictBoolean(actor.attackedThisTurn, `${path}.attackedThisTurn`);
-  strictIdentifierArray(actor.usedAbilityIds, `${path}.usedAbilityIds`, 200);
   strictBoolean(actor.turnTaken, `${path}.turnTaken`);
   strictInteger(actor.turnsRemaining, `${path}.turnsRemaining`, 0);
   strictInteger(actor.turnsTakenThisRound, `${path}.turnsTakenThisRound`, 0);

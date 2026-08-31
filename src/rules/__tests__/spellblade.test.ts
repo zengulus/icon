@@ -2,6 +2,7 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+import { noRepeatKey } from '../automation/kernels/use-ledger.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
@@ -81,7 +82,7 @@ describe('Spellblade ability automation (p.222–229)', () => {
 
     // The bolt is a free action on the same source program, so the fixture
     // clears the same-turn repeat gate.
-    stanced.state.actors[hero.id].usedAbilityIds = [];
+    delete stanced.state.actors[hero.id].ruleState[noRepeatKey('spellblade:odinforce')];
     const bolt = executeCommand(stanced.state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -94,7 +95,7 @@ describe('Spellblade ability automation (p.222–229)', () => {
     expect(bolt.state.actors[hero.id].ruleState['spellblade:odinforce:die']).toBe(2);
     expect(bolt.state.actors[foe.id].hp).toBe(31); // 32 - 1 piercing
     const replayed = applyEvents(stanced.state, []);
-    replayed.actors[hero.id].usedAbilityIds = [];
+    delete replayed.actors[hero.id].ruleState[noRepeatKey('spellblade:odinforce')];
     expect(applyEvents(replayed, bolt.events)).toEqual(bolt.state);
   });
 

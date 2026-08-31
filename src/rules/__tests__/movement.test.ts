@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, RuleViolation } from '../encounter.js';
 import { planMovement, planMovementPath } from '../movement.js';
+import { noRepeatKey, standardMoveOncePerTurnKey } from '../automation/kernels/use-ledger.js';
 import type { EncounterState, Position, TerrainCell } from '../types.js';
 import {validCharacter, endTurnTo, startEncounterTo, dangerousTerrainTriggeredThisTurn} from './fixtures.js';
 
@@ -104,7 +105,8 @@ describe('shared movement planner', () => {
     const executedDash = moveAccepted(engaged.state, engaged.hero.id, dash.path, 'dash');
     expect(executedDash.accepted).toBe(true);
     if (executedDash.accepted) {
-      expect(executedDash.result.state.actors[engaged.hero.id]).toMatchObject({ actionsRemaining: 1, usedAbilityIds: ['basic:dash'] });
+      expect(executedDash.result.state.actors[engaged.hero.id]).toMatchObject({ actionsRemaining: 1 });
+      expect(executedDash.result.state.actors[engaged.hero.id]!.ruleState[noRepeatKey('basic:dash')]).toBe(true);
     }
   });
 
@@ -119,7 +121,7 @@ describe('shared movement planner', () => {
 
   it('retains reducer validation order for an empty MOVE path', () => {
     const { state, hero } = activeEncounter();
-    state.actors[hero.id].standardMoveUsed = true;
+    state.actors[hero.id].ruleState[standardMoveOncePerTurnKey(hero.id)] = true;
     expect(planMovementPath(state, hero.id, [], 'standard')).toMatchObject({ legal: false, issue: { code: 'move.empty' } });
     try {
       executeCommand(state, { type: 'MOVE', actorId: hero.id, path: [], mode: 'standard' });

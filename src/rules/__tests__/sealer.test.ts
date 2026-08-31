@@ -2,6 +2,7 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+import { noRepeatKey } from '../automation/kernels/use-ledger.js';
 import { encounterConditionSet, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
@@ -238,12 +239,12 @@ describe('Sealer ability automation (p.189–196)', () => {
 
     // The shrine-raise is the same ability used again while adjacent, so the
     // fixture clears the same-turn repeat gate.
-    first.state.actors[hero.id].usedAbilityIds = [];
+    delete first.state.actors[hero.id].ruleState[noRepeatKey('sealer:spirit-shrine')];
     const second = executeCommand(first.state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:spirit-shrine', targetIds: [] }, scriptedDice());
     const raised = Object.values(second.state.entities).filter((entity) => entity.type === 'shrine');
     expect(raised[0]?.state.height).toBe(2);
     const replayed = applyEvents(state, first.events);
-    replayed.actors[hero.id].usedAbilityIds = []; // mirrors the fixture's same-turn gate clear
+    delete replayed.actors[hero.id].ruleState[noRepeatKey('sealer:spirit-shrine')]; // mirrors the fixture's same-turn gate clear
     expect(applyEvents(replayed, second.events)).toEqual(second.state);
   });
 

@@ -7,7 +7,7 @@ import { determineEncounterDamage, encounterRuleState } from '../automation/kern
 import { resolveAuthoritativeAttack } from '../automation/kernels/attack-resolution.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand, migrateEncounter } from '../encounter.js';
-import { attackOncePerTurnKey } from '../automation/kernels/use-ledger.js';
+import { attackOncePerTurnKey, noRepeatKey } from '../automation/kernels/use-ledger.js';
 import type { DiceSource } from '../dice.js';
 import type { EncounterActor, EncounterCommand, EncounterEvent, EncounterState, Position } from '../types.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
@@ -358,12 +358,11 @@ describe('Bleak Mercy mastery — Painkiller (p.144)', () => {
     // A foe with two statuses inside the aura: the re-use deals 2 × 2 damage.
     // (The ledger fields are cleared to exercise the same-turn re-use branch;
     // this is deliberate test manipulation, not a command sequence.)
-    chain.state.actors[fixture.hero.id].usedAbilityIds = [];
-    chain.state.actors[fixture.hero.id].attackedThisTurn = false;
-    // Clear the typed one-attack U16 gate too — the same-turn re-use branch.
-    // The gate now lives on the `ledger:turn:` attack key, no longer the
-    // attackedThisTurn fact alone (deliberate test manipulation as above).
+    // The No-Repeats mark and the one-attack U16 gate are the same-turn re-use
+    // branch's typed gates: clear them here like the (removed) raw booleans.
+    delete chain.state.actors[fixture.hero.id].ruleState[noRepeatKey('knave:bleak-mercy')];
     delete chain.state.actors[fixture.hero.id].ruleState[attackOncePerTurnKey(fixture.hero.id)];
+    chain.state.actors[fixture.hero.id].attackedThisTurn = false;
     chain.state.actors[fixture.hero.id].actionsRemaining = 2;
     chain.state.actors[fixture.hero.id].resources.combo = 1;
     chain.state.actors[fixture.foe.id].statuses = ['slashed', 'dazed'];

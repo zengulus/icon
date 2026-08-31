@@ -2000,8 +2000,15 @@ once per turn; slashed once per turn; one attack-tag ability per turn
 once per trigger (p.105); interrupt refresh; per-use magnitude ("2nd/3rd use
 dashes 3/2/1").
 
-**Current state.** `CORE LANDED (T3, 2026-08-30); full completion staged to
-T4`. `primitives/usage.ts` (barrel re-exported) owns the core ledger:
+**Current state.** `AUTHORITATIVE` (single executing usage authority). Core
+Landed T3 (2026-08-30), U10 de-dup T4, raw-field consolidation T6.4, and
+the T6.4a corrective closure (2026-08-31) met all six closure gates:
+actor-local one-interrupt-per-turn; `usedAbilityIds` (No Repeats) +
+`standardMoveUsed` migrated to typed `ledger:*` keys (schema 12); the
+dangerous-terrain damage-cadence contradiction recorded as adopted
+adjudication `icon-1.5:dangerous-terrain:damage-cadence`; no competing
+executing authority; the full named acceptance suite green.
+`primitives/usage.ts` (barrel re-exported) owns the core ledger:
 `UsageKeySpec`/`usageKey` (byte-identical `ledger:<scope>:<sourceId>`
 format, extended per-target — the STORAGE key, actor-local by design), and
 `usageIdentity`/`usageIdentityKey`/`usageIdentitiesEqual` (the typed
@@ -2044,11 +2051,20 @@ de-duplication is the fact read — semantically distinct. **T6.4 (2026-08-31)
 closed the raw-field consolidation**: the `interrupt-uses` counter,
 `interrupt-uses-this-turn`, `slashed`/`dangerous-terrain` once-per-turn
 flags, and the one-attack-per-turn gate now live ONLY on typed `ledger:*`
-entries (owner-relative `turn` pools + the `any-turn` battlefield windows),
+entries (owner-relative `turn` pools + the per-actor `any-turn` windows),
 and the raw `EncounterActor` fields were REMOVED (schema 11 folds legacy
-values 1:1 and drops them deterministically). The `attackedThisTurn`
-resolution FACT is retained as a documented U10 specialist (onset resolution
-record, read by Soul Blade / Carnevale / Hissatsu / Monogatari / VM).
+values 1:1 and drops them deterministically). **T6.4a (this tranche, 2026-08-31)
+completed U16's closure: (1)** the one-interrupt-per-turn restriction is
+ACTOR-LOCAL (p.91 subject is the character; the rejected battlefield-global
+`interruptWindowUsedBy` scan is removed; Black Rock Vanguard is an
+actor-scoped cap); **(2)** `usedAbilityIds` (No Repeats) and `standardMoveUsed`
+were re-audited and MIGRATED to typed `ledger:*` keys (schema 12) instead of
+being retained as raw/scheduler specialists; **(3)** the dangerous-terrain
+once-per-turn vs the p.183 Harvester once-per-round reprint is recorded as
+adopted adjudication `icon-1.5:dangerous-terrain:damage-cadence`. The
+`attackedThisTurn` resolution FACT is retained as a documented U10
+specialist (onset resolution record, read by Soul Blade / Carnevale /
+Hissatsu / Monogatari / VM).
 
 **Locations partially owning/duplicating.** `kernels/use-ledger.ts`;
 `kernels/trait-reactions.ts` (`roundLedgerKey`, de-dup ledger);
@@ -2085,8 +2101,11 @@ reactive-trigger de-dup + interrupt-use fixtures replay byte-identical.
 
 **Consumers to migrate.** `trait-reactions.ts` de-dup → shared identity;
 `executedStepIds`/`derivedTriggers` de-dup → U16 identity + U10 facts;
-`attacked-this-turn`/`end-turn` flags → typed ledger entries;
-`interrupt-uses` → ledger; movement/terrain once-per-turn gates → ledger.
+`interrupt-uses` → ledger; movement/terrain once-per-turn gates → ledger
+(RAW-FIELD migrations from T6.4/T6.4a are already DONE: the four usage
+fields via schema 11 and `usedAbilityIds`/`standardMoveUsed` via
+schema 12; `attackedThisTurn` is the retained U10 fact specialist and
+`end-turn` the retained scheduler flag).
 
 **Blocker families enabled (information only).** use-count-override,
 interrupt-use-scaling, first-use-gate, auto-refresh, shared-turn-ledger,

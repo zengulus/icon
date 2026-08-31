@@ -126,6 +126,31 @@ export const SOURCE_ADJUDICATIONS: readonly SourceAdjudication[] = [
     status: 'adopted',
     boundary: { kind: 'level', value: 1 },
   },
+  {
+    id: 'icon-1.5:dangerous-terrain:damage-cadence',
+    rulesVersion: '1.5',
+    topic: 'Dangerous terrain — damage cadence (once per turn vs once per round)',
+    sources: [
+      {
+        page: 89,
+        statement: 'Dangerous Terrain - Entering or exiting a dangerous terrain space causes a character to take 2 piercing damage, (ignoring armor and vigor). Characters can only take this damage once a turn, even if they enter new dangerous terrain spaces.',
+      },
+      {
+        page: 183,
+        statement: 'Dangerous Terrain (Harvester “Relevant Rules” keyword recap) - Entering or exiting a dangerous terrain space causes a character to take 2 piercing damage. Characters can only take this damage once a round,.',
+      },
+    ],
+    conflict: 'Two passages state the same mechanic — the cadence of the 2 piercing dangerous-terrain damage per character — with contradictory windows. The core Battlefield/Terrain rule (p.89) says “once a turn”; the Harvester job sheet’s “Relevant Rules” keyword recap (p.183) reprints the same rule as “once a round”. These are materially different: once-a-turn allows the damage again in a later turn of the same round, whereas once-a-round caps the damage across the entire round.',
+    adopted: 'Dangerous terrain deals its 2 piercing damage (ignoring armor and vigor) to a character at most once per TURN. The per-turn window reopens at each turn start. The engine scopes this as a per-actor `any-turn` usage mark cleared by the turn-start sweep.',
+    rationale: 'p.89 is the canonical global definition of terrain in the Book of Battle (“The Battlefield”), while the p.183 sentence is one item in a condensed job-sheet keyword recap intended to jog a Harvester player’s memory. The recap itself shows the reprint is careless: it drops the clarifying “(ignoring armor and vigor)” and the “even if they enter new dangerous terrain spaces” clause, and carries a stray comma (“once a round,”). ICON restates dangerous terrain consistently as once-per-turn everywhere the full rule appears (the glossary and the core rule; see affectedCode). Against a general rule restated consistently and a single localized recap with evident transcription errors, the general definition is authoritative; adopting once-per-turn also preserves the established engine behavior (p.89 reading) rather than changing it.',
+    affectedCode: [
+      'src/rules/core.ts — core:terrain dangerous definition (“at most once per turn”)',
+      'src/rules/automation/kernels/use-ledger.ts — dangerousOncePerTurnKey (per-actor any-turn usage mark, cleared by the turn-start sweep)',
+      'src/rules/movement.ts — planMovementPath de-duplicates dangerous-terrain damage through the U16 any-turn window',
+      'src/rules/encounter.ts — ACTOR_MOVED reducer records the once-per-turn dangerous-terrain mark; refreshAnyTurnLedgersForAll reopens every actor’s window at each turn start',
+    ],
+    status: 'adopted',
+  },
 ];
 
 /** Stable-ID lookup used by tests and documentation generation. */

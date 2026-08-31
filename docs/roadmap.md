@@ -380,13 +380,13 @@ remains. Suite: `t6-3-turn-boundary-ordering.test.ts` (27 cases) + pinned
 blocker: U2 role-consumer routing (U16 raw-field classification/migration
 landed in T6.4).**
 
-**T6.4 landed (2026-08-31): U16 raw usage-field consolidation — U16 is now the
-single executing usage authority.** The raw `EncounterActor` usage/entitlement fields
-(`interruptUses`, `interruptUsedThisTurn`, `slashedTriggeredThisTurn`,
+**T6.4 landed (2026-08-31): U16 raw usage-field consolidation.** The raw
+`EncounterActor` usage/entitlement fields (`interruptUses`,
+`interruptUsedThisTurn`, `slashedTriggeredThisTurn`,
 `dangerousTerrainTriggeredThisTurn`) were classified and migrated onto the
 typed `ledger:*` authority, then REMOVED from the type + VTT checkpoint
 schema (schema 11 folds legacy values 1:1 and drops them deterministically).
-Added the `any-turn` battlefield period for the global
+Added the `any-turn` per-actor period for the ACTOR-LOCAL
 one-interrupt-during-any-turn window (p.91), Slashed once-per-turn (p.116)
 and dangerous-terrain once-per-turn (p.89); the one-attack-per-turn gate
 lives on `ledger:turn:core:attack-this-turn`, split from the
@@ -396,9 +396,23 @@ can never fabricate a U17 same-owner tie. Suite:
 `t6-4-usage-global-ledger.test.ts` (9 adversarial cases) + updated
 `t5c1`/`interrupts`/`bastion`/`knave`/`movement`/`conditions`/
 `damage-ledger`/`encounter`/`rooms`/`mastery` assertions reading the typed
-ledger; full suite green (1807 tests); census byte-stable at 427 (no source
+ledger; full suite green (1808 tests); census byte-stable at 427 (no source
 promotion); architecture guard (`bespoke-u16-entitlement-field`) + detection
 test added.
+
+**T6.4a landed (this tranche, 2026-08-31): U16 corrective closure — U16 is
+now the single executing usage authority.** Corrected the
+one-interrupt-per-turn window from battlefield-GLOBAL to ACTOR-LOCAL (the
+p.91 passage's subject is the character; the rejected `interruptWindowUsedBy`
+battlefield scan is removed). Re-audited and MIGRATED `usedAbilityIds`
+(No Repeats) and `standardMoveUsed` to typed `ledger:*` keys and REMOVED
+them from the `EncounterActor` type + checkpoint schema (schema 12).
+Recorded the dangerous-terrain damage-cadence contradiction (p.89 once-per-turn
+vs the p.183 Harvester reprint once-per-round) as adopted adjudication
+`icon-1.5:dangerous-terrain:damage-cadence` (once per turn). Full suite
+green (1818 tests); census byte-stable at 427 (no source promotion). The six
+§8 U16 closure gates are now all met; the T6.4a gate report registers the
+resulting status.
 
 **T6.1–T6.4 scope note (per the T6 §3 split mandate).** U8 (temporal
 consolidation), U17 (simultaneous-order arbitration + turn-boundary

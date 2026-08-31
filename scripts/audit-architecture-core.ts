@@ -134,12 +134,13 @@ const SOURCE_ID_FALSE_POSITIVE_RE =
 const KERNEL_SOURCE_ID_EXEMPTIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['kernels/core-resolvers.ts', new Set(['core:standard-move', 'core:light-attack', 'core:heavy-attack'])],
   ['kernels/encounter-adapter.ts', new Set(['fool:masquerade', 'knave:sucker-punch'])],
-  // The U16 usage-ledger kernel's battlefield entitlement/window gates.
-  // These are the protocol-level core-mechanic gate provenance keys (p.91
-  // one-attack/one-interrupt-during-any-turn, p.116 Slashed, p.89 dangerous
-  // terrain once-per-turn) owned by the shared U16 authority - not
-  // per-content resolvers, and no content/consumer may reuse the vocabulary.
-  ['kernels/use-ledger.ts', new Set(['core:one-interrupt-per-turn', 'core:attack-this-turn', 'core:slashed-this-turn', 'core:dangerous-terrain-this-turn'])],
+  // The U16 usage-ledger kernel's entitlement/window gates. These are the
+  // protocol-level core-mechanic gate provenance keys (p.91 one-attack /
+  // one-interrupt-per-turn / No Repeats / the once-per-own-turn standard move,
+  // p.116 Slashed, p.89 dangerous terrain once-per-turn) owned by the shared
+  // U16 authority - not per-content resolvers, and no content/consumer may
+  // reuse the vocabulary.
+  ['kernels/use-ledger.ts', new Set(['core:one-interrupt-per-turn', 'core:attack-this-turn', 'core:slashed-this-turn', 'core:dangerous-terrain-this-turn', 'core:standard-move'])],
 ]);
 
 // T6.4 (U16): exactly the raw usage/entitlement fields migrated OFF the
@@ -150,10 +151,15 @@ const KERNEL_SOURCE_ID_EXEMPTIONS: ReadonlyMap<string, ReadonlySet<string>> = ne
 // (the U10 historical resolution fact) and the scheduler clock fields
 // (`turnTaken`, `turnsTakenThisRound`, `standardMoveUsed`, `usedAbilityIds`).
 const RESERVED_BESPOKE_U16_FIELDS: ReadonlySet<string> = new Set([
+  // T6.4: the four raw usage/entitlement fields.
   'interruptUses',
   'interruptUsedThisTurn',
   'slashedTriggeredThisTurn',
   'dangerousTerrainTriggeredThisTurn',
+  // T6.4a: the No Repeats array and the once-per-own-turn standard-move
+  // boolean both folded onto typed ledger keys (schema 12).
+  'usedAbilityIds',
+  'standardMoveUsed',
 ]);
 
 /** Single source of truth for the semantic guard: does an `EncounterActor`

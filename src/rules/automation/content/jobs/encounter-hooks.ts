@@ -1,6 +1,17 @@
 import { determineAndApplyEncounterDamage, registerDefeatGuard, registerOnDamageDealtHook, registerStatusSavePolicySource, registerVigorDenialSource } from '../../kernels/encounter-adapter.js';
 import { auraDefinitionFor, auraStateView, isInAura } from '../../kernels/aura.js';
+import { registerInterruptsPerTurnCapSource } from '../../kernels/use-ledger.js';
 import type { EncounterActor, EncounterState } from '../../../types.js';
+
+/** ICON p.124 Bastion Chapter 3 Black Rock Vanguard: "You can take any number
+ * of interrupts per turn." This is an ACTOR-SPECIFIC override of the p.91
+ * per-turn interrupt restriction for the owning Bastion only — it must never
+ * raise any other actor's independent per-turn window. Registered here as a
+ * content cap source; the kernel decides the window purely from the actor. */
+registerInterruptsPerTurnCapSource((actor) => {
+  if (actor.traitIds.includes('bastion:trait:black-rock-vanguard')) return Number.POSITIVE_INFINITY;
+  return undefined;
+});
 
 /**
  * Source-specific encounter hooks (content/jobs).

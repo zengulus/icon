@@ -1,6 +1,6 @@
 import type { EncounterActor, EncounterState, Position, TerrainCell } from './types.js';
 import { encounterConditionSet, rampartObstructs } from './automation/kernels/encounter-adapter.js';
-import { dangerousOncePerTurnKey, usageCount } from './automation/kernels/use-ledger.js';
+import { dangerousOncePerTurnKey, noRepeatKey, standardMoveOncePerTurnKey, usageCount } from './automation/kernels/use-ledger.js';
 import { footprintCells, footprintsOverlap, footprintsAdjacent } from './automation/primitives/spatial-intent.js';
 
 /** The two built-in movement abilities available to an actor. */
@@ -228,13 +228,17 @@ function preflightActor(state: EncounterState, actorId: string): MovementPreflig
 }
 
 function movementAvailabilityIssue(actor: EncounterActor, mode: MovementMode): MovementIssue | null {
-  if (mode === 'standard' && actor.standardMoveUsed) {
+  // Standard move is an OWNER-RELATIVE once-per-own-turn entitlement (p.91
+  // "The most basic Free Action is a standard move"): it resets at the OWNER's
+  // own turn-start, never another actor's boundary. Downtime dash follow p.91
+  // No Repeats. Both read the typed U16 ledger.
+  if (mode === 'standard' && usageCount(actor, standardMoveOncePerTurnKey(actor.id)) >= 1) {
     return issue('move.standard-used', 'The standard move has already been used this turn.');
   }
   if (mode === 'dash' && actor.actionsRemaining < 1) {
     return issue('action.insufficient', 'Dashing costs one action.');
   }
-  if (mode === 'dash' && actor.usedAbilityIds.includes('basic:dash')) {
+  if (mode === 'dash' && usageCount(actor, noRepeatKey('basic:dash')) >= 1) {
     return issue('ability.repeat', 'Dash cannot be repeated during the same turn.');
   }
   return null;

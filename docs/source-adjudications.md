@@ -43,6 +43,7 @@ can be checked against the registry without parsing prose.
 | --- | --- | --- | --- |
 | `icon-1.5:advancement:mid-level-ap` | Mid-level Ability Point (XP breakpoints) | adopted | +1 AP at 7 XP |
 | `icon-1.5:advancement:limit-break-level` | Limit Break unlock level | adopted | unlocks at level 1 |
+| `icon-1.5:dangerous-terrain:damage-cadence` | Dangerous terrain damage cadence | adopted | once per turn |
 
 The typed records are the authority; this table is a summary index and must
 not drift into a second full copy. Add or change fields in
@@ -63,6 +64,16 @@ not drift into a second full copy. Add or change fields in
    `LIMIT_BREAK_UNLOCK_LEVEL` in `src/rules/character.ts`. No Limit Break
    availability gate exists yet, so this constant is the durable boundary a
    future gate must agree with.
+3. **Dangerous terrain damage cadence** — the core Battlefield/Terrain rule
+   (p.89) states dangerous-terrain damage may be taken "once a turn, even if
+   they enter new dangerous terrain spaces"; the Harvester job sheet's
+   "Relevant Rules" keyword recap (p.183) reprints the same rule as "once a
+   round" (and drops the "ignoring armor and vigor" clarification and the
+   new-spaces clause). These are the same mechanic with contradictory
+   windows, so the contradiction is recorded. The engine adopts the general
+   rule — once per turn — implemented as a per-actor `any-turn` usage mark
+   (`dangerousOncePerTurnKey` in `src/rules/automation/kernels/use-ledger.ts`)
+   re-opened at each turn start, matching p.89.
 
 ## Tests
 
@@ -71,6 +82,7 @@ invariants (unique IDs, rules version present, ≥2 conflicting source
 references per adopted record, non-empty rationale, identified affected
 locations) and pins the adopted boundaries semantically against the engine:
 the AP is claimed at exactly 7 XP (not 5 or 10), a level banks at exactly
-15 XP, the claim resets per level, and `LIMIT_BREAK_UNLOCK_LEVEL` equals the
-adjudicated level boundary. If the engine or a record changes one side of a
-boundary, the tests fail.
+15 XP, the claim resets per level, `LIMIT_BREAK_UNLOCK_LEVEL` equals the
+adjudicated level boundary, and the dangerous-terrain claim is keyed to the
+`any-turn` window the adjudicated once-per-turn boundary adopts. If the
+engine or a record changes one side of a boundary, the tests fail.

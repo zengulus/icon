@@ -93,23 +93,25 @@ describe('auditArchitecture (real codebase)', () => {
     expect(result.checked.content).toBeGreaterThan(0);
   });
 
-  it('T6.4 U16 guard flags bespoke entitlement fields but not retained specialists', () => {
+  it('T6.4/(a) U16 guard flags bespoke entitlement fields but not retained specialists', () => {
     // The migrated bespoke U16 duplicate authorities are reserved.
     expect(isBespokeU16FieldName('interruptUses')).toBe(true);
     expect(isBespokeU16FieldName('interruptUsedThisTurn')).toBe(true);
     expect(isBespokeU16FieldName('slashedTriggeredThisTurn')).toBe(true);
     expect(isBespokeU16FieldName('dangerousTerrainTriggeredThisTurn')).toBe(true);
+    // T6.4a: the No Repeats array and the once-per-own-turn standard-move
+    // boolean both folded onto typed ledger keys are now reserved too.
+    expect(isBespokeU16FieldName('standardMoveUsed')).toBe(true);
+    expect(isBespokeU16FieldName('usedAbilityIds')).toBe(true);
     // Any future actor-level `*UsedThisTurn` / `*TriggeredThisTurn` entitlement
     // boolean is also reserved (semantic duplicate authority, not naming only).
     expect(isBespokeU16FieldName('somethingUsedThisTurn')).toBe(true);
     expect(isBespokeU16FieldName('somethingTriggeredThisTurn')).toBe(true);
-    // Retained SPECIALISTS must NOT be flagged: the U10 resolution fact and the
-    // scheduler clock fields are legitimate turn-state, not U16 duplications.
+    // Retained SPECIALISTS must NOT be flagged: the U10 historical resolution
+    // fact and the pure scheduler clock fields.
     expect(isBespokeU16FieldName('attackedThisTurn')).toBe(false);
     expect(isBespokeU16FieldName('turnTaken')).toBe(false);
     expect(isBespokeU16FieldName('turnsTakenThisRound')).toBe(false);
-    expect(isBespokeU16FieldName('standardMoveUsed')).toBe(false);
-    expect(isBespokeU16FieldName('usedAbilityIds')).toBe(false);
   });
 });
 

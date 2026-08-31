@@ -1,6 +1,7 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
+import { standardMoveOncePerTurnKey } from '../automation/kernels/use-ledger.js';
 import {
   isActorSlowCommitted,
   mustNextTurnBeSlow,
@@ -319,7 +320,7 @@ describe('ICON 1.5 turn order — Slow turns', () => {
     expect(current.turnPhase).toBe('slow');
     current = executeCommand(current, { type: 'TAKE_TURN', actorId: heroes[0]!.id }, scriptedDice()).state;
     expect(current.actors[heroes[0]!.id].actionsRemaining).toBe(2);
-    expect(current.actors[heroes[0]!.id].standardMoveUsed).toBe(false);
+    expect(current.actors[heroes[0]!.id].ruleState[standardMoveOncePerTurnKey(heroes[0]!.id)]).toBeUndefined();
   });
 
   it('illegal slow/turn decisions are rejected: acting again, going slow twice, normal turn from the slow pool, slow turn before the normal phase is exhausted', () => {

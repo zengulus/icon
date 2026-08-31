@@ -5,6 +5,7 @@ import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { compileManualRuleProgram } from '../automation/content/glue/manual-programs.js';
 import { rangeModifierRuleScopes, registerRangeModifierRule } from '../automation/kernels/range.js';
 import { registerBonusDamageRule } from '../automation/kernels/bonus-damage.js';
+import { noRepeatKey } from '../automation/kernels/use-ledger.js';
 import {
   compoundTalentMissingComponents, getExecutableTalentIds, isExecutableTalent,
   registerCompoundTalentCompleteness, registerPreUseTalentAugmentation, talentTriggerMutations,
@@ -797,7 +798,7 @@ describe('F14 use-ledger proof — Masquerade talent 1 (haven\u2019t-acted gate 
     // ledger resets for every candidate — the same boundary the F14
     // turn-ledger reset recipe drives.
     state.actors[hero.id].turnTaken = true;
-    state.actors[hero.id].usedAbilityIds = [];
+    delete state.actors[hero.id].ruleState[noRepeatKey('fool:masquerade')];
     state.round += 1;
     state.actors[hero.id].turnTaken = false;
     const result = executeCommand(state, {

@@ -785,16 +785,39 @@ assumption here, document the evidence and update this list before proceeding.
   `ledger:*` entries and REMOVED them from the `EncounterActor` type + VTT
   checkpoint schema (bumped `ENCOUNTER_SCHEMA_VERSION` to 11; the migration
   folds legacy values 1:1 and drops the raw fields deterministically). Added
-  the `any-turn` battlefield period for the global one-interrupt-during-any-
-  turn window (p.91), Slashed once-per-turn (p.116) and dangerous-terrain
+  the `any-turn` per-actor period for the ACTOR-LOCAL one-interrupt-during-
+  any-turn window (p.91), Slashed once-per-turn (p.116) and dangerous-terrain
   once-per-turn (p.89). Split the one-attack gate
   (`ledger:turn:core:attack-this-turn`) from the `attackedThisTurn` U10
   resolution fact (the fact stays as a documented specialist). Routed
   use-ledger reset recipes through ownerless maintenance noops so the reset
   never fabricates a U17 same-owner tie. Verification: `t6-4-usage-global-
-  ledger.test.ts` (9 adversarial cases), full suite green (1807 tests),
+  ledger.test.ts` (9 adversarial cases), full suite green (1808 tests),
   architecture audit guard (`bespoke-u16-entitlement-field`) + test added,
   census byte-stable at 427 (no source promotion). Next smallest-first
+  blocker: U2 role-consumer routing.
+
+- **T6.4a — U16 corrective closure (this tranche).** `DONE`. Corrected the
+  T6.4 one-interrupt-per-turn window from battlefield-GLOBAL to ACTOR-LOCAL
+  (the p.91 passage's subject is the character; removed the
+  `interruptWindowUsedBy` battlefield scan so one actor's use never closes
+  another's window; Black Rock Vanguard is an actor-scoped cap). Re-audited
+  and MIGRATED `usedAbilityIds` (No Repeats — per-source any-turn marks) and
+  `standardMoveUsed` (owner-relative `turn` gate distinct from Dash) to
+  typed `ledger:*` keys and REMOVED them from the `EncounterActor` type +
+  checkpoint schema (schema 12; fold-then-drop). Recorded the dangerous-terrain
+  damage-cadence contradiction (p.89 once-per-turn vs the p.183 Harvester
+  reprint once-per-round) as adopted adjudication
+  `icon-1.5:dangerous-terrain:damage-cadence` (once per turn). Architecture
+  guard now forbids restoring `usedAbilityIds`/`standardMoveUsed` as
+  bespoke U16 fields. Verification: `t6-4-usage-global-ledger.test.ts`
+  (17 adversarial cases), `source-adjudications.test.ts` pin, full suite
+  green (1818 tests), admission tests green, census byte-stable at 427 (no
+  source promotion). The six §8 U16 closure gates are now all met
+  (actor-local interrupts; `usedAbilityIds`/`standardMoveUsed` migrated; the
+  dangerous-terrain adjudication recorded; no competing authority; the named
+  acceptance suite green) — the gate report registers the resulting status
+  rather than treating the raw-field removal as proof. Next smallest-first
   blocker: U2 role-consumer routing.
 
 1. **Verify canonical census + full verification baseline.** — `DONE`

@@ -18,7 +18,10 @@ export const CHARACTER_SCHEMA_VERSION = 5 as const;
 // Schema 9 (U13): the interrupt-window collection becomes the ONE typed U13
 // window record (`decisionWindows: DecisionWindowRecord[]`); the legacy
 // `decisionWindows` schema is migrated field-for-field (see migrateEncounter).
-export const ENCOUNTER_SCHEMA_VERSION = 11 as const;
+// Schema 12 (T6.4a): the raw `usedAbilityIds` (No Repeats) array and the
+// `standardMoveUsed` Boolean fold onto typed `ledger:*` keys and are removed
+// from the actor (see migrateEncounter).
+export const ENCOUNTER_SCHEMA_VERSION = 12 as const;
 
 export const ACTION_IDS = [
   'sneak',
@@ -505,9 +508,11 @@ export interface EncounterActor {
   onBattlefield: boolean;
   defeated: boolean;
   actionsRemaining: number;
-  standardMoveUsed: boolean;
+  /** The U10 historical "did this actor resolve an attack this turn" fact.
+   * The one-attack-per-turn ENTITLEMENT is a separate owner-relative
+   * `ledger:turn:` key (`attackOncePerTurnKey`); this field is NEVER an
+   * executing entitlement gate. Retained specialist (see U16 closure). */
   attackedThisTurn: boolean;
-  usedAbilityIds: string[];
   /** True once the actor has taken at least one actual turn this round. The
    * scheduler derives it from `turnsTakenThisRound`; content once-per-round
    * ledgers read it as the durable "acted this round" boolean. */

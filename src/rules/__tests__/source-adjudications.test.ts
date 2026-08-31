@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LIMIT_BREAK_UNLOCK_LEVEL, abilityPointAllowance, awardXp, spendLevelUp } from '../character.js';
 import { SOURCE_ADJUDICATIONS, findAdjudication } from '../source-adjudications.js';
+import { dangerousOncePerTurnKey } from '../automation/kernels/use-ledger.js';
 import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 describe('source adjudication registry invariants', () => {
@@ -113,5 +114,27 @@ describe('adopted advancement boundary — Limit Break unlock (icon-1.5:advancem
     // grants +2 AP (Total AP 2 → 5); the engine implements that row.
     expect(abilityPointAllowance({ ...validCharacter(), level: 1, xpAbilityPointClaimed: false })).toBe(5);
     expect(abilityPointAllowance({ ...validCharacter(), level: 0, xpAbilityPointClaimed: false })).toBe(2);
+  });
+});
+
+describe('adopted combat boundary — dangerous terrain cadence (icon-1.5:dangerous-terrain:damage-cadence)', () => {
+  const adjudication = findAdjudication('icon-1.5:dangerous-terrain:damage-cadence');
+  it('is an adopted record citing both the p.89 general rule and the p.183 Harvester reprint', () => {
+    expect(adjudication?.status).toBe('adopted');
+    const pages = adjudication?.sources.map(({ page }) => page).sort((a, b) => a - b);
+    expect(pages).toEqual([89, 183]);
+    // The adopted reading must be the p.89 general rule (once per turn), not
+    // the p.183 Harvester recap (once per round).
+    expect(adjudication?.adopted).toMatch(/once per TURN/i);
+  });
+
+  it('the engine keys the dangerous-terrain claim to the any-turn window the adjudication adopts', () => {
+    // The adopted once-per-turn boundary is implemented as a per-actor
+    // any-turn usage mark (reopened at each turn start), distinct from the
+    // per-interrupt and once-per-round buckets. The key is the typed authority,
+    // never a bare battlefield scan or a per-owner `turn`/`round` ledger key.
+    const key = dangerousOncePerTurnKey();
+    expect(key.startsWith('ledger:any-turn:')).toBe(true);
+    expect(key).not.toMatch(/^ledger:(turn|round):/);
   });
 });

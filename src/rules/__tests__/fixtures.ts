@@ -6,7 +6,7 @@ import type { DiceSource } from '../dice.js';
 import type { EncounterCommand, EncounterState, IconCharacter } from '../types.js';
 
 import type { EncounterActor } from '../types.js';
-import { dangerousOncePerTurnKey, interruptUseKey, oneInterruptPerTurnWindowKey, slashedOncePerTurnKey, usageCount } from '../automation/kernels/use-ledger.js';
+import { dangerousOncePerTurnKey, interruptUseKey, noRepeatKey, oneInterruptPerTurnWindowKey, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount } from '../automation/kernels/use-ledger.js';
 
 /** T6.4 ledger read helpers — tests assert the typed U16 authority instead of
  * the migrated-away raw usage/entitlement fields. */
@@ -21,6 +21,19 @@ export function slashedTriggeredThisTurn(actor: Pick<EncounterActor, 'ruleState'
 }
 export function dangerousTerrainTriggeredThisTurn(actor: Pick<EncounterActor, 'ruleState'>): boolean {
   return usageCount(actor, dangerousOncePerTurnKey()) >= 1;
+}
+
+/** T6.4a per-ability No Repeats read — the typed `ledger:any-turn:<sourceId>`
+ * mark that replaced the raw `usedAbilityIds` array. Tests assert the typed
+ * authority instead of the removed field. */
+export function usedAbilityThisTurn(actor: Pick<EncounterActor, 'ruleState'>, sourceId: string): boolean {
+  return usageCount(actor, noRepeatKey(sourceId)) >= 1;
+}
+
+/** T6.4a once-per-own-turn standard-move read — the typed owner-relative
+ * `ledger:turn:core:standard-move` key that replaced the raw boolean. */
+export function standardMoveUsedThisTurn(actor: Pick<EncounterActor, 'ruleState' | 'id'>, ownerId?: string): boolean {
+  return usageCount(actor, standardMoveOncePerTurnKey(ownerId ?? actor.id)) >= 1;
 }
 
 export function validCharacter(name = 'Aster'): IconCharacter {

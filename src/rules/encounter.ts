@@ -8,7 +8,7 @@ import type { ArmedContinuation, RuleAction, RuleChoice, RuleExecutionContext, R
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
-import { attackOncePerTurnKey, dangerousOncePerTurnKey, interruptUseKey, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, slashedOncePerTurnKey, usageCount, interruptWindowUsedBy } from './automation/kernels/use-ledger.js';
+import { attackOncePerTurnKey, dangerousOncePerTurnKey, interruptUseKey, interruptWindowAvailableFor, noRepeatKey, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount } from './automation/kernels/use-ledger.js';
 import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
@@ -192,7 +192,7 @@ export function createEncounter(name = 'Untitled encounter'): EncounterState {
 export function migrateEncounter(input: unknown): EncounterState {
   if (!input || typeof input !== 'object') throw new RuleViolation('encounter.invalid', 'Encounter data must be an object.');
   const candidate = input as Omit<Partial<EncounterState>, 'schemaVersion'> & { schemaVersion?: number };
-  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== 7 && candidate.schemaVersion !== 9 && candidate.schemaVersion !== 10 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
+  if (candidate.schemaVersion !== 1 && candidate.schemaVersion !== 2 && candidate.schemaVersion !== 3 && candidate.schemaVersion !== 4 && candidate.schemaVersion !== 5 && candidate.schemaVersion !== 6 && candidate.schemaVersion !== 7 && candidate.schemaVersion !== 9 && candidate.schemaVersion !== 10 && candidate.schemaVersion !== 11 && candidate.schemaVersion !== ENCOUNTER_SCHEMA_VERSION) {
     throw new RuleViolation('encounter.schema', `Unsupported encounter schema version: ${String(candidate.schemaVersion)}`);
   }
   // There is no cross-rules-version converter in this release. Treat a
@@ -224,7 +224,6 @@ export function migrateEncounter(input: unknown): EncounterState {
       stance: actor.stance ? { ...actor.stance, ownerId: actor.stance.ownerId ?? null } : null,
       traitIds: [...(actor.traitIds ?? [])],
       onBattlefield: actor.onBattlefield ?? true,
-      usedAbilityIds: [...(actor.usedAbilityIds ?? [])],
       // Scheduler migration: a pre-scheduler checkpoint cannot reconstruct
       // turn entitlements. An actor that already acted this round (turnTaken)
       // is treated as having spent its single entitlement; the rest still owe
@@ -253,10 +252,22 @@ export function migrateEncounter(input: unknown): EncounterState {
     foldBool(migrated.interruptUsedThisTurn, oneInterruptPerTurnWindowKey());
     foldBool(migrated.slashedTriggeredThisTurn, slashedOncePerTurnKey());
     foldBool(migrated.dangerousTerrainTriggeredThisTurn, dangerousOncePerTurnKey());
+    // U16 (schema 12) No Repeats + standard-move fold: a pre-12 checkpoint's
+    // raw per-ability no-repeat array maps 1:1 onto distinct `any-turn` ledger
+    // marks (one per abilities id, actor-local, never aliasing two abilities),
+    // and the once-per-own-turn standard-move boolean folds onto its
+    // owner-relative `turn` key. Guards do not overwrite a newer ledger mark
+    // already present and never grant or consume a use not represented.
+    for (const usedId of (migrated.usedAbilityIds as string[] | undefined) ?? []) {
+      if (typeof usedId === 'string' && !(noRepeatKey(usedId) in led)) led[noRepeatKey(usedId)] = true;
+    }
+    foldBool(migrated.standardMoveUsed, standardMoveOncePerTurnKey(actorId));
     delete migrated.interruptUses;
     delete migrated.interruptUsedThisTurn;
     delete migrated.slashedTriggeredThisTurn;
     delete migrated.dangerousTerrainTriggeredThisTurn;
+    delete migrated.usedAbilityIds;
+    delete migrated.standardMoveUsed;
     return [id, migrated as EncounterActor];
   }));
   // Pre-provenance checkpoint schemas did not record which actor created a
@@ -579,9 +590,7 @@ export function actorFromCharacter(character: IconCharacter, position: Position,
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
-    standardMoveUsed: false,
     attackedThisTurn: false,
-    usedAbilityIds: [],
     turnTaken: false,
     turnsRemaining: 1,
     turnsTakenThisRound: 0,
@@ -657,9 +666,7 @@ export function createFoe(name: string, position: Position): EncounterActor {
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
-    standardMoveUsed: false,
     attackedThisTurn: false,
-    usedAbilityIds: [],
     turnTaken: false,
     turnsRemaining: 1,
     turnsTakenThisRound: 0,
@@ -748,9 +755,7 @@ export function createFoeFromProfile(profileId: string, position: Position, play
     onBattlefield: true,
     defeated: false,
     actionsRemaining: 2,
-    standardMoveUsed: false,
     attackedThisTurn: false,
-    usedAbilityIds: [],
     turnTaken: false,
     turnsRemaining: 1,
     turnsTakenThisRound: 0,
@@ -1648,13 +1653,16 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
       `${ability.name} is not an independently executable ICON rule yet. Review p.${ability.source.page}: ${ability.rulesText}`,
     );
   }
-  if (actor.usedAbilityIds.includes(ability.id)) throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
+  if (usageCount(actor, noRepeatKey(ability.id)) >= 1) throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
   if (ability.cost.kind === 'passive') throw new RuleViolation('ability.passive', 'Passive abilities are always active and cannot be used as commands.');
 
   const interrupt = ability.cost.kind === 'interrupt';
   if (interrupt) {
     if (actor.statuses.includes('stunned')) throw new RuleViolation('interrupt.stunned', 'Stunned characters cannot use interrupts.');
-    if (interruptWindowUsedBy(state) !== null) throw new RuleViolation('interrupt.turn-limit', 'A character can only use one interrupt during any turn.');
+    // p.91 actor-local one-interrupt-per-turn restriction: the acting actor's
+    // OWN window is checked. Another actor's use never closes this window
+    // (Bastion's Black Rock Vanguard raises only its own allowance).
+    if (!interruptWindowAvailableFor(actor)) throw new RuleViolation('interrupt.turn-limit', 'This character can only use one interrupt during any turn.');
     // The per-round allowance is the mastery-fold authority: an interrupt's
     // rank is its uses per round (p.91), and a mastered rank override
     // (MANGONEL p.123, PERFECT BATTLEMENT p.122) genuinely raises it.
@@ -2077,7 +2085,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const actor = state.actors[command.actorId];
       if (!actor || actor.defeated || !actor.onBattlefield) throw new RuleViolation('actor.unavailable', 'That actor cannot execute a rule program.');
       if (command.timing === 'use' && state.activeActorId !== actor.id) throw new RuleViolation('turn.not-active-actor', 'Only the active actor can use this rule action.');
-      if (actor.usedAbilityIds.includes(command.sourceId) && command.timing === 'use') throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
+      if (command.timing === 'use' && usageCount(actor, noRepeatKey(command.sourceId)) >= 1) throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
       const unit = findRuleSourceUnit(command.sourceId);
       if (!unit) throw new RuleViolation('rule.source-unknown', 'That ICON source rule does not exist.');
       // Compilation coverage is an audit signal, not permission to execute a
@@ -2246,7 +2254,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
     case 'INTERACT': {
       const actor = assertActive(state, command.actorId);
       if (actor.actionsRemaining < 1) throw new RuleViolation('action.insufficient', 'Interact costs one action.');
-      if (actor.usedAbilityIds.includes('basic:interact')) throw new RuleViolation('ability.repeat', 'Interact cannot be repeated during the same turn.');
+      if (usageCount(actor, noRepeatKey('basic:interact')) >= 1) throw new RuleViolation('ability.repeat', 'Interact cannot be repeated during the same turn.');
       if (command.position.x < 0 || command.position.y < 0 || command.position.x >= state.grid.width || command.position.y >= state.grid.height) throw new RuleViolation('interact.out-of-bounds', 'That interaction is outside the battlefield.');
       if (distance(actor.position, command.position) > 1) throw new RuleViolation('interact.range', 'Interact can only affect the user’s space or an adjacent space.');
       events = [{ type: 'ACTOR_INTERACTED', actorId: actor.id, position: command.position, description: command.description.trim() || 'Interact' }];
@@ -2256,7 +2264,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const actor = assertActive(state, command.actorId);
       const target = state.actors[command.targetId];
       if (actor.actionsRemaining < 1) throw new RuleViolation('action.insufficient', 'Rescue costs one action.');
-      if (actor.usedAbilityIds.includes('basic:rescue')) throw new RuleViolation('ability.repeat', 'Rescue cannot be repeated during the same turn.');
+      if (usageCount(actor, noRepeatKey('basic:rescue')) >= 1) throw new RuleViolation('ability.repeat', 'Rescue cannot be repeated during the same turn.');
       if (!target || !target.defeated || target.side !== actor.side || target.id === actor.id) throw new RuleViolation('rescue.target', 'Rescue requires an adjacent defeated ally.');
       // ICON p.172 Succor changes only Rescue's target distance. Keep this a
       // closed source-ID check: a trait name or arbitrary condition cannot
@@ -2276,7 +2284,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
     case 'RECOVER': {
       const actor = assertActive(state, command.actorId);
       if (actor.actionsRemaining < 2) throw new RuleViolation('action.insufficient', 'Recover costs two actions.');
-      if (actor.usedAbilityIds.includes('basic:recover')) throw new RuleViolation('ability.repeat', 'Recover cannot be repeated during the same turn.');
+      if (usageCount(actor, noRepeatKey('basic:recover')) >= 1) throw new RuleViolation('ability.repeat', 'Recover cannot be repeated during the same turn.');
       // ICON p.91 Recover is Cure self, then save against every saveable
       // status.  Match Diaga's Cure sequence exactly: a cure denial blocks
       // that immediate sequence, while Rot's curse still applies to separate
@@ -3067,10 +3075,15 @@ function applyTurnTransition(
       candidate.marks = [];
     }
   }
-  // The battlefield any-turn windows re-open for every actor at a turn boundary.
+  // The battlefield any-turn windows (actor-local one-interrupt-per-turn, No
+  // Repeats, Slashed, dangerous terrain) re-open for every actor at a turn
+  // boundary. `refreshAnyTurnLedgersForAll` sweeps every `ledger:any-turn:*`
+  // key on every actor (including the per-ability No Repeats marks), and the
+  // owner-relative `ledger:turn:*` keys (one-attack gate, standard move,
+  // per-interrupt pools) refresh only at the OWNER's own turn-start via the
+  // lifecycle turn-ledger-reset recipe.
   refreshAnyTurnLedgersForAll(state);
   for (const candidate of Object.values(state.actors)) {
-    candidate.usedAbilityIds = [];
     candidate.ruleState['damage-immune'] = false;
     candidate.ruleStateOwners['damage-immune'] ??= null;
     candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
@@ -3106,7 +3119,9 @@ function applyTurnTransition(
     // keep their exact cadence; new events never name a next actor).
     const next = state.actors[event.nextActorId];
     next.actionsRemaining = derivedTurnStartActions(next);
-    next.standardMoveUsed = false;
+    // The once-per-own-turn standard-move gate is an owner-relative `turn`
+    // ledger key; the lifecycle turn-ledger-reset recipe clears it at the
+    // OWNER's own turn-start. No direct boolean reset here.
     next.attackedThisTurn = false;
     refreshAnyTurnLedgersForAll(state);
     if (next.traitIds.includes('wright:trait:aether')) next.resources.aether = (next.resources.aether ?? 0) + 1;
@@ -3186,19 +3201,18 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // The selected actor's fresh turn clock: HP-threshold passives derive
         // the action pool from current HP exactly like every later boundary.
         actor.actionsRemaining = derivedTurnStartActions(actor);
-        actor.standardMoveUsed = false;
         actor.attackedThisTurn = false;
-        // Owner-relative U16 turn gates (one-attack gate + per-interrupt pools)
-        // refresh ONLY at the OWNER's own turn-start via the lifecycle
-        // turn-ledger-reset recipe (p.91 "get them all back at the start of any
-        // of your turns") — never another actor's boundary.
+        // Owner-relative U16 turn gates (one-attack gate, the once-per-own-turn
+        // standard move, + per-interrupt pools) refresh ONLY at the OWNER's own
+        // turn-start via the lifecycle turn-ledger-reset recipe (p.91 "get them
+        // all back at the start of any of your turns") — never another actor's
+        // boundary.
         if (actor.traitIds.includes('wright:trait:aether')) actor.resources.aether = (actor.resources.aether ?? 0) + 1;
-        // The battlefield any-turn windows (global one-interrupt-during-any-turn,
+        // The per-actor any-turn windows (actor-local one-interrupt-during-any-turn,
         // slashed once per turn, dangerous terrain once per turn) re-open for
         // EVERY actor at EVERY turn start.
         refreshAnyTurnLedgersForAll(state);
         for (const candidate of Object.values(state.actors)) {
-          candidate.usedAbilityIds = [];
           candidate.ruleState['damage-immune'] = false;
           candidate.ruleStateOwners['damage-immune'] ??= null;
           candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
@@ -3238,7 +3252,13 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         const actor = state.actors[event.actorId];
         const from = { ...actor.position };
         actor.position = event.path.at(-1)!;
-        actor.standardMoveUsed ||= event.mode === 'standard';
+        if (event.mode === 'standard') {
+          // A standard move is a Free Action, so it also follows No Repeats
+          // (p.91) — mark its once-per-own-turn entitlement AND its per-ability
+          // no-repeat mark. Both are distinct U16 entries.
+          recordUsageKey(actor, standardMoveOncePerTurnKey(actor.id));
+          recordUsageKey(actor, noRepeatKey('basic:standard-move'));
+        }
         pickupThrownWeapon(state, actor, [from, actor.position, ...event.path]);
         if (event.mode === 'dash') {
           // ICON p.168 Path of the Aesi: while the owner has Stealth the Dash
@@ -3246,7 +3266,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           // condition could never accidentally waive the core Dash cost.
           const freeDash = actor.traitIds.includes('warden:trait:path-of-the-aesi') && encounterConditionSet(actor, state).has('stealth');
           if (!freeDash) actor.actionsRemaining -= 1;
-          actor.usedAbilityIds.push('basic:dash');
+          recordUsageKey(actor, noRepeatKey('basic:dash'));
         }
         // Movement events intentionally retain source amounts.  Do not route
         // them through applyDeterminedEncounterDamage: that API is only for
@@ -3320,13 +3340,13 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
       case 'ABILITY_RESOLVED': {
         const actor = state.actors[event.actorId];
         actor.actionsRemaining -= event.actionCost;
-        actor.usedAbilityIds.push(event.abilityId);
+        recordUsageKey(actor, noRepeatKey(event.abilityId));
         actor.attackedThisTurn ||= event.attackAbility;
         if (event.attackAbility) recordUsageKey(actor, attackOncePerTurnKey(actor.id));
         if (event.interrupt) {
-          // p.91 per-interrupt pool (owner `ledger:turn:<id>`) and the GLOBAL
-          // one-interrupt-during-any-turn battlefield window — distinct U16
-          // entries that never share a counter.
+          // p.91 per-interrupt pool (owner `ledger:turn:<id>`) and the ACTOR-LOCAL
+          // one-interrupt-during-any-turn window — distinct U16 entries that
+          // never share a counter.
           recordUsageKey(actor, interruptUseKey(actor.id, event.abilityId));
           recordUsageKey(actor, oneInterruptPerTurnWindowKey());
           // ICON p.107: an interrupt answers the most recently triggered window
@@ -3427,7 +3447,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // owner records their order; the LIFO pop below consumes the recorded
         // ranks and fails closed while the decision is pending.
         openOrderingDecisionForSameOwnerTies(state);
-        if (event.timing === 'use' || event.timing === 'interrupt') actor.usedAbilityIds.push(event.sourceId);
+        if (event.timing === 'use' || event.timing === 'interrupt') recordUsageKey(actor, noRepeatKey(event.sourceId));
         actor.attackedThisTurn ||= event.tags.includes('attack');
         if (event.tags.includes('attack')) recordUsageKey(actor, attackOncePerTurnKey(actor.id));
         if (event.mutations.some((mutation) => mutation.kind === 'attack' && mutation.hit)) discardWickedSheathDie(actor);
@@ -3532,14 +3552,14 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
       case 'ACTOR_INTERACTED': {
         const actor = state.actors[event.actorId];
         actor.actionsRemaining -= 1;
-        actor.usedAbilityIds.push('basic:interact');
+        recordUsageKey(actor, noRepeatKey('basic:interact'));
         break;
       }
       case 'ACTOR_RESCUED': {
         const actor = state.actors[event.actorId];
         const target = state.actors[event.targetId];
         actor.actionsRemaining -= 1;
-        actor.usedAbilityIds.push('basic:rescue');
+        recordUsageKey(actor, noRepeatKey('basic:rescue'));
         target.defeated = false;
         target.hp = event.restoredHp;
         target.vigor = 0;
@@ -3577,7 +3597,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
       case 'ACTOR_RECOVERED': {
         const actor = state.actors[event.actorId];
         actor.actionsRemaining -= 2;
-        actor.usedAbilityIds.push('basic:recover');
+        recordUsageKey(actor, noRepeatKey('basic:recover'));
         if (event.statusSaveMutations) {
           // New events replay the full cure/save ledger, including policy
           // denial, Rot's curse, and any explicit Blessing spend.
