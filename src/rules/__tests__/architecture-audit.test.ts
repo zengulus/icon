@@ -185,6 +185,9 @@ describe('U1 Reference/Binding routing guard', () => {
     // the inventoried U1×U4 boundary and must NOT be flagged.
     'content/jobs/programs/shade-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const triggerPosition = resolveTriggerSource(context)?.position; const selected = context.input.actorIds?.target?.[0]; const chosen = selected ? sourceActor(context, selected) : undefined;',
     'content/jobs/programs/warden-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const foeId = context.input.actorIds?.target?.[0]; const foe = foeId ? sourceActor(context, foeId) : undefined;',
+    // Migrated Sealer keeps its pinned adapter surface; the U1×U4 chain reads
+    // (`input.actorIds?.[0] ?? attackTargetId` → sourceActor) stay inventoried.
+    'content/jobs/programs/sealer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined;',
     'content/jobs/job-trait-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); mutations.push({ kind: \'condition\', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id });',
     'content/classes/class-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); const inputTargets = context.input.actorIds?.target; if (inputTargets[0] !== context.attackTargetId) throw 0;',
   };
@@ -217,6 +220,17 @@ describe('U1 Reference/Binding routing guard', () => {
       'content/jobs/programs/geomancer-programs.ts': "const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;",
     });
     expect(problems).toEqual([]);
+  });
+
+  it('T5c: catches a MIGRATED Sealer program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/sealer-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/sealer-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
   });
 
   it('T5c: catches a MIGRATED Shade/Warden program that reverts live-slot reads to legacy sourceActor(context, …)', () => {

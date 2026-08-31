@@ -11,6 +11,7 @@ import {
   gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
 
@@ -48,8 +49,8 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
  * the nearest eligible ally, self first). Exceed: you and allies in range 2
  * gain 3 vigor. */
 const godHandEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 1, 'God Hand');
@@ -72,8 +73,8 @@ const godHandEffects: RuleResolver = (context) => {
  * attack [D]+fray, then the foe explodes in a medium blast dealing 1 divine to
  * all foes. Exceed repeats the effect. */
 const devilHandEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 1, 'Devil Hand');
@@ -117,8 +118,8 @@ const grandSealEffects: RuleResolver = (context) => {
  * inside gain 3 vigor, foes take 2 divine. The optional ally teleports are a
  * documented free-action window. */
 const matsuriEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 2, 'Matsuri');
@@ -145,7 +146,7 @@ const matsuriEffects: RuleResolver = (context) => {
  * aura benefits (cover, +1 boon, vigor on turn end, evasion) are documented
  * object-effect windows. */
 const spiritShrineEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const existing = Object.values(context.state.entities)
     .filter((entity) => entity.type === 'shrine' && entity.ownerId === source.id)
@@ -222,7 +223,7 @@ const divineAegisEffects: RuleResolver = (context) => {
 /** ICON p.194 Justice (interrupt): burst 2 (self) — foes take 1 divine and
  * allies are blessed, then player-selected Teleport 2. */
 const justiceEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
   const area = squareArea(source.position, 2);
@@ -242,7 +243,7 @@ const justiceEffects: RuleResolver = (context) => {
  * Self-teleport is a player choice. Foe teleports use per-foe position keys
  * (unqualified "teleport" in source). */
 const judgementEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const { roll: gamble } = gambleD6(context.dice);
   const distanceMoved = Math.max(1, Math.floor(gamble / 2));
@@ -271,8 +272,8 @@ const judgementEffects: RuleResolver = (context) => {
  * turned into a hit). Exceed: shove the foe 1, player-selected teleport 1,
  * shove the foe 1, player-selected teleport 1. */
 const openTheGatesEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   // Player-selected Teleport 1
@@ -305,8 +306,8 @@ const openTheGatesEffects: RuleResolver = (context) => {
  * spaces equal to the round number, then attack [D]+fray (fray on miss).
  * Exceed: deal 1 damage again to the target (6 at round 4 or later). */
 const centerTheTempleEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const steps = Math.min(context.state.round, Math.max(context.state.grid.width, context.state.grid.height));

@@ -114,29 +114,73 @@ their sites.
 
 ### Fresh residual inventory (semantic classification, not a ban list)
 
-A fresh scan at this HEAD finds 242 remaining `sourceActor(context, …)`
+A fresh scan at this HEAD finds 230 remaining `sourceActor(context, …)`
 calls across 14 named program files. Classified by semantic family (the
 previous hand-count of ~120 was a partial tally; the fresh grep is exact):
 
-- **U1 reference identity — pure LIVE slot reads (188, migrate family-by-
+- **U1 reference identity — pure LIVE slot reads (175, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
-  Warden migrated this tranche. Per-file: Chanter 19, Enochian 18, Sealer 17,
-  Knave 17, Harvester 16, Demon Slayer 16, Seer 15, Fool 15, Geomancer 14,
-  Freelancer 14, Stormbender 11, Colossus 11.
+  Warden/Sealer migrated across tranches 2–3. Remaining per-file: Chanter 19,
+  Enochian 18, Knave 17, Harvester 16, Demon Slayer 16, Seer 15, Fool 15,
+  Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11.
 - **U1×U4 boundary — captured/derived-id dereferences (55, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from
   `input.actorIds?.[n]` (Shade Harrow/Shadow Play/Assassinate, Warden
-  Gwynt/Stampede, Knave targets, etc.) or a `??` priority chain
-  (`target[0] ?? attackTargetId`, Harvester line 155). The caller's
-  `?.[0]`/`?.[1]`/`slice` SELECT is U4 cardinality (the adapter deliberately
-  has no first-element collapse); the subsequent dereference is U1 captured-
-  identity. Which slot answers a chain depends on the source contract at each
-  call site — migrated with its parity test, never mechanically.
+  Gwynt/Stampede, Sealer Grand Seal/Sanctify/Grand Banishment/Divine Aegis,
+  Knave targets, etc.) or a `??` priority chain
+  (`target[0] ?? attackTargetId`). The caller's `?.[0]`/`?.[1]`/`slice`
+  SELECT is U4 cardinality (the adapter deliberately has no first-element
+  collapse); the subsequent dereference is U1 captured-identity. Which slot
+  answers a chain depends on the source contract at each call site — migrated
+  with its parity test, never mechanically.
 - **U9 provenance / plumbing (never migrate)**: `sourceActorId:` on emitted
   mutations, `actorId: context.actorId` commands, and `context.attackTargetId
   ?` gate tests remain at their sites.
+
+## U1 tranche executed (fresh HEAD, 2026-09-01, third tranche — Sealer)
+
+### Migrated: Sealer pure LIVE-slot reference reads
+
+`content/jobs/programs/sealer-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter:
+
+- source reads → `resolveSourceActor(context)` in God Hand, Devil Hand,
+  Matsuri, Spirit Shrine, Justice, JUDGEMENT, Open The Gates, and Center The
+  Temple;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(…attackTargetId) : undefined`) → `resolveAttackTarget(context)`
+  in God Hand, Devil Hand, Matsuri, Open The Gates, and Center The Temple.
+
+Semantics preserved exactly: LIVE re-read of current state, absent-singular→
+undefined, and the resolvers' own `if (!source.position || !target?.position)
+return []` early-return guards are untouched (they gate on board state, not
+reference identity). Grand Seal, Sanctify, Grand Banishment, and Divine Aegis
+KEEP their `input.actorIds?.target?.[0] ?? attackTargetId` chains — caller-own-
+ed U4 precedence (which slot answers depends on the source contract per call
+site), inventoried with the U1×U4 boundary; only their non-chain sibling
+resolvers migrated in this tranche.
+
+### Guard
+
+The `u1-reference-routing` guard pins Sealer (resolveSourceActor,
+resolveAttackTarget) to the adapter; the retained chain dereferences are NOT
+banned. Mutation tests: a Sealer revert to
+`sourceActor(context, context.actorId)` drops the pinned calls and is
+caught, and the chain-shape fixture is accepted as the inventoried boundary.
+
+### Evidence
+
+- `reference-authoring.test.ts` +2: God Hand and Open The Gates resolvers
+  fail closed (`reference.missing-actor`) on a gated-bypass ghost
+  `attackTargetId`; a Grand Seal chain site with a present input target but
+  absent fallback still resolves through the caller-owned precedence (chain
+  semantics untouched).
+- `sealer.test.ts` (19 tests) green through the engine path — behavior-
+  preserving migration proof.
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
 
 ## U1 tranche executed (fresh HEAD, 2026-09-01, second tranche)
 
@@ -199,12 +243,12 @@ dereference. It deliberately does not ban the inventoried
 rewrite), `context.input.actorIds` reads (U4 identity lives at the caller) or
 provenance `context.actorId` (never reference interpretation).
 
-U1 remains PARTIAL: the shared surface is proved and pinned across six
-migrated files (Bastion, Spellblade, Shade, Warden, Job-trait, Class
-resolvers), and the residual is a classified migration inventory — 188 pure
+U1 remains PARTIAL: the shared surface is proved and pinned across seven
+migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Job-trait, Class
+resolvers), and the residual is a classified migration inventory — 175 pure
 LIVE-slot reads (next tranches) + 55 captured/derived-id boundary reads + 0
 direct dereferences. A whole-consumer audit is NOT yet done, so U1 cannot
-claim AUTHORITATIVE: 12 program files still resolve live slots through the
+claim AUTHORITATIVE: 11 program files still resolve live slots through the
 legacy kernel-side convenience, and the U1×U4 captured-identity boundary has
 no shared surface yet.
 

@@ -42,6 +42,7 @@ import {
 } from '../automation/content/glue/reference-authoring.js';
 import { SHADE_RULE_RESOLVERS } from '../automation/content/jobs/programs/shade-programs.js';
 import { WARDEN_RULE_RESOLVERS } from '../automation/content/jobs/programs/warden-programs.js';
+import { SEALER_RULE_RESOLVERS } from '../automation/content/jobs/programs/sealer-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -243,6 +244,25 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
   it('Warden Sidhe resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
     const context = ctx({ attackTargetId: 'ghost' });
     expectViolationCode(() => WARDEN_RULE_RESOLVERS['warden:sidhe:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Sealer God Hand resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => SEALER_RULE_RESOLVERS['sealer:god-hand:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Sealer Open The Gates resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor — the U1×U4 chain sites keep caller-owned precedence; only PURE live-slot reads migrated', () => {
+    // Grand Seal's `input.actorIds?.target?.[0] ?? attackTargetId` precedence is
+    // caller-owned U4 (inventoried); the PURE God Hand/Open The Gates reads
+    // resolve the attack-target slot directly and fail closed on a ghost.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => SEALER_RULE_RESOLVERS['sealer:open-the-gates:effects'](context, defaultAction), 'reference.missing-actor');
+    // And the chain site still honors its caller-owned precedence: a present
+    // input target is used, and a ghost FALLBACK slot alone would resolve
+    // through the caller's `targetId ?` guard (undefined → caller gate).
+    const chained = ctx({ attackTargetId: undefined, input: { actorIds: { target: ['foe'] } } });
+    const resolved = SEALER_RULE_RESOLVERS['sealer:grand-seal:effects'](chained, defaultAction);
+    expect(Array.isArray(resolved)).toBe(true);
   });
 
   it('Shade Nocturne resolver: a ghost triggerSourceId (gate bypassed) throws instead of degenerating to the source position', () => {

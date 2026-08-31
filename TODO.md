@@ -140,20 +140,24 @@ assumption here, document the evidence and update this list before proceeding.
 > U16 remains the single executing usage authority.
 >
 > **U1 content-authoring surface (2026-09-01, commit 4bd0189) + Shade/Warden
-> live-slot tranche (2026-09-01).** The named-content U1 residual got ONE
-> shared surface (`content/glue/reference-authoring.ts`: resolveSourceActor /
+> live-slot tranche (2026-09-01, commit ea9526c) + Sealer live-slot tranche
+> (2026-09-01).** The named-content U1 residual got ONE shared surface
+> (`content/glue/reference-authoring.ts`: resolveSourceActor /
 > resolveAttackTarget / resolveTriggerSource / resolveTriggerTargets /
 > resolveCapturedSelectedActors / resolveBoundActor, all composing
-> `primitives/reference.ts`), and six content families migrated:
+> `primitives/reference.ts`), and seven content families migrated:
 > Bastion/Spellblade programs, the Job-trait/Class resolvers' six direct
-> dereferences, then Shade + Warden pure LIVE-slot reads (source/attack-target
-> /Nocturne trigger-source) — the last direct
-> `state.actors[context.…]` dereference in content is gone. The
-> `u1-reference-routing` guard scans the content layer (adapter-keeps-U1,
-> migrated-program pins, deref rejection; no blanket lexical ban on the
-> inventoried residual). Fresh exact residual: 242 `sourceActor(context, …)`
-> sites — 188 pure LIVE-slot reads (next tranches), 55 captured/derived-id
-> boundary reads, 0 direct dereferences. U1 stays PARTIAL; zero source
+> dereferences, then the pure LIVE-slot reads (source/attack-target
+> /Nocturne trigger-source) in Shade, Warden, and Sealer (God Hand/Devil
+> Hand/Matsuri/Spirit Shrine/Justice/JUDGEMENT/Open The Gates/Center The
+> Temple) — the last direct `state.actors[context.…]` dereference in content
+> is gone. The `u1-reference-routing` guard scans the content layer
+> (adapter-keeps-U1, migrated-program pins incl. Sealer, deref rejection; no
+> blanket lexical ban on the inventoried residual). Fresh exact residual:
+> 230 `sourceActor(context, …)` sites — 175 pure LIVE-slot reads (next
+> tranches), 55 captured/derived-id boundary reads (incl. Sealer Grand
+> Seal/Sanctify/Grand Banishment/Divine Aegis chains — caller-owned U4
+> precedence), 0 direct dereferences. U1 stays PARTIAL; zero source
 > promotion; census remains 427.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
@@ -173,6 +177,28 @@ assumption here, document the evidence and update this list before proceeding.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 3 — Sealer pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/sealer-programs.ts` now
+  routes its pure live-slot references through the adapter: source reads →
+  `resolveSourceActor` in God Hand, Devil Hand, Matsuri, Spirit Shrine,
+  Justice, JUDGEMENT, Open The Gates, Center The Temple; attack-target reads
+  → `resolveAttackTarget` in God Hand, Devil Hand, Matsuri, Open The Gates,
+  Center The Temple — identical LIVE/absent-singular semantics with the
+  resolvers' early-return board-state guards untouched. The five U1×U4 chain
+  sites (Grand Seal, Sanctify, Grand Banishment, Divine Aegis —
+  `input.actorIds?.target?.[0] ?? attackTargetId`) stay inventoried
+  caller-owned precedence. Guard pins Sealer; mutation tests cover a Sealer
+  revert and the chain-shape acceptance. Evidence: +2 fail-closed tests in
+  `reference-authoring.test.ts` (God Hand/Open The Gates ghost
+  attackTargetId → `reference.missing-actor`; Grand Seal chain keeps
+  caller-owned precedence), `sealer.test.ts` (19) green. Fresh exact
+  residual: 230 `sourceActor(context, …)` sites — 175 pure live-slot reads
+  (Chanter 19, Enochian 18, Knave 17, Harvester 16, Demon Slayer 16, Seer
+  15, Fool 15, Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11),
+  55 captured/derived boundary reads, 0 direct dereferences; U1 remains
+  PARTIAL. Full suite 1978 green, audits green, census byte-stable at 427,
+  zero source promotion.
 
 - **U1 content-authoring tranche 2 — Shade/Warden pure LIVE-slot reads
   (2026-09-01) — DONE.** All 12 executable Shade resolvers and all 9 Warden
