@@ -32,7 +32,20 @@
  * semantic role authority for a resolution; `RuleChoice` carries typed
  * optional chooser/controller roles (behavior-neutral until U4 consumes them).
  */
-import type { RuleExecutionContext } from './types.js';
+import type { RuleActorView, RuleExecutionContext } from './types.js';
+
+/**
+ * The U2 authority's BRANDED RELATION SOURCE actor. The self/ally/foe
+ * semantic operation (`matchesTargetRelation`, U3) requires its SOURCE to be
+ * a `RelationActor` — an actor only the U2 authority (`relationSourceFor`)
+ * can produce, from the U2-derived `RelationPerspective`. A plain/aliased
+ * lookup (`const localId = context.actorId; state.actors[localId]`) yields an
+ * un-branded `RuleActorView` that is NOT assignable to `RelationActor`, so the
+ * semantic operation structurally refuses a perspective that did not flow
+ * through U2 (T8d: dependency enforcement in the type, not a regex).
+ */
+declare const relationSourceBrand: unique symbol;
+export type RelationActor = RuleActorView & { readonly [relationSourceBrand]: true };
 
 /**
  * The U2 authority's BRANDED perspective result. Only the U2 authority
@@ -236,6 +249,22 @@ export function relationPerspectiveIdFromContext(context: RuleExecutionContext):
   return relationPerspectiveId(roleFrameFromContext(context));
 }
 
+/** The single, SEALED way to resolve a RELATION SOURCE actor: index the actor
+ * state by the U2-derived `RelationPerspective`. The returned `RelationActor`
+ * is branded so the eager/aliased substitution
+ * (`const localId = context.actorId; state.actors[localId]`) — a different,
+ * incidental actor id — cannot satisfy the `matchesTargetRelation` SOURCE
+ * parameter at the type level. Returns null (fail closed) when the
+ * perspective actor is absent; the caller rejects rather than guesses. This
+ * is the ONLY producer of a `RelationActor` outside the U2 frame. */
+export function relationSourceFor(
+  state: Readonly<Record<string, RuleActorView>>,
+  perspective: RelationPerspective,
+): RelationActor | null {
+  const view = state[perspective];
+  return view === undefined ? null : (view as RelationActor);
+}
+
 /** The durable RESPONDER role a window/decision resolves to (U2 narrator for
  * U13): the window's actorId is the responder whose interrupt entitlement or
  * choice this is, and the recorded per-SUBJECT controller map is the network
@@ -260,19 +289,19 @@ export function windowResponderId(selector: RoleSelector, frame: RoleFrame): str
  * the bearer / entity creator-owner is); U2 owns the mapping RULE:
  *
  *   - an actor-bearing aura is interpreted relative to its BEARER;
- *   - an entity-origin aura is interpreted relative to the entity's
- *     CREATOR/OWNER (an entity has no side of its own);
+ *   - an entity-origin aura is interpreted relative to the entity's canonical
+ *     OWNER/SUMMONER identity (an entity has no side of its own);
  *   - an OWNERLESS / neutral entity has NO derivable ally/foe perspective —
  *     the aura can only express `characters` membership, never a manufactured
  *     side.
  *
- * This keeps creator ≠ owner ≠ spatial anchor ≠ affected member representable:
- * an entity-origin aura's perspective is the creator/owner while its U7
- * spatial origin is the entity, and a Rebound original-user role never
- * collapses into the current-origin spatial anchor. Returns null exactly when
- * no ally/foe perspective is derivable — the consuming kernel FAILS CLOSED
- * (only `characters` relations apply) rather than guessing an actor from the
- * spatial anchor.
+ * This keeps the OWNER identity ≠ the SPATIAL ANCHOR ≠ the affected member,
+ * and a Rebound original-user role never collapses into the current-origin
+ * spatial anchor. (Current engine scope does NOT claim creator ≠ owner: entity
+ * state has ONE canonical identity — the owner/summoner.) Returns null exactly
+ * when no ally/foe perspective is derivable — the consuming kernel FAILS
+ * CLOSED (only `characters` relations apply) rather than guessing an actor
+ * from the spatial anchor.
  */
 export type AuraPerspectiveOrigin =
   | { kind: 'actor'; bearerId: string }

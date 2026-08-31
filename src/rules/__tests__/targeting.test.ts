@@ -1,8 +1,12 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { eligibleTargets, isEligibleTarget, matchesTargetRelation, queryDirectTarget } from '../automation/primitives/targeting.js';
+import type { RelationActor } from '../automation/primitives/roles.js';
 
-const source = { id: 'hero', side: 'heroes', position: { x: 1, y: 1 }, defeated: false };
+// The relation SOURCE must be a U2-branded `RelationActor` (the semantic
+// operation refuses a plain actor). Tests cast a fixture because they exercise
+// the operation directly; production only derives it through the U2 producer.
+const source = { id: 'hero', side: 'heroes', position: { x: 1, y: 1 }, defeated: false } as RelationActor;
 const ally = { id: 'ally', side: 'heroes', position: { x: 2, y: 1 }, defeated: false };
 const foe = { id: 'foe', side: 'foes', position: { x: 3, y: 1 }, defeated: false };
 const defeatedFoe = { id: 'fallen', side: 'foes', position: { x: 4, y: 1 }, defeated: true };

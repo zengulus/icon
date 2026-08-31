@@ -11,6 +11,7 @@
  */
 
 import { footprintDistance } from './spatial-intent.js';
+import type { RelationActor } from './roles.js';
 
 export type TargetRelation = 'self' | 'ally' | 'foe' | 'any';
 
@@ -34,7 +35,12 @@ export interface TargetEligibility {
 }
 
 export function matchesTargetRelation(
-  source: Pick<TargetCandidate, 'id' | 'side'>,
+  // The SOURCE is the actor relative to whom the relation is interpreted. It
+  // MUST be a U2-produced `RelationActor` (T8d): the self/ally/foe semantic
+  // decision structurally requires a perspective that flowed through the U2
+  // authority, so a plain/aliased actor lookup (`state.actors[context.actorId]`)
+  // cannot substitute — it is not assignable to `RelationActor`.
+  source: RelationActor,
   target: Pick<TargetCandidate, 'id' | 'side'>,
   relation: TargetRelation,
 ): boolean {
@@ -45,7 +51,7 @@ export function matchesTargetRelation(
 }
 
 export function isEligibleTarget(
-  source: Pick<TargetCandidate, 'id' | 'side'>,
+  source: RelationActor,
   target: TargetCandidate,
   options: TargetEligibility,
 ): boolean {
@@ -56,7 +62,7 @@ export function isEligibleTarget(
 }
 
 export function eligibleTargets<T extends TargetCandidate>(
-  source: Pick<TargetCandidate, 'id' | 'side'>,
+  source: RelationActor,
   candidates: readonly T[],
   options: TargetEligibility,
 ): T[] {
@@ -104,7 +110,7 @@ export interface DirectTargetResult {
  * point-cell Chebyshev metric the reducer historically used.
  */
 export function queryDirectTarget(
-  source: Pick<TargetCandidate, 'id' | 'side' | 'position' | 'size'>,
+  source: RelationActor,
   target: TargetCandidate,
   query: DirectTargetQuery,
 ): DirectTargetResult {

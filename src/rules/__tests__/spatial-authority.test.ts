@@ -5,6 +5,7 @@ import { hasLineOfEffect, hasLineOfSight as kernelLineOfSight, lineOfSightCells,
 import { computeSpatialArea, footprintCells, footprintsAdjacent, footprintDistance, footprintIntersectsCells } from '../automation/primitives/spatial-intent.js';
 import { applyRuleMutations, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
 import { queryDirectTarget } from '../automation/primitives/targeting.js';
+import type { RelationActor } from '../automation/primitives/roles.js';
 import type { Position } from '../types.js';
 
 /**
@@ -401,7 +402,9 @@ describe('shoveResolution — footprint-aware shove authority (p.92)', () => {
 });
 
 describe('queryDirectTarget — footprint-aware range (p.92)', () => {
-  const source = { id: 'hero', side: 'heroes', position: { x: 5, y: 5 }, size: 1 };
+  // The relation SOURCE is a U2-branded `RelationActor` (the relation operation
+  // refuses a plain actor; production only derives it through the U2 producer).
+  const source = { id: 'hero', side: 'heroes', position: { x: 5, y: 5 }, size: 1 } as RelationActor;
 
   it('a Size-2 foe within range by its area is a legal target even beyond point range', () => {
     // Foe footprint (3,3)-(4,4) — its (4,4) space is one space from the source.

@@ -29,6 +29,7 @@ import {
   deriveRoles,
   relationPerspectiveId,
   relationPerspectiveIdFromContext,
+  relationSourceFor,
   resolveRoleSelector,
   roleFrameFromContext,
   windowResponderId,
@@ -36,6 +37,7 @@ import {
   type RoleFrame,
   type RoleSelector,
 } from '../automation/primitives/roles.js';
+import { matchesTargetRelation } from '../automation/primitives/targeting.js';
 import { validateActorCandidate } from '../automation/kernels/candidate.js';
 import {
   auraOriginRefs,
@@ -322,6 +324,34 @@ describe('U2 — BRANDED perspective result (the authority\'s returned value is 
     // Runtime truth (the brand is type-only; the value is still a string id).
     expect(_notBrandable).toBe('hero');
     expect(_notAuraPerspective).toBe('hero');
+  });
+
+  it('type-level: the relation semantic operation refuses a plain/aliased actor as its SOURCE (T8d)', () => {
+    // `matchesTargetRelation`'s SOURCE must be a U2-branded `RelationActor`. A
+    // bypass that calls U2, ignores its result, and reads the acting actor from
+    // an incidental/aliased id (`const localId = context.actorId;
+    // state.actors[localId]`) yields a plain `RuleActorView` — NOT assignable
+    // to `RelationActor` — so it cannot compile into the relation decision.
+    const plainLookup = {} as RuleExecutionContext['state']['actors'][string];
+    const anyTarget = {} as RuleExecutionContext['state']['actors'][string];
+    // The compile error below is the proof: a plain/aliased actor cannot serve as
+    // the relation SOURCE — `matchesTargetRelation` requires a U2 `RelationActor`.
+    // @ts-expect-error — a plain/aliased actor lookup is not a U2 RelationActor source.
+    matchesTargetRelation(plainLookup, anyTarget, 'ally');
+    expect(true).toBe(true);
+  });
+
+  it('the ONLY way to obtain a relation source is the U2 SEALED producer (relationSourceFor)', () => {
+    const ctx = queryCtx();
+    const perspective = relationPerspectiveIdFromContext(ctx);
+    expect(perspective).not.toBeNull();
+    const source = relationSourceFor(ctx.state.actors, perspective!);
+    expect(source).not.toBeNull();
+    // The producer resolves the U2 DERIVED perspective actor (the source role),
+    // never an incidental id.
+    expect(source!.id).toBe('hero');
+    // And it is the value the candidate authority feeds to the relation decision.
+    expect(matchesTargetRelation(source!, ctx.state.actors['ally'], 'ally')).toBe(true);
   });
 
   it('the U2 authority produces exactly the value the kernel stores and membership consumes', () => {

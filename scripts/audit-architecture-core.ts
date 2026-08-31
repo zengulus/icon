@@ -571,13 +571,20 @@ export function auditArchitecture(automationRoot: string): AuditResult {
     }
     // U2-M1: the candidate relation perspective must be the U2 authority's
     // returned value; reading it straight off the incidental `context.actorId`
-    // (while keeping the U2 call alive) is a bypass.
-    if (relFile === 'kernels/candidate.ts' && CANDIDATE_INCIDENTAL_PERSPECTIVE_READ_RE.test(code)) {
-      violations.push({
-        check: 'u2-perspective-authority',
-        file: relFile,
-        detail: `candidate.ts reads the relation perspective (whose SIDE establishes self/ally/foe) directly from the incidental context.actorId, ignoring the U2 authority's returned value (relationPerspectiveIdFromContext); the relation perspective must be the U2-derived source role.`,
-      });
+    // (while keeping the U2 call alive) is a bypass. The scan is over
+    // executable lines only (a docstring mentioning the pattern is not a bypass).
+    if (relFile === 'kernels/candidate.ts') {
+      const executable = code.split('\n').filter((line) => {
+        const t = line.trimStart();
+        return t.length > 0 && !t.startsWith('//') && !t.startsWith('*');
+      }).join('\n');
+      if (CANDIDATE_INCIDENTAL_PERSPECTIVE_READ_RE.test(executable)) {
+        violations.push({
+          check: 'u2-perspective-authority',
+          file: relFile,
+          detail: `candidate.ts reads the relation perspective (whose SIDE establishes self/ally/foe) directly from the incidental context.actorId, ignoring the U2 authority's returned value (relationPerspectiveIdFromContext); the relation perspective must be the U2-derived source role.`,
+        });
+      }
     }
   }
 
@@ -639,13 +646,15 @@ export function auditArchitecture(automationRoot: string): AuditResult {
         detail: `F9 fold reads availability from the raw actor ruleState instead of the U16 ledgerAvailable result; the once-per-round gate must consume the U16 authority's returned availability.`,
       });
     }
-    // U16-M2: consume bypass — a hand-built state mark that never references
-    // the U16 consume result (mark.*) persists a mark independently of U16.
-    if (U16_F9_HANDBUILT_MARK_RE.test(executable) && !executable.includes('mark.')) {
+    // U16-M2: consume bypass — a hand-built state mark that never references a
+    // U16-produced result (the plan's `.consume` / a consume `mark.*`) persists
+    // a mark independently of U16. The production fold pushes the U16 plan's
+    // consume field (`gate.consume`), so `.consume` is present.
+    if (U16_F9_HANDBUILT_MARK_RE.test(executable) && !executable.includes('.consume') && !executable.includes('mark.')) {
       violations.push({
         check: 'u16-usage-ledger-routing',
         file: relFile,
-        detail: `F9 fold hand-builds a 'state' ledger mark without spreading the U16 consumeUsageMutation RESULT (mark.*); the once-per-round mark must be persisted from the U16 authority's returned mutation.`,
+        detail: `F9 fold hand-builds a 'state' ledger mark without consuming a U16-produced result (the oncePerRoundGate plan's .consume / a consumeUsageMutation mark.*); the once-per-round mark must be persisted from the U16 authority's returned plan.`,
       });
     }
     // U16-M4: owner bypass — a typed U16 call with a fabricated/missing owner.

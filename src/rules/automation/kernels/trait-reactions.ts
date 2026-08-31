@@ -32,8 +32,8 @@
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { RuleMutation } from '../primitives/types.js';
-import type { UsageKeySpec } from '../primitives/usage.js';
-import { consumeUsageMutation, ledgerAvailable, usageKey } from '../primitives/usage.js';
+import type { UsageIdentity, UsageKeySpec } from '../primitives/usage.js';
+import { consumeUsageMutation, ledgerAvailable, usageIdentity, usageKey } from '../primitives/usage.js';
 import { affectedFoeIds } from './talent-recipes.js';
 
 /** The resolved mutation kinds a wired reaction may emit (each without its
@@ -135,6 +135,44 @@ export function roundLedgerAvailable(actor: EncounterActor, key: string): boolea
 }
 
 /**
+ * The ONE authoritative U16 plan for a reaction's once-per-round gate (T8d).
+ * The U16 authority derives the key, the availability answer, AND the consume
+ * mark together in a single object; the F9 fold consumes ONLY this plan. It
+ * cannot recompute availability / key / consume independently while still
+ * "using" U16 nominally — the answers it acts on come from this object.
+ *
+ * The typed `identity` carries the REAL owning actor (actor-local storage
+ * bytes omit the owner), so a fabricated empty owner is distinguishable at
+ * the typed boundary even though the physical key cannot.
+ */
+export interface OncePerRoundGate {
+  /** The typed U16 storage address (actor-local; never reconstructed locally). */
+  readonly key: string;
+  /** Whether THIS actor's own round ledger still allows the reaction to fire
+   * (the fold gates on this — never raw `ruleState`). */
+  readonly available: boolean;
+  /** The U16 consume mutation to persist when the reaction fires (the fold
+   * pushes this VERBATIM — it never hand-builds a state mark). */
+  readonly consume: Extract<RuleMutation, { kind: 'state' }>;
+  /** The typed de-dup identity carrying the REAL owner. */
+  readonly identity: UsageIdentity;
+}
+
+/** Resolve the once-per-round gate through the U16 authority (the ONLY
+ * producer of a `OncePerRoundGate`). Derived in one place from the REAL
+ * owner's typed spec. */
+export function oncePerRoundGate(actor: EncounterActor, sourceId: string): OncePerRoundGate {
+  const spec = roundLedgerUsageSpec(actor.id, sourceId);
+  const key = usageKey(spec);
+  return {
+    key,
+    available: ledgerAvailable(actor, key),
+    consume: consumeUsageMutation(sourceId, actor.id, key) as Extract<RuleMutation, { kind: 'state' }>,
+    identity: usageIdentity(spec),
+  };
+}
+
+/**
  * The shared job-trait reaction fold: after an ability's program produced its
  * mutations, append every equipped wired job-trait reaction whose trigger
  * fired, with its source id and (for gated rows) its once-per-round ledger
@@ -154,10 +192,12 @@ export function traitReactionMutations(
     const recipe = traitReactionRecipes[traitId];
     const reaction = recipe?.reaction;
     if (!reaction) continue;
-    // The gate is addressed through the REAL owner's typed spec (actor-local
-    // storage bytes omit the owner; the typed identity must still carry it).
-    const ledgerKey = reaction.gate === 'once-per-round' ? usageKey(roundLedgerUsageSpec(actor.id, traitId)) : null;
-    if (ledgerKey && !roundLedgerAvailable(actor, ledgerKey)) continue;
+    // The once-per-round gate is the U16 plan: key + availability + consume
+    // resolved TOGETHER by the U16 authority from the REAL owner's typed spec.
+    // The fold acts on the plan only (fail-closed on the plan's availability);
+    // it never recomputes availability from raw ruleState or rebuilds the key.
+    const gate = reaction.gate === 'once-per-round' ? oncePerRoundGate(actor, traitId) : null;
+    if (gate && !gate.available) continue;
     // Deciding the trigger from durable sources never re-rolls or re-decides.
     let triggerTargetIds: string[] = [];
     if (reaction.trigger === 'collide') {
@@ -172,11 +212,10 @@ export function traitReactionMutations(
     }
     const context: TraitReactionContext = { state, mutations, actorId: actor.id };
     const built: TraitReactionMutation[] = reaction.build(actor.id, triggerTargetIds, context);
-    if (ledgerKey) {
-      // U16 CORE consume: the once-per-round mark is persisted as a typed U16
-      // ledger mutation (one-shot set true), never a hand-rolled state write.
-      const mark = consumeUsageMutation(traitId, actor.id, ledgerKey) as Extract<RuleMutation, { kind: 'state' }>;
-      built.push({ kind: 'state', sourceActorId: mark.sourceActorId, actorId: mark.actorId, key: mark.key, operation: mark.operation, value: mark.value });
+    if (gate) {
+      // Persist the U16 plan's consume mark VERBATIM — resolved ONCE by the U16
+      // authority. The fold never re-derives or hand-builds the mark.
+      built.push(gate.consume);
     }
     for (const mutation of built) out.push({ ...mutation, sourceId: traitId } as RuleMutation);
   }

@@ -38,7 +38,7 @@ import type { ActorCandidateQuery } from '../primitives/query.js';
 import {
   matchesTargetRelation,
 } from '../primitives/targeting.js';
-import { relationPerspectiveIdFromContext } from '../primitives/roles.js';
+import { relationPerspectiveIdFromContext, relationSourceFor, type RelationActor } from '../primitives/roles.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import {
   anchorFromActorSelector,
@@ -147,13 +147,20 @@ function anchorSelectorIds(
  * (`relationPerspectiveIdFromContext` → the source role), never inferred
  * from an incidental actor id — an underivable perspective fails closed.
  */
-function actingActor(context: RuleExecutionContext): RuleActorView {
+function actingActor(context: RuleExecutionContext): RelationActor {
+  // The relation source MUST flow through the U2 authority's sealed producer:
+  // the perspective is derived by U2 (branded `RelationPerspective`) and the
+  // actor is resolved ONLY by `relationSourceFor`, which returns a branded
+  // `RelationActor`. Reading `context.state.actors[context.actorId]` (or an
+  // alias) instead yields a plain `RuleActorView` that is NOT assignable to
+  // the `matchesTargetRelation` SOURCE parameter — a type-level prohibition of
+  // the ignored-result / incidental-id bypass. Fails closed when underivable.
   const perspectiveId = relationPerspectiveIdFromContext(context);
   if (perspectiveId === null) {
     throw new RuleProgramViolation('selector.actor-missing', 'The relation perspective cannot be derived from the durable role frame.');
   }
-  const source = context.state.actors[perspectiveId];
-  if (!source) {
+  const source = relationSourceFor(context.state.actors, perspectiveId);
+  if (source === null) {
     throw new RuleProgramViolation('selector.actor-missing', `Actor ${perspectiveId} does not exist.`);
   }
   return source;

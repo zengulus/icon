@@ -1,7 +1,7 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
-import { roundLedgerKey, roundLedgerUsageSpec, traitReactionMutations } from '../automation/kernels/trait-reactions.js';
+import { oncePerRoundGate, roundLedgerKey, roundLedgerUsageSpec, traitReactionMutations } from '../automation/kernels/trait-reactions.js';
 import { usageIdentitiesEqual, usageIdentity, usageIdentityKey, usageKey } from '../automation/primitives/usage.js';
 
 /** The canonical U16 round-scope ledger key for a source id (byte-identical
@@ -192,6 +192,24 @@ describe('F9 once-per-round reactive job-trait fold', () => {
       expect(mark.operation).toBe('set');
       expect(mark.value).toBe(true);
     }
+  });
+
+  it('the F9 fold consumes the ONE U16 plan object (oncePerRoundGate): availability gates, the mark is pushed verbatim', () => {
+    const { state, heroId, foeId } = dashEncounter();
+    // The plan derives key + availability + consume TOGETHER from the U16
+    // authority and the REAL owner's typed spec.
+    const gate = oncePerRoundGate(state.actors[heroId], DASH);
+    expect(gate.available).toBe(true);
+    expect(gate.key).toBe(roundLedgerKey(heroId, DASH));
+    expect(gate.key).toBe(usageKey({ sourceId: DASH, ownerId: heroId, scope: 'round' }));
+    expect(gate.consume.operation).toBe('set');
+    // The fold; the persisted mark is exactly the plan's consume answer.
+    const first = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
+    const mark = first.find((m) => m.kind === 'state');
+    expect(mark && mark.kind === 'state' ? mark.key : undefined).toBe(gate.key);
+    // Applying the plan's consume closes the gate for the owner.
+    const applied = applyEvents(state, [{ type: 'RULE_MUTATIONS_APPLIED', actorId: heroId, sourceId: DASH, actionId: 'default', timing: 'use', tags: [], mutations: first }]);
+    expect(oncePerRoundGate(applied.actors[heroId], DASH).available).toBe(false);
   });
 
   it('replay applies exactly what the command decided (ledger marks and damage both reapplied deterministically)', () => {
