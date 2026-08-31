@@ -148,8 +148,11 @@ const KERNEL_SOURCE_ID_EXEMPTIONS: ReadonlyMap<string, ReadonlySet<string>> = ne
 // `\w*UsedThisTurn` / `\w*TriggeredThisTurn` entitlement boolean) reintroduced
 // to the authoritative type must instead be routed through the U16 ledger in
 // kernels/use-ledger.ts. Retained SPECIALISTS are not matches: `attackedThisTurn`
-// (the U10 historical resolution fact) and the scheduler clock fields
-// (`turnTaken`, `turnsTakenThisRound`, `standardMoveUsed`, `usedAbilityIds`).
+// (the U10 historical resolution fact, NOT the one-attack entitlement) and the
+// scheduler/lifecycle clock fields (`turnTaken`, `turnsTakenThisRound`). The
+// former raw/scheduler names `standardMoveUsed` / `usedAbilityIds` are NOT
+// retained — they were MIGRATED to typed ledger keys (T6.4a, schema 12) and are
+// therefore reserved bespoke names, exactly like the other migrated fields.
 const RESERVED_BESPOKE_U16_FIELDS: ReadonlySet<string> = new Set([
   // T6.4: the four raw usage/entitlement fields.
   'interruptUses',
@@ -166,8 +169,10 @@ const RESERVED_BESPOKE_U16_FIELDS: ReadonlySet<string> = new Set([
  * field name reintroduce a bespoke U16 usage/entitlement authority? The exact
  * migrated names plus any actor-level `\w*UsedThisTurn` / `\w*TriggeredThisTurn`
  * entitlement boolean. Retained SPECIALISTS are NOT matches: `attackedThisTurn`
- * (the U10 resolution fact) and the scheduler clock fields (`turnTaken`,
- * `turnsTakenThisRound`, `standardMoveUsed`, `usedAbilityIds`).
+ * (the U10 resolution fact, NOT the one-attack entitlement) and the
+ * scheduler/lifecycle clock fields (`turnTaken`, `turnsTakenThisRound`).
+ * `standardMoveUsed` / `usedAbilityIds` are NOT retained specialists — both were
+ * migrated (T6.4a, schema 12) and remain reserved bespoke names.
  */
 export function isBespokeU16FieldName(name: string): boolean {
   return RESERVED_BESPOKE_U16_FIELDS.has(name)
@@ -320,10 +325,12 @@ export function auditArchitecture(automationRoot: string): AuditResult {
   // field without an explicit allowlisted retained-specialist justification.
   // It targets semantic duplicate authority, not naming aesthetics: only
   // actor-level `*UsedThisTurn` / `*TriggeredThisTurn` entitlement booleans and
-  // the exact migrated raw counter are reserved. Retained specialists
-  // (`attackedThisTurn` — the U10 historical resolution fact — and the
-  // scheduler clock `turnTaken` / `turnsTakenThisRound` / `standardMoveUsed` /
-  // `usedAbilityIds`) are not reservation matches and remain legitimate.
+  // the exact migrated raw counters are reserved. Retained specialists
+  // (`attackedThisTurn` — the U10 historical resolution fact, NOT the one-attack
+  // entitlement — and the scheduler/lifecycle clock `turnTaken` /
+  // `turnsTakenThisRound`) are not reservation matches and remain legitimate.
+  // `standardMoveUsed` / `usedAbilityIds` are NOT retained: they were migrated
+  // (T6.4a, schema 12) so they stay in the reserved set.
   const typesPath = join(automationRoot, '..', 'types.ts');
   try {
     const typesCode = readFileSync(typesPath, 'utf8');

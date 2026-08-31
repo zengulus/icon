@@ -8,6 +8,7 @@ import type { Binder, Reference } from './reference.js';
 import type { RoleSelector } from './roles.js';
 import type { SpatialAnchor } from './anchor.js';
 import type { ValueQuery } from './query.js';
+import type { UsagePeriod } from './usage.js';
 
 // Compatibility barrel: incremental underlay extraction re-exports new
 // primitive vocabulary here so consumers can keep importing from the
@@ -163,7 +164,7 @@ export type RulePredicate =
    * de-duplication (the U10 fact-backed `hasResolvedAsFact` read, U16/T4):
    * this counts entitlements; the fact read answers "has this specific use
    * resolved for this fact/event?". */
-  | { kind: 'used-scope'; target: RuleSelector; sourceId: string; scope: 'turn' | 'round' | 'combat'; atLeast?: number }
+  | { kind: 'used-scope'; target: RuleSelector; sourceId: string; scope: UsagePeriod; atLeast?: number }
   /** Effect-still-exists (U6, completed T4): does the SPECIFIC live effect
    * instance named by `effectKind`/`effectId` (scoped to `sourceId`, default
    * the acting source) still exist on the target? Reads through the U10

@@ -431,7 +431,7 @@ event is emitted. U15 owns the grouping; per-domain legality stays in the
 domain authorities (spatial, payment, creation). Tests:
 `t3-transaction.test.ts`.
 
-### Usage / Entitlement Ledger (U16 underlay, CORE) — single executing authority (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a corrective closure, 2026-08-31)
+### Usage / Entitlement Ledger (U16 underlay, CORE) — single executing authority (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b closure, 2026-08-31)
 
 "How many times has/may this rule be used within scope X?" — distinct from
 spendable resources. `primitives/usage.ts` owns the core ledger:
@@ -482,7 +482,17 @@ state. The dangerous-terrain damage-cadence contradiction (p.89 once-per-turn
 vs the p.183 Harvester reprint once-per-round) is recorded as adopted
 adjudication `icon-1.5:dangerous-terrain:damage-cadence`. Lifecycle reset
 recipes are ownerless maintenance noops so they never fabricate a U17
-same-owner tie. Tests: `t3-usage.test.ts` + `t4-dedup.test.ts` +
+same-owner tie. **T6.4b** resolved the remaining command/window-authority
+seams: generic `EXECUTE_RULE` interrupts authorize through the ONE
+`interruptLegality` gate (window + pool + No Repeats) BEFORE effects/RNG;
+p.290 Repeatable is an ACTION-TAG decision (`noRepeatsApplies` — foe
+Bull Rush/Bash/Hurl plus a new generic `repeatable` mastery-modifier
+family, so mastered Phantom Bolts' same-turn retrigger is legal and the
+reducer records no fabricated usage mark); reactive window discovery keys
+No Repeats by the interrupt's own sub-action id (a used stance never
+blocks its distinct interrupt); Black Rock Vanguard provably lifts only
+its actor's per-turn cap. No durable shape changed (schema stays 12).
+Tests: `t3-usage.test.ts` + `t4-dedup.test.ts` +
 `t4-corrective.test.ts` + `use-ledger.test.ts` +
 `t6-4-usage-global-ledger.test.ts`.
 

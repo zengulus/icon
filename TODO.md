@@ -820,6 +820,29 @@ assumption here, document the evidence and update this list before proceeding.
   rather than treating the raw-field removal as proof. Next smallest-first
   blocker: U2 role-consumer routing.
 
+- **T6.4b — U16 corrective closure (this tranche).** `DONE`. Audited every
+  remaining U16 command/window surface and resolved the live semantic holes a
+  T6.4a review found: generic `EXECUTE_RULE` interrupts now authorize through
+  the SAME `interruptLegality` U16 gate as `USE_ABILITY` (actor-local
+  one-per-turn window, named interrupt's between-turn pool, No Repeats),
+  rejected BEFORE any resolver effect or RNG; p.290 Repeatable is an
+  ACTION-TAG decision (`noRepeatsApplies`) shared by command and reducer
+  (foe Bull Rush/Bash/Hurl and a new generic `repeatable` mastery-modifier
+  family that makes mastered Phantom Bolts' same-turn retrigger legal while
+  the reducer records NO fabricated usage mark); reactive window discovery
+  keys No Repeats by the interrupt's own sub-action id (a used Endless
+  Battlement stance never blocks its distinct Heroic Intervention); Black
+  Rock Vanguard provably lifts ONLY the actor-local per-turn cap — No Repeats
+  and each interrupt's pool remain independent. `used-scope` vocabulary
+  reuses the canonical `UsagePeriod`. No durable shape changed => schema
+  stays 12. Verification: `t6-4-usage-global-ledger.test.ts` (+6 T6.4b
+  adversarial: Repeatable-restricted-to-No-Repeats, action-cost still
+  applies, cross-actor non-alias, non-Repeatable second-use rejection,
+  EXECUTE_RULE interrupt zero-RNG reject, BRV×No-Repeats×pool), full suite
+  green (1824 tests), strict fidelity clean, census byte-stable at 427 (no
+  source promotion). U16 remains the single executing usage/entitlement
+  authority. Next smallest-first blocker: U2 role-consumer routing.
+
 1. **Verify canonical census + full verification baseline.** — `DONE`
    (2026-08-26). Census regenerates byte-stable under strict mode; full
    baseline green.

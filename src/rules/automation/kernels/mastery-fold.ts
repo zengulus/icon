@@ -65,7 +65,16 @@ export type MasteryModifier =
   /** Convert the parent ability's damage instances of type `from` to `to`. */
   | { kind: 'damage-type'; from: string; to: string }
   /** Remove the parent ability's maximum-range bound ("no maximum range"). */
-  | { kind: 'unlimited-range' };
+  | { kind: 'unlimited-range' }
+  /** Make the parent ability's action Repeatable (p.290 semantics) for the
+   * mastered actor: it may be used again within the same turn, ignoring the
+   * p.91 No Repeats rule AND (for an interrupting action) the actor-local
+   * one-interrupt-per-turn window and the named interrupt's between-turn
+   * pool — the mastery grants repeated use, as with e.g. Phantom Bolts
+   * ("when the ability triggers again, you may deal… instead of replacing
+   * the aura", p.158). This is the REDUCER-consistent typed authority (the
+   * event's `repeatable` tag means the reducer records no usage mark). */
+  | { kind: 'repeatable' };
 
 /** The minimal actor read the gates need — satisfied by both the encounter
  * actor and the resolver runtime actor view. */
@@ -141,6 +150,15 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
         sourceId: rule.sourceId,
         ownerId: rule.abilityId,
         queryPoint: 'range-bound',
+        kind: 'immune',
+        ...(gates.length > 0 ? { gates } : {}),
+      });
+      break;
+    case 'repeatable':
+      registerPermissionRule({
+        sourceId: rule.sourceId,
+        ownerId: rule.abilityId,
+        queryPoint: 'repeatable',
         kind: 'immune',
         ...(gates.length > 0 ? { gates } : {}),
       });
@@ -235,4 +253,22 @@ export function hasUnlimitedRange(
   abilityId: string,
 ): boolean {
   return effectivePermission('range-bound', abilityId, masteryFoldView(view, actorId)) !== null;
+}
+
+/**
+ * True when a registered `repeatable` mastery modifier rule grants the named
+ * parent ability repeated in-turn use to this actor (the p.290 Repeatable
+ * semantic the mastered actor is entitled to). Reads the shared `repeatable`
+ * permission registry (immune) gated on the parent being equipped AND
+ * mastered AND the source conditions. The REDUCER consumes the same
+ * determination (the command stamps `repeatable` on the recorded event, and
+ * the reducer records no usage mark), so authorization and persistence can
+ * never disagree.
+ */
+export function masteryActionRepeatable(
+  view: MasteryFoldStateView,
+  actorId: string,
+  abilityId: string,
+): boolean {
+  return effectivePermission('repeatable', abilityId, masteryFoldView(view, actorId)) !== null;
 }

@@ -118,8 +118,36 @@ export function oneInterruptPerTurnWindowKey(): string {
  * at every turn start. The per-ability mark is keyed by the ability's own
  * source id (never a shared `core:` namespace) so it cannot alias two
  * different abilities or two different actors (storage is actor-local). */
-export function noRepeatKey(sourceId: string): string {
-  return usageKey({ sourceId, ownerId: '', scope: 'any-turn' });
+export function noRepeatKey(sourceId: string, actionId?: string): string {
+  // No Repeats is an ACTION-level restriction (p.91 "you can't repeat it"): a
+  // source unit may expose several actions under ONE sourceId (a stance whose
+  // interrupt, an ability + its collide/combo action). Using the main action
+  // and then the stance's DISTINCT interrupt must not be treated as repeating
+  // the same ability, so a NON-primary action gets its own identity
+  // `sourceId#actionId` while the primary action (actionId undefined / 'default'
+  // / 'use' / a combo dispatch that shares the base) stays on the bare
+  // `sourceId` key. Command/reducer gates record the bare (primary) key; window
+  // discovery passes a stance-interrupt's action id so a used stance never
+  // falsely blocks its distinct sub-interrupt. Opaque to content ids. */
+  const primary = actionId === undefined || actionId === 'default' || actionId === 'use' || actionId === 'combo';
+  return usageKey({ sourceId: primary ? sourceId : `${sourceId}#${actionId}`, ownerId: '', scope: 'any-turn' });
+}
+
+/** ICON p.290 Repeatable (foe Unique Rule): "Repeatable X: This action is
+ * repeatable any number of times in a turn, ignoring the no repeats rule."
+ * The keyword is a TYPED, source-derived tag recorded on the compiled action
+ * and on the recorded event (via the source catalog `tags`), never inferred
+ * from ability name or prose. Job abilities never carry it — No Repeats
+ * (p.91) applies to every job/basic ability and every interrupt. */
+export const REPEATABLE_TAG = 'repeatable';
+
+/** Whether the p.91 No Repeats rule applies to an action: true UNLESS the
+ * action's source-derived tags declare it explicitly Repeatable (p.290). This
+ * is the ONE typed semantic deciding No-Repeats applicability, shared by the
+ * command-side authorization and the reducer-side recording so they can never
+ * disagree (task: command and reducer must use the same rule). */
+export function noRepeatsApplies(tags: readonly string[]): boolean {
+  return !tags.includes(REPEATABLE_TAG);
 }
 
 /** Reserved provenance for the standard move (p.91 "The most basic Free
@@ -264,20 +292,93 @@ export function interruptWindowAvailableFor(actor: Pick<EncounterActor, 'ruleSta
   return usageCount(actor, oneInterruptPerTurnWindowKey()) < interruptsPerTurnCap(actor);
 }
 
-/** Whether the actor can use an interrupt at all: the actor's OWN
- * one-per-turn window is open, AND the named source's owner-relative
- * between-turn pool has remaining uses. Cap = the per-interrupt rank.
- * Distinct identities: the actor-local per-turn window and the per-source
- * between-turn pool are different U16 entries. No battlefield coupling. */
+/** Whether the actor can use an interrupt at all (reactive WINDOW DISCOVERY
+ * projection): the actor owns it, their actor-local one-per-turn window is
+ * open, the named source's owner-relative between-turn pool has remaining
+ * uses, AND No Repeats does not forbid that specific interrupt in the current
+ * turn. Cap = the per-interrupt rank. `noRepeatActionId` keys the No Repeats
+ * check for a stance-GRANTED interrupt (a distinct sub-action of a shared
+ * source) so a used stance never falsely blocks its interrupt; standalone
+ * interrupts leave it unset (bare source key). Black Rock Vanguard raises only
+ * the per-turn cap (`interruptsPerTurnCap`), never the pool or No Repeats, so
+ * a second interrupt window can open under BRV only when that specific
+ * interrupt is not No-Repeats-exhausted. */
+export interface InterruptLegalityResult {
+  ok: boolean;
+  code: string;
+  detail: string;
+}
+
+/** THE shared U16 interrupt-authorization predicate (p.91), used by the
+ * USE_ABILITY command, the generic EXECUTE_RULE command, and reactive window
+ * discovery so every surface decides from exactly the same authority and can
+ * never disagree:
+ *
+ * 1. the actor is not Stunned;
+ * 2. the actor's OWN one-interrupt-during-any-turn window is open;
+ * 3. the named interrupt's owner-relative between-own-turn pool (cap = rank)
+ *    still has uses;
+ * 4. p.91 No Repeats does not forbid that specific interrupt in the current
+ *    turn (unless an explicit source rule — Black Rock Vanguard — raises the
+ *    actor's per-turn cap, which it does WITHOUT touching the pool or No
+ *    Repeats).
+ *
+ * `noRepeatActionId` keys the No Repeats check for a stance-granted interrupt
+ * (a distinct sub-action of a shared source) so a used stance never falsely
+ * blocks its interrupt; standalone interrupts leave it unset (bare source
+ * key). Ownership is checked by the command layer (which knows the unit's
+ * kind/cheat-time marking); window discovery checks it separately via
+ * `interruptAvailable`. Returns a typed result so the caller throws with the
+ * exact U16 code/detail. PURE — no mutation, no RNG. */
+export function interruptLegality(
+  actor: Pick<EncounterActor, 'id' | 'ruleState' | 'statuses' | 'abilityIds' | 'traitIds'>,
+  interruptSourceId: string,
+  cap: number,
+  noRepeatActionId?: string,
+  options: { repeatable?: boolean } = {},
+): InterruptLegalityResult {
+  if (actor.statuses.includes('stunned')) return { ok: false, code: 'interrupt.stunned', detail: 'Stunned characters cannot use interrupts.' };
+  // A source-granted Repeatable interrupt (p.290) may be used again in the
+  // current turn by the entitled actor: it bypasses No Repeats, the actor-
+  // local one-per-turn window, and the between-turn pool (they would each
+  // otherwise throttle a second same-turn use). OTHER gates — ownership,
+  // stunned — still apply. The reducer must skip recording usage marks for
+  // the same action (commanded via `repeatable`, persisted from the same
+  // determination), so authorization and persistence agree.
+  if (options.repeatable) return { ok: true, code: 'ok', detail: '' };
+  if (!interruptWindowAvailableFor(actor)) return { ok: false, code: 'interrupt.turn-limit', detail: 'This character can only use one interrupt during any turn.' };
+  if (usageCount(actor, interruptUseKey(actor.id, interruptSourceId)) >= cap) {
+    return { ok: false, code: 'interrupt.uses', detail: 'This interrupt has no uses remaining before the actor’s next turn.' };
+  }
+  if (usageCount(actor, noRepeatKey(interruptSourceId, noRepeatActionId)) >= 1) {
+    return { ok: false, code: 'ability.repeat', detail: 'An ability with a cost cannot be repeated during the same turn.' };
+  }
+  return { ok: true, code: 'ok', detail: '' };
+}
+
+/** Whether the actor can use an interrupt at all (reactive WINDOW DISCOVERY
+ * projection): the actor owns it, their actor-local one-per-turn window is
+ * open, the named source's owner-relative between-turn pool has remaining
+ * uses, AND No Repeats does not forbid that specific interrupt in the current
+ * turn. Cap = the per-interrupt rank. `noRepeatActionId` keys the No Repeats
+ * check for a stance-GRANTED interrupt (a distinct sub-action of a shared
+ * source) so a used stance never falsely blocks its interrupt; standalone
+ * interrupts leave it unset (bare source key). Black Rock Vanguard raises only
+ * the per-turn cap (`interruptsPerTurnCap`), never the pool or No Repeats, so
+ * a second interrupt window can open under BRV only when that specific
+ * interrupt is not No-Repeats-exhausted. */
 export function interruptAvailable(
   state: EncounterState,
   actor: Pick<EncounterActor, 'id' | 'ruleState' | 'abilityIds' | 'traitIds'>,
   interruptSourceId: string,
   cap: number,
+  noRepeatActionId?: string,
 ): boolean {
   if (!actor.abilityIds.includes(interruptSourceId)) return false;
   if (!interruptWindowAvailableFor(actor)) return false;
-  return usageCount(actor, interruptUseKey(actor.id, interruptSourceId)) < cap;
+  if (usageCount(actor, interruptUseKey(actor.id, interruptSourceId)) >= cap) return false;
+  if (usageCount(actor, noRepeatKey(interruptSourceId, noRepeatActionId)) >= 1) return false;
+  return true;
 }
 
 

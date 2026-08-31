@@ -232,7 +232,7 @@ acceptance met.
 | U13 Window | `kernels/decision-window.ts` | AUTHORITATIVE (T5c.1) | DONE (window layer) | TRUE |
 | U14 Modifier | `primitives/modifiers.ts` | LANDED + `RuleModifier` stat bag unresolved | `RuleModifier` stat bag → typed query points; attack/mastery/bonus-damage/aura reads | PARTIAL |
 | U15 Transaction | `primitives/transaction.ts` | LANDED (T3) | cost-payment, `spatialBatchId`, `countMode:exact`, `requiresLegalSpatialBatch` (documented U15 instantiations) | TRUE |
-| U16 Usage | `primitives/usage.ts` + `use-ledger.ts` | AUTHORITATIVE (T6.4 + T6.4a corrective) | usage/entitlement is the single executing authority: the six §8 gate conditions are met — (1) the one-interrupt-per-turn restriction is ACTOR-LOCAL (p.91 subject is the character; Black Rock Vanguard is an actor-scoped override) and No Repeats + `standardMoveUsed` are MIGRATED to typed `ledger:*` keys (schema 12) and REMOVED; the one-attack gate is `ledger:turn:core:attack-this-turn` (distinct from the `attackedThisTurn` U10 fact); the `any-turn` per-actor windows (one-interrupt-during-any-turn, No Repeats, Slashed, dangerous terrain) reopen at every turn start while owner-relative `turn` pools refresh only at the owner's turn; the dangerous-terrain once-per-turn reading is recorded as adopted adjudication `icon-1.5:dangerous-terrain:damage-cadence`; lifecycle reset recipes ownerless noops | TRUE |
+| U16 Usage | `primitives/usage.ts` + `use-ledger.ts` | AUTHORITATIVE (T6.4 + T6.4a corrective + T6.4b closure) | usage/entitlement is the single executing authority: the six §8 gate conditions are met — (1) the one-interrupt-per-turn restriction is ACTOR-LOCAL (p.91 subject is the character; Black Rock Vanguard is an actor-scoped override) and No Repeats + `standardMoveUsed` are MIGRATED to typed `ledger:*` keys (schema 12) and REMOVED; the one-attack gate is `ledger:turn:core:attack-this-turn` (distinct from the `attackedThisTurn` U10 fact); the `any-turn` per-actor windows (one-interrupt-during-any-turn, No Repeats, Slashed, dangerous terrain) reopen at every turn start while owner-relative `turn` pools refresh only at the owner's turn; the dangerous-terrain once-per-turn reading is recorded as adopted adjudication `icon-1.5:dangerous-terrain:damage-cadence`; lifecycle reset recipes ownerless noops. T6.4b additionally: generic `EXECUTE_RULE` interrupts authorize through the ONE `interruptLegality` U16 gate (window + pool + No Repeats) BEFORE effects/RNG; p.290 Repeatable is an ACTION-TAG decision (`noRepeatsApplies`, foe actions + a new generic `repeatable` mastery-modifier family consumed by both command and reducer so Phantom Bolts' mastered retrigger is legal and records no fabricated mark); reactive window discovery keys No Repeats by the interrupt's own sub-action id (a used stance never blocks its distinct Heroic Intervention). No durable shape change => schema stays 12 | TRUE |
 | U17 Ordering | `primitives/ordering.ts` | COMPLETE/AUTHORITATIVE (T6.2 recorded same-owner decision + T6.3 turn-boundary consumers) | recorded same-owner permutation LANDED (T6.2); turn-boundary consumers (non-active-owner-first, hostile-before-beneficial, same-owner controller-choice at real call sites) LANDED (T6.3); duplicate lifecycle/listing-order authority REMOVED | TRUE |
 
 **Only U10, U13, U15 meet the complete-contract bar.** Everything else has an
@@ -458,7 +458,7 @@ Evaluate each §4 criterion as written.
 | 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Unresolved: U2 role consumers, U8 `RuleDuration`/`RuleTiming`/lifecycle/scheduler surfaces (use-ledger reset migrated in T6.1), U14 `RuleModifier`, U9 reconstruction, U6 gate-body folds, U12 resolver effects. U16 raw fields REMOVED (T6.4 schema 11 + T6.4a schema 12); the one-interrupt-per-turn window is ACTOR-LOCAL; `usedAbilityIds`/`standardMoveUsed` are gone; `attackedThisTurn` retained as a documented U10 fact specialist. U17's lifecycle registration-order and expiry misfiring-order duplicate authorities are REMOVED (T6.3) |
 | 3 | Required acceptance tests exist and pass | **FAIL (not established)** | Exhaustive matrix (deliverable C) has MISSING rows for U2, U4, U5, U6, U7, U8 (duration/lifecycle expiry), U9, U12, U14. The U17 recorded same-owner ordering + replay obligation is PASS (T6.2) and the U17 turn-boundary consumers obligation is PASS (T6.3); the U16 usage/entitlement acceptance rows are PASS (T6.4 + T6.4a). The remaining PARTIAL rows (U2/U4/U5/U6/U7/U8/U9/U12/U14) lack a closed acceptance suite, so the criterion as a whole is NOT ESTABLISHED |
 | 4 | No known duplicate competing authority | **FAIL** | U2 role reads in aura/targeting/save-window; U8 `RuleDuration`/`RuleTiming`/scheduler temporal surfaces beside Clock (use-ledger reset now routes through U8); U14 `RuleModifier` bag beside the fold. U16 no longer duplicates the ledger on raw actor fields (T6.4 + T6.4a; the architecture `bespoke-u16-entitlement-field` guard forbids reintroducing them). The U17 duplicate ordering authority is REMOVED (T6.3) |
-| 5 | Full suite green | **PASS** | typecheck / npm test (1818) / build / audits / source-artifacts / e2e green at this commit (see §I verification) |
+| 5 | Full suite green | **PASS** | typecheck / npm test (1824) / build / audits / source-artifacts / e2e green at this commit (see §I verification) |
 | 6 | U18/U19 decided | **PASS** | Both NOT promoted from code evidence (§F) |
 | 7 | Generated docs regenerated (byte-stable) | **PASS** | `audit:class-job-census` regenerates byte-stable; census unchanged; no source promotion |
 
@@ -560,12 +560,14 @@ seam; the U17 turn-boundary lifecycle consumers; the U16 raw usage-field
 consolidation), so the full §4.5 suite was actually rerun at this commit,
 not inherited:
 - `npm run typecheck` — PASS;
-- `npm test` — **1818 pass** (the T6.4 baseline + the T6.4a corrected
+- `npm test` — **1824 pass** (the T6.4 baseline + the T6.4a corrected
   interrupt/No-Repeats/standard-move ledger assertions + the new
   `t6-4-usage-global-ledger` adversarial cases + the new architecture guard
   cases + the `source-adjudications` dangerous-terrain pin + the
   `encounter`/`mastery`/`bastion`/`knave`/`movement`/`conditions`/
-  `damage-ledger`/`t5c1`/`rooms` test updates to read the typed ledger); all
+  `damage-ledger`/`t5c1`/`rooms` test updates to read the typed ledger + the
+  T6.4b closures: Repeatable foe reuse, EXECUTE_RULE interrupt authorization,
+  Black Rock Vanguard × No Repeats × pool); all
   updated assertions read the U16 `ledger:*` keys, never the removed fields;
 - `npm run build` — PASS;
 - `npm run audit:architecture` / `audit:automation` /

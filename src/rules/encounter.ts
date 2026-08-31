@@ -8,7 +8,7 @@ import type { ArmedContinuation, RuleAction, RuleChoice, RuleExecutionContext, R
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
-import { attackOncePerTurnKey, dangerousOncePerTurnKey, interruptUseKey, interruptWindowAvailableFor, noRepeatKey, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount } from './automation/kernels/use-ledger.js';
+import { REPEATABLE_TAG, attackOncePerTurnKey, dangerousOncePerTurnKey, interruptLegality, interruptUseKey, noRepeatKey, noRepeatsApplies, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount } from './automation/kernels/use-ledger.js';
 import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
@@ -38,7 +38,7 @@ import { factInstanceId, hasResolvedAsFact, resolveIdentityForTrigger, triggerRe
 import { resolveOrdinaryAttackMutations } from './automation/kernels/ordinary-attack.js';
 import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
 import { areaStateView, masteryFoldStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
-import { effectiveInterruptRank } from './automation/kernels/mastery-fold.js';
+import { effectiveInterruptRank, masteryActionRepeatable } from './automation/kernels/mastery-fold.js';
 import { effectiveAbilityRange } from './automation/kernels/range.js';
 import { effectiveAreaFor } from './automation/kernels/area.js';
 import { footprintCells, footprintDistance, footprintsOverlap } from './automation/primitives/spatial-intent.js';
@@ -1658,15 +1658,19 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
 
   const interrupt = ability.cost.kind === 'interrupt';
   if (interrupt) {
-    if (actor.statuses.includes('stunned')) throw new RuleViolation('interrupt.stunned', 'Stunned characters cannot use interrupts.');
-    // p.91 actor-local one-interrupt-per-turn restriction: the acting actor's
-    // OWN window is checked. Another actor's use never closes this window
-    // (Bastion's Black Rock Vanguard raises only its own allowance).
-    if (!interruptWindowAvailableFor(actor)) throw new RuleViolation('interrupt.turn-limit', 'This character can only use one interrupt during any turn.');
-    // The per-round allowance is the mastery-fold authority: an interrupt's
-    // rank is its uses per round (p.91), and a mastered rank override
-    // (MANGONEL p.123, PERFECT BATTLEMENT p.122) genuinely raises it.
-    if (usageCount(actor, interruptUseKey(actor.id, ability.id)) >= effectiveInterruptRank(masteryFoldStateView(state), actor.id, ability.id, ability.cost.value)) throw new RuleViolation('interrupt.uses', 'This interrupt has no uses remaining before the actor’s next turn.');
+    // Route USE_ABILITY interrupts through the SAME U16 authority as the
+    // generic EXECUTE_RULE path and reactive window discovery
+    // (`interruptLegality`: actor-local one-interrupt-per-turn window, the
+    // named interrupt's between-own-turn pool, and No Repeats — p.91 — plus
+    // the stunned gate). The per-round allowance is the mastery-fold authority:
+    // an interrupt's rank is its uses per round (p.91), and a mastered rank
+    // override (MANGONEL p.123, PERFECT BATTLEMENT p.122) genuinely raises it.
+    const legal = interruptLegality(
+      actor,
+      ability.id,
+      effectiveInterruptRank(masteryFoldStateView(state), actor.id, ability.id, ability.cost.value),
+    );
+    if (!legal.ok) throw new RuleViolation(legal.code, legal.detail);
   } else {
     assertActive(state, actor.id);
     // F8a action-cost override: the cost modifier fold may reduce the
@@ -2085,7 +2089,6 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const actor = state.actors[command.actorId];
       if (!actor || actor.defeated || !actor.onBattlefield) throw new RuleViolation('actor.unavailable', 'That actor cannot execute a rule program.');
       if (command.timing === 'use' && state.activeActorId !== actor.id) throw new RuleViolation('turn.not-active-actor', 'Only the active actor can use this rule action.');
-      if (command.timing === 'use' && usageCount(actor, noRepeatKey(command.sourceId)) >= 1) throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
       const unit = findRuleSourceUnit(command.sourceId);
       if (!unit) throw new RuleViolation('rule.source-unknown', 'That ICON source rule does not exist.');
       // Compilation coverage is an audit signal, not permission to execute a
@@ -2110,6 +2113,31 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       if (compilation.unsupportedClauses.length > 0) throw new RuleViolation('rule.not-executable', `${unit.name} still has ${compilation.unsupportedClauses.length} unsupported source clause${compilation.unsupportedClauses.length === 1 ? '' : 's'}.`);
       const action = compilation.program.actions.find(({ id, timing }) => id === command.actionId && timing === command.timing);
       if (!action) throw new RuleViolation('rule.action-unknown', 'That rule action is not available at this timing.');
+      // The p.290/footnote Repeatable determination for THIS action: an action
+      // whose source-derived tags declare it Repeatable (foe Unique Rule) OR a
+      // mastered ability its registered mastery makes Repeatable (e.g. Phantom
+      // Bolts, p.158) is exempt from No Repeats. This ONE determination is the
+      // authority both the command gates and the reducer's recorded-event
+      // decision read, so they can never disagree.
+      const repeatable = !noRepeatsApplies(action.tags) || masteryActionRepeatable(masteryFoldStateView(state), actor.id, unit.id);
+      if (command.timing === 'use' && !repeatable && usageCount(actor, noRepeatKey(unit.id, action.id)) >= 1) {
+        throw new RuleViolation('ability.repeat', 'An ability with a cost cannot be repeated during the same turn.');
+      }
+      // Generic EXECUTE_RULE interrupts authorize through the SAME U16 authority
+      // as USE_ABILITY (`interruptLegality`: actor-local per-turn window, the
+      // named interrupt's between-own-turn pool, and No Repeats) BEFORE any
+      // resolver effect or RNG. The reducer only persists this already-
+      // authorized decision; it must never be where the system first discovers
+      // the interrupt was consumed. Rank = the action's Interrupt N cost,
+      // mastery-folded exactly as USE_ABILITY does. A Repeatable interrupt is
+      // authorized without throttling (window/pool/No Repeats) — the mastery
+      // grants repeated use.
+      if (command.timing === 'interrupt') {
+        const interruptCost = action.costs.find((cost) => cost.kind === 'interrupt');
+        const baseRank = interruptCost && 'amount' in interruptCost && interruptCost.amount.kind === 'constant' ? interruptCost.amount.value : 1;
+        const legal = interruptLegality(actor, unit.id, effectiveInterruptRank(masteryFoldStateView(state), actor.id, unit.id, baseRank), action.id, { repeatable });
+        if (!legal.ok) throw new RuleViolation(legal.code, legal.detail);
+      }
       if (action.tags.includes('attack') && usageCount(actor, attackOncePerTurnKey(actor.id)) >= 1) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
       if (action.tags.includes('attack') && actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
       // Pre-use talent augmentations resolve BEFORE target validation/effects/
@@ -2227,7 +2255,11 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         sourceId: unit.id,
         actionId: command.actionId,
         timing: command.timing,
-        tags: [...action.tags],
+        // A mastery-made-Repeatable action carries the p.290 `repeatable` tag on
+        // its recorded event so the reducer records NO usage mark (No Repeats
+        // and, for interrupts, the per-turn window/pool), exactly matching the
+        // command boundary's exemption.
+        tags: repeatable && noRepeatsApplies(action.tags) ? [...action.tags, REPEATABLE_TAG] : [...action.tags],
         // F7 talent fold + F9 reactive job-trait fold: symmetric with USE_ABILITY.
         mutations: eventMutations,
         ...(result.resolutionFacts ? { resolutionFacts: result.resolutionFacts } : {}),
@@ -3447,7 +3479,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // owner records their order; the LIFO pop below consumes the recorded
         // ranks and fails closed while the decision is pending.
         openOrderingDecisionForSameOwnerTies(state);
-        if (event.timing === 'use' || event.timing === 'interrupt') recordUsageKey(actor, noRepeatKey(event.sourceId));
+        if ((event.timing === 'use' || event.timing === 'interrupt') && noRepeatsApplies(event.tags)) recordUsageKey(actor, noRepeatKey(event.sourceId, event.actionId));
         actor.attackedThisTurn ||= event.tags.includes('attack');
         if (event.tags.includes('attack')) recordUsageKey(actor, attackOncePerTurnKey(actor.id));
         if (event.mutations.some((mutation) => mutation.kind === 'attack' && mutation.hit)) discardWickedSheathDie(actor);
@@ -3462,9 +3494,15 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         if (event.mutations.some((mutation) => mutation.kind === 'attack')) consumeTraitAttackModifiers(actor.ruleState);
         if (event.timing === 'interrupt') {
           // Route resolver-based interrupts through the same U16 ledger marks
-          // as ABILITY_RESOLVED, so they obey the source usage limits.
-          recordUsageKey(actor, interruptUseKey(actor.id, event.sourceId));
-          recordUsageKey(actor, oneInterruptPerTurnWindowKey());
+          // as ABILITY_RESOLVED, so they obey the source usage limits. A
+          // Repeatable interrupt (p.290, carried on the event tags) records NEITHER
+          // the window mark nor the no-repeat/attack marks — the mastery grants
+          // repeated use, and the reducer must not fabricate a usage mark the
+          // command boundary exempted.
+          if (noRepeatsApplies(event.tags)) {
+            recordUsageKey(actor, interruptUseKey(actor.id, event.sourceId));
+            recordUsageKey(actor, oneInterruptPerTurnWindowKey());
+          }
           // ICON p.107: an interrupt answers the most recently triggered window
           // open for its user (LIFO); windows close at the end of the turn.
           const window = popInterruptWindow(state, actor.id);

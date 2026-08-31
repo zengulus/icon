@@ -47,3 +47,20 @@ registerMasteryModifierRule({
   gate: { kind: 'round-at-least', value: 4 },
   modifier: { kind: 'unlimited-range' },
 });
+
+// ICON p.158 PHANTOM BOLTS (Warding Bolts): "You can cause the area to hover
+// around you as an Aura 2 instead, which lasts for the rest of combat … when
+// the ability triggers again, you may deal 2 unerring damage to all foes in
+// this aura instead of replacing the aura." The mastered interrupt is
+// Repeatable for the mastered actor (p.290-style): using Warding Bolts again
+// while the aura is active re-triggers it rather than being blocked by the
+// p.91 No Repeats rule or the actor-local one-interrupt-per-turn window/pool.
+// The row's resolver already branches on `hasMastery` + aura-active for the
+// retrigger damage; this row is what makes the retrigger LEGAL to issue, and
+// the reducer skips recording usage marks for a repeatable action.
+registerMasteryModifierRule({
+  sourceId: 'freelancer:warding-bolts:mastery',
+  abilityId: 'freelancer:warding-bolts',
+  gate: { kind: 'always' },
+  modifier: { kind: 'repeatable' },
+});

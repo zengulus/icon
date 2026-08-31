@@ -2007,7 +2007,15 @@ actor-local one-interrupt-per-turn; `usedAbilityIds` (No Repeats) +
 `standardMoveUsed` migrated to typed `ledger:*` keys (schema 12); the
 dangerous-terrain damage-cadence contradiction recorded as adopted
 adjudication `icon-1.5:dangerous-terrain:damage-cadence`; no competing
-executing authority; the full named acceptance suite green.
+executing authority; the full named acceptance suite green. T6.4b
+(2026-08-31) closed the remaining command/window seams without any durable
+shape change (schema stays 12): generic `EXECUTE_RULE` interrupts authorize
+through the ONE `interruptLegality` gate; p.290 Repeatable is an
+ACTION-TAG decision (`noRepeatsApplies`) with a generic `repeatable`
+mastery-modifier family (foe Bull Rush/Bash/Hurl + mastered Phantom Bolts),
+command- and reducer-consistent; reactive window discovery keys No Repeats
+by the interrupt's own sub-action id; Black Rock Vanguard lifts only its
+actor's per-turn cap (No Repeats and each pool remain independent).
 `primitives/usage.ts` (barrel re-exported) owns the core ledger:
 `UsageKeySpec`/`usageKey` (byte-identical `ledger:<scope>:<sourceId>`
 format, extended per-target — the STORAGE key, actor-local by design), and

@@ -410,6 +410,7 @@ export type PermissionQueryPoint =
   | 'defiance'
   | 'vigor'
   | 'range-bound'
+  | 'repeatable'
   | 'delivery'
   | 'trigger';
 
@@ -417,9 +418,11 @@ export type PermissionQueryPoint =
  * the negative kinds the source defines. A rule requesting a pair outside
  * this set is rejected at registration — a wildcard bypass is
  * unrepresentable. 'range-bound' is immune-only ("no maximum range"); the
- * defense boundaries (cover/aetherwall/dodge/armor/defiance/vigor) are
- * ignore-only as negatives today; 'delivery'/'trigger' are cannot-only
- * (permission to deny a delivery/trigger). */
+ * 'repeatable' point is immune-only (the p.290-style mastery grant that an
+ * action may be used again in the current turn); the defense boundaries
+ * (cover/aetherwall/dodge/armor/defiance/vigor) are ignore-only as
+ * negatives today; 'delivery'/'trigger' are cannot-only (permission to
+ * deny a delivery/trigger). */
 export const PERMISSION_NEGATIVES: Readonly<Record<PermissionQueryPoint, readonly PermissionKind[]>> = {
   cover: ['ignore'],
   aetherwall: ['ignore'],
@@ -428,6 +431,7 @@ export const PERMISSION_NEGATIVES: Readonly<Record<PermissionQueryPoint, readonl
   defiance: ['ignore'],
   vigor: ['ignore'],
   'range-bound': ['immune'],
+  repeatable: ['immune'],
   delivery: ['cannot'],
   trigger: ['cannot'],
 };

@@ -808,12 +808,12 @@ export function hatredDivertsDamage(state: EncounterState, source: EncounterActo
  */
 const INTERRUPT_ALLOWLISTS: Record<
   string,
-  Readonly<Record<string, { usesPerRound: number; programId?: string; allyRange?: number }>>
+  Readonly<Record<string, { usesPerRound: number; programId?: string; allyRange?: number; actionId?: string }>>
 > = {};
 
 export function registerInterruptAllowlist(
   trigger: string,
-  allowlist: Readonly<Record<string, { usesPerRound: number; programId?: string; allyRange?: number }>>,
+  allowlist: Readonly<Record<string, { usesPerRound: number; programId?: string; allyRange?: number; actionId?: string }>>,
 ): void {
   INTERRUPT_ALLOWLISTS[trigger] = allowlist;
 }
@@ -904,8 +904,14 @@ function deferredEffects(mutations: RuleMutation[]): RuleMutation[] {
 /** True when the interrupt's per-round uses remain and the global
  * one-interrupt-during-any-turn window is open, mirroring the USE_ABILITY
  * gates through the shared U16 ledger authority. */
-function interruptAvailable(state: EncounterState, actor: EncounterActor, abilityId: string, usesPerRound: number): boolean {
-  return sharedInterruptAvailable(state, actor, abilityId, usesPerRound);
+function interruptAvailable(
+  state: EncounterState,
+  actor: EncounterActor,
+  abilityId: string,
+  usesPerRound: number,
+  noRepeatActionId?: string,
+): boolean {
+  return sharedInterruptAvailable(state, actor, abilityId, usesPerRound, noRepeatActionId);
 }
 
 /** ICON p.107 — the deferred-trigger window for abilities that have not
@@ -940,7 +946,7 @@ export function deferrableEffectWindow(
       const entry = (INTERRUPT_ALLOWLISTS['uses-ability'] ?? {})[candidate.stance.stanceId];
       if (!entry || !entry.programId) continue;
       const usesPerRound = effectiveInterruptRank(foldView, candidate.id, entry.programId, entry.usesPerRound);
-      if (!interruptAvailable(state, candidate, entry.programId, usesPerRound)) continue;
+      if (!interruptAvailable(state, candidate, entry.programId, usesPerRound, entry.actionId)) continue;
       const allyId = typeof candidate.stance.state.allyId === 'string' ? candidate.stance.state.allyId : undefined;
       if (!allyId || allyId === candidate.id) continue;
       const ally = state.actors[allyId];

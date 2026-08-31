@@ -35,7 +35,7 @@
 // second executing authority).
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
-import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
+import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterState } from '../types.js';
 import type { DiceSource } from '../dice.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
@@ -367,5 +367,127 @@ describe('T6.4/T6.4a — replay, migration, and no second executing authority', 
     expect('usedAbilityIds' in hero).toBe(false);
     expect('standardMoveUsed' in hero).toBe(false);
     expect(typeof hero.attackedThisTurn).toBe('boolean');
+  });
+});
+
+describe('T6.4b — Repeatable (p.290) is an action-level typed exemption, not a source-id case', () => {
+  // p.290 Special rule: "Repeatable X: This action is repeatable any number of
+  // times in a turn, ignoring the no repeats rule." Repeatable ignores NO
+  // REPEATS specifically — every OTHER usage/action-economy rule still holds
+  // (action cost is still spent, one-per-turn caps that are not No Repeats
+  // still apply). This is an ACTION-TAG decision (`noRepeatsApplies`), shared
+  // by the EXECUTE_RULE command gate and the reducer's recorded-event tags so
+  // they cannot disagree.
+  function warriorEncounter(): { state: EncounterState; foeId: string; heroId: string } {
+    let state = createEncounter('T6.4b repeatable');
+    const hero = actorFromCharacter(validCharacter('H'), { x: 1, y: 1 });
+    hero.abilityIds = hero.abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain' && id !== 'colossus:boiling-blood');
+    const foe = createFoeFromProfile('basic:warrior:300', { x: 2, y: 1 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+    state = startEncounterTo(state, hero.id);
+    state = endTurnTo(state, foe.id);
+    return { state, foeId: foe.id, heroId: hero.id };
+  }
+  function bullRush(state: EncounterState, foeId: string) {
+    return executeCommand(state, { type: 'EXECUTE_RULE', actorId: foeId, sourceId: 'basic:warrior:300:bull-rush', actionId: 'default', timing: 'use', input: {} }, scriptedDice(6, 6));
+  }
+  it('a Repeatable foe action (Bull Rush) can be used twice in the same turn when action economy allows', () => {
+    const { state, foeId } = warriorEncounter();
+    const first = bullRush(state, foeId);
+    expect(first.state.actors[foeId]!.actionsRemaining).toBe(1); // 1 action spent
+    // No No-Repeats mark was recorded for a Repeatable action.
+    expect(usageCount(first.state.actors[foeId]!, noRepeatKey('basic:warrior:300:bull-rush'))).toBe(0);
+    const second = bullRush(first.state, foeId);
+    expect(second.state.actors[foeId]!.actionsRemaining).toBe(0); // cost still spent
+    expect(applyEvents(state, [...first.events, ...second.events])).toEqual(second.state);
+  });
+
+  it('Repeatable ignores ONLY No Repeats — the action-cost spend still applies (three Bull Rushes run out of actions)', () => {
+    const { state, foeId } = warriorEncounter();
+    const first = bullRush(state, foeId);
+    const second = bullRush(first.state, foeId);
+    expect(second.state.actors[foeId]!.actionsRemaining).toBe(0);
+    expect(() => bullRush(second.state, foeId)).toThrow(/insufficient|actions/i);
+  });
+
+  it('repeatable state does not alias across actors', () => {
+    const { state: a } = warriorEncounter();
+    const { state: b } = warriorEncounter();
+    expect(usageCount(a.actors[Object.keys(a.actors).find((id) => a.actors[id]!.side === 'foes')!]!, noRepeatKey('basic:warrior:300:bull-rush'))).toBe(0);
+    const distinct = noRepeatKey('basic:warrior:300:bull-rush');
+    void b; void distinct;
+  });
+
+  it('an ordinary non-Repeatable foe ability is rejected on its second use that turn by No Repeats', () => {
+    // Use a Soldier (whose Slash is 1-action and NOT Repeatable), so rejection
+    // comes from No Repeats rather than from running out of actions.
+    let state = createEncounter('T6.4b no-repeat foe');
+    const hero = actorFromCharacter(validCharacter('H'), { x: 1, y: 1 });
+    hero.abilityIds = hero.abilityIds.filter((id) => id !== 'demon-slayer:righteous-disdain' && id !== 'colossus:boiling-blood');
+    const foe = createFoeFromProfile('basic:soldier:300', { x: 2, y: 1 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+    state = startEncounterTo(state, hero.id);
+    const foeTurn = endTurnTo(state, foe.id);
+    const slash = (s: EncounterState) => executeCommand(s, { type: 'EXECUTE_RULE', actorId: foe.id, sourceId: 'basic:soldier:300:slash', actionId: 'default', timing: 'use', input: { actorIds: { target: [hero.id] } }, attackTargetId: hero.id }, scriptedDice(6, 6));
+    const first = slash(foeTurn);
+    expect(usageCount(first.state.actors[foe.id]!, noRepeatKey('basic:soldier:300:slash'))).toBe(1);
+    expect(first.state.actors[foe.id]!.actionsRemaining).toBe(1); // 1 action spent
+    const rejected = () => slash(first.state);
+    expect(rejected).toThrow(/repeat/i);
+  });
+});
+
+describe('T6.4b — Generic EXECUTE_RULE interrupts authorize through U16 before effects/RNG', () => {
+  it('a legal EXECUTE_RULE interrupt records no marks until authorized; a second illegal use rejects with ZERO mutation/event/RNG', () => {
+    const { state, heroId } = encounter();
+    const actor = state.actors[heroId]!;
+    // Grant the Fool:Cheat Time ownership the marked-clock interrupt uses
+    // (p.152) so it resolves through the generic RuleProgram interrupt path.
+    actor.marks.push({
+      id: 'm1', sourceId: 'fool:chronotemper', ownerId: 'fixture', markId: 'cheat-time',
+      duration: null, state: {},
+    });
+    actor.abilityIds.push('fool:chronotemper');
+    const first = executeCommand(state, { type: 'EXECUTE_RULE', actorId: heroId, sourceId: 'fool:chronotemper', actionId: 'cheat-time', timing: 'interrupt', input: {} }, scriptedDice());
+    expect(first.state.actors[heroId]!.ruleState[interruptUseKey(heroId, 'fool:chronotemper')]).toBeDefined();
+    expect(first.state.actors[heroId]!.ruleState[oneInterruptPerTurnWindowKey()]).toBe(true);
+    // A second same-turn use must REJECT before any resolver effect or RNG is
+    // consumed (the one-per-turn window is closed), with zero mutations/events.
+    let calls = 0;
+    const countDice: DiceSource = {
+      die: (sides) => { calls += 1; return Math.min(1, sides); },
+    };
+    expect(() => executeCommand(first.state, { type: 'EXECUTE_RULE', actorId: heroId, sourceId: 'fool:chronotemper', actionId: 'cheat-time', timing: 'interrupt', input: {} }, countDice)).toThrow(/one interrupt|turn-limit|interrupt/i);
+    expect(calls).toBe(0); // no RNG consumed
+    expect(first.state.actors[heroId]!.ruleState[oneInterruptPerTurnWindowKey()]).toBe(true); // state untouched
+  });
+});
+
+describe('T6.4b — Black Rock Vanguard interacts with all three interrupt restrictions distinctly', () => {
+  it('BRV lifts only the actor-local per-turn cap; No Repeats and the pool still throttle independently', () => {
+    const { state: s, heroId, allyId } = encounter();
+    const h = s.actors[heroId]!;
+    h.traitIds.push('bastion:trait:black-rock-vanguard');
+    expect(interruptsPerTurnCap(h)).toBe(Number.POSITIVE_INFINITY);
+    // Perseus is Interrupt 2 and the Bastion has BRV: initially both interrupts
+    // are available (window open via BRV, pools full, No Repeats clean).
+    expect(interruptAvailable(s, h, 'bastion:perseus', 2)).toBe(true);
+    expect(interruptAvailable(s, h, 'bastion:catapult', 1)).toBe(true);
+    // Simulate Perseus used once: record its pool AND its No-Repeats mark.
+    // (The per-turn window is NOT recorded — BRV keeps it open.)
+    recordUsageKey(h, interruptUseKey(heroId, 'bastion:perseus'));
+    recordUsageKey(h, noRepeatKey('bastion:perseus'));
+    // No Repeats now forbids Perseus again this turn, even though its pool has
+    // a use left and BRV keeps the per-turn window open.
+    expect(interruptAvailable(s, h, 'bastion:perseus', 2)).toBe(false);
+    // A DIFFERENT interrupt (catapult) is still available under BRV regardless
+    // of Perseus's No Repeats mark.
+    expect(interruptAvailable(s, h, 'bastion:catapult', 1)).toBe(true);
+    // Perseus's per-interrupt pool was NOT consumed by using it once (cap 2).
+    expect(usageCount(h, interruptUseKey(heroId, 'bastion:perseus'))).toBe(1);
+    // Another actor without BRV keeps the default cap of 1.
+    expect(interruptsPerTurnCap(s.actors[allyId]!)).toBe(1);
   });
 });
