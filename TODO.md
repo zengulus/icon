@@ -71,6 +71,19 @@ assumption here, document the evidence and update this list before proceeding.
 > byte-stable at 427; zero source units promoted; phase gate OPEN. See
 > `docs/t8b-audit-integrity-report.md`.
 >
+> **Fidelity guard repair — strong-claim SURFACE guard (2026-09-01).** The
+> lexical allowlist for strong-token prose is gone. A statement is treated as a
+> project claim only when it occupies a canonical status surface: a status
+> heading, a table status cell, or a state-verb predicate over a named subject.
+> Vocabulary definitions and ordinary prose (fail-closed lines, closed-set and
+> complete-mapping modifiers, capability legends, historical changelog
+> operation records) pass with no exemption. Six previously allowlisted
+> canonical status headings (U2, U17, U9, U14, P1, P2) are now registered
+> legacy claims surfaced in the source-fidelity audit instead of hidden. Strong
+> claims on surfaces still fail when unregistered; claims stronger than their
+> evidence still fail. U8 remains PARTIAL; census byte-stable at 427; zero
+> source promotion. See `docs/strong-claim-surface-repair.md`.
+>
 > **T9g — U16/F9 operation-boundary repair (2026-08-31).** The F9
 > once-per-round reactive entitlement is now ONE U16 COMMIT operation
 > (`applyOncePerRoundUsage`) instead of a forgeable branded result object;

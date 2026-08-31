@@ -87,6 +87,12 @@ These strong project claims exist outside migrated fidelity scopes. They are rep
 | Passive projection (foe-trait keyword manifests) (`claim:foundations:passive-projection`) | docs/rules-foundations.md | AUTHORITATIVE | closed-manifest negative tests exist; no fidelity scope |
 | Combat settlement (foundations mirror) (`claim:foundations:combat-settlement`) | docs/rules-foundations.md | AUTHORITATIVE | mirrors claim:deliverables:combat-settlement |
 | Cost/payment kernel (`claim:foundations:cost-payment`) | docs/rules-foundations.md | AUTHORITATIVE | source-tested via payment fixtures; no fidelity scope |
+| Role / Perspective (U2 underlay) (`claim:foundations:u2-authoritative`) | docs/rules-foundations.md | AUTHORITATIVE | U2 status re-certified at T8c by roles.ts + candidate/aura/choice/decision-window routing; no strict fidelity scope |
+| Ordering / Arbitration (U17 underlay) (`claim:foundations:u17-complete`) | docs/rules-foundations.md | COMPLETE | U17 status landed at T6.3 scrutinized by a fresh-audit residual census; no strict fidelity scope |
+| Provenance / Delivery Dimensions (U9 underlay) (`claim:foundations:u9-landed`) | docs/rules-foundations.md | COMPLETE | U9 landed-status heading (T4 seam); not bound to a strict fidelity scope |
+| Modifier / Policy (U14 underlay) (`claim:foundations:u14-landed`) | docs/rules-foundations.md | COMPLETE | U14 landed-status heading (T3 seam); not bound to a strict fidelity scope |
+| P1 combat-settlement repair slice (DONE) (`claim:roadmap:p1-settlement-done`) | docs/roadmap.md | COMPLETE | roadmap slice-progress marker; tracked by the deliverables census, no fidelity scope |
+| P2 foe-role entitlements slice (DONE) (`claim:roadmap:p2-foe-done`) | docs/roadmap.md | COMPLETE | roadmap slice-progress marker; tracked by the deliverables census, no fidelity scope |
 | Schema v3 checkpoint migration (`claim:infra:schema-v3-migration`) | docs/roadmap.md | COMPLETE | verified by transport/persistence tests; no fidelity scope |
 | Combat settlement slice (P1) (`claim:deliverables:settlement-slice-closed`) | docs/deliverables.md | CLOSED | mirrors claim:deliverables:combat-settlement |
 | P2 Slice A (foe-complexity repair slice) (`claim:roadmap:p2-slice-a-closed`) | docs/roadmap.md | CLOSED | roadmap progress note; tracked by the deliverables census, no fidelity scope |

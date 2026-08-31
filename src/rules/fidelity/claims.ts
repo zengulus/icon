@@ -13,11 +13,15 @@
  *   - explicitly declared LEGACY/UNVERIFIED, with a recorded reason — which
  *     is reported in every audit output instead of being silently accepted.
  *
- * A secondary guard scans the canonical documents for strong tokens
- * (AUTHORITATIVE / CLOSED / COMPLETE, uppercase) and requires every such line
- * to be covered by a registered claim anchor or an explicit definitional
- * allowlist entry. An unregistered strong claim is a hard failure: it means
- * project prose is asserting rules authority outside machine-audited state.
+ * A secondary guard scans the canonical documents for potentially strong
+ * statements and classifies each occurrence: only statements that occupy a
+ * canonical status SURFACE (a status heading, a table status cell, or a
+ * state-verb predicate over a named subject) are treated as project claims
+ * requiring registration. Strong VOCABULARY is never forbidden; ordinary
+ * prose using the words ("fail closed", "closed set", definitions, changelog
+ * operation descriptions) passes without any exemption. Any unregistered
+ * strong CLAIM on a status surface is a hard failure: it means project prose
+ * is asserting rules authority outside machine-audited state.
  */
 
 import { readFileSync } from 'node:fs';
@@ -57,8 +61,14 @@ export interface ProjectClaim {
   id: string;
   /** Canonical document carrying the claim. */
   file: string;
-  /** Verbatim substring locating the claimed line. Must exist (dangling = hard failure). */
+  /** Verbatim substring locating the claimed line. Must exist (dangling = hard
+   * failure). */
   anchor: string;
+  /** Additional verbatim substrings that are RESTATEMENTS of the same claim in
+   * any canonical document (e.g. a status heading and its changelog mirrors).
+   * Each entry names its own file, so a claim can legitimately span documents.
+   * An anchor covers EVERY occurrence of that line in its file. */
+  anchors?: readonly { file: string; anchor: string }[];
   strength: ClaimStrength;
   subject: string;
   binding: ClaimBinding;
@@ -86,106 +96,180 @@ export const CANONICAL_CLAIM_FILES = [
   'docs/roadmap.md',
 ] as const;
 
-/** Strong authority tokens are matched CASE-INSENSITIVELY: writing "complete"
- * or "closed" in lowercase does not downgrade a claim's meaning, so a strong
- * claim cannot hide from the registry by changing its letter case. Definitional
- * prose is handled by the visible allowlist below, never by case games. */
-const STRONG_TOKEN = /\b(AUTHORITATIVE|CLOSED|COMPLETE)\b/i;
+// ---------------------------------------------------------------------------
+// Strong-claim surface classifier
+//
+// A strong WORD is never forbidden. Only a strong CLAIM — a statement that
+// asserts project/rules authority on a canonical status surface — must be
+// registered. The classifier decides which strong-token occurrences are
+// claims; everything else is ordinary prose or an explicit vocabulary
+// definition and passes with no exemption database.
+// ---------------------------------------------------------------------------
 
-/** Lines that mention strong tokens without claiming authority (vocabulary
- * definitions, generated-doc references). Each entry must still match a real
- * line prefix, so stale allowlist entries surface as drift. */
-export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reason: string }[] = [
-  { file: 'docs/deliverables.md', linePrefix: '[`roadmap.md`](roadmap.md). Status vocabulary:', reason: 'definitional status-vocabulary legend' },
-  { file: 'docs/rules-foundations.md', linePrefix: '| AUTHORITATIVE | Execution matches source semantics for its scope |', reason: 'capability-ladder vocabulary definition' },
-  // --- descriptive architecture / product prose (README) -------------------
-  { file: 'README.md', linePrefix: 'A rules-first ICON 1.5 character manager', reason: 'product summary; "authoritative" describes server topology, not audit status' },
-  { file: 'README.md', linePrefix: '`#/lab` is a public, browser-local human-testing service', reason: 'phase-gate behavior description' },
-  { file: 'README.md', linePrefix: 'Render exposes `/health` and `/realtime`.', reason: 'architecture description of command authority' },
-  { file: 'README.md', linePrefix: '| `npm run test:e2e` | Run both authoritative transport', reason: 'test-suite table description' },
-  // --- definitional closure legend (deliverables) --------------------------
-  { file: 'docs/deliverables.md', linePrefix: 'What must exist for the product to be genuinely complete', reason: 'section intro defining scope of document' },
-  { file: 'docs/deliverables.md', linePrefix: '> A slice is **closed** when', reason: 'definitional slice-closure criterion' },
-  // --- capability-ladder definitions + pattern names (foundations) ---------
-  { file: 'docs/rules-foundations.md', linePrefix: "Authoritative map of the engine's reusable mechanical foundations", reason: 'document self-description' },
-  { file: 'docs/rules-foundations.md', linePrefix: '    (blocked < partial < executable < source-tested < replay-tested < closed)', reason: 'ladder-order definition' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'source-complete).', reason: 'wrapped sentence continuation describing coverage policy' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'Closed source-ID manifests, never runtime prose parsing', reason: 'implementation-pattern description' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'projection (Rot → Regeneration / defiance suppression). Closed-negative tests', reason: 'test-pattern name in wrapped sentence' },
-  { file: 'docs/rules-foundations.md', linePrefix: '| K-P5 | Mastery fold |', reason: 'foundations ledger row; status vocabulary in notes column' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'closed-manifest pattern; the foe declarative recipe factories', reason: 'pattern reference in wrapped sentence' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'Fail-closed at both layers regardless of typing: the runtime rejects an', reason: 'implementation-pattern description (paired creation-spatial contract enforcement), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'mark a source unit complete by itself ONLY when the unit\'s complete', reason: 'implementation-pattern description (compound-talent completeness contract), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'a unit complete only when every component is wired; removing any one', reason: 'implementation-pattern description (compound-talent completeness contract), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'fail-closed: an un-migrated legacy-shaped mutation is declined, not', reason: 'implementation-pattern description (legacy entity-mutation normalization), not an authority claim' },
-  { file: 'TODO.md', linePrefix: '   `RuleMutation.creationSpatial`), fail-closed at the runtime (zero/multi/', reason: 'implementation-pattern description in the corrective-repair changelog, not an authority claim' },
-  { file: 'TODO.md', linePrefix: '   audits such a unit complete only when every component is genuinely wired,', reason: 'implementation-pattern description in the corrective-repair changelog, not an authority claim' },
-  { file: 'TODO.md', linePrefix: '   the reducer fail-closed declines an un-migrated legacy-shaped mutation —', reason: 'implementation-pattern description in the corrective-repair changelog, not an authority claim' },
-  { file: 'TODO.md', linePrefix: '  Closed the U17 gap where multiple effects owned by the same character', reason: 'tranche-changelog status entry describing the landed T6.2 seam, not a subsystem authority claim' },
-  { file: 'TODO.md', linePrefix: '  selected order durably, instead of failing closed or inventing a', reason: 'implementation-pattern description in the T6.2 changelog, not an authority claim' },
-  { file: 'TODO.md', linePrefix: '     window instead of failing closed, and the `ANSWER_DECISION_WINDOW`', reason: 'implementation-pattern description in the T6.2 changelog, not an authority claim' },
-  { file: 'TODO.md', linePrefix: '     effect resolves exactly once; re-answering a closed window rejects;', reason: 'implementation-pattern description in the T6.2 changelog, not an authority claim' },
-  // --- ladder rung definition (coverage) -----------------------------------
-  { file: 'docs/rules-coverage.md', linePrefix: '| 5 | Authoritative | Execution matches source semantics without hidden bypasses |', reason: 'capability-ladder vocabulary definition' },
-  // --- gate/criterion definitions (roadmap) --------------------------------
-  { file: 'docs/roadmap.md', linePrefix: 'Phase gates are acceptance criteria, not feature lists. A phase is complete', reason: 'gate-completion definition' },
-  { file: 'docs/roadmap.md', linePrefix: '  authoritative with replay fixtures.', reason: 'gate-criterion continuation fragment' },
-  { file: 'docs/roadmap.md', linePrefix: 'closed); the recorded order stamps durable `resolvedOrder` ranks and the', reason: 'implementation-pattern description (U17 recorded-ordering semantics), not an authority claim' },
-  { file: 'docs/roadmap.md', linePrefix: '## P2 — Foe role entitlements and the first closed foe-complexity slice', reason: 'phase heading naming a GOAL, not a status claim' },
-  { file: 'docs/roadmap.md', linePrefix: 'replay; closed negative for unequipped mastery.', reason: 'test-plan continuation fragment' },
-  { file: 'docs/roadmap.md', linePrefix: '(P1–P2) does multiplayer have something authoritative to share.', reason: 'rhetorical phase-justification criterion' },
-  { file: 'docs/roadmap.md', linePrefix: 'promoting any further source units, with its UNDERLAY PHASE COMPLETE gate', reason: 'phase-gate name reference (proper noun from underlay-completion-plan.md §4), not a status claim' },
-  { file: 'docs/roadmap.md', linePrefix: 'census regeneration resumes only after the UNDERLAY PHASE COMPLETE gate.', reason: 'phase-gate name reference (proper noun from underlay-completion-plan.md §4), not a status claim' },
-  { file: 'TODO.md', linePrefix: '> resume only after the UNDERLAY PHASE COMPLETE gate', reason: 'phase-gate name reference (proper noun from underlay-completion-plan.md §4), not a status claim' },
-  { file: 'TODO.md', linePrefix: '     selection and fails closed on equidistant ties.', reason: 'implementation-pattern description (nearest tie policy), not an authority claim' },
-  { file: 'TODO.md', linePrefix: '     their resolvers fail closed on those clauses;', reason: 'implementation-pattern description (retraction fail-closed semantics), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: '`evaluate-query.ts` and fails closed on equidistant ties.', reason: 'implementation-pattern description (nearest tie policy), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'choosers fail closed, cross-owner groups never open a same-owner window);', reason: 'implementation-pattern description (U17 fail-closed semantics), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'invented) are documented non-executable, their resolvers fail closed on', reason: 'implementation-pattern description (retraction fail-closed semantics), not an authority claim' },
-  { file: 'TODO.md', linePrefix: '     position reject fail-closed); `RuleExecutionContext.boundNames`', reason: 'implementation-pattern description (reference resolution fail-closed semantics), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'position reject fail-closed; a captured defeated-actor ref stays', reason: 'implementation-pattern description (reference resolution fail-closed semantics), not an authority claim' },
-  // --- T6.3 (U17 turn-boundary consumers, 2026-08-31) ----------------------
-  { file: 'docs/rules-foundations.md', linePrefix: '### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)', reason: 'tranche-status heading naming the landed U17 state, not a subsystem authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'decision → a remaining cross-owner/missing-owner tie fails closed). The', reason: 'implementation-pattern description (U17 turn-boundary fail-closed semantics), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'genuine U17 consumer remains. U17 is COMPLETE. The blocking families it', reason: 'tranche-status changelog sentence (fresh-audit conclusion), not a subsystem authority claim' },
-  { file: 'docs/roadmap.md', linePrefix: 'COMPLETE/AUTHORITATIVE.** `primitives/ordering.ts` gains', reason: 'tranche-changelog status entry describing the landed T6.3 seam, not a subsystem authority claim' },
-  { file: 'docs/roadmap.md', linePrefix: 'and any remaining cross-owner/missing-owner tie fails closed. The command', reason: 'implementation-pattern description (U17 turn-boundary fail-closed semantics), not an authority claim' },
-  { file: 'TODO.md', linePrefix: '  U13 seam; U17 remains PARTIAL with exactly that residual — closed by', reason: 'tranche-changelog residual note (T6.2 residual closed by T6.3), not a subsystem authority claim' },
-  { file: 'TODO.md', linePrefix: '  U17 now COMPLETE/AUTHORITATIVE.** Finished the remaining U17', reason: 'tranche-changelog status entry describing the landed T6.3 seam, not a subsystem authority claim' },
-  { file: 'TODO.md', linePrefix: '     FAILS CLOSED. Never one numeric priority; never array/registration', reason: 'implementation-pattern description (U17 turn-boundary fail-closed semantics), not an authority claim' },
-  { file: 'TODO.md', linePrefix: '  responder, permutation validation, fail-closed cross-owner +', reason: 'implementation-pattern description in the T6.3 changelog, not an authority claim' },
-  { file: 'TODO.md', linePrefix: '  audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.', reason: 'tranche-changelog status sentence (fresh-audit conclusion), not a subsystem authority claim' },
-  // --- T7 (U2 downstream consumers, 2026-08-31) ----------------------------
-  { file: 'docs/rules-foundations.md', linePrefix: '### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31; T8c branded-seam + owner-contract re-cert, 2026-08-31)', reason: 'tranche-status heading naming the U2 consumer-consolidation state, not a standalone subsystem claim (backed by roles.ts + candidate/aura/choice/decision-window routing, re-attested by the T8c branded RelationPerspective typed seam and alias-tolerant semantic-ownership guards)' },
-  // --- T8b (corrective audit-integrity tranche changelog, 2026-08-31) -------
-  // The T8b tranche lands no new source units and becomes the fresh HEAD the
-  // next tranche audits; its changelog/status prose references STATUS LABELS
-  // (PARTIAL/AUTHORITATIVE/CLOSED) when describing the conservatively
-  // re-demoted or re-certified rows and the still-mandatory gate. Each line is
-  // a tranche-changelog entry naming a state, not a standalone subsystem
-  // authority claim — consistent with the T6.3/T7 changelog allowlisting.
-  { file: 'TODO.md', linePrefix: '> **T8 — Underlay Authority Repair re-audit (2026-08-31).** Re-audited every', reason: 'tranche-changelog header intro, not a standalone authority claim' },
-  { file: 'TODO.md', linePrefix: '> underlay under the strict AUTHORITATIVE invariant and corrected the audit', reason: 'tranche-changelog header line, not a standalone authority claim' },
-  { file: 'TODO.md', linePrefix: '> and architecture guards so AUTHORITATIVE cannot coexist with a competing', reason: 'tranche-changelog header line, not a standalone authority claim' },
-  { file: 'TODO.md', linePrefix: '> remain AUTHORITATIVE. Zero source units promoted; census byte-stable at 427.', reason: 'tranche-changelog status sentence (T8 corrective summary; U2/U13/U17 re-certified by fresh audit, not by symbol presence)' },
-  { file: 'TODO.md', linePrefix: '> **T8b — Audit-Integrity Correction (2026-08-31).** Fresh-audited HEAD', reason: 'tranche-changelog status sentence (T8b summary; zero promotion + U2 re-cert shown by concrete call path), not a standalone authority claim' },
-  { file: 'TODO.md', linePrefix: '> (not inferred from T8) and found T8\'s U2 AUTHORITATIVE claim hid a false', reason: 'tranche-changelog prose (U2 false-closure description), not an authority claim' },
-  { file: 'TODO.md', linePrefix: '> mutation fixtures M1–M7 all CAUGHT. U2 re-certified AUTHORITATIVE by', reason: 'tranche-changelog status sentence (T8b summary), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: '> **T8b corrective note:** the prior T8 AUTHORITATIVE claim initially hid a', reason: 'tranche-changelog corrective note (U2 false-closure + repair description), not a standalone authority claim' },
-  { file: 'TODO.md', linePrefix: '> U16/U10/U15 stay PARTIAL. Census', reason: 'tranche-changelog status sentence (T8b summary), not a standalone authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: '### Fact / Outcome Record (U10 underlay) — PARTIAL (T4 LANDED; repair re-audit 2026-08-31 conservatively demoted', reason: 'tranche-status heading naming the conservative U10 demotion, not a standalone authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: '### Transaction / Atomic Commit (U15 underlay) — PARTIAL (T3 landed `transaction.ts`; repair re-audit 2026-08-31 conservatively demoted', reason: 'tranche-status heading naming the conservative U15 demotion, not a standalone authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'AUTHORITATIVE to PARTIAL, then the concrete duplicate repaired.** The', reason: 'tranche-changelog sentence (U16 demoted then repaired), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'core. That violates the authoritative invariant (a competing executing', reason: 'implementation-pattern description (U16 restore-vs-routing invariant), not an authority claim' },
-  { file: 'docs/rules-foundations.md', linePrefix: 'than a second usage ledger before AUTHORITATIVE can be re-certified. See', reason: 'tranche-changelog residual description (what must close before U16 re-certification), not an authority claim' },
-  // --- T9g (U16/F9 operation-boundary repair changelog, 2026-08-31) ---------
-  { file: 'docs/rules-foundations.md', linePrefix: 'spread/alias replacement of a genuine result) are closed architecturally:', reason: 'tranche-changelog sentence describing the T9g operation-boundary repair (the once-per-round gate exposes no per-piece key; only U16\'s commit operation), not a standalone subsystem authority claim' },
-  // --- U16 semantic correction (2026-08-31): the census's AUTHORITATIVE
-  // re-certification was withdrawn — U16 is PARTIAL again, so the previous
-  // three allowlist entries for the AUTHORITATIVE heading/sentences no longer
-  // match any line and were removed (the corrected heading and prose carry no
-  // strong tokens: PARTIAL is not in the STRONG_TOKEN set).
+const CORE_STRONG_RE = /\b(authoritative|complete|closed)\b/i;
+
+/** Status markers accepted in the STATUS SLOT of an ATX heading. This is
+ * surface-only vocabulary (a heading "— DONE" or "— COMPLETE" still asserts a
+ * state); it is never applied to prose. Keeping a small explicit set means a
+ * heading cannot be reworded with an equivalent marker to dodge registration
+ * while ordinary prose never triggers on these words. */
+const HEADING_STATUS_MARKERS = [
+  'authoritative',
+  'complete',
+  'closed',
+  'done',
+  'canonical',
+  'landed',
+  'fully',
+  'full',
 ];
+
+const HEADING_RE = /^\s{0,3}#{1,6}\s+(.+)$/;
+
+/** A strong word used as a compound or noun-modifier is ordinary prose
+ * ("fail closed", "fail-closed", "closed set", "complete mapping",
+ * "Closed-negative tests", "source-complete"). */
+function isModifierOrCompoundUsage(line: string): boolean {
+  const lower = line.toLowerCase();
+  if (/\bfail(?:s|ed|ing)?\s+closed\b/.test(lower)) return true;
+  if (/\bfail\s*[-–]\s*closed\b/.test(lower)) return true;
+  // hyphen-adjoined modifiers on either side of the strong word.
+  if (/[-–]\s*(closed|complete)\b/.test(lower)) return true;
+  if (/\b(closed|complete)\s*[-–]/.test(lower)) return true;
+  // noun-modifier adjectives: "closed set", "closed manifest", "complete mapping", …
+  if (/\bclosed\s+(set|manifests?|circle|negative|source[- ]id|sourcebook|manifest[- ]pattern)\b/.test(lower)) return true;
+  if (/\bcomplete\s+mapping\b/.test(lower)) return true;
+  return false;
+}
+
+/** A capability-ladder or status-vocabulary legend (defines the terms, does
+ * not assert a state). */
+function isDefinitionLegend(line: string): boolean {
+  const lower = line.toLowerCase();
+  // ordering ladder — at least two "x < y < z" steps and a strong word.
+  // The strong rung is usually the LAST term, so we do not require a trailing
+  // "<": e.g. "(blocked < partial < executable < source-tested < replay-tested
+  // < closed)".
+  if (/(?:<\s*[a-z][a-z0-9-]*\s*){2,}/i.test(line) && CORE_STRONG_RE.test(lower)) return true;
+  // explicit status-vocabulary legend line.
+  if (/\bstatus\s+vocabulary\b/.test(lower)) return true;
+  // A table cell that is itself followed by a definition ("Execution matches…").
+  if (isTableDefinition(rowCells(lower))) return true;
+  return false;
+}
+
+function rowCells(line: string): string[] {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return [];
+  return trimmed.slice(1, -1).split('|').map((cell) => cell.trim());
+}
+
+const TABLE_STATUS_CELL_RE = /^(authoritative|complete|closed|done|canonical)(\([^)]*\))?(\s*\/\s*[^|]*)?$/i;
+
+/** A markdown table row whose strong token is a canonical STATUS CELL (a bare
+ * strong word in its own cell) with a named subject before it is a status
+ * surface. A row that merely DEFINES the term is a legend, not a claim. */
+function classifyTableRow(line: string): 'claim' | 'definition' | null {
+  const cells = rowCells(line);
+  if (cells.length === 0) return null;
+  const statusIdx = cells.findIndex((cell) => TABLE_STATUS_CELL_RE.test(cell));
+  if (statusIdx === -1) return null;
+  const next = cells[statusIdx + 1];
+  // Definitional legend: the adjacent cell explains what the term means.
+  if (next !== undefined && /^(execution matches|means|defined as|is when|refers to|-\s)/i.test(next)) {
+    return 'definition';
+  }
+  if (statusIdx >= 1) {
+    const subject = cells[statusIdx - 1];
+    const isIndex = subject === '' || /^\d+$/.test(subject);
+    if (!isIndex) return 'claim';
+  }
+  return next !== undefined ? 'definition' : 'claim';
+}
+
+function isTableDefinition(cells: string[]): boolean {
+  if (cells.length < 2) return false;
+  const idx = cells.findIndex((cell) => TABLE_STATUS_CELL_RE.test(cell));
+  if (idx === -1) return false;
+  return cells[idx + 1] !== undefined && /^(execution matches|means|defined as|is when|refers to|-\s)/i.test(cells[idx + 1]);
+}
+
+/** The STATUS SLOT of an ATX heading (: the trailing `—`/`-`/`:`-delimited
+ * segment). Returns the lowercase leading marker if it reads as a status, else
+ * null. A heading declaring a state here is a surface; a narrative/goal heading
+ * whose strong word is mid-sentence is handled as prose below. */
+function headingStatusSlot(line: string): string | null {
+  const m = line.match(HEADING_RE);
+  if (!m) return null;
+  const text = m[1].trim();
+  const segments = text.split(/\s+(?:—|–|-)\s+/);
+  let last = segments[segments.length - 1].replace(/^[*_"\s]+/, '').replace(/[*_"\s]+$/, '');
+  const lead = (last.match(/^([a-zA-Z][a-zA-Z/_-]*)/)?.[1] ?? '').toLowerCase();
+  for (const marker of HEADING_STATUS_MARKERS) {
+    if (lead === marker || lead === `${marker}/` || lead.startsWith(`${marker} +`) || lead.startsWith(`${marker}/`)) {
+      return marker;
+    }
+  }
+  return null;
+}
+
+const STATE_VERB_RE = /\b(?:is|are|was|were|be|been|being|remains?|remain|becomes?|stays?|stay)\s+(?:still\s+|no\s+longer\s+)?(authoritative|complete|closed)\b/i;
+const SUBJECT_ELLIPSIS_RE = /\b(?:U\d+|P\d+|Slice\s+[A-Z])\s+(?:now|already|currently|is\s+now)?\s*(?:authoritative|complete|closed|done)(?:\s*[/.,;:)\]—]|$)/i;
+
+/** A state-verb predicate over a named subject ("U17 is COMPLETE", "the
+ * summon engine is complete", "U2/U13/U17 remain AUTHORITATIVE") is a genuine
+ * status surface. It is ordinary prose/definition when the subject is a
+ * generic class ("A phase is complete"), when a conditional/definitional
+ * qualifier follows ("closed only when…", "closed by design"), or when it is a
+ * negation. THIS treats "X re-certified AUTHORITATIVE" as a narrated event,
+ * not a current-state claim: the guard protects current-state authority, not
+ * descriptions of certification actions or of closed local operations. */
+function isSubjectPredicateClaim(line: string): boolean {
+  const s = line.trim();
+  const pred = s.match(STATE_VERB_RE);
+  if (pred) {
+    if (/\b(?:is|are|was|were|remains?|remain)\s+not\s+(?:authoritative|complete|closed)\b/i.test(pred[0])) return false;
+    const before = s.slice(0, pred.index!);
+    const after = s.slice(pred.index! + pred[0].length, pred.index! + pred[0].length + 90);
+    // A continuation/definitional qualifier means the token is explanatory,
+    // not a bare status declaration.
+    if (/\b(only when|only if|whenever|\bwhen\b|\bif\b|by itself|means|provided|is defined as)\b/i.test(after)) return false;
+    if (/(architecturally|by design|in the \w+\s+(?:architecture|topology))/i.test(after)) return false;
+    // The subject must actually appear on this line (a continuation fragment
+    // like "> remain AUTHORITATIVE" whose subject is on the previous line is
+    // prose, not a claim).
+    if (!/\b[a-zA-Z][\w-]*\b/.test(before)) return false;
+    // A generic-class definition with an indefinite determiner subject
+    // ("A phase is complete", "a slice is closed") — explanatory, not a claim.
+    if (/(?:a|an|each|every|any|some)\s+\w+[\w .-]{0,60}\s*$/i.test(before)) return false;
+    return true;
+  }
+  if (SUBJECT_ELLIPSIS_RE.test(s)) return true;
+  return false;
+}
+
+type StrongLineClass = 'claim' | 'definition' | 'prose' | 'none';
+
+/** Classify a strong-token (or status-heading) line. 'none' means there is
+ * nothing to guard; 'claim' means unregistered instances must be reported;
+ * 'definition' and 'prose' pass without any registration. */
+export function classifyStrongLine(line: string): StrongLineClass {
+  // A heading status slot is a surface even when the marker is an equivalent
+  // word ("— DONE") that is not one of the three core strong tokens.
+  if (headingStatusSlot(line) !== null) return 'claim';
+
+  const lower = line.toLowerCase();
+  if (!CORE_STRONG_RE.test(lower)) return 'none';
+  if (isModifierOrCompoundUsage(line)) return 'prose';
+
+  const table = classifyTableRow(line);
+  if (table !== null) return table;
+
+  if (isDefinitionLegend(line)) return 'definition';
+  if (isSubjectPredicateClaim(line)) return 'claim';
+
+  return 'prose';
+}
 
 // ---------------------------------------------------------------------------
 // The registry itself
@@ -490,6 +574,63 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     binding: legacy('source-tested via payment fixtures; no fidelity scope'),
   },
 
+  // --- eponymous status headings surfaced by the surface guard (these are
+  //     real canonical status surfaces, now audited instead of allowlisted) --
+  {
+    id: 'claim:foundations:u2-authoritative',
+    file: 'docs/rules-foundations.md',
+    anchor: '### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31; T8c branded-seam + owner-contract re-cert, 2026-08-31)',
+    strength: 'authoritative',
+    subject: 'Role / Perspective (U2 underlay)',
+    binding: legacy('U2 status re-certified at T8c by roles.ts + candidate/aura/choice/decision-window routing; no strict fidelity scope'),
+  },
+  {
+    id: 'claim:foundations:u17-complete',
+    file: 'docs/rules-foundations.md',
+    anchor: '### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)',
+    anchors: [
+      { file: 'docs/rules-foundations.md', anchor: 'genuine U17 consumer remains. U17 is COMPLETE. The blocking families it' },
+      { file: 'TODO.md', anchor: '  U17 now COMPLETE/AUTHORITATIVE.** Finished the remaining U17' },
+      { file: 'TODO.md', anchor: '  audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.' },
+      { file: 'docs/roadmap.md', anchor: 'COMPLETE/AUTHORITATIVE.** `primitives/ordering.ts` gains' },
+    ],
+    strength: 'complete',
+    subject: 'Ordering / Arbitration (U17 underlay)',
+    binding: legacy('U17 status landed at T6.3 scrutinized by a fresh-audit residual census; no strict fidelity scope'),
+  },
+  {
+    id: 'claim:foundations:u9-landed',
+    file: 'docs/rules-foundations.md',
+    anchor: '### Provenance / Delivery Dimensions (U9 underlay) — LANDED (T4, 2026-08-30)',
+    strength: 'complete',
+    subject: 'Provenance / Delivery Dimensions (U9 underlay)',
+    binding: legacy('U9 landed-status heading (T4 seam); not bound to a strict fidelity scope'),
+  },
+  {
+    id: 'claim:foundations:u14-landed',
+    file: 'docs/rules-foundations.md',
+    anchor: '### Modifier / Policy (U14 underlay) — LANDED (T3, 2026-08-30)',
+    strength: 'complete',
+    subject: 'Modifier / Policy (U14 underlay)',
+    binding: legacy('U14 landed-status heading (T3 seam); not bound to a strict fidelity scope'),
+  },
+  {
+    id: 'claim:roadmap:p1-settlement-done',
+    file: 'docs/roadmap.md',
+    anchor: '## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**',
+    strength: 'complete',
+    subject: 'P1 combat-settlement repair slice (DONE)',
+    binding: legacy('roadmap slice-progress marker; tracked by the deliverables census, no fidelity scope'),
+  },
+  {
+    id: 'claim:roadmap:p2-foe-done',
+    file: 'docs/roadmap.md',
+    anchor: '## P2 — Foe role entitlements and the first closed foe-complexity slice (REPAIR + VERTICAL SLICE) — **DONE 2026-08-26** (entitlements; Slice C itself stays blocked on phases/traits)',
+    strength: 'complete',
+    subject: 'P2 foe-role entitlements slice (DONE)',
+    binding: legacy('roadmap slice-progress marker; tracked by the deliverables census, no fidelity scope'),
+  },
+
   // --- lowercase strong claims surfaced by the case-insensitive scan --------
   {
     id: 'claim:infra:schema-v3-migration',
@@ -563,6 +704,37 @@ function packageScripts(deps: ClaimCheckDeps): ReadonlySet<string> {
   }
 }
 
+/** Collect every canonical line covered by a registered claim (its primary
+ * anchor plus any restatement anchors). An anchor covers EVERY occurrence of
+ * its line, so a duplicated canonical heading is still fully covered. */
+function collectClaimLines(deps: ClaimCheckDeps, claims: readonly ProjectClaim[]): { covered: Map<string, Set<string>>; violations: ProjectClaimViolation[] } {
+  const covered = new Map<string, Set<string>>();
+  const violations: ProjectClaimViolation[] = [];
+  for (const claim of claims) {
+    const pairs = [{ file: claim.file, anchor: claim.anchor }, ...(claim.anchors ?? [])];
+    for (const { file, anchor } of pairs) {
+      const text = read(deps, file);
+      if (text === null) {
+        violations.push({ check: 'claim-anchor-missing', detail: `${claim.id}: canonical file ${file} is missing` });
+        continue;
+      }
+      const lines = text.split('\n');
+      const indices: number[] = [];
+      lines.forEach((line, index) => {
+        if (line.includes(anchor)) indices.push(index);
+      });
+      if (indices.length === 0) {
+        violations.push({ check: 'claim-anchor-missing', detail: `${claim.id}: anchor not found in ${file}: "${anchor}"` });
+        continue;
+      }
+      const set = covered.get(file) ?? new Set<string>();
+      for (const index of indices) set.add(lines[index]);
+      covered.set(file, set);
+    }
+  }
+  return { covered, violations };
+}
+
 /**
  * Full project-claim audit:
  * 1. every registered claim's anchor must exist in its file;
@@ -570,36 +742,25 @@ function packageScripts(deps: ClaimCheckDeps): ReadonlySet<string> {
  *    computed scope rank;
  * 3. generated-audit bindings must name a real package.json script;
  * 4. legacy-unverified bindings are legal and REPORTED (returned separately);
- * 5. every strong-token line in a canonical file must be covered by a
- *    registered claim anchor or an allowlisted definitional entry.
+ * 5. every strong CLAIM in a canonical file (a status heading, table status
+ *    cell, or state-verb predicate over a named subject) must be covered by a
+ *    registered claim anchor. Ordinary prose that merely uses strong
+ *    vocabulary passes without exemption; only unregistered strong CLAIMS are
+ *    hard failures.
  */
 export function checkProjectClaims(
   result: FidelityAuditResult,
   deps: ClaimCheckDeps,
   claims: readonly ProjectClaim[] = PROJECT_CLAIMS,
 ): { violations: ProjectClaimViolation[]; unverifiedClaims: ProjectClaim[] } {
-  const violations: ProjectClaimViolation[] = [];
+  const violations = collectClaimLines(deps, claims).violations;
   const unverifiedClaims: ProjectClaim[] = [];
   const scripts = packageScripts(deps);
   const scopeById = new Map(result.scopes.map((scope) => [scope.scopeId, scope]));
 
-  const coveredLines = new Map<string, Set<string>>();
-  for (const claim of claims) {
-    const text = read(deps, claim.file);
-    if (text === null) {
-      violations.push({ check: 'claim-anchor-missing', detail: `${claim.id}: canonical file ${claim.file} is missing` });
-      continue;
-    }
-    const lines = text.split('\n');
-    const lineIndex = lines.findIndex((line) => line.includes(claim.anchor));
-    if (lineIndex === -1) {
-      violations.push({ check: 'claim-anchor-missing', detail: `${claim.id}: anchor not found in ${claim.file}: "${claim.anchor}"` });
-      continue;
-    }
-    const covered = coveredLines.get(claim.file) ?? new Set<string>();
-    covered.add(lines[lineIndex]);
-    coveredLines.set(claim.file, covered);
+  const coveredLines = collectClaimLines(deps, claims).covered;
 
+  for (const claim of claims) {
     if (claim.binding.kind === 'fidelity-scope') {
       const scope = scopeById.get(claim.binding.scopeId);
       if (!scope) {
@@ -659,19 +820,18 @@ export function checkProjectClaims(
     }
   }
 
-  // Secondary guard: unregistered strong claims.
+  // Secondary guard: unregistered strong CLAIMS on canonical status surfaces.
   for (const file of CANONICAL_CLAIM_FILES) {
     const text = read(deps, file);
     if (text === null) continue;
     const covered = coveredLines.get(file) ?? new Set<string>();
     text.split('\n').forEach((line, index) => {
-      if (!STRONG_TOKEN.test(line)) return;
+      const cls = classifyStrongLine(line);
+      if (cls !== 'claim') return;
       if (covered.has(line)) return;
-      const allowlisted = CLAIM_ALLOWLIST.find((entry) => entry.file === file && line.startsWith(entry.linePrefix));
-      if (allowlisted) return;
       violations.push({
         check: 'unregistered-strong-claim',
-        detail: `${file}:${index + 1}: strong claim outside the audited registry: "${line.trim().slice(0, 140)}"`,
+        detail: `${file}:${index + 1}: strong claim on a canonical status surface but outside the audited registry: "${line.trim().slice(0, 140)}"`,
       });
     });
   }
