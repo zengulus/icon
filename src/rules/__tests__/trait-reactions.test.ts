@@ -1,7 +1,8 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
-import { oncePerRoundGate, roundLedgerKey, roundLedgerUsageSpec, traitReactionMutations } from '../automation/kernels/trait-reactions.js';
+import { oncePerRoundGate, roundLedgerKey, roundLedgerUsageSpec, traitReactionMutations, type OncePerRoundGate } from '../automation/kernels/trait-reactions.js';
+import type { RuleMutation } from '../automation/primitives/types.js';
 import { usageIdentitiesEqual, usageIdentity, usageIdentityKey, usageKey } from '../automation/primitives/usage.js';
 
 /** The canonical U16 round-scope ledger key for a source id (byte-identical
@@ -11,7 +12,7 @@ import { usageIdentitiesEqual, usageIdentity, usageIdentityKey, usageKey } from 
 function usageRoundKey(sourceId: string, ownerId: string): string {
   return usageKey({ sourceId, ownerId, scope: 'round' });
 }
-import type { EncounterState } from '../types.js';
+import type { EncounterActor, EncounterState } from '../types.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
@@ -233,5 +234,108 @@ describe('F9 once-per-round reactive job-trait fold', () => {
     expect(next.actors[heroId].ruleState[`ledger:round:${DASH}`]).toBeUndefined();
     const again = traitReactionMutations(next, next.actors[heroId], [], { collidedActorIds: [foeId] });
     expect(again.length).toBeGreaterThan(0);
+  });
+});
+
+describe('U16 — the once-per-round gate result is structurally unforgeable (T8d F9)', () => {
+  // A real gate, kept alive so each adversarial construction can reuse its
+  // genuine U16-derived fields while stamping a locally-derived semantic answer.
+  function realGate(): { hero: EncounterActor; gate: OncePerRoundGate } {
+    const { state, heroId } = dashEncounter();
+    return { hero: state.actors[heroId], gate: oncePerRoundGate(state.actors[heroId], DASH) };
+  }
+
+  it('calling the real authority does NOT make a plain forged object a valid gate (A1: forged gate)', () => {
+    const { hero, gate } = realGate();
+    // A consumer inspects the real gate, then independently constructs an
+    // ordinary structural object with the same key / a locally chosen
+    // `available` / a locally built mutation / a locally built identity. The
+    // private brand is absent, so this is a COMPILE ERROR — the forged object
+    // is not assignable to `OncePerRoundGate` regardless of what the real
+    // authority returned first. This is the structural seam, not a caller
+    // discipline or a lexical guard.
+    // @ts-expect-error — a `OncePerRoundGate` requires the private U16 brand;
+    // a plain object (even seeded with a real gate's fields) is not one.
+    const forged: OncePerRoundGate = {
+      key: gate.key,
+      available: true,
+      consume: gate.consume,
+      identity: gate.identity,
+    };
+    expect(forged).toBeTruthy();
+    expect(hero).toBeTruthy();
+  });
+
+  it('a locally-computed availability is not stampable into a valid gate (A2: local availability)', () => {
+    const { hero, gate } = realGate();
+    // The production fold gates on `gate.available` and NEVER recomputes it. If
+    // a caller tried to keep the real gate alive but substitute an answer
+    // derived from raw ruleState (`!hasOwnProperty(state, gate.key)`) into a
+    // `OncePerRoundGate`, the missing brand makes it a compile error — a
+    // locally derived availability can never become a gate's semantic answer.
+    // @ts-expect-error — a gate whose availability was locally recomputed is
+    // not the U16-produced result (private brand missing).
+    const localAvailability: OncePerRoundGate = {
+      key: gate.key,
+      available: !Object.prototype.hasOwnProperty.call(hero.ruleState, gate.key),
+      consume: gate.consume,
+      identity: gate.identity,
+    };
+    expect(localAvailability).toBeTruthy();
+  });
+
+  it('an independently constructed consume mutation is not stampable into a valid gate (A3: local consume)', () => {
+    const { gate } = realGate();
+    // The fold persists `gate.consume` VERBATIM; it never hand-builds a state
+    // mark. Substituting an independently constructed mutation into a gate is a
+    // compile error (brand missing), so the persisted mark can only be the
+    // U16-produced consume answer of the real gate.
+    const localMutation: RuleMutation = { kind: 'state', key: gate.key, actorId: 'x', operation: 'set', value: true } as RuleMutation;
+    // @ts-expect-error — a gate carrying a hand-built consume mutation is not
+    // the U16-produced result (private brand missing).
+    const localConsume: OncePerRoundGate = {
+      key: gate.key,
+      available: gate.available,
+      consume: localMutation as OncePerRoundGate['consume'],
+      identity: gate.identity,
+    };
+    expect(localConsume).toBeTruthy();
+  });
+
+  it('an alternate-spelling key is not stampable into a valid gate (A4: local key)', () => {
+    const { gate } = realGate();
+    // The key is derived by U16 in one place (`usageKey(roundLedgerUsageSpec(
+    // actor.id, sourceId))`); a locally rejoined address
+    // (`['ledger','round',sourceId].join(':')`) is not a gate the engine will
+    // accept as a U16 result. Solved by the type brand, NOT by enumerating more
+    // string spellings.
+    const localKey = ['ledger', 'round', DASH].join(':');
+    // @ts-expect-error — a gate built from a locally rejoined storage address
+    // is not the U16-produced result (private brand missing).
+    const localKeyed: OncePerRoundGate = {
+      key: localKey,
+      available: gate.available,
+      consume: gate.consume,
+      identity: gate.identity,
+    };
+    expect(localKeyed).toBeTruthy();
+  });
+
+  it('the real gate is the U16 plan and the F9 fold consumes its fields directly (available gates, consume pushed verbatim)', () => {
+    const { state, heroId, foeId } = dashEncounter();
+    const gate = oncePerRoundGate(state.actors[heroId], DASH);
+    // Authentic U16 answers: key is the round-scope usage key, availability
+    // reflects the recorded ledger, consume is the U16 one-shot state mark.
+    expect(gate.key).toBe(usageKey({ sourceId: DASH, ownerId: heroId, scope: 'round' }));
+    expect(gate.available).toBe(true);
+    expect(gate.consume.kind).toBe('state');
+    expect(gate.consume.operation).toBe('set');
+    expect(gate.consume.value).toBe(true);
+    expect(gate.identity.ownerId).toBe(heroId);
+    // The fold consumes the ONE plan: it gates on gate.available and pushes
+    // gate.consume verbatim as the durable mark.
+    const out = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
+    const mark = out.find((m) => m.kind === 'state');
+    expect(mark).toMatchObject({ key: gate.key, actorId: heroId, operation: 'set', value: true });
   });
 });

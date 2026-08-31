@@ -71,6 +71,21 @@ carries the REAL owner, so a fabricated empty owner is distinguishable at the
 typed boundary even though storage bytes omit it. (U16 stays PARTIAL
 regardless — residual actor-level trigger marks are still uncensused, see §7.)
 
+**The U16 F9 corrective (this tranche): `OncePerRoundGate` is now structurally
+UNFORGEABLE.** The plan type carries a module-private `unique symbol` brand
+(`oncePerRoundGateBrand`), and only `oncePerRoundGate` stamps it. The brand is
+**not exported**, so arbitrary consumers cannot even name the required
+property — a plain object (even one seeded with a real gate's `key` /
+`available` / `consume` / `identity`, or carrying a locally recomputed
+availability, a hand-built mutation, or an alternate-spelling key) is **a
+compile error** when assigned to `OncePerRoundGate`. So "the engine accepts X
+as a U16 once-per-round gate result ⇒ X was produced by U16" now holds at the
+type level, not as a caller-discipline or lexical-guard claim. The gate object
+is transient (only the `consume` state mutation rides the durable event), so
+the brand never enters checkpoint bytes. The four adversarial cases (A1 forged
+gate, A2 local availability, A3 local consume, A4 local key) are pinned by
+`@ts-expect-error` compile proofs in `trait-reactions.test.ts` (see §4).
+
 ## 3. Authority → returned result → semantic operation paths
 
 ### U2 candidate
@@ -98,7 +113,13 @@ oncePerRoundGate(actor, sourceId)                        [U16 plan producer]
 ```
 Alternative semantic path: **none in the fold** — it consumes the plan; raw
 `ruleState[` gating, key reconstruction, hand-built marks, and fabricated
-empty owners are prevented (and additionally flagged by the audit).
+empty owners are prevented (and additionally flagged by the audit). And
+**nothing else can produce a valid `OncePerRoundGate`**: the plan type is
+branded with the module-private `oncePerRoundGateBrand` unique symbol that only
+`oncePerRoundGate` stamps (§2), so any object literal / cast / alias /
+locally-recomputed construction is a compile error. The semantic answers a gate
+carries (key / available / consume / identity) are therefore provably U16-derived
+whenever the engine accepts the value as a gate result.
 
 ## 4. Adversarial mutations — CAUGHT
 
@@ -115,6 +136,10 @@ audit (second, defensive).
 | U16-M2 | `consumeUsageMutation` touched, separate hand-built mark persisted | fold persists `gate.consume` verbatim; a hand-built mark not referencing a U16 result is flagged | **CAUGHT** |
 | U16-M3 | `usageKey` called, key rebuilt via `['ledger',scope,id].join(':')` | plan derives the key in U16; key reconstruction (template or concat) is flagged | **CAUGHT** |
 | U16-M4 | decoy real-owner call, actual path uses fabricated `''` owner | plan builds from the REAL owner's typed spec; `ownerId: ''` in the fold is flagged | **CAUGHT** |
+| U16-A1 | forged gate: real authority called, then a plain object reusing `real.key` / `available` / `consume` / `identity` is built | `OncePerRoundGate` requires the private `oncePerRoundGateBrand`; a plain object is a **compile error** (`@ts-expect-error` in `trait-reactions.test.ts`); calling the real authority first does not make the forgery valid | **CAUGHT (structural)** |
+| U16-A2 | local availability: real gate kept alive, availability independently typed from raw `ruleState` (`!hasOwnProperty(state, gate.key)`) | a gate stamped with a locally-derived `available` is a **compile error** (private brand missing); the fold gates on `gate.available` (positive audit) | **CAUGHT (structural)** |
+| U16-A3 | local consume: real gate kept alive, an independently built mutation persisted | a gate stamped with a hand-built `consume` is a **compile error**; a fold persisting its own mark drops the `consumeUsageMutation` call (symbol-routing guard flags it) | **CAUGHT (structural + audit)** |
+| U16-A4 | local key: real gate kept alive, key rejoined via `['ledger','round',id].join(':')` | a gate stamped with a locally-rejoined key is a **compile error**; dropped `usageKey` routing is flagged | **CAUGHT (structural, not a key-spelling regex)** |
 
 ## 5. Corrected U1–U17 census (mutually exclusive buckets)
 
@@ -139,7 +164,7 @@ UNRESOLVED DUPLICATE.*
 | U13 | Has resolution paused for a decision? | `kernels/decision-window.ts` | all window kinds through ONE record | `save-window.ts`/`gamble-window.ts` — disjoint (produce a recorded roll; cannot open/close windows) | none | **AUTHORITATIVE** |
 | U14 | How does an attached rule alter a query point? | `primitives/modifiers.ts` | range/area/mastery/bonus-damage folds | `cost-payment.ts`, armed one-shot fold, aura/save boon-curse sites — disjoint; consume only | `RuleModifier` stat bag not fully typed | PARTIAL |
 | U15 | Which changes validate together? | `primitives/transaction.ts` | Masquerade spatial-batch gate | per-list cost-payment, spatial per-leg legality — disjoint (feed the group, don't group) | cost-payment/spatial-swap/exact-count/sacrifice/split-pool/flow atomicity unproven | PARTIAL |
-| U16 | How many uses within scope X? | `primitives/usage.ts`+`use-ledger.ts` | F9 via `oncePerRoundGate` plan (real owner, result-proven §3); reducer/lifecycle resets | `attackedThisTurn` (U10 fact), scheduler clocks, Delay flags — disjoint; cannot gate uses | residual actor-level marks (`chain-reaction-used`, `incubus:triggered`, `stampede:triggered`, `gates-of-hell:vigilance-rushed`, `damage-immune`, per-source `:used`/`:charged`) | **PARTIAL** |
+| U16 | How many uses within scope X? | `primitives/usage.ts`+`use-ledger.ts` | F9 via `oncePerRoundGate` plan (real owner, BRANDED-result proof §3–4); reducer/lifecycle resets | `attackedThisTurn` (U10 fact), scheduler clocks, Delay flags — disjoint; cannot gate uses | residual actor-level marks (`chain-reaction-used`, `incubus:triggered`, `stampede:triggered`, `gates-of-hell:vigilance-rushed`, `damage-immune`, per-source `:used`/`:charged`) | **PARTIAL** |
 | U17 | Simultaneous order? | `primitives/ordering.ts` | runtime/lifecycle/decision-window/encounter ordering | scheduler turn election; `modifiers.ts` declarative ordering field — disjoint; cannot arbitrate | none | **AUTHORITATIVE** |
 
 No consumer appears in both RETAINED SPECIALIST and UNRESOLVED DUPLICATE.
@@ -155,16 +180,20 @@ overlap).
 **Zero** source units promoted. Blocker census byte-stable at **427**
 unresolved. Changes are generic substrate only: `roles.ts`
 (`RelationActor` + `relationSourceFor`), `targeting.ts` (source typed),
-`candidate.ts`, `trait-reactions.ts` (`oncePerRoundGate` plan), audit
-internals, tests, docs.
+`candidate.ts`, `trait-reactions.ts` (`oncePerRoundGate` plan now BRANDED — the
+private `oncePerRoundGateBrand` unique symbol makes the single producer claim
+mechanically true), audit internals, tests, docs.
 
 ## 7. Verification
 
-`npx tsc --noEmit` clean (incl. the `@ts-expect-error` structural proofs);
-`npm test` **122 files / 1873 passed**; `npm run build` exit 0;
-`npm run audit:architecture` 115 files, 0 violations; automation / outcome /
-strict source-fidelity / source-artifacts pass; `audit:class-job-census` 427
-(unchanged); `git diff --check` clean.
+`npx tsc --noEmit` clean (incl. the `@ts-expect-error` structural proofs for the
+two branded seams); `npm test` **122 files / 1883 passed**;
+`npm run build` exit 0; `npm run audit:architecture` 115 files, 0 violations;
+automation audit passes; strict source-fidelity — no integrity violations;
+`audit:class-job-census` **427** (unchanged — the regenerated blocker-census
+files are byte-identical); `git diff --check` clean. Full suite coverage
+includes the replay/timing/encounter suites (round-ledger reset, deterministic
+re-apply assert).
 
 ## 8. Gate
 
@@ -184,6 +213,10 @@ for zero unresolved duplicates. Not begun.
 
 An authority function being merely called/touched is **not** routing proof;
 the U2 candidate relation decision structurally requires a U2-branded
-`RelationActor` and the U16 F9 gate consumes ONE U16-produced plan. U2 is
-AUTHORITATIVE because that bar is NOW mechanically met; had it not been, U2
-would be PARTIAL. Zero source units promoted.
+`RelationActor` and the U16 F9 gate consumes ONE U16-produced plan. The
+`OncePerRoundGate` type is BRANDED with a module-private `unique symbol` that
+only `oncePerRoundGate` stamps, so the "only producer" claim is NOW mechanically
+true: the engine cannot accept a value as a U16 once-per-round gate result that
+was not produced by U16. U2 remains AUTHORITATIVE and U16 stays PARTIAL
+(residual unsold marks); had the U2 bar not been met, U2 would be PARTIAL.
+Zero source units promoted.

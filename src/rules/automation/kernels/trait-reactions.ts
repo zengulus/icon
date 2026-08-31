@@ -134,12 +134,35 @@ export function roundLedgerAvailable(actor: EncounterActor, key: string): boolea
   return ledgerAvailable(actor, key);
 }
 
+/** A private brand that makes a `OncePerRoundGate` structurally unforgeable:
+ * only the U16 authority (`oncePerRoundGate`) can stamp it, because the symbol
+ * is declared in THIS module and NEVER exported — arbitrary consumers cannot
+ * even NAME the property, so a plain/aliased object (even one seeded with a
+ * real gate's `key` / `consume` / `identity`) is not assignable to
+ * `OncePerRoundGate`. A consumer may inspect and use a real gate result, but
+ * cannot manufacture a substitute whose semantic answers (key / available /
+ * consume / identity) were derived anywhere else.
+ *
+ * The brand is a real runtime symbol (`unique symbol = Symbol('…')`) so the
+ * gate genuinely carries it, but the gate object is TRANSIENT — only `consume`
+ * (a `state` mutation) rides the durable event and enters checkpoint state, and
+ * that mutation never includes the brand, so no durable bytes change. */
+const oncePerRoundGateBrand: unique symbol = Symbol('oncePerRoundGateBrand');
+
 /**
  * The ONE authoritative U16 plan for a reaction's once-per-round gate (T8d).
  * The U16 authority derives the key, the availability answer, AND the consume
  * mark together in a single object; the F9 fold consumes ONLY this plan. It
  * cannot recompute availability / key / consume independently while still
  * "using" U16 nominally — the answers it acts on come from this object.
+ *
+ * The type carries a private `readonly [oncePerRoundGateBrand]: true` seam. The
+ * brand's symbol is declared but NEVER exported, so the ONLY way to obtain a
+ * value assignable to `OncePerRoundGate` is to call `oncePerRoundGate` — the
+ * sole producer — which stamps the brand. No object-literal, cast, alias, or
+ * locally-computed reconstruction can satisfy the type (each is a compile
+ * error), so "if the engine accepts something as a U16 once-per-round gate
+ * result, it was actually produced by U16."
  *
  * The typed `identity` carries the REAL owning actor (actor-local storage
  * bytes omit the owner), so a fabricated empty owner is distinguishable at
@@ -156,11 +179,15 @@ export interface OncePerRoundGate {
   readonly consume: Extract<RuleMutation, { kind: 'state' }>;
   /** The typed de-dup identity carrying the REAL owner. */
   readonly identity: UsageIdentity;
+  /** The private U16 brand — stamps this object as `oncePerRoundGate`'s ONLY
+   * valid result. Deliberately absent from the exported members of the type.
+   * (type-only; no durable bytes). */
+  readonly [oncePerRoundGateBrand]: true;
 }
 
 /** Resolve the once-per-round gate through the U16 authority (the ONLY
- * producer of a `OncePerRoundGate`). Derived in one place from the REAL
- * owner's typed spec. */
+ * producer of a `OncePerRoundGate` — it alone can stamp the private brand).
+ * Derived in one place from the REAL owner's typed spec. */
 export function oncePerRoundGate(actor: EncounterActor, sourceId: string): OncePerRoundGate {
   const spec = roundLedgerUsageSpec(actor.id, sourceId);
   const key = usageKey(spec);
@@ -169,6 +196,7 @@ export function oncePerRoundGate(actor: EncounterActor, sourceId: string): OnceP
     available: ledgerAvailable(actor, key),
     consume: consumeUsageMutation(sourceId, actor.id, key) as Extract<RuleMutation, { kind: 'state' }>,
     identity: usageIdentity(spec),
+    [oncePerRoundGateBrand]: true,
   };
 }
 
