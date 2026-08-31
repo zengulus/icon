@@ -75,6 +75,27 @@ export function usageKey(spec: UsageKeySpec): string {
   return spec.targetId === undefined ? base : `${base}:target:${spec.targetId}`;
 }
 
+/** The canonical durable STORAGE key for a LIFECYCLE-scoped usage gate
+ * ("once per THIS song"), the only key-authority surface a lifecycle consumer
+ * uses (content calls the operation boundary, never this directly).
+ *
+ * The key rides a DISTINCT durable namespace — `ledger:lifecycle:<instance>:
+ * <sourceId>` — that the periodic reset sweeps (`ledger:turn:*` / `any-turn` /
+ * `round` / `combat`) never touch. It resets ONLY when the lifecycle advances:
+ * each new instance discriminator yields a fresh key with count 0. `instance`
+ * is a U8 `lifecycleIdentityKey` (owner × source × instance) composed by U8,
+ * so two different owners of the same source lifecycle never alias and
+ * replacing one owner advances only that owner's instance. The key is
+ * actor-LOCAL (stored on the RECIPIENT), so once-per-recipient is inherent. */
+export function lifecycleScopedUsageKey(
+  sourceId: string,
+  instance: string,
+  targetId?: string,
+): string {
+  const base = `ledger:lifecycle:${instance}:${sourceId}`;
+  return targetId === undefined ? base : `${base}:target:${targetId}`;
+}
+
 /** The typed de-duplication IDENTITY: \"one use of THIS RULE by THIS OWNER
  * against this target within this scope\". DISTINCT from the storage key:
  * the identity must distinguish two different OWNERS of the same

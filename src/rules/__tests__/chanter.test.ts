@@ -281,7 +281,10 @@ describe('Chanter ability automation (p.174–181)', () => {
     const afterFoe = endTurnTo(ended, hero.id, scriptedDice());
     const blessed = endTurnTo(afterFoe, foe.id, scriptedDice());
     expect(blessed.actors[hero.id].resources.blessing).toBe(1); // did not attack -> tale complete
-    expect(blessed.actors[hero.id].ruleState['monogatari:granted']).toBe(true);
+    // The once-per-song entitlement is recorded on the hero as a U16 ledger
+    // key keyed by the U8 song lifecycle instance, not a `monogatari:granted`
+    // boolean (see monogatari-u8-u16.test.ts for the adversarial matrix).
+    expect(blessed.actors[hero.id].ruleState['monogatari:granted']).toBeUndefined();
   });
 
   it('Monogatari Charge: rolls two dice, both recorded durably (choice unresolved)', () => {

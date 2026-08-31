@@ -84,6 +84,22 @@ assumption here, document the evidence and update this list before proceeding.
 > evidence still fail. U8 remains PARTIAL; census byte-stable at 427; zero
 > source promotion. See `docs/strong-claim-surface-repair.md`.
 >
+> **U8 → Monogatari/U16 proof consumer (2026-09-01).** The generic U8
+> source-defined lifecycle identity (`scope.ts` `LifecycleIdentity`, "until
+> this source is used/replaced again") is proven with its first real consumer:
+> Monogatari's song is a U8 lifecycle INSTANCE (owner = Chanter, source =
+> `chanter:monogatari`, advanced every re-sing), and the once-per-song
+> blessing is a U16 `applyLifecycleScopedUsage` entitlement keyed by that
+> identity (reopens only under a NEW song; two Chanters never alias; replacing
+> one Chanter's song leaves the other's usage untouched). `monogatari:granted`
+> has no remaining production reader. Fresh U16 residual census: no remaining
+> unresolved U16 consumer and no competing usage authority → U16 recertified
+> COMPLETE (registered source-fidelity claim). U8 stays PARTIAL: the reducer's
+> durable turns/rounds counters and the scheduler cadence are specialist
+> recorded-state/cadence authorities whose boundary meaning already comes from
+> U8 — deliberately NOT folded into scope.ts. Census byte-stable at 427; zero
+> source promotion. See `docs/u8-monogatari-u16-report.md`.
+>
 > **T9g — U16/F9 operation-boundary repair (2026-08-31).** The F9
 > once-per-round reactive entitlement is now ONE U16 COMMIT operation
 > (`applyOncePerRoundUsage`) instead of a forgeable branded result object;

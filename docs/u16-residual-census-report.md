@@ -1,9 +1,19 @@
 # U16 Residual Usage-State Census & Migration — 2026-08-31
 
+> **RESOLVED / recertified (2026-09-01).** The last open consumer from this
+> census — **`monogatari:granted`** — is now integrated. The U8
+> source-defined lifecycle identity (`scope.ts` `LifecycleIdentity`) supplies
+> the missing "song" boundary as a generic lifecycle INSTANCE, and the
+> once-per-song blessing is a typed U16 `applyLifecycleScopedUsage`
+> entitlement keyed by `owner × source × instance` (see
+> `docs/u8-monogatari-u16-report.md`). A fresh U16 residual census finds no
+> remaining unresolved U16 consumer and no competing usage authority, so U16
+> is recertified **COMPLETE**. Census stays 427; zero source promotion.
+>
 > **SUPERSEDED / corrected (2026-08-31).** The follow-up **U16 semantic
 > correction** tranche found two classifications in this report did not
 > survive fresh evidence, so its "U16 = AUTHORITATIVE" conclusion is
-> withdrawn and U16 is **PARTIAL**:
+> withdrawn and U16 was **PARTIAL**:
 > 1. **Bull's Strength** was migrated with the wrong entitlement identity and
 >    scope: the restriction belongs to the character RECEIVING the damage
 >    (per-target `any-turn` battlefield window, `bullStrengthCollideKey(targetId)`),

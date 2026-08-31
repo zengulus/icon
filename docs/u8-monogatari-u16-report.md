@@ -1,0 +1,186 @@
+# U8 → Monogatari/U16 proof-consumer integration (2026-09-01)
+
+This is the Stage B report for the two-stage request that first hardened the
+strong-claim surface guard (Stage A, `docs/strong-claim-surface-repair.md`),
+then proved the U8 source-defined-lifecycle abstraction with the real Monogatari
+consumer, composed with U16. Authority split preserved through the whole stage:
+
+- **U8** (`primitives/scope.ts`) owns *which lifecycle instance is current and
+  when it was replaced* — a song is a U8 lifecycle INSTANCE.
+- **U16** (`primitives/usage.ts` core + `kernels/use-ledger.ts` operation)
+  owns *has THIS recipient already fulfilled within THAT instance*.
+- **Content** (`content/jobs/chanter-programs.ts` + `lifecycle-recipes.ts`)
+  owns the concrete trigger/effect and that the scope is the current song.
+
+No `'song'` usage period was invented. No owner/source identity lives in a magic
+string. No generic primitive/kernel branches on a Monogatari source id.
+
+## Cursor: exact Monogatari source reading (ICON 1.5.pdf p.179)
+
+The passage establishes, in order:
+
+1. Monogatari establishes a song;
+2. that song persists until Monogatari is used again;
+3. a character fulfilling the described course receives the benefit;
+4. a character may fulfill the condition once per song.
+
+No rule beyond those was inferred.
+
+## Stage A — strong-claim surface hardening (summary)
+
+Done first, committed separately. `primitives/scope.ts` and the reducer were
+untouched by Stage A. The surface classifier catches claims, not words; a
+genuine claim surface wins over unrelated prose on the same line; the blanket
+`by design`/`architecturally` qualifier exemption was removed (subject/surface
+meaning decides). See `docs/strong-claim-surface-repair.md`.
+
+## Stage B — Monogatari × U8 × U16
+
+### Required identity
+
+The entitlement distinguishes `source/owner of the song × recipient ×
+lifecycle instance`. `LifecycleGroupKey` already embeds the OWNER
+(`lifecycleGroupKey(owner, source)`), so two Chanters never alias and
+re-establishing one owner advances only that owner's entry.
+
+### Generic extension to the U16 API
+
+The smallest generic extension was added, all U16-side (no Monogatari knowledge
+leaks into primitives/kernels):
+
+- `primitives/usage.ts` — `lifecycleScopedUsageKey(sourceId, lifecycleIdentityKey)`:
+  the durable U16 ledger key for a once-per-lifecycle-instance entitlement,
+  derived from U8's canonical `lifecycleIdentityKey` (owner × source ×
+  instance). No content constructs this key by hand.
+- `kernels/use-ledger.ts` — `applyLifecycleScopedUsage({ recipient, lifecycle,
+  now, sourceId, mutations })`: the ONE U16 COMMIT operation. It verifies the
+  lifecycle identity is CURRENT through U8 (`lifecycleInstanceCurrent` — a
+  stale/missing identity FAILS CLOSED and can never fall back to a
+  turn/round/combat scope), derives the durable key, checks availability, and
+  groups the consume mark with the caller's proposed effect mutations. The
+  caller cannot reconstruct the key, cannot separately decide availability, and
+  never emits its own consume mutation.
+- `kernels/use-ledger.ts` — `currentLifecycleInstanceFor`,
+  `recordLifecycleInstance`, `lifecycleObservationForGroup`: the durable
+  read/write/observation boundary for the U8-composed lifecycle-instance store.
+
+### Monogatari execution flow before → after
+
+**Before:** Monogatari turn-end set a durable `monogatari:tale`, and
+`monogatari:granted` (a raw content boolean) was set once; a *new* tale deleted
+*all* `monogatari:granted` flags globally. That is exactly the alias bug this
+transche removes: one Chanter's new tale reopened every Chanter's grant, and a
+second recipient and a second Chanter could not be distinguished.
+
+**After:** the turn-end recipe resolve does two separable deterministic steps:
+
+1. **Grant branch first** — the ending hero's tale is read from the singing
+   Chanter's durable ruleState, the Chanter's CURRENT U8 song instance is read
+   (`currentLifecycleInstanceFor`), and the blessing is a U16
+   `applyLifecycleScopedUsage` transaction keyed by `{ owner: chanter, source,
+   instance }`. If the identity is not current or the recipient already
+   consumed within that instance, it fails closed (no fallback, no grant).
+2. **Song-establishment branch** — a freshly-gambled tale is a NEW song:
+   `recordLifecycleInstance` ADVANCES the Chanter's U8 instance, yielding a
+   fresh U16 ledger key so every eligible hero's once-per-song entitlement
+   reopens WITHOUT a global clear. (The grant branch runs first so establishing
+   the new song never also grants under the stale song.)
+
+`monogatari:granted` has no remaining production writer or reader (the chanter
+test now asserts its absence); the blessed resource mutation and the U16
+consume ride the recorded TURN_ENDED event, so replay applies the recorded mint
++ grant decisions byte-identically and never re-decides entitlement.
+
+### Adversarial test matrix (`src/rules/__tests__/monogatari-u8-u16.test.ts`)
+
+1. One recipient fulfills one song once → blessed exactly once; same-song
+   repeat blocked (usage key stays at 1; instance unchanged).
+2. A second recipient may fulfill the same song independently (its own ledger
+   under the same instance).
+3. Using Monogatari again creates/replaces the lifecycle instance; the same
+   recipient may fulfill the NEW song (reopens without a global clear).
+4. Two Chanters' songs never alias; replacing A's song ADVANCES A's instance
+   but leaves B's instance and usage untouched.
+5. Malformed/missing lifecycle identity fails closed — never falls back to a
+   turn/round/combat scope.
+6. Exact command replay (applyEvents over the recorded event list after each
+   command) produces byte-identical state for the mint AND grant decisions and
+   does not re-decide entitlement.
+
+Aura-placement note: heroes carry `bastion:trait:shieldmaster` (aura radius 1).
+Two heroes within range 1 open a legitimate same-owner U13 ordering window that
+defers a turn-end recipe — correct engine behavior, but it would obscure the
+Monogatari lifecycle assertions. The fixture places second heroes/allies at
+Chebyshev distance ≥ 2 so the aura covers no ally and the Monogatari turn-end
+resolves immediately.
+
+## Replay result
+
+Each command's recorded events rebuild the exact resulting state
+(`applyEvents(preCommand, events) === postCommand`), including the song mint and
+the once-per-song U16 consume. No lifecycle/usage eligibility decision is
+re-derived on replay.
+
+## Fresh U8 residual census
+
+The substantive question was applied to the reducer's durable turns/rounds
+counters and the scheduler cadence: do they independently interpret source
+temporal semantics, or merely store/advance state whose boundary meaning already
+comes from U8? Finding: they are specialist recorded-state/cadence authorities —
+the reducer stores the elapsed boundary count and the scheduler advances turn
+cadence; neither re-interprets a U8 duration/scope. No competing temporal
+interpretation remains inside U8's declared contract. So **U8 is NOT churned**
+into scope.ts for durable counters (no schema churn for its own sake). U8
+remains a PARTIAL/composition authority whose vocabulary + reducer boundary
+router are proven, and whose remaining specialist recorded-state surfaces are
+attested residual, not inconsistency.
+
+## Fresh U16 residual census
+
+`monogatari:granted` was the SOLE UNRESOLVED U16 consumer. It is now integrated
+as a generic lifecycle-scoped usage. A fresh census (grep over content for raw
+`:used` / `:granted` / `:triggered` RULE-STATE readers) found NONE; every
+once-per-X gate lives on typed U16 ledger keys, and the armed/pending/charged
+MODE states remain content-owned state (they answer "is the next attack/effect
+armed?", never "may this use occur again?"). No remaining unresolved U16
+consumer and no competing usage authority. **U16 is recertified COMPLETE** by a
+strict source-fidelity registered claim.
+
+## Source-unit census delta
+
+Source-unit census is **byte-stable at 427 unresolved, zero source promotion**.
+Stage B wired an already-identified proof consumer onto substrate (U8×U16); it
+did not promote, migrate, or rewire unrelated unresolved content.
+
+## Validation
+
+- `npm test` — 1925 passed (59 in the four targeted suites incl. the 6 new
+  Stage B tests).
+- typecheck, `npm run build` — pass.
+- architecture audit (115 files), automation audit — pass.
+- outcome-triggers audit, class/job census — pass.
+- strict source-fidelity — pass (U16 recertification registered as a claim).
+- `verify:source-artifacts` — valid.
+- census — 427 unresolved, zero promotion.
+- `git diff --check` — clean.
+
+## Status justification
+
+- **U8**: PARTIAL — source-defined lifecycle identity + reducer boundary router
+  landed and proven, but the scheduler cadence and the reducer's elapsed-count
+  recorded storage remain specialist recorded-state surfaces (deliberately not
+  folded into scope.ts).
+- **U16**: COMPLETE — the sole unresolved consumer is integrated and the fresh
+  residual census shows no remaining consumer or competing authority.
+
+## Strongest next tranche implied by the fresh post-integration residual graph
+
+Now that the proof consumer is landed, the residual dependency graph points back
+at **U8 closure**: the remaining U8-relevant surfaces are the scheduler
+turn/round cadence and the reducer's durable turns/rounds counters. If a fresh
+audit confirms those only store/advance state whose boundary meaning is already
+U8-composed (no competing interpretation), the residual work is a U8
+recertification audit rather than new substrate; if it surfaces a genuine
+competing temporal reader, that becomes the repair. Either way the next tranche
+is the U8 residual-migration/recertification audit, not more fidelity
+infrastructure.

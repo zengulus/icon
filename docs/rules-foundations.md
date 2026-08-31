@@ -501,7 +501,7 @@ event is emitted. U15 owns the grouping; per-domain legality stays in the
 domain authorities (spatial, payment, creation). Tests:
 `t3-transaction.test.ts`.
 
-### Usage / Entitlement Ledger (U16 underlay, CORE) — PARTIAL (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b + T9g operation-boundary repair + U16 residual-marks census migration; semantic correction 2026-08-31: per-recipient Bull's Strength gate + unresolved Monogatari once-per-song consumer blocked on the U8 source-defined lifecycle scope)
+### Usage / Entitlement Ledger (U16 underlay, CORE) — COMPLETE (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b + T9g operation-boundary repair + U16 residual-marks census migration; semantic correction 2026-08-31: per-recipient Bull's Strength gate; Monogatari once-per-song consumer integrated via the U8 source-defined lifecycle scope 2026-09-01)
 
 "How many times has/may this rule be used within scope X?" — distinct from
 spendable resources. `primitives/usage.ts` owns the core ledger:
@@ -664,13 +664,21 @@ state — each answers "is the next attack/effect armed or pending?", never
 `monogatari:granted` is NOT retained content state: it answers "may this
 character receive the Monogatari fulfillment reward again during the current
 song?" and is classified UNRESOLVED U16 CONSUMER, blocked on the U8
-source-defined lifecycle scope ("song" is not yet a generic U16 UsagePeriod
-and is NOT approximated onto turn/round/combat). U16 therefore stays
-**PARTIAL**: the residual census alone was insufficient evidence for
-re-certification, and the Monogatari consumer keeps the declared contract
-open until U8 supplies the generic boundary and a later U16 follow-up can
-migrate the grant and re-audit. See `docs/u16-semantic-correction-report.md`
-and `docs/t6-gate-report.md`.
+source-defined lifecycle scope. **Integration (2026-09-01):** the U8
+source-defined lifecycle scope (`scope.ts` `LifecycleIdentity`, "until this
+source is used/replaced again") now EXISTS and Monogatari is its first real
+consumer — a song is a U8 lifecycle INSTANCE (`owner` = the Chanter,
+`source` = `chanter:monogatari`, advanced every time Monogatari is used
+again), and the once-per-song blessing is a U16 `applyLifecycleScopedUsage`
+entitlement keyed by that identity (so it reopens only under a NEW song,
+never a global clear; two Chanters never alias and replacing one Chanter's
+song leaves the other's usage untouched — proven by
+`monogatari-u8-u16.test.ts`). `monogatari:granted` has no remaining
+production reader (the chanter test now asserts its absence). A fresh U16
+residual census finds NO remaining unresolved U16 consumer and NO competing
+usage/entitlement authority: every once-per-X gate lives on typed U16 ledger
+keys, and the sole former gap is now a generic U8×U16 lifecycle-scoped
+entitlement. U16 is therefore recertified **COMPLETE** (2026-09-01). See `docs/u8-monogatari-u16-report.md`.
 
 ### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)
 

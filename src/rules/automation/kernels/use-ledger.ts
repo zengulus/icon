@@ -31,11 +31,13 @@
  * content-owned provenance strings recorded verbatim.
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
+import { lifecycleGroupKey, lifecycleIdentityKey, lifecycleInstanceCurrent, type ClockObservation, type LifecycleIdentity } from '../primitives/scope.js';
 import type { BoundaryRef } from '../primitives/scope.js';
 import {
   consumeUsageMutation,
   holdsUsageKey,
   ledgerAvailable,
+  lifecycleScopedUsageKey,
   usageCount,
   usageKey,
   usagePeriodForResetBoundary,
@@ -593,4 +595,109 @@ export function usageLedgerHoldsForBoundary(
   const period = usagePeriodForResetBoundary(boundary);
   if (period === null) return false;
   return holdsUsageKey(actor, period);
+}
+
+// ---------------------------------------------------------------------------
+// U8 source-defined lifecycle instance storage (composition seam)
+// ---------------------------------------------------------------------------
+// The durable "current instance of this source's lifecycle OWNED BY this actor"
+// is recorded on the OWNING actor's ruleState under the U8 group key
+// (`lifecycleGroupKey(owner, source)`), so two owners of the same source
+// lifecycle never alias (the owner is part of the key) and re-establishing one
+// owner's lifecycle advances only that owner's entry. The key is U8-composed,
+// never hand-authored in content. These two helpers are the generic read/write
+// boundary for that durable store; U8 owns identity, this kernel owns the
+// storage convention.
+
+/** Read the CURRENT source-defined lifecycle instance discriminator owned by
+ * `owner` for `source` (U8 identity), or undefined when that lifecycle is not
+ * currently active. Deterministic — a read of durable ruleState. */
+export function currentLifecycleInstanceFor(
+  owner: Pick<EncounterActor, 'id' | 'ruleState'>,
+  ownerRef: import('../primitives/reference.js').Reference<'actor'>,
+  sourceRef: import('../primitives/reference.js').Reference<'rule-source'>,
+): string | undefined {
+  const key = lifecycleGroupKey(ownerRef, sourceRef);
+  const value = owner.ruleState[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** Durably record the CURRENT instance discriminator of a source-defined
+ * lifecycle on its owner (replacing the prior one). Reuse of a token T is
+ * allowed to ADVANCE a lifecycle (a new instance) but never to reuse across
+ * two DIFFERENT owners — the caller composes the token from deterministic
+ * durable source (e.g. the encounter revision). Deterministic under replay. */
+export function recordLifecycleInstance(
+  owner: Pick<EncounterActor, 'id' | 'ruleState' | 'ruleStateOwners'>,
+  ownerRef: import('../primitives/reference.js').Reference<'actor'>,
+  sourceRef: import('../primitives/reference.js').Reference<'rule-source'>,
+  instance: string,
+): void {
+  const key = lifecycleGroupKey(ownerRef, sourceRef);
+  owner.ruleState[key] = instance;
+  owner.ruleStateOwners[key] = owner.id;
+}
+
+/** Build a U8 `ClockObservation` whose `lifecycles` map records exactly the
+ * current instance of the ONE (owner, source) lifecycle described by
+ * `identity.owner`/`identity.source` IF it is currently active. Used by a
+ * consumer to hand the availability operator a faithful durable read without
+ * reconstructing the whole encounter lifecycle map. `lifecycle.current` is the
+ * durable current instance token (from `currentLifecycleInstanceFor`); pass
+ * undefined when no song is active (the observation then reports NO active
+ * instance → the identity is not current → any lifecycle-scoped entitlement is
+ * unavailable, failing closed). */
+export function lifecycleObservationForGroup(
+  ownerRef: import('../primitives/reference.js').Reference<'actor'>,
+  sourceRef: import('../primitives/reference.js').Reference<'rule-source'>,
+  currentInstance: string | undefined,
+): ClockObservation {
+  const last: BoundaryRef = { kind: 'boundary', boundary: 'turn', edge: 'end' };
+  return {
+    last,
+    counts: {},
+    ...(currentInstance !== undefined ? { lifecycles: { [lifecycleGroupKey(ownerRef, sourceRef)]: currentInstance } } : {}),
+  };
+}
+
+/** U16 COMMIT operation for ONE source-defined-lifecycle-scoped usage
+ * ("once per THIS song"), the generic composition over U8 lifecycle identity.
+ *
+ * The caller PROPOSES its effect mutations; U16 owns the entire entitlement
+ * transaction in ONE operation: lifecycle CURRENTNESS is verified through U8
+ * (`lifecycleInstanceCurrent` — a stale/missing identity FAILS CLOSED and can
+ * NEVER fall back to a turn/round/combat scope), the durable key is derived
+ * from U8's canonical `lifecycleIdentityKey` (owner × source × instance — two
+ * owners never alias, a replacement advances only its owner), availability is
+ * checked (`ledgerAvailable`), and the consume mark is grouped with the
+ * allowed effects into the returned bundle. The caller cannot separate the
+ * availability decision, cannot reconstruct the key, and never exposes a
+ * periodic-scope fallback. Generic and source-ID-free: `sourceId` is opaque
+ * provenance and the proposed `mutations` are opaque to this kernel.
+ * Deterministic — a pure function of the durable observation, the recipients'a
+ * recorded ruleState, and the proposed mutations. */
+export function applyLifecycleScopedUsage(options: {
+  recipient: Pick<EncounterActor, 'id' | 'ruleState'>;
+  /** The typed U8 lifecycle identity: owner (the lifecycle's owner actor ref),
+   * source (the source-defined lifecycle), and the recorded INSTANCE the scope
+   * is being granted under. */
+  lifecycle: LifecycleIdentity;
+  /** The durable U8 lifecycle observation the current instance is read from.
+   * The identity must be CURRENT here or the entitlement is unavailable. */
+  now: ClockObservation;
+  sourceId: string;
+  mutations: readonly RuleMutation[];
+}): {
+  available: boolean;
+  mutations: readonly RuleMutation[];
+} {
+  // Fail CLOSED on a stale/missing lifecycle identity — never fall back to a
+  // periodic scope. Absence of an active instance is a definite "no song now".
+  if (!lifecycleInstanceCurrent(options.lifecycle, options.now)) return { available: false, mutations: [] };
+  // U16 key authority (primitives) derives the lifecycle-scoped durable key;
+  // this operation and its content caller never reconstruct it.
+  const key = lifecycleScopedUsageKey(options.sourceId, lifecycleIdentityKey(options.lifecycle));
+  if (!ledgerAvailable(options.recipient, key)) return { available: false, mutations: [] };
+  const consume = consumeUsageMutation(options.sourceId, options.recipient.id, key) as Extract<RuleMutation, { kind: 'state' }>;
+  return { available: true, mutations: [...options.mutations, consume] };
 }

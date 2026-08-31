@@ -11,9 +11,10 @@ import { registerMovementEntryTrigger } from '../../kernels/movement-triggers.js
 import { nearestCandidates } from '../../kernels/evaluate-query.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-geometry.js';
 import { clockForTiming } from '../../primitives/scope.js';
-import type { BoundaryRef } from '../../primitives/scope.js';
+import type { BoundaryRef, LifecycleIdentity } from '../../primitives/scope.js';
 import type { RuleTiming } from '../../primitives/types.js';
-import { incubusOncePerRoundKey, oneInterruptPerTurnWindowKey, recordUsageKey, refreshUsageLedgerForBoundary, stampedeOncePerRoundKey, usageCount, usageLedgerHoldsForBoundary, useLedgerAvailable } from '../../kernels/use-ledger.js';
+import { capturedActor } from '../../primitives/reference.js';
+import { applyLifecycleScopedUsage, currentLifecycleInstanceFor, incubusOncePerRoundKey, lifecycleObservationForGroup, oneInterruptPerTurnWindowKey, recordLifecycleInstance, recordUsageKey, refreshUsageLedgerForBoundary, stampedeOncePerRoundKey, usageCount, usageLedgerHoldsForBoundary, useLedgerAvailable } from '../../kernels/use-ledger.js';
 import type { DiceSource } from '../../../dice.js';
 import type { EncounterActor, EncounterMark, EncounterState, Position } from '../../../types.js';
 import type { RuleMutation } from '../../primitives/types.js';
@@ -685,9 +686,33 @@ registerLifecycleRecipe({
   },
 });
 
+/** The source-defined lifecycle (ICON p.179 Monogatari song): the ability
+ * defines a "song" whose LIFEcycle INSTANCE advances every time Monogatari is
+ * used again. Content provenance, never branched on generically. */
+const MONOGATARI_SONG = 'chanter:monogatari';
+
+/** A U8 `Reference<'rule-source'>` naming the Monogatari song lifecycle
+ * (opaque identity; its key includes the source id verbatim).
+ * This module (already `chanter:monogatari`) is the one content owner; a
+ * helper keeps the identity wording uniform across the mint + grant recipes. */
+function monogatariSongSourceRef() {
+  return { kind: 'live' as const, domain: 'rule-source' as const, name: { kind: 'id' as const, id: MONOGATARI_SONG } };
+}
+
+/** Deterministic, replay-stable mint of the NEXT song-instance discriminator:
+ * the current durable encounter revision names the instance, so every
+ * re-sing produces a fresh token and replay reproduces the identical token at
+ * the identical reconcile point. The owner id is embedded so two different
+ * Chanters' discriminator spaces never collide. */
+function mintMonogatariSongInstance(state: EncounterState, chanterId: string): string {
+  return `song:${state.revision}:${chanterId}`;
+}
+
 /** ICON p.179 Monogatari turn end: a hero that completed the active tale is
- * blessed once per song, and the boundary that used the song sets the tale
- * (pre-rolled gamble) and resets the once-per-song grants. */
+ * blessed once per CURRENT song (U16 entitlement keyed by the U8 song lifecycle
+ * instance), and the boundary that used the song sets the new tale (pre-rolled
+ * gamble) and ADVANCES the Chanter's U8 song instance (a new song reopens the
+ * once-per-song entitlement via a fresh ledger key — no global clear). */
 registerLifecycleRecipe({
   sourceId: 'chanter:monogatari',
   phase: 'turn-end',
@@ -701,22 +726,34 @@ registerLifecycleRecipe({
     ? actor.id
     : null,
   resolve: (state, actor, diceWindows) => {
-    if (actor.side === 'heroes' && !actor.defeated && actor.position && actor.ruleState['monogatari:granted'] !== true) {
-      const owner = Object.values(state.actors).find((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined);
-      if (owner && monogatariTaleMet(state, actor, Number(owner.ruleState['monogatari:tale']))) {
-        actor.ruleState['monogatari:granted'] = true;
-        actor.ruleStateOwners['monogatari:granted'] = actor.id;
-        applyRuleMutations(state, [{ kind: 'resource', sourceId: 'chanter:monogatari', actorId: actor.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null }]);
+    // 1) GRANT branch FIRST — a hero that completes the described course is
+    //    blessed ONCE PER CURRENT SONG. The check reads the DURABLY established
+    //    song lifecycle instance (U8) and gates the blessing through U16.
+    const owner = Object.values(state.actors).find((candidate) => candidate.ruleState['monogatari:tale'] !== null && candidate.ruleState['monogatari:tale'] !== undefined);
+    if (owner && actor.side === 'heroes' && !actor.defeated && actor.position) {
+      const chanterRef = capturedActor(owner.id);
+      const sourceRef = monogatariSongSourceRef();
+      const current = currentLifecycleInstanceFor(owner, chanterRef, sourceRef);
+      if (current !== undefined && monogatariTaleMet(state, actor, Number(owner.ruleState['monogatari:tale']))) {
+        const identity: LifecycleIdentity = { owner: chanterRef, source: sourceRef, instance: current };
+        const txn = applyLifecycleScopedUsage({
+          recipient: actor,
+          lifecycle: identity,
+          now: lifecycleObservationForGroup(chanterRef, sourceRef, current),
+          sourceId: MONOGATARI_SONG,
+          mutations: [{ kind: 'resource', sourceId: MONOGATARI_SONG, actorId: actor.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null }],
+        });
+        if (txn.available) applyRuleMutations(state, [...txn.mutations]);
       }
     }
+    // 2) Song-ESTABLISHMENT branch — a new tale was gambled, so this IS a new
+    //    song: set the tale and ADVANCE the Chanter's U8 lifecycle instance.
+    //    The new discriminator yields a fresh U16 ledger key, so every eligible
+    //    hero's once-per-song entitlement reopens WITHOUT a global clear.
     if (diceWindows.monogatariGamble !== undefined) {
       actor.ruleState['monogatari:tale'] = diceWindows.monogatariGamble;
       actor.ruleStateOwners['monogatari:tale'] = actor.id;
-      for (const candidate of Object.values(state.actors)) {
-        if (candidate.side !== 'heroes') continue;
-        delete candidate.ruleState['monogatari:granted'];
-        delete candidate.ruleStateOwners['monogatari:granted'];
-      }
+      recordLifecycleInstance(actor, capturedActor(actor.id), monogatariSongSourceRef(), mintMonogatariSongInstance(state, actor.id));
     }
   },
 });
