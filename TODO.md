@@ -943,6 +943,32 @@ assumption here, document the evidence and update this list before proceeding.
   replay) green; census byte-stable at 427; zero promotion. See
   `docs/u16-semantic-correction-report.md`.
 
+- **U8 Scope/Clock — source-defined lifecycle identity + reducer
+  boundary-router (this tranche).** `DONE`. `primitives/scope.ts` gains the
+  generic `LifecycleIdentity` (U1-composed `owner` + `source` references +
+  durable `instance` discriminator), the `until-lifecycle-replaced` Scope,
+  `lifecycleGroupKey`/`lifecycleIdentityKey`/`sameLifecycleInstance`/
+  `lifecycleInstanceCurrent`/`lifecycleReplaced`/
+  `currentLifecycleInstanceId`, and a `lifecycles` observation map on
+  `ClockObservation`. This supplies the generic U8 scope the Monogatari
+  once-per-song `monogatari:granted` consumer was blocked on — WITHOUT a
+  hard-coded period-enum member, without magic-string identity, and without
+  aliasing two owners (the owner is part of the group key). Per the U16
+  boundary, U8 only supplies the scope; Monogatari content and U16 are not
+  rewired/recertified here. The reducer's active-effect expiry
+  (`expireBoundaryEffects` / `expireOneBoundaryRecord`) now interprets its
+  boundary through `clockForTiming`/`boundaryEquals` (durable
+  remaining-count storage byte-identical). New adversarial tests
+  (`u8-lifecycle-identity.test.ts`, +8: two-owner no-alias, replace-A-not-B,
+  active-song-not-satisfied, malformed-identity-no-fallback,
+  unobserved-lifecycle-declines, determinism/replay, stable keys).
+  Verification: typecheck/build green, 1899 tests green, architecture /
+  automation / strict-fidelity audits clean, source artifacts verified, census
+  byte-stable at 427, zero source promotion (substrate/migration only). See
+  `docs/u8-scope-clock-tranche.md`. **U8 remains PARTIAL** on its
+  `RuleDuration`/`RuleTiming` lifecycle/scheduler surfaces; those recorded-
+  state specialists are the residual (see the tranche report §6).
+
 - **T7 — U2 role-consumer consolidation (this tranche).** `DONE`. Made
   `primitives/roles.ts` the single semantic authority for "relative to whom is
   this clause interpreted?" by migrating the remaining executing duplicate

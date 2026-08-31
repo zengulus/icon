@@ -444,6 +444,26 @@ audit is the **U8 Scope/Clock surface** (`RuleDuration` / `RuleTiming` /
 lifecycle / scheduler / source-defined lifecycle boundaries), which remains
 PARTIAL beside U14/U9/U6.
 
+**U8 Scope/Clock tranche landed (2026-09-01).** The generic **source-defined
+lifecycle identity** resolved the blocking gap that kept U16's
+`monogatari:granted` consumer unresolved: `primitives/scope.ts` now owns
+`LifecycleIdentity` (U1-composed owner + source references + a durable
+`instance` discriminator), the `until-lifecycle-replaced` Scope, the
+`lifecycleGroupKey`/`lifecycleIdentityKey`/`sameLifecycleInstance`/
+`lifecycleInstanceCurrent`/`lifecycleReplaced`/
+`currentLifecycleInstanceId` helpers, and a `lifecycles` observation map on
+`ClockObservation` — a generic "until this source is used/replaced/refreshed
+again" representation with NO hard-coded period-enum member, no magic-string
+identity, and no aliasing between two owners. The reducer's active-effect
+expiry (`expireBoundaryEffects` / `expireOneBoundaryRecord`) now routes its
+boundary meaning through `clockForTiming`/`boundaryEquals` (durable storage
+byte-identical). Per the U16 boundary, U8 supplied the generic scope;
+Monogatari content and U16 are untouched. New adversarial tests
+(`u8-lifecycle-identity.test.ts`, +8). 1899 tests green, audits/typecheck/
+build/extraction/replay clean, census byte-stable at 427, zero source
+promotion. U8 stays PARTIAL on its `RuleDuration`/`RuleTiming` lifecycle/
+scheduler surfaces.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

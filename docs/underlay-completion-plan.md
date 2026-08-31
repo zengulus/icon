@@ -1120,10 +1120,27 @@ of hard-coding `ledger:turn:*`/`ledger:round:*` prefix interpretation. The
 generic temporal question ("what period does this boundary refresh, and
 whose boundary matters?") now routes through the Clock; `scope.test.ts`
 and `t6-u8-scope-consolidation.test.ts` prove the consumers actually
-route through it. The remaining legacy surfaces still decide temporal
-semantics independently and keep U8 PARTIAL: `RuleDuration` consumers,
-`RuleTiming` boundary reads, lifecycle phase-duration expiry, and the
-scheduler's round/turn counters (still the scheduling authority, but
+route through it. **2026-09-01 U8 tranche (substrate only):** the generic
+**SOURCE-DEFINED LIFECYCLE IDENTITY** landed (`LifecycleIdentity` + the
+`until-lifecycle-replaced` Scope + `lifecycleGroupKey` /
+`lifecycleIdentityKey` / `sameLifecycleInstance` /
+`lifecycleInstanceCurrent` / `lifecycleReplaced` / `currentLifecycleInstanceId` + a
+`lifecycles` observation map on `ClockObservation`) — the Monogatari
+once-per-song proof case composed of U1 `owner` + `source` references plus a
+durable `instance` discriminator, WITHOUT a hard-coded period-enum member,
+never aliasing two owners, advancing only the replaced owner. The reducer's
+active-effect expiry (`expireBoundaryEffects` / `expireOneBoundaryRecord`)
+now interprets its boundary through `clockForTiming`/`boundaryEquals`
+instead of re-keyed boundary-name literals (durable remaining-count storage
+was unchanged). Per the U16 boundary, U8 supplied the generic scope
+Monogatari's `monogatari:granted` consumer needed but did NOT rewire
+Monogatari content nor recertify U16. Tests: `u8-lifecycle-identity.test.ts`
+(+8 adversarial: two-owner no-alias, replace-A-not-B, active-song-
+not-satisfied, malformed-identity-no-fallback, no-lifecycle-observation-fails-
+closed, determinism/replay, stable keys). The remaining legacy surfaces still
+decide temporal semantics independently and keep U8 PARTIAL: `RuleDuration`
+consumers, `RuleTiming` boundary reads, lifecycle phase-duration expiry, and
+the scheduler's round/turn counters (still the scheduling authority, but
 re-key "round" for rule-level reads). Migrating those is the remaining U8
 work.
 

@@ -310,7 +310,7 @@ perspective, aura entity-origin owner≠origin, ownerless-neutral reject,
 ROLE≠ANCHOR geometry, source≠target controller, underivable responder
 rejects, replay determinism).
 
-### Scope / Clock (U8 underlay) — PARTIAL: vocabulary + boundary-read surface landed (T1, 2026-08-30)
+### Scope / Clock (U8 underlay) — PARTIAL: vocabulary + boundary-read surface landed (T1, 2026-08-30); source-defined lifecycle identity + reducer boundary-router landed (2026-09-01)
 
 `primitives/scope.ts` defines the ONE `Clock`/`Scope` vocabulary with FULL
 temporal fidelity (corrected 2026-08-30): `BoundaryRef` carries an EDGE
@@ -341,6 +341,38 @@ source-turn≠target-turn, relative-3-rounds-from-round-5-origin, next-target-
 turn not on source turn, slow-turn≠ordinary-turn, non-boundary-null,
 permanent-never, named-event, replay; plus edge/subject preservation in
 `scopeForDuration`) — 17 tests.
+
+**Landed 2026-09-01 — U8 tranche (substrate only, zero source promotion):**
+
+- **Source-defined lifecycle identity.** `primitives/scope.ts` adds the
+  FIRST-CLASS, generic representation of "the current instance of this
+  source-defined lifecycle owned by this source/actor" — Monogatari's song
+  (p.179) proof case — WITHOUT a hard-coded `'song'` period-enum member and
+  WITHOUT hiding semantic identity in magic strings. `LifecycleIdentity` is
+  composed of two U1 References (the `owner` actor that owns the instance and
+  the `source` rule that defines it) plus a durable `instance` discriminator
+  minted at establishment and ADVANCED on every replacement. The
+  `until-lifecycle-replaced` Scope is satisfied exactly when the observed
+  current instance for the same `(owner, source)` advances past the recorded
+  one. The group key includes the owner, so two Chanters' songs never alias,
+  and re-establishing one Chanter's song advances only that owner's instance
+  (  never another's). An observation that records no lifecycles is never
+  treated as replaced (it declines to report a replacement). Per the U16 boundary,
+  this supplies the generic U8 scope that was the blocking gap for
+  `monogatari:granted`; the Monogatari content is intentionally NOT rewired
+  and U16 is NOT recertified here.
+- **Reducer boundary router.** `encounter.ts` `expireBoundaryEffects` /
+  `expireOneBoundaryRecord` now interpret WHICH boundary a recorded
+  `RuleDuration` expires at through the ONE U8 authority
+  (`clockForTiming` + `boundaryEquals`) instead of re-keying boundary-name
+  literals; the durable per-record remaining-count storage and replay bytes
+  are unchanged (specialist recorded-state decrement, not a boundary
+  interpretation).
+- Tests: `u8-lifecycle-identity.test.ts` (+8): two-owner no-alias,
+  replace-A-not-B, active-song-not-satisfied, malformed-identity-fails,
+  unobserved-lifecycle-declines, determinism/replay.
+
+### Provenance / Delivery Dimensions (U9 underlay) — LANDED (T4, 2026-08-30)
 
 ### Provenance / Delivery Dimensions (U9 underlay) — LANDED (T4, 2026-08-30)
 

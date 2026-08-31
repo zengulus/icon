@@ -105,6 +105,104 @@ export type Clock =
   /** The next matching boundary after the scope's established epoch. */
   | { kind: 'next'; boundary: BoundaryRef };
 
+/** The durable identity of ONE source-defined lifecycle INSTANCE: "the current
+ * occurrence of this source's lifecycle owned by this actor". Composed of U1
+ * REFERENCE semantics (the `owner` who the lifecycle belongs to and the
+ * `source` that defines it) plus a durable `instance` DISCRIMINATOR that
+ * advances every time the lifecycle is re-established (a new song).
+ *
+ * This is the generic answer to "how is the current instance of a
+ * source-defined lifecycle owned by this source/actor represented WITHOUT
+ * hiding semantic identity inside magic strings":
+ *
+ *  - the OWNER is a U1 `Reference<'actor'>` (never a raw actor id) — two
+ *    different owners of the same source lifecycle are different identities;
+ *  - the SOURCE is a U1 `Reference<'rule-source'>` naming the source-defined
+ *    lifecycle (Monogatari's song), opaque and never parsed;
+ *  - the INSTANCE discriminator is durable observed state, minted at
+ *    establishment and ADVANCED on every re-establishment/replacement.
+ *
+ * Proof case (Monogatari, p.179): a song persists until Monogatari is used
+ * again; a character may fulfill its condition once per that song; two
+ * Chanters' songs never alias; replacing one Chanter's song never resets
+ * another's usage state. All four hold because the identity is
+ * (owner + source + instance): the group key excludes the instance (so two
+ * Chanters are distinct) and each Chanter's current discriminator advances
+ * only for that owner.
+ */
+export interface LifecycleIdentity {
+  /** U1 OWNER Reference — whom this lifecycle instance belongs to (the
+   * Chanter). Part of the identity: two owners never alias. */
+  owner: Reference<'actor'>;
+  /** U1 SOURCE Reference — the source-defined lifecycle name (the rule that
+   * defines the song). Opaque and never parsed; identity only. */
+  source: Reference<'rule-source'>;
+  /** Durable instance DISCRIMINATOR, minted at establishment and advanced on
+   * every re-establishment (a new song). The CURRENT value lives in the
+   * durable `ClockObservation.lifecycles` map; this field is the recorded
+   * instance a scope was created against. */
+  instance: string;
+}
+
+/** The stable GROUP key of a lifecycle INSTANCE: "WHOSE song is this" —
+ * `(owner, source)` WITHOUT the instance discriminator. Two owners and/or two
+ * sources never collide (the owner is part of the key), and the group key is
+ * what `ClockObservation.lifecycles` is indexed by: each (owner, source) has
+ * exactly ONE current discriminator. */
+export function lifecycleGroupKey(owner: Reference<'actor'>, source: Reference<'rule-source'>): string {
+  return `lifecycle:${referenceKey(owner)}:${referenceKey(source)}`;
+}
+
+/** The FULL identity key of one lifecycle instance: group key + discriminator.
+ * Canonical form for deterministic equality / serialization. */
+export function lifecycleIdentityKey(identity: LifecycleIdentity): string {
+  return `${lifecycleGroupKey(identity.owner, identity.source)}:${identity.instance}`;
+}
+
+/** Structural identity equality — the same (owner, source, instance). */
+export function sameLifecycleInstance(a: LifecycleIdentity, b: LifecycleIdentity): boolean {
+  return lifecycleIdentityKey(a) === lifecycleIdentityKey(b);
+}
+
+/** The CURRENT instance discriminator of a (owner, source) lifecycle observed
+ * at `now`, or undefined when the lifecycle is not currently active (never
+ * established, or its owner's instance was removed). Reads the durable
+ * `lifecycles` map keyed by group — never ambient state. */
+export function currentLifecycleInstanceId(
+  now: ClockObservation,
+  owner: Reference<'actor'>,
+  source: Reference<'rule-source'>,
+): string | undefined {
+  return now.lifecycles?.[lifecycleGroupKey(owner, source)];
+}
+
+/** Whether a recorded lifecycle instance is CURRENT at the observation: the
+ * durable `lifecycles` map still names ITS discriminator for (owner, source).
+ * An observation with no `lifecycles` map (or no entry for that group) returns
+ * false — a lifecycle that is not observed as active cannot be confirmed
+ * current. */
+export function lifecycleInstanceCurrent(identity: LifecycleIdentity, now: ClockObservation): boolean {
+  const current = currentLifecycleInstanceId(now, identity.owner, identity.source);
+  return current !== undefined && current === identity.instance;
+}
+
+/** Whether a recorded lifecycle instance has been REPLACED at the observation:
+ * the durable current discriminator for (owner, source) has ADVANCED past this
+ * recorded one, or the lifecycle is no longer active. Replacing owner A's song
+ * advances A's entry only — owner B's entry is untouched.
+ *
+ * FAIL CLOSED on an observation that records NO lifecycles at all (the caller
+ * never supplied a lifecycle observation): absence of data is NOT evidence of
+ * replacement, so it returns false rather than approximating from the boundary
+ * counts. A PRESENT map whose (owner, source) entry is missing or advanced IS a
+ * definite read — that lifecycle is not currently active, so the recorded
+ * instance is replaced. */
+export function lifecycleReplaced(identity: LifecycleIdentity, now: ClockObservation): boolean {
+  if (now.lifecycles === undefined) return false; // no lifecycle observation → unknown, fail closed
+  const current = now.lifecycles[lifecycleGroupKey(identity.owner, identity.source)];
+  return current === undefined || current !== identity.instance;
+}
+
 /** A temporal/usage extent over the Clock. */
 export type Scope =
   | { kind: 'until'; clock: Clock }
@@ -116,16 +214,38 @@ export type Scope =
   /** Permanent — a scope with NO expiration. Never satisfied ("reached"). */
   | { kind: 'permanent' }
   /** Until a named lifecycle event. */
-  | { kind: 'until-event'; event: string };
+  | { kind: 'until-event'; event: string }
+  /** Until this specific source-defined lifecycle INSTANCE is replaced by a new
+   * occurrence of the SAME (owner, source) lifecycle — "until this rule is used
+   * / refreshed again". The `instance` discriminator IS the epoch: the scope is
+   * satisfied exactly when the observed current instance for that (owner, source)
+   * advances past it or the lifecycle is no longer active. Generic proof case:
+   * Monogatari's "once per song" — a song is this Scope, it persists until
+   * Monogatari is used again (a new song mints a new discriminator), two
+   * different Chanters' songs never alias (the owner is part of the group key),
+   * and replacing one Chanter's song advances only that Chanter's instance.
+   * An observation that never records lifecycles FAILS CLOSED (false), never
+   * approximated from the boundary map. */
+  | { kind: 'until-lifecycle-replaced'; lifecycle: LifecycleIdentity };
 
 /** A durable observation of where the shared Clock is. `last` is the boundary
  * (or event) that most recently actually transitioned; `counts` are per-
  * boundary occurrence counters keyed by `boundaryKey(...)`, captured AT a
  * reference moment (scope establishment or the present). Relative satisfaction
- * compares two observations — never an absolute round number. */
+ * compares two observations — never an absolute round number. `lifecycles`
+ * (optional) records the CURRENT active source-defined lifecycle instances,
+ * keyed by the stable `lifecycleGroupKey(owner, source)` (whose lifecycle) →
+ * the CURRENT instance discriminator. It is the durable read the
+ * `until-lifecycle-replaced` scope composes. */
 export interface ClockObservation {
   last: BoundaryRef;
   counts: Readonly<Record<string, number>>;
+  /** Currently ACTIVE source-defined lifecycle instances, keyed by
+   * `lifecycleGroupKey(owner, source)` (WHOSE lifecycle — the owner is part of
+   * the key, so two owners' instances never alias) → the CURRENT instance
+   * discriminator. A `until-lifecycle-replaced` scope named with an older
+   * discriminator is REPLACED exactly when this map advances or drops its key. */
+  lifecycles?: Readonly<Record<string, string>>;
 }
 
 function occurrenceOf(obs: ClockObservation | undefined, key: string): number {
@@ -211,6 +331,15 @@ export function scopeSatisfied(scope: Scope, now: ClockObservation, epoch?: Cloc
       if (!boundaryEquals(now.last, scope.boundary)) return false;
       const delta = boundaryOccurrence(now, scope.boundary) - boundaryOccurrence(epoch, scope.boundary);
       return delta >= 1;
+    }
+    case 'until-lifecycle-replaced': {
+      // RELATIVE scope whose epoch is the recorded instance discriminator: it
+      // is satisfied exactly when the observed current instance for the same
+      // (owner, source) has advanced past the recorded one (lifecycle
+      // replaced) or the lifecycle is no longer active. NO epoch argument is
+      // needed — the discriminator IS the epoch. An observation that records
+      // no lifecycles fails closed (not satisfied). Deterministic.
+      return lifecycleReplaced(scope.lifecycle, now);
     }
   }
 }

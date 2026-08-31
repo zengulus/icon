@@ -359,7 +359,15 @@ record and FAIL CLOSED on relative reads with no epoch; `permanent` never
 satisfies; non-boundary step timings ('use', attack-*) return null from
 `clockForTiming`/`currentClock`. The boundary-read surface is
 `clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`/
-`scopeSatisfied`. Missing: migrating the `RuleDuration`/`use-ledger`/
+`scopeSatisfied`. The `use-ledger` reset readers migrate (T6.1); the generic
+**source-defined lifecycle identity** (`LifecycleIdentity` + the
+`until-lifecycle-replaced` Scope + `lifecycleGroupKey`/`lifecycleIdentityKey`/
+`sameLifecycleInstance`/`lifecycleInstanceCurrent`/`lifecycleReplaced`/
+`currentLifecycleInstanceId` + a `lifecycles` observation map on
+`ClockObservation`) landed 2026-09-01 (Monogatari once-per-song proof case,
+U1-composed owner+source, no hard-coded period-enum member); the reducer's
+active-effect expiry boundary meaning routes through `clockForTiming`/
+`boundaryEquals`. Missing: migrating the remaining `RuleDuration`/`use-ledger`/
 lifecycle readers onto the Clock (the U8 completion work, including the
 scheduler's turn record for turn-level `boundaryReached`).
 

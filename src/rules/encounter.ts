@@ -4,7 +4,7 @@ import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
 import { randomDice, rollBoonOrCurse, rollDamage, type DiceSource } from './dice.js';
 import { compileRuleSourceUnit } from './automation/content/glue/compiler.js';
-import type { ArmedContinuation, RuleAction, RuleChoice, RuleExecutionContext, RuleExecutionResult, RuleEffect, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
+import type { ArmedContinuation, RuleAction, RuleChoice, RuleDuration, RuleExecutionContext, RuleExecutionResult, RuleEffect, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
@@ -24,6 +24,10 @@ import { applyCombatStartTraitEffects, planTurnStartParticipants, planTurnTransi
 import { resumeDueContinuations } from './automation/kernels/continuation-runtime.js';
 import { clockObservationForBoundary } from './automation/primitives/continuation.js';
 import { capturedActor } from './automation/primitives/reference.js';
+// U8 boundary authority: the reducer composes the Clock for the boundary
+// MEANING of an active-effect expiry (which timing token = which boundary),
+// while keeping its recorded remaining-count storage on the durable record.
+import { boundaryEquals, clockForTiming } from './automation/primitives/scope.js';
 import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
@@ -2484,6 +2488,27 @@ function resolveDelayedMarkEffects(state: EncounterState, actor: EncounterActor)
 
 type DurationBoundary = 'turn-start' | 'turn-end' | 'round-start' | 'round-end';
 
+/** U8-composed boundary meaning for an active-effect expiry. The reducer keeps
+ * its recorded remaining-count storage on the durable record, but WHICH
+ * boundary a `RuleDuration` expires at (span + edge) is interpreted through the
+ * ONE Clock authority (`clockForTiming`), never a re-keyed boundary-name
+ * literal. The four boundary kinds below map 1:1 to a `BoundaryRef`; a duration
+ * whose kind is not a boundary kind maps to null and can never match. */
+function boundaryRefForDurationBoundary(boundary: DurationBoundary): ReturnType<typeof clockForTiming> | null {
+  return clockForTiming(boundary as RuleTiming);
+}
+
+/** Whether a recorded `RuleDuration` expires at the given U8 boundary ref.
+ * Both the duration's kind and the processed boundary are mapped through the
+ * SAME `clockForTiming` authority and compared by `boundaryEquals` (deterministic
+ * canonical-key compare) — byte-identical to the historical string compare for
+ * the four boundary kinds, and never a second boundary interpretation. */
+function durationExpiresAtBoundary(duration: null | { kind: RuleDuration['kind'] } | undefined, boundaryRef: ReturnType<typeof clockForTiming>): boolean {
+  if (!duration) return false;
+  const kindRef = clockForTiming(duration.kind as RuleTiming);
+  return kindRef !== null && boundaryRef !== null && boundaryEquals(kindRef, boundaryRef);
+}
+
 interface BoundaryEffect {
   actorId: string;
   ownerId: string | null;
@@ -2542,17 +2567,27 @@ function expiryIdentity(kind: 'condition' | 'effect', record: EncounterCondition
 function expireOneBoundaryRecord(state: EncounterState, entry: BoundaryEffect): void {
   const actor = state.actors[entry.actorId];
   const duration = entry.record.duration;
-  if (!duration || duration.kind !== entry.boundaryKind) return;
-  if (duration.kind === 'turn-start' || duration.kind === 'turn-end') {
-    const turns = duration.turns ?? 1;
+  // The boundary MEANING is interpreted through the ONE U8 authority
+  // (`clockForTiming` / `boundaryEquals`) — the recorded `RuleDuration` is
+  // mapped to its boundary ref and compared against the processed boundary's
+  // ref, never re-keyed by a literal. The remaining-count arithmetic below is
+  // the reducer's recorded-state decrement, not a boundary interpretation.
+  if (!duration || !durationExpiresAtBoundary(duration, boundaryRefForDurationBoundary(entry.boundaryKind))) return;
+  // The recorded boundary kind legally determines the schedule (turn-boundary
+  // durations carry `turns`, round-boundary durations carry `rounds`); narrow
+  // the union to read the correct remaining-count field for the decrement.
+  if (entry.boundaryKind === 'turn-start' || entry.boundaryKind === 'turn-end') {
+    const turnDuration = duration as Extract<RuleDuration, { kind: 'turn-start' | 'turn-end' }>;
+    const turns = turnDuration.turns ?? 1;
     if (turns > 1) {
-      entry.record.duration = { ...duration, turns: turns - 1 };
+      entry.record.duration = { ...turnDuration, turns: turns - 1 };
       return;
     }
   } else {
-    const rounds = duration.rounds ?? 1;
+    const roundDuration = duration as Extract<RuleDuration, { kind: 'round-start' | 'round-end' }>;
+    const rounds = roundDuration.rounds ?? 1;
     if (rounds > 1) {
-      entry.record.duration = { ...duration, rounds: rounds - 1 };
+      entry.record.duration = { ...roundDuration, rounds: rounds - 1 };
       return;
     }
   }
@@ -2806,16 +2841,20 @@ function drainUnansweredChoiceWindows(state: EncounterState) {
  *     authority.
  */
 function expireBoundaryEffects(state: EncounterState, turnActorId: string, boundary: DurationBoundary) {
+  // The boundary MEANING is the ONE U8 Clock interpretation (span + edge) — it
+  // never re-keys a boundary-name literal here. The recorded active-effect
+  // remaining-count arithmetic stays on the durable record (reducer state).
+  const boundaryRef = boundaryRefForDurationBoundary(boundary);
   const turnScoped = boundary === 'turn-start' || boundary === 'turn-end';
   const pending: BoundaryEffect[] = [];
   let order = 0;
   for (const candidate of Object.values(state.actors)) {
     for (const condition of candidate.conditions) {
-      if (condition.duration?.kind !== boundary || (turnScoped && condition.ownerId !== turnActorId)) continue;
+      if (!durationExpiresAtBoundary(condition.duration, boundaryRef) || (turnScoped && condition.ownerId !== turnActorId)) continue;
       pending.push({ actorId: candidate.id, ownerId: condition.ownerId, kind: 'condition', record: condition, order: order++, boundaryKind: boundary });
     }
     for (const effect of candidate.activeEffects) {
-      if (effect.duration.kind !== boundary || (turnScoped && effect.ownerId !== turnActorId)) continue;
+      if (!durationExpiresAtBoundary(effect.duration, boundaryRef) || (turnScoped && effect.ownerId !== turnActorId)) continue;
       pending.push({ actorId: candidate.id, ownerId: effect.ownerId, kind: 'effect', record: effect, order: order++, boundaryKind: boundary });
     }
   }
