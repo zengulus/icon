@@ -139,6 +139,23 @@ assumption here, document the evidence and update this list before proceeding.
 > (`applyOncePerRoundUsage`) instead of a forgeable branded result object;
 > U16 remains the single executing usage authority.
 >
+> **U1 content-authoring surface (2026-09-01, commit 4bd0189) + Shade/Warden
+> live-slot tranche (2026-09-01).** The named-content U1 residual got ONE
+> shared surface (`content/glue/reference-authoring.ts`: resolveSourceActor /
+> resolveAttackTarget / resolveTriggerSource / resolveTriggerTargets /
+> resolveCapturedSelectedActors / resolveBoundActor, all composing
+> `primitives/reference.ts`), and six content families migrated:
+> Bastion/Spellblade programs, the Job-trait/Class resolvers' six direct
+> dereferences, then Shade + Warden pure LIVE-slot reads (source/attack-target
+> /Nocturne trigger-source) — the last direct
+> `state.actors[context.…]` dereference in content is gone. The
+> `u1-reference-routing` guard scans the content layer (adapter-keeps-U1,
+> migrated-program pins, deref rejection; no blanket lexical ban on the
+> inventoried residual). Fresh exact residual: 242 `sourceActor(context, …)`
+> sites — 188 pure LIVE-slot reads (next tranches), 55 captured/derived-id
+> boundary reads, 0 direct dereferences. U1 stays PARTIAL; zero source
+> promotion; census remains 427.
+>
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
 > (2026-08-31; lifecycle follow-up 2026-09-01).** Migrated the last actor-local
 > once-per-scope marks onto typed U16 ledger keys
@@ -156,6 +173,37 @@ assumption here, document the evidence and update this list before proceeding.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 2 — Shade/Warden pure LIVE-slot reads
+  (2026-09-01) — DONE.** All 12 executable Shade resolvers and all 9 Warden
+  resolvers now route their pure live-slot references through
+  `content/glue/reference-authoring.ts`: source reads →
+  `resolveSourceActor`, primary-attack-target reads →
+  `resolveAttackTarget`, Nocturne's trigger-source position →
+  `resolveTriggerSource` (the `<area-center> ?? trigger ?? source` fallback
+  chain stays caller-owned U7/U11). No U4 semantics moved: gates,
+  `?.[0]`/`slice` cardinality, fallback priority, and player-choice meaning
+  stay exactly where they were; only the dereference of an already-
+  determined identity migrated. Remaining Shade (7) / Warden (5)
+  `sourceActor` sites are the captured-input dereferences (`input.actorIds`
+  → id → actor) — the inventoried U1×U4 boundary, left untouched with
+  their parity tests pending. The `u1-reference-routing` guard pins Shade
+  (resolveSourceActor/resolveAttackTarget/resolveTriggerSource) and Warden
+  (resolveSourceActor/resolveAttackTarget) so a revert to the legacy
+  convenience is caught, with no blanket lexical ban on the inventoried
+  residual. Evidence: +7 in `reference-authoring.test.ts` (production
+  resolvers fail closed on gated-bypass context — ghost attackTargetId for
+  Umbra/Sidhe, ghost triggerSourceId for Nocturne never degenerates to the
+  user's position), +2 engine-level boundary tests in `shade.test.ts` /
+  `warden.test.ts` (ghost targets rejected at the command boundary before
+  any effect; Umbra replays byte-identically — `b.events` deep-equals
+  `a.events` and `applyEvents` reproduces both). Fresh exact residual:
+  242 `sourceActor(context, …)` sites — 188 pure LIVE-slot reads (next
+  tranches: Chanter/Enochian/Sealer/Knave/Harvester/Demon Slayer/…), 55
+  captured/derived-id boundary reads, 0 direct dereferences; U1 remains
+  PARTIAL (no whole-consumer audit yet). Full suite green (1975 tests),
+  audits green, census byte-stable at 427, zero source promotion. See
+  `docs/u8-u1-underlay-census.md`.
 
 - **U3 audit correction — QUERY is PARTIAL, not landed (Phase T2 entry) —
   LANDED for the actor domain (2026-08-30).**

@@ -10,6 +10,7 @@ import {
   placeMutation, teleportMutation, entityMutation, summonEntity, terrainMutation, swapMutations,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAttackTarget, resolveSourceActor, resolveTriggerSource } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
@@ -45,8 +46,8 @@ import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
  *//** ICON p.162: player-selected Teleport 3, +1-boon attack, blind, and
  * summon a shadow adjacent to the target on a Finishing Blow. */
 const umbraEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const sourcePosition = source.position;
 
   const mutations: RuleMutation[] = [];
@@ -78,8 +79,8 @@ const umbraEffects: RuleResolver = (context) => {
  * moving yourself. The foe can save to avoid the effect; blinded foes fail the
  * save automatically (the save mutation is recorded for the replay). */
 const umbraComboEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const sourcePosition = source.position;
   const targetPosition = target?.position;
   const mutations: RuleMutation[] = [];
@@ -133,8 +134,8 @@ const harrowEffects: RuleResolver = (context) => {
  * splashes fray to every other foe in the burst; a Finishing Blow drops a pit
  * under the target. */
 const deathBlossomEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const targetPosition = target?.position;
   if (!target || !targetPosition) return [];
   // ICON p.162 Death Blossom is INHERENTLY unerring ("2 actions, Attack,
@@ -161,8 +162,8 @@ const deathBlossomEffects: RuleResolver = (context) => {
 /** ICON p.162 Combo (Flying Sleeves): the area becomes Arc 4 — every foe within
  * 4 of the attack target takes the splash fray. */
 const deathBlossomComboEffects: RuleResolver = (context, action) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const targetPosition = target?.position;
   const mutations: RuleMutation[] = deathBlossomEffects(context, action);
   if (!target || !targetPosition) return mutations;
@@ -177,7 +178,7 @@ const deathBlossomComboEffects: RuleResolver = (context, action) => {
 /** ICON p.162: summon 2 shadows in range 2 and raise the Nightmare aura (the
  * consume-a-shadow evasion interrupt is a documented reactive window). */
 const nightmareEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   if (!sourcePosition) return [];
   const mutations: RuleMutation[] = [
@@ -220,7 +221,7 @@ const shadowPlayEffects: RuleResolver = (context) => {
  * The turn-end refresh (no adjacent foes) ticks the die up in the reducer; the
  * "trigger finishing blow effects then tick down" stance rewrite is documented. */
 const umbralEchoEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [
     stanceMutation(context, source.id, 'enter', 'umbral-echo'),
     stateMutation(context, source.id, 'umbral-echo:die', 2),
@@ -243,8 +244,8 @@ const assassinateEffects: RuleResolver = (context) => {
 /** ICON p.163: an interrupt that marks a small blast centered on the finishing
  * blow target as a shadow-cloud terrain effect, lasting until used again. */
 const nocturneEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const triggerPosition = context.triggerSourceId ? sourceActor(context, context.triggerSourceId).position : undefined;
+  const source = resolveSourceActor(context);
+  const triggerPosition = resolveTriggerSource(context)?.position;
   const center = context.input.positions?.['area-center']?.[0] ?? triggerPosition ?? source.position;
   if (!center) throw new RuleProgramViolation('choice.position-range', 'Nocturne requires a finishing blow character to center on.');
   const mutations: RuleMutation[] = [];
@@ -260,8 +261,8 @@ const nocturneEffects: RuleResolver = (context) => {
 /** ICON p.164: +1-boon attack that marks the foe; a Finishing Blow immediately
  * detonates the mark (2 damage + dazed to the marked foe and adjacent foes). */
 const incubusEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const targetPosition = target?.position;
   if (!target) return [];
   const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });
@@ -292,7 +293,7 @@ const incubusEffects: RuleResolver = (context) => {
 /** ICON p.164 Combo (Succubus): deal 3 damage to every character marked by
  * Incubus and player-selected Teleport 2 for each. */
 const incubusComboEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   const mutations: RuleMutation[] = [];
   let markedIndex = 0;

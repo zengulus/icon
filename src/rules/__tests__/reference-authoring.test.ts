@@ -30,7 +30,18 @@ import {
   bind, capturedActor, capturedPosition, EMPTY_BINDER, referenceCollection,
 } from '../automation/primitives/reference.js';
 import { RuleProgramViolation } from '../automation/kernels/violations.js';
-import type { RuleExecutionContext } from '../automation/primitives/types.js';
+import type { RuleAction, RuleExecutionContext } from '../automation/primitives/types.js';
+import {
+  capturedSelectedActorsRef,
+  resolveAttackTarget,
+  resolveBoundActor,
+  resolveCapturedSelectedActors,
+  resolveSourceActor,
+  resolveTriggerSource,
+  resolveTriggerTargets,
+} from '../automation/content/glue/reference-authoring.js';
+import { SHADE_RULE_RESOLVERS } from '../automation/content/jobs/programs/shade-programs.js';
+import { WARDEN_RULE_RESOLVERS } from '../automation/content/jobs/programs/warden-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -45,15 +56,6 @@ function expectViolationCode(fn: () => unknown, code: string): void {
   }
   throw new Error('expected a RuleProgramViolation');
 }
-import {
-  capturedSelectedActorsRef,
-  resolveAttackTarget,
-  resolveBoundActor,
-  resolveCapturedSelectedActors,
-  resolveSourceActor,
-  resolveTriggerSource,
-  resolveTriggerTargets,
-} from '../automation/content/glue/reference-authoring.js';
 
 function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContext {
   return {
@@ -221,5 +223,34 @@ describe('content-authoring adapter — migrated-content parity (behavior-preser
     // The migrated Bastion/Spellblade resolvers keep `target?.position`
     // guards; the adapter preserves that absent-slot semantics.
     expect(resolveAttackTarget(ctx())).toBeUndefined();
+  });
+});
+
+describe('content-authoring adapter — production Shade/Warden resolvers fail closed on gated-bypass context (resolver is the final authority)', () => {
+  // The resolvers read the action only for tags/triggers that these
+  // fail-closed cases never reach; a minimal well-typed action suffices.
+  const defaultAction: RuleAction = {
+    id: 'default', name: 'resolver-under-test', timing: 'use',
+    costs: [], tags: [], range: null, area: null, choices: [], steps: [],
+  };
+  const interruptAction: RuleAction = { ...defaultAction, timing: 'interrupt' };
+
+  it('Shade Umbra resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => SHADE_RULE_RESOLVERS['shade:umbra:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Warden Sidhe resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => WARDEN_RULE_RESOLVERS['warden:sidhe:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Shade Nocturne resolver: a ghost triggerSourceId (gate bypassed) throws instead of degenerating to the source position', () => {
+    // The Nocturne fallback chain `area-center ?? triggerSource ?? source` is
+    // caller-owned; only the TRIGGER-SOURCE reference itself is U1 — a trigger
+    // source that names a missing actor must reject, never silently reinterpret
+    // as the user's own position.
+    const context = ctx({ triggerSourceId: 'ghost' });
+    expectViolationCode(() => SHADE_RULE_RESOLVERS['shade:nocturne:effects'](context, interruptAction), 'reference.missing-actor');
   });
 });

@@ -114,27 +114,79 @@ their sites.
 
 ### Fresh residual inventory (semantic classification, not a ban list)
 
-A fresh scan at this HEAD finds ~120 remaining `sourceActor(context, …)`
-calls across a dozen named program files (Shade, Knave, Geomancer, Enochian,
-Warden, Seer, Stormbender, Demon Slayer, Chanter, Colossus, Harvester, Fool,
-Sealer, Freelancer). Classified by semantic family:
+A fresh scan at this HEAD finds 242 remaining `sourceActor(context, …)`
+calls across 14 named program files. Classified by semantic family (the
+previous hand-count of ~120 was a partial tally; the fresh grep is exact):
 
-- **U1 reference identity** (migrate next): the `sourceActor(context,
-  context.<slot>)` live-slot re-reads (≈60) and the `context.input.actorIds`
-  captured reads that are dereferenced into actors (Shade first/second,
-  Warden pair, Chanter chosen list, etc.).
-- **U4 choice-cardinality (retained, caller-owned)**: the `?.[0]`/`?.[1]`
-  single-selection and `.slice(1)` shapes that SELECT the recorded choice —
-  the adapter deliberately has no first-element collapse; these narrow to an
-  element and then feed a U1 captured/selected read.
-- **U1×U4 boundary (one semantic decision each, family-by-family)**:
-  `target[0] ?? context.attackTargetId` / `?? context.triggerTargetIds?.[0]`
-  priority chains (Geomancer, Enochian, Seer, Stormbender, Sealer, Freelancer,
-  Harvester, Knave) — which slot answers depends on the source contract at
-  each call site; migrated with its parity test, not mechanically.
+- **U1 reference identity — pure LIVE slot reads (188, migrate family-by-
+  family next)**: `sourceActor(context, context.actorId)` (the ability user)
+  and `sourceActor(context, context.attackTargetId)` (the primary attack
+  target) — the unambiguous U1 reference reads, exactly the family Shade/
+  Warden migrated this tranche. Per-file: Chanter 19, Enochian 18, Sealer 17,
+  Knave 17, Harvester 16, Demon Slayer 16, Seer 15, Fool 15, Geomancer 14,
+  Freelancer 14, Stormbender 11, Colossus 11.
+- **U1×U4 boundary — captured/derived-id dereferences (55, one semantic
+  decision each)**: `sourceActor(context, <var>)` where `<var>` came from
+  `input.actorIds?.[n]` (Shade Harrow/Shadow Play/Assassinate, Warden
+  Gwynt/Stampede, Knave targets, etc.) or a `??` priority chain
+  (`target[0] ?? attackTargetId`, Harvester line 155). The caller's
+  `?.[0]`/`?.[1]`/`slice` SELECT is U4 cardinality (the adapter deliberately
+  has no first-element collapse); the subsequent dereference is U1 captured-
+  identity. Which slot answers a chain depends on the source contract at each
+  call site — migrated with its parity test, never mechanically.
 - **U9 provenance / plumbing (never migrate)**: `sourceActorId:` on emitted
   mutations, `actorId: context.actorId` commands, and `context.attackTargetId
   ?` gate tests remain at their sites.
+
+## U1 tranche executed (fresh HEAD, 2026-09-01, second tranche)
+
+### Migrated: Shade + Warden pure LIVE-slot reference reads
+
+`content/jobs/programs/shade-programs.ts` and `content/jobs/programs/
+warden-programs.ts` now route every pure live-slot reference through the
+content-authoring adapter:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in all 12 executable Shade resolvers and all 9
+  Warden resolvers;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Umbra, Umbra Combo, Death Blossom, Death
+  Blossom Combo, Incubus (Shade) and Apex, Circle The Oak, Sidhe (Warden);
+- Nocturne's trigger-source position read (`context.triggerSourceId ?
+  sourceActor(…).position : undefined`) → `resolveTriggerSource(context)?.position`
+  (the `<area-center> ?? trigger ?? source` fallback chain stays caller-owned
+  U7/U11 — only the trigger-source REFERENCE itself migrated).
+
+Semantics preserved exactly: LIVE re-read of current state, absent-singular→
+undefined, gates stay at the callers. Remaining in Shade (7) and Warden (5)
+are only the captured-input dereferences (`input.actorIds?.[n]` →
+`sourceActor`) — the inventoried U1×U4 boundary, untouched.
+
+### Guard
+
+The `u1-reference-routing` guard pins Shade (resolveSourceActor,
+resolveAttackTarget, resolveTriggerSource) and Warden (resolveSourceActor,
+resolveAttackTarget) to the adapter — a revert to
+`sourceActor(context, context.actorId)` drops the pinned calls and is
+caught; the retained captured-input dereferences are NOT banned (the guard
+has no blanket lexical ban).
+
+### Evidence
+
+- `reference-authoring.test.ts` +7: production Shade/Warden resolvers fail
+  closed (`reference.missing-actor`) on a gated-bypass context — a ghost
+  `attackTargetId` (Umbra, Sidhe) or `triggerSourceId` (Nocturne, which must
+  not degenerate into the user's own position) rejects instead of the legacy
+  silent no-op;
+- `shade.test.ts` / `warden.test.ts` +2: ghost attack targets are rejected at
+  the command boundary (`attack.invalid-target` / `ability.invalid-target`)
+  before any effect, and Umbra resolves byte-identically across two fresh
+  commands on identical recorded state (`b.events` deep-equals `a.events`,
+  `applyEvents` reproduces both) — decisions/RNG recorded once, never
+  re-decided;
+- the full Shade (19) and Warden (17) suites stay green through the engine
+  path, proving the migration is behavior-preserving.
 
 No direct `state.actors[context.…]` dereference remains anywhere in content.
 
@@ -147,9 +199,14 @@ dereference. It deliberately does not ban the inventoried
 rewrite), `context.input.actorIds` reads (U4 identity lives at the caller) or
 provenance `context.actorId` (never reference interpretation).
 
-U1 remains PARTIAL: the shared surface is proved and pinned, and the
-residual is now a classified migration inventory instead of an unexamined
-lexical count.
+U1 remains PARTIAL: the shared surface is proved and pinned across six
+migrated files (Bastion, Spellblade, Shade, Warden, Job-trait, Class
+resolvers), and the residual is a classified migration inventory — 188 pure
+LIVE-slot reads (next tranches) + 55 captured/derived-id boundary reads + 0
+direct dereferences. A whole-consumer audit is NOT yet done, so U1 cannot
+claim AUTHORITATIVE: 12 program files still resolve live slots through the
+legacy kernel-side convenience, and the U1×U4 captured-identity boundary has
+no shared surface yet.
 
 ## Coverage and verification invariants
 
@@ -157,4 +214,5 @@ lexical count.
   238 talent, 129 mastery, 16 limit-break), unchanged.
 - Automation audit: 3,275 programs / 4,701 clauses; 467 complete programs /
   1,604 complete clauses; 3,097 clauses remain explicitly unsupported.
-- No source unit was promoted or reclassified by either tranche.
+- No source unit was promoted or reclassified by any tranche; U1 remains
+  PARTIAL.

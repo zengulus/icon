@@ -78,6 +78,39 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(shadows).toHaveLength(1);
   });
 
+  // U1 tranche: the migrated source/attack-target/trigger-source references
+  // route through the content-authoring adapter, which FAILS CLOSED on a slot
+  // that names an actor absent from state (the legacy resolver silently
+  // no-opped). Engine-level proofs on the production path.
+  it('U1: a ghost attack target is rejected at the command boundary before any effect', () => {
+    const { state, hero, foe } = shadeEncounter({ foe: { x: 4, y: 1 }, second: null });
+    // Both production command paths gate the target's existence BEFORE the
+    // resolver runs (USE_ABILITY: `ability.invalid-target`, generic
+    // EXECUTE_RULE: `attack.invalid-target`), so a ghost never reaches the
+    // migrated resolver — no silent no-op, no partial effect. The resolver
+    // itself additionally fail-closes on a gated-bypass context (proved in
+    // reference-authoring.test.ts against the production resolvers).
+    let code: string | undefined;
+    try {
+      executeCommand(state, {
+        type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'shade:umbra', actionId: 'default', timing: 'use', input: {}, attackTargetId: 'ghost',
+      }, scriptedDice(15, 4, 4));
+    } catch (error) {
+      code = (error as { code?: string }).code;
+    }
+    expect(code).toBe('attack.invalid-target');
+    expect(state.actors[foe.id].statuses).not.toContain('blind'); // nothing partially applied
+  });
+
+  it('U1: Umbra resolves byte-identically across two fresh commands on identical recorded state (replay never re-decides)', () => {
+    const { state, hero, foe } = shadeEncounter({ foe: { x: 4, y: 1 }, second: null });
+    const a = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:umbra', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 2, y: 1 }] } } }, scriptedDice(15, 4, 4));
+    const b = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:umbra', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 2, y: 1 }] } } }, scriptedDice(15, 4, 4));
+    expect(b.events).toEqual(a.events); // decisions/RNG recorded once, applied identically
+    expect(applyEvents(state, a.events)).toEqual(a.state);
+    expect(applyEvents(state, b.events)).toEqual(b.state);
+  });
+
   it('Umbra Combo (Penumbra): a failed save teleports the foe up to 3 toward the user', () => {
     const { state, hero, foe } = shadeEncounter({ foe: { x: 4, y: 1 }, second: null });
     state.actors[hero.id].resources.combo = 1;

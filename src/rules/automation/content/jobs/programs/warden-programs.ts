@@ -9,6 +9,7 @@ import {
   shoveMutation, rushMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
@@ -53,8 +54,8 @@ const summonBeastNear = (
 /** ICON p.169: range-3 +1-boon attack, daze, summon a beast adjacent to the
  * target; Finishing Blow/Charge summons one more beast and grants stealth. */
 const apexEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const targetPosition = target?.position;
   const mutations: RuleMutation[] = [];
   if (!target || !targetPosition) return mutations;
@@ -134,8 +135,8 @@ const gwyntEffects: RuleResolver = (context) => {
  * clockwise dealing fray per ally passed (max 4); Finishing Blow/Charge dashes 5
  * and shoves the foe 2. */
 const circleTheOakEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const sourcePosition = source.position;
   const targetPosition = target?.position;
   const mutations: RuleMutation[] = [];
@@ -168,7 +169,7 @@ const circleTheOakEffects: RuleResolver = (context) => {
 /** ICON p.169: create a small-blast mist cloud in range 3 (replacing the prior
  * one); Charge creates a second cloud. */
 const mistStriderEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   if (!sourcePosition) return [];
   const center = context.input.positions?.['area-center']?.[0] ?? sourcePosition;
@@ -202,7 +203,7 @@ const stampedeEffects: RuleResolver = (context) => {
 /** ICON p.170: enter the stance, summon a beast in the aura, and dash yourself
  * and allies 1; the stance refreshes at the start of your turn in the reducer. */
 const strengthOfThePackEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'strength-of-the-pack')];
   if (sourcePosition) {
@@ -221,7 +222,7 @@ const strengthOfThePackEffects: RuleResolver = (context) => {
 /** ICON p.170: create a leafy portal in a free adjacent space; a second portal
  * grows at the end of your turn via the reducer. Charge summons a beast. */
 const underwayEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   if (!sourcePosition) return [];
   const mutations: RuleMutation[] = [];
@@ -245,7 +246,7 @@ const underwayEffects: RuleResolver = (context) => {
  * turn the flock lashes out — allies gain stealth, foes are shoved 2 and
  * blinded. */
 const morriganEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [
     stateMutation(context, source.id, 'morrigan:pending', true),
     stateMutation(context, source.id, 'end-turn-requested', true),
@@ -256,8 +257,8 @@ const morriganEffects: RuleResolver = (context) => {
  * deals 6 damage (3 adjacent to an ally) at the end of the foe's next turn.
  * Finishing Blow/Charge shoves the target 2. */
 const sidheEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const mutations: RuleMutation[] = [];
   if (!target) return mutations;
   const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 });

@@ -180,7 +180,11 @@ describe('U1 Reference/Binding routing guard', () => {
     // are NOT reference interpretation.
     'content/jobs/programs/chanter-programs.ts': 'const foeId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;',
     'content/jobs/programs/knave-programs.ts': 'const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0];',
-    'content/jobs/programs/shade-programs.ts': 'const source = sourceActor(context, context.actorId);',
+    // Migrated Shade/Warden keep their pinned adapter surface; the remaining
+    // captured-input dereferences (`input.actorIds?.[n]` → sourceActor) are
+    // the inventoried U1×U4 boundary and must NOT be flagged.
+    'content/jobs/programs/shade-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const triggerPosition = resolveTriggerSource(context)?.position; const selected = context.input.actorIds?.target?.[0]; const chosen = selected ? sourceActor(context, selected) : undefined;',
+    'content/jobs/programs/warden-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const foeId = context.input.actorIds?.target?.[0]; const foe = foeId ? sourceActor(context, foeId) : undefined;',
     'content/jobs/job-trait-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); mutations.push({ kind: \'condition\', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id });',
     'content/classes/class-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); const inputTargets = context.input.actorIds?.target; if (inputTargets[0] !== context.attackTargetId) throw 0;',
   };
@@ -201,17 +205,32 @@ describe('U1 Reference/Binding routing guard', () => {
   });
 
   it('T5c: non-migrated sourceActor(context, …) residual stays inventoried (accepted) — NOT a blanket ban; only the dereference + pins bite', () => {
-    // ~120 `sourceActor(context, …)` calls across a dozen named program files
-    // are the classified U1 residual (docs/u8-u1-underlay-census.md) migrated
-    // family-by-family; the guard must not force a blind mechanical rewrite,
-    // nor silently accept a NEW direct dereference elsewhere.
+    // The remaining `sourceActor(context, …)` calls in NON-MIGRATED named
+    // program files are the classified U1 residual + U1×U4 boundary
+    // (docs/u8-u1-underlay-census.md) migrated family-by-family; the guard
+    // must not force a blind mechanical rewrite, nor silently accept a NEW
+    // direct dereference elsewhere.
     const problems = u1ReferenceRoutingProblems({
       ...valid,
       ...validContent,
-      'content/jobs/programs/shade-programs.ts': "const source = sourceActor(context, context.actorId); const t = sourceActor(context, context.attackTargetId);",
-      'content/jobs/programs/harvester-programs.ts': "const target = resolveAttackTarget(context); const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined;",
+      'content/jobs/programs/harvester-programs.ts': "const source = sourceActor(context, context.actorId); const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined;",
+      'content/jobs/programs/geomancer-programs.ts': "const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;",
     });
     expect(problems).toEqual([]);
+  });
+
+  it('T5c: catches a MIGRATED Shade/Warden program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    // Reverting the migrated LIVE slot reads drops the pinned adapter
+    // accessors; the guard flags the missing calls without a lexical ban on
+    // the retained captured-input dereferences.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/shade-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/shade-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
   });
 
   it('T5c: catches a MIGRATED program that reverts to direct slot resolution (drops the adapter calls)', () => {

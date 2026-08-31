@@ -237,6 +237,29 @@ describe('Warden ability automation (p.165–171)', () => {
     expect(detonated.actors[foe.id].marks.some(({ markId }) => markId === 'sidhe-toxin')).toBe(false);
   });
 
+  // U1 tranche: Warden's source/attack-target reads route through the
+  // content-authoring adapter, which FAILS CLOSED on a recorded reference
+  // naming an actor absent from state (the legacy resolver silently no-opped).
+  it('U1: Sidhe rejects a ghost attack target at the command boundary before any effect', () => {
+    const { state, hero, foe } = wardenEncounter({ second: null });
+    // Both production command paths gate the target's existence BEFORE the
+    // resolver runs (USE_ABILITY: `ability.invalid-target`, generic
+    // EXECUTE_RULE: `attack.invalid-target`), so a ghost never reaches the
+    // migrated resolver — no silent no-op, no partial effect. The resolver
+    // itself additionally fail-closes on a gated-bypass context (proved in
+    // reference-authoring.test.ts against the production resolvers).
+    let code: string | undefined;
+    try {
+      executeCommand(state, {
+        type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'warden:sidhe', actionId: 'default', timing: 'use', input: {}, attackTargetId: 'ghost',
+      }, scriptedDice(15, 4, 4));
+    } catch (error) {
+      code = (error as { code?: string }).code;
+    }
+    expect(code).toBe('attack.invalid-target');
+    expect(state.actors[foe.id].hp).toBe(32); // untouched — nothing partially applied
+  });
+
   it('Sidhe: the toxin is halved to 3 when the foe ends its turn adjacent to an ally', () => {
     const fixture = wardenEncounter({ foe: { x: 2, y: 1 }, second: { x: 2, y: 2 } });
     const injected = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'warden:sidhe', targetIds: [fixture.foe.id] }, scriptedDice(15, 4, 4)).state;
