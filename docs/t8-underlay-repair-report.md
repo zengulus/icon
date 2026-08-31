@@ -1,5 +1,14 @@
 # T8 — Underlay Authority Repair Tranche (2026-08-31)
 
+> **SUPERSEDED / historical.** T8b (`docs/t8b-audit-integrity-report.md`)
+> audited fresh HEAD and found T8's U2 AUTHORITATIVE claim hid a false closure:
+> `kernels/aura.ts` locally derived `perspectiveActorId` from the spatial-origin
+> case while carrying the U2 symbol. T8b repaired that seam (aura/chanter now
+> route through the U2 `auraRelationPerspectiveId` authority), repaired T8's
+> fabricated U16 typed-owner call (`ownerId: ''` → the real owning actor, storage
+> bytes unchanged), strengthened the U2/U16 guards to require call-form routing,
+> and re-certified U2 by concrete call path. Read T8b as the current state.
+
 Lead specialization: S9 (audit/verification) with S4 (U16 entitlement routing)
 and S2 (architecture guards). This is a **rules-underlay repair tranche only**:
 **zero** previously unresolved ICON source units were promoted or newly wired.

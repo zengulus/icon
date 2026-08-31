@@ -156,7 +156,28 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'TODO.md', linePrefix: '  responder, permutation validation, fail-closed cross-owner +', reason: 'implementation-pattern description in the T6.3 changelog, not an authority claim' },
   { file: 'TODO.md', linePrefix: '  audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.', reason: 'tranche-changelog status sentence (fresh-audit conclusion), not a subsystem authority claim' },
   // --- T7 (U2 downstream consumers, 2026-08-31) ----------------------------
-  { file: 'docs/rules-foundations.md', linePrefix: '### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7, 2026-08-31)', reason: 'tranche-status heading naming the landed U2 consumer-consolidation state, not a standalone subsystem claim (backed by roles.ts + candidate/aura/choice/decision-window routing)' },
+  { file: 'docs/rules-foundations.md', linePrefix: '### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31)', reason: 'tranche-status heading naming the U2 consumer-consolidation state, not a standalone subsystem claim (backed by roles.ts + candidate/aura/choice/decision-window routing, re-attested by T8b concrete call path)' },
+  // --- T8b (corrective audit-integrity tranche changelog, 2026-08-31) -------
+  // The T8b tranche lands no new source units and becomes the fresh HEAD the
+  // next tranche audits; its changelog/status prose references STATUS LABELS
+  // (PARTIAL/AUTHORITATIVE/CLOSED) when describing the conservatively
+  // re-demoted or re-certified rows and the still-mandatory gate. Each line is
+  // a tranche-changelog entry naming a state, not a standalone subsystem
+  // authority claim — consistent with the T6.3/T7 changelog allowlisting.
+  { file: 'TODO.md', linePrefix: '> **T8 — Underlay Authority Repair re-audit (2026-08-31).** Re-audited every', reason: 'tranche-changelog header intro, not a standalone authority claim' },
+  { file: 'TODO.md', linePrefix: '> underlay under the strict AUTHORITATIVE invariant and corrected the audit', reason: 'tranche-changelog header line, not a standalone authority claim' },
+  { file: 'TODO.md', linePrefix: '> and architecture guards so AUTHORITATIVE cannot coexist with a competing', reason: 'tranche-changelog header line, not a standalone authority claim' },
+  { file: 'TODO.md', linePrefix: '> remain AUTHORITATIVE. Zero source units promoted; census byte-stable at 427.', reason: 'tranche-changelog status sentence (T8 corrective summary; U2/U13/U17 re-certified by fresh audit, not by symbol presence)' },
+  { file: 'TODO.md', linePrefix: '> **T8b — Audit-Integrity Correction (2026-08-31).** Fresh-audited HEAD', reason: 'tranche-changelog status sentence (T8b summary; zero promotion + U2 re-cert shown by concrete call path), not a standalone authority claim' },
+  { file: 'TODO.md', linePrefix: '> (not inferred from T8) and found T8\'s U2 AUTHORITATIVE claim hid a false', reason: 'tranche-changelog prose (U2 false-closure description), not an authority claim' },
+  { file: 'TODO.md', linePrefix: '> mutation fixtures M1–M7 all CAUGHT. U2 re-certified AUTHORITATIVE by', reason: 'tranche-changelog status sentence (T8b summary), not an authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: '> **T8b corrective note:** the prior T8 AUTHORITATIVE claim initially hid a', reason: 'tranche-changelog corrective note (U2 false-closure + repair description), not a standalone authority claim' },
+  { file: 'TODO.md', linePrefix: '> U16/U10/U15 stay PARTIAL. Census', reason: 'tranche-changelog status sentence (T8b summary), not a standalone authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: '### Fact / Outcome Record (U10 underlay) — PARTIAL (T4 LANDED; repair re-audit 2026-08-31 conservatively demoted', reason: 'tranche-status heading naming the conservative U10 demotion, not a standalone authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: '### Transaction / Atomic Commit (U15 underlay) — PARTIAL (T3 landed `transaction.ts`; repair re-audit 2026-08-31 conservatively demoted', reason: 'tranche-status heading naming the conservative U15 demotion, not a standalone authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'AUTHORITATIVE to PARTIAL, then the concrete duplicate repaired.** The', reason: 'tranche-changelog sentence (U16 demoted then repaired), not an authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'core. That violates the authoritative invariant (a competing executing', reason: 'implementation-pattern description (U16 restore-vs-routing invariant), not an authority claim' },
+  { file: 'docs/rules-foundations.md', linePrefix: 'than a second usage ledger before AUTHORITATIVE can be re-certified. See', reason: 'tranche-changelog residual description (what must close before U16 re-certification), not an authority claim' },
 ];
 
 // ---------------------------------------------------------------------------

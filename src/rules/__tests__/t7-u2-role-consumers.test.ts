@@ -24,6 +24,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RuleExecutionContext } from '../automation/primitives/types.js';
 import {
+  auraRelationPerspectiveId,
   deriveRoles,
   relationPerspectiveId,
   relationPerspectiveIdFromContext,
@@ -180,6 +181,70 @@ describe('U2 — aura: spatial origin ≠ semantic perspective (ROLE ≠ ANCHOR)
     };
     expect(membersOfAura(view, alliesAura)).toEqual([]);           // no ally perspective derivable
     expect(membersOfAura(view, charactersAura)).toEqual(['anyIn']); // characters relation still applies
+  });
+
+  it('actor-origin aura: the SEMANTIC perspective is the bearer (U2), routed through the U2 authority — confirmed on the origin ref', () => {
+    // An actor-trait aura (Commander's Aura) — the bearer is both the U7
+    // spatial anchor and the U2 perspective subject, but the perspective is
+    // still obtained through the U2 authority (never derived locally).
+    const actorAura: AuraDefinition = {
+      sourceId: 'fixture:actor-aura',
+      origin: { kind: 'actor-trait', traitId: 'commander' },
+      radius: 2,
+      relations: ['allies'],
+      includesOrigin: true,
+    };
+    const view: AuraStateView = {
+      actors: {
+        hero: { ...AURA_ACTOR('hero', 'heroes', { x: 5, y: 5 }), traitIds: ['commander'] },
+        ally: AURA_ACTOR('ally', 'heroes', { x: 6, y: 5 }),
+      },
+    };
+    const origins = auraOriginRefs(view, actorAura);
+    // The semantic perspective is the bearer hero (U2), identical to its role.
+    expect(origins).toHaveLength(1);
+    expect(origins[0]!.perspectiveActorId).toBe('hero');
+    expect(isAuraMember(view, actorAura, origins[0]!, 'ally')).toBe(true);
+    // ROLE ≠ ANCHOR is still representable: even for an actor origin, the
+    // perspective actor id is a U2-derived value, not an incidental side read.
+    expect(origins[0]!.actorId).toBe('hero');
+  });
+
+  it('source/anchor ≠ perspective survives for entity origins (creator != spatial origin)', () => {
+    // An entity-origin aura whose owner/creator is hero, while the SPATIAL
+    // origin is the beacon entity. The perspective is the owner (U2) and the
+    // spatial anchor stays the entity — the two never collapse.
+    const view: AuraStateView = {
+      actors: {
+        hero: AURA_ACTOR('hero', 'heroes', { x: 9, y: 9 }),
+        allyIn: AURA_ACTOR('allyIn', 'heroes', { x: 6, y: 5 }),
+      },
+      entities: { beacon: ENTITY('beacon', 'beacon', 'hero', { x: 5, y: 5 }) },
+    };
+    const origin = auraOriginRefs(view, alliesAura)[0]!;
+    // Spatial origin is the ENTITY; the ally/foe perspective is the OWNER.
+    expect(origin.entityId).toBe('beacon');
+    expect(origin.actorId).toBeNull();
+    expect(origin.perspectiveActorId).toBe('hero');
+  });
+
+  it('replay produces the identical semantic perspective (deterministic U2 route)', () => {
+    const view: AuraStateView = {
+      actors: {
+        hero: AURA_ACTOR('hero', 'heroes', { x: 9, y: 9 }),
+        allyIn: AURA_ACTOR('allyIn', 'heroes', { x: 6, y: 5 }),
+      },
+      entities: { beacon: ENTITY('beacon', 'beacon', 'hero', { x: 5, y: 5 }) },
+    };
+    const first = auraOriginRefs(view, alliesAura)[0]!;
+    const second = auraOriginRefs(view, alliesAura)[0]!;
+    expect(first.perspectiveActorId).toBe(second.perspectiveActorId);
+    expect(first.perspectiveActorId).toBe('hero');
+    // A parameter-free pure route: the same durable facts always derive the same
+    // perspective actor (the U2 authority is a pure function of the facts).
+    expect(auraRelationPerspectiveId({ kind: 'entity', creatorOrOwnerId: 'hero' })).toBe('hero');
+    expect(auraRelationPerspectiveId({ kind: 'entity', creatorOrOwnerId: null })).toBeNull();
+    expect(auraRelationPerspectiveId({ kind: 'actor', bearerId: 'hero' })).toBe('hero');
   });
 
   it('ROLE ≠ ANCHOR: moving the entity spatial origin does not change the owner perspective membership', () => {

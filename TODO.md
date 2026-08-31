@@ -55,6 +55,21 @@ assumption here, document the evidence and update this list before proceeding.
 > conservatively PARTIAL (see `docs/t8-underlay-repair-report.md`); U2/U13/U17
 > remain AUTHORITATIVE. Zero source units promoted; census byte-stable at 427.
 > Phase gate remains OPEN.
+>
+> **T8b — Audit-Integrity Correction (2026-08-31).** Fresh-audited HEAD
+> (not inferred from T8) and found T8's U2 AUTHORITATIVE claim hid a false
+> closure: `kernels/aura.ts` locally derived `perspectiveActorId` from the
+> spatial-origin case (actor→actor.id, entity→entity.ownerId). Moved the
+> semantic rule (actor aura → bearer; entity aura → creator/owner; ownerless
+> → no ally/foe) behind the U2 authority `auraRelationPerspectiveId` in
+> `primitives/roles.ts`; aura + the Chanter Gentleness seam now CALL it.
+> Repaired T8's fabricated U16 typed-owner call (`ownerId: ''` → the real
+> owning actor; storage bytes unchanged). Upgraded the U2/U16 guards to
+> call-form routing so symbol-presence bypasses are CAUGHT; adversarial
+> mutation fixtures M1–M7 all CAUGHT. U2 re-certified AUTHORITATIVE by
+> concrete call path; U13/U17 re-attested; U16/U10/U15 stay PARTIAL. Census
+> byte-stable at 427; zero source units promoted; phase gate OPEN. See
+> `docs/t8b-audit-integrity-report.md`.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):

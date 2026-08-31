@@ -245,7 +245,16 @@ binder/collection + ordered plural targets, negative unbound/missing +
 domain-mismatch, boundary empty-collection + defeated-actor-captured,
 replay identical-literal + Binder purity).
 
-### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7, 2026-08-31)
+### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31)
+
+> **T8b corrective note:** the prior T8 AUTHORITATIVE claim initially hid a
+> false closure — `kernels/aura.ts` produced `perspectiveActorId` by locally
+> mapping the spatial-origin case (actor→actor.id, entity→entity.ownerId).
+> Repaired: `auraOriginRefs` now CALLS the U2 `auraRelationPerspectiveId(origin)`
+> authority with the origin FACTS, and the same content seam
+> (`chanter-programs.ts` Gentleness) routes through it; the `u2-perspective-
+> authority` guard is upgraded to call-form routing so a symbol-presence bypass
+> is CAUGHT. See `docs/t8b-audit-integrity-report.md`,
 
 `primitives/roles.ts` owns the `Role` vocabulary: source/owner/controller/
 chooser/payer/target/recipient/carrier/creator/trigger-source/
@@ -525,7 +534,13 @@ tests incl. once-per-round exact-once, round-boundary reset, replay, and a
 new two-owner isolation adversarial case stay green). The
 `u16-usage-ledger-routing` architecture guard now flags any non-U16
 primitives/kernels file that reconstructs a `ledger:<scope>:…` key, and
-pins the F9 fold to the U16 core symbols. U16 is therefore PARTIAL: the
+pins the F9 fold to the U16 core symbols. **T8b corrected the fabricated
+typed-owner seam**: `roundLedgerKey` originated with `ownerId: ''` in the
+typed U16 call; it now passes the REAL owning actor (`actor.id`) while
+`usageKey` keeps the actor-local storage format byte-identical
+(`ledger:round:<sourceId>`). The typed semantic identity carries the owner;
+the storage address omits it by design — the two are never conflated. See
+`docs/t8b-audit-integrity-report.md`. U16 is therefore PARTIAL: the
 generic canonical-ledger authority is single again, but a census of the
 remaining actor-level once-per-round/turn trigger marks
 (`chain-reaction-used`, `incubus:triggered`, `stampede:triggered`,

@@ -221,3 +221,45 @@ export function relationPerspectiveIdFromContext(context: RuleExecutionContext):
 export function windowResponderId(selector: RoleSelector, frame: RoleFrame): string | null {
   return resolveRoleSelector(selector, deriveRoles(frame));
 }
+
+/**
+ * The U2 AURA MEMBER PERSPECTIVE authority: "relative to whom is an aura's
+ * ally/foe membership interpreted?"
+ *
+ * ROLE ≠ ANCHOR (U7): the SPATIAL ORIGIN (whose square emits the aura, and the
+ * U7 anchor membership is measured from) is a separate fact from the SEMANTIC
+ * PERSPECTIVE subject (the actor whose SIDE establishes whether another
+ * character is an ally or a foe). The aura KERNEL supplies the durable origin
+ * FACTS (whether the aura sits on a character-bearer or on an entity, and who
+ * the bearer / entity creator-owner is); U2 owns the mapping RULE:
+ *
+ *   - an actor-bearing aura is interpreted relative to its BEARER;
+ *   - an entity-origin aura is interpreted relative to the entity's
+ *     CREATOR/OWNER (an entity has no side of its own);
+ *   - an OWNERLESS / neutral entity has NO derivable ally/foe perspective —
+ *     the aura can only express `characters` membership, never a manufactured
+ *     side.
+ *
+ * This keeps creator ≠ owner ≠ spatial anchor ≠ affected member representable:
+ * an entity-origin aura's perspective is the creator/owner while its U7
+ * spatial origin is the entity, and a Rebound original-user role never
+ * collapses into the current-origin spatial anchor. Returns null exactly when
+ * no ally/foe perspective is derivable — the consuming kernel FAILS CLOSED
+ * (only `characters` relations apply) rather than guessing an actor from the
+ * spatial anchor.
+ */
+export type AuraPerspectiveOrigin =
+  | { kind: 'actor'; bearerId: string }
+  | { kind: 'entity'; creatorOrOwnerId: string | null };
+
+export function auraRelationPerspectiveId(origin: AuraPerspectiveOrigin): string | null {
+  switch (origin.kind) {
+    case 'actor':
+      return origin.bearerId;
+    case 'entity':
+      // Creator/owner is the perspective subject; an ownerless entity has no
+      // derivable ally/foe side (only `characters` membership applies). Null here
+      // is a POSITIVE underivable result — the caller fails closed, never guesses.
+      return origin.creatorOrOwnerId;
+  }
+}

@@ -46,7 +46,7 @@ describe('use-ledger: key contract', () => {
   });
 
   it('the round key is byte-identical to the F9 reactive fold key', () => {
-    expect(useLedgerKey('round', 'fixture:reaction')).toBe(roundLedgerKey('fixture:reaction'));
+    expect(useLedgerKey('round', 'fixture:reaction')).toBe(roundLedgerKey('actor:hero', 'fixture:reaction'));
   });
 
   it('the consume mutation sets the durable key on the actor', () => {

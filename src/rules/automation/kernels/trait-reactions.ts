@@ -102,9 +102,15 @@ export function traitReactionNeededTriggers(actor: EncounterActor): Set<'collide
 /** The durable round-ledger key for a reaction's once-per-round gate — U16
  * CORE (`usageKey` in the `round` period). Byte-identical to the long-standing
  * `ledger:round:<sourceId>` format, so the shared gate, the U16 reset
- * lifecycle recipe, and the checkpoint format stay one authority. */
-export function roundLedgerKey(sourceId: string): string {
-  return usageKey({ sourceId, ownerId: '', scope: 'round' });
+ * lifecycle recipe, and the checkpoint format stay one authority.
+ *
+ * The TYPED U16 identity receives the REAL owning actor (`ownerId`) even
+ * though the ACTOR-LOCAL storage address deliberately omits owner bytes (the
+ * durable state lives on the owner, so two owners of the same source never
+ * alias a shared key). The seam must never fabricate an empty owner to the U16
+ * typed call — typed semantic identity and actor-local storage are distinct. */
+export function roundLedgerKey(ownerId: string, sourceId: string): string {
+  return usageKey({ sourceId, ownerId, scope: 'round' });
 }
 
 /** Whether the actor's round ledger still allows this reaction to fire — U16
@@ -134,7 +140,7 @@ export function traitReactionMutations(
     const recipe = traitReactionRecipes[traitId];
     const reaction = recipe?.reaction;
     if (!reaction) continue;
-    const ledgerKey = reaction.gate === 'once-per-round' ? roundLedgerKey(traitId) : null;
+    const ledgerKey = reaction.gate === 'once-per-round' ? roundLedgerKey(actor.id, traitId) : null;
     if (ledgerKey && !roundLedgerAvailable(actor, ledgerKey)) continue;
     // Deciding the trigger from durable sources never re-rolls or re-decides.
     let triggerTargetIds: string[] = [];

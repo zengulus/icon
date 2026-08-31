@@ -5,9 +5,11 @@ import { roundLedgerKey, traitReactionMutations } from '../automation/kernels/tr
 import { usageKey } from '../automation/primitives/usage.js';
 
 /** The canonical U16 round-scope ledger key for a source id (byte-identical
- * to `roundLedgerKey`, owned by the U16 core). */
-function usageRoundKey(sourceId: string): string {
-  return usageKey({ sourceId, ownerId: '', scope: 'round' });
+ * to `roundLedgerKey`, owned by the U16 core). The typed identity must carry a
+ * REAL owner (actor-local storage accepts any owner id because the durable
+ * state lives on the owner — it never fabricates an empty owner). */
+function usageRoundKey(sourceId: string, ownerId: string): string {
+  return usageKey({ sourceId, ownerId, scope: 'round' });
 }
 import type { EncounterState } from '../types.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
@@ -125,6 +127,19 @@ describe('F9 once-per-round reactive job-trait fold', () => {
     expect(traitReactionMutations(applied, applied.actors[first.id], [], { collidedActorIds: [foe.id] })).toEqual([]);
   });
 
+  it('adversarial: the typed U16 key call receives the REAL owning actor while the physical storage key stays byte-compatible', () => {
+    // The U16 identity is NOT `` { ownerId: '' } `` — the seam must carry the
+    // real owning actor through the typed call even though actor-local storage
+    // omits the owner bytes.
+    expect(roundLedgerKey('actor:a', DASH)).toBe(usageKey({ sourceId: DASH, ownerId: 'actor:a', scope: 'round' }));
+    // Different owners produce the SAME physical storage address (actor-local),
+    // but the TYPED identity they were built with always carried the real owner
+    // (the sealed-test proof that no owner bytes were ever fabricated).
+    expect(roundLedgerKey('actor:a', DASH)).toBe(roundLedgerKey('actor:b', DASH));
+    // And it is byte-identical to the long-standing `ledger:round:<sourceId>` format.
+    expect(roundLedgerKey('actor:a', DASH)).toBe(`ledger:round:${DASH}`);
+  });
+
   it('adversarial: the once-per-round mark is the canonical U16 round ledger key (usageKey round scope), not an id-agnostic flag', () => {
     const { state, heroId, foeId } = dashEncounter();
     const first = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
@@ -132,8 +147,10 @@ describe('F9 once-per-round reactive job-trait fold', () => {
     expect(mark).toBeDefined();
     if (mark && mark.kind === 'state') {
       // Byte-identical to the U16 core `usageKey({scope:'round'})` surface.
-      expect(mark.key).toBe(roundLedgerKey(DASH));
-      expect(mark.key).toBe(usageRoundKey(DASH));
+      // The typed U16 call receives the REAL owning actor (the state lives on
+      // the owner's ruleState; the actor-local storage address omits owner).
+      expect(mark.key).toBe(roundLedgerKey(heroId, DASH));
+      expect(mark.key).toBe(usageRoundKey(DASH, heroId));
       expect(mark.operation).toBe('set');
       expect(mark.value).toBe(true);
     }

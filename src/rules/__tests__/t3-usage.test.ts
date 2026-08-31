@@ -52,7 +52,7 @@ describe('U16 — key and identity contract', () => {
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'turn' })).toBe('ledger:turn:fixture:gate');
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'round' })).toBe('ledger:round:fixture:gate');
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'combat' })).toBe('ledger:combat:fixture:gate');
-    expect(useLedgerKey('round', 'fixture:reaction')).toBe(roundLedgerKey('fixture:reaction'));
+    expect(useLedgerKey('round', 'fixture:reaction')).toBe(roundLedgerKey('hero', 'fixture:reaction'));
     // A per-target gate never collides with the per-source gate.
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'turn', targetId: 'foe' })).toBe('ledger:turn:fixture:gate:target:foe');
   });

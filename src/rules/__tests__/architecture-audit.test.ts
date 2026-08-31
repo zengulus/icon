@@ -375,6 +375,163 @@ describe('auditArchitecture (violation detection)', () => {
     rmSync(tmpDir, { recursive: true });
   });
 
+  // ── T8b adversarial authority-mutation guards ────────────────────────────
+  // Each keeps imports/canonical-symbol presence while restoring the competing
+  // semantic implementation; the guard must STILL fail (symbol-presence is not
+  // authority evidence — routing must be mechanically detectable).
+
+  it('U2 (aura): keeps every U2 symbol/call but derives the perspective locally from origin kind/owner — MUST FAIL (ROLE ≠ ANCHOR)', () => {
+    setup();
+    // Keeps `auraRelationPerspectiveId` (even called) AND `perspectiveActorId`,
+    // but reintroduces the local semantic derivation `perspectiveActorId: actor.id`
+    // / `perspectiveActorId: entity.ownerId` from the spatial-origin case.
+    writeFileSync(
+      join(tmpDir, 'kernels', 'aura.ts'),
+      [
+        'perspectiveActorId',
+        "import { auraRelationPerspectiveId } from '../primitives/roles.js';",
+        'const unused = auraRelationPerspectiveId({ kind: "actor", bearerId: "x" });',
+        'const bad1 = { perspectiveActorId: actor.id };',
+        'const bad2 = { perspectiveActorId: entity.ownerId };',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u2-perspective-authority',
+          file: 'kernels/aura.ts',
+          detail: expect.stringContaining('auraRelationPerspectiveId'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U2 (candidate): keeps the U2 symbol import but uses context.actorId for the relation decision — MUST FAIL', () => {
+    setup();
+    // `relationPerspectiveIdFromContext` stays imported (symbol present) but the
+    // acting-actor (relation perspective) is re-derived from an incidental field.
+    writeFileSync(
+      join(tmpDir, 'kernels', 'candidate.ts'),
+      [
+        "import { relationPerspectiveIdFromContext } from '../primitives/roles.js';",
+        'function actingActor(context) { return context.state.actors[context.actorId]; }',
+        '// the U2 symbol is present but never CALLED for the relation decision',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u2-perspective-authority',
+          file: 'kernels/candidate.ts',
+          detail: expect.stringContaining('never CALLED'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16 (F9 availability): keeps all U16 imports but reads raw ruleState for gating — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      [
+        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
+        'export function gate(actor, key) { return !actor.ruleState[key]; }',
+        '// usageKey/consumeUsageMutation imported but unused; ledgerAvailable not CALLED',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u16-usage-ledger-routing',
+          file: 'kernels/trait-reactions.ts',
+          detail: expect.stringContaining('ledgerAvailable'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16 (F9 consume): keeps all U16 imports but emits the state mark by hand instead of the U16 consume result — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      [
+        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
+        'const mark = { kind: "state", key, operation: "set", value: true };',
+        '// ledgerAvailable/consumeUsageMutation imported but not CALLED',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u16-usage-ledger-routing',
+          file: 'kernels/trait-reactions.ts',
+          detail: expect.stringContaining('consumeUsageMutation'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16 (F9 key): keeps all U16 imports but rebuilds a semantically-equivalent storage address by string concatenation — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      [
+        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
+        'const key = "ledger:" + "round:" + sourceId;',
+        '// usageKey imported but not CALLED — the key is hand-rebuilt',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u16-usage-ledger-routing',
+          file: 'kernels/trait-reactions.ts',
+          detail: expect.stringContaining('usageKey'),
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16 (F9): an alternate-spelling key in a NON-U16 trait-reactions override is flagged (key reconstruction)', () => {
+    setup();
+    // Even with the symbols used for other surfaces, a local reconstruction of
+    // the canonical key address (an alternate spelling) in a non-authority file
+    // is still a competing U16 authority.
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      [
+        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
+        'usageKey({sourceId, ownerId: "", scope: "round"});',
+        'const rebuilt = `ledger:${scope}:${sourceId}`;',
+        'ledgerAvailable(actor, rebuilt);',
+        'consumeUsageMutation(sourceId, actorId, rebuilt);',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u16-usage-ledger-routing', file: 'kernels/trait-reactions.ts' }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
   it('U16 guard does not flag the two U16 authority files for key reconstruction', () => {
     setup();
     // usage.ts and use-ledger.ts are allowed to build the canonical key.

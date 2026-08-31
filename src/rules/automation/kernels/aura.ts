@@ -1,5 +1,6 @@
 import { squareArea } from '../../area-geometry.js';
 import type { RuleSourceUnit } from '../../source-units.js';
+import { auraRelationPerspectiveId } from '../primitives/roles.js';
 import type { EncounterState, Position } from '../../types.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import { hasMastery } from './mastery.js';
@@ -213,13 +214,19 @@ export function auraEffectRadius(effect: NonNullable<AuraActorView['activeEffect
  * SEPARATE from the spatial anchor (U2 ROLE ≠ U7 ANCHOR): `actorId`/
  * `entityId` are the spatial origin (whose square emits the aura), while
  * `perspectiveActorId` is the actor relative to whom "ally" / "foe" is
- * interpreted — for an actor origin the bearer itself, for an entity-origin
- * aura (Spirit Shrine, Rampant Nail's lightning spike, p.227) the entity's
- * CREATOR/OWNER. This keeps an entity-origin aura representable without
- * collapsing entity, creator/owner, spatial origin, and affected member. A
- * null perspective (an ownerless entity, or a neutral origin) means no
- * ally/foe relation is semantically derivable — only `characters` relations
- * apply, never a manufactured side.
+ * interpreted. The perspective is derived through the U2 authority
+ * (`primitives/roles.ts` `auraRelationPerspectiveId`) from the durable
+ * origin facts — NEVER locally from the spatial anchor here (ROLE ≠ ANCHOR).
+ * `auraOriginRefs` supplies the facts (whether the aura sits on a
+ * character-bearer or on an entity, and who the bearer / creator-owner is)
+ * and U2 owns the rule (actor aura → bearer; entity aura → creator/owner;
+ * ownerless entity → no ally/foe perspective). This keeps an entity-origin
+ * aura representable without collapsing entity, creator/owner, spatial
+ * origin, and affected member, and keeps a Rebound original-user role from
+ * collapsing into the current-origin spatial anchor. A null perspective (an
+ * ownerless entity, or a neutral origin) means no ally/foe relation is
+ * semantically derivable — only `characters` relations apply, never a
+ * manufactured side.
  */
 export interface AuraOriginRef {
   /** The spatial anchor actor whose footprint emits the aura (null for an
@@ -257,11 +264,13 @@ export function auraOriginRefs(state: AuraStateView, definition: AuraDefinition)
       : Number.NaN;
     const radius = Number.isFinite(radiusOverride) && radiusOverride > 0 ? radiusOverride : definition.radius;
     if (origin.kind === 'actor-trait' && (actor.traitIds?.includes(origin.traitId) ?? false)) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: actor.id });
+      // An actor-bearing aura is interpreted relative to its BEARER (U2 rule,
+      // resolved here — never derived locally from the spatial anchor).
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'actor', bearerId: actor.id }) });
     } else if (origin.kind === 'actor-state' && actor.state?.[origin.stateKey]) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: actor.id });
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'actor', bearerId: actor.id }) });
     } else if (origin.kind === 'stance' && actor.stance?.stanceId === origin.stanceId) {
-      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: actor.id });
+      origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'actor', bearerId: actor.id }) });
     } else if (origin.kind === 'aura-effect') {
       for (const effect of actor.activeEffects ?? []) {
         // The durable aura effect is the lifetime record; provenance pairs it
@@ -271,18 +280,20 @@ export function auraOriginRefs(state: AuraStateView, definition: AuraDefinition)
         if (effect.sourceId !== (origin.sourceId ?? definition.sourceId)) continue;
         const effectRadius = auraEffectRadius(effect);
         if (effectRadius === null) continue;
-        origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius: effectRadius, perspectiveActorId: actor.id });
+        origins.push({ actorId: actor.id, entityId: null, position: actor.position, size: actor.size ?? 1, radius: effectRadius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'actor', bearerId: actor.id }) });
       }
     }
   }
   if (origin.kind === 'entity-type') {
     for (const entity of Object.values(state.entities ?? {})) {
       if (entity.type !== origin.entityType || !entity.position) continue;
-      // The entity's spatial origin is the entity; the ally/foe perspective is
-      // the entity's CREATOR/OWNER (an entity has no side of its own). An
-      // ownerless entity has no derivable perspective — only `characters`
-      // relations apply (a neutral origin never manufactures an ally/foe side).
-      origins.push({ actorId: null, entityId: entity.id, position: entity.position, size: 1, radius: definition.radius, perspectiveActorId: entity.ownerId ?? null });
+      // The entity's spatial origin is the ENTITY; the ally/foe perspective is
+      // the entity's CREATOR/OWNER. U2 owns the rule — the kernel supplies the
+      // creator/owner fact and FAILS CLOSED on an ownerless entity (only
+      // `characters` relations apply; a neutral origin never manufactures a
+      // side). Defining the perspective here would make this kernel a second
+      // U2 authority, so it must route through the U2 authority below.
+      origins.push({ actorId: null, entityId: entity.id, position: entity.position, size: 1, radius: definition.radius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'entity', creatorOrOwnerId: entity.ownerId }) });
     }
   }
   return origins;

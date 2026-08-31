@@ -193,9 +193,11 @@ const U2_PERSPECTIVE_SYMBOLS: ReadonlyMap<string, string> = new Map([
   // candidate.ts must resolve the relation perspective (whose SIDE establishes
   // self/ally/foe) through roles.ts, never straight off `context.actorId`.
   ['kernels/candidate.ts', 'relationPerspectiveIdFromContext'],
-  // aura.ts must separate SEMANTIC perspective (`perspectiveActorId`, the U2
-  // role) from the SPATIAL anchor (`actorId`/`entityId`, the U7 origin).
-  ['kernels/aura.ts', 'perspectiveActorId'],
+  // aura.ts must derive the SEMANTIC perspective (`perspectiveActorId` field) by
+  // CALLING the U2 role-perspective authority (`auraRelationPerspectiveId`) with
+  // the spatial-origin FACTS — separate from the SPATIAL anchor
+  // (`actorId`/`entityId`, the U7 origin). ROLE ≠ ANCHOR.
+  ['kernels/aura.ts', 'auraRelationPerspectiveId'],
 ]);
 
 // The precise removed independent-perspective patterns in aura.ts: the old
@@ -207,6 +209,17 @@ const U2_PERSPECTIVE_SYMBOLS: ReadonlyMap<string, string> = new Map([
 // `AuraActorView.side = actor.side` factual projection in the view adapters is
 // NOT matched — the actor's own side is a property, not the U2 member perspective.
 const AURA_ANCHOR_SIDE_RESTORE_RE = /origin\.side\b|\.side\s*\?\?\s*null/;
+
+// ROLE ≠ ANCHOR — the aura kernel must never decide the SEMANTIC PERSPECTIVE
+// from the SPATIAL-ORIGIN case. The migrated seam routes the perspective
+// through U2 (`primitives/roles.ts` `auraRelationPerspectiveId`) with the
+// origin FACTS, never by locally mapping origin kind/owner to a perspective
+// actor. The mutation that keeps every U2 symbol/name but reintroduces the
+// local derivation (`perspectiveActorId: actor.id`, `perspectiveActorId:
+// entity.ownerId`) is exactly the competing authority the guard must catch.
+// Narrow semantic-derivation guard, NOT a global ban on `.side` / `ownerId` /
+// `actorId` (those remain legitimate underlying facts elsewhere).
+const AURA_LOCAL_PERSPECTIVE_RESTORE_RE = /perspectiveActorId\s*:\s*(?:actor\.id|entity\.ownerId)/;
 
 // U16 (usage/entitlement) single-authority guard details.
 //
@@ -431,6 +444,11 @@ export function auditArchitecture(automationRoot: string): AuditResult {
   // anchor-derived side relation in aura.ts. It is deliberately NOT a global
   // ban on `.side` / `ownerId` / `actorId` / equality compares — those facts
   // remain legitimate for many non-U2 responsibilities.
+  // Symbol PRESENCE alone is insufficient authority evidence: a contributor can
+  // keep the canonical U2 symbol/import and still stop using its result for the
+  // semantic decision (re-deriving the perspective from `context.actorId` in
+  // candidate.ts, or from the origin kind/owner in aura.ts). The guard therefore
+  // requires the symbol to be genuinely CALLED (routing), not merely imported.
   for (const [relFile, symbol] of U2_PERSPECTIVE_SYMBOLS) {
     const file = join(automationRoot, relFile);
     let code: string;
@@ -439,11 +457,12 @@ export function auditArchitecture(automationRoot: string): AuditResult {
     } catch {
       continue; // fixture root may omit the file
     }
-    if (!code.includes(symbol)) {
+    if (!code.includes(`${symbol}(`)) {
+      const cameo = code.includes(symbol) ? ' (symbol present but never CALLED — resting the acting-actor/perspective read on an incidental field)' : '';
       violations.push({
         check: 'u2-perspective-authority',
         file: relFile,
-        detail: `migrated U2 consumer no longer routes its relation/controller perspective through roles.ts ('${symbol}'); restore the U2 authority instead of re-deriving from an incidental field.`,
+        detail: `migrated U2 consumer no longer routes its relation/controller perspective through roles.ts ('${symbol}')${cameo}; restore the U2 call instead of re-deriving the perspective from an incidental field.`,
       });
     }
     if (relFile === 'kernels/aura.ts' && AURA_ANCHOR_SIDE_RESTORE_RE.test(code)) {
@@ -451,6 +470,13 @@ export function auditArchitecture(automationRoot: string): AuditResult {
         check: 'u2-perspective-authority',
         file: relFile,
         detail: `aura.ts re-derives ally/foe from the spatial anchor/owner side instead of the U2 perspective role (perspectiveActorId); ROLE ≠ ANCHOR — only the U2 authority establishes the member relation.`,
+      });
+    }
+    if (relFile === 'kernels/aura.ts' && AURA_LOCAL_PERSPECTIVE_RESTORE_RE.test(code)) {
+      violations.push({
+        check: 'u2-perspective-authority',
+        file: relFile,
+        detail: `aura.ts derives the SEMANTIC perspective (perspectiveActorId) locally from the spatial-origin case (origin kind/owner); ROLE ≠ ANCHOR — the aura kernel must route the perspective through the U2 authority (auraRelationPerspectiveId) with the origin FACTS, never mapping them to a perspective actor here.`,
       });
     }
   }
@@ -480,7 +506,12 @@ export function auditArchitecture(automationRoot: string): AuditResult {
     }
   }
 
-  // ---- Check 8: migrated U16 consumers must keep routing through the U16 core ----
+  // ---- Check 8: migrated U16 consumers must keep CALLING the U16 core ----
+  // Symbol PRESENCE is insufficient authority evidence (a contributor can keep
+  // the import and still bypass availability / consume / key by reading raw
+  // ruleState or emitting a hand-rolled mark). This guard requires the migrated
+  // fold to genuinely CALL each U16 core surface for its round gate — routing,
+  // not import-presence, is what proves delegation.
   for (const [relFile, symbols] of U16_CONSUMER_SYMBOLS) {
     const file = join(automationRoot, relFile);
     let code: string;
@@ -489,12 +520,13 @@ export function auditArchitecture(automationRoot: string): AuditResult {
     } catch {
       continue; // fixture root may omit the file
     }
-    const missing = [...symbols].filter((s) => !code.includes(s));
+    const missing = [...symbols].filter((s) => !code.includes(`${s}(`));
+    const presentButUnused = [...symbols].filter((s) => !code.includes(`${s}(`) && code.includes(s));
     if (missing.length > 0) {
       violations.push({
         check: 'u16-usage-ledger-routing',
         file: relFile,
-        detail: `migrated U16 consumer no longer routes its usage/entitlement reads through the U16 core (missing ${missing.join(', ')}); restore the U16 authority instead of rebuilding the ledger locally.`,
+        detail: `migrated U16 consumer does not CALL the U16 core surfaces used for its usage/entitlement gate (uncalled or missing: ${missing.join(', ')})${presentButUnused.length > 0 ? `. Imported-but-unused: ${presentButUnused.join(', ')} — likely a hand-rolled availability/consume/key that bypasses the U16 authority.` : ''}; the F9 fold must route key+availability+consume through primitives/usage.ts, never rebuild them locally.`,
       });
     }
   }

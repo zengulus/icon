@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { auraRelationPerspectiveId } from '../../../primitives/roles.js';
 import { resolveSaveWindow } from '../../../primitives/save-window.js';
 import { auraDefinitionFor, auraRuntimeView, isAuraMember } from '../../../kernels/aura.js';
 import { hasMastery } from '../../../kernels/mastery.js';
@@ -354,9 +355,10 @@ const gentlenessEffects: RuleResolver = (context) => {
       if (definition && source.position) {
         const view = auraRuntimeView(context.state);
         // The spatial anchor is the stance holder (source); the ally/foe
-        // perspective (U2) is the same actor for a character-stance aura.
+        // perspective (U2) is derived through the U2 authority for a
+        // character-stance aura (ROLE ≠ ANCHOR — never invented locally here).
         const origin = {
-          actorId: source.id, entityId: null, position: source.position, size: source.size ?? 1, radius: next, perspectiveActorId: source.id,
+          actorId: source.id, entityId: null, position: source.position, size: source.size ?? 1, radius: next, perspectiveActorId: auraRelationPerspectiveId({ kind: 'actor', bearerId: source.id }),
         };
         for (const foe of Object.values(context.state.actors)) {
           if (foe.side === source.side || foe.defeated) continue;
