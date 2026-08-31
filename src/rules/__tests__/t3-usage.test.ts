@@ -37,7 +37,7 @@ import {
   useLedgerAvailable,
   useLedgerKey,
 } from '../automation/kernels/use-ledger.js';
-import { roundLedgerKey } from '../automation/kernels/trait-reactions.js';
+
 import { evaluatePredicate } from '../automation/kernels/runtime.js';
 import { resolveModifierNumber } from '../automation/kernels/evaluate-modifiers.js';
 import { constantModifierValue, registerModifierRule, type ModifierFoldView } from '../automation/primitives/modifiers.js';
@@ -52,7 +52,9 @@ describe('U16 — key and identity contract', () => {
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'turn' })).toBe('ledger:turn:fixture:gate');
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'round' })).toBe('ledger:round:fixture:gate');
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'combat' })).toBe('ledger:combat:fixture:gate');
-    expect(useLedgerKey('round', 'fixture:reaction')).toBe(roundLedgerKey('hero', 'fixture:reaction'));
+    // byte-identical to the canonical U16 round-scope key (the once-per-round
+    // entitlement writes exactly this address).
+    expect(useLedgerKey('round', 'fixture:reaction')).toBe(usageKey({ sourceId: 'fixture:reaction', ownerId: 'hero', scope: 'round' }));
     // A per-target gate never collides with the per-source gate.
     expect(usageKey({ sourceId: 'fixture:gate', ownerId: 'hero', scope: 'turn', targetId: 'foe' })).toBe('ledger:turn:fixture:gate:target:foe');
   });

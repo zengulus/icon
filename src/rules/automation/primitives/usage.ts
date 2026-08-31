@@ -63,7 +63,7 @@ export interface UsageKeySpec {
 
 /** The canonical durable STORAGE key for a usage entry. Byte-identical to
  * the engine's long-standing `ledger:<period>:<sourceId>` format (the F9
- * reactive fold's `roundLedgerKey` and the use-ledger kernel write exactly
+ * F9 reactive fold's U16 operation and the use-ledger kernel write exactly
  * this key), so the shared gate, the F9 fold, and the lifecycle reset
  * recipes can never drift. An optional target ref extends the key with a
  * `:target:<id>` suffix — a per-target gate never collides with the

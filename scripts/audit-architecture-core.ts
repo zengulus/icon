@@ -302,32 +302,38 @@ const U16_LEDGER_KEY_RECONSTRUCTION_RE = /ledger:(?:[a-z-]+:)?\$\{/;
 // double-quoted) — one semantic seam, not per-use spelling variants.
 const U16_LEDGER_KEY_CONCAT_RE = /['"]ledger:['"]\s*\+/;
 
-// T8c — the F9 fold's three U16 result-consumption pinpoints, plus the SEAMS
-// that detect when the canonical call is retained but its RESULT is ignored:
+// U16/F9-corrective — the F9 fold's once-per-round result-consumption pins
+// against the ONE U16 COMMIT operation (`applyOncePerRoundUsage`), plus the
+// SEAMS that detect when the canonical call is retained but its RESULT is
+// ignored or replaced:
 //
-//  - AVAILABILITY (U16-M1): the gate decision must read the recorded count
-//    through `ledgerAvailable`; reading raw `ruleState[` directly is a bypass.
-//  - CONSUME (U16-M2): a hand-built state mark must spread the fields of the
-//    U16 consume RESULT (`mark.*`); a `{ kind: 'state', ... }` object that
-//    never touches the result is a bypass.
-//  - OWNER (U16-M4): the typed U16 call must carry the REAL owner; `ownerId: ''`
-//    is a fabricated/missing-owner bypass that the storage bytes cannot reveal.
+//  - AVAILABILITY (positive): the fold must gate the gated reaction on the
+//    operation's returned `result.available`; re-deciding availability from raw
+//    `ruleState[` (M1) or anything else is a bypass.
+//  - CONSUME (positive): the fold must commit the operation's returned
+//    `result.mutations` bundle verbatim; a hand-built `{ kind: 'state', ... }`
+//    mark (M2) that never touches the returned bundle is a bypass.
+//  - OWNER (U16-M4): the operation takes the ACTOR (owner never exposed); a
+//    future local `ownerId: ''` on any typed usage call is a fabricated/missing-
+//    owner bypass the storage bytes cannot reveal.
 // These are semantic-dependency pins for ONE migrated consumer (trait-reactions.ts),
 // enforced as named invariants rather than an enumeration of value spellings.
 const U16_F9_RAW_RULESTATE_GATE_RE = /ruleState\[/;
 const U16_F9_HANDBUILT_MARK_RE = /\{[^\n]*kind:\s*['"]state['"]/;
+const U16_F9_RESULT_AVAILABLE_RE = /result\.available\b/;
+const U16_F9_RESULT_MUTATIONS_RE = /result\.mutations\b/;
 const U16_F9_EMPTY_OWNER_RE = /ownerId:\s*['"][\s]*['"]/;
 
 // The F9 reactive fold (`kernels/trait-reactions.ts`) was migrated to route its
-// once-per-round gate through the U16 core. It must keep using the U16
-// symbols; a contributor who re-derives availability / consume / key locally
-// drops the import, which this structural allowlist catches (exactly like the
-// U2 guard).
+// ENTIRE once-per-round entitlement transaction through the U16 COMMIT operation
+// `applyOncePerRoundUsage` (`kernels/use-ledger.ts`). It must keep CALLING that
+// operation; a contributor who re-derives availability / consume / key locally
+// (or reverts to the old per-piece oncePerRoundGate plan) drops the call, which
+// this structural allowlist catches (exactly like the U2 guard). The operation
+// internally uses `usageKey` / `ledgerAvailable` / `consumeUsageMutation`, so
+// F9 itself never touches the core symbols directly.
 const U16_CONSUMER_SYMBOLS: ReadonlyMap<string, Set<string>> = new Map([
-  // The once-per-round gate must derive its key, availability, and consume mark
-  // through the U16 CORE (`usageKey` / `ledgerAvailable` / `consumeUsageMutation`),
-  // never by reconstructing `ledger:round:*` / reading ruleState directly.
-  ['kernels/trait-reactions.ts', new Set(['usageKey', 'ledgerAvailable', 'consumeUsageMutation'])],
+  ['kernels/trait-reactions.ts', new Set(['applyOncePerRoundUsage'])],
 ]);
 
 // Patterns that indicate side-effect registration at module scope
@@ -616,13 +622,15 @@ export function auditArchitecture(automationRoot: string): AuditResult {
     }
   }
 
-  // ---- Check 9: U16 F9 result-consumption pins (trait-reactions.ts) ----
-  // Beyond requiring the U16 symbols to be CALLED, the F9 fold's three seams
-  // must consume the CALLS' RESULTS: the availability decision reads the
-  // recorded count through the U16 read (not raw `ruleState[`), the consume
-  // mark spreads the U16 consume result (`mark.*`), and the typed U16 call
-  // carries the REAL owner (never a fabricated `ownerId: ''`). Kept narrowly
-  // scoped to the ONE migrated F9 fold.
+  // ---- Check 9: U16/F9-result-consumption pins (trait-reactions.ts) ----
+  // Beyond requiring the U16 COMMIT operation to be CALLED, the F9 fold's seams
+  // must route through that operation's RESULT: the availability decision must
+  // read the returned `available` (not raw `ruleState[`), and the committed
+  // mark must be the returned `mutations` bundle verbatim (never a hand-built
+  // `{ kind: 'state', ... }` literal), with no fabricated `ownerId: ''` on any
+  // typed usage call. Kept narrowly scoped to the ONE migrated F9 fold. These
+  // are the mechanical proofs that F9 can only propose effects — U16 alone
+  // turns them into an allowed once-per-round commit.
   for (const [relFile] of U16_CONSUMER_SYMBOLS) {
     const file = join(automationRoot, relFile);
     let code: string;
@@ -637,32 +645,51 @@ export function auditArchitecture(automationRoot: string): AuditResult {
       const t = line.trimStart();
       return t.length > 0 && !t.startsWith('//') && !t.startsWith('*');
     }).join('\n');
+    // Positive availability consumption: the fold must gate the once-per-round
+    // reaction on the operation's returned `available` (a caller re-deciding it
+    // elsewhere — raw state, a local recomputation — never touches the bundle).
+    if (!U16_F9_RESULT_AVAILABLE_RE.test(executable)) {
+      violations.push({
+        check: 'u16-usage-ledger-routing',
+        file: relFile,
+        detail: `F9 fold does not gate the once-per-round reaction on the U16 operation's returned availability (result.available); the entitlement decision must come from applyOncePerRoundUsage's result — never raw ruleState or a local recomputation.`,
+      });
+    }
+    // Positive consume consumption: the fold must commit the operation's
+    // returned `mutations` bundle verbatim (the mark is inside that bundle).
+    if (!U16_F9_RESULT_MUTATIONS_RE.test(executable)) {
+      violations.push({
+        check: 'u16-usage-ledger-routing',
+        file: relFile,
+        detail: `F9 fold does not commit the U16 operation's returned mutations bundle (result.mutations) verbatim; the consume mark must be the U16-produced mark grouped with the allowed effects — never hand-built.`,
+      });
+    }
     // U16-M1: availability bypass — a gate reading the actor's raw ruleState
-    // instead of the U16 `ledgerAvailable` result.
+    // instead of the operation's returned `result.available`.
     if (U16_F9_RAW_RULESTATE_GATE_RE.test(executable)) {
       violations.push({
         check: 'u16-usage-ledger-routing',
         file: relFile,
-        detail: `F9 fold reads availability from the raw actor ruleState instead of the U16 ledgerAvailable result; the once-per-round gate must consume the U16 authority's returned availability.`,
+        detail: `F9 fold reads availability from the raw actor ruleState instead of the U16 operation's returned result.available; the once-per-round gate must consume the U16 authority's returned availability.`,
       });
     }
-    // U16-M2: consume bypass — a hand-built state mark that never references a
-    // U16-produced result (the plan's `.consume` / a consume `mark.*`) persists
-    // a mark independently of U16. The production fold pushes the U16 plan's
-    // consume field (`gate.consume`), so `.consume` is present.
-    if (U16_F9_HANDBUILT_MARK_RE.test(executable) && !executable.includes('.consume') && !executable.includes('mark.')) {
+    // U16-M2: consume bypass — a hand-built state mark that never references the
+    // U16 operation's returned `mutations` bundle persists a mark independently
+    // of U16 (the production fold commits result.mutations, so its only 'state'
+    // mark comes from the bundle).
+    if (U16_F9_HANDBUILT_MARK_RE.test(executable) && !U16_F9_RESULT_MUTATIONS_RE.test(executable)) {
       violations.push({
         check: 'u16-usage-ledger-routing',
         file: relFile,
-        detail: `F9 fold hand-builds a 'state' ledger mark without consuming a U16-produced result (the oncePerRoundGate plan's .consume / a consumeUsageMutation mark.*); the once-per-round mark must be persisted from the U16 authority's returned plan.`,
+        detail: `F9 fold hand-builds a 'state' ledger mark without committing the U16 operation's returned mutations bundle (result.mutations); the once-per-round mark must be persisted from the U16 authority's returned bundle.`,
       });
     }
-    // U16-M4: owner bypass — a typed U16 call with a fabricated/missing owner.
+    // U16-M4: owner bypass — a typed usage call with a fabricated/missing owner.
     if (U16_F9_EMPTY_OWNER_RE.test(executable)) {
       violations.push({
         check: 'u16-usage-ledger-routing',
         file: relFile,
-        detail: `F9 fold passes a fabricated empty owner ('ownerId: \'\'') to the typed U16 call; the once-per-round gate must carry the REAL owning actor (roundLedgerUsageSpec(actor.id, …)) — typed semantic identity and actor-local storage are distinct.`,
+        detail: `F9 fold passes a fabricated empty owner ('ownerId: \'\'') on a usage call; the once-per-round operation takes the ACTOR (its real owner) — never a fabricated empty owner — typed semantic identity and actor-local storage are distinct.`,
       });
     }
   }

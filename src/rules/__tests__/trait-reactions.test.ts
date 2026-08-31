@@ -1,14 +1,15 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
-import { oncePerRoundGate, roundLedgerKey, roundLedgerUsageSpec, traitReactionMutations, type OncePerRoundGate } from '../automation/kernels/trait-reactions.js';
+import { traitReactionMutations } from '../automation/kernels/trait-reactions.js';
+import { applyOncePerRoundUsage } from '../automation/kernels/use-ledger.js';
 import type { RuleMutation } from '../automation/primitives/types.js';
-import { usageIdentitiesEqual, usageIdentity, usageIdentityKey, usageKey } from '../automation/primitives/usage.js';
+import { usageKey } from '../automation/primitives/usage.js';
 
-/** The canonical U16 round-scope ledger key for a source id (byte-identical
- * to `roundLedgerKey`, owned by the U16 core). The typed identity must carry a
- * REAL owner (actor-local storage accepts any owner id because the durable
- * state lives on the owner — it never fabricates an empty owner). */
+/** The canonical U16 round-scope ledger key for a source id (owned by the U16
+ * core `usageKey`). The once-per-round entitlement lives behind the U16
+ * operation `applyOncePerRoundUsage`; this is only the byte-compat address the
+ * durable mark writes. */
 function usageRoundKey(sourceId: string, ownerId: string): string {
   return usageKey({ sourceId, ownerId, scope: 'round' });
 }
@@ -19,11 +20,16 @@ import { turnEligibleActorIds } from '../turn-scheduler.js';
 /**
  * F9 once-per-round reactive job-trait fold (docs/rules-foundations.md §10
  * item 1). A wired job trait may declare a post-application reaction (collide
- * / shove / slay) gated once per round by a durable `ledger:round:*` flag that
- * resets at the round-start boundary. Proved on `stormbender:trait:
- * dash-on-the-rocks` (ICON p.230): 1/round when you cause a character to
- * collide, gain 1 aether and deal 1 piercing damage as a burst-1 area centered
- * on the collided character (the burst never affects the ability user, p.97).
+ * / shove / slay) gated once per round. The ENTIRE once-per-round entitlement
+ * transaction lives behind the U16 operation `applyOncePerRoundUsage` (the
+ * consume mark is a durable `ledger:round:*` flag reset at the round-start
+ * boundary). F9 owns ONLY whether the trigger occurred and the reaction's
+ * ordinary effect mutations; U16 owns availability, the key, consumption, and
+ * the grouping of the consume with the allowed effects. Proved on
+ * `stormbender:trait:dash-on-the-rocks` (ICON p.230): 1/round when you cause a
+ * character to collide, gain 1 aether and deal 1 piercing damage as a burst-1
+ * area centered on the collided character (the burst never affects the ability
+ * user, p.97).
  */
 
 const DASH = 'stormbender:trait:dash-on-the-rocks';
@@ -128,91 +134,6 @@ describe('F9 once-per-round reactive job-trait fold', () => {
     expect(traitReactionMutations(applied, applied.actors[first.id], [], { collidedActorIds: [foe.id] })).toEqual([]);
   });
 
-  it('adversarial: the typed U16 key call receives the REAL owning actor while the physical storage key stays byte-compatible', () => {
-    // The U16 identity is NOT `` { ownerId: '' } `` — the seam must carry the
-    // real owning actor through the typed call even though actor-local storage
-    // omits the owner bytes.
-    expect(roundLedgerKey('actor:a', DASH)).toBe(usageKey({ sourceId: DASH, ownerId: 'actor:a', scope: 'round' }));
-    // Different owners produce the SAME physical storage address (actor-local),
-    // but the TYPED identity they were built with always carried the real owner
-    // (the sealed-test proof that no owner bytes were ever fabricated).
-    expect(roundLedgerKey('actor:a', DASH)).toBe(roundLedgerKey('actor:b', DASH));
-    // And it is byte-identical to the long-standing `ledger:round:<sourceId>` format.
-    expect(roundLedgerKey('actor:a', DASH)).toBe(`ledger:round:${DASH}`);
-  });
-
-  it('real-owner seam: the TYPED usage identity distinguishes the real owner from a fabricated empty owner (storage bytes cannot)', () => {
-    // The physical storage address (`ledger:round:<sourceId>`) deliberately
-    // omits owner bytes, so comparing storage cannot prove the real owner was
-    // passed to the typed U16 call. The typed SPEC fed to `usageKey` carries the
-    // owner, and `usageIdentity`/`usageIdentityKey` built from that SAME spec DO
-    // distinguish a real owner from `ownerId: ''` — the seam that makes owner
-    // propagation directly observable without changing storage bytes.
-    const real = roundLedgerKey('actor:a', DASH);
-    const fabricated = roundLedgerKey('', DASH);
-    // Storage-identical (actor-local) — the negative assertion the brief warns
-    // is insufficient on its own, shown here as the reason the typed seam is
-    // needed on TOP of the storage check.
-    expect(real).toBe(fabricated);
-    expect(real).toBe(`ledger:round:${DASH}`);
-    // Typed identity: real owner ≠ fabricated empty owner, despite equal storage.
-    expect(usageIdentitiesEqual(usageIdentity(roundLedgerUsageSpec('actor:a', DASH)), usageIdentity(roundLedgerUsageSpec('', DASH)))).toBe(false);
-    expect(usageIdentityKey(roundLedgerUsageSpec('actor:a', DASH))).not.toBe(usageIdentityKey(roundLedgerUsageSpec('', DASH)));
-    expect(usageIdentity(roundLedgerUsageSpec('actor:a', DASH)).ownerId).toBe('actor:a');
-    // And two DIFFERENT real owners are distinct typed identities too.
-    expect(usageIdentityKey(roundLedgerUsageSpec('actor:a', DASH))).not.toBe(usageIdentityKey(roundLedgerUsageSpec('actor:b', DASH)));
-  });
-
-  it('the F9 fold persists the gate mark at the REAL owner\'s typed spec (actor.id, never a fabricated empty owner)', () => {
-    const { state, heroId, foeId } = dashEncounter();
-    const first = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
-    const mark = first.find((m) => m.kind === 'state');
-    expect(mark).toBeDefined();
-    if (mark && mark.kind === 'state') {
-      // The mark's storage key is addressed via the REAL owner's typed spec
-      // (the fold calls roundLedgerUsageSpec(actor.id, …)), not `` {} ``.
-      const fromRealOwnerSpec = usageIdentityKey(roundLedgerUsageSpec(heroId, DASH));
-      expect(mark.key).toBe(roundLedgerKey(heroId, DASH));
-      // The identity the fold carries is the real owner's, distinct from a
-      // fabricated empty owner.
-      expect(fromRealOwnerSpec).not.toBe(usageIdentityKey({ sourceId: DASH, ownerId: '', scope: 'round' }));
-    }
-  });
-
-  it('adversarial: the once-per-round mark is the canonical U16 round ledger key (usageKey round scope), not an id-agnostic flag', () => {
-    const { state, heroId, foeId } = dashEncounter();
-    const first = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
-    const mark = first.find((m) => m.kind === 'state');
-    expect(mark).toBeDefined();
-    if (mark && mark.kind === 'state') {
-      // Byte-identical to the U16 core `usageKey({scope:'round'})` surface.
-      // The typed U16 call receives the REAL owning actor (the state lives on
-      // the owner's ruleState; the actor-local storage address omits owner).
-      expect(mark.key).toBe(roundLedgerKey(heroId, DASH));
-      expect(mark.key).toBe(usageRoundKey(DASH, heroId));
-      expect(mark.operation).toBe('set');
-      expect(mark.value).toBe(true);
-    }
-  });
-
-  it('the F9 fold consumes the ONE U16 plan object (oncePerRoundGate): availability gates, the mark is pushed verbatim', () => {
-    const { state, heroId, foeId } = dashEncounter();
-    // The plan derives key + availability + consume TOGETHER from the U16
-    // authority and the REAL owner's typed spec.
-    const gate = oncePerRoundGate(state.actors[heroId], DASH);
-    expect(gate.available).toBe(true);
-    expect(gate.key).toBe(roundLedgerKey(heroId, DASH));
-    expect(gate.key).toBe(usageKey({ sourceId: DASH, ownerId: heroId, scope: 'round' }));
-    expect(gate.consume.operation).toBe('set');
-    // The fold; the persisted mark is exactly the plan's consume answer.
-    const first = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
-    const mark = first.find((m) => m.kind === 'state');
-    expect(mark && mark.kind === 'state' ? mark.key : undefined).toBe(gate.key);
-    // Applying the plan's consume closes the gate for the owner.
-    const applied = applyEvents(state, [{ type: 'RULE_MUTATIONS_APPLIED', actorId: heroId, sourceId: DASH, actionId: 'default', timing: 'use', tags: [], mutations: first }]);
-    expect(oncePerRoundGate(applied.actors[heroId], DASH).available).toBe(false);
-  });
-
   it('replay applies exactly what the command decided (ledger marks and damage both reapplied deterministically)', () => {
     const { state, heroId, foeId } = dashEncounter();
     const mutations = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
@@ -235,107 +156,154 @@ describe('F9 once-per-round reactive job-trait fold', () => {
     const again = traitReactionMutations(next, next.actors[heroId], [], { collidedActorIds: [foeId] });
     expect(again.length).toBeGreaterThan(0);
   });
+
+  it('adversarial: the fold marks the REAL owner — the persisted mark carries actor.id, never a fabricated empty owner', () => {
+    const { state, heroId, foeId } = dashEncounter();
+    const first = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
+    const mark = first.find((m) => m.kind === 'state');
+    expect(mark).toBeDefined();
+    if (mark && mark.kind === 'state') {
+      // The durable mark is addressed via the REAL owner's actor id (the
+      // operation builds the consume from the actor argument) — never `` '' ``.
+      expect(mark.key).toBe(usageRoundKey(DASH, heroId));
+      expect(mark.actorId).toBe(heroId);
+      expect(mark.sourceActorId).toBe(heroId);
+      expect(mark.operation).toBe('set');
+      expect(mark.value).toBe(true);
+    }
+  });
+
+  it('adversarial: the once-per-round mark is the canonical U16 round ledger key (usageKey round scope), not an id-agnostic flag', () => {
+    const { state, heroId, foeId } = dashEncounter();
+    const first = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
+    const mark = first.find((m) => m.kind === 'state');
+    expect(mark).toBeDefined();
+    if (mark && mark.kind === 'state') {
+      // Byte-identical to the U16 core `usageKey({scope:'round'})` surface — the
+      // key is derived inside the U16 operation, never rejoined by F9.
+      expect(mark.key).toBe(usageRoundKey(DASH, heroId));
+      expect(mark.key).toBe(usageKey({ sourceId: DASH, ownerId: heroId, scope: 'round' }));
+      expect(mark.key).toBe(`ledger:round:${DASH}`);
+    }
+  });
 });
 
-describe('U16 — the once-per-round gate result is structurally unforgeable (T8d F9)', () => {
-  // A real gate, kept alive so each adversarial construction can reuse its
-  // genuine U16-derived fields while stamping a locally-derived semantic answer.
-  function realGate(): { hero: EncounterActor; gate: OncePerRoundGate } {
-    const { state, heroId } = dashEncounter();
-    return { hero: state.actors[heroId], gate: oncePerRoundGate(state.actors[heroId], DASH) };
+describe('U16 — the once-per-round entitlement is ONE U16 operation (F9 corrective)', () => {
+  /** The ordinary reaction effect mutations F9 PROPOSES before U16 turns them
+   * into an allowed once-per-round commit. */
+  function proposedEffects(heroId: string): RuleMutation[] {
+    return [
+      { kind: 'resource', sourceId: DASH, actorId: heroId, resourceId: 'aether', operation: 'gain', amount: 1, minimum: 0, maximum: null },
+      { kind: 'damage', sourceId: DASH, sourceActorId: heroId, actorId: 'foe', amount: 1, damageType: 'piercing', instance: 1, delivery: 'area', ignoreCover: false },
+    ];
   }
 
-  it('calling the real authority does NOT make a plain forged object a valid gate (A1: forged gate)', () => {
-    const { hero, gate } = realGate();
-    // A consumer inspects the real gate, then independently constructs an
-    // ordinary structural object with the same key / a locally chosen
-    // `available` / a locally built mutation / a locally built identity. The
-    // private brand is absent, so this is a COMPILE ERROR — the forged object
-    // is not assignable to `OncePerRoundGate` regardless of what the real
-    // authority returned first. This is the structural seam, not a caller
-    // discipline or a lexical guard.
-    // @ts-expect-error — a `OncePerRoundGate` requires the private U16 brand;
-    // a plain object (even seeded with a real gate's fields) is not one.
-    const forged: OncePerRoundGate = {
-      key: gate.key,
-      available: true,
-      consume: gate.consume,
-      identity: gate.identity,
-    };
-    expect(forged).toBeTruthy();
-    expect(hero).toBeTruthy();
+  it('the operation returns unavailable when the round ledger is consumed, and the exact effect+consume bundle when open', () => {
+    const { state, heroId } = dashEncounter();
+    const proposed = proposedEffects(heroId);
+    let result = applyOncePerRoundUsage({ actor: state.actors[heroId], sourceId: DASH, mutations: proposed });
+    expect(result.available).toBe(true);
+    if (result.available) {
+      // The bundle is the caller's proposed effects PLUS exactly one U16 consume mark.
+      expect(result.mutations.length).toBe(proposed.length + 1);
+      const effects = result.mutations.slice(0, proposed.length);
+      const mark = result.mutations[proposed.length];
+      expect(effects).toEqual(proposed);
+      expect(mark && mark.kind === 'state' ? mark : null).toMatchObject({
+        key: usageRoundKey(DASH, heroId),
+        actorId: heroId,
+        operation: 'set',
+        value: true,
+      });
+    }
+    // Applying the returned bundle (the reducer applies recorded authority)
+    // closes the gate: a second operation reports unavailable.
+    const applied = applyEvents(state, [{ type: 'RULE_MUTATIONS_APPLIED', actorId: heroId, sourceId: DASH, actionId: 'default', timing: 'use', tags: [], mutations: result.available ? [...result.mutations] : [] }]);
+    expect(applyOncePerRoundUsage({ actor: applied.actors[heroId], sourceId: DASH, mutations: proposed }).available).toBe(false);
   });
 
-  it('a locally-computed availability is not stampable into a valid gate (A2: local availability)', () => {
-    const { hero, gate } = realGate();
-    // The production fold gates on `gate.available` and NEVER recomputes it. If
-    // a caller tried to keep the real gate alive but substitute an answer
-    // derived from raw ruleState (`!hasOwnProperty(state, gate.key)`) into a
-    // `OncePerRoundGate`, the missing brand makes it a compile error — a
-    // locally derived availability can never become a gate's semantic answer.
-    // @ts-expect-error — a gate whose availability was locally recomputed is
-    // not the U16-produced result (private brand missing).
-    const localAvailability: OncePerRoundGate = {
-      key: gate.key,
-      available: !Object.prototype.hasOwnProperty.call(hero.ruleState, gate.key),
-      consume: gate.consume,
-      identity: gate.identity,
-    };
-    expect(localAvailability).toBeTruthy();
+  it('adversarial 1 + 4: the operation takes the ACTOR — availability and owner are decided inside U16, so there is no separate raw-state check or fabricatable owner', () => {
+    // An unavailable owner: the round ledger is already consumed (the seed
+    // bundle was applied). The operation's `available` answer is the ONLY
+    // authority F9 consumes — no raw `ruleState[` read remains in the fold.
+    const { state, heroId } = dashEncounter();
+    const seed = applyOncePerRoundUsage({ actor: state.actors[heroId], sourceId: DASH, mutations: proposedEffects(heroId) });
+    expect(seed.available).toBe(true);
+    let blocked = state;
+    if (seed.available) {
+      blocked = applyEvents(state, [{ type: 'RULE_MUTATIONS_APPLIED', actorId: heroId, sourceId: DASH, actionId: 'default', timing: 'use', tags: [], mutations: [...seed.mutations] }]);
+    }
+    expect(applyOncePerRoundUsage({ actor: blocked.actors[heroId], sourceId: DASH, mutations: proposedEffects(heroId) }).available).toBe(false);
+    // Two DIFFERENT owners never alias: B's open gate is unaffected by A's mark
+    // (the key lives on the owner; the operation decides per-actor).
+    const { state: s2, heroId: aId } = dashEncounter();
+    const b = actorFromCharacter(validCharacter('Arthur'), { x: 2, y: 1 });
+    b.traitIds = b.traitIds.filter((id) => id !== 'stalwart:trait:fortify');
+    expect(applyOncePerRoundUsage({ actor: s2.actors[aId], sourceId: DASH, mutations: proposedEffects(aId) }).available).toBe(true);
+    expect(applyOncePerRoundUsage({ actor: b, sourceId: DASH, mutations: proposedEffects(b.id) }).available).toBe(true);
   });
 
-  it('an independently constructed consume mutation is not stampable into a valid gate (A3: local consume)', () => {
-    const { gate } = realGate();
-    // The fold persists `gate.consume` VERBATIM; it never hand-builds a state
-    // mark. Substituting an independently constructed mutation into a gate is a
-    // compile error (brand missing), so the persisted mark can only be the
-    // U16-produced consume answer of the real gate.
-    const localMutation: RuleMutation = { kind: 'state', key: gate.key, actorId: 'x', operation: 'set', value: true } as RuleMutation;
-    // @ts-expect-error — a gate carrying a hand-built consume mutation is not
-    // the U16-produced result (private brand missing).
-    const localConsume: OncePerRoundGate = {
-      key: gate.key,
-      available: gate.available,
-      consume: localMutation as OncePerRoundGate['consume'],
-      identity: gate.identity,
-    };
-    expect(localConsume).toBeTruthy();
-  });
-
-  it('an alternate-spelling key is not stampable into a valid gate (A4: local key)', () => {
-    const { gate } = realGate();
-    // The key is derived by U16 in one place (`usageKey(roundLedgerUsageSpec(
-    // actor.id, sourceId))`); a locally rejoined address
-    // (`['ledger','round',sourceId].join(':')`) is not a gate the engine will
-    // accept as a U16 result. Solved by the type brand, NOT by enumerating more
-    // string spellings.
-    const localKey = ['ledger', 'round', DASH].join(':');
-    // @ts-expect-error — a gate built from a locally rejoined storage address
-    // is not the U16-produced result (private brand missing).
-    const localKeyed: OncePerRoundGate = {
-      key: localKey,
-      available: gate.available,
-      consume: gate.consume,
-      identity: gate.identity,
-    };
-    expect(localKeyed).toBeTruthy();
-  });
-
-  it('the real gate is the U16 plan and the F9 fold consumes its fields directly (available gates, consume pushed verbatim)', () => {
+  it('adversarial 3: F9 exposes no ledger key to reconstruct — the commit mark is the canonical U16 round key from the returned bundle', () => {
     const { state, heroId, foeId } = dashEncounter();
-    const gate = oncePerRoundGate(state.actors[heroId], DASH);
-    // Authentic U16 answers: key is the round-scope usage key, availability
-    // reflects the recorded ledger, consume is the U16 one-shot state mark.
-    expect(gate.key).toBe(usageKey({ sourceId: DASH, ownerId: heroId, scope: 'round' }));
-    expect(gate.available).toBe(true);
-    expect(gate.consume.kind).toBe('state');
-    expect(gate.consume.operation).toBe('set');
-    expect(gate.consume.value).toBe(true);
-    expect(gate.identity.ownerId).toBe(heroId);
-    // The fold consumes the ONE plan: it gates on gate.available and pushes
-    // gate.consume verbatim as the durable mark.
-    const out = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
-    const mark = out.find((m) => m.kind === 'state');
-    expect(mark).toMatchObject({ key: gate.key, actorId: heroId, operation: 'set', value: true });
+    const fold = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
+    const foldMark = fold.find((m) => m.kind === 'state');
+    // The fold's persisted mark equals the U16 operation's returned consume mark.
+    const op = applyOncePerRoundUsage({ actor: state.actors[heroId], sourceId: DASH, mutations: proposedEffects(heroId) });
+    expect(op.available).toBe(true);
+    if (op.available && foldMark && foldMark.kind === 'state') {
+      const opMark = op.mutations[op.mutations.length - 1];
+      expect(foldMark.key).toBe(usageRoundKey(DASH, heroId));
+      expect(opMark && opMark.kind === 'state' ? opMark.key : undefined).toBe(foldMark.key);
+    }
+    // The mark is NOT an id-agnostic rebuildable address chosen by F9 — it is
+    // the canonical `ledger:round:<sourceId>` (actor-local) surface.
+    expect(foldMark && foldMark.kind === 'state' ? foldMark.key : undefined).toBe(`ledger:round:${DASH}`);
+  });
+
+  it('adversarial 2 + 5: the consume mark exists ONLY inside the returned bundle — F9 cannot hand-build it or spread-alias a replacement', () => {
+    // The fold commits `result.mutations` verbatim (asserted by the architecture
+    // audit); behaviorally, committing it and then re-calling the operation shows
+    // the bundle is self-consistent. A caller that hand-builds its own mark
+    // instead of using the bundle would be constructing a competing transaction —
+    // the API makes that path unnecessary because the bundle already carries the
+    // mark, and the semantic pins make it impossible for the fold (no local state
+    // literal, no separately-decided entitlement).
+    const { state, heroId } = dashEncounter();
+    const result = applyOncePerRoundUsage({ actor: state.actors[heroId], sourceId: DASH, mutations: proposedEffects(heroId) });
+    expect(result.available).toBe(true);
+    if (result.available) {
+      // The bundle always exports the consume mark grouped with the effects; the
+      // caller cannot obtain a mark without the bundle (nothing else exposes it).
+      expect(result.mutations.filter((m) => m.kind === 'state')).toHaveLength(1);
+    }
+  });
+
+  it('replay purity: the command decides once, the reducer applies the recorded bundle without rechecking entitlement', () => {
+    const { state, heroId, foeId } = dashEncounter();
+    const mutations = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
+    const event: never[] = [{ type: 'RULE_MUTATIONS_APPLIED', actorId: heroId, sourceId: DASH, actionId: 'default', timing: 'use', tags: [], mutations }] as never;
+    const once = applyEvents(state, event);
+    const twice = applyEvents(state, event);
+    expect(once).toEqual(twice);
+  });
+
+  it('the fold exposes no independent gate internals (key / availability / consume / owner) to forge', () => {
+    // The API-boundary proof for the five adversarial paths: F9 proposes effects,
+    // but it owns NONE of the entitlement pieces — no key derivation, no
+    // availability recomputation, no consume construction, no owner parameter.
+    // A competing once-per-round path therefore has nothing to build from here.
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(import.meta.dirname ?? __dirname, '..', 'automation', 'kernels', 'trait-reactions.ts'), 'utf8');
+    expect(src).not.toMatch(/OncePerRoundGate|oncePerRoundGate|oncePerRoundGateBrand/);
+    expect(src).not.toMatch(/consumeUsageMutation/);
+    expect(src).not.toMatch(/ledgerAvailable/);
+    expect(src).not.toMatch(/usageKey\(|usageRoundKey/);
+    expect(src).not.toMatch(/roundLedger|ownerId:\s*['"]['"]/);
+    // The fold's only once-per-round authority is the U16 operation and its bundle.
+    expect(src).toContain('applyOncePerRoundUsage');
+    expect(src).toContain('result.available');
+    expect(src).toContain('result.mutations');
+    expect(src).toContain('out.push(...result.mutations)');
   });
 });

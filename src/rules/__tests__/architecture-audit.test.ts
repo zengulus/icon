@@ -498,14 +498,20 @@ describe('auditArchitecture (violation detection)', () => {
     rmSync(tmpDir, { recursive: true });
   });
 
-  it('U16 (F9 availability): keeps all U16 imports but reads raw ruleState for gating — MUST FAIL', () => {
+  it('U16 (F9 availability): keeps the U16 operation but reads raw ruleState for the gate — MUST FAIL', () => {
     setup();
+    // The fold CALLS the U16 operation (Check 8 routing passes) but decides
+    // availability from raw actor.ruleState instead of the returned `result` —
+    // the M1 raw-ruleState seam and the positive `result.available` pin flag it.
     writeFileSync(
       join(tmpDir, 'kernels', 'trait-reactions.ts'),
       [
-        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
-        'export function gate(actor, key) { return !actor.ruleState[key]; }',
-        '// usageKey/consumeUsageMutation imported but unused; ledgerAvailable not CALLED',
+        "import { applyOncePerRoundUsage } from './use-ledger.js';",
+        'export function gate(actor, sourceId, effects) {',
+        '  const result = applyOncePerRoundUsage({ actor, sourceId, mutations: effects });',
+        '  return !actor.ruleState["ledger:round:" + sourceId] ? result.mutations : [];',
+        '  // availability read from raw ruleState, not result.available',
+        '}',
       ].join('\n'),
     );
 
@@ -515,21 +521,28 @@ describe('auditArchitecture (violation detection)', () => {
         expect.objectContaining({
           check: 'u16-usage-ledger-routing',
           file: 'kernels/trait-reactions.ts',
-          detail: expect.stringContaining('ledgerAvailable'),
+          detail: expect.stringContaining('ruleState'),
         }),
       ]),
     );
     rmSync(tmpDir, { recursive: true });
   });
 
-  it('U16 (F9 consume): keeps all U16 imports but emits the state mark by hand instead of the U16 consume result — MUST FAIL', () => {
+  it('U16 (F9 consume): keeps the operation bundle but hand-builds the state mark — MUST FAIL', () => {
     setup();
+    // The fold CALLS the operation but never commits its returned `mutations`;
+    // it persists a locally-built `{ kind: "state", ... }` mark instead — the
+    // M2 seam and the positive `result.mutations` pin flag it (independent
+    // consume construction).
     writeFileSync(
       join(tmpDir, 'kernels', 'trait-reactions.ts'),
       [
-        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
-        'const mark = { kind: "state", key, operation: "set", value: true };',
-        '// ledgerAvailable/consumeUsageMutation imported but not CALLED',
+        "import { applyOncePerRoundUsage } from './use-ledger.js';",
+        'export function fold(actor, sourceId, effects) {',
+        '  const result = applyOncePerRoundUsage({ actor, sourceId, mutations: effects });',
+        '  if (!result.available) return [];',
+        '  return [{ kind: "state", key: "ledger:round:" + sourceId, actorId: actor.id, operation: "set", value: true }];',
+        '}',
       ].join('\n'),
     );
 
@@ -539,21 +552,24 @@ describe('auditArchitecture (violation detection)', () => {
         expect.objectContaining({
           check: 'u16-usage-ledger-routing',
           file: 'kernels/trait-reactions.ts',
-          detail: expect.stringContaining('consumeUsageMutation'),
+          detail: expect.stringContaining('result.mutations'),
         }),
       ]),
     );
     rmSync(tmpDir, { recursive: true });
   });
 
-  it('U16 (F9 key): keeps all U16 imports but rebuilds a semantically-equivalent storage address by string concatenation — MUST FAIL', () => {
+  it('U16 (F9 key): rebuilds the ledger address locally via string concatenation — MUST FAIL', () => {
     setup();
+    // A locally rebuilt address (`` 'ledger:' + 'round:' + sourceId ``) is a
+    // competing U16 authority; the fold routes nothing through the operation, so
+    // Check 7 (key reconstruction) and the symbol-routing guard both fire.
     writeFileSync(
       join(tmpDir, 'kernels', 'trait-reactions.ts'),
       [
-        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
-        'const key = "ledger:" + "round:" + sourceId;',
-        '// usageKey imported but not CALLED — the key is hand-rebuilt',
+        'export function keyFor(sourceId) {',
+        "  return 'ledger:' + 'round:' + sourceId;",
+        '}',
       ].join('\n'),
     );
 
@@ -563,7 +579,7 @@ describe('auditArchitecture (violation detection)', () => {
         expect.objectContaining({
           check: 'u16-usage-ledger-routing',
           file: 'kernels/trait-reactions.ts',
-          detail: expect.stringContaining('usageKey'),
+          detail: expect.stringContaining('applyOncePerRoundUsage'),
         }),
       ]),
     );
@@ -698,28 +714,25 @@ describe('auditArchitecture (violation detection)', () => {
     rmSync(tmpDir, { recursive: true });
   });
 
-  it('U16 adversarial-3 (LOCAL CONSUME): the real gate is kept alive but an independently built mark is persisted without routing through U16 — MUST FAIL', () => {
+  it('U16-M5 (spread/alias): a genuine U16 result is spread and its entitlement semantics replaced before committing — MUST FAIL', () => {
     setup();
-    // A hand-built state mark that never flows through the U16 consume surface
-    // is a competing authority. The narrow RELIABLE invariant here is the
-    // symbol-routing guard: an independently constructed mark is only possible
-    // because the fold DROPS the CALL to `consumeUsageMutation` (the gate builds
-    // the consume internally, so a fold persisting its own mark has no U16
-    // consume call), which the audit flags. The decoy move of touching
-    // `real.consume` while ignoring it is closed at the TYPE level (the private
-    // brand makes a locally-stamped consume unreachable) — not by a spelling
-    // regex, per scope.
+    // Even receiving a legitimate U16 result, a caller can no longer hand the
+    // engine a competing once-per-round commit: spreading it and overriding
+    // available/mutations with a locally built bundle hand-builds the mark (M2)
+    // and stops naming the returned result (positive result.available /
+    // result.mutations pins). The production fold commits only the returned
+    // bundle, so replacing the semantics is exactly this — flagged. Solved by
+    // the API boundary and these pins, NOT by a branded-data-object proof.
     writeFileSync(
       join(tmpDir, 'kernels', 'trait-reactions.ts'),
       [
-        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
-        'export function fold(actor, sourceId) {',
-        '  const real = oncePerRoundGate(actor, sourceId);',
-        '  usageKey({ sourceId, ownerId: actor.id, scope: "round" });',
-        '  ledgerAvailable(actor, real.key);',
-        '  const read = real.consume; // kept alive but ignored',
-        '  const mark = { kind: "state", key: real.key, actorId: actor.id, operation: "set", value: true };',
-        '  return [mark];',
+        "import { applyOncePerRoundUsage } from './use-ledger.js';",
+        'export function fold(actor, sourceId, effects) {',
+        '  const result = applyOncePerRoundUsage({ actor, sourceId, mutations: effects });',
+        '  const forged = { ...result };',
+        '  forged.available = true;',
+        '  forged.mutations = [{ kind: "state", key: ["ledger", "round", sourceId].join(":"), actorId: actor.id, operation: "set", value: true }];',
+        '  return forged.mutations;',
         '}',
       ].join('\n'),
     );
@@ -730,28 +743,29 @@ describe('auditArchitecture (violation detection)', () => {
         expect.objectContaining({
           check: 'u16-usage-ledger-routing',
           file: 'kernels/trait-reactions.ts',
-          detail: expect.stringContaining('consumeUsageMutation'),
+          detail: expect.stringContaining('result.available'),
         }),
       ]),
     );
     rmSync(tmpDir, { recursive: true });
   });
 
-  it('U16 adversarial-4 (LOCAL KEY): the real gate is kept alive but the key is rejoined locally as the storage address — MUST FAIL', () => {
+  it('U16 adversarial (LOCAL KEY): the operation is called as a decoy but a re-joined storage address drives the commit — MUST FAIL', () => {
     setup();
-    // An alternate-spelling key (`['ledger','round',sourceId].join(':')`) is a
-    // competing U16 authority. The audit catches it because routing a key
-    // through the U16 authority would require CALLING usageKey — dropping that
-    // call (rejoining the address locally) is flagged by the symbol-routing
-    // guard, exactly the narrow invariant this seam depends on.
+    // A fold may keep the operation CALLED (Check 8 routing passes) yet still
+    // construct its own commitment off a locally rejoined address
+    // (`['ledger','round',sourceId].join(':')`). Because it never commits the
+    // returned `mutations` bundle, the positive `result.mutations` pin flags it
+    // — the key is behind the operation, so a competing key path is a competing
+    // transaction.
     writeFileSync(
       join(tmpDir, 'kernels', 'trait-reactions.ts'),
       [
-        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
-        'export function keyFor(sourceId) {',
-        '  const real = oncePerRoundGate(null, sourceId);',
+        "import { applyOncePerRoundUsage } from './use-ledger.js';",
+        'export function keyFor(actor, sourceId, effects) {',
+        '  const result = applyOncePerRoundUsage({ actor, sourceId, mutations: effects });',
         '  const localKey = ["ledger", "round", sourceId].join(":");',
-        '  return localKey;',
+        '  return [localKey, result.available];',
         '}',
       ].join('\n'),
     );
@@ -762,7 +776,7 @@ describe('auditArchitecture (violation detection)', () => {
         expect.objectContaining({
           check: 'u16-usage-ledger-routing',
           file: 'kernels/trait-reactions.ts',
-          detail: expect.stringContaining('usageKey'),
+          detail: expect.stringContaining('result.mutations'),
         }),
       ]),
     );
@@ -907,39 +921,29 @@ describe('single U16 usage/entitlement authority', () => {
     return readFileSync(path.join(srcDir, 'rules', 'automation', rel), 'utf8');
   };
 
-  it('the once-per-round F9 fold routes through U16 and does not rebuild the ledger key', () => {
+  it('the once-per-round F9 fold routes the whole entitlement transaction through the U16 operation', () => {
     const traitReactions = read('kernels/trait-reactions.ts');
-    // Uses the U16 CORE surfaces for its round gate.
-    expect(traitReactions).toContain('usageKey');
-    expect(traitReactions).toContain('ledgerAvailable');
-    expect(traitReactions).toContain('consumeUsageMutation');
-    // It must NOT reconstruct the canonical `ledger:round:<id>` key itself.
+    // F9 commits the once-per-round gated reaction through applyOncePerRoundUsage
+    // (the U16 COMMIT operation in kernels/use-ledger.ts) — never the raw core
+    // symbols, never a locally rebuilt `ledger:round:<id>` key.
+    expect(traitReactions).toContain('applyOncePerRoundUsage');
     expect(traitReactions).not.toMatch(/ledger:\$\{/);
+    // The obsolete branded-plan machinery (OncePerRoundGate / oncePerRoundGate /
+    // the private brand) is DELETED — F9 exposes no gate internals to forge.
+    expect(traitReactions).not.toMatch(/OncePerRoundGate|oncePerRoundGate|oncePerRoundGateBrand/);
   });
 
-  it('the F9 fold consumes the ONE U16 plan: gates on gate.available and persists gate.consume verbatim', () => {
+  it('the F9 fold gates on the operation result.available and commits result.mutations verbatim', () => {
     const traitReactions = read('kernels/trait-reactions.ts');
-    // The production fold derives the plan through the authority and acts on
-    // its fields — it never recomputes availability from raw state, never
-    // rejoins the key, never hand-builds the mark.
-    expect(traitReactions).toMatch(/oncePerRoundGate\(actor, traitId\)/);
-    expect(traitReactions).toContain('gate.available');
-    expect(traitReactions).toContain('gate.consume');
-  });
-
-  it('the OncePerRoundGate result carries a PRIVATE brand that only oncePerRoundGate can stamp', () => {
-    const traitReactions = read('kernels/trait-reactions.ts');
-    // The type-level unforgeability seam: a private `unique symbol` brand, NOT
-    // exported, referenced by the exported `OncePerRoundGate` type. Because the
-    // symbol is module-private, arbitrary consumers cannot even NAME the brand
-    // property, so a plain/aliased/forged object cannot satisfy the type — only
-    // the `oncePerRoundGate` producer (which stamps `[oncePerRoundGateBrand]: true`)
-    // can produce a value assignable to `OncePerRoundGate`.
-    expect(traitReactions).toMatch(/oncePerRoundGateBrand:\s*unique\s*symbol/);
-    expect(traitReactions).toMatch(/\[oncePerRoundGateBrand\]:\s*true/);
-    // The brand symbol is NOT exported (no `export` on its declaration), so the
-    // forge path has no way to name the required property.
-    expect(traitReactions).not.toMatch(/export const oncePerRoundGateBrand/);
+    // The production fold decides availability from the operation's returned
+    // `result.available` and commits EXACTLY the returned `result.mutations`
+    // bundle (the U16 consume mark grouped with the allowed reaction effects).
+    // It never recomputes availability from raw state, never rejoins the key,
+    // never hand-builds the mark, and takes the ACTOR (no owner to fabricate).
+    expect(traitReactions).toContain('applyOncePerRoundUsage({ actor, sourceId: traitId, mutations: proposed })');
+    expect(traitReactions).toContain('result.available');
+    expect(traitReactions).toContain('result.mutations');
+    expect(traitReactions).toContain('out.push(...result.mutations)');
   });
 
   it('only the two U16 authority files construct the canonical ledger key', () => {

@@ -8,7 +8,7 @@
  * - `once-per-round` — a durable `ledger:round:<sourceId>` flag written when
  *   the use fires; a round-start lifecycle recipe clears every actor's round
  *   ledger. This is the F9 reactive job-trait fold's existing gate
- *   (`kernels/trait-reactions.ts` `roundLedgerKey` writes the identical key
+ *   (the F9 reactive fold's `applyOncePerRoundUsage` writes the identical key
  *   format), so the shared gate and F9 can never drift.
  * - `once-per-turn` — a durable `ledger:turn:<sourceId>` flag; a turn-start
  *   lifecycle recipe clears the flag on the actor whose turn begins.
@@ -35,6 +35,7 @@ import type { BoundaryRef } from '../primitives/scope.js';
 import {
   consumeUsageMutation,
   holdsUsageKey,
+  ledgerAvailable,
   usageCount,
   usageKey,
   usagePeriodForResetBoundary,
@@ -58,6 +59,46 @@ export function useLedgerKey(period: UseLedgerPeriod, sourceId: string): string 
  * the recorded count is below the one-shot cap). */
 export function useLedgerAvailable(actor: Pick<EncounterActor, 'ruleState'>, key: string): boolean {
   return usageCount(actor, key) < 1;
+}
+
+/** The authoritative result of a once-per-round usage COMMIT (U16). A
+ * discriminated union: either the entitlement is unavailable (emit nothing),
+ * or U16 returns the COMPLETE commit bundle — the caller's proposed effect
+ * mutations PLUS the U16 consume mark, grouped in one array. The caller commits
+ * `mutations` verbatim and through it alone: it cannot separately decide
+ * availability, cannot hand-build the consume mark, and never names the ledger
+ * key (none of the three are exposed by the operation — they are decided inside
+ * U16). */
+export type OncePerRoundTransaction =
+  | { available: false }
+  | { available: true; mutations: readonly RuleMutation[] };
+
+/** U16 COMMIT operation for one once-per-round usage. The caller PROPOSES its
+ * effect mutations; U16 owns the entire entitlement transaction in ONE
+ * operation: the typed owner identity (the `actor` argument's id), the one-shot
+ * round usage scope, the physical key derivation (`usageKey` round period), the
+ * availability check (`ledgerAvailable`), the consume mark
+ * (`consumeUsageMutation`), and the grouping of that consume with the allowed
+ * effects into the returned bundle. The caller cannot separate the availability
+ * decision from the returned transaction and cannot independently construct the
+ * usage-consume mutation — it commits the returned `mutations` bundle and only
+ * that.
+ *
+ * A round-start lifecycle recipe clears the round ledger, so the entitlement
+ * reopens at the next round boundary. The decision is made ONCE at the command
+ * boundary; replay applies the recorded bundle and never rechecks entitlement.
+ * Generic and source-ID-free: `sourceId` is a content-owned provenance key, and
+ * the proposed `mutations` are opaque to this kernel. Deterministic — a pure
+ * function of the actor's recorded ruleState and the proposed mutations. */
+export function applyOncePerRoundUsage(options: {
+  actor: Pick<EncounterActor, 'id' | 'ruleState'>;
+  sourceId: string;
+  mutations: readonly RuleMutation[];
+}): OncePerRoundTransaction {
+  const key = usageKey({ sourceId: options.sourceId, ownerId: options.actor.id, scope: 'round' });
+  if (!ledgerAvailable(options.actor, key)) return { available: false };
+  const consume = consumeUsageMutation(options.sourceId, options.actor.id, key) as Extract<RuleMutation, { kind: 'state' }>;
+  return { available: true, mutations: [...options.mutations, consume] };
 }
 
 /** The durable mark mutation: setting the gate's key records the use so a

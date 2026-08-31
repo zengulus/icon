@@ -544,15 +544,27 @@ key, read availability straight off `ruleState`, and wrote its own one-shot
 `set true` mark (its own key/availability/consume), instead of routing the
 "has this reaction already fired this round?" entitlement through the U16
 core. That violates the authoritative invariant (a competing executing
-implementation, even with identical results). The fold now derives its key
-from U16 `usageKey` (round), reads availability through U16
-`ledgerAvailable`, and persists its mark through U16 `consumeUsageMutation`
-(byte-identical durable output; behavior-preserving — 8 trait-reaction
-tests incl. once-per-round exact-once, round-boundary reset, replay, and a
-new two-owner isolation adversarial case stay green). The
-`u16-usage-ledger-routing` architecture guard now flags any non-U16
-primitives/kernels file that reconstructs a `ledger:<scope>:…` key, and
-pins the F9 fold to the U16 core symbols. **T8b corrected the fabricated
+implementation, even with identical results). The fold now routes the
+ENTIRE once-per-round entitlement transaction through U16's
+`applyOncePerRoundUsage` COMMIT operation (`kernels/use-ledger.ts`): the
+operation owns the typed owner identity, the round usage scope, the
+physical key derivation (`usageKey` round — byte-identical
+`ledger:round:<sourceId>`), the availability check (`ledgerAvailable`), the
+consume mark (`consumeUsageMutation`), and the grouping of that consume
+with the allowed reaction effects into one commit bundle. F9 PROPOSES only
+the reaction's ordinary effect mutations; U16 decides whether the
+entitlement is available and returns the exact bundle to commit. This is
+the final narrow F9 corrective (2026-08-31, U16/F9 operation-boundary
+repair): F9 can propose effects, but only U16 can turn them into an
+allowed once-per-round transaction — the fold exposes no key, availability,
+consume, or usage identity of its own to reconstruct or forge (behavior-
+preserving durable marks; 8 trait-reaction tests incl. once-per-round
+exact-once, round-boundary reset, replay, and two-owner isolation stay
+green). The `u16-usage-ledger-routing` architecture guard now flags any
+non-U16 primitives/kernels file that reconstructs a `ledger:<scope>:…` key,
+and pins the F9 fold to the U16 `applyOncePerRoundUsage` operation
+(availability and commit pins: the fold must gate on the returned
+`available` and commit the returned `mutations` bundle verbatim). **T8b corrected the fabricated
 typed-owner seam**: `roundLedgerKey` originated with `ownerId: ''` in the
 typed U16 call; it now passes the REAL owning actor (`actor.id`) while
 `usageKey` keeps the actor-local storage format byte-identical
@@ -566,6 +578,35 @@ remaining actor-level once-per-round/turn trigger marks
 flags) must prove each is a U10/mark de-dup or content-owned state rather
 than a second usage ledger before AUTHORITATIVE can be re-certified. See
 `docs/t6-gate-report.md` and the tranche report.
+
+**Final narrow F9 corrective (2026-08-31, U16/F9 operation-boundary repair).**
+The prior branded-data-object proof (`OncePerRoundGate`, a module-private
+`unique symbol` brand stamped by `oncePerRoundGate`) was still forgeable
+through object spread — a caller could `{ ...real, available: local,
+consume: localMutation }` and preserve the hidden brand while replacing the
+semantic answers. The fix moves the semantic DECISION itself behind the
+boundary instead of proving a result object unforgeable: the branded plan
+is DELETED, and the once-per-round gate exposes no per-piece key /
+availability / consume / usage identity. A consumer (the F9 job-trait fold)
+calls U16's single COMMIT operation `applyOncePerRoundUsage({ actor,
+sourceId, mutations })` and receives either `{ available: false }` or
+`{ available: true, mutations }` — the latter being the proposed effects
+PLUS the U16 consume mark, committed verbatim. The five adversarial paths
+(raw-`ruleState` availability, hand-built consume, locally rejoined key
+incl. `['ledger','round',sourceId].join(':')`, fabricated/missing owner, and
+spread/alias replacement of a genuine result) are closed architecturally:
+the operation takes the ACTOR (no owner to fabricate), the key and availability
+are decided inside U16 and never exposed to the caller, the consume mark
+exists only inside the returned bundle, and a spread/alias that replaces
+entitlement semantics must hand-build the commit (M2) or re-decide
+availability (raw state / dropped result pins), both flagged by the
+`u16-usage-ledger-routing` guard. Replay stays pure: the command boundary
+calls the operation once, and `applyEvents` applies the recorded bundle
+without rechecking entitlement. See `docs/t8f-operation-boundary-report.md`.
+U16 stays **PARTIAL** — the residual actor-level once-per-round/turn trigger
+marks (`chain-reaction-used`, `incubus:triggered`, `stampede:triggered`,
+`gates-of-hell:vigilance-rushed`, `damage-immune`, per-source `:used`) still
+require the U16 residual-marks census/migration tranche (not started).
 
 ### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)
 

@@ -2070,8 +2070,10 @@ increment), `refreshUsageMutation`, `usageRead` (per-use magnitude
 ordinal), `holdsUsageKey`, `resetBoundaryFor` (turn/round/combat onto U8
 boundaries), and `usageCap` (folds the U14 `use-cap` query point for
 count-override caps). `kernels/use-ledger.ts` is now a thin adapter
-preserving the byte-identical keys/marks (the F9 `roundLedgerKey`
-contract still holds), and the U6 `used-scope` predicate evaluates against
+preserving the byte-identical keys/marks (the F9 once-per-round gate's
+`ledger:round:*` byte-contract still holds via the U16 `applyOncePerRoundUsage`
+operation — the old `roundLedgerKey` adapter is deleted), and the U6
+`used-scope` predicate evaluates against
 the durable ledger. **T4 (2026-08-30) completed U16's U10-backed
 de-duplication** (`primitives/facts.ts`), then corrected by the T4
 corrective pass (2026-08-30): the de-dup identity is RESOLUTION-scoped —
@@ -2114,7 +2116,8 @@ specialist (onset resolution record, read by Soul Blade / Carnevale /
 Hissatsu / Monogatari / VM).
 
 **Locations partially owning/duplicating.** `kernels/use-ledger.ts`;
-`kernels/trait-reactions.ts` (`roundLedgerKey`, de-dup ledger);
+`kernels/trait-reactions.ts` (F9 fold routes its once-per-round gate
+through U16's `applyOncePerRoundUsage` COMMIT operation; de-dup ledger);
 `RuleContinuationState.executedStepIds` + `derivedTriggers`
 (`src/rules/encounter.ts`); F9 once-per-ability registries; `ruleState`
 `end-turn` flag (retained scheduler flag; `attackedThisTurn` is the

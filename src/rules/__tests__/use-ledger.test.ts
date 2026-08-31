@@ -8,7 +8,7 @@ import {
   useLedgerKey,
   type UseLedgerPeriod,
 } from '../automation/kernels/use-ledger.js';
-import { roundLedgerKey } from '../automation/kernels/trait-reactions.js';
+import { usageKey } from '../automation/primitives/usage.js';
 import type { EncounterState } from '../types.js';
 import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
@@ -45,8 +45,10 @@ describe('use-ledger: key contract', () => {
     expect(useLedgerKey('combat', 'fixture:gate')).toBe('ledger:combat:fixture:gate');
   });
 
-  it('the round key is byte-identical to the F9 reactive fold key', () => {
-    expect(useLedgerKey('round', 'fixture:reaction')).toBe(roundLedgerKey('actor:hero', 'fixture:reaction'));
+  it('the round key is byte-identical to the canonical U16 round-scope key', () => {
+    // The once-per-round entitlement (F9's reactive fold via the U16 operation
+    // applyOncePerRoundUsage) writes exactly this U16 core address.
+    expect(useLedgerKey('round', 'fixture:reaction')).toBe(usageKey({ sourceId: 'fixture:reaction', ownerId: 'actor:hero', scope: 'round' }));
   });
 
   it('the consume mutation sets the durable key on the actor', () => {
