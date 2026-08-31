@@ -10,6 +10,9 @@ import {
   distance, withinGrid, rushMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import {
+  resolveAttackTarget, resolveCapturedSelectedActors, resolveSourceActor,
+} from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Bastion ability implementations (ICON p.122–124).
@@ -53,8 +56,8 @@ const reactionTarget = (relation: 'ally' | 'any'): RuleSelector => ({ kind: 'inp
 
 /** ICON p.122: repeatable single-target control plus a second-foe shove. */
 const heraculeEffects: RuleResolver = (context) => {
-  const source = context.state.actors[context.actorId];
-  const target = context.attackTargetId ? context.state.actors[context.attackTargetId] : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !target?.position || !source.position) return [];
   const repetitions = context.triggers?.has('collide') || context.triggers?.has('heroic') ? 2 : 1;
   const targetDirection = context.input.directions?.direction ?? toward(source.position, target.position);
@@ -72,8 +75,8 @@ const heraculeEffects: RuleResolver = (context) => {
 
 /** ICON p.122: burst-area fray damage and away-from-target shoves. */
 const landWasterArea: RuleResolver = (context) => {
-  const source = context.state.actors[context.actorId];
-  const target = context.attackTargetId ? context.state.actors[context.attackTargetId] : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !target?.position || !source.position) return [];
   const burst = context.triggers?.has('heroic') ? 2 : 1;
   const area = Object.values(context.state.actors).filter((candidate) => candidate.id !== source.id && candidate.position && distance(candidate.position, target.position!) <= burst);
@@ -92,7 +95,7 @@ const landWasterArea: RuleResolver = (context) => {
 
 /** ICON p.122: rush 1 twice (thrice with Collide/Heroic), shoving adjacent characters after each rush. */
 const valiantMovement: RuleResolver = (context) => {
-  const source = context.state.actors[context.actorId];
+  const source = resolveSourceActor(context);
   if (!source?.position) return [];
   const rushes = context.triggers?.has('collide') || context.triggers?.has('heroic') ? 3 : 2;
   // Project positions as shoves are planned: rush destinations and shove
@@ -128,11 +131,15 @@ const valiantMovement: RuleResolver = (context) => {
  * rule removes the maximum range — the source's own wording — so the
  * ally-selection bound collapses; before round 4 (or unmastered) it holds. */
 const battlementEnter: RuleResolver = (context) => {
-  const source = context.state.actors[context.actorId];
-  const allyId = context.input.actorIds?.target?.[0];
+  const source = resolveSourceActor(context);
+  // The chosen ally is a CAPTURED command selection: the recorded id is the
+  // identity (stored durably in the stance state), resolved through the U1
+  // captured-actor collection — never re-derived from later state.
+  const selected = resolveCapturedSelectedActors(context, 'target');
+  const ally = selected[0];
+  const allyId = ally?.id;
   if (!source || !allyId) return [];
   const unlimited = hasUnlimitedRange(masteryFoldRuleRuntimeView(context), source.id, 'bastion:endless-battlement');
-  const ally = context.state.actors[allyId];
   if (!ally?.position || !source.position || (!unlimited && distance(source.position, ally.position) > 4)) {
     throw new RuleProgramViolation('choice.actor-range', 'Endless Battlement requires an ally in range 4.');
   }
@@ -146,7 +153,7 @@ const battlementEnter: RuleResolver = (context) => {
 
 /** ICON p.122: stance refresh re-grants aura 1 to the recorded ally. */
 const battlementRefresh: RuleResolver = (context) => {
-  const source = context.state.actors[context.actorId];
+  const source = resolveSourceActor(context);
   if (!source) return [];
   const allyId = typeof source.state['endless-battlement:ally-id'] === 'string' ? source.state['endless-battlement:ally-id'] : undefined;
   const mutations: RuleMutation[] = [{ kind: 'stance', sourceId: context.sourceId, sourceActorId: source.id, operation: 'refresh', actorId: source.id, stanceId: 'endless-battlement', state: { allyId: allyId ?? null } }];
@@ -159,7 +166,7 @@ const battlementRefresh: RuleResolver = (context) => {
  * program-level value fold deals 4 instead of 2 (the mastery rows are the
  * single source of the round gate). */
 const battlementInterrupt: RuleResolver = (context) => {
-  const source = context.state.actors[context.actorId];
+  const source = resolveSourceActor(context);
   if (!source) return [];
   const perfectDamage = masteryModifierActive(masteryFoldRuleRuntimeView(context), source.id, 'bastion:endless-battlement:mastery') ? 4 : 2;
   const mutations: RuleMutation[] = [{
@@ -177,7 +184,7 @@ const battlementInterrupt: RuleResolver = (context) => {
 
 /** ICON p.123: Perseus — aura 1 (2 with Heroic) and immunity to the triggering ability. */
 const perseusEffects: RuleResolver = (context) => {
-  const source = context.state.actors[context.actorId];
+  const source = resolveSourceActor(context);
   if (!source) return [];
   const aura = context.triggers?.has('heroic') ? 2 : 1;
   const mutations: RuleMutation[] = [
@@ -189,8 +196,8 @@ const perseusEffects: RuleResolver = (context) => {
 
 /** ICON p.123: Rook — shove the target and hold an aura until the end of your next turn. */
 const rookEffects: RuleResolver = (context) => {
-  const source = context.state.actors[context.actorId];
-  const target = context.attackTargetId ? context.state.actors[context.attackTargetId] : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source?.position) return [];
   const aura = context.triggers?.has('heroic') ? 2 : 1;
   const mutations: RuleMutation[] = [];

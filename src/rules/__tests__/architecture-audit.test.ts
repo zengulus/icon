@@ -157,6 +157,87 @@ describe('U1 Reference/Binding routing guard', () => {
       expect.objectContaining({ file: 'kernels/core-resolvers.ts', detail: 'resolves recorded actor-input identities outside U1 (or U4 choice validation)' }),
     ]));
   });
+
+  // T5c — the content layer is now inside the U1 guard. The ONE content
+  // reference surface is content/glue/reference-authoring.ts (composing the
+  // U1 vocabulary); migrated programs must keep ROUTING through it. The
+  // deliberate scope of the content scan is REFERENCE INTERPRETATION: a raw
+  // `state.actors[context.…]` dereference. It deliberately does NOT ban the
+  // `sourceActor(context, …)` residual (~120 calls, inventoried for
+  // family-by-family migration), `context.input.actorIds` reads (U4 choice
+  // identity lives at the caller), or `context.actorId` as provenance /
+  // ownership / scheduling identity — those are not reference resolution.
+  const validContent = {
+    // The adapter must keep COMPOSING the single U1 vocabulary (constructors +
+    // resolution authority), not become a second reference system.
+    'content/glue/reference-authoring.ts':
+      "import { liveActorSlot, liveActorBound, capturedActor, resolveReference } from '../../primitives/reference.js';"
+      + "\nexport function sourceActorRef() { return liveActorSlot('source'); }",
+    'content/jobs/programs/bastion-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); resolveCapturedSelectedActors(context, \'target\');',
+    'content/jobs/programs/spellblade-programs.ts': 'resolveSourceActor(context); resolveAttackTarget(context); resolveTriggerTargets(context); resolveCapturedSelectedActors(context, \'target\');',
+    // Non-migrated content: caller-owned U4 cardinality reads, incidental
+    // provenance/ownership fields, and the inventoried sourceActor residual
+    // are NOT reference interpretation.
+    'content/jobs/programs/chanter-programs.ts': 'const foeId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;',
+    'content/jobs/programs/knave-programs.ts': 'const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0];',
+    'content/jobs/programs/shade-programs.ts': 'const source = sourceActor(context, context.actorId);',
+    'content/jobs/job-trait-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); mutations.push({ kind: \'condition\', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id });',
+    'content/classes/class-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); const inputTargets = context.input.actorIds?.target; if (inputTargets[0] !== context.attackTargetId) throw 0;',
+  };
+
+  it('T5c: accepts a clean content layer — adapter surface + caller-owned U4 reads + provenance plumbing', () => {
+    expect(u1ReferenceRoutingProblems({ ...valid, ...validContent })).toEqual([]);
+  });
+
+  it('T5c: flags a content program that dereferences a legacy slot through state.actors', () => {
+    expect(u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/classes/class-resolvers.ts': "const target = context.state.actors[context.attackTargetId];",
+    })).toContainEqual(expect.objectContaining({
+      file: 'content/classes/class-resolvers.ts',
+      detail: expect.stringContaining('dereferences a legacy reference slot'),
+    }));
+  });
+
+  it('T5c: non-migrated sourceActor(context, …) residual stays inventoried (accepted) — NOT a blanket ban; only the dereference + pins bite', () => {
+    // ~120 `sourceActor(context, …)` calls across a dozen named program files
+    // are the classified U1 residual (docs/u8-u1-underlay-census.md) migrated
+    // family-by-family; the guard must not force a blind mechanical rewrite,
+    // nor silently accept a NEW direct dereference elsewhere.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/shade-programs.ts': "const source = sourceActor(context, context.actorId); const t = sourceActor(context, context.attackTargetId);",
+      'content/jobs/programs/harvester-programs.ts': "const target = resolveAttackTarget(context); const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined;",
+    });
+    expect(problems).toEqual([]);
+  });
+
+  it('T5c: catches a MIGRATED program that reverts to direct slot resolution (drops the adapter calls)', () => {
+    // Bastion reverting to the legacy `sourceActor(context, …)` read is caught
+    // by the POSITIVE routing pin (the adapter accessors stop being called) —
+    // a migrated file cannot bypass U1 by restoring legacy resolution.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/bastion-programs.ts': 'const source = sourceActor(context, context.actorId);',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/bastion-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
+  });
+
+  it('T5c: catches an adapter that stops composing the U1 vocabulary', () => {
+    expect(u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/glue/reference-authoring.ts': 'export function resolveSourceActor(context) { return context.state.actors[context.actorId]; }',
+    })).toContainEqual(expect.objectContaining({
+      file: 'content/glue/reference-authoring.ts',
+      detail: expect.stringContaining('no longer composes the single U1 vocabulary'),
+    }));
+  });
 });
 
 describe('U8 Scope/Clock routing guard', () => {

@@ -6,12 +6,15 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, arcCells, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, occupied,
+  distance, occupied,
   damageMutation, conditionMutation, stateMutation, rollDamageDice,
   resourceMutation, stanceMutation, markMutation,
   teleportMutation, shoveMutation, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
+import {
+  resolveAttackTarget, resolveCapturedSelectedActors, resolveSourceActor, resolveTriggerTargets,
+} from '../../glue/reference-authoring.js';
 import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
@@ -54,8 +57,8 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
  * player-selected Teleport 1 and deal 1 piercing to a foe in range 3, twice.
  * Slay or Infuse 3 (GRAN BLITZ) repeats the teleport-and-pierce effect. */
 const blitzEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -78,7 +81,7 @@ const blitzEffects: RuleResolver = (context) => {
  * slay-triggered +2 bolts are modeled on the stance's die counter; the
  * automatic start-of-turn refresh is a documented stance window. */
 const odinforceEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [
     stanceMutation(context, source.id, 'enter', 'odinforce'),
     stateMutation(context, source.id, 'spellblade:odinforce:die', 3),
@@ -88,8 +91,8 @@ const odinforceEffects: RuleResolver = (context) => {
 /** ICON p.225 Odinforce bolt: deal 1 piercing to a foe in range 3 (as an area
  * effect) and reduce the power die by 1; with no bolts left the stance ends. */
 const odinforceBoltEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
   const current = Number(source.state['spellblade:odinforce:die'] ?? 3);
@@ -118,9 +121,9 @@ const odinforceBoltEffects: RuleResolver = (context) => {
  * lists delivers as the mastery-fold's converted type (divine) when Nothung
  * is mastered. */
 const nothungEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const strikeType = convertedDamageType(masteryFoldRuleRuntimeView(context), source.id, 'spellblade:nothung', 'piercing');
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   // ICON p.225 Nothung talent 2: "Comeback: Increase teleport to 4." A
   // program-level comeback clause (the same flag deriveTriggers turns into
@@ -203,7 +206,7 @@ const chosenTeleportDestination = (
  * The flurry instances are listed by Nothung itself, so they ride the same
  * EXCALIBUR conversion as the main ability. */
 const gramEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
   const area = squareArea(source.position, 2);
@@ -222,9 +225,10 @@ const gramEffects: RuleResolver = (context) => {
  * shatters foes ending their turn in it. The cover, the end-of-turn shatter,
  * and the once-a-round infuse teleport are documented terrain windows. */
 const atherwandEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const source = resolveSourceActor(context);
+  // The center is the CAPTURED command selection when the player chose one,
+  // else the LIVE attack target (an effect center, never a query).
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const center = target?.position ?? source.position;
   if (distance(source.position, center) > 4) throw new RuleProgramViolation('choice.actor-range', 'Ätherwand requires its center in range 4.');
@@ -249,9 +253,8 @@ const atherwandEffects: RuleResolver = (context) => {
 /** ICON p.226 Fulminate: mark a character in range 6 — they gain aura 2 while
  * marked. The start-of-turn aura teleport is a documented stance/turn window. */
 const fulminateEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Fulminate requires a character in range 6.');
   if (distance(source.position, target.position) > 6) throw new RuleProgramViolation('choice.actor-range', 'Fulminate requires a character in range 6.');
   return [markMutation(context, target.id, 'fulminate', {})];
@@ -262,7 +265,7 @@ const fulminateEffects: RuleResolver = (context) => {
  * allies can grab as a free action to teleport between its spaces (a
  * documented free-action window). */
 const bifrostEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const direction = context.input.directions?.line ?? rushTowardFoes(context, source.position);
   const cells: { x: number; y: number }[] = [];
@@ -288,7 +291,7 @@ const bifrostEffects: RuleResolver = (context) => {
  * charged detonation, and the free-action explosion are documented summon
  * windows. */
 const rampantNailEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   // ICON p.227: the player chooses a space in range 3 for the spike.
   const chosen = context.input.positions?.['spike-position']?.[0];
@@ -309,7 +312,7 @@ const rampantNailEffects: RuleResolver = (context) => {
  * chooses the arc's orthogonal path (`input.positions['arc-path']`), the
  * shared arc geometry validates it, and the teleport goes to the arc's end. */
 const sturmreitenEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const { shape, length } = effectiveAreaFor(
     { round: context.state.round, actor: { ...source, maximumHp: source.maxHp } },
@@ -354,8 +357,8 @@ const sturmreitenEffects: RuleResolver = (context) => {
  * on the Wind interrupt (a foe enters a space adjacent to you — teleport 2 and
  * 1 piercing) until the start of your next turn. */
 const driftingLeafEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -382,9 +385,11 @@ const driftingLeafEffects: RuleResolver = (context) => {
 /** ICON p.227 Leaf on the Wind: player-selected Teleport 2 and deal 1 piercing
  * to the foe that entered a space adjacent to you. */
 const leafOnTheWindEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const foeId = context.triggerTargetIds?.[0] ?? context.input.actorIds?.target?.[0];
-  const foe = foeId ? sourceActor(context, foeId) : undefined;
+  const source = resolveSourceActor(context);
+  // The entering foe is the first recorded TRIGGER TARGET (ordered plural
+  // collection); a command-selected target is the CAPTURED fallback. Both
+  // resolve through the U1 collections — never an arbitrary first element.
+  const foe = resolveTriggerTargets(context)[0] ?? resolveCapturedSelectedActors(context, 'target')[0];
   if (!source.position || !foe?.position) return [];
   const mutations: RuleMutation[] = [];
   const landing = chosenTeleportDestination(context, source.id, 'teleport', source.position, 2, 'Leaf on the Wind');

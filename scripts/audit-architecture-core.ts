@@ -270,7 +270,33 @@ export function u8EncounterRoutingProblems(code: string): string[] {
  * `roles.ts` may project the same facts into the disjoint U2 role frame.
  * Actor-choice bucket reads in `choice.ts` are retained U4 validation, not a
  * second reference resolver. Every migrated generic consumer must keep calling
- * the U1 surface, and raw slot/self lookups elsewhere are competing authority. */
+ * the U1 surface, and raw slot/self lookups elsewhere are competing authority.
+ *
+ * LAYER COVERAGE: the guard scans primitives + kernels (as before) AND the
+ * named content layer (`content/`, every file except the content-authoring
+ * adapter itself). Content resolvers answer "what thing does a later clause
+ * refer to?" — a raw dereference of a legacy slot in a content program is the
+ * exact U1 residual the shared adapter exists to absorb, so content files (the
+ * adapter itself excepted) may not directly interpret `sourceActor(context,
+ * …)` or `…state.actors[context.…]`. This is a SEMANTIC routing pin, not a ban
+ * on incidental id fields: `context.actorId` as provenance on an emitted
+ * mutation (`sourceActorId:`), as scheduling/ownership identity, or as a U4
+ * choice-identity COMPARE (`input.actorIds` compared but never dereferenced)
+ * remains legitimate and is untouched. T5c additionally requires the content
+ * adapter itself to keep composing the single U1 vocabulary (so a future
+ * contributor cannot delete the adapter and route content through a bespoke
+ * remap), and pins each MIGRATED named program to its adapter accessors so a
+ * revert to legacy slot resolution is caught by dropping the call.
+ *
+ * Intentional non-goal (parity): success-path resolution is identical, but
+ * MIGRATING a resolver also moves its malformed-input failure to the shared
+ * `RuleProgramViolation` codes (`reference.*`) — so this release pins only the
+ * two migrated programs. The remaining direct content reads are classified,
+ * inventoried residual (U1 identity vs U2 role vs U4 choice validation vs U9
+ * provenance vs plumbing) in docs/u8-u1-underlay-census.md, to be migrated
+ * family-by-family with parity tests; the guard's content scan flags them only
+ * through the MIGRATED-family pins, never as a blanket ban that would force
+ * unplanned code-semantic drift. */
 export function u1ReferenceRoutingProblems(
   files: Readonly<Record<string, string>>,
 ): Array<{ file: string; detail: string }> {
@@ -283,8 +309,22 @@ export function u1ReferenceRoutingProblems(
     'kernels/evaluate-query.ts': ['resolveActorSelectorReference'],
     'primitives/attack-resolution.ts': ['resolveReference', 'liveActorSlot'],
   };
+  // T5c: migrated named-content programs must keep routing their actor
+  // reference reads through the shared content-authoring adapter (U1 surface).
+  const contentAdapterFile = 'content/glue/reference-authoring.ts';
+  const contentAdapterSurface: Readonly<Record<string, readonly string[]>> = {
+    'content/jobs/programs/bastion-programs.ts': ['resolveSourceActor', 'resolveAttackTarget', 'resolveCapturedSelectedActors'],
+    'content/jobs/programs/spellblade-programs.ts': ['resolveSourceActor', 'resolveAttackTarget', 'resolveCapturedSelectedActors', 'resolveTriggerTargets'],
+    'content/jobs/job-trait-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
+    'content/classes/class-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
+  };
   const problems: Array<{ file: string; detail: string }> = [];
-  for (const [file, code] of Object.entries(files)) {
+
+  // ---- Layer split: primitives/kernels (legacy generic scan) ----
+  const genericFiles = Object.fromEntries(
+    Object.entries(files).filter(([file]) => !file.startsWith('content/')),
+  );
+  for (const [file, code] of Object.entries(genericFiles)) {
     const executable = code.split('\n').filter((line) => {
       const trimmed = line.trimStart();
       return trimmed.length > 0 && !trimmed.startsWith('//') && !trimmed.startsWith('*');
@@ -308,6 +348,55 @@ export function u1ReferenceRoutingProblems(
       problems.push({ file, detail: 'resolves recorded actor-input identities outside U1 (or U4 choice validation)' });
     }
   }
+
+  // ---- Content layer: the adapter is the ONE named-content reference
+  // surface. Every OTHER content file may no longer interpret references by
+  // re-deriving a source actor via `sourceActor(context, …)` or dereferencing
+  // a legacy slot through `.state.actors[context.…]`. The direct
+  // `?.[0]`-style cardinality reads and U4 identity COMPARES stay exactly
+  // where they are (they are not reference interpretation). ----
+  for (const [file, code] of Object.entries(files)) {
+    if (!file.startsWith('content/')) continue;
+    const executable = code.split('\n').filter((line) => {
+      const trimmed = line.trimStart();
+      return trimmed.length > 0 && !trimmed.startsWith('//') && !trimmed.startsWith('*');
+    }).join('\n');
+    const isAdapter = file === contentAdapterFile;
+    // T5c: the content adapter itself must keep COMPOSING the U1 vocabulary —
+    // if it stops calling the reference constructors/resolution authority the
+    // content reference surface silently becomes a second reference system.
+    if (isAdapter) {
+      if (!/liveActorSlot\s*\(|liveActorBound\s*\(|capturedActor\s*\(|resolveReference\s*\(/.test(executable)) {
+        problems.push({ file, detail: 'content-authoring adapter no longer composes the single U1 vocabulary (primitives/reference.ts)' });
+      }
+      continue;
+    }
+    // The kernel-side `sourceActor(context, …)` convenience REMAINS the named
+    // program inventory's retained U1 residual (~120 call sites, classified
+    // family-by-family in docs/u8-u1-underlay-census.md; the choice-cardinality
+    // `?.[0]` select and U4 identity compares are caller-owned and never
+    // flagged). What is flagged is DIRECT DEREFERENCE of a legacy slot
+    // (`.state.actors[context.…]`) — the exact reference interpretation the
+    // adapter exists to absorb — plus (below) any regression in the MIGRATED
+    // programs, whose positive routing pins prove they keep consuming the
+    // adapter surface.
+    if (/state\.actors\s*\[\s*context\./.test(executable)) {
+      problems.push({ file, detail: 'content program dereferences a legacy reference slot (context.*) directly through state.actors instead of the U1 content-authoring adapter' });
+    }
+  }
+
+  // ---- T5c: migrated programs must keep ROUTING through the adapter. A
+  // revert to legacy direct slot resolution drops the adapter calls, which
+  // this positive pin catches (semantic routing, not import-presence). ----
+  for (const [file, symbols] of Object.entries(contentAdapterSurface)) {
+    const code = files[file];
+    if (code === undefined) continue; // a unit fixture may omit the program file
+    const missing = symbols.filter((symbol) => !new RegExp(`\\b${symbol}\\s*\\(`).test(code));
+    if (missing.length > 0) {
+      problems.push({ file, detail: `migrated content program no longer routes its reference reads through the U1 content-authoring adapter (uncalled: ${missing.join(', ')}); restore the adapter accessors instead of resolving state.actors slots directly.` });
+    }
+  }
+
   return problems;
 }
 
@@ -857,10 +946,17 @@ export function auditArchitecture(automationRoot: string): AuditResult {
   }
 
   // ---- Check 12: U1 reference consumers keep routing through reference.ts ----
+  // Scans primitives + kernels AS BEFORE, plus the named content layer: the
+  // content-authoring adapter (content/glue/reference-authoring.ts) is now the
+  // ONE content reference surface, migrated programs are pinned to it, and any
+  // other content file that re-derives a source actor via sourceActor(context,
+  // …) or dereferences state.actors[context.…] is caught as competing U1
+  // authority. (rules/encounter.ts and other non-automation consumers keep
+  // their existing U8-only pin.)
   const automationCode = Object.fromEntries(files
     .filter((file) => {
       const layer = layerFor(file, automationRoot);
-      return layer === 'primitives' || layer === 'kernels';
+      return layer === 'primitives' || layer === 'kernels' || layer === 'content';
     })
     .map((file) => [posixRelative(automationRoot, file), readFileSync(file, 'utf8')]));
   for (const problem of u1ReferenceRoutingProblems(automationCode)) {

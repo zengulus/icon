@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../kernels/runtime.js';
+import { resolveAttackTarget, resolveSourceActor } from '../glue/reference-authoring.js';
 import type { RuleMutation, RuleResolver, RuleResolverRegistry } from '../../primitives/types.js';
 
 /**
@@ -18,10 +19,16 @@ import type { RuleMutation, RuleResolver, RuleResolverRegistry } from '../../pri
  * records as the durable `hatred-of` provenance the damage pipeline halves
  * against (p.104). */
 const tauntResolver: RuleResolver = (context) => {
+  // The defensive gate stays caller-owned (U4 cardinality / gate validation):
+  // Requiring attackTargetId routes the target through the generic
+  // range/line-of-sight gate. The reference itself (target, source) resolves
+  // through the U1 content-authoring adapter.
   if (!context.attackTargetId) throw new RuleProgramViolation('choice.actor-count', 'Taunt requires one foe in range 3.');
-  const target = context.state.actors[context.attackTargetId];
-  if (!target) throw new RuleProgramViolation('selector.actor-missing', 'Taunt target does not exist.');
-  if (target.side === context.state.actors[context.actorId]?.side) {
+  // The caller-owned gate above guarantees the slot; the adapter still
+  // fail-closes (reference.missing-actor) if a nameless actor vanished.
+  const target = resolveAttackTarget(context)!;
+  const source = resolveSourceActor(context);
+  if (target.side === source.side) {
     throw new RuleProgramViolation('choice.actor-relation', 'Taunt can only target a foe.');
   }
   const mutations: RuleMutation[] = [{
@@ -42,8 +49,8 @@ const tauntResolver: RuleResolver = (context) => {
 const klingenkunstResolver: RuleResolver = (context) => {
   const destination = context.input.positions?.destination?.[0];
   if (!destination) throw new RuleProgramViolation('choice.position-required', 'Klingenkunst requires a destination within range 2.');
-  const source = context.state.actors[context.actorId];
-  if (!source?.position) throw new RuleProgramViolation('actor.unavailable', 'The user cannot teleport from off the battlefield.');
+  const source = resolveSourceActor(context);
+  if (!source.position) throw new RuleProgramViolation('actor.unavailable', 'The user cannot teleport from off the battlefield.');
   const grid = context.state.grid;
   if (destination.x < 0 || destination.y < 0 || destination.x >= grid.width || destination.y >= grid.height) {
     throw new RuleProgramViolation('move.out-of-bounds', 'Klingenkunst destination is outside the battlefield.');

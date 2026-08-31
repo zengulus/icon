@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../kernels/runtime.js';
+import { resolveAttackTarget, resolveSourceActor } from '../glue/reference-authoring.js';
 import { resolveCureMutations } from '../../primitives/status-saves.js';
 import type { RuleMutation, RuleResolver, RuleResolverRegistry } from '../../primitives/types.js';
 
@@ -21,8 +22,11 @@ export const CLASS_RULE_RESOLVERS: RuleResolverRegistry = {
   'vagabond:trait:skirmisher': applyCondition('skirmisher'),
   'vagabond:trait:dodge': applyCondition('dodge'),
   'vagabond:trait:prowl': (context) => {
-    const source = context.state.actors[context.actorId];
-    if (!source) return [];
+    // The source-actor reference resolves through the U1 content-authoring
+    // adapter (the legacy `if (!source) return []` guard was the off-actor
+    // hole that simply skipped Stealth; fail-closed resolution is strictly
+    // stricter — a nameless source is malformed command input).
+    const source = resolveSourceActor(context);
     // ICON p.116: Prowl costs one action unless no *living* foe is within
     // range 2. Defeated and off-board actors cannot make the activation cost.
     const foesInRange = Object.values(context.state.actors).some((target) => !target.defeated
@@ -41,10 +45,13 @@ export const CLASS_RULE_RESOLVERS: RuleResolverRegistry = {
   // point against the actual damage recipient.
   'mendicant:trait:diaga': (context) => {
     // Diaga targets a character in range 4.  Requiring attackTargetId routes
-    // that non-attack target through the generic range/line-of-sight gate.
+    // that non-attack target through the generic range/line-of-sight gate
+    // (caller-owned validation); the target reference itself resolves through
+    // the U1 content-authoring adapter (fail closed on a missing actor).
     if (!context.attackTargetId) throw new RuleProgramViolation('choice.actor-count', 'Diaga requires one character in range 4.');
-    const target = context.state.actors[context.attackTargetId];
-    if (!target) throw new RuleProgramViolation('selector.actor-missing', 'Diaga target does not exist.');
+    // The caller-owned gate above guarantees the slot; the adapter still
+    // fail-closes (reference.missing-actor) if a nameless actor vanished.
+    const target = resolveAttackTarget(context)!;
     return resolveCureMutations(context, target);
   },
   'mendicant:trait:bless': (context) => {
@@ -52,12 +59,14 @@ export const CLASS_RULE_RESOLVERS: RuleResolverRegistry = {
     // therefore required; do not let an unrelated input selector retarget the
     // Blessing after the command layer has range-checked attackTargetId.
     if (!context.attackTargetId) throw new RuleProgramViolation('choice.actor-count', 'Bless requires one character in range 4.');
+    // U4 choice-identity validation (ID compare, never dereferenced here).
     const inputTargets = context.input.actorIds?.target;
     if (inputTargets && (inputTargets.length !== 1 || inputTargets[0] !== context.attackTargetId)) {
       throw new RuleProgramViolation('choice.actor-mismatch', 'Bless input target must match its range-checked rule target.');
     }
-    const target = context.state.actors[context.attackTargetId];
-    if (!target) throw new RuleProgramViolation('selector.actor-missing', 'Bless target does not exist.');
+    // The caller-owned gate above guarantees the slot; the adapter still
+    // fail-closes (reference.missing-actor) if a nameless actor vanished.
+    const target = resolveAttackTarget(context)!;
     return [{ kind: 'resource', sourceId: context.sourceId, actorId: target.id, resourceId: 'blessing', operation: 'gain', amount: 1, minimum: 0, maximum: null }];
   },
   'mendicant:trait:succor': passiveState,

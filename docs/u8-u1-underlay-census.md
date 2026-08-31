@@ -65,12 +65,91 @@ route through U1. The `u1-reference-routing` guard rejects restored raw slot,
 implicit-source, or actor-input reference resolution in generic code; U2 role
 projection and U4 choice validation are explicit disjoint boundaries.
 
-U1 remains PARTIAL. A conservative lexical residual scan currently finds 314
-direct-reference signals across 18 named content-resolver files. That number
-is a migration inventory, not a semantic coverage count: many occurrences are
-repeated source/provenance reads, and each resolver still requires parity
-testing. The next smallest safe slice is one shared content-authoring adapter
-over U1 followed by behavior-preserving migration and a fresh residual scan.
+## U1 tranche executed (fresh HEAD, 2026-09-01)
+
+### Shared content-authoring adapter
+
+`content/glue/reference-authoring.ts` is the ONE content-facing U1 reference
+surface. It is NOT a second reference system and NOT a syntax shortcut: every
+accessor composes the single U1 vocabulary (`primitives/reference.ts`
+constructors + `resolveReference`) and expresses REFERENCE INTENT. The whole
+surface is six typed accessors — no generic `getActor(id)` convenience
+(described in `docs/rules-foundations.md` § U1):
+
+- `resolveSourceActor(context)` — LIVE source-actor reference (never a stale
+  snapshot; malformed source rejects `reference.missing-actor`);
+- `resolveAttackTarget(context)` — LIVE primary attack target, `undefined`
+  for a legitimately absent singular slot, fail-closed `reference.*` when the
+  slot names a missing actor;
+- `resolveTriggerSource(context)` — LIVE trigger source with the same
+  optional-singular/absent-vs-missing discipline;
+- `resolveTriggerTargets(context)` — plural trigger targets as an ORDERED
+  COLLECTION (never one arbitrary first element);
+- `resolveCapturedSelectedActors(context, key)` — CAPTURED command-selected
+  actor identities from the recorded `input.actorIds[key]`; replay applies
+  the recorded choice and never re-derives it from later state (defeated
+  captured actors stay resolvable as identity);
+- `resolveBoundActor(context, name)` — a BOUND actor referent, DOMAIN-verified
+  (a bound position cannot satisfy an actor reference).
+
+Query-shaped selectors stay U3; choice cardinality (`[0]`, mins/maxes) stays
+U4 at the caller; `context.actorId` as provenance (`sourceActorId:` on emitted
+mutations), scheduling/ownership identity, and U4 choice-identity COMPARES
+(IDs compared, never dereferenced) are NOT reference resolution and remain at
+their sites.
+
+### Migrated this tranche (behavior-preserving)
+
+- `content/jobs/programs/{bastion,spellblade}-programs.ts` — the two named
+  program families' source/attack/trigger/captured reads now route through the
+  adapter.
+- `content/jobs/job-trait-resolvers.ts` (Taunt, Klingenkunst) and
+  `content/classes/class-resolvers.ts` (Prowl, Diaga, Bless) — the six direct
+  `state.actors[context.…]` dereferences are gone; the resolvers' defensive
+  gates (`choice.actor-count` / `choice.actor-mismatch` / `ability.range` /
+  `actor.position`) stay caller-owned, and the adapter fail-closes
+  (`reference.missing-actor`) where the legacy code threw a bespoke
+  `selector.actor-missing`. Prowl's silent `if (!source) return []` skip is
+  strictly stricter now (fail closed).
+
+### Fresh residual inventory (semantic classification, not a ban list)
+
+A fresh scan at this HEAD finds ~120 remaining `sourceActor(context, …)`
+calls across a dozen named program files (Shade, Knave, Geomancer, Enochian,
+Warden, Seer, Stormbender, Demon Slayer, Chanter, Colossus, Harvester, Fool,
+Sealer, Freelancer). Classified by semantic family:
+
+- **U1 reference identity** (migrate next): the `sourceActor(context,
+  context.<slot>)` live-slot re-reads (≈60) and the `context.input.actorIds`
+  captured reads that are dereferenced into actors (Shade first/second,
+  Warden pair, Chanter chosen list, etc.).
+- **U4 choice-cardinality (retained, caller-owned)**: the `?.[0]`/`?.[1]`
+  single-selection and `.slice(1)` shapes that SELECT the recorded choice —
+  the adapter deliberately has no first-element collapse; these narrow to an
+  element and then feed a U1 captured/selected read.
+- **U1×U4 boundary (one semantic decision each, family-by-family)**:
+  `target[0] ?? context.attackTargetId` / `?? context.triggerTargetIds?.[0]`
+  priority chains (Geomancer, Enochian, Seer, Stormbender, Sealer, Freelancer,
+  Harvester, Knave) — which slot answers depends on the source contract at
+  each call site; migrated with its parity test, not mechanically.
+- **U9 provenance / plumbing (never migrate)**: `sourceActorId:` on emitted
+  mutations, `actorId: context.actorId` commands, and `context.attackTargetId
+  ?` gate tests remain at their sites.
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
+
+The `u1-reference-routing` architecture guard now scans the content layer: it
+requires the adapter to keep composing the U1 vocabulary, pins every MIGRATED
+program to its adapter accessors (a revert to legacy slot resolution drops the
+calls and is caught), and rejects any new direct `state.actors[context.…]`
+dereference. It deliberately does not ban the inventoried
+`sourceActor(context, …)` residual (that would force a blind mechanical
+rewrite), `context.input.actorIds` reads (U4 identity lives at the caller) or
+provenance `context.actorId` (never reference interpretation).
+
+U1 remains PARTIAL: the shared surface is proved and pinned, and the
+residual is now a classified migration inventory instead of an unexamined
+lexical count.
 
 ## Coverage and verification invariants
 
