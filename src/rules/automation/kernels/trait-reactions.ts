@@ -13,18 +13,26 @@
  * The fold decision is made once at the command boundary and the resulting
  * mutations ride the ability's RULE_MUTATIONS_APPLIED event (F0 durable-record
  * principle), exactly like the talent fold — replay applies exactly what the
- * command decided and never re-rolls or re-decides. The duration key of the
- * once-per-round gate is a durable `ledger:round:<sourceId>` ruleState flag
- * written as a `state` mutation by the fold; a round-start lifecycle recipe
- * clears it, so the gate resets at the next round boundary.
+ * command decided and never re-rolls or re-decides.
+ *
+ * The once-per-round gate is a U16 USAGE / ENTITLEMENT question: "has this
+ * reaction already fired within this round?" It therefore routes through the
+ * U16 core (`primitives/usage.ts`): `roundLedgerKey` is `usageKey` in the
+ * `round` period (byte-identical `ledger:round:<sourceId>`, so the shared
+ * gate, the reset lifecycle recipe, and the durable checkpoint format never
+ * drift), `roundLedgerAvailable` reads availability through U16's
+ * `usageCount`/`ledgerAvailable`, and the consume mark is U16's
+ * `consumeUsageMutation` (one-shot set true). A round-start lifecycle recipe
+ * clears the key, so the gate resets at the next round boundary.
  *
  * The wired rows themselves live in `content/jobs/trait-reactions.ts` and
  * register through `registerTraitReaction`. This module contains only the
- * closed registry, the fold, and the round-ledger helpers, and deliberately
- * no source IDs of its own.
+ * closed registry, the fold, and the round-ledger helpers (thin U16
+ * adapters), and deliberately no source IDs of its own.
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { RuleMutation } from '../primitives/types.js';
+import { consumeUsageMutation, ledgerAvailable, usageKey } from '../primitives/usage.js';
 import { affectedFoeIds } from './talent-recipes.js';
 
 /** The resolved mutation kinds a wired reaction may emit (each without its
@@ -91,14 +99,19 @@ export function traitReactionNeededTriggers(actor: EncounterActor): Set<'collide
   return needed;
 }
 
-/** The durable round-ledger key for a reaction's once-per-round gate. */
+/** The durable round-ledger key for a reaction's once-per-round gate — U16
+ * CORE (`usageKey` in the `round` period). Byte-identical to the long-standing
+ * `ledger:round:<sourceId>` format, so the shared gate, the U16 reset
+ * lifecycle recipe, and the checkpoint format stay one authority. */
 export function roundLedgerKey(sourceId: string): string {
-  return `ledger:round:${sourceId}`;
+  return usageKey({ sourceId, ownerId: '', scope: 'round' });
 }
 
-/** Whether the actor's round ledger still allows this reaction to fire. */
+/** Whether the actor's round ledger still allows this reaction to fire — U16
+ * CORE availability (the recorded usage count is below the one-shot cap). The
+ * fold never reconstructs availability from the raw `ruleState` directly. */
 export function roundLedgerAvailable(actor: EncounterActor, key: string): boolean {
-  return !actor.ruleState[key];
+  return ledgerAvailable(actor, key);
 }
 
 /**
@@ -137,7 +150,12 @@ export function traitReactionMutations(
     }
     const context: TraitReactionContext = { state, mutations, actorId: actor.id };
     const built: TraitReactionMutation[] = reaction.build(actor.id, triggerTargetIds, context);
-    if (ledgerKey) built.push({ kind: 'state', sourceActorId: actor.id, actorId: actor.id, key: ledgerKey, operation: 'set', value: true });
+    if (ledgerKey) {
+      // U16 CORE consume: the once-per-round mark is persisted as a typed U16
+      // ledger mutation (one-shot set true), never a hand-rolled state write.
+      const mark = consumeUsageMutation(traitId, actor.id, ledgerKey) as Extract<RuleMutation, { kind: 'state' }>;
+      built.push({ kind: 'state', sourceActorId: mark.sourceActorId, actorId: mark.actorId, key: mark.key, operation: mark.operation, value: mark.value });
+    }
     for (const mutation of built) out.push({ ...mutation, sourceId: traitId } as RuleMutation);
   }
   return out;

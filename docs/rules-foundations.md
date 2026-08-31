@@ -333,7 +333,7 @@ causal `sourceActorId`. Domain-specific provenance (`attackDamageProvenance`,
 `voluntary` flag) stays as documented retained specialists; U9 is the
 shared vocabulary facts and U16 reads consume. Tests: `t4-facts-provenance.test.ts`.
 
-### Fact / Outcome Record (U10 underlay) — LANDED (T4, 2026-08-30; corrected 2026-08-30)
+### Fact / Outcome Record (U10 underlay) — PARTIAL (T4 LANDED; repair re-audit 2026-08-31 conservatively demoted: movement/shove-rush-fly vs remove/place and save outcome distinctions must be shown representable in the recorded Fact vocabulary before AUTHORITATIVE)
 
 `primitives/facts.ts` owns the exactly-typed DISCRIMINATED `Fact` union
 (ability-used / attack-resolved / damage-applied / actor-defeated /
@@ -419,7 +419,7 @@ program-emitted fields; the permission registry is where content-registered
 permission rows fold). Tests: `t3-modifiers.test.ts`. Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
-### Transaction / Atomic Commit (U15 underlay) — LANDED (T3, 2026-08-30)
+### Transaction / Atomic Commit (U15 underlay) — PARTIAL (T3 landed `transaction.ts`; repair re-audit 2026-08-31 conservatively demoted: every flow deciding "which proposed state changes validate together before commit" — cost/payment, spatial batches/swaps, exact-count creation, grouped movement/flow — must be proven to route through the single grouping/snapshot/atomicity authority before AUTHORITATIVE)
 
 One atomic-grouping authority: `primitives/transaction.ts` owns
 `TransactionLeg` (intent + per-leg validate), `TransactionSpec` (legs +
@@ -442,7 +442,7 @@ event is emitted. U15 owns the grouping; per-domain legality stays in the
 domain authorities (spatial, payment, creation). Tests:
 `t3-transaction.test.ts`.
 
-### Usage / Entitlement Ledger (U16 underlay, CORE) — single executing authority (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b closure, 2026-08-31)
+### Usage / Entitlement Ledger (U16 underlay, CORE) — PARTIAL (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b closure, 2026-08-31; T-turn corrective repair re-audited to PARTIAL)
 
 "How many times has/may this rule be used within scope X?" — distinct from
 spendable resources. `primitives/usage.ts` owns the core ledger:
@@ -506,6 +506,33 @@ its actor's per-turn cap. No durable shape changed (schema stays 12).
 Tests: `t3-usage.test.ts` + `t4-dedup.test.ts` +
 `t4-corrective.test.ts` + `use-ledger.test.ts` +
 `t6-4-usage-global-ledger.test.ts`.
+
+**Corrective re-audit (this tranche, 2026-08-31) — U16 demoted from
+AUTHORITATIVE to PARTIAL, then the concrete duplicate repaired.** The
+underlay-repair audit found a REAL executing duplicate that the prior
+T6.4a/b "zero competing authority" claim over-looked: `kernels/trait-reactions.ts`
+(the F9 once-per-round reactive job-trait fold) independently implemented
+its own round ledger — it reconstructed the canonical `ledger:round:<id>`
+key, read availability straight off `ruleState`, and wrote its own one-shot
+`set true` mark (its own key/availability/consume), instead of routing the
+"has this reaction already fired this round?" entitlement through the U16
+core. That violates the authoritative invariant (a competing executing
+implementation, even with identical results). The fold now derives its key
+from U16 `usageKey` (round), reads availability through U16
+`ledgerAvailable`, and persists its mark through U16 `consumeUsageMutation`
+(byte-identical durable output; behavior-preserving — 8 trait-reaction
+tests incl. once-per-round exact-once, round-boundary reset, replay, and a
+new two-owner isolation adversarial case stay green). The
+`u16-usage-ledger-routing` architecture guard now flags any non-U16
+primitives/kernels file that reconstructs a `ledger:<scope>:…` key, and
+pins the F9 fold to the U16 core symbols. U16 is therefore PARTIAL: the
+generic canonical-ledger authority is single again, but a census of the
+remaining actor-level once-per-round/turn trigger marks
+(`chain-reaction-used`, `incubus:triggered`, `stampede:triggered`,
+`gates-of-hell:vigilance-rushed`, `damage-immune`, and per-source `:used`
+flags) must prove each is a U10/mark de-dup or content-owned state rather
+than a second usage ledger before AUTHORITATIVE can be re-certified. See
+`docs/t6-gate-report.md` and the tranche report.
 
 ### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)
 

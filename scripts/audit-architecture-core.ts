@@ -208,6 +208,41 @@ const U2_PERSPECTIVE_SYMBOLS: ReadonlyMap<string, string> = new Map([
 // NOT matched — the actor's own side is a property, not the U2 member perspective.
 const AURA_ANCHOR_SIDE_RESTORE_RE = /origin\.side\b|\.side\s*\?\?\s*null/;
 
+// U16 (usage/entitlement) single-authority guard details.
+//
+// The canonical durable key format is `ledger:<scope>:<sourceId>` and the
+// availability / consume / refresh semantics are owned by `primitives/usage.ts`
+// (with the `kernels/use-ledger.ts` adapter). ONLY those two files may
+// construct the key (`` `ledger:${scope}:…` ``). A contributor who re-implements
+// a once-per-turn/round/combat ledger elsewhere reconstructs the canonical key
+// locally — e.g. the F9 fold previously derived `` `ledger:round:${sourceId}` ``
+// and read/`set` it directly instead of routing through U16. That is a
+// competing U16 authority even when behaviour is identical.
+const U16_LEDGER_AUTHORITY_FILES: ReadonlySet<string> = new Set([
+  'primitives/usage.ts',
+  'kernels/use-ledger.ts',
+]);
+
+// The key-construction signal: a template literal rebuilding the canonical
+// `ledger:<scope>:…` storage address. Matches both the generic interpolation
+// (`` `ledger:${scope}:${sourceId}` ``) and a hard-coded period form
+// (`` `ledger:round:${sourceId}` `` — the exact shape the F9 fold used to
+// rebuild). Absent in every file except the U16 authority pair (verified by
+// valid-files tests in the architecture suite).
+const U16_LEDGER_KEY_RECONSTRUCTION_RE = /ledger:(?:[a-z-]+:)?\$\{/;
+
+// The F9 reactive fold (`kernels/trait-reactions.ts`) was migrated to route its
+// once-per-round gate through the U16 core. It must keep using the U16
+// symbols; a contributor who re-derives availability / consume / key locally
+// drops the import, which this structural allowlist catches (exactly like the
+// U2 guard).
+const U16_CONSUMER_SYMBOLS: ReadonlyMap<string, Set<string>> = new Map([
+  // The once-per-round gate must derive its key, availability, and consume mark
+  // through the U16 CORE (`usageKey` / `ledgerAvailable` / `consumeUsageMutation`),
+  // never by reconstructing `ledger:round:*` / reading ruleState directly.
+  ['kernels/trait-reactions.ts', new Set(['usageKey', 'ledgerAvailable', 'consumeUsageMutation'])],
+]);
+
 // Patterns that indicate side-effect registration at module scope
 const REGISTER_CALL_RE = /^\s*(?:register\w+|Object\.assign)\s*\(/;
 // ---------------------------------------------------------------------------
@@ -416,6 +451,50 @@ export function auditArchitecture(automationRoot: string): AuditResult {
         check: 'u2-perspective-authority',
         file: relFile,
         detail: `aura.ts re-derives ally/foe from the spatial anchor/owner side instead of the U2 perspective role (perspectiveActorId); ROLE ≠ ANCHOR — only the U2 authority establishes the member relation.`,
+      });
+    }
+  }
+
+  // ---- Check 7: no local reconstruction of the U16 usage-ledger key ----
+  // U16 (`primitives/usage.ts` + the `kernels/use-ledger.ts` adapter) is the ONE
+  // authority for the durable `ledger:<scope>:<sourceId>` key AND for its
+  // availability / consume / refresh semantics. Only those two files build the
+  // canonical key (`` `ledger:${scope}:…` ``). A second executing usage ledger
+  // reconstructed in any other primitives/kernels file is a competing U16
+  // authority even when it produces identical keys/results — caught here BEFORE
+  // it can silently diverge. (The `u16-perspective-authority`-style symbol
+  // allowlist below separately pins the migrated trait-reactions fold to the
+  // U16 CORE symbols.)
+  for (const file of files) {
+    const relFile = posixRelative(automationRoot, file);
+    if (U16_LEDGER_AUTHORITY_FILES.has(relFile)) continue;
+    const layer = layerFor(file, automationRoot);
+    if (layer !== 'primitives' && layer !== 'kernels') continue;
+    const code = readFileSync(file, 'utf8');
+    if (U16_LEDGER_KEY_RECONSTRUCTION_RE.test(code)) {
+      violations.push({
+        check: 'u16-usage-ledger-routing',
+        file: relFile,
+        detail: `locally reconstructs the U16 usage-ledger key ('ledger:<scope>:…'); route availability / consume / refresh through primitives/usage.ts (kernels/use-ledger.ts) instead of rebuilding the canonical ledger key.`,
+      });
+    }
+  }
+
+  // ---- Check 8: migrated U16 consumers must keep routing through the U16 core ----
+  for (const [relFile, symbols] of U16_CONSUMER_SYMBOLS) {
+    const file = join(automationRoot, relFile);
+    let code: string;
+    try {
+      code = readFileSync(file, 'utf8');
+    } catch {
+      continue; // fixture root may omit the file
+    }
+    const missing = [...symbols].filter((s) => !code.includes(s));
+    if (missing.length > 0) {
+      violations.push({
+        check: 'u16-usage-ledger-routing',
+        file: relFile,
+        detail: `migrated U16 consumer no longer routes its usage/entitlement reads through the U16 core (missing ${missing.join(', ')}); restore the U16 authority instead of rebuilding the ledger locally.`,
       });
     }
   }

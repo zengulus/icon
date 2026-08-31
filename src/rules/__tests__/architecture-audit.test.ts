@@ -314,6 +314,84 @@ describe('auditArchitecture (violation detection)', () => {
     rmSync(tmpDir, { recursive: true });
   });
 
+  it('U16 guard detects a kernel that reconstructs the canonical usage-ledger key locally', () => {
+    setup();
+    // A locally-implemented once-per-round ledger: rebuild the canonical
+    // `ledger:<scope>:<sourceId>` key instead of routing through usage.ts.
+    writeFileSync(
+      join(tmpDir, 'kernels', 'foo.ts'),
+      'const k = `ledger:round:${sourceId}`;\n',
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u16-usage-ledger-routing',
+          file: 'kernels/foo.ts',
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16 guard detects a primitives file that reconstructs a usage-ledger key', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'primitives', 'foo.ts'),
+      'const ping = `ledger:${scope}:${id}`;\n',
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u16-usage-ledger-routing',
+          file: 'primitives/foo.ts',
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16 guard flags a migrated consumer that dropped its U16 core symbols', () => {
+    setup();
+    // trait-reactions.ts rebuilt the round ledger locally and dropped the U16
+    // CORE consume/availability imports.
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      'const k = `ledger:round:${traitId}`;\nfunction available(a, k){ return !a.ruleState[k]; }\n',
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          check: 'u16-usage-ledger-routing',
+          file: 'kernels/trait-reactions.ts',
+        }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16 guard does not flag the two U16 authority files for key reconstruction', () => {
+    setup();
+    // usage.ts and use-ledger.ts are allowed to build the canonical key.
+    writeFileSync(
+      join(tmpDir, 'primitives', 'usage.ts'),
+      'export const usageKey = (s) => `ledger:${s.scope}:${s.sourceId}`;\n',
+    );
+    writeFileSync(
+      join(tmpDir, 'kernels', 'use-ledger.ts'),
+      'export const prefix = `ledger:${p}:`;\n',
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations.filter((v) => v.check === 'u16-usage-ledger-routing')).toEqual([]);
+    rmSync(tmpDir, { recursive: true });
+  });
+
   it('detects unmapped registration modules', () => {
     setup();
     // A content file that calls registerFoo() but is NOT imported by registry.ts
@@ -397,6 +475,53 @@ describe('single U2 perspective authority', () => {
     const code = readFileSync(path.join(srcDir, 'rules', 'automation', 'primitives', 'roles.ts'), 'utf8');
     expect(code).not.toMatch(/from '[.][^']*\/kernels\//);
     expect(code).not.toMatch(/from '[.][^']*\/content\//);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Single U16 usage/entitlement authority (U16 consumer-routing guard)
+// ---------------------------------------------------------------------------
+
+describe('single U16 usage/entitlement authority', () => {
+  const shareDir = import.meta.dirname;
+  const srcDir = join(shareDir, '..', '..');
+  const read = (rel: string) => {
+    const { readFileSync } = require('node:fs');
+    const path = require('node:path');
+    return readFileSync(path.join(srcDir, 'rules', 'automation', rel), 'utf8');
+  };
+
+  it('the once-per-round F9 fold routes through U16 and does not rebuild the ledger key', () => {
+    const traitReactions = read('kernels/trait-reactions.ts');
+    // Uses the U16 CORE surfaces for its round gate.
+    expect(traitReactions).toContain('usageKey');
+    expect(traitReactions).toContain('ledgerAvailable');
+    expect(traitReactions).toContain('consumeUsageMutation');
+    // It must NOT reconstruct the canonical `ledger:round:<id>` key itself.
+    expect(traitReactions).not.toMatch(/ledger:\$\{/);
+  });
+
+  it('only the two U16 authority files construct the canonical ledger key', () => {
+    const { readdirSync, readFileSync, statSync } = require('node:fs');
+    const path = require('node:path');
+    const srcDir = path.resolve(import.meta.dirname ?? __dirname, '..', '..');
+    const violations: string[] = [];
+    function scanDir(dir: string): void {
+      for (const entry of readdirSync(dir)) {
+        const fullPath = path.join(dir, entry);
+        if (statSync(fullPath).isDirectory()) { scanDir(fullPath); continue; }
+        if (!fullPath.endsWith('.ts') || fullPath.endsWith('.test.ts')) continue;
+        const rel = path.relative(srcDir, fullPath).split(path.sep).join('/');
+        if (rel === 'rules/automation/primitives/usage.ts' || rel === 'rules/automation/kernels/use-ledger.ts') continue;
+        const content = readFileSync(fullPath, 'utf8');
+        if (/ledger:\$\{/.test(content)) {
+          violations.push(`Canonical usage-ledger key reconstructed outside the U16 authority in ${rel}`);
+        }
+      }
+    }
+    scanDir(path.join(srcDir, 'rules', 'automation', 'primitives'));
+    scanDir(path.join(srcDir, 'rules', 'automation', 'kernels'));
+    expect(violations).toEqual([]);
   });
 });
 

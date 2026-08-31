@@ -57,6 +57,24 @@ cross-owner + missing-owner, suspension/exact-once, replay with permuted
 input, interrupt/phase boundaries). U2 role-consumer routing is now the next
 smallest blocker (U16's raw-field consolidation closed in T6.4).
 
+**Underlay-repair re-pass (2026-08-31, HEAD after `a531f12`).** This
+document is extended by the underlay-authority repair pass
+(`docs/t6-underlay-repair-report.md`). The repair pass re-audited every
+underlay against HEAD and found false closures the T6.4b "zero competing
+authority" claims over-looked. Deltas vs the B matrix below: **U16 demoted
+AUTHORITATIVE → PARTIAL** (a genuine executing duplicate — the F9
+`trait-reactions.ts` independently built a `ledger:round:*`
+key/availability/consume — was repaired this pass; residual actor-level
+once-per-round/turn trigger marks still need a classification census),
+**U10 and U15 demoted TRUE → PARTIAL** (per the strict invariant: U10 must
+positively prove movement/shove-rush-fly vs remove/place and save outcomes
+are representable in recorded facts, U15 must prove every atomic-group
+route goes through `transaction.ts`; those proofs are not yet exhaustive).
+U2, U13, U17 remain AUTHORITATIVE (verified this pass: U2's `roles.ts`
+single authority + `u2-perspective-authority` guard green; U13's ONE
+`DecisionWindowRecord` is the only window schema; U17 records ordering as
+durable ranks, never array/registration order).
+
 This report is a CLAIM TO AUDIT. The authoritative phase gate and the
 authoritative per-underlay contracts remain `docs/underlay-completion-plan.md`
 §4 and §1 rows. Where the prior `6591d5a` report disagreed with §1 or with
@@ -259,18 +277,25 @@ acceptance met.
 | U7 Anchor | `primitives/anchor.ts` | PARTIAL | aura origins, `runtime.ts` actorId-as-anchor, rebound origin (U12), entity `creationSpatial` | PARTIAL |
 | U8 Scope/Clock | `primitives/scope.ts` | PARTIAL | ~~`use-ledger` periods~~ migrated (T6.1); remaining: `RuleDuration` consumers, `RuleTiming` boundary reads, lifecycle phase-duration expiry, scheduler round counters | PARTIAL |
 | U9 Provenance | `primitives/provenance.ts` | PARTIAL | `resolution-triggers` read, damage-ledger entry construction, movement-entry folds, reroll-save | PARTIAL |
-| U10 Fact | `primitives/facts.ts` | LANDED (T4) | executedStepIds/derivedTriggers → typed facts (flow bookkeeping, documented) | TRUE |
+| U10 Fact | `primitives/facts.ts` | LANDED (T4) | executedStepIds/derivedTriggers → typed facts (flow bookkeeping, documented). Repair re-audit: conservatively PARTIAL until movement/shove-rush-fly vs remove/place and save outcome distinctions are shown representable in the recorded Fact vocabulary (a flagged weak point) | PARTIAL |
 | U11 Flow | `kernels/execute-flow.ts` | PARTIAL | per-resolver hand-sequenced code; no separate `choose` node required (`open-window→U13→U4` is the sole mid-flow decision carriage, corrected) | PARTIAL |
 | U12 Continuation | `primitives/continuation.ts` + `continuation-runtime.ts` | PARTIAL | resolver end-of-turn effects (Polaris/Carnevale), save-window AST, held-damage records | PARTIAL |
 | U13 Window | `kernels/decision-window.ts` | AUTHORITATIVE (T5c.1) | DONE (window layer) | TRUE |
 | U14 Modifier | `primitives/modifiers.ts` | LANDED + `RuleModifier` stat bag unresolved | `RuleModifier` stat bag → typed query points; attack/mastery/bonus-damage/aura reads | PARTIAL |
-| U15 Transaction | `primitives/transaction.ts` | LANDED (T3) | cost-payment, `spatialBatchId`, `countMode:exact`, `requiresLegalSpatialBatch` (documented U15 instantiations) | TRUE |
-| U16 Usage | `primitives/usage.ts` + `use-ledger.ts` | AUTHORITATIVE (T6.4 + T6.4a corrective + T6.4b closure) | usage/entitlement is the single executing authority: the six §8 gate conditions are met — (1) the one-interrupt-per-turn restriction is ACTOR-LOCAL (p.91 subject is the character; Black Rock Vanguard is an actor-scoped override) and No Repeats + `standardMoveUsed` are MIGRATED to typed `ledger:*` keys (schema 12) and REMOVED; the one-attack gate is `ledger:turn:core:attack-this-turn` (distinct from the `attackedThisTurn` U10 fact); the `any-turn` per-actor windows (one-interrupt-during-any-turn, No Repeats, Slashed, dangerous terrain) reopen at every turn start while owner-relative `turn` pools refresh only at the owner's turn; the dangerous-terrain once-per-turn reading is recorded as adopted adjudication `icon-1.5:dangerous-terrain:damage-cadence`; lifecycle reset recipes ownerless noops. T6.4b additionally: generic `EXECUTE_RULE` interrupts authorize through the ONE `interruptLegality` U16 gate (window + pool + No Repeats) BEFORE effects/RNG; p.290 Repeatable is an ACTION-TAG decision (`noRepeatsApplies`, foe actions + a new generic `repeatable` mastery-modifier family consumed by both command and reducer so Phantom Bolts' mastered retrigger is legal and records no fabricated mark); reactive window discovery keys No Repeats by the interrupt's own sub-action id (a used stance never blocks its distinct Heroic Intervention). No durable shape change => schema stays 12 | TRUE |
+| U15 Transaction | `primitives/transaction.ts` | LANDED (T3) | `transaction.ts` is a good generic primitive, but U15 stays PARTIAL per the tranche baseline until every high-level flow that validates a proposed state batch together (cost/payment, spatial swaps, exact-count creation, grouped movement) provably routes through the single grouping/snapshot/atomicity authority rather than independently implementing it | PARTIAL |
+| U16 Usage | `primitives/usage.ts` + `use-ledger.ts` | AUTHORITATIVE (T6.4 + T6.4a corrective + T6.4b closure) | usage/entitlement is the single executing authority: the six §8 gate conditions are met — (1) the one-interrupt-per-turn restriction is ACTOR-LOCAL (p.91 subject is the character; Black Rock Vanguard is an actor-scoped override) and No Repeats + `standardMoveUsed` are MIGRATED to typed `ledger:*` keys (schema 12) and REMOVED; the one-attack gate is `ledger:turn:core:attack-this-turn` (distinct from the `attackedThisTurn` U10 fact); the `any-turn` per-actor windows (one-interrupt-during-any-turn, No Repeats, Slashed, dangerous terrain) reopen at every turn start while owner-relative `turn` pools refresh only at the owner's turn; the dangerous-terrain once-per-turn reading is recorded as adopted adjudication `icon-1.5:dangerous-terrain:damage-cadence`; lifecycle reset recipes ownerless noops. T6.4b additionally: generic `EXECUTE_RULE` interrupts authorize through the ONE `interruptLegality` U16 gate (window + pool + No Repeats) BEFORE effects/RNG; p.290 Repeatable is an ACTION-TAG decision (`noRepeatsApplies`, foe actions + a new generic `repeatable` mastery-modifier family consumed by both command and reducer so Phantom Bolts' mastered retrigger is legal and records no fabricated mark); reactive window discovery keys No Repeats by the interrupt's own sub-action id (a used stance never blocks its distinct Heroic Intervention). No durable shape change => schema stays 12. **Repair re-audit: PARTIAL** — the F9 `trait-reactions.ts` was a genuine executing duplicate (independent `ledger:round:*` key/availability/consume) and is now routed through the U16 core (this repair pass, `u16-usage-ledger-routing` guard added), but the remaining actor-level once-per-round/turn trigger marks still need a classification census before AUTHORITATIVE can be re-certified | PARTIAL |
 | U17 Ordering | `primitives/ordering.ts` | COMPLETE/AUTHORITATIVE (T6.2 recorded same-owner decision + T6.3 turn-boundary consumers) | recorded same-owner permutation LANDED (T6.2); turn-boundary consumers (non-active-owner-first, hostile-before-beneficial, same-owner controller-choice at real call sites) LANDED (T6.3); duplicate lifecycle/listing-order authority REMOVED | TRUE |
 
-**Only U10, U13, U15 meet the complete-contract bar.** Everything else has an
-outstanding §1 consumer migration or unbuilt seam. This is materially more
-conservative than `6591d5a`, and it is the honest code-and-§1 truth.
+**Only U13, U17 (and U2 by evidence) meet the strict complete-contract bar.**
+The repair re-pass conservatively demoted U10, U15, and U16 (the three rows
+previously credited as single-authority) back to PARTIAL: U10's fact
+vocabulary must positively prove movement/save distinctions, U15's atomic
+grouping must be proven to route through `transaction.ts` everywhere, and
+U16 carried a real executing duplicate (now repaired) plus residual actor-
+level once-per-scope trigger marks. Everything else has an outstanding §1
+consumer migration or unbuilt seam. This is materially more conservative
+than `6591d5a` (and than the interim T6.4a/b AUTHORITATIVE claims) and it is
+the honest code-and-§1 truth.
 
 ---
 
@@ -490,7 +515,7 @@ Evaluate each §4 criterion as written.
 
 | # | Criterion | Verdict | Evidence |
 | --- | --- | --- | --- |
-| 1 | U1–U17 source-backed contracts current and true of code | **PASS** | Every §1 row is now current and code-true: PARTIAL underlays truthfully state their unfinished migrations (U2, U3, U4, U5, U6, U7, U8, U9, U11, U12, U14) and LANDED/AUTHORITATIVE rows match code (U10, U13, U15, U16, U17). The U11 `choose` contract and the U8 `use-ledger` reset row were reconciled; U16 reached AUTHORITATIVE in T6.4a once all six closure gates were met (actor-local interrupts, `usedAbilityIds`/`standardMoveUsed` migrated, the dangerous-terrain adjudication recorded, no competing authority, acceptance suite green) — see §B/§D. Note: a contract truthfully stating `PARTIAL` still satisfies §4.1; incompleteness is judged under §4.2/§4.3/§4.4, not §4.1 |
+| 1 | U1–U17 source-backed contracts current and true of code | **PASS** | Every row is now current and code-true (see the preamble re-audit + `docs/t8-underlay-repair-report.md`): PARTIAL underlays truthfully state their unfinished migrations (U1, U3, U4, U5, U6, U7, U8, U9, U10, U11, U12, U14, U15, U16) and AUTHORITATIVE rows match code (U2, U13, U17). The U10/U15/U16 rows were conservatively demoted from the interim T6.4a claims (U16 carried a real executing duplicate now repaired). Note: a contract truthfully stating `PARTIAL` still satisfies §4.1; incompleteness is judged under §4.2/§4.3/§4.4, not §4.1 |
 | 2 | One clearly owned semantic authority each; named locations migrated or documented retained specialists | **FAIL** | Resolved: U2 role consumers (T7: candidate perspective via `relationPerspectiveIdFromContext`; aura `perspectiveActorId`; decision-window/`choiceEntitledPlayer` responders via `resolveRoleSelector`; `targeting.ts` parameterized retained specialist; `u2-perspective-authority` guard). Unresolved: U8 `RuleDuration`/`RuleTiming`/lifecycle/scheduler surfaces (use-ledger reset migrated in T6.1), U14 `RuleModifier`, U9 reconstruction, U6 gate-body folds, U12 resolver effects. U16 raw fields REMOVED (T6.4 schema 11 + T6.4a schema 12); the one-interrupt-per-turn window is ACTOR-LOCAL; `usedAbilityIds`/`standardMoveUsed` are gone; `attackedThisTurn` retained as a documented U10 fact specialist. U17's lifecycle registration-order and expiry misfiring-order duplicate authorities are REMOVED (T6.3) |
 | 3 | Required acceptance tests exist and pass | **FAIL (not established)** | Exhaustive matrix (deliverable C) has MISSING rows for U2, U4, U5, U6, U7, U8 (duration/lifecycle expiry), U9, U12, U14. The U17 recorded same-owner ordering + replay obligation is PASS (T6.2) and the U17 turn-boundary consumers obligation is PASS (T6.3); the U16 usage/entitlement acceptance rows are PASS (T6.4 + T6.4a). The remaining PARTIAL rows (U2/U4/U5/U6/U7/U8/U9/U12/U14) lack a closed acceptance suite, so the criterion as a whole is NOT ESTABLISHED |
 | 4 | No known duplicate competing authority | **FAIL** | U2 role/perspective reads NO LONGER DUPLICATE roles.ts (T7: candidate + aura migrated; targeting/save-rolled-of the U16/`matchesTargetRelation` retained specialists; `u2-perspective-authority` guard). Remaining duplicates: U8 `RuleDuration`/`RuleTiming`/scheduler temporal surfaces beside Clock (use-ledger reset now routes through U8); U14 `RuleModifier` bag beside the fold. U16 no longer duplicates the ledger on raw actor fields (T6.4 + T6.4a; the architecture `bespoke-u16-entitlement-field` guard forbids reintroducing them). The U17 duplicate ordering authority is REMOVED (T6.3) |
@@ -585,6 +610,15 @@ interrupts, both migrations, the recorded adjudication, no competing
 executing authority, the full named acceptance suite green) are demonstrably
 met — not merely because the original four raw fields were removed. The
 UNDERLAY PHASE gate stays OPEN on U2/U8/U12/U14/U9/U6.
+
+> **Historical T6.4a claim, superseded by the T8 repair re-audit.** The
+> "U16 is now AUTHORITATIVE … no competing executing authority" claim above
+> was premature: the T8 audit found `kernels/trait-reactions.ts` had silently
+> reconstructed the `ledger:round:*` key / availability / consume as its own
+> executing U16 duplicate. T8 migrated it onto the U16 core and added a guard;
+> U16 is now truthfully PARTIAL (see the preamble re-audit and the full
+> `docs/t8-underlay-repair-report.md`). U10 and U15 were likewise conservatively
+> demoted.
 
 ---
 

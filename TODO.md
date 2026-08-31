@@ -42,6 +42,19 @@ assumption here, document the evidence and update this list before proceeding.
 > resume only after the UNDERLAY PHASE COMPLETE gate
 > (`docs/underlay-completion-plan.md` §4). Per-task tracking lives in the
 > ledger below; the plan document owns contracts, DAG, and gates.
+>
+> **T8 — Underlay Authority Repair re-audit (2026-08-31).** Re-audited every
+> underlay under the strict AUTHORITATIVE invariant and corrected the audit
+> and architecture guards so AUTHORITATIVE cannot coexist with a competing
+> executing authority. Concrete outcome: U16 was found to be a false closure
+> (the F9 `trait-reactions.ts` independently reconstructed the `ledger:round:*`
+> key / availability / consume) — migrated onto the U16 core
+> (`usageKey`/`ledgerAvailable`/`consumeUsageMutation`) with no behavioral
+> change, new adversarial two-owner + key-identity tests, and the
+> `u16-usage-ledger-routing` architecture guard. U16, U10, and U15 are
+> conservatively PARTIAL (see `docs/t8-underlay-repair-report.md`); U2/U13/U17
+> remain AUTHORITATIVE. Zero source units promoted; census byte-stable at 427.
+> Phase gate remains OPEN.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
