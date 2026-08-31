@@ -12,6 +12,12 @@ import {
   layerFor,
   walk,
 } from '../../../scripts/audit-architecture-core.js';
+import {
+  buildU1ResidualInventory,
+  categorizeSourceActorArgument,
+  scanFileSites,
+} from '../../../scripts/u1-residual-inventory.js';
+import { join as joinPath } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // parseImports
@@ -114,6 +120,92 @@ describe('auditArchitecture (real codebase)', () => {
     expect(isBespokeU16FieldName('attackedThisTurn')).toBe(false);
     expect(isBespokeU16FieldName('turnTaken')).toBe(false);
     expect(isBespokeU16FieldName('turnsTakenThisRound')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U1 residual census integrity (machine-derived; one source of truth)
+// ---------------------------------------------------------------------------
+// The named-content U1 residual census is DERIVED from a site-level inventory
+// (scripts/u1-residual-inventory.ts): every `sourceActor(` call site records
+// file/line/shape/category, and total / per-category / per-file counts are
+// computed from that list — never hand-maintained. These tests enforce the
+// executable invariant `total === sum(all mutually exclusive categories)` and
+// pin the exact repo figures, so the 242-vs-188+55 class of drift cannot
+// recur. (Pre-repair prose misclassified ONE site — harvester's in-call
+// captured-identity read `sourceActor(context, context.input.actorIds.target[0])`
+// — as BOTH pure and captured; the machine inventory is consistent: ea9526c
+// 242 = 187 + 54 + 1, current 229 = 174 + 54 + 1.)
+describe('U1 residual census (machine inventory)', () => {
+  const PROGRAMS_ROOT = joinPath(import.meta.dirname, '../automation/content/jobs/programs');
+
+  it('total === sum of all mutually exclusive categories, at the repo root', () => {
+    const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
+    const categorySum =
+      inventory.categoryCounts.PURE_LIVE_REFERENCE
+      + inventory.categoryCounts.CAPTURED_ID_DEREFERENCE
+      + inventory.categoryCounts.DERIVED_OR_PRECEDENCE_BOUNDARY
+      + inventory.categoryCounts.NON_U1_OTHER;
+    expect(inventory.consistent).toBe(true);
+    expect(inventory.total).toBe(categorySum);
+    expect(inventory.total).toBeGreaterThan(0);
+  });
+
+  it('sum of per-file counts equals the total (no cross-file drift)', () => {
+    const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
+    const perFileTotal = Object.values(inventory.perFile).reduce(
+      (acc, counts) => acc + counts.PURE_LIVE_REFERENCE + counts.CAPTURED_ID_DEREFERENCE + counts.DERIVED_OR_PRECEDENCE_BOUNDARY + counts.NON_U1_OTHER,
+      0,
+    );
+    expect(perFileTotal).toBe(inventory.total);
+    // Every file present in the scan is represented per-file and vice versa.
+    const fileNames = new Set(inventory.sites.map((site) => site.file));
+    expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
+  });
+
+  it('pins the exact repo figures (229 = 174 + 54 + 1) so docs cannot drift from the machine', () => {
+    const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
+    expect(inventory.total).toBe(229);
+    expect(inventory.categoryCounts).toEqual({
+      PURE_LIVE_REFERENCE: 174,
+      CAPTURED_ID_DEREFERENCE: 54,
+      DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
+      NON_U1_OTHER: 0,
+    });
+  });
+
+  it('every site carries a machine-derived provenance string (auditable classification)', () => {
+    const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
+    for (const site of inventory.sites) {
+      expect(site.provenance.length).toBeGreaterThan(0);
+      expect(site.line).toBeGreaterThan(0);
+      expect(site.shape.startsWith('sourceActor(')).toBe(true);
+    }
+  });
+
+  it('classifier mutation: the harvester in-call captured read is the ONE boundary site, never double-counted', () => {
+    // The pre-repair hand scan classified this site as BOTH pure and captured
+    // (`188+55=243 ≠ 242`). The machine classifier must place it in exactly
+    // one bucket: the DERIVED_OR_PRECEDENCE_BOUNDARY (it names recorded input
+    // inside the call).
+    expect(categorizeSourceActorArgument('context.actorId')).toBe('PURE_LIVE_REFERENCE');
+    expect(categorizeSourceActorArgument('context.attackTargetId')).toBe('PURE_LIVE_REFERENCE');
+    expect(categorizeSourceActorArgument('context.input.actorIds.target[0]')).toBe('DERIVED_OR_PRECEDENCE_BOUNDARY');
+    expect(categorizeSourceActorArgument('targetId')).toBe('CAPTURED_ID_DEREFERENCE');
+    expect(categorizeSourceActorArgument('allyIds[i]')).toBe('CAPTURED_ID_DEREFERENCE');
+  });
+
+  it('scanner survival: multi-line calls count as ONE site; harness, not hand grep', () => {
+    const text = [
+      "const source = sourceActor(context,",
+      "  context.actorId);",
+      'const other = sourceActor(context, targetId);',
+    ].join('\n');
+    const sites = scanFileSites('fixture.ts', text);
+    expect(sites).toHaveLength(2);
+    expect(sites[0].line).toBe(1);
+    expect(sites[0].category).toBe('PURE_LIVE_REFERENCE');
+    expect(sites[1].category).toBe('CAPTURED_ID_DEREFERENCE');
   });
 });
 

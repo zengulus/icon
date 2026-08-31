@@ -114,32 +114,79 @@ their sites.
 
 ### Fresh residual inventory (semantic classification, not a ban list)
 
-A fresh scan at this HEAD finds 230 remaining `sourceActor(context, …)`
-calls across 14 named program files. Classified by semantic family (the
-previous hand-count of ~120 was a partial tally; the fresh grep is exact):
+> **Census-integrity repair (2026-09-01).** The counts in this section are
+> now MACHINE-DERIVED from a site-level inventory
+> (`scripts/u1-residual-inventory.ts`, audited by `scripts/audit-u1-residual.ts`
+> + `audit:u1-residual` and the architecture-audit suite). No figure below is
+> hand-maintained. The exact mutually exclusive counts at the prior commits:
+>
+> | Commit | Total | PURE_LIVE_REFERENCE | CAPTURED_ID_DEREFERENCE | DERIVED_OR_PRECEDENCE_BOUNDARY |
+> | --- | --- | --- | --- | --- |
+> | `ea9526c` (pre-Sealer) | 242 | 187 | 54 | 1 |
+> | current HEAD (post-Sealer) | 229 | 174 | 54 | 1 |
+>
+> The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
+> (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
+> 242 − 13 = 229. The earlier prose figures (`242 = 188 + 55`;
+> `230 = 175 + 55`) were each wrong by one in BOTH buckets for the SAME
+> reason: a hand scan classified the single Harvester site
+> `sourceActor(context, context.input.actorIds.target[0])` (an in-call
+> captured-identity read wrapped in a `?` precedence chain) as BOTH a pure
+> live-slot read (its argument starts with `context.`) and a
+> captured/derived read (its argument names recorded input). It is machine-
+> classified as exactly ONE boundary site, and the totals were accurate in
+> the inventory sense all along. `242 = 187 + 54 + 1` was internally
+> consistent; `188 + 55 = 243 ≠ 242` was the misclassification surfacing
+> through two hand-maintained buckets.
+>
+A machine scan at this HEAD finds 229 `sourceActor(context, …)` call
+sites across 14 named program files (multi-line calls collapse to one site;
+`npm run audit:u1-residual` reproduces these figures). Classified by
+MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
+provenance string):
 
-- **U1 reference identity — pure LIVE slot reads (175, migrate family-by-
+- **U1 reference identity — pure LIVE-slot reads (174, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
   Warden/Sealer migrated across tranches 2–3. Remaining per-file: Chanter 19,
-  Enochian 18, Knave 17, Harvester 16, Demon Slayer 16, Seer 15, Fool 15,
-  Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11.
-- **U1×U4 boundary — captured/derived-id dereferences (55, one semantic
-  decision each)**: `sourceActor(context, <var>)` where `<var>` came from
-  `input.actorIds?.[n]` (Shade Harrow/Shadow Play/Assassinate, Warden
-  Gwynt/Stampede, Sealer Grand Seal/Sanctify/Grand Banishment/Divine Aegis,
-  Knave targets, etc.) or a `??` priority chain
-  (`target[0] ?? attackTargetId`). The caller's `?.[0]`/`?.[1]`/`slice`
-  SELECT is U4 cardinality (the adapter deliberately has no first-element
-  collapse); the subsequent dereference is U1 captured-identity. Which slot
-  answers a chain depends on the source contract at each call site — migrated
-  with its parity test, never mechanically.
+  Enochian 18, Knave 17, Harvester 15, Demon Slayer 16, Seer 15, Fool 15,
+  Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11, Sealer 4 (chain
+  sites' source reads — see boundary), Shade 3, Warden 2.
+- **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
+  decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
+  earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
+  loop-index element like `allyIds[i]`, or a passed-in parameter); plus the 1
+  in-call captured-identity read (Harvester line 155) — the precedence
+  question is a per-call-site source-contract decision, inventoried, never
+  migrated. The caller's `?.[0]`/`?.[1]`/`slice` SELECT stays U4
+  cardinality (the adapter deliberately has no first-element collapse).
 - **U9 provenance / plumbing (never migrate)**: `sourceActorId:` on emitted
   mutations, `actorId: context.actorId` commands, and `context.attackTargetId
   ?` gate tests remain at their sites.
 
 ## U1 tranche executed (fresh HEAD, 2026-09-01, third tranche — Sealer)
+
+### Census-integrity repair (one source of truth)
+
+The residual census now lives in ONE machine-derived inventory
+(`scripts/u1-residual-inventory.ts` → `scripts/audit-u1-residual.ts`): every
+`sourceActor(` site records file/line/shape/category/provenance, and total +
+per-category + per-file counts are computed from that list. The executable
+invariant `total === sum(mutually exclusive categories)` is enforced by
+`npm run audit:u1-residual` and by the architecture-audit suite
+(`U1 residual census (machine inventory)` — 6 tests, incl. exact repo pins
+229 = 174 + 54 + 1 and classifier mutations proving the Harvester in-call
+read is ONE boundary site). Docs must be regenerated from this inventory;
+prose totals that disagree with the machine are stale by construction.
+
+### Wording precision
+
+Migrated-tranche descriptions say valid/reachable-state semantics are
+preserved byte-for-byte, and MALFORMED/unrepresentable references now fail
+closed (`reference.missing-actor`) where legacy code could silently
+no-op/fall through — they never claim malformed-state behavior is
+byte-identical.
 
 ### Migrated: Sealer pure LIVE-slot reference reads
 
@@ -245,12 +292,12 @@ provenance `context.actorId` (never reference interpretation).
 
 U1 remains PARTIAL: the shared surface is proved and pinned across seven
 migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Job-trait, Class
-resolvers), and the residual is a classified migration inventory — 175 pure
-LIVE-slot reads (next tranches) + 55 captured/derived-id boundary reads + 0
-direct dereferences. A whole-consumer audit is NOT yet done, so U1 cannot
-claim AUTHORITATIVE: 11 program files still resolve live slots through the
-legacy kernel-side convenience, and the U1×U4 captured-identity boundary has
-no shared surface yet.
+resolvers), and the residual is a machine-derived classified inventory — 174
+pure LIVE-slot reads (next tranches) + 54 captured/derived dereferences + 1
+in-call boundary read = 229 sites, 0 direct dereferences. A whole-consumer
+audit is NOT yet done, so U1 cannot claim AUTHORITATIVE: 11 program files
+still resolve live slots through the legacy kernel-side convenience, and the
+U1×U4 captured-identity boundary has no shared surface yet.
 
 ## Coverage and verification invariants
 

@@ -153,12 +153,16 @@ assumption here, document the evidence and update this list before proceeding.
 > Temple) — the last direct `state.actors[context.…]` dereference in content
 > is gone. The `u1-reference-routing` guard scans the content layer
 > (adapter-keeps-U1, migrated-program pins incl. Sealer, deref rejection; no
-> blanket lexical ban on the inventoried residual). Fresh exact residual:
-> 230 `sourceActor(context, …)` sites — 175 pure LIVE-slot reads (next
-> tranches), 55 captured/derived-id boundary reads (incl. Sealer Grand
-> Seal/Sanctify/Grand Banishment/Divine Aegis chains — caller-owned U4
-> precedence), 0 direct dereferences. U1 stays PARTIAL; zero source
-> promotion; census remains 427.
+> blanket lexical ban on the inventoried residual). Residual is machine-
+> derived from the site inventory (`npm run audit:u1-residual`): 229
+> `sourceActor(context, …)` sites = 174 pure LIVE-slot reads + 54
+> captured/derived-id dereferences + 1 in-call precedence-boundary read
+> (Harvester line 155) + 0 other, 0 direct dereferences — every count
+> regenerated from the same site list, no hand-maintained totals. (Census-
+> integrity repair: the earlier prose "242 = 188 + 55" and "230 = 175 + 55"
+> each misclassified that ONE Harvester boundary site into BOTH buckets; the
+> exact figures are ea9526c 242 = 187 + 54 + 1 and current 229 = 174 + 54 +
+> 1.) U1 stays PARTIAL; zero source promotion; census remains 427.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
 > (2026-08-31; lifecycle follow-up 2026-09-01).** Migrated the last actor-local
@@ -192,11 +196,14 @@ assumption here, document the evidence and update this list before proceeding.
   revert and the chain-shape acceptance. Evidence: +2 fail-closed tests in
   `reference-authoring.test.ts` (God Hand/Open The Gates ghost
   attackTargetId → `reference.missing-actor`; Grand Seal chain keeps
-  caller-owned precedence), `sealer.test.ts` (19) green. Fresh exact
-  residual: 230 `sourceActor(context, …)` sites — 175 pure live-slot reads
-  (Chanter 19, Enochian 18, Knave 17, Harvester 16, Demon Slayer 16, Seer
-  15, Fool 15, Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11),
-  55 captured/derived boundary reads, 0 direct dereferences; U1 remains
+  caller-owned precedence), `sealer.test.ts` (19) green. The tranche removed
+exactly 13 PURE_LIVE_REFERENCE sites (Sealer 17 → 4), moving the machine-
+derived residual from ea9526c 242 = 187 + 54 + 1 to 229 = 174 + 54 + 1
+(see `npm run audit:u1-residual` and docs/u8-u1-underlay-census.md — no
+hand-maintained totals; the earlier prose "230 = 175 + 55" double-counted
+one boundary site in both buckets). Sealer's remaining 4 pure sources feed
+its chain sites and stay inventoried with the 54 captured/derived + 1
+boundary reads; 0 direct dereferences; U1 remains
   PARTIAL. Full suite 1978 green, audits green, census byte-stable at 427,
   zero source promotion.
 
@@ -223,10 +230,13 @@ assumption here, document the evidence and update this list before proceeding.
   user's position), +2 engine-level boundary tests in `shade.test.ts` /
   `warden.test.ts` (ghost targets rejected at the command boundary before
   any effect; Umbra replays byte-identically — `b.events` deep-equals
-  `a.events` and `applyEvents` reproduces both). Fresh exact residual:
-  242 `sourceActor(context, …)` sites — 188 pure LIVE-slot reads (next
-  tranches: Chanter/Enochian/Sealer/Knave/Harvester/Demon Slayer/…), 55
-  captured/derived-id boundary reads, 0 direct dereferences; U1 remains
+  `a.events` and `applyEvents` reproduces both). Machine-derived residual
+  at this commit: 242 `sourceActor(context, …)` sites = 187 pure LIVE-slot
+  reads + 54 captured/derived-id dereferences + 1 in-call boundary read
+  (Harvester line 155) — NOT "188 + 55": the pre-repair hand scan counted
+  that one boundary site in both buckets (188 + 55 = 243 ≠ 242); the exact
+  consistent figures are reconciled in docs/u8-u1-underlay-census.md and
+  enforced by `npm run audit:u1-residual`. U1 remains
   PARTIAL (no whole-consumer audit yet). Full suite green (1975 tests),
   audits green, census byte-stable at 427, zero source promotion. See
   `docs/u8-u1-underlay-census.md`.
