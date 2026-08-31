@@ -1,7 +1,6 @@
 import { registerAttackModifierRule } from '../../kernels/attack-modifiers.js';
 import { collidingShoveTargets } from '../../kernels/encounter-adapter.js';
-import { bullStrengthOncePerTurnKey, useLedgerAvailable } from '../../kernels/use-ledger.js';
-import { consumeUsageMutation } from '../../primitives/usage.js';
+import { applyBullStrengthCollide, bullStrengthCollideKey } from '../../kernels/use-ledger.js';
 import type { EncounterState } from '../../../types.js';
 import type { RuleMutation } from '../../primitives/types.js';
 
@@ -29,9 +28,11 @@ import type { RuleMutation } from '../../primitives/types.js';
  *   13+ instead of 15+.
  * - **Bull's Strength** (bastion, p.149) — abilities gain "collide: deal 2
  *   damage": when an ability's shove collides, the shoved character takes 2
- *   damage, once per turn per character (a U16 owner-relative once-per-turn
- *   ledger gate `bullStrengthOncePerTurnKey`, refreshed at the owner's next
- *   turn-start by the shared core:turn-ledger-reset lifecycle recipe).
+ *   damage, and "Characters can't take this damage more than once a turn."
+ *   The restriction belongs to the character RECEIVING the damage: a U16
+ *   per-target `any-turn` gate (`bullStrengthCollideKey(targetId)`) that
+ *   reopens at every actor's turn start, so each character may take the
+ *   bonus once per battlefield turn and two different Bastions never alias.
  */
 
 export const DEMON_EDGE_TRAIT = 'demon-slayer:trait:demon-edge';
@@ -90,43 +91,56 @@ export function demonEdgeSlowTurnMutations(
 
 /**
  * Bull's Strength collide fold (p.149): abilities gain "collide: deal 2
- * damage". When one of the ability's shoves collides with an obstruction and
- * the shoving character still has the trait's once-per-turn guard clear,
- * append a 2-damage mutation against the shoved character and set the guard
- * (a plan-time decision recorded through the event's mutations; the guard is
- * cleared by the turn-end lifecycle recipe).
+ * damage", and "Characters can't take this damage more than once a turn."
+ * The restriction is PER-TARGET: each character that is shoved into an
+ * obstruction may take the 2 damage at most once during the current
+ * battlefield turn, and the window reopens at the next actor's turn start
+ * (no dependency on the Bastion's own turn). For every collided shove, the
+ * fold proposes the 2-damage mutation against the shoved character through
+ * the U16 per-target `any-turn` transaction (`applyBullStrengthCollide`),
+ * which authorizes and records the consume; the same-command planning set is
+ * keyed on the exact U16 entitlement identity (owner storage + source +
+ * target + window), so an ability that shoves the same character twice
+ * awards the damage once while two DIFFERENT targets each stay entitled.
  */
 export function bullStrengthCollideMutations(state: EncounterState, mutations: readonly RuleMutation[]): RuleMutation[] {
   const appended: RuleMutation[] = [];
   const collidedTargets = new Set(collidingShoveTargets(state, mutations));
-  // The once-per-turn guard holds both across commands (the reducer-applied
-  // ruleState) and within a single ability use (a local set — a multi-shove
-  // ability only awards the collide damage once).
-  const guardSeen = new Set<string>();
+  // Same-command planning set keyed on the FULL U16 ledger key — owner
+  // (the storage actor) + source + target + the current any-turn window.
+  // It dedupes only WITHIN this command (recorded consumes are not applied
+  // until the event); it never substitutes for the ledger availability gate.
+  const planned = new Set<string>();
   for (const mutation of mutations) {
     if (mutation.kind !== 'move' || mutation.movement !== 'shove' || !collidedTargets.has(mutation.actorId)) continue;
     const source = state.actors[mutation.sourceActorId];
     if (!source || !source.traitIds.includes(BULL_STRENGTH_TRAIT)) continue;
-    if (!useLedgerAvailable(source, bullStrengthOncePerTurnKey()) || guardSeen.has(source.id)) continue;
     const shoved = state.actors[mutation.actorId];
     if (!shoved || shoved.defeated || !shoved.onBattlefield) continue;
-    guardSeen.add(source.id);
+    const key = bullStrengthCollideKey(shoved.id);
+    if (planned.has(key)) continue;
+    planned.add(key);
     // The once-per-turn gate is a *recorded* consume mutation (not a live-state
     // write), so re-running the identical program on the same state is
     // deterministic — the reducer applies the ledger consume with the damage,
     // and the next command's plan reads the applied gate. The shared
-    // core:turn-ledger-reset recipe refreshes it at the owner's next turn-start.
-    appended.push({
-      kind: 'damage',
+    // any-turn sweep refreshes the window at the next turn boundary.
+    appended.push(...applyBullStrengthCollide({
+      actor: source,
+      targetId: shoved.id,
       sourceId: BULL_STRENGTH_TRAIT,
-      sourceActorId: source.id,
-      actorId: shoved.id,
-      amount: 2,
-      damageType: 'normal',
-      instance: 1,
-      delivery: 'effect',
-      ignoreCover: false,
-    }, consumeUsageMutation(BULL_STRENGTH_TRAIT, source.id, bullStrengthOncePerTurnKey()));
+      mutations: [{
+        kind: 'damage',
+        sourceId: BULL_STRENGTH_TRAIT,
+        sourceActorId: source.id,
+        actorId: shoved.id,
+        amount: 2,
+        damageType: 'normal',
+        instance: 1,
+        delivery: 'effect',
+        ignoreCover: false,
+      }],
+    }));
   }
   return appended;
 }

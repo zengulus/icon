@@ -2,17 +2,20 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { useLedgerAvailable } from '../automation/kernels/use-ledger.js';
+import { bullStrengthCollideKey, useLedgerAvailable } from '../automation/kernels/use-ledger.js';
+import { bullStrengthCollideMutations } from '../automation/content/jobs/attack-modifier-recipes.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
+import type { RuleMutation } from '../automation/primitives/types.js';
 import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /**
- * U16 residual-usage-state census (2026-08-31) — adversarial / replay /
- * disjointness proofs for the once-per-scope marks that moved from raw
- * booleans/counters onto typed U16 ledger keys:
+ * U16 residual-usage-state census (2026-08-31, corrected) — adversarial /
+ * replay / disjointness proofs for the once-per-scope marks that moved from
+ * raw booleans/counters onto typed U16 ledger keys:
  *   - chain-reaction  -> ledger:round:core:chain-reaction        (once/round)
  *   - midas           -> ledger:combat:geomancer:midas           (twice/combat)
- *   - bull-s-strength -> ledger:turn:core:bull-s-strength        (once/own-turn)
+ *   - bull-s-strength -> ledger:any-turn:core:bull-s-strength:target:<id>
+ *                        (per-RECIPIENT, once per any-turn battlefield window)
  * plus the RETAINED damage-immune mode (proven disjoint from U16). Every
  * scenario must stay deterministic under applyEvents replay. The round cadence
  * is strict hero/foe alternation: after the hero the caller must take every
@@ -21,7 +24,6 @@ import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fix
 
 const chainReactionKey = 'ledger:round:core:chain-reaction';
 const midasKey = 'ledger:combat:geomancer:midas';
-const bullStrengthKey = 'ledger:turn:core:bull-s-strength';
 
 /** End the active actor's turn and take `nextId`'s turn (the TF fixture helper). */
 const take = (state: EncounterState, nextId: string): EncounterState =>
@@ -155,27 +157,51 @@ describe('U16 — Chain Reaction (Wright) round gate: once per round, owner-loca
   });
 });
 
-describe('U16 — Bull\'s Strength collide is an owner-relative once-per-turn entitlement (turn scope)', () => {
-  it('the collide bonus consumes the U16 turn gate once, is owner-local, and refreshes only at the owner\'s own turn start', () => {
+describe('U16 — Bull\'s Strength is a per-TARGET any-turn entitlement (recipient-limited, battlefield window)', () => {
+  it('two different Bastion owners never alias: the same target may take the damage from each owner in the same turn', () => {
     // Heracule's shove (hero at 1,1) pushes the foe at 2,1 into the impassable
-    // cell at 3,1 -> collide (p.95), the once-per-turn Bull's Strength bonus.
-    const { state, hero, foes, rotor } = wrightFixture({ targets: [{ x: 2, y: 1 }] });
+    // cell at 3,1 -> collide (p.95), the Bull's Strength bonus. The restriction
+    // ("Characters can't take this damage more than once a turn") belongs to
+    // the RECIPIENT, so the per-target gate lives on the OWNER's ledger with a
+    // target suffix: owner A's consume must never close owner B's gate.
+    const { state, hero, foes, secondHero } = wrightFixture({ targets: [{ x: 2, y: 1 }], secondHero: true });
     state.grid.terrain.push({ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 });
     state.actors[hero.id].traitIds.push('bastion:trait:bull-s-strength');
-    let s = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foes[0]!.id] }, scriptedDice(15, 3, 5)).state;
-    expect(s.actors[hero.id].ruleState[bullStrengthKey]).toBe(true);
-    expect(useLedgerAvailable(s.actors[hero.id], bullStrengthKey)).toBe(false);
-    // The gate is owner-local: a second actor's independent turn ledger is open.
-    expect(useLedgerAvailable(s.actors[rotor.id], bullStrengthKey)).toBe(true);
-    // Cycling every foe-side actor (but NOT the owner) does NOT refresh the
-    // owner-relative turn gate — only the OWNER's own turn-start does.
-    for (const foeId of [foes[0]!.id, rotor.id]) s = take(s, foeId);
-    expect(s.actors[hero.id].ruleState[bullStrengthKey]).toBe(true);
-    // Take the owner's NEXT turn start -> the owner-relative turn gate refreshes.
-    s = take(s, hero.id);
-    expect(useLedgerAvailable(s.actors[hero.id], bullStrengthKey)).toBe(true);
+    state.actors[secondHero!.id].traitIds.push('bastion:trait:bull-s-strength');
+    const target = foes[0]!.id;
+    const key = bullStrengthCollideKey(target);
+    // Owner A collides the target: its per-target gate consumes; owner B's
+    // identical gate on the SAME target stays untouched (OWNER ≠ TARGET).
+    const first = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [target] }, scriptedDice(15, 3, 5));
+    expect(first.state.actors[hero.id].ruleState[key]).toBe(true);
+    expect(first.state.actors[secondHero!.id].ruleState[key]).toBeUndefined();
+    // Owner B's collide fold against the SAME target in the SAME turn still
+    // fires (damage + its own consume) — the two owners never alias.
+    const shove = (targetId: string): RuleMutation => ({
+      kind: 'move', sourceId: 'test', sourceActorId: secondHero!.id, actorId: targetId, movement: 'shove', distance: 1,
+      positions: [], direction: { x: -1, y: 0 }, phasing: false,
+    });
+    const ownerBCollide = bullStrengthCollideMutations(first.state, [shove(target)]);
+    expect(ownerBCollide.filter((mutation) => mutation.kind === 'damage')).toHaveLength(1);
+    expect(ownerBCollide.filter((mutation) => mutation.kind === 'state' && mutation.key === key)).toHaveLength(1);
+    // Deterministic replay reproduces owner A's recorded target-sensitive consume.
+    expect(applyEvents(state, first.events)).toEqual(first.state);
+  });
+
+  it('the battlefield any-turn window reopens at another actor\'s turn start — no owner-turn dependency (replay byte-identical)', () => {
+    const { state, hero, foes } = wrightFixture({ targets: [{ x: 2, y: 1 }] });
+    state.grid.terrain.push({ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 });
+    state.actors[hero.id].traitIds.push('bastion:trait:bull-s-strength');
+    const target = foes[0]!.id;
+    const key = bullStrengthCollideKey(target);
+    const resulted = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [target] }, scriptedDice(15, 3, 5));
+    let s = resulted.state;
+    expect(useLedgerAvailable(s.actors[hero.id], key)).toBe(false);
+    // Ending the owner's turn and starting a FOE's turn reopens the battlefield
+    // window — the Bastion never takes its own turn between.
+    s = take(s, foes[0]!.id);
+    expect(useLedgerAvailable(s.actors[hero.id], key)).toBe(true);
     // Replay reproduces the collide transition byte-identically.
-    const resulted = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foes[0]!.id] }, scriptedDice(15, 3, 5));
     expect(applyEvents(state, resulted.events)).toEqual(resulted.state);
   });
 });

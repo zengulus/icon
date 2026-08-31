@@ -7,7 +7,7 @@ import { JOB_TRAIT_RECIPES } from '../automation/content/jobs/job-trait-recipes.
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position, TerrainCell } from '../types.js';
 import type { RuleMutation, RuleProgram } from '../automation/primitives/types.js';import { scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
-import { useLedgerAvailable } from '../automation/kernels/use-ledger.js';
+import { bullStrengthCollideKey, useLedgerAvailable } from '../automation/kernels/use-ledger.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
@@ -317,83 +317,97 @@ describe('Pulverize (p.142)', () => {
 });
 
 describe('Bull\'s Strength (p.149)', () => {
-  it('a colliding shove deals 2 damage to the shoved character and records the once-per-turn guard', () => {
+  /** A single synthetic colliding shove from the hero (pushed into the hero's
+   * own cell or an impassable cell, so `collidingShoveTargets` reports it). */
+  const shove = (heroId: string, targetId: string): RuleMutation => ({
+    kind: 'move', sourceId: 'test', sourceActorId: heroId, actorId: targetId, movement: 'shove', distance: 1,
+    positions: [], direction: { x: -1, y: 0 }, phasing: false,
+  });
+
+  /** Hero at (1,1), foe A at (2,1) (a -x shove lands on the hero → collide),
+   * impassable cell at (3,1), foe B at (4,1) (a -x shove lands on the
+   * impassable cell → collide). */
+  function bullStrengthEncounter(): { state: EncounterState; hero: EncounterActor; foeA: EncounterActor; foeB: EncounterActor } {
     const { state, hero, foe } = traitEncounter({
       traitIds: ['bastion:trait:bull-s-strength'],
       abilityIds: ['bastion:heracule'],
       heroAt: { x: 1, y: 1 },
       foeAt: { x: 2, y: 1 },
-      // Heracule's default shove pushes the foe away from the hero; the
-      // impassable cell behind the foe stops the push → collide (p.95).
       terrainCells: [{ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 }],
     });
-    const hpBefore = state.actors[foe.id].hp;
+    const foeB = createFoe('Grim', { x: 4, y: 1 });
+    state.actors[foeB.id] = foeB;
+    return { state, hero, foeA: foe, foeB };
+  }
+
+  it('a colliding shove deals 2 damage to the shoved character and records the per-target any-turn guard on the owner', () => {
+    const { state, hero, foeA } = bullStrengthEncounter();
+    const hpBefore = state.actors[foeA.id].hp;
     const result = executeCommand(state, {
-      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id],
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foeA.id],
     }, scriptedDice());
     const bullDamage = bullDamageOf(result);
     expect(bullDamage).toHaveLength(1);
-    expect(bullDamage[0]).toMatchObject({ actorId: foe.id, amount: 2 });
+    expect(bullDamage[0]).toMatchObject({ actorId: foeA.id, amount: 2 });
     // Heracule's own attack also damages the foe; the hp drop is the sum of
     // the recorded damage mutations (attack + collide).
     const foeDamage = result.events.flatMap((event) => event.type === 'RULE_MUTATIONS_APPLIED' ? event.mutations : [])
-      .filter((mutation): mutation is Extract<RuleMutation, { kind: 'damage' }> => mutation.kind === 'damage' && mutation.actorId === foe.id);
+      .filter((mutation): mutation is Extract<RuleMutation, { kind: 'damage' }> => mutation.kind === 'damage' && mutation.actorId === foeA.id);
     const totalDamage = foeDamage.reduce((sum, mutation) => sum + mutation.amount, 0);
-    expect(result.state.actors[foe.id].hp).toBe(hpBefore - totalDamage);
-    // The gate is a recorded U16 ledger consume mutation, so replay applies it too.
+    expect(result.state.actors[foeA.id].hp).toBe(hpBefore - totalDamage);
+    // The gate is a recorded U16 consume mutation keyed on the TARGET and
+    // stored on the OWNER's ruleState, so replay applies it too. The owner
+    // (Bastion) holds it — never the target's own ruleState.
+    const key = bullStrengthCollideKey(foeA.id);
     const guardMutation = result.events.flatMap((event) => event.type === 'RULE_MUTATIONS_APPLIED' ? event.mutations : [])
-      .find((mutation) => mutation.kind === 'state' && mutation.key === 'ledger:turn:core:bull-s-strength');
-    expect(guardMutation).toMatchObject({ value: true });
+      .find((mutation) => mutation.kind === 'state' && mutation.key === key);
+    expect(guardMutation).toMatchObject({ value: true, actorId: hero.id });
+    expect(result.state.actors[hero.id].ruleState[key]).toBe(true);
+    expect(result.state.actors[foeA.id].ruleState[key]).toBeUndefined();
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('the fold awards the collide damage once even when an ability shoves twice (unit)', () => {
-    const { state, hero, foe } = traitEncounter({
-      traitIds: ['bastion:trait:bull-s-strength'],
-      abilityIds: ['bastion:heracule'],
-      heroAt: { x: 1, y: 1 },
-      foeAt: { x: 2, y: 1 },
-    });
-    const shove = (targetId: string): RuleMutation => ({
-      kind: 'move', sourceId: 'test', sourceActorId: hero.id, actorId: targetId, movement: 'shove', distance: 1,
-      positions: [], direction: { x: -1, y: 0 }, phasing: false,
-    });
-    // Two shoves of the same foe (or two foes) both collide; only one damage.
-    const appended = bullStrengthCollideMutations(state, [shove(foe.id), shove(foe.id)]);
-    expect(appended.filter((mutation) => mutation.kind === 'damage')).toHaveLength(1);
-    expect(appended.filter((mutation) => mutation.kind === 'state')).toHaveLength(1);
+  it('the fold awards the collide damage exactly once per target within one command', () => {
+    const { state, hero, foeA, foeB } = bullStrengthEncounter();
+    // Same target shoved twice in one command: one damage, one consume — the
+    // planning set dedupes by the U16 owner+target identity.
+    const sameTarget = bullStrengthCollideMutations(state, [shove(hero.id, foeA.id), shove(hero.id, foeA.id)]);
+    expect(sameTarget.filter((mutation) => mutation.kind === 'damage')).toHaveLength(1);
+    expect(sameTarget.filter((mutation) => mutation.kind === 'state')).toHaveLength(1);
+    // Two DIFFERENT targets each collide: each takes its own damage — the
+    // per-target gate never merges two recipients into one use.
+    const twoTargets = bullStrengthCollideMutations(state, [shove(hero.id, foeA.id), shove(hero.id, foeB.id)]);
+    expect(twoTargets.filter((mutation) => mutation.kind === 'damage')).toHaveLength(2);
+    expect(twoTargets.filter((mutation) => mutation.kind === 'state')).toHaveLength(2);
+    expect(twoTargets.filter((mutation) => mutation.kind === 'state' && mutation.key === bullStrengthCollideKey(foeB.id))).toHaveLength(1);
   });
 
-  it('the gate refreshes at the owner\'s next turn-start so it can fire again', () => {
-    const { state, hero, foe } = traitEncounter({
-      traitIds: ['bastion:trait:bull-s-strength'],
-      abilityIds: ['bastion:heracule'],
-      heroAt: { x: 1, y: 1 },
-      foeAt: { x: 2, y: 1 },
-      terrainCells: [{ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 }],
-    });
+  it('a consumed target does not block a different target (per-target isolation)', () => {
+    const { state, hero, foeA, foeB } = bullStrengthEncounter();
+    // Simulate target A's already-recorded consume (a prior collide this turn).
+    state.actors[hero.id].ruleState[bullStrengthCollideKey(foeA.id)] = true;
+    const appended = bullStrengthCollideMutations(state, [shove(hero.id, foeA.id), shove(hero.id, foeB.id)]);
+    // A: blocked (no new damage, no new consume). B: still entitled.
+    expect(appended.filter((mutation) => mutation.kind === 'damage')).toHaveLength(1);
+    expect(appended[0]).toMatchObject({ actorId: foeB.id, amount: 2 });
+    expect(appended.filter((mutation) => mutation.kind === 'state')).toHaveLength(1);
+    expect(appended.find((mutation) => mutation.kind === 'state' && mutation.key === bullStrengthCollideKey(foeB.id))).toBeDefined();
+  });
+
+  it('the battlefield any-turn window reopens at the next actor\'s turn start — no owner-turn dependency', () => {
+    const { state, hero, foeA } = bullStrengthEncounter();
     const collided = executeCommand(state, {
-      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id],
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foeA.id],
     }, scriptedDice()).state;
-    expect(useLedgerAvailable(collided.actors[hero.id], 'ledger:turn:core:bull-s-strength')).toBe(false);
-    // A second collide shove this turn (the fold, gate now consumed) fires no
-    // additional damage and records no new consume.
-    const shove = (targetId: string): RuleMutation => ({
-      kind: 'move', sourceId: 'test', sourceActorId: hero.id, actorId: targetId, movement: 'shove', distance: 1,
-      positions: [], direction: { x: -1, y: 0 }, phasing: false,
-    });
-    expect(bullStrengthCollideMutations(collided, [shove(foe.id)])).toEqual([]);
-    // Taking the owner's next turn (through every other actor) refreshes the
-    // U16 owner-relative turn gate: end the owner's turn, take + end every
-    // other actor, then take the owner's next turn (its turn-start recipe
-    // clears the owner-relative `ledger:turn:*` gate).
+    const key = bullStrengthCollideKey(foeA.id);
+    expect(useLedgerAvailable(collided.actors[hero.id], key)).toBe(false);
+    // A second collide shove this turn (the fold, window still consumed) fires
+    // no additional damage and records no new consume.
+    expect(bullStrengthCollideMutations(collided, [shove(hero.id, foeA.id)])).toEqual([]);
+    // The window is BATTLEFIELD any-turn: ending the owner's turn and starting
+    // the FOE's turn reopens it — the Bastion never takes its own turn between.
     let s = executeCommand(collided, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
-    for (const id of Object.keys(s.actors)) {
-      if (id === hero.id) continue;
-      s = executeCommand(s, { type: 'TAKE_TURN', actorId: id }, scriptedDice()).state;
-      s = executeCommand(s, { type: 'END_TURN', actorId: id }, scriptedDice()).state;
-    }
-    s = executeCommand(s, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
-    expect(useLedgerAvailable(s.actors[hero.id], 'ledger:turn:core:bull-s-strength')).toBe(true);
+    s = executeCommand(s, { type: 'TAKE_TURN', actorId: foeA.id }, scriptedDice()).state;
+    expect(useLedgerAvailable(s.actors[hero.id], key)).toBe(true);
   });
 });

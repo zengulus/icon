@@ -2039,9 +2039,10 @@ once per turn; slashed once per turn; one attack-tag ability per turn
 once per trigger (p.105); interrupt refresh; per-use magnitude ("2nd/3rd use
 dashes 3/2/1").
 
-**Current state.** `AUTHORITATIVE` (single executing usage authority). Core
+**Current state.** `PARTIAL` (single executing usage authority, but the
+declared contract stays open on a source-defined lifecycle scope). Core
 Landed T3 (2026-08-30), U10 de-dup T4, raw-field consolidation T6.4, and
-the T6.4a corrective closure (2026-08-31) met all six closure gates. The
+the T6.4a corrective closure (2026-08-31) met their gates. The
 **U16 residual-usage-state census (2026-08-31)** then migrated the last
 actor-local once-per-scope marks off raw booleans/counters onto typed U16
 ledger keys: `chain-reaction-used` → `chainReactionOncePerRoundKey` (round),
@@ -2049,13 +2050,20 @@ ledger keys: `chain-reaction-used` → `chainReactionOncePerRoundKey` (round),
 `stampede:triggered` → `stampedeOncePerRoundKey` (round, mark owner),
 `gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (any-turn),
 `midas:used` → `midasOncePerCombatKey` (combat, cap 2), and
-`bull-s-strength:collided` → `bullStrengthOncePerTurnKey` (owner-relative
-turn, refreshed by the shared core:turn-ledger-reset). `damage-immune` is
-proven disjoint (MODE/immune state, never a usage count) and the remaining
-armed/charged/pending flags record content mode or historical fact, not
-entitlement. A fresh semantic census finds no remaining ruleState
-boolean/counter answering "may/how many times within scope X?" outside the
-typed ledger.
+`bull-s-strength:collided` → `bullStrengthCollideKey(targetId)` — corrected
+by the **U16 semantic correction (2026-08-31)** from an owner-relative `turn`
+gate to the per-RECIPIENT identity: "Characters can't take this damage more
+than once a turn" (p.149) restricts the character RECEIVING the damage
+(owner = Bastion ledger storage, target = U16 `:target:` suffix, scope =
+the battlefield `any-turn` window reopened at every actor's turn start).
+`damage-immune` is proven disjoint (MODE/immune state, never a usage count)
+and the remaining armed/charged/pending flags record content mode or
+historical fact, not entitlement. `monogatari:granted` is an UNRESOLVED U16
+consumer (once-per-song entitlement) blocked on the U8 source-defined
+lifecycle scope — "song" is not yet a generic U16 UsagePeriod and is NOT
+approximated onto turn/round/combat, so U16 stays PARTIAL until U8 supplies
+the generic boundary and a later U16 follow-up can migrate the grant and
+re-audit. See `docs/u16-semantic-correction-report.md`.
 actor-local one-interrupt-per-turn; `usedAbilityIds` (No Repeats) +
 `standardMoveUsed` migrated to typed `ledger:*` keys (schema 12); the
 dangerous-terrain damage-cadence contradiction recorded as adopted

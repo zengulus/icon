@@ -48,7 +48,7 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
   },
   'bastion:trait:bull-s-strength': {
     sourceId: 'bastion:trait:bull-s-strength', name: 'Bull\u2019s Strength', status: 'wired',
-    mechanic: 'Abilities gain \u201ccollide: deal 2 damage\u201d through the collide fold in executeRuleProgramWithReactiveTriggers: when one of the ability\u2019s shoves collides (the shared collidingShoveTargets detection), the shoved character takes 2 damage, once per turn (guard set at plan time, cleared by the turn-end recipe).',
+    mechanic: 'Abilities gain \u201ccollide: deal 2 damage\u201d through the collide fold in executeRuleProgramWithReactiveTriggers: when one of the ability\u2019s shoves collides (the shared collidingShoveTargets detection), the shoved character takes 2 damage, and \u201cCharacters can\u2019t take this damage more than once a turn\u201d — a U16 per-target `any-turn` gate keyed on the shoved character (owner = the Bastion\u2019s ledger storage, target = the key suffix), reopened at every actor\u2019s turn start, so each recipient takes the bonus at most once per battlefield turn and separate Bastions never alias.',
     detail: '',
   },
   'bastion:trait:shieldmaster': {

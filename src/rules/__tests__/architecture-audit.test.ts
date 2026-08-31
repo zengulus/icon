@@ -1010,24 +1010,32 @@ describe('U16 — migrated once-per-scope marks are not reintroduced as raw rule
     const geomancer = read('rules/automation/content/jobs/programs/geomancer-programs.ts');
     expect(geomancer).not.toContain("'midas:used'");
     expect(geomancer).toContain('midasOncePerCombatKey');
-    // Bull's Strength (once-per-turn collide) also routes through the U16
-    // owner-relative turn ledger, never a raw `bull-s-strength:collided` flag
-    // with a bespoke turn-end clear.
+    // Bull's Strength (per-target once-per-any-turn collide) also routes
+    // through the U16 target-sensitive key + operation-boundary transaction,
+    // never a raw `bull-s-strength:collided` flag with a bespoke turn-end
+    // clear or a guardSeen set keyed on the source id.
     const modifiers = read('rules/automation/content/jobs/attack-modifier-recipes.ts');
     expect(modifiers).not.toContain("'bull-s-strength:collided'");
-    expect(modifiers).toContain('bullStrengthOncePerTurnKey');
-    expect(modifiers).toContain('consumeUsageMutation');
+    expect(modifiers).toContain('bullStrengthCollideKey');
+    expect(modifiers).toContain('applyBullStrengthCollide');
+    expect(modifiers).not.toContain('guardSeen');
     expect(recipes).not.toContain("'bull-s-strength:collided'"); // bespoke turn-end clear removed
   });
 
-  it('the U16 usage kernel owns the six migrated round/turn/combat gate keys', () => {
+  it('the U16 usage kernel owns the six migrated round/turn/combat gate keys, and Bull\'s Strength is the per-target any-turn form', () => {
     const ledger = read('rules/automation/kernels/use-ledger.ts');
     expect(ledger).toContain('chainReactionOncePerRoundKey');
     expect(ledger).toContain('incubusOncePerRoundKey');
     expect(ledger).toContain('stampedeOncePerRoundKey');
     expect(ledger).toContain('vigilanceRushOncePerTurnKey');
     expect(ledger).toContain('midasOncePerCombatKey');
-    expect(ledger).toContain('bullStrengthOncePerTurnKey');
+    // Bull's Strength is a per-RECIPIENT gate: the target suffix is part of the
+    // typed U16 key and the scope is the battlefield `any-turn` window (reopens
+    // at every actor's turn start), NOT an owner-relative `turn` gate.
+    expect(ledger).toContain('bullStrengthCollideKey');
+    expect(ledger).toContain("scope: 'any-turn'");
+    expect(ledger).toContain('targetId');
+    expect(ledger).not.toContain('bullStrengthOncePerTurnKey');
   });
 });
 

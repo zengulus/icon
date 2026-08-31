@@ -151,10 +151,10 @@ format preserved).
 ## 8. Gate OPEN
 
 `#/vtt/:encounterId` remains phase-gated; this tranche changed no phase gates.
-`#/lab` unaffected. U2/U13/U17 remain **AUTHORITATIVE**; U16 remaining
-**PARTIAL** pending the residual-marks census.
+`#/lab` unaffected. U2/U13/U17 remain **AUTHORITATIVE**; U16 remains
+**PARTIAL** (see §9 + the U16 semantic correction).
 
-## 9. Next tranche — LANDED (U16 residual-marks census, 2026-08-31)
+## 9. Next tranche — LANDED (U16 residual-marks census, 2026-08-31) + semantic correction (2026-08-31)
 
 The residual U16-mark classification census/migration
 (`chain-reaction-used`, `incubus:triggered`, `stampede:triggered`,
@@ -163,12 +163,17 @@ flags) was executed: every genuine once-per-scope entitlement mark migrated to
 a typed U16 ledger key (`chainReactionOncePerRoundKey`,
 `incubusOncePerRoundKey`, `stampedeOncePerRoundKey`,
 `vigilanceRushOncePerTurnKey`, `midasOncePerCombatKey`, and
-`bullStrengthOncePerTurnKey`); `damage-immune` is proven disjoint (MODE
+`bullStrengthCollideKey(targetId)`); `damage-immune` is proven disjoint (MODE
 state, negative-substitute + boundary adversarial tests) and the armed/charged/
-pending flags are content mode or recorded fact, not entitlement. A fresh
-semantic census finds no remaining ruleState boolean/counter answering
-"may/how many times within scope X?" outside the typed U16 ledger, so U16 is
-re-certified **AUTHORITATIVE**. See `docs/rules-foundations.md` §U16.
+pending flags are content mode or recorded fact, not entitlement. The follow-up
+**semantic correction** then found the census had promoted U16 too early:
+Bull's Strength was migrated with the wrong identity/scope (it is a
+per-RECIPIENT `any-turn` gate, not an owner-relative `turn` gate), and
+`monogatari:granted` is an UNRESOLVED U16 consumer (once-per-song entitlement)
+blocked on the U8 source-defined lifecycle scope rather than retained content
+state. U16 therefore stays **PARTIAL** until U8 supplies the generic boundary.
+See `docs/u16-semantic-correction-report.md` and `docs/rules-foundations.md`
+§U16.
 
 ## Validation
 

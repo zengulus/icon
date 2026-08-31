@@ -318,19 +318,49 @@ export function midasOncePerCombatKey(): string {
   return usageKey({ sourceId: MIDAS_ONCE_PER_COMBAT, ownerId: '', scope: 'combat' });
 }
 
-/** Bull's Strength (Bastion p.149): abilities gain "collide: deal 2 damage",
- * once per turn per character. Opaque gate key. This is the U16 owner-relative
- * once-per-own-turn entitlement (the collide bonus only ever fires on the
- * OWNER's own ability use), distinct from the `any-turn` battlefield window.
- * Cleared by the core:turn-ledger-reset lifecycle recipe at the owner's next
- * turn-start (the old bespoke turn-end clear is behaviorally equivalent — the
- * owner cannot trigger a collide between its turn-END and its next turn-START). */
-const BULL_STRENGTH_ONCE_PER_TURN = 'core:bull-s-strength';
+/** Bull's Strength (Bastion p.149): abilities gain "collide: deal 2 damage"
+ * and "Characters can't take this damage more than once a turn." The
+ * restriction belongs to the character RECEIVING the Bull's Strength damage
+ * — a PER-TARGET, battlefield `any-turn` entitlement (reopens at EVERY actor's
+ * turn start), NOT an owner-relative once-per-own-turn gate. Opaque gate key. */
+const BULL_STRENGTH_COLLIDE = 'core:bull-s-strength';
 
-/** The typed KEY for the once-per-turn Bull's Strength collide bonus.
- * Owner-relative `turn` scope, actor-local on the trait owner. */
-export function bullStrengthOncePerTurnKey(): string {
-  return usageKey({ sourceId: BULL_STRENGTH_ONCE_PER_TURN, ownerId: '', scope: 'turn' });
+/** The typed KEY for the per-target once-per-turn Bull's Strength collide
+ * damage. Lives on the TRAIT OWNER's ruleState with a U16 `:target:<id>`
+ * suffix (owner identity = the storage actor, target identity = the key
+ * suffix), so two different Bastions never alias and two different targets
+ * never share a gate. `any-turn` scope: the battlefield window reopens for
+ * every actor at every turn start via `refreshAnyTurnLedgersForAll`, so the
+ * next actor's turn-start is sufficient — there is no dependency on the
+ * Bastion's own next turn. */
+export function bullStrengthCollideKey(targetId: string): string {
+  return usageKey({ sourceId: BULL_STRENGTH_COLLIDE, ownerId: '', scope: 'any-turn', targetId });
+}
+
+/** U16 COMMIT operation for ONE per-target Bull's Strength collide damage
+ * (p.149 "Characters can't take this damage more than once a turn"). The
+ * caller PROPOSES the effect mutations (the 2 damage against the shoved
+ * character); U16 owns the entire entitlement transaction in ONE operation:
+ * the per-target `any-turn` identity (`bullStrengthCollideKey` — owner via
+ * the storage actor, target via the key suffix), the availability check
+ * (`ledgerAvailable`), the consume mark (`consumeUsageMutation`), and the
+ * grouping of that consume with the allowed effects into the returned bundle.
+ * The caller cannot separately decide availability or hand-build the consume
+ * mark. A turn boundary reopens the window, so the next battlefield turn may
+ * deal the damage again. Generic and source-ID-free: `sourceId` is the
+ * content-owned provenance recorded on the consume, and the proposed
+ * `mutations` are opaque to this kernel. Deterministic — a pure function of
+ * the owner's recorded ruleState and the proposed mutations. */
+export function applyBullStrengthCollide(options: {
+  actor: Pick<EncounterActor, 'id' | 'ruleState'>;
+  targetId: string;
+  sourceId: string;
+  mutations: readonly RuleMutation[];
+}): readonly RuleMutation[] {
+  const key = bullStrengthCollideKey(options.targetId);
+  if (!ledgerAvailable(options.actor, key)) return [];
+  const consume = consumeUsageMutation(options.sourceId, options.actor.id, key) as Extract<RuleMutation, { kind: 'state' }>;
+  return [...options.mutations, consume];
 }
 
 /** The durable PREFIX of every `any-turn` battlefield window key (the U16 key
@@ -346,11 +376,12 @@ export function anyActorHoldsAnyTurnLedger(state: EncounterState): boolean {
 
 /** U16/U8 ANY-TURN SWEEP: refresh every actor's battlefield `any-turn` window
  * (one-interrupt-during-any-turn, slashed once per turn, dangerous terrain
- * once per turn) at a turn-START boundary. This is the DISTINCT reset for the
- * "during any turn" restriction: unlike the owner-relative `ledger:turn:*`
- * pools (which refresh only at the OWNER's turn), the `any-turn` window is
- * re-opened for ALL actors at EVERY turn start. Pure over the durable state;
- * deterministic and replay-stable (replay re-applies the same deletes). */
+ * once per turn, and the per-target Bull's Strength collide gates) at a
+ * turn-START boundary. This is the DISTINCT reset for the "during any turn"
+ * restriction: unlike the owner-relative `ledger:turn:*` pools (which refresh
+ * only at the OWNER's turn), the `any-turn` window is re-opened for ALL actors
+ * at EVERY turn start. Pure over the durable state; deterministic and
+ * replay-stable (replay re-applies the same deletes). */
 export function refreshAnyTurnLedgersForAll(state: EncounterState): void {
   for (const candidate of Object.values(state.actors)) {
     let touched = false;

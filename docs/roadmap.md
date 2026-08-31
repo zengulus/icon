@@ -428,15 +428,21 @@ typed U16 ledger keys: `chain-reaction-used` → `chainReactionOncePerRoundKey`
 `stampede:triggered` → `stampedeOncePerRoundKey` (round, mark owner),
 `gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (any-turn),
 `midas:used` → `midasOncePerCombatKey` (combat, cap 2), and
-`bull-s-strength:collided` → `bullStrengthOncePerTurnKey` (owner-relative
-turn, refreshed by the shared core:turn-ledger-reset). `damage-immune` and the
+`bull-s-strength:collided` → `bullStrengthCollideKey(targetId)` — corrected
+from the census's owner-relative `turn` gate to the per-RECIPIENT identity:
+"Characters can't take this damage more than once a turn" (p.149) restricts
+the character RECEIVING the damage (owner = the Bastion's ledger storage,
+target = the U16 key suffix, scope = the battlefield `any-turn` window
+reopened at every actor's turn start). `damage-immune` and the
 armed/charged/pending flags are proven content MODE or recorded fact, never a
-usage gate; a fresh semantic census finds no remaining ruleState
-boolean/counter answering "may/how many times within scope X?" outside the
-typed U16 ledger — U16 re-certified **AUTHORITATIVE** (zero promotion; census
-byte-stable at 427). The smallest next underlay tranche from the post-migration
-fresh audit is the **U8 duration/timing/scheduler surface** (`RuleDuration` /
-`RuleTiming` / lifecycle / scheduler), which remains PARTIAL beside U14/U9/U6.
+usage gate; `monogatari:granted` is an UNRESOLVED U16 consumer (once-per-song
+entitlement) blocked on the U8 source-defined lifecycle scope and is NOT
+approximated onto turn/round/combat. A fresh semantic census therefore
+corrects the prior re-certification: U16 remains **PARTIAL** (zero promotion;
+census byte-stable at 427). The smallest next underlay tranche from the fresh
+audit is the **U8 Scope/Clock surface** (`RuleDuration` / `RuleTiming` /
+lifecycle / scheduler / source-defined lifecycle boundaries), which remains
+PARTIAL beside U14/U9/U6.
 
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 

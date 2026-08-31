@@ -1,5 +1,22 @@
 # U16 Residual Usage-State Census & Migration — 2026-08-31
 
+> **SUPERSEDED / corrected (2026-08-31).** The follow-up **U16 semantic
+> correction** tranche found two classifications in this report did not
+> survive fresh evidence, so its "U16 = AUTHORITATIVE" conclusion is
+> withdrawn and U16 is **PARTIAL**:
+> 1. **Bull's Strength** was migrated with the wrong entitlement identity and
+>    scope: the restriction belongs to the character RECEIVING the damage
+>    (per-target `any-turn` battlefield window, `bullStrengthCollideKey(targetId)`),
+>    NOT an owner-relative `turn` gate.
+> 2. **`monogatari:granted`** is NOT retained content state: it answers "may
+>    this character receive the Monogatari fulfillment reward again during the
+>    current song?" — an UNRESOLVED U16 consumer blocked on the U8
+>    source-defined lifecycle scope, deliberately not approximated onto
+>    turn/round/combat.
+> The affected rows below are marked **[corrected]**; the full adversarial
+> matrix, production paths, and status decision are in
+> `docs/u16-semantic-correction-report.md`. Census stays 427; zero promotion.
+
 This is the U16 residual-mark classification tranche of the underlay completion
 phase. Its purpose was to census every live actor/rule-state mark that could
 answer a **usage / entitlement** question and migrate **only those that are**
@@ -37,7 +54,7 @@ classification.
 | `gates-of-hell:vigilance-rushed` | May the vigilance rush be used again this turn? | `ledgerAvailable` (new) | demon-slayer program → `consumeUsageMutation`; any-turn sweep | any-turn (battlefield) | **MIGRATE U16** | once-per-turn entitlement, reopens every turn start |
 | `midas:used` | May Midas be used again this combat? | `ledgerAvailable(..., 2)` (new) | geomancer program → `consumeUsageMutation` (cap 2) | combat (never resets) | **MIGRATE U16** | twice-per-combat N-per-scope count |
 | `damage-immune` | Is the actor immune to damage this turn? | immunity predicates across resolution | reducer set false / encounter-hooks / adapter read; turn-boundary reset | turn (mode) | **RETAINED CONTENT STATE** | genuine MODE/immune state, not a usage count; proven disjoint (negative-substitute + boundary tests). |
-| `bull-s-strength:collided` | May the once-per-turn collide bonus fire again this turn? | `useLedgerAvailable` (new) | BS collide fold → `consumeUsageMutation`; shared core:turn-ledger-reset | owner-relative turn | **MIGRATE U16** | genuine once-per-turn entitlement (fresh census find — the WIP list was not complete). |
+| `bull-s-strength:collided` | May THIS target take the collide bonus again this turn? | `ledgerAvailable` (new) | BS collide fold → `applyBullStrengthCollide` (U16 transaction); `refreshAnyTurnLedgersForAll` at every turn start | per-recipient `any-turn` **[corrected]** | **MIGRATE U16** | per-RECIPIENT entitlement (p.149 "can't take this damage more than once a turn"): owner = Bastion ledger storage, target = U16 `:target:` suffix; the census's owner-relative `turn` gate was the wrong identity/scope. |
 
 ### Fresh-census additional candidates (not on the named suspect list)
 
@@ -50,16 +67,20 @@ classification.
 | `end-turn-requested` | Was an end-turn requested this use? | reducer checks to end turn | intimidate etc. set; turn-boundary reset | turn (request) | **RETAINED CONTENT STATE** | a request flag, not a use count |
 | `hatred-of` | Whom is the hatred provenance against? | damage half pipeline | reducer / recipes | provenance | **RETAINED CONTENT STATE** | damage provenance, not entitlement |
 | `slow-turn` / `six-hells:*` | six-hells stage / slow mode | reducer | reducer / recipes | mode | **RETAINED CONTENT STATE** | mode/stage state, not a use count |
-| `monogatari:*` | tale / grant / charge / turn-start-pos | reducer + recipes | recipes reset at song boundary | per-song | **RETAINED CONTENT STATE** | once-per-song content boundary, not a U16 UsagePeriod |
+| `monogatari:granted` | May this character receive the Monogatari fulfillment reward again during the current song? | lifecycle turn-end recipe (gates the blessing grant) | recipe sets true; new-tale boundary deletes all grants | per-song | **UNRESOLVED U16 CONSUMER** **[corrected]** | usage/entitlement question; the missing "song" lifecycle scope is a U8 source-defined boundary, not a reason to keep it as content state — never approximated onto turn/round/combat |
+| `monogatari:*` (tale / charge / turn-start-pos) | tale value / charge / position snapshot | reducer + recipes | recipes set / reset at song boundary | per-song | **RETAINED CONTENT STATE** | recorded value / mode, not entitlement |
 | `demon-edge:window` (+round), `hissatsu:armed`, `ace:armed`, `trick-shot:armed`, `carnevale:armed` | one-shot armed windows | attack-modifier fold / reducer | recipes arm + consume | armed mode | **RETAINED CONTENT STATE** | armed one-shot modifiers, not once-per-scope usage counts |
 | `aria:pending` / `damaged`, `morrigan:pending`, `phoenix-rage:active`, `orogenic/storm-hilt-rage:active`, `warding-bolts:owner`, `gallows-humor:die`, `massive-overhead` | pending / active / owner / die value | various reducer + recipes | recipes set / clear | mode / provenance | **RETAINED CONTENT STATE** | mode, pending, provenance, or recorded value — none answers may/how-many-times within a scope |
 | `attackedThisTurn` | did this actor already attack (historical)? | Soul Blade / Carnevale / Hissatsu / Monogatari / VM readers | reducer | turn (fact) | **RETAINED U10 FACT** (previously settled) | historical resolution fact; the one-attack entitlement is the distinct owner-relative `attack-this-turn` ledger key |
 
-No candidate was classified UNRESOLVED: every live mark had sufficient
-evidence to determine its semantic question, lifetime, and whether it is a
-usage gate. States whose name suggested usage but which are not entitlement
-(`charged`, `armed`, `:used` with no reader, `triggered` mark state) were
-classified by what they actually gate.
+**Correction:** the original run claimed no UNRESOLVED candidates; the fresh
+evidence in the semantic-correction tranche proved otherwise —
+`monogatari:granted` answers a usage/entitlement question whose scope (song)
+the generic U16/U8 vocabulary cannot yet represent, so it is UNRESOLVED U16
+CONSUMER blocked on U8, and Bull's Strength's per-recipient identity was
+misclassified as owner-relative. States whose name suggested usage but which
+are not entitlement (`charged`, `armed`, `:used` with no reader, `triggered`
+mark state) remain classified by what they actually gate.
 
 ## Deliverable 4 — Genuine U16 duplicates migrated (exact list)
 
@@ -68,7 +89,10 @@ classified by what they actually gate.
 3. `stampede:triggered` → `stampedeOncePerRoundKey` (`ledger:round:warden:stampede`)
 4. `gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (`ledger:any-turn:gates-of-hell:vigilance-rushed`)
 5. `midas:used` → `midasOncePerCombatKey` (`ledger:combat:geomancer:midas`, cap 2)
-6. `bull-s-strength:collided` → `bullStrengthOncePerTurnKey` (`ledger:turn:core:bull-s-strength`)
+6. `bull-s-strength:collided` → `bullStrengthCollideKey(targetId)`
+   (`ledger:any-turn:core:bull-s-strength:target:<id>`) **[corrected]** —
+   per-recipient `any-turn`; the census's owner-relative `turn` key was
+   replaced.
 
 ## Deliverable 5 — Retained U10 facts / content state / other-underlay with disjointness proof
 
@@ -78,7 +102,7 @@ classified by what they actually gate.
 | `sucker-punch:used` | no production reader exists for it as a gate; a flag no code consults cannot block a use. |
 | armed/charged/pending flags (`wicked-sheath:charged` etc.) | they are consumed by the next attack/step as mode, never counted against a scope; no fallback usage gate. |
 | `attackedThisTurn` | documented U10 historical fact; the one-attack **entitlement** is the separate owner-relative `attack-this-turn` key (established in T6.4, not reopened here). |
-| `monogatari:granted` | once-per-song content boundary (resets when a new tale is set); "song" is not a U16 UsagePeriod — pushing it onto the ledger would invent a scope. |
+| `monogatari:granted` | **[corrected]** NOT retained: it is an UNRESOLVED U16 consumer — "may this character receive the fulfillment reward again during the current song?" — whose song scope is a U8 source-defined lifecycle boundary the generic vocabulary does not yet represent. |
 
 ## Deliverable 6 — Unresolved cases
 
@@ -94,45 +118,55 @@ candidate was left with insufficient evidence.
 | `stampede:triggered` | lifecycle `useLedgerAvailable(owner, stampedeOncePerRoundKey())` → `recordUsageKey`; round-start reset |
 | `gates-of-hell:vigilance-rushed` | program `ledgerAvailable(state, vigilanceRushOncePerTurnKey())` → `consumeUsageMutation`; `refreshAnyTurnLedgersForAll` at every turn start |
 | `midas:used` | program `ledgerAvailable(state, midasOncePerCombatKey(), 2)` → `consumeUsageMutation(cap 2)`; combat scope never refreshes |
-| `bull-s-strength:collided` | fold `useLedgerAvailable(source, bullStrengthOncePerTurnKey())` → `consumeUsageMutation`; shared `core:turn-ledger-reset` at owner's next turn-start (bespoke turn-end clear removed) |
+| `bull-s-strength:collided` **[corrected]** | fold `applyBullStrengthCollide({ actor, targetId, sourceId, mutations })` (U16 per-target `any-turn` transaction: key = `bullStrengthCollideKey(targetId)`, availability + consume inside U16); `refreshAnyTurnLedgersForAll` at every turn start — no owner-turn dependency; same-command dedupe keyed on the full U16 identity |
 
 ## Deliverable 8 — Adversarial / replay results
 
 New adversarial + replay coverage in `src/rules/__tests__/u16-residual-census.test.ts`
 (6 cases) and the re-written Bull's Strength cases in `attack-modifiers.test.ts`:
 
-- same source, two owners → no alias (chain-reaction second owner untouched; BS owner-local)
+- same source, two owners → no alias (chain-reaction second owner untouched; BS per-recipient gate is owner-local)
 - once-per-round reset occurs at the round boundary exactly once, and a fresh
   proc regenerates the consumed mark
 - combat scope never resets early (Midas persists across rounds; a third use is
   rejected by the cap)
-- owner-relative turn vs any-turn distinction: Bull's Strength refreshes only at
-  the OWNER's turn-start, not when foes cycle
+- **[corrected]** per-target any-turn: same target twice → one damage; two
+  targets → each takes one; target A consumed never blocks target B; two
+  Bastion owners never alias; the next actor's turn start reopens the window
+  (no owner-turn dependency); same command with a repeated target does not
+  double-consume; replay reproduces the recorded target-sensitive consumes
 - unavailable second use produces no effects (BS: a gate-consumed fold returns `[]`)
 - replay byte-identity: `applyEvents` reproduces the migrated transitions
 - damage-immune mode is disjoint from the U16 gate both directions
 
-All 1889 tests pass (vs 1887 at HEAD; two pre-existing strict-fidelity failures
-introduced by the T9g changelog were repaired — see below).
+All tests pass; the two pre-existing strict-fidelity failures introduced by
+the T9g changelog were repaired (allowlist correction) and the U16
+re-certification allowlist entries were updated for this correction (see
+below).
 
 ## Deliverable 9 — U16 final status
 
-**AUTHORITATIVE.** Against the §8 criterion:
+**[corrected] PARTIAL.** The original run certified AUTHORITATIVE; the
+semantic-correction tranche withdraws that certification. Against the §8
+criterion, gates 2–8 all hold for the CURRENTLY REPRESENTABLE `UsagePeriod`s,
+but the declared contract is not complete:
 
-1. typed scope/identity/count/consume/reset contract complete — yes.
-2. every live usage-entitlement consumer censused — yes (exhaustive census).
-3. every such consumer routes through U16 — yes (all six migrated).
-4. retained facts/content states have explicit semantic-disjointness proof — yes.
-5. zero unresolved competing usage gates remain — yes (fresh census clean).
-6. owner/scope/source distinctions preserved — yes (turn / any-turn / round / combat; mark-owner vs actor-local).
-7. adversarial + replay tests pass — yes.
-8. architecture guards prevent obvious regrowth — yes (architecture-audit test pins the six migrated keys and bans the raw fields; the kernel source-id exemption allowlist includes the new gate provenance).
+- the per-recipient Bull's Strength identity/scope was wrong in this run
+  (now corrected: owner = storage actor, target = key suffix, `any-turn`
+  battlefield window);
+- `monogatari:granted` is a live usage-entitlement consumer that U16 cannot
+  represent until U8 supplies a generic source-defined lifecycle scope
+  ("song") — incompleteness of the scope substrate is not disjointness.
+
+AUTHORITATIVE requires the declared contract, not just the subset the current
+implementation supports, so U16 stays PARTIAL pending the U8 tranche and a
+later U16 re-audit. See `docs/u16-semantic-correction-report.md`.
 
 ## Deliverable 10 — U1–U17 matrix delta
 
-Only U16 changed by fresh evidence (PARTIAL → AUTHORITATIVE). U2/U13/U17 stay
-AUTHORITATIVE; U8/U14/U9/U6/U12/U4/U5/U7 stay PARTIAL. No U10/U15/U3/etc. row
-needed a change on this tranche's evidence.
+**[corrected]** U16 remains PARTIAL (it was never re-certified; the prior
+PARTIAL → AUTHORITATIVE delta in this report is withdrawn). U2/U13/U17 stay
+AUTHORITATIVE; U8/U14/U9/U6/U12/U4/U5/U7 stay PARTIAL.
 
 ## Deliverable 11 — Census 427 / zero promotion
 
@@ -147,12 +181,14 @@ U14/U9/U6/U12/U4/U5/U7, remain PARTIAL.
 
 ## Deliverable 13 — Next smallest coherent underlay tranche
 
-From the post-migration fresh audit: **U8 duration / timing / scheduler
-surfaces** (`RuleDuration`, `RuleTiming`, lifecycle timing, scheduler clocks,
-scheduler `turnTaken`/`turnsTakenThisRound` reads). U16 reads nothing of this
-(Bull's Strength now refreshes through the shared turn-ledger reset), so U16
-can be certified independently; U8 remains the smallest remaining substrate
-seam. **Not implemented in this pass.**
+From the post-correction fresh audit: **U8 Scope/Clock — duration / timing /
+scheduler / source-defined lifecycle boundaries** (`RuleDuration`,
+`RuleTiming`, lifecycle timing, scheduler clocks, and generic boundaries for
+"current song / next song", source-defined lifecycle events, N occurrences,
+next matching boundary). The U8 tranche must determine the generic
+representation for the Monogatari song scope WITHOUT inventing
+Monogatari-specific architecture; only then can a later U16 follow-up migrate
+`monogatari:granted` and re-audit U16. **Not implemented in this pass.**
 
 ## Validation
 

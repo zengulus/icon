@@ -207,8 +207,13 @@ actor-level mark (`chain-reaction-used`, `incubus:triggered`,
 `stampede:triggered`, `gates-of-hell:vigilance-rushed`, `damage-immune`,
 per-source `:used`/`:charged`) was classified and the genuine once-per-scope
 entitlements migrated to typed U16 `ledger:*` entries (see
-`docs/rules-foundations.md` §U16); U16 re-certified AUTHORITATIVE. The next
-smallest underlay tranche is the U8 duration/timing/scheduler surface.
+`docs/rules-foundations.md` §U16). **Correction (2026-08-31):** the follow-up
+U16 semantic-correction tranche found the census promoted U16 too early —
+Bull's Strength is a per-recipient `any-turn` gate (not owner-relative `turn`)
+and `monogatari:granted` is an unresolved once-per-song U16 consumer blocked
+on the U8 source-defined lifecycle scope — so U16 remains PARTIAL. The next
+smallest underlay tranche is the U8 Scope/Clock surface. See
+`docs/u16-semantic-correction-report.md`.
 
 ## Completion criterion
 

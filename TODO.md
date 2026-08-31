@@ -76,17 +76,20 @@ assumption here, document the evidence and update this list before proceeding.
 > (`applyOncePerRoundUsage`) instead of a forgeable branded result object;
 > U16 remains the single executing usage authority.
 >
-> **U16 residual-mark census & migration (2026-08-31).** Landed. Migrated the
-> last actor-local once-per-scope marks onto typed U16 ledger keys
+> **U16 residual-mark census & migration (2026-08-31) + semantic correction
+> (2026-08-31).** Landed + corrected. Migrated the last actor-local
+> once-per-scope marks onto typed U16 ledger keys
 > (`chainReactionOncePerRoundKey`, `incubusOncePerRoundKey`,
 > `stampedeOncePerRoundKey`, `vigilanceRushOncePerTurnKey`,
-> `midasOncePerCombatKey`, `bullStrengthOncePerTurnKey`); `damage-immune` and
-> armed/charged/pending flags proven content MODE or recorded fact, never a
-> usage gate. A fresh semantic census finds no remaining ruleState
-> boolean/counter answering "may/how many times within scope X?" outside the
-> typed ledger — U16 re-certified **AUTHORITATIVE**. Census byte-stable at
-> 427; zero source promotion; the phase gate stays OPEN on U8/U14/U9/U6/U12/
-> U4/U5/U7.
+> `midasOncePerCombatKey`, `bullStrengthCollideKey(targetId)` — corrected to
+> a per-recipient `any-turn` gate: the restriction belongs to the character
+> RECEIVING the damage, owner = the Bastion's ledger storage, target = the
+> U16 key suffix); `damage-immune` and armed/charged/pending flags proven
+> content MODE or recorded fact, never a usage gate. `monogatari:granted` is
+> an UNRESOLVED U16 consumer (once-per-song entitlement) blocked on the U8
+> source-defined lifecycle scope, NOT approximated onto turn/round/combat.
+> U16 remains **PARTIAL**. Census byte-stable at 427; zero source promotion;
+> the phase gate stays OPEN on U8/U14/U9/U6/U12/U4/U5/U7.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
@@ -897,23 +900,48 @@ assumption here, document the evidence and update this list before proceeding.
   `stampede:triggered` → `stampedeOncePerRoundKey` (round, mark owner),
   `gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (any-turn),
   `midas:used` → `midasOncePerCombatKey` (combat, cap 2), and
-  `bull-s-strength:collided` → `bullStrengthOncePerTurnKey` (owner-relative
-  turn; the bespoke turn-end clear removed in favor of the shared
-  core:turn-ledger-reset). RETAINED with disjointness proof: `damage-immune`
+  `bull-s-strength:collided` → `bullStrengthCollideKey(targetId)` — corrected
+  from an owner-relative `turn` gate to the per-RECIPIENT identity: the
+  "more than once a turn" restriction (p.149) belongs to the character
+  RECEIVING the damage (owner = Bastion ledger storage, target = U16 key
+  suffix, scope = `any-turn` battlefield window reopened at every actor's
+  turn start; the bespoke turn-end clear removed in favor of the shared
+  any-turn sweep). RETAINED with disjointness proof: `damage-immune`
   (MODE state — negative-substitute + boundary adversarial tests), recorded
-  facts with no gate reader (`sucker-punch:used`), and armed/charged mode
-  (`wicked-sheath:charged`, `riposte:armed`, `revenge:active`, `hissatsu:armed`,
-  `ace:armed`, `trick-shot:armed`, `carnevale:armed`) + `monogatari:granted`
-  (once-per-song content boundary, not a U16 UsagePeriod). Governance:
+  facts with no gate reader (`sucker-punch:used`), and armed/charged/pending
+  mode (`wicked-sheath:charged`, `riposte:armed`, `revenge:active`, `hissatsu:armed`,
+  `ace:armed`, `trick-shot:armed`, `carnevale:armed`, `morrigan:pending`,
+  `aria:pending`, `eclipse:pending`, `implode:pending`). `monogatari:granted`
+  is reclassified **UNRESOLVED U16 CONSUMER** (once-per-song entitlement),
+  blocked on the U8 source-defined lifecycle scope — not approximated onto
+  turn/round/combat; U16 stays PARTIAL. Governance:
   architecture-audit test pins the six migrated keys + a ban on the raw
   fields, and the kernel source-id exemption allowlist includes the new gate
   provenance. Verification: `u16-residual-census.test.ts` (+1, 6 cases),
   `attack-modifiers.test.ts` updated to the typed key, architecture-audit +
   strict fidelity clean, census byte-stable at 427 (no source promotion), full
-  suite green. The smallest next underlay tranche from the post-migration
-  fresh audit is **U8 duration/timing/scheduler surfaces** (`RuleDuration` /
-  `RuleTiming` / lifecycle / scheduler), which remains PARTIAL beside
-  U14/U9/U6/U12/U4/U5/U7.
+  suite green. The smallest next underlay tranche from the fresh audit is
+  **U8 Scope/Clock — duration / timing / scheduler / source-defined lifecycle
+  boundaries** (see the semantic-correction tranche), which remains PARTIAL
+  beside U14/U9/U6/U12/U4/U5/U7.
+
+- **U16 semantic correction (this tranche).** `DONE`. The residual census was
+  promoted too early: two classifications did not survive fresh evidence.
+  (1) Bull's Strength was migrated with the wrong entitlement identity/scope
+  — the "more than once a turn" restriction belongs to the character
+  RECEIVING the damage, so the gate is now the U16 per-target `any-turn` key
+  `bullStrengthCollideKey(targetId)` (owner = the Bastion's ledger storage,
+  target = the U16 `:target:` suffix, reopens at EVERY actor's turn start,
+  never aliasing two Bastions; same-command dedupe keys on the exact U16
+  identity, not `guardSeen`). (2) `monogatari:granted` is NOT retained
+  content state: it answers "may this character receive the Monogatari
+  fulfillment reward again during the current song?" — an UNRESOLVED U16
+  CONSUMER blocked on the U8 source-defined lifecycle scope, deliberately
+  NOT migrated onto turn/round/combat. U16 stays **PARTIAL**; adversarial
+  matrix (same-target once, two-targets each, target isolation, two owners
+  no alias, next-actor turn-start refresh, same-command no double-consume,
+  replay) green; census byte-stable at 427; zero promotion. See
+  `docs/u16-semantic-correction-report.md`.
 
 - **T7 — U2 role-consumer consolidation (this tranche).** `DONE`. Made
   `primitives/roles.ts` the single semantic authority for "relative to whom is
