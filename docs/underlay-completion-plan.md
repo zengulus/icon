@@ -2041,7 +2041,21 @@ dashes 3/2/1").
 
 **Current state.** `AUTHORITATIVE` (single executing usage authority). Core
 Landed T3 (2026-08-30), U10 de-dup T4, raw-field consolidation T6.4, and
-the T6.4a corrective closure (2026-08-31) met all six closure gates:
+the T6.4a corrective closure (2026-08-31) met all six closure gates. The
+**U16 residual-usage-state census (2026-08-31)** then migrated the last
+actor-local once-per-scope marks off raw booleans/counters onto typed U16
+ledger keys: `chain-reaction-used` → `chainReactionOncePerRoundKey` (round),
+`incubus:triggered` → `incubusOncePerRoundKey` (round, mark owner),
+`stampede:triggered` → `stampedeOncePerRoundKey` (round, mark owner),
+`gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (any-turn),
+`midas:used` → `midasOncePerCombatKey` (combat, cap 2), and
+`bull-s-strength:collided` → `bullStrengthOncePerTurnKey` (owner-relative
+turn, refreshed by the shared core:turn-ledger-reset). `damage-immune` is
+proven disjoint (MODE/immune state, never a usage count) and the remaining
+armed/charged/pending flags record content mode or historical fact, not
+entitlement. A fresh semantic census finds no remaining ruleState
+boolean/counter answering "may/how many times within scope X?" outside the
+typed ledger.
 actor-local one-interrupt-per-turn; `usedAbilityIds` (No Repeats) +
 `standardMoveUsed` migrated to typed `ledger:*` keys (schema 12); the
 dangerous-terrain damage-cadence contradiction recorded as adopted

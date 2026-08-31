@@ -469,7 +469,7 @@ event is emitted. U15 owns the grouping; per-domain legality stays in the
 domain authorities (spatial, payment, creation). Tests:
 `t3-transaction.test.ts`.
 
-### Usage / Entitlement Ledger (U16 underlay, CORE) — PARTIAL (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b closure, 2026-08-31; T-turn corrective repair re-audited to PARTIAL)
+### Usage / Entitlement Ledger (U16 underlay, CORE) — AUTHORITATIVE (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b closure + T9g operation-boundary repair + U16 residual-marks census migration, 2026-08-31)
 
 "How many times has/may this rule be used within scope X?" — distinct from
 spendable resources. `primitives/usage.ts` owns the core ledger:
@@ -603,10 +603,27 @@ availability (raw state / dropped result pins), both flagged by the
 `u16-usage-ledger-routing` guard. Replay stays pure: the command boundary
 calls the operation once, and `applyEvents` applies the recorded bundle
 without rechecking entitlement. See `docs/t8f-operation-boundary-report.md`.
-U16 stays **PARTIAL** — the residual actor-level once-per-round/turn trigger
-marks (`chain-reaction-used`, `incubus:triggered`, `stampede:triggered`,
-`gates-of-hell:vigilance-rushed`, `damage-immune`, per-source `:used`) still
-require the U16 residual-marks census/migration tranche (not started).
+
+**U16 residual-marks census & migration (2026-08-31).** The residual
+actor-level once-per-round/turn marks are censused and migrated off raw
+booleans/counters onto typed U16 ledger keys: `chain-reaction-used` →
+`chainReactionOncePerRoundKey` (round, actor-local), `incubus:triggered` →
+`incubusOncePerRoundKey` (round, mark owner), `stampede:triggered` →
+`stampedeOncePerRoundKey` (round, mark owner), `gates-of-hell:vigilance-rushed`
+→ `vigilanceRushOncePerTurnKey` (any-turn), `midas:used` →
+`midasOncePerCombatKey` (combat, cap 2), and `bull-s-strength:collided` →
+`bullStrengthOncePerTurnKey` (owner-relative turn, refreshed by the shared
+core:turn-ledger-reset). `damage-immune` is RETAINED as MODE/immune state with
+a disjointness proof (the negative-substitute and boundary tests show it never
+reads a ledger count and never functions as a usage gate); `sucker-punch:used`
+is a recorded fact with no production reader (not entitlement); armed/charged
+modes (`wicked-sheath:charged`, `riposte:armed`, `revenge:active`,
+`hissatsu:armed`, `ace:armed`, `trick-shot:armed`, `carnevale:armed`) and
+`monogatari:granted` (once-per-song content boundary, not a U16 UsagePeriod)
+are content-owned state, not competing U16 authorities. The fresh semantic
+census finds no remaining ruleState boolean/counter answering
+"may/how many times within scope X?" outside the typed U16 ledger. See
+`docs/t6-gate-report.md` and the tranche report.
 
 ### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)
 

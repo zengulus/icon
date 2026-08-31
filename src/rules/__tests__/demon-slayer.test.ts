@@ -410,7 +410,8 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
       input: {},
     }, scriptedDice()).state;
     expect(rushed.actors[hero.id].position).toEqual({ x: 5, y: 1 });
-    expect(rushed.actors[hero.id].ruleState['gates-of-hell:vigilance-rushed']).toBe(true);
+    // The once-per-turn vigilance-rush gate is a U16 any-turn ledger key.
+    expect(rushed.actors[hero.id].ruleState['ledger:any-turn:gates-of-hell:vigilance-rushed']).toBe(true);
     expect(() => executeCommand(rushed, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,

@@ -329,7 +329,8 @@ describe('combat condition pipeline (p.104–105)', () => {
 
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'bastion:land-waster', targetIds: [foe.id] }, scriptedDice(15, 3, 5));
     expect(result.state.actors[heroId].resources.aether).toBe(1);
-    expect(result.state.actors[heroId].ruleState['chain-reaction-used']).toBe(true);
+    // The once-per-round Chain Reaction entitlement is a U16 round-ledger key.
+    expect(result.state.actors[heroId].ruleState['ledger:round:core:chain-reaction']).toBe(true);
   });
 
   it('isBloodied tracks the after-wounds half of maximum HP', () => {

@@ -13,7 +13,7 @@ import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-ge
 import { clockForTiming } from '../../primitives/scope.js';
 import type { BoundaryRef } from '../../primitives/scope.js';
 import type { RuleTiming } from '../../primitives/types.js';
-import { oneInterruptPerTurnWindowKey, refreshUsageLedgerForBoundary, usageCount, usageLedgerHoldsForBoundary } from '../../kernels/use-ledger.js';
+import { incubusOncePerRoundKey, oneInterruptPerTurnWindowKey, recordUsageKey, refreshUsageLedgerForBoundary, stampedeOncePerRoundKey, usageCount, usageLedgerHoldsForBoundary, useLedgerAvailable } from '../../kernels/use-ledger.js';
 import type { DiceSource } from '../../../dice.js';
 import type { EncounterActor, EncounterMark, EncounterState, Position } from '../../../types.js';
 import type { RuleMutation } from '../../primitives/types.js';
@@ -562,8 +562,11 @@ registerLifecycleRecipe({
     for (const marked of Object.values(state.actors)) {
       const mark = marked.marks.find((candidate) => candidate.markId === 'incubus');
       if (!mark || marked.defeated || !marked.onBattlefield || !marked.position) continue;
+      // Once-per-round entitlement routed through the U16 round ledger
+      // (actor-local on the mark owner): availability via useLedgerAvailable,
+      // consume via recordUsageKey. The U16 round-start reset reopens it.
       const owner = state.actors[mark.ownerId];
-      if (!owner || owner.defeated || owner.ruleState['incubus:triggered'] === true) continue;
+      if (!owner || owner.defeated || !useLedgerAvailable(owner, incubusOncePerRoundKey())) continue;
       const adjacent = actor.id === marked.id
         ? Object.values(state.actors).some((candidate) => candidate.side === 'foes' && candidate.id !== marked.id && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, marked.position) <= 1)
         : distance(actor.position, marked.position) <= 1;
@@ -575,8 +578,7 @@ registerLifecycleRecipe({
           { kind: 'condition', sourceId: 'shade:incubus', sourceActorId: owner.id, actorId: target.id, conditionId: 'dazed', operation: 'apply', potency: 'normal' },
         ]);
       }
-      owner.ruleState['incubus:triggered'] = true;
-      owner.ruleStateOwners['incubus:triggered'] = owner.id;
+      recordUsageKey(owner, incubusOncePerRoundKey());
     }
   },
 });
@@ -636,10 +638,12 @@ registerLifecycleRecipe({
     if (!actor.position) return;
     for (const mark of [...actor.marks]) {
       if (mark.markId !== 'stampede') continue;
+      // Once-per-round entitlement routed through the U16 round ledger
+      // (actor-local on the mark owner): availability via useLedgerAvailable,
+      // consume via recordUsageKey. The U16 round-start reset reopens it.
       const owner = state.actors[mark.ownerId];
-      if (!owner || owner.defeated || !owner.onBattlefield || owner.ruleState['stampede:triggered'] === true) continue;
-      owner.ruleState['stampede:triggered'] = true;
-      owner.ruleStateOwners['stampede:triggered'] = owner.id;
+      if (!owner || owner.defeated || !owner.onBattlefield || !useLedgerAvailable(owner, stampedeOncePerRoundKey())) continue;
+      recordUsageKey(owner, stampedeOncePerRoundKey());
       applyRuleMutations(state, [{
         kind: 'damage', sourceId: 'warden:stampede', sourceActorId: owner.id, actorId: actor.id, amount: 2, damageType: 'normal', instance: 1, delivery: 'effect', ignoreCover: false,
       }]);
@@ -912,20 +916,6 @@ registerLifecycleRecipe({
     delete actor.ruleStateOwners['demon-edge:window'];
     delete actor.ruleState['demon-edge:window-round'];
     delete actor.ruleStateOwners['demon-edge:window-round'];
-  },
-});
-
-/** ICON p.149 Bastion Bull's Strength: abilities gain "collide: deal 2
- * damage", once per turn — the collide fold sets the guard at plan time;
- * this row clears it at the end of the owner's turn so it can fire again. */
-registerLifecycleRecipe({
-  sourceId: 'bastion:trait:bull-s-strength',
-  phase: 'turn-end',
-  applies: (actor) => actor.traitIds.includes('bastion:trait:bull-s-strength') && actor.ruleState['bull-s-strength:collided'] === true,
-  resolve: (state, actor) => {
-    if (actor.ruleState['bull-s-strength:collided'] !== true) return;
-    delete actor.ruleState['bull-s-strength:collided'];
-    delete actor.ruleStateOwners['bull-s-strength:collided'];
   },
 });
 

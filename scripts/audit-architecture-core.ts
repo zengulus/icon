@@ -140,7 +140,7 @@ const KERNEL_SOURCE_ID_EXEMPTIONS: ReadonlyMap<string, ReadonlySet<string>> = ne
   // p.116 Slashed, p.89 dangerous terrain once-per-turn) owned by the shared
   // U16 authority - not per-content resolvers, and no content/consumer may
   // reuse the vocabulary.
-  ['kernels/use-ledger.ts', new Set(['core:one-interrupt-per-turn', 'core:attack-this-turn', 'core:slashed-this-turn', 'core:dangerous-terrain-this-turn', 'core:standard-move'])],
+  ['kernels/use-ledger.ts', new Set(['core:one-interrupt-per-turn', 'core:attack-this-turn', 'core:slashed-this-turn', 'core:dangerous-terrain-this-turn', 'core:standard-move', 'core:chain-reaction', 'core:bull-s-strength', 'shade:incubus', 'warden:stampede', 'gates-of-hell:vigilance-rushed', 'geomancer:midas'])],
 ]);
 
 // T6.4 (U16): exactly the raw usage/entitlement fields migrated OFF the

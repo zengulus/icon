@@ -70,6 +70,23 @@ assumption here, document the evidence and update this list before proceeding.
 > concrete call path; U13/U17 re-attested; U16/U10/U15 stay PARTIAL. Census
 > byte-stable at 427; zero source units promoted; phase gate OPEN. See
 > `docs/t8b-audit-integrity-report.md`.
+>
+> **T9g — U16/F9 operation-boundary repair (2026-08-31).** The F9
+> once-per-round reactive entitlement is now ONE U16 COMMIT operation
+> (`applyOncePerRoundUsage`) instead of a forgeable branded result object;
+> U16 remains the single executing usage authority.
+>
+> **U16 residual-mark census & migration (2026-08-31).** Landed. Migrated the
+> last actor-local once-per-scope marks onto typed U16 ledger keys
+> (`chainReactionOncePerRoundKey`, `incubusOncePerRoundKey`,
+> `stampedeOncePerRoundKey`, `vigilanceRushOncePerTurnKey`,
+> `midasOncePerCombatKey`, `bullStrengthOncePerTurnKey`); `damage-immune` and
+> armed/charged/pending flags proven content MODE or recorded fact, never a
+> usage gate. A fresh semantic census finds no remaining ruleState
+> boolean/counter answering "may/how many times within scope X?" outside the
+> typed ledger — U16 re-certified **AUTHORITATIVE**. Census byte-stable at
+> 427; zero source promotion; the phase gate stays OPEN on U8/U14/U9/U6/U12/
+> U4/U5/U7.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
@@ -870,6 +887,33 @@ assumption here, document the evidence and update this list before proceeding.
   green (1824 tests), strict fidelity clean, census byte-stable at 427 (no
   source promotion). U16 remains the single executing usage/entitlement
   authority. Next smallest-first blocker: U2 role-consumer routing.
+
+- **U16 residual-usage-state census (this tranche).** `DONE`. Per the
+  exhaustive-census mandate, audited current HEAD for every live
+  state/read/write/reset that could answer a usage/entitlement question.
+  Genuine once-per-scope marks migrated onto typed U16 ledger keys:
+  `chain-reaction-used` → `chainReactionOncePerRoundKey` (round, actor-local),
+  `incubus:triggered` → `incubusOncePerRoundKey` (round, mark owner),
+  `stampede:triggered` → `stampedeOncePerRoundKey` (round, mark owner),
+  `gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (any-turn),
+  `midas:used` → `midasOncePerCombatKey` (combat, cap 2), and
+  `bull-s-strength:collided` → `bullStrengthOncePerTurnKey` (owner-relative
+  turn; the bespoke turn-end clear removed in favor of the shared
+  core:turn-ledger-reset). RETAINED with disjointness proof: `damage-immune`
+  (MODE state — negative-substitute + boundary adversarial tests), recorded
+  facts with no gate reader (`sucker-punch:used`), and armed/charged mode
+  (`wicked-sheath:charged`, `riposte:armed`, `revenge:active`, `hissatsu:armed`,
+  `ace:armed`, `trick-shot:armed`, `carnevale:armed`) + `monogatari:granted`
+  (once-per-song content boundary, not a U16 UsagePeriod). Governance:
+  architecture-audit test pins the six migrated keys + a ban on the raw
+  fields, and the kernel source-id exemption allowlist includes the new gate
+  provenance. Verification: `u16-residual-census.test.ts` (+1, 6 cases),
+  `attack-modifiers.test.ts` updated to the typed key, architecture-audit +
+  strict fidelity clean, census byte-stable at 427 (no source promotion), full
+  suite green. The smallest next underlay tranche from the post-migration
+  fresh audit is **U8 duration/timing/scheduler surfaces** (`RuleDuration` /
+  `RuleTiming` / lifecycle / scheduler), which remains PARTIAL beside
+  U14/U9/U6/U12/U4/U5/U7.
 
 - **T7 — U2 role-consumer consolidation (this tranche).** `DONE`. Made
   `primitives/roles.ts` the single semantic authority for "relative to whom is

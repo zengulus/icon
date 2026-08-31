@@ -267,7 +267,8 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(resolved.actors[second!.id].hp).toBe(30); // 32 - 2
     expect(resolved.actors[foe.id].statuses).toContain('dazed');
     expect(resolved.actors[second!.id].statuses).toContain('dazed');
-    expect(resolved.actors[hero.id].ruleState['incubus:triggered']).toBe(true);
+    // The once-per-round Incubus detonation entitlement is a U16 round-ledger key.
+    expect(resolved.actors[hero.id].ruleState['ledger:round:shade:incubus']).toBe(true);
   });
 
   it('Incubus talent 2: "deals bonus damage for every ally of your target adjacent to your target" (p.164)', () => {

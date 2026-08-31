@@ -146,7 +146,10 @@ describe('shared resources (p.99–105, p.204)', () => {
     state.actors[hero.id].traitIds.push('wright:trait:chain-reaction');
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:land-waster', targetIds: [foe.id] }, scriptedDice(15, 3, 5));
     expect(result.state.actors[hero.id].resources.aether).toBe(1);
-    expect(result.state.actors[hero.id].ruleState['chain-reaction-used']).toBe(true);
+    // The once-per-round Chain Reaction entitlement is a U16 round-ledger key
+    // (recordUsageKey writes the one-shot boolean true, byte-compatible with
+    // the long-standing mark).
+    expect(result.state.actors[hero.id].ruleState['ledger:round:core:chain-reaction']).toBe(true);
   });
 
   it('Vigilance: spending a charge validates that a charge exists', () => {

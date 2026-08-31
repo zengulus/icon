@@ -1,5 +1,7 @@
 import { registerAttackModifierRule } from '../../kernels/attack-modifiers.js';
 import { collidingShoveTargets } from '../../kernels/encounter-adapter.js';
+import { bullStrengthOncePerTurnKey, useLedgerAvailable } from '../../kernels/use-ledger.js';
+import { consumeUsageMutation } from '../../primitives/usage.js';
 import type { EncounterState } from '../../../types.js';
 import type { RuleMutation } from '../../primitives/types.js';
 
@@ -27,8 +29,9 @@ import type { RuleMutation } from '../../primitives/types.js';
  *   13+ instead of 15+.
  * - **Bull's Strength** (bastion, p.149) — abilities gain "collide: deal 2
  *   damage": when an ability's shove collides, the shoved character takes 2
- *   damage, once per turn per character (`bull-s-strength:collided` guard,
- *   cleared by the turn-end lifecycle recipe).
+ *   damage, once per turn per character (a U16 owner-relative once-per-turn
+ *   ledger gate `bullStrengthOncePerTurnKey`, refreshed at the owner's next
+ *   turn-start by the shared core:turn-ledger-reset lifecycle recipe).
  */
 
 export const DEMON_EDGE_TRAIT = 'demon-slayer:trait:demon-edge';
@@ -104,15 +107,15 @@ export function bullStrengthCollideMutations(state: EncounterState, mutations: r
     if (mutation.kind !== 'move' || mutation.movement !== 'shove' || !collidedTargets.has(mutation.actorId)) continue;
     const source = state.actors[mutation.sourceActorId];
     if (!source || !source.traitIds.includes(BULL_STRENGTH_TRAIT)) continue;
-    if (source.ruleState['bull-s-strength:collided'] === true || guardSeen.has(source.id)) continue;
+    if (!useLedgerAvailable(source, bullStrengthOncePerTurnKey()) || guardSeen.has(source.id)) continue;
     const shoved = state.actors[mutation.actorId];
     if (!shoved || shoved.defeated || !shoved.onBattlefield) continue;
     guardSeen.add(source.id);
-    // The once-per-turn guard is a *recorded* mutation (not a live-state
+    // The once-per-turn gate is a *recorded* consume mutation (not a live-state
     // write), so re-running the identical program on the same state is
-    // deterministic — the reducer applies the guard with the damage, and the
-    // next command's plan reads the applied guard. The turn-end recipe
-    // clears it for the next turn.
+    // deterministic — the reducer applies the ledger consume with the damage,
+    // and the next command's plan reads the applied gate. The shared
+    // core:turn-ledger-reset recipe refreshes it at the owner's next turn-start.
     appended.push({
       kind: 'damage',
       sourceId: BULL_STRENGTH_TRAIT,
@@ -123,15 +126,7 @@ export function bullStrengthCollideMutations(state: EncounterState, mutations: r
       instance: 1,
       delivery: 'effect',
       ignoreCover: false,
-    }, {
-      kind: 'state',
-      sourceId: BULL_STRENGTH_TRAIT,
-      sourceActorId: source.id,
-      actorId: source.id,
-      key: 'bull-s-strength:collided',
-      operation: 'set',
-      value: true,
-    });
+    }, consumeUsageMutation(BULL_STRENGTH_TRAIT, source.id, bullStrengthOncePerTurnKey()));
   }
   return appended;
 }

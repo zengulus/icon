@@ -391,7 +391,9 @@ describe('Geomancer ability automation (p.215–221)', () => {
     const statue = Object.values(result.state.entities).find((entity) => entity.type === 'statue');
     expect(statue).toBeDefined();
     expect(statue?.state.held).toBe(foe.id);
-    expect(result.state.actors[hero.id].ruleState['midas:used']).toBe(1);
+    // The twice-per-combat Midas count is a U16 combat-scope ledger key
+    // (consumeUsageMutation cap 2 increments the durable count).
+    expect(result.state.actors[hero.id].ruleState['ledger:combat:geomancer:midas']).toBe(1);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

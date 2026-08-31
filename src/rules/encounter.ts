@@ -8,7 +8,7 @@ import type { ArmedContinuation, RuleAction, RuleChoice, RuleExecutionContext, R
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
 import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
-import { REPEATABLE_TAG, attackOncePerTurnKey, dangerousOncePerTurnKey, interruptLegality, interruptUseKey, noRepeatKey, noRepeatsApplies, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount } from './automation/kernels/use-ledger.js';
+import { REPEATABLE_TAG, attackOncePerTurnKey, chainReactionOncePerRoundKey, dangerousOncePerTurnKey, interruptLegality, interruptUseKey, noRepeatKey, noRepeatsApplies, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, refreshUsageLedgerForBoundary, resetBoundaryFor, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount, useLedgerAvailable } from './automation/kernels/use-ledger.js';
 import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
@@ -3088,12 +3088,19 @@ function applyTurnTransition(
       // Re-derive the round's turn entitlements from the registered sources
       // (multi-turn elites/legends keep their extra turns every round).
       candidate.turnsRemaining = Math.max(1, turnEntitlements(state, candidate));
-      candidate.ruleState['chain-reaction-used'] = false;
-      candidate.ruleStateOwners['chain-reaction-used'] ??= null;
-      candidate.ruleState['incubus:triggered'] = false;
-      candidate.ruleStateOwners['incubus:triggered'] ??= null;
-      candidate.ruleState['stampede:triggered'] = false;
-      candidate.ruleStateOwners['stampede:triggered'] ??= null;
+    }
+    // U16 once-per-round reset: every actor's round ledger (`ledger:round:*`)
+    // is cleared UNCONDITIONALLY at a round boundary, routed through the U16
+    // `refreshUsageLedgerForBoundary` seam (Round scope). This is deliberately
+    // NOT plan-gated: a once-per-round mark that fires ON the boundary-crossing
+    // turn (e.g. Stampede's end-of-foe-turn charge, Chain Reaction's proc)
+    // must still reset for the new round. Idempotent with the lifecycle
+    // `core:round-ledger-reset` recipe (same authority, different timing).
+    {
+      const roundBoundaryForReset = resetBoundaryFor('round', actor.id);
+      for (const candidate of Object.values(state.actors)) {
+        refreshUsageLedgerForBoundary(candidate, roundBoundaryForReset);
+      }
     }
     state.partyResolve += 1;
     chargeWickedSheathDie(state);
@@ -3118,8 +3125,6 @@ function applyTurnTransition(
   for (const candidate of Object.values(state.actors)) {
     candidate.ruleState['damage-immune'] = false;
     candidate.ruleStateOwners['damage-immune'] ??= null;
-    candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
-    candidate.ruleStateOwners['gates-of-hell:vigilance-rushed'] ??= null;
   }
   // The delayed phase (historical resolveDelayedMarkEffects position): runs
   // after the per-actor flag reset so its fresh ability-moves (Great Giorgios
@@ -3247,8 +3252,6 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         for (const candidate of Object.values(state.actors)) {
           candidate.ruleState['damage-immune'] = false;
           candidate.ruleStateOwners['damage-immune'] ??= null;
-          candidate.ruleState['gates-of-hell:vigilance-rushed'] = false;
-          candidate.ruleStateOwners['gates-of-hell:vigilance-rushed'] ??= null;
         }
         state.activeActorId = event.actorId;
         // The combat-start first turn replays the historical ENCOUNTER_STARTED
@@ -3542,8 +3545,12 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           }
         }
         // ICON p.95 Chain Reaction (Wright): once per round, damaging at least
-        // two foes with one ability grants 1 Aether.
-        if (encounterConditionSet(actor, state).has('chain-reaction') && actor.ruleState['chain-reaction-used'] !== true) {
+        // two foes with one ability grants 1 Aether. The once-per-round
+        // entitlement routes through the U16 round ledger
+        // (chainReactionOncePerRoundKey) — availability via useLedgerAvailable,
+        // consume via recordUsageKey — not a raw boolean. A round-start
+        // lifecycle recipe clears the key, so the gate reopens next round.
+        if (encounterConditionSet(actor, state).has('chain-reaction') && useLedgerAvailable(actor, chainReactionOncePerRoundKey())) {
           const damagedFoeIds = new Set<string>();
           for (const mutation of event.mutations) {
             if (mutation.kind !== 'damage' || mutation.amount <= 0) continue;
@@ -3551,8 +3558,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
           }
           if (damagedFoeIds.size >= 2) {
             actor.resources.aether = (actor.resources.aether ?? 0) + 1;
-            actor.ruleState['chain-reaction-used'] = true;
-            actor.ruleStateOwners['chain-reaction-used'] = actor.id;
+            recordUsageKey(actor, chainReactionOncePerRoundKey());
           }
         }
         if (event.mutations.some((mutation) => mutation.kind === 'attack' && !mutation.hit)) tickGallowsHumorOnMiss(state);

@@ -270,15 +270,15 @@ docs.
 **UNDERLAY PHASE: OPEN** — 14 of 17 underlays remain PARTIAL per the
 corrected matrix.
 
-## 12. Next tranche (identified, NOT started)
+## 12. Next tranche (identified)
 
-**U16 residual-marks census & migration** (unchanged from the prior pointer):
-classify each actor-level mark (`chain-reaction-used`, `incubus:triggered`,
+**U16 residual-marks census & migration** — LANDED (2026-08-31): each
+actor-level mark (`chain-reaction-used`, `incubus:triggered`,
 `stampede:triggered`, `gates-of-hell:vigilance-rushed`, `damage-immune`,
-per-source `:used`/`:charged`) as a U10 fact-backed de-dup (documented
-specialist) or migrate it to a typed U16 `ledger:*` entry, then re-audit U16
-for zero unresolved duplicates. Alternatives of equal standing: U10
-movement/save fact-vocabulary completeness; U15 atomic-group route proof.
+per-source `:used`/`:charged`) was classified and the genuine once-per-scope
+entitlements migrated to typed U16 `ledger:*` entries (see
+`docs/rules-foundations.md` §U16); U16 re-certified AUTHORITATIVE. The next
+smallest underlay tranche is the U8 duration/timing/scheduler surface.
 
 ---
 

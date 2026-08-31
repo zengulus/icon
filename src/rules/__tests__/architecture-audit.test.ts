@@ -971,6 +971,67 @@ describe('single U16 usage/entitlement authority', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Regression: U16 residual once-per-scope marks are MIGRATED to ledger keys,
+// not raw ruleState booleans/counters (U16 residual-usage-state census, 2026-08-31)
+// ---------------------------------------------------------------------------
+
+describe('U16 — migrated once-per-scope marks are not reintroduced as raw ruleState', () => {
+  const dir = import.meta.dirname;
+  const srcDir = join(dir, '..', '..');
+  const read = (rel: string) => {
+    const { readFileSync } = require('node:fs');
+    const path = require('node:path');
+    return readFileSync(path.join(srcDir, rel), 'utf8');
+  };
+
+  it('the once-per-round marks route through the U16 ledger, never raw booleans in the reducer', () => {
+    const reducer = read('rules/encounter.ts');
+    expect(reducer).not.toMatch(/ruleState\['chain-reaction-used'\]/);
+    expect(reducer).not.toMatch(/ruleState\['incubus:triggered'\]/);
+    expect(reducer).not.toMatch(/ruleState\['stampede:triggered'\]/);
+    expect(reducer).not.toMatch(/ruleState\['gates-of-hell:vigilance-rushed'\]/);
+    // The Chain Reaction gate routes through the U16 typed round key.
+    expect(reducer).toContain('chainReactionOncePerRoundKey');
+    expect(reducer).toContain('useLedgerAvailable');
+    // Round-boundary reset is unconditional and routed through U16.
+    expect(reducer).toContain('refreshUsageLedgerForBoundary');
+  });
+
+  it('the content consumers route their once-per-scope gates through the U16 typed keys', () => {
+    const recipes = read('rules/automation/content/jobs/lifecycle-recipes.ts');
+    expect(recipes).not.toContain("'incubus:triggered'");
+    expect(recipes).not.toContain("'stampede:triggered'");
+    expect(recipes).toContain('incubusOncePerRoundKey');
+    expect(recipes).toContain('stampedeOncePerRoundKey');
+    expect(recipes).toContain('recordUsageKey');
+    const demonSlayer = read('rules/automation/content/jobs/programs/demon-slayer-programs.ts');
+    expect(demonSlayer).not.toContain("'gates-of-hell:vigilance-rushed'");
+    expect(demonSlayer).toContain('vigilanceRushOncePerTurnKey');
+    const geomancer = read('rules/automation/content/jobs/programs/geomancer-programs.ts');
+    expect(geomancer).not.toContain("'midas:used'");
+    expect(geomancer).toContain('midasOncePerCombatKey');
+    // Bull's Strength (once-per-turn collide) also routes through the U16
+    // owner-relative turn ledger, never a raw `bull-s-strength:collided` flag
+    // with a bespoke turn-end clear.
+    const modifiers = read('rules/automation/content/jobs/attack-modifier-recipes.ts');
+    expect(modifiers).not.toContain("'bull-s-strength:collided'");
+    expect(modifiers).toContain('bullStrengthOncePerTurnKey');
+    expect(modifiers).toContain('consumeUsageMutation');
+    expect(recipes).not.toContain("'bull-s-strength:collided'"); // bespoke turn-end clear removed
+  });
+
+  it('the U16 usage kernel owns the six migrated round/turn/combat gate keys', () => {
+    const ledger = read('rules/automation/kernels/use-ledger.ts');
+    expect(ledger).toContain('chainReactionOncePerRoundKey');
+    expect(ledger).toContain('incubusOncePerRoundKey');
+    expect(ledger).toContain('stampedeOncePerRoundKey');
+    expect(ledger).toContain('vigilanceRushOncePerTurnKey');
+    expect(ledger).toContain('midasOncePerCombatKey');
+    expect(ledger).toContain('bullStrengthOncePerTurnKey');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Regression: single action-cost authority (F8a merge contamination guard)
 // ---------------------------------------------------------------------------
 

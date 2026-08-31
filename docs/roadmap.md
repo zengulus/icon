@@ -421,6 +421,23 @@ are independent seams with no real implementation dependency. T6.1 did U8
 only; T6.2 landed the U17 recorded-decision seam; T6.3 landed the U17
 turn-boundary consumers; T6.4 landed the U16 raw-field consolidation.
 
+**U16 residual-usage-state census & migration (2026-08-31).** The last
+actor-local once-per-scope marks were migrated off raw booleans/counters onto
+typed U16 ledger keys: `chain-reaction-used` → `chainReactionOncePerRoundKey`
+(round), `incubus:triggered` → `incubusOncePerRoundKey` (round, mark owner),
+`stampede:triggered` → `stampedeOncePerRoundKey` (round, mark owner),
+`gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (any-turn),
+`midas:used` → `midasOncePerCombatKey` (combat, cap 2), and
+`bull-s-strength:collided` → `bullStrengthOncePerTurnKey` (owner-relative
+turn, refreshed by the shared core:turn-ledger-reset). `damage-immune` and the
+armed/charged/pending flags are proven content MODE or recorded fact, never a
+usage gate; a fresh semantic census finds no remaining ruleState
+boolean/counter answering "may/how many times within scope X?" outside the
+typed U16 ledger — U16 re-certified **AUTHORITATIVE** (zero promotion; census
+byte-stable at 427). The smallest next underlay tranche from the post-migration
+fresh audit is the **U8 duration/timing/scheduler surface** (`RuleDuration` /
+`RuleTiming` / lifecycle / scheduler), which remains PARTIAL beside U14/U9/U6.
+
 ## P1 — Combat settlement and cross-combat character continuity (REPAIR) — **DONE 2026-08-25**
 
 **Goal.** End an encounter into a durable post-combat state that can start the

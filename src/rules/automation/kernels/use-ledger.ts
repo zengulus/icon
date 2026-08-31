@@ -248,6 +248,91 @@ export function dangerousOncePerTurnKey(): string {
   return usageKey({ sourceId: DANGEROUS_ONCE_PER_TURN, ownerId: '', scope: 'any-turn' });
 }
 
+// ---------------------------------------------------------------------------
+// Residual once-per-scope marks (U16 residual-usage-state census, 2026-08-31)
+// ---------------------------------------------------------------------------
+// The following are the last actor-local usage/entitlement gates the engine
+// owned as raw booleans/counters. Each is now a typed U16 `ledger:*` key so the
+// authority derives identity + scope + availability + consume + reset in one
+// place; the migrated consumers read `usageCount`/`ledgerAvailable` and persist
+// via `consumeUsageMutation`/`recordUsageKey`, and the lifecycle resets below
+// reuse the shared boundary sweeps (`refreshAnyTurnLedgersForAll` for any-turn,
+// the round-start `core:round-ledger-reset` recipe for round, and the combat
+// period which never refreshes). Source ids are opaque content-owned provenance,
+// never branched on.
+
+/** Chain Reaction (Wright p.95, encounter condition): once per round, damaging
+ * at least two foes with one ability grants 1 Aether. Opaque gate key. */
+const CHAIN_REACTION_ONCE_PER_ROUND = 'core:chain-reaction';
+
+/** The typed KEY for the once-per-round Chain Reaction proc. Round scope,
+ * actor-local — the acting actor's own round ledger, reset by the U16
+ * round-start reset. */
+export function chainReactionOncePerRoundKey(): string {
+  return usageKey({ sourceId: CHAIN_REACTION_ONCE_PER_ROUND, ownerId: '', scope: 'round' });
+}
+
+/** Incubus (Shade p.164): the marked foe and adjacent foes take 2 damage and
+ * are dazed when adjacency triggers, once per round. Opaque gate key (the
+ * entitlement lives on the MARK OWNER). */
+const INCUBUS_ONCE_PER_ROUND = 'shade:incubus';
+
+/** The typed KEY for Incubus's once-per-round detonation. Round scope,
+ * actor-local on the mark owner, reset by the U16 round-start reset. */
+export function incubusOncePerRoundKey(): string {
+  return usageKey({ sourceId: INCUBUS_ONCE_PER_ROUND, ownerId: '', scope: 'round' });
+}
+
+/** Stampede (Warden p.170): once per round, at the end of the marked foe's
+ * turn, the spirit beast charges in. Opaque gate key (the entitlement lives on
+ * the MARK OWNER). */
+const STAMPEDE_ONCE_PER_ROUND = 'warden:stampede';
+
+/** The typed KEY for Stampede's once-per-round charge. Round scope, actor-local
+ * on the mark owner, reset by the U16 round-start reset. */
+export function stampedeOncePerRoundKey(): string {
+  return usageKey({ sourceId: STAMPEDE_ONCE_PER_ROUND, ownerId: '', scope: 'round' });
+}
+
+/** Vigilance Rush (Demon Slayer p.129): may rush 2 after activating vigilance,
+ * once per turn. Opaque gate key. Reopens at EVERY turn start for every actor
+ * (the battlefield `any-turn` window), exactly like No Repeats — the ability is
+ * only usable on the user's own turn, and the observed reset is any-turn.
+ * Cleared by `refreshAnyTurnLedgersForAll`. */
+const VIGILANCE_RUSH_ONCE_PER_TURN = 'gates-of-hell:vigilance-rushed';
+
+/** The typed KEY for the once-per-turn vigilance rush. `any-turn` scope (reopened
+ * by every turn start), actor-local. */
+export function vigilanceRushOncePerTurnKey(): string {
+  return usageKey({ sourceId: VIGILANCE_RUSH_ONCE_PER_TURN, ownerId: '', scope: 'any-turn' });
+}
+
+/** Midas (Geomancer p.220 interrupt): twice per combat. The count is the U16
+ * N-per-combat entitlement (combat scope — never refreshes mid-encounter).
+ * Opaque gate key. */
+const MIDAS_ONCE_PER_COMBAT = 'geomancer:midas';
+
+/** The typed KEY for Midas's twice-per-combat permanence. Combat scope,
+ * actor-local, cap 2. */
+export function midasOncePerCombatKey(): string {
+  return usageKey({ sourceId: MIDAS_ONCE_PER_COMBAT, ownerId: '', scope: 'combat' });
+}
+
+/** Bull's Strength (Bastion p.149): abilities gain "collide: deal 2 damage",
+ * once per turn per character. Opaque gate key. This is the U16 owner-relative
+ * once-per-own-turn entitlement (the collide bonus only ever fires on the
+ * OWNER's own ability use), distinct from the `any-turn` battlefield window.
+ * Cleared by the core:turn-ledger-reset lifecycle recipe at the owner's next
+ * turn-start (the old bespoke turn-end clear is behaviorally equivalent — the
+ * owner cannot trigger a collide between its turn-END and its next turn-START). */
+const BULL_STRENGTH_ONCE_PER_TURN = 'core:bull-s-strength';
+
+/** The typed KEY for the once-per-turn Bull's Strength collide bonus.
+ * Owner-relative `turn` scope, actor-local on the trait owner. */
+export function bullStrengthOncePerTurnKey(): string {
+  return usageKey({ sourceId: BULL_STRENGTH_ONCE_PER_TURN, ownerId: '', scope: 'turn' });
+}
+
 /** The durable PREFIX of every `any-turn` battlefield window key (the U16 key
  * vocabulary owns the format, never a caller rewriting `ledger:any-turn:*`).
  * The reducer's turn-start sweep clears exactly these keys on every actor. */

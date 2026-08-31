@@ -11,6 +11,8 @@ import {
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
 import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { vigilanceRushOncePerTurnKey } from '../../../kernels/use-ledger.js';
+import { consumeUsageMutation, ledgerAvailable } from '../../../primitives/usage.js';
 
 /**
  * Independently reviewed Demon Slayer ability implementations (ICON p.128–130).
@@ -284,12 +286,17 @@ const gatesOfHell: RuleResolver = (context) => {
 const gatesOfHellVigilanceRush: RuleResolver = (context) => {
   const source = sourceActor(context, context.actorId);
   if (!source || !source.position) return [];
-  if (source.state['gates-of-hell:vigilance-rushed'] === true) throw new RuleProgramViolation('rule.turn-limit', 'The vigilance rush can only be used once a turn.');
+  // The once-per-turn gate routes through the U16 `any-turn` ledger
+  // (vigilanceRushOncePerTurnKey): availability via the U16 ledger read over the
+  // projected state bag (ledgerAvailable), consume via the U16 consume mutation
+  // riding this event. The mark reopens at every turn start via
+  // refreshAnyTurnLedgersForAll — never a raw ruleState boolean.
+  if (!ledgerAvailable({ ruleState: source.state }, vigilanceRushOncePerTurnKey())) throw new RuleProgramViolation('rule.turn-limit', 'The vigilance rush can only be used once a turn.');
   const direction = context.input.directions?.['rush-direction'] ?? { x: 1, y: 0 };
   const path = plannedRush(context, source.id, 2, direction);
   const mutations: RuleMutation[] = [];
   if (path.length > 0) mutations.push(rushMutation(context, source.id, path));
-  mutations.push(stateMutation(context, source.id, 'gates-of-hell:vigilance-rushed', true));
+  mutations.push(consumeUsageMutation(context.sourceId, source.id, vigilanceRushOncePerTurnKey()));
   return mutations;
 };
 

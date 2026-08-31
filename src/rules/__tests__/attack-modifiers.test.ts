@@ -6,8 +6,8 @@ import '../automation/content/registry.js';
 import { JOB_TRAIT_RECIPES } from '../automation/content/jobs/job-trait-recipes.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position, TerrainCell } from '../types.js';
-import type { RuleMutation, RuleProgram } from '../automation/primitives/types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import type { RuleMutation, RuleProgram } from '../automation/primitives/types.js';import { scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { useLedgerAvailable } from '../automation/kernels/use-ledger.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
@@ -340,9 +340,9 @@ describe('Bull\'s Strength (p.149)', () => {
       .filter((mutation): mutation is Extract<RuleMutation, { kind: 'damage' }> => mutation.kind === 'damage' && mutation.actorId === foe.id);
     const totalDamage = foeDamage.reduce((sum, mutation) => sum + mutation.amount, 0);
     expect(result.state.actors[foe.id].hp).toBe(hpBefore - totalDamage);
-    // The guard is a recorded ruleState mutation, so replay applies it too.
+    // The gate is a recorded U16 ledger consume mutation, so replay applies it too.
     const guardMutation = result.events.flatMap((event) => event.type === 'RULE_MUTATIONS_APPLIED' ? event.mutations : [])
-      .find((mutation) => mutation.kind === 'state' && mutation.key === 'bull-s-strength:collided');
+      .find((mutation) => mutation.kind === 'state' && mutation.key === 'ledger:turn:core:bull-s-strength');
     expect(guardMutation).toMatchObject({ value: true });
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
@@ -364,7 +364,7 @@ describe('Bull\'s Strength (p.149)', () => {
     expect(appended.filter((mutation) => mutation.kind === 'state')).toHaveLength(1);
   });
 
-  it('the guard clears at the end of the owner\'s turn so it can fire next round', () => {
+  it('the gate refreshes at the owner\'s next turn-start so it can fire again', () => {
     const { state, hero, foe } = traitEncounter({
       traitIds: ['bastion:trait:bull-s-strength'],
       abilityIds: ['bastion:heracule'],
@@ -375,8 +375,25 @@ describe('Bull\'s Strength (p.149)', () => {
     const collided = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id],
     }, scriptedDice()).state;
-    expect(collided.actors[hero.id].ruleState['bull-s-strength:collided']).toBe(true);
-    const ended = endAllTurns(collided);
-    expect(ended.actors[hero.id].ruleState['bull-s-strength:collided']).not.toBe(true);
+    expect(useLedgerAvailable(collided.actors[hero.id], 'ledger:turn:core:bull-s-strength')).toBe(false);
+    // A second collide shove this turn (the fold, gate now consumed) fires no
+    // additional damage and records no new consume.
+    const shove = (targetId: string): RuleMutation => ({
+      kind: 'move', sourceId: 'test', sourceActorId: hero.id, actorId: targetId, movement: 'shove', distance: 1,
+      positions: [], direction: { x: -1, y: 0 }, phasing: false,
+    });
+    expect(bullStrengthCollideMutations(collided, [shove(foe.id)])).toEqual([]);
+    // Taking the owner's next turn (through every other actor) refreshes the
+    // U16 owner-relative turn gate: end the owner's turn, take + end every
+    // other actor, then take the owner's next turn (its turn-start recipe
+    // clears the owner-relative `ledger:turn:*` gate).
+    let s = executeCommand(collided, { type: 'END_TURN', actorId: hero.id }, scriptedDice()).state;
+    for (const id of Object.keys(s.actors)) {
+      if (id === hero.id) continue;
+      s = executeCommand(s, { type: 'TAKE_TURN', actorId: id }, scriptedDice()).state;
+      s = executeCommand(s, { type: 'END_TURN', actorId: id }, scriptedDice()).state;
+    }
+    s = executeCommand(s, { type: 'TAKE_TURN', actorId: hero.id }, scriptedDice()).state;
+    expect(useLedgerAvailable(s.actors[hero.id], 'ledger:turn:core:bull-s-strength')).toBe(true);
   });
 });

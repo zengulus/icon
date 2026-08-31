@@ -345,7 +345,8 @@ describe('U13 — automatic triggered effects are NOT windows', () => {
     expect(rushed.state.decisionWindows.some((candidate) => candidate.kind === 'choice')).toBe(false);
     expect(interruptUsedThisTurn(rushed.state.actors[hero.id])).toBe(false);
     expect(interruptUses(rushed.state.actors[hero.id], 'knave:sucker-punch')).toBe(0);
-    expect(rushed.state.actors[hero.id].ruleState['gates-of-hell:vigilance-rushed']).toBe(true);
+    // The once-per-turn vigilance-rush gate is a U16 any-turn ledger key.
+    expect(rushed.state.actors[hero.id].ruleState['ledger:any-turn:gates-of-hell:vigilance-rushed']).toBe(true);
     // And the once-per-turn gate is the effect's own (a second rush is
     // rejected — it is not gated by interrupt rank).
     expect(() => executeCommand(rushed.state, {

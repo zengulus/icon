@@ -15,6 +15,8 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { midasOncePerCombatKey } from '../../../kernels/use-ledger.js';
+import { consumeUsageMutation, ledgerAvailable } from '../../../primitives/usage.js';
 
 /**
  * Independently reviewed Geomancer ability implementations (ICON p.215–221),
@@ -425,10 +427,15 @@ const midasEffects: RuleResolver = (context) => {
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Midas requires a character in range 5.');
   if (distance(source.position, target.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'Midas requires a character in range 5.');
+  // Twice-per-combat permanence (p.220): the count is the U16 combat-scope
+  // entitlement (midasOncePerCombatKey, cap 2). Availability reads through
+  // U16 (ledgerAvailable cap 2) over the projected state bag; the consume
+  // records the use via the U16 increment mutation riding this event.
+  if (!ledgerAvailable({ ruleState: source.state }, midasOncePerCombatKey(), 2)) throw new RuleProgramViolation('rule.combat-limit', 'Midas can only be used twice per combat.');
   const mutations: RuleMutation[] = [
     removeMutation(context, target.id),
     { kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'statue', ownerId: source.id, positions: [target.position], count: 1, state: { held: target.id } },
-    stateMutation(context, source.id, 'midas:used', Number(source.state['midas:used'] ?? 0) + 1),
+    consumeUsageMutation(context.sourceId, source.id, midasOncePerCombatKey(), { cap: 2, amount: 1 }),
   ];
   return mutations;
 };

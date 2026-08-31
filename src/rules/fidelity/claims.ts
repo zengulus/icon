@@ -178,6 +178,12 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'docs/rules-foundations.md', linePrefix: 'AUTHORITATIVE to PARTIAL, then the concrete duplicate repaired.** The', reason: 'tranche-changelog sentence (U16 demoted then repaired), not an authority claim' },
   { file: 'docs/rules-foundations.md', linePrefix: 'core. That violates the authoritative invariant (a competing executing', reason: 'implementation-pattern description (U16 restore-vs-routing invariant), not an authority claim' },
   { file: 'docs/rules-foundations.md', linePrefix: 'than a second usage ledger before AUTHORITATIVE can be re-certified. See', reason: 'tranche-changelog residual description (what must close before U16 re-certification), not an authority claim' },
+  // --- T9g (U16/F9 operation-boundary repair changelog, 2026-08-31) ---------
+  { file: 'docs/rules-foundations.md', linePrefix: 'spread/alias replacement of a genuine result) are closed architecturally:', reason: 'tranche-changelog sentence describing the T9g operation-boundary repair (the once-per-round gate exposes no per-piece key; only U16\'s commit operation), not a standalone subsystem authority claim' },
+  // --- U16 re-certification (residual-mark census, 2026-08-31) --------------
+  { file: 'docs/rules-foundations.md', linePrefix: '### Usage / Entitlement Ledger (U16 underlay, CORE) — AUTHORITATIVE (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b closure + T9g operation-boundary repair + U16 residual-marks census migration, 2026-08-31)', reason: 'tranche-status heading naming the re-certified U16 state (backed by primitives/usage.ts + kernels/use-ledger.ts routing and the residual-mark census + architecture guard), not a standalone subsystem claim' },
+  { file: 'docs/roadmap.md', linePrefix: 'typed U16 ledger — U16 re-certified **AUTHORITATIVE** (zero promotion; census', reason: 'tranche-changelog status sentence describing the landed U16 residual-mark census, not a standalone subsystem authority claim' },
+  { file: 'TODO.md', linePrefix: '> typed ledger — U16 re-certified **AUTHORITATIVE**. Census byte-stable at', reason: 'tranche-changelog status sentence describing the landed U16 residual-mark census, not a standalone subsystem authority claim' },
 ];
 
 // ---------------------------------------------------------------------------
