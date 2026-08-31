@@ -12,9 +12,10 @@
  *    whose perspective establishes it).
  *  - aura membership: the ally/foe perspective is SEPARATE from the spatial
  *    origin (ROLE ≠ ANCHOR). An entity-origin aura's spatial origin is the
- *    entity; its ally/foe perspective is the entity's CREATOR/OWNER. An
- *    ownerless (or neutral) origin has NO derivable ally/foe — only
- *    `characters` relations apply, never a manufactured side.
+ *    entity; its ally/foe perspective is the entity's canonical OWNER/SUMMONER
+ *    (a single identity — current engine scope does NOT claim a distinct
+ *    creator). An ownerless (or neutral) origin has NO derivable ally/foe —
+ *    only `characters` relations apply, never a manufactured side.
  *  - window/choice responder: `windowResponderId(selector, frame)` resolves
  *    the entitled responder through U2 (subject-relative controller-of), and
  *    an underivable responder FAILS CLOSED (never a fallback to the source /
@@ -31,6 +32,7 @@ import {
   resolveRoleSelector,
   roleFrameFromContext,
   windowResponderId,
+  type RelationPerspective,
   type RoleFrame,
   type RoleSelector,
 } from '../automation/primitives/roles.js';
@@ -40,6 +42,7 @@ import {
   isAuraMember,
   membersOfAura,
   type AuraDefinition,
+  type AuraOriginRef,
   type AuraStateView,
 } from '../automation/kernels/aura.js';
 
@@ -131,7 +134,7 @@ describe('U2 — aura: spatial origin ≠ semantic perspective (ROLE ≠ ANCHOR)
     includesOrigin: false,
   };
   /** An entity-origin aura that claims `allies` relative to the entity's
-   * CREATOR/OWNER. */
+   * OWNER/SUMMONER (the single canonical identity). */
   const alliesAura: AuraDefinition = {
     sourceId: 'fixture:allied-entity',
     origin: { kind: 'entity-type', entityType: 'beacon' },
@@ -210,7 +213,7 @@ describe('U2 — aura: spatial origin ≠ semantic perspective (ROLE ≠ ANCHOR)
     expect(origins[0]!.actorId).toBe('hero');
   });
 
-  it('source/anchor ≠ perspective survives for entity origins (creator != spatial origin)', () => {
+  it('source/anchor ≠ perspective survives for entity origins (owner != spatial origin)', () => {
     // An entity-origin aura whose owner/creator is hero, while the SPATIAL
     // origin is the beacon entity. The perspective is the owner (U2) and the
     // spatial anchor stays the entity — the two never collapse.
@@ -242,8 +245,8 @@ describe('U2 — aura: spatial origin ≠ semantic perspective (ROLE ≠ ANCHOR)
     expect(first.perspectiveActorId).toBe('hero');
     // A parameter-free pure route: the same durable facts always derive the same
     // perspective actor (the U2 authority is a pure function of the facts).
-    expect(auraRelationPerspectiveId({ kind: 'entity', creatorOrOwnerId: 'hero' })).toBe('hero');
-    expect(auraRelationPerspectiveId({ kind: 'entity', creatorOrOwnerId: null })).toBeNull();
+    expect(auraRelationPerspectiveId({ kind: 'entity', ownerId: 'hero' })).toBe('hero');
+    expect(auraRelationPerspectiveId({ kind: 'entity', ownerId: null })).toBeNull();
     expect(auraRelationPerspectiveId({ kind: 'actor', bearerId: 'hero' })).toBe('hero');
   });
 
@@ -303,5 +306,45 @@ describe('U2 — window/choice responder derivation through the durable frame', 
     };
     expect(windowResponderId(targetController, frame)).toBe(windowResponderId(targetController, frame));
     expect(windowResponderId(targetController, frame)).toBe('player-b');
+  });
+});
+
+describe('U2 — BRANDED perspective result (the authority\'s returned value is the value the engine uses)', () => {
+  it('type-level: an incidental id (or an alias of one) is NOT assignable to a RelationPerspective slot — a compile error, not a spell-check', () => {
+    // T8c: AUTHORITY CALLED ≠ AUTHORITY RESULT USED. The proof is the BRAND:
+    // `perspectiveActorId: actor.id` (or any local alias: `const p = actor.id;`
+    // … `perspectiveActorId: p`) fails at the TYPE level, so a UUID bypass that
+    // keeps the call alive cannot compile into the perspective slot.
+    // @ts-expect-error — a plain string id is not the U2 brand.
+    const _notBrandable: RelationPerspective = 'hero';
+    // @ts-expect-error — aura's perspectiveActorId field carries the U2 brand.
+    const _notAuraPerspective: AuraOriginRef['perspectiveActorId'] = 'hero';
+    // Runtime truth (the brand is type-only; the value is still a string id).
+    expect(_notBrandable).toBe('hero');
+    expect(_notAuraPerspective).toBe('hero');
+  });
+
+  it('the U2 authority produces exactly the value the kernel stores and membership consumes', () => {
+    const actorAura: AuraDefinition = {
+      sourceId: 'fixture:branded-actor',
+      origin: { kind: 'actor-trait', traitId: 'commander' },
+      radius: 2,
+      relations: ['allies'],
+      includesOrigin: true,
+    };
+    const view: AuraStateView = {
+      actors: {
+        hero: { ...AURA_ACTOR('hero', 'heroes', { x: 5, y: 5 }), traitIds: ['commander'] },
+        ally: AURA_ACTOR('ally', 'heroes', { x: 6, y: 5 }),
+        foe: AURA_ACTOR('foe', 'foes', { x: 6, y: 5 }),
+      },
+    };
+    const origin = auraOriginRefs(view, actorAura)[0]!;
+    // The stored value IS the U2 authority's returned value for the same facts.
+    expect(origin.perspectiveActorId).toBe(auraRelationPerspectiveId({ kind: 'actor', bearerId: 'hero' }));
+    // Membership consumes THAT value's side — the same side comparison that a
+    // locally-alised perspective could not produce without the U2 result.
+    expect(isAuraMember(view, actorAura, origin, 'ally')).toBe(true);
+    expect(isAuraMember(view, actorAura, origin, 'foe')).toBe(false);
   });
 });

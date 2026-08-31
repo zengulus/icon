@@ -422,10 +422,11 @@ retained specialists), so no executing duplicate perspective path remains:
   `source`; neither owns nor guesses whose side establishes the relation).
 - `kernels/aura.ts` separates the SEMANTIC `perspectiveActorId` (U2) from the
   SPATIAL anchor `actorId`/`entityId` (U7): actor origin → bearer is the
-  perspective; entity-origin aura → the entity's CREATOR/OWNER is the
-  perspective; an ownerless/neutral origin has NO derivable ally/foe — only
-  `characters` relations apply (ROLE ≠ ANCHOR, entity ≠ creator ≠ origin ≠
-  member represented without collapse).
+  perspective; entity-origin aura → the entity's canonical OWNER/SUMMONER is
+  the perspective (a SINGLE identity — T8c: current engine scope does NOT
+  claim creator ≠ owner is representable); an ownerless/neutral origin has NO
+  derivable ally/foe — only `characters` relations apply (ROLE ≠ ANCHOR,
+  owner-identity ≠ spatial origin ≠ member represented without collapse).
 - Choice/decision-window responders already resolve through
   `resolveRoleSelector` / `choiceEntitledPlayer` over the durable frame
   (subject-relative, fail closed, replay-exact); the save-rolled window
@@ -434,11 +435,18 @@ retained specialists), so no executing duplicate perspective path remains:
   (thin facade over `resolveRoleSelector`, pinned by tests).
 
 The architecture `u2-perspective-authority` guard (audit-architecture-core.ts)
-forbids a migrated consumer dropping its U2 symbol or aura re-deriving
-ally/foe from the anchor/owner side (`origin.side`, `.side ?? null`) — a
-structural/allowlist guard, NOT a global ban on `.side`/`ownerId`/`actorId`.
-**U2 is AUTHORITATIVE** (completion criteria §8 met; suite green; no source
-promotion; census unchanged). The UNDERLAY PHASE gate stays OPEN on
+forbids a migrated consumer dropping its U2 symbol; T8c (2026-08-31) upgrades
+it to RESULT-OWNERSHIP proof — every runtime producer of
+`perspectiveActorId`'s value must be the U2 call (alias-tolerant), membership
+must consume `state.actors[origin.perspectiveActorId]`, candidate must not
+read the perspective off `context.actorId`, and the BRANDED
+`RelationPerspective` type (a `unique symbol` brand) makes `perspectiveActorId:
+actor.id` (or an alias) a compile error — AUTHORITY RESULT USED, not merely
+AUTHORITY CALLED. See `docs/t8c-authority-proof-report.md`. Still NOT a global
+ban on `.side`/`ownerId`/`actorId`.
+**U2 is AUTHORITATIVE** (completion criteria §8 met; all eight adversarial
+U2-M1..M4 / U16-M1..M4 mutations CAUGHT; suite green; no source promotion;
+census unchanged). The UNDERLAY PHASE gate stays OPEN on
 U8/U14/U9/U6/U12/U4/U5/U7.
 
 **Locations partially owning/duplicating.** (post-T7 residual audit)

@@ -380,45 +380,19 @@ describe('auditArchitecture (violation detection)', () => {
   // semantic implementation; the guard must STILL fail (symbol-presence is not
   // authority evidence — routing must be mechanically detectable).
 
-  it('U2 (aura): keeps every U2 symbol/call but derives the perspective locally from origin kind/owner — MUST FAIL (ROLE ≠ ANCHOR)', () => {
+  it('U2-M1 (candidate): CANONICAL U2 CALLED but its result ignored — perspective read off context.actorId — MUST FAIL', () => {
     setup();
-    // Keeps `auraRelationPerspectiveId` (even called) AND `perspectiveActorId`,
-    // but reintroduces the local semantic derivation `perspectiveActorId: actor.id`
-    // / `perspectiveActorId: entity.ownerId` from the spatial-origin case.
-    writeFileSync(
-      join(tmpDir, 'kernels', 'aura.ts'),
-      [
-        'perspectiveActorId',
-        "import { auraRelationPerspectiveId } from '../primitives/roles.js';",
-        'const unused = auraRelationPerspectiveId({ kind: "actor", bearerId: "x" });',
-        'const bad1 = { perspectiveActorId: actor.id };',
-        'const bad2 = { perspectiveActorId: entity.ownerId };',
-      ].join('\n'),
-    );
-
-    const result = auditArchitecture(tmpDir);
-    expect(result.violations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          check: 'u2-perspective-authority',
-          file: 'kernels/aura.ts',
-          detail: expect.stringContaining('auraRelationPerspectiveId'),
-        }),
-      ]),
-    );
-    rmSync(tmpDir, { recursive: true });
-  });
-
-  it('U2 (candidate): keeps the U2 symbol import but uses context.actorId for the relation decision — MUST FAIL', () => {
-    setup();
-    // `relationPerspectiveIdFromContext` stays imported (symbol present) but the
-    // acting-actor (relation perspective) is re-derived from an incidental field.
+    // The authority function is genuinely CALLED (the old proof would pass), but
+    // its returned perspective is discarded and the actual relation perspective
+    // comes straight from the incidental `context.actorId`.
     writeFileSync(
       join(tmpDir, 'kernels', 'candidate.ts'),
       [
         "import { relationPerspectiveIdFromContext } from '../primitives/roles.js';",
-        'function actingActor(context) { return context.state.actors[context.actorId]; }',
-        '// the U2 symbol is present but never CALLED for the relation decision',
+        'function actingActor(context) {',
+        '  const ignored = relationPerspectiveIdFromContext(context);',
+        '  return context.state.actors[context.actorId];',
+        '}',
       ].join('\n'),
     );
 
@@ -428,8 +402,97 @@ describe('auditArchitecture (violation detection)', () => {
         expect.objectContaining({
           check: 'u2-perspective-authority',
           file: 'kernels/candidate.ts',
-          detail: expect.stringContaining('never CALLED'),
         }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U2-M2 (aura actor): CANONICAL U2 CALLED, result ignored, a locally-aliased actor.id supplies perspectiveActorId — MUST FAIL', () => {
+    setup();
+    // `const perspective = actor.id` is an ALIAS of the incidental id — the
+    // alias-tolerant producer guard must flag it, not a spelling regex.
+    writeFileSync(
+      join(tmpDir, 'kernels', 'aura.ts'),
+      [
+        'perspectiveActorId',
+        "import { auraRelationPerspectiveId } from '../primitives/roles.js';",
+        "const unused = auraRelationPerspectiveId({ kind: 'actor', bearerId: 'x' });",
+        'const perspective = actor.id;',
+        'return { perspectiveActorId: perspective };',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u2-perspective-authority', file: 'kernels/aura.ts' }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U2-M2b (aura): U2 called + result ignored, a const-named perspectiveActorId aliased from actor.id — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'aura.ts'),
+      [
+        "import { auraRelationPerspectiveId } from '../primitives/roles.js';",
+        "const ignored = auraRelationPerspectiveId({ kind: 'actor', bearerId: 'x' });",
+        'const perspectiveActorId = actor.id;',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u2-perspective-authority', file: 'kernels/aura.ts' }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U2-M3 (aura entity): U2 called, result ignored, entity ownership aliased into perspectiveActorId — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'aura.ts'),
+      [
+        'perspectiveActorId',
+        "import { auraRelationPerspectiveId } from '../primitives/roles.js';",
+        "const unused = auraRelationPerspectiveId({ kind: 'entity', ownerId: 'x' });",
+        'const owner = entity.ownerId;',
+        'const semanticPerspective = owner;',
+        'return { perspectiveActorId: semanticPerspective };',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u2-perspective-authority', file: 'kernels/aura.ts' }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U2-M4 (aura membership): perspectiveActorId IS U2-derived but membership compares the owner/anchor side — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'aura.ts'),
+      [
+        "import { auraRelationPerspectiveId } from '../primitives/roles.js';",
+        "const origin = { perspectiveActorId: auraRelationPerspectiveId({ kind: 'actor', bearerId: 'x' }) };",
+        'function member(state, actor) {',
+        '  const ownerSide = state.actors[state.entities[origin.entityId].ownerId].side;',
+        '  return actor.side === ownerSide;',
+        '}',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u2-perspective-authority', file: 'kernels/aura.ts' }),
       ]),
     );
     rmSync(tmpDir, { recursive: true });
@@ -520,6 +583,99 @@ describe('auditArchitecture (violation detection)', () => {
         'const rebuilt = `ledger:${scope}:${sourceId}`;',
         'ledgerAvailable(actor, rebuilt);',
         'consumeUsageMutation(sourceId, actorId, rebuilt);',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u16-usage-ledger-routing', file: 'kernels/trait-reactions.ts' }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16-M1 (availability): ledgerAvailable CALLED but its result ignored — the actual gate reads raw ruleState — MUST FAIL', () => {
+    setup();
+    // All three U16 symbols are CALLED (the old call-presence proof passes), but
+    // the actual availability decision reads the actor's raw ruleState instead of
+    // the U16 returned availability.
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      [
+        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
+        'export function gate(actor, key, sourceId) {',
+        "  usageKey({ sourceId, ownerId: 'real', scope: 'round' });",
+        '  ledgerAvailable(actor, key);',
+        "  consumeUsageMutation(sourceId, 'actor', key);",
+        '  return !actor.ruleState[key];',
+        '}',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u16-usage-ledger-routing', file: 'kernels/trait-reactions.ts' }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16-M2 (consume): consumeUsageMutation CALLED but its result ignored — the mark is hand-built — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      [
+        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
+        'export function fold(actor, key, sourceId) {',
+        '  consumeUsageMutation(sourceId, actor.id, key);',
+        '  return { kind: "state", key, operation: "set", value: true };',
+        '}',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u16-usage-ledger-routing', file: 'kernels/trait-reactions.ts' }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16-M3 (key): usageKey CALLED but its result ignored — the actual key is locally rebuilt by concatenation — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      [
+        "import { usageKey, ledgerAvailable, consumeUsageMutation } from '../primitives/usage.js';",
+        'export function keyFor(sourceId) {',
+        "  usageKey({ sourceId, ownerId: 'r', scope: 'round' });",
+        "  return 'ledger:' + 'round:' + sourceId;",
+        '}',
+      ].join('\n'),
+    );
+
+    const result = auditArchitecture(tmpDir);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'u16-usage-ledger-routing', file: 'kernels/trait-reactions.ts' }),
+      ]),
+    );
+    rmSync(tmpDir, { recursive: true });
+  });
+
+  it('U16-M4 (owner): a decoy real-owner call exists but the ACTUAL key path uses a fabricated missing owner — MUST FAIL', () => {
+    setup();
+    writeFileSync(
+      join(tmpDir, 'kernels', 'trait-reactions.ts'),
+      [
+        "import { usageKey } from '../primitives/usage.js';",
+        'export function keyFor(actor, sourceId) {',
+        "  usageKey({ sourceId, ownerId: actor.id, scope: 'round' }); // decoy real owner",
+        "  return usageKey({ sourceId, ownerId: '', scope: 'round' }); // fabricated owner drives the actual path",
+        '}',
       ].join('\n'),
     );
 

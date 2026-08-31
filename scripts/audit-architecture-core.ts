@@ -210,16 +210,62 @@ const U2_PERSPECTIVE_SYMBOLS: ReadonlyMap<string, string> = new Map([
 // NOT matched — the actor's own side is a property, not the U2 member perspective.
 const AURA_ANCHOR_SIDE_RESTORE_RE = /origin\.side\b|\.side\s*\?\?\s*null/;
 
-// ROLE ≠ ANCHOR — the aura kernel must never decide the SEMANTIC PERSPECTIVE
-// from the SPATIAL-ORIGIN case. The migrated seam routes the perspective
-// through U2 (`primitives/roles.ts` `auraRelationPerspectiveId`) with the
-// origin FACTS, never by locally mapping origin kind/owner to a perspective
-// actor. The mutation that keeps every U2 symbol/name but reintroduces the
-// local derivation (`perspectiveActorId: actor.id`, `perspectiveActorId:
-// entity.ownerId`) is exactly the competing authority the guard must catch.
-// Narrow semantic-derivation guard, NOT a global ban on `.side` / `ownerId` /
-// `actorId` (those remain legitimate underlying facts elsewhere).
-const AURA_LOCAL_PERSPECTIVE_RESTORE_RE = /perspectiveActorId\s*:\s*(?:actor\.id|entity\.ownerId)/;
+// T8c — alias-tolerant SEMANTIC-OWNERSHIP guard. Call-presence plus a spelling
+// regex (`perspectiveActorId: actor.id`) is NOT authority proof: a contributor
+// can call U2, ignore its result, and alias a local into the slot
+// (`const p = actor.id; ... perspectiveActorId: p`). The guard therefore flags
+// EVERY value-producing producer of the `perspectiveActorId` field in aura.ts
+// (an object-literal property, a const/let/var declaration, or a member write)
+// whose right-hand side is NOT the `auraRelationPerspectiveId(` call. The
+// interface TYPE-ANNOTATION is exempt (it declares the type, it does not
+// produce a runtime value). This is dependency enforcement for ONE semantically
+// meaningful slot — no enumeration of incidental-id spellings.
+const AURA_PERSPECTIVE_PRODUCER_RE =
+  /(?:perspectiveActorId\s*:\s*|(?:const|let|var)\s+perspectiveActorId\s*=\s*|\.perspectiveActorId\s*=\s*)/g;
+
+/** Every runtime producer of the `perspectiveActorId` value in aura.ts that is
+ * NOT the U2 call, or an empty list when every producer routes through U2.
+ * The interface field declaration (`perspectiveActorId: RelationPerspective |
+ * null;`) is a type annotation and is exempted. Reads (`origin.
+ * perspectiveActorId`) have no assignment and never match. */
+export function nonAuthorityAuraPerspectiveProducers(code: string): string[] {
+  const bad: string[] = [];
+  AURA_PERSPECTIVE_PRODUCER_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = AURA_PERSPECTIVE_PRODUCER_RE.exec(code))) {
+    const lhs = m[0];
+    const rhs = code.slice(m.index + lhs.length);
+    if (/^(?:string|RelationPerspective)\b/.test(rhs)) continue; // type annotation
+    if (rhs.startsWith('auraRelationPerspectiveId(')) continue;   // the U2 route
+    bad.push(lhs.trim());
+  }
+  return bad;
+}
+
+// U2-M4 (aura membership bypass): even with `perspectiveActorId` correctly
+// U2-derived, membership must compare the side of the actor looked up by THAT
+// U2-derived perspective. If membership instead derives an anchor/owner actor's
+// side, the canonical consumption read disappears — a POSITIVE requirement, not
+// a spelling regex.
+const AURA_PERSPECTIVE_CONSUMPTION_RE = /state\.actors\[origin\.perspectiveActorId\]/;
+
+// U2-M1 (candidate): the relation perspective (whose SIDE establishes
+// self/ally/foe) must come from the U2 authority's returned value, never by
+// reading the acting-actor slot off the incidental `context.actorId`. A
+// contributor that calls U2 but ignores its result and reads `context.actorId`
+// reintroduces exactly this read.
+const CANDIDATE_INCIDENTAL_PERSPECTIVE_READ_RE = /(?:context\.)?\.state\.actors\[context\.actorId\]/;
+
+// The U2 BRANDED-perspective typed seam (roles.ts declares `RelationPerspective`
+// as a `unique symbol` brand; the authority functions return it; aura's
+// `AuraOriginRef.perspectiveActorId` is typed with it). Without the brand,
+// `perspectiveActorId: actor.id` stops being a compile error, so the type-level
+// result-ownership proof silently disappears.
+const RELATION_PERSPECTIVE_BRAND_MARKER_RE = /type\s+RelationPerspective\b[\s\S]*?\[relationPerspectiveBrand\]/;
+const RELATION_PERSPECTIVE_BRAND_SYMBOL_RE = /relationPerspectiveBrand:\s*unique\s+symbol/;
+const RELATION_PERSPECTIVE_RETURN_RE = /relationPerspectiveId\(frame: RoleFrame\): RelationPerspective \| null/;
+const AURA_PERSPECTIVE_RETURN_RE = /auraRelationPerspectiveId\(origin: AuraPerspectiveOrigin\): RelationPerspective \| null/;
+const AURA_PERSPECTIVE_FIELD_TYPE_RE = /\bperspectiveActorId:\s*RelationPerspective \| null/;
 
 // U16 (usage/entitlement) single-authority guard details.
 //
@@ -242,7 +288,35 @@ const U16_LEDGER_AUTHORITY_FILES: ReadonlySet<string> = new Set([
 // (`` `ledger:round:${sourceId}` `` — the exact shape the F9 fold used to
 // rebuild). Absent in every file except the U16 authority pair (verified by
 // valid-files tests in the architecture suite).
+// The key-construction signal: a template literal rebuilding the canonical
+// `ledger:<scope>:…` storage address. Matches both the generic interpolation
+// (`` `ledger:${scope}:${sourceId}` ``) and a hard-coded period form
+// (`` `ledger:round:${sourceId}` ``). Absent in every file except the U16
+// authority pair (verified by valid-files tests in the architecture suite).
 const U16_LEDGER_KEY_RECONSTRUCTION_RE = /ledger:(?:[a-z-]+:)?\$\{/;
+
+// T8c — a locally rebuilt canonical KEY by string CONCATENATION (U16-M3:
+// `'ledger:' + 'round:' + sourceId`) is a competing authority just like the
+// template-literal form; the physical storage address must be produced only by
+// the U16 authority. Matches the literal-prefix concatenation (single- or
+// double-quoted) — one semantic seam, not per-use spelling variants.
+const U16_LEDGER_KEY_CONCAT_RE = /['"]ledger:['"]\s*\+/;
+
+// T8c — the F9 fold's three U16 result-consumption pinpoints, plus the SEAMS
+// that detect when the canonical call is retained but its RESULT is ignored:
+//
+//  - AVAILABILITY (U16-M1): the gate decision must read the recorded count
+//    through `ledgerAvailable`; reading raw `ruleState[` directly is a bypass.
+//  - CONSUME (U16-M2): a hand-built state mark must spread the fields of the
+//    U16 consume RESULT (`mark.*`); a `{ kind: 'state', ... }` object that
+//    never touches the result is a bypass.
+//  - OWNER (U16-M4): the typed U16 call must carry the REAL owner; `ownerId: ''`
+//    is a fabricated/missing-owner bypass that the storage bytes cannot reveal.
+// These are semantic-dependency pins for ONE migrated consumer (trait-reactions.ts),
+// enforced as named invariants rather than an enumeration of value spellings.
+const U16_F9_RAW_RULESTATE_GATE_RE = /ruleState\[/;
+const U16_F9_HANDBUILT_MARK_RE = /\{[^\n]*kind:\s*['"]state['"]/;
+const U16_F9_EMPTY_OWNER_RE = /ownerId:\s*['"][\s]*['"]/;
 
 // The F9 reactive fold (`kernels/trait-reactions.ts`) was migrated to route its
 // once-per-round gate through the U16 core. It must keep using the U16
@@ -465,6 +539,8 @@ export function auditArchitecture(automationRoot: string): AuditResult {
         detail: `migrated U2 consumer no longer routes its relation/controller perspective through roles.ts ('${symbol}')${cameo}; restore the U2 call instead of re-deriving the perspective from an incidental field.`,
       });
     }
+    // U2-M4: membership must re-derive ally/foe from the U2-derived perspective
+    // actor, never from the spatial anchor/owner side.
     if (relFile === 'kernels/aura.ts' && AURA_ANCHOR_SIDE_RESTORE_RE.test(code)) {
       violations.push({
         check: 'u2-perspective-authority',
@@ -472,11 +548,35 @@ export function auditArchitecture(automationRoot: string): AuditResult {
         detail: `aura.ts re-derives ally/foe from the spatial anchor/owner side instead of the U2 perspective role (perspectiveActorId); ROLE ≠ ANCHOR — only the U2 authority establishes the member relation.`,
       });
     }
-    if (relFile === 'kernels/aura.ts' && AURA_LOCAL_PERSPECTIVE_RESTORE_RE.test(code)) {
+    // U2-M2/M3: every producer of `perspectiveActorId`'s VALUE (in any spelling
+    // — direct, const/let aliased, or member-written) must be the U2 call.
+    if (relFile === 'kernels/aura.ts') {
+      const badProducers = nonAuthorityAuraPerspectiveProducers(code);
+      if (badProducers.length > 0) {
+        violations.push({
+          check: 'u2-perspective-authority',
+          file: relFile,
+          detail: `aura.ts produces the SEMANTIC perspective (perspectiveActorId) from a NON-U2 source (see: ${badProducers.join('; ')}) — a locally-aliased id that ignores the U2 returned result; ROLE ≠ ANCHOR — the perspective actor id must be the U2 authority's returned value (auraRelationPerspectiveId), never an incidental id or alias.`,
+        });
+      }
+      // U2-M4: the U2-derived perspective must be the actor whose side membership
+      // compares (positive consumption chain).
+      if (!AURA_PERSPECTIVE_CONSUMPTION_RE.test(code)) {
+        violations.push({
+          check: 'u2-perspective-authority',
+          file: relFile,
+          detail: `aura.ts membership does not read the side of the actor looked up by the U2-derived perspective (state.actors[origin.perspectiveActorId]) — membership must route through the U2 perspective, never an anchor/owner-derived side.`,
+        });
+      }
+    }
+    // U2-M1: the candidate relation perspective must be the U2 authority's
+    // returned value; reading it straight off the incidental `context.actorId`
+    // (while keeping the U2 call alive) is a bypass.
+    if (relFile === 'kernels/candidate.ts' && CANDIDATE_INCIDENTAL_PERSPECTIVE_READ_RE.test(code)) {
       violations.push({
         check: 'u2-perspective-authority',
         file: relFile,
-        detail: `aura.ts derives the SEMANTIC perspective (perspectiveActorId) locally from the spatial-origin case (origin kind/owner); ROLE ≠ ANCHOR — the aura kernel must route the perspective through the U2 authority (auraRelationPerspectiveId) with the origin FACTS, never mapping them to a perspective actor here.`,
+        detail: `candidate.ts reads the relation perspective (whose SIDE establishes self/ally/foe) directly from the incidental context.actorId, ignoring the U2 authority's returned value (relationPerspectiveIdFromContext); the relation perspective must be the U2-derived source role.`,
       });
     }
   }
@@ -497,13 +597,114 @@ export function auditArchitecture(automationRoot: string): AuditResult {
     const layer = layerFor(file, automationRoot);
     if (layer !== 'primitives' && layer !== 'kernels') continue;
     const code = readFileSync(file, 'utf8');
-    if (U16_LEDGER_KEY_RECONSTRUCTION_RE.test(code)) {
+    // U16-M3: a locally reconstructed canonical key — by template literal OR
+    // string concatenation — is a competing authority (the U2/U16 caller kept a
+    // canonical call alive but the ACTUAL key path re-derives the address).
+    if (U16_LEDGER_KEY_RECONSTRUCTION_RE.test(code) || U16_LEDGER_KEY_CONCAT_RE.test(code)) {
       violations.push({
         check: 'u16-usage-ledger-routing',
         file: relFile,
         detail: `locally reconstructs the U16 usage-ledger key ('ledger:<scope>:…'); route availability / consume / refresh through primitives/usage.ts (kernels/use-ledger.ts) instead of rebuilding the canonical ledger key.`,
       });
     }
+  }
+
+  // ---- Check 9: U16 F9 result-consumption pins (trait-reactions.ts) ----
+  // Beyond requiring the U16 symbols to be CALLED, the F9 fold's three seams
+  // must consume the CALLS' RESULTS: the availability decision reads the
+  // recorded count through the U16 read (not raw `ruleState[`), the consume
+  // mark spreads the U16 consume result (`mark.*`), and the typed U16 call
+  // carries the REAL owner (never a fabricated `ownerId: ''`). Kept narrowly
+  // scoped to the ONE migrated F9 fold.
+  for (const [relFile] of U16_CONSUMER_SYMBOLS) {
+    const file = join(automationRoot, relFile);
+    let code: string;
+    try {
+      code = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    // Only executable lines count — a docstring/comment mentioning `ownerId: ''`
+    // or `ruleState[` is not a bypass. Filter out comment lines before testing.
+    const executable = code.split('\n').filter((line) => {
+      const t = line.trimStart();
+      return t.length > 0 && !t.startsWith('//') && !t.startsWith('*');
+    }).join('\n');
+    // U16-M1: availability bypass — a gate reading the actor's raw ruleState
+    // instead of the U16 `ledgerAvailable` result.
+    if (U16_F9_RAW_RULESTATE_GATE_RE.test(executable)) {
+      violations.push({
+        check: 'u16-usage-ledger-routing',
+        file: relFile,
+        detail: `F9 fold reads availability from the raw actor ruleState instead of the U16 ledgerAvailable result; the once-per-round gate must consume the U16 authority's returned availability.`,
+      });
+    }
+    // U16-M2: consume bypass — a hand-built state mark that never references
+    // the U16 consume result (mark.*) persists a mark independently of U16.
+    if (U16_F9_HANDBUILT_MARK_RE.test(executable) && !executable.includes('mark.')) {
+      violations.push({
+        check: 'u16-usage-ledger-routing',
+        file: relFile,
+        detail: `F9 fold hand-builds a 'state' ledger mark without spreading the U16 consumeUsageMutation RESULT (mark.*); the once-per-round mark must be persisted from the U16 authority's returned mutation.`,
+      });
+    }
+    // U16-M4: owner bypass — a typed U16 call with a fabricated/missing owner.
+    if (U16_F9_EMPTY_OWNER_RE.test(executable)) {
+      violations.push({
+        check: 'u16-usage-ledger-routing',
+        file: relFile,
+        detail: `F9 fold passes a fabricated empty owner ('ownerId: \'\'') to the typed U16 call; the once-per-round gate must carry the REAL owning actor (roundLedgerUsageSpec(actor.id, …)) — typed semantic identity and actor-local storage are distinct.`,
+      });
+    }
+  }
+
+  // ---- Check 10: U2 branded-perspective typed seam (roles.ts + aura.ts) ----
+  // `Authority CALLED` is not authority proof. The strongest seam pins the TYPE
+  // so an ignored result cannot be substituted by an incidental id. This guard
+  // keeps the BRAND alive: roles.ts must declare the `RelationPerspective`
+  // unique-symbol brand and the three authority functions must return it, and
+  // aura's `AuraOriginRef.perspectiveActorId` must be typed with it. Without
+  // these, `perspectiveActorId: actor.id` stops being a compile error and the
+  // result-ownership typed seam silently disappears.
+  const rolesPath = join(automationRoot, 'primitives', 'roles.ts');
+  try {
+    const rolesCode = readFileSync(rolesPath, 'utf8');
+    if (!RELATION_PERSPECTIVE_BRAND_MARKER_RE.test(rolesCode) || !RELATION_PERSPECTIVE_BRAND_SYMBOL_RE.test(rolesCode)) {
+      violations.push({
+        check: 'u2-perspective-authority',
+        file: 'primitives/roles.ts',
+        detail: `roles.ts no longer declares the BRANDED RelationPerspective (a unique-symbol brand the type references); without the brand, an incidental id (actor.id/entity.ownerId alias) can be spooled into a perspectiveActorId slot and the U2 result-ownership typed seam is gone.`,
+      });
+    }
+    if (!RELATION_PERSPECTIVE_RETURN_RE.test(rolesCode)) {
+      violations.push({
+        check: 'u2-perspective-authority',
+        file: 'primitives/roles.ts',
+        detail: `relationPerspectiveId must return the BRANDED RelationPerspective so candidate relation reads provably consume the U2 result.`,
+      });
+    }
+    if (!AURA_PERSPECTIVE_RETURN_RE.test(rolesCode)) {
+      violations.push({
+        check: 'u2-perspective-authority',
+        file: 'primitives/roles.ts',
+        detail: `auraRelationPerspectiveId must return the BRANDED RelationPerspective so aura membership provably consumes the U2 result.`,
+      });
+    }
+  } catch {
+    // fixture root may omit roles.ts — the type gate still applies at build time
+  }
+  const auraPath = join(automationRoot, 'kernels', 'aura.ts');
+  try {
+    const auraCode = readFileSync(auraPath, 'utf8');
+    if (!AURA_PERSPECTIVE_FIELD_TYPE_RE.test(auraCode)) {
+      violations.push({
+        check: 'u2-perspective-authority',
+        file: 'kernels/aura.ts',
+        detail: `AuraOriginRef.perspectiveActorId must be typed as the BRANDED RelationPerspective | null; without the brand, assigning actor.id/entity.ownerId (or an alias) compiles and the result-ownership proof is gone.`,
+      });
+    }
+  } catch {
+    // fixture root may omit aura.ts
   }
 
   // ---- Check 8: migrated U16 consumers must keep CALLING the U16 core ----

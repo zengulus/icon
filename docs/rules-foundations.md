@@ -245,7 +245,7 @@ binder/collection + ordered plural targets, negative unbound/missing +
 domain-mismatch, boundary empty-collection + defeated-actor-captured,
 replay identical-literal + Binder purity).
 
-### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31)
+### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31; T8c branded-seam + owner-contract re-cert, 2026-08-31)
 
 > **T8b corrective note:** the prior T8 AUTHORITATIVE claim initially hid a
 > false closure — `kernels/aura.ts` produced `perspectiveActorId` by locally
@@ -254,7 +254,25 @@ replay identical-literal + Binder purity).
 > authority with the origin FACTS, and the same content seam
 > (`chanter-programs.ts` Gentleness) routes through it; the `u2-perspective-
 > authority` guard is upgraded to call-form routing so a symbol-presence bypass
-> is CAUGHT. See `docs/t8b-audit-integrity-report.md`,
+> is CAUGHT. See `docs/t8b-audit-integrity-report.md`.
+>
+> **T8c re-cert (2026-08-31):** T8b's call-form proof was still insufficient on
+> its own — *"called" is not *"result used"*. A contributor could keep the U2
+> call alive and read the relation/member perspective from an incidental id
+> (or an alias of one). This tranche lands a BRANDED typed seam
+> (`RelationPerspective`, a `unique symbol` brand): `relationPerspectiveId` /
+> `relationPerspectiveIdFromContext` / `auraRelationPerspectiveId` return the
+> brand, and `AuraOriginRef.perspectiveActorId` is typed with it, so
+> `perspectiveActorId: actor.id` (or any local alias) is a COMPILE ERROR, not
+> merely a regex catch. The architecture audit's `u2-perspective-authority`
+> guard is upgraded to alias-tolerant SEMANTIC OWNERSHIP (every producer of
+> `perspectiveActorId`'s value must be the U2 call), a POSITIVE membership-
+> consumption requirement (`state.actors[origin.perspectiveActorId]`), and a
+> candidate result-consumption ban on reading the perspective from
+> `context.actorId`. The entity creator/owner contract is stated truthfully:
+> current engine scope has ONE canonical identity per entity (`ownerId`) and
+> does NOT claim creator ≠ owner is representable (see the report). All eight
+> adversarial mutations (U2-M1..M4, U16-M1..M4) are CAUGHT.
 
 `primitives/roles.ts` owns the `Role` vocabulary: source/owner/controller/
 chooser/payer/target/recipient/carrier/creator/trigger-source/

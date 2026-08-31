@@ -34,6 +34,28 @@
  */
 import type { RuleExecutionContext } from './types.js';
 
+/**
+ * The U2 authority's BRANDED perspective result. Only the U2 authority
+ * (`relationPerspectiveId`, `relationPerspectiveIdFromContext`,
+ * `auraRelationPerspectiveId`) can produce a `RelationPerspective`. A plain
+ * id (`context.actorId`, `actor.id`, `entity.ownerId`, or any local alias of
+ * them) is NOT assignable to a `RelationPerspective` slot — that is a TYPE
+ * ERROR — so the value the downstream relation / aura-membership decision
+ * actually consumes is structurally guaranteed to have come from the U2
+ * authority (T8c: AUTHORITY RESULT USED, not merely AUTHORITY CALLED). The
+ * branded id is still a string (usable as a `Record<string, …>` index), so
+ * the seam adds proof without changing any durable bytes.
+ */
+declare const relationPerspectiveBrand: unique symbol;
+export type RelationPerspective = string & { readonly [relationPerspectiveBrand]: true };
+
+/** Brand a derived id as the U2 perspective result. Internal to the authority:
+ * the ONLY place plain ids become `RelationPerspective`. Null (underivable)
+ * stays null — a caller that needs a perspective must reject, never guess. */
+function brandPerspective(id: string | null): RelationPerspective | null {
+  return id === null ? null : (id as RelationPerspective);
+}
+
 /** The semantic roles a resolution can attribute. */
 export type Role =
   | 'source'
@@ -197,16 +219,20 @@ export function roleFrameFromContext(context: RuleExecutionContext): RoleFrame {
  * underlying factual property (U3 eligibility compares it); U2 decides WHO
  * is the perspective subject. Returns null only for a genuinely underivable
  * frame (no source) — callers fail closed rather than guessing an actor.
+ * The return is the BRANDED `RelationPerspective`: a consumer cannot feed a
+ * locally-aliased id into the perspective decision without a type error, so
+ * the value that drives relation eligibility is provably the U2 result.
  */
-export function relationPerspectiveId(frame: RoleFrame): string | null {
-  return frame.sourceId ?? null;
+export function relationPerspectiveId(frame: RoleFrame): RelationPerspective | null {
+  return brandPerspective(frame.sourceId ?? null);
 }
 
 /** Convenience over the legacy context slots: the relation perspective for a
  * resolution is the source role it records, so candidate/aura/choice relation
  * reads never independently infer the perspective from an incidental field.
+ * Returns the U2 BRANDED perspective (a consumer cannot substitute a local id).
  */
-export function relationPerspectiveIdFromContext(context: RuleExecutionContext): string | null {
+export function relationPerspectiveIdFromContext(context: RuleExecutionContext): RelationPerspective | null {
   return relationPerspectiveId(roleFrameFromContext(context));
 }
 
@@ -250,16 +276,23 @@ export function windowResponderId(selector: RoleSelector, frame: RoleFrame): str
  */
 export type AuraPerspectiveOrigin =
   | { kind: 'actor'; bearerId: string }
-  | { kind: 'entity'; creatorOrOwnerId: string | null };
+  | { kind: 'entity'; ownerId: string | null };
 
-export function auraRelationPerspectiveId(origin: AuraPerspectiveOrigin): string | null {
+export function auraRelationPerspectiveId(origin: AuraPerspectiveOrigin): RelationPerspective | null {
   switch (origin.kind) {
     case 'actor':
-      return origin.bearerId;
+      return brandPerspective(origin.bearerId);
     case 'entity':
-      // Creator/owner is the perspective subject; an ownerless entity has no
-      // derivable ally/foe side (only `characters` membership applies). Null here
-      // is a POSITIVE underivable result — the caller fails closed, never guesses.
-      return origin.creatorOrOwnerId;
+      // The entity's canonical OWNER/SUMMONER identity is the perspective
+      // subject (ICON p.95: a summon belongs to its summoner). Current engine
+      // scope has ONE canonical identity per entity — creator and owner are
+      // NOT distinct representable roles yet, and no source-required aura
+      // semantics need them to differ. An ownerless entity has no derivable
+      // ally/foe side (only `characters` membership applies). Null here is a
+      // POSITIVE underivable result — the caller fails closed, never guesses.
+      // The return is the U2 BRANDED perspective: an aliased local id can
+      // never be placed in `AuraOriginRef.perspectiveActorId` without a type
+      // error, so aura membership is provably U2-derived.
+      return brandPerspective(origin.ownerId);
   }
 }

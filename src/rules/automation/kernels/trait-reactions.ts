@@ -32,6 +32,7 @@
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { RuleMutation } from '../primitives/types.js';
+import type { UsageKeySpec } from '../primitives/usage.js';
 import { consumeUsageMutation, ledgerAvailable, usageKey } from '../primitives/usage.js';
 import { affectedFoeIds } from './talent-recipes.js';
 
@@ -99,18 +100,31 @@ export function traitReactionNeededTriggers(actor: EncounterActor): Set<'collide
   return needed;
 }
 
+/** The TYPED U16 usage spec for a reaction's once-per-round gate — the seam
+ * that proves the REAL owner is propagated into the typed authority call
+ * even though the ACTOR-LOCAL physical storage key deliberately omits owner
+ * bytes. `usageIdentity` built from this spec distinguishes the real owner
+ * from a fabricated empty owner (the storage address cannot). The fold
+ * constructs the ledger through this spec, so the real owning actor is
+ * observable at the typed boundary — never `ownerId: ''`.
+ */
+export function roundLedgerUsageSpec(ownerId: string, sourceId: string): UsageKeySpec {
+  return { sourceId, ownerId, scope: 'round' };
+}
+
 /** The durable round-ledger key for a reaction's once-per-round gate — U16
  * CORE (`usageKey` in the `round` period). Byte-identical to the long-standing
  * `ledger:round:<sourceId>` format, so the shared gate, the U16 reset
  * lifecycle recipe, and the checkpoint format stay one authority.
  *
- * The TYPED U16 identity receives the REAL owning actor (`ownerId`) even
- * though the ACTOR-LOCAL storage address deliberately omits owner bytes (the
- * durable state lives on the owner, so two owners of the same source never
- * alias a shared key). The seam must never fabricate an empty owner to the U16
- * typed call — typed semantic identity and actor-local storage are distinct. */
+ * The TYPED U16 identity receives the REAL owning actor (`ownerId` via
+ * `roundLedgerUsageSpec`) even though the ACTOR-LOCAL storage address
+ * deliberately omits owner bytes (the durable state lives on the owner, so
+ * two owners of the same source never alias a shared key). The seam must
+ * never fabricate an empty owner to the U16 typed call — typed semantic
+ * identity and actor-local storage are distinct. */
 export function roundLedgerKey(ownerId: string, sourceId: string): string {
-  return usageKey({ sourceId, ownerId, scope: 'round' });
+  return usageKey(roundLedgerUsageSpec(ownerId, sourceId));
 }
 
 /** Whether the actor's round ledger still allows this reaction to fire — U16
@@ -140,7 +154,9 @@ export function traitReactionMutations(
     const recipe = traitReactionRecipes[traitId];
     const reaction = recipe?.reaction;
     if (!reaction) continue;
-    const ledgerKey = reaction.gate === 'once-per-round' ? roundLedgerKey(actor.id, traitId) : null;
+    // The gate is addressed through the REAL owner's typed spec (actor-local
+    // storage bytes omit the owner; the typed identity must still carry it).
+    const ledgerKey = reaction.gate === 'once-per-round' ? usageKey(roundLedgerUsageSpec(actor.id, traitId)) : null;
     if (ledgerKey && !roundLedgerAvailable(actor, ledgerKey)) continue;
     // Deciding the trigger from durable sources never re-rolls or re-decides.
     let triggerTargetIds: string[] = [];

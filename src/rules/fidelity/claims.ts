@@ -156,7 +156,7 @@ export const CLAIM_ALLOWLIST: readonly { file: string; linePrefix: string; reaso
   { file: 'TODO.md', linePrefix: '  responder, permutation validation, fail-closed cross-owner +', reason: 'implementation-pattern description in the T6.3 changelog, not an authority claim' },
   { file: 'TODO.md', linePrefix: '  audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.', reason: 'tranche-changelog status sentence (fresh-audit conclusion), not a subsystem authority claim' },
   // --- T7 (U2 downstream consumers, 2026-08-31) ----------------------------
-  { file: 'docs/rules-foundations.md', linePrefix: '### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31)', reason: 'tranche-status heading naming the U2 consumer-consolidation state, not a standalone subsystem claim (backed by roles.ts + candidate/aura/choice/decision-window routing, re-attested by T8b concrete call path)' },
+  { file: 'docs/rules-foundations.md', linePrefix: '### Role / Perspective (U2 underlay) — AUTHORITATIVE (T1 + T2 + T7; T8b repair+re-cert, 2026-08-31; T8c branded-seam + owner-contract re-cert, 2026-08-31)', reason: 'tranche-status heading naming the U2 consumer-consolidation state, not a standalone subsystem claim (backed by roles.ts + candidate/aura/choice/decision-window routing, re-attested by the T8c branded RelationPerspective typed seam and alias-tolerant semantic-ownership guards)' },
   // --- T8b (corrective audit-integrity tranche changelog, 2026-08-31) -------
   // The T8b tranche lands no new source units and becomes the fresh HEAD the
   // next tranche audits; its changelog/status prose references STATUS LABELS

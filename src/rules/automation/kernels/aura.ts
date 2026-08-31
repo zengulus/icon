@@ -1,6 +1,6 @@
 import { squareArea } from '../../area-geometry.js';
 import type { RuleSourceUnit } from '../../source-units.js';
-import { auraRelationPerspectiveId } from '../primitives/roles.js';
+import { auraRelationPerspectiveId, type RelationPerspective } from '../primitives/roles.js';
 import type { EncounterState, Position } from '../../types.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import { hasMastery } from './mastery.js';
@@ -240,9 +240,13 @@ export interface AuraOriginRef {
   size: number;
   radius: number;
   /** The semantic perspective actor whose side establishes ally/foe relations
-   * (U2 role, distinct from the spatial anchor). Null = neutral/ownerless
-   * origin: only `characters` relations apply. */
-  perspectiveActorId: string | null;
+   * (U2 role, distinct from the spatial anchor). TYPED as the U2 BRANDED
+   * `RelationPerspective` — a locally-aliased id (`actor.id`, `entity.ownerId`,
+   * or a variable aliasing one) cannot be assigned here without a type error,
+   * so the membership decision structurally consumes the U2 authority's
+   * returned value (T8c). Null = neutral/ownerless origin: only `characters`
+   * relations apply. */
+  perspectiveActorId: RelationPerspective | null;
 }
 
 /** Resolve every concrete origin of the aura in current state. Pure — no
@@ -288,12 +292,12 @@ export function auraOriginRefs(state: AuraStateView, definition: AuraDefinition)
     for (const entity of Object.values(state.entities ?? {})) {
       if (entity.type !== origin.entityType || !entity.position) continue;
       // The entity's spatial origin is the ENTITY; the ally/foe perspective is
-      // the entity's CREATOR/OWNER. U2 owns the rule — the kernel supplies the
-      // creator/owner fact and FAILS CLOSED on an ownerless entity (only
+      // the entity's canonical OWNER/SUMMONER. U2 owns the rule — the kernel
+      // supplies the owner fact and FAILS CLOSED on an ownerless entity (only
       // `characters` relations apply; a neutral origin never manufactures a
       // side). Defining the perspective here would make this kernel a second
       // U2 authority, so it must route through the U2 authority below.
-      origins.push({ actorId: null, entityId: entity.id, position: entity.position, size: 1, radius: definition.radius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'entity', creatorOrOwnerId: entity.ownerId }) });
+      origins.push({ actorId: null, entityId: entity.id, position: entity.position, size: 1, radius: definition.radius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'entity', ownerId: entity.ownerId }) });
     }
   }
   return origins;

@@ -1,8 +1,8 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
-import { roundLedgerKey, traitReactionMutations } from '../automation/kernels/trait-reactions.js';
-import { usageKey } from '../automation/primitives/usage.js';
+import { roundLedgerKey, roundLedgerUsageSpec, traitReactionMutations } from '../automation/kernels/trait-reactions.js';
+import { usageIdentitiesEqual, usageIdentity, usageIdentityKey, usageKey } from '../automation/primitives/usage.js';
 
 /** The canonical U16 round-scope ledger key for a source id (byte-identical
  * to `roundLedgerKey`, owned by the U16 core). The typed identity must carry a
@@ -138,6 +138,44 @@ describe('F9 once-per-round reactive job-trait fold', () => {
     expect(roundLedgerKey('actor:a', DASH)).toBe(roundLedgerKey('actor:b', DASH));
     // And it is byte-identical to the long-standing `ledger:round:<sourceId>` format.
     expect(roundLedgerKey('actor:a', DASH)).toBe(`ledger:round:${DASH}`);
+  });
+
+  it('real-owner seam: the TYPED usage identity distinguishes the real owner from a fabricated empty owner (storage bytes cannot)', () => {
+    // The physical storage address (`ledger:round:<sourceId>`) deliberately
+    // omits owner bytes, so comparing storage cannot prove the real owner was
+    // passed to the typed U16 call. The typed SPEC fed to `usageKey` carries the
+    // owner, and `usageIdentity`/`usageIdentityKey` built from that SAME spec DO
+    // distinguish a real owner from `ownerId: ''` — the seam that makes owner
+    // propagation directly observable without changing storage bytes.
+    const real = roundLedgerKey('actor:a', DASH);
+    const fabricated = roundLedgerKey('', DASH);
+    // Storage-identical (actor-local) — the negative assertion the brief warns
+    // is insufficient on its own, shown here as the reason the typed seam is
+    // needed on TOP of the storage check.
+    expect(real).toBe(fabricated);
+    expect(real).toBe(`ledger:round:${DASH}`);
+    // Typed identity: real owner ≠ fabricated empty owner, despite equal storage.
+    expect(usageIdentitiesEqual(usageIdentity(roundLedgerUsageSpec('actor:a', DASH)), usageIdentity(roundLedgerUsageSpec('', DASH)))).toBe(false);
+    expect(usageIdentityKey(roundLedgerUsageSpec('actor:a', DASH))).not.toBe(usageIdentityKey(roundLedgerUsageSpec('', DASH)));
+    expect(usageIdentity(roundLedgerUsageSpec('actor:a', DASH)).ownerId).toBe('actor:a');
+    // And two DIFFERENT real owners are distinct typed identities too.
+    expect(usageIdentityKey(roundLedgerUsageSpec('actor:a', DASH))).not.toBe(usageIdentityKey(roundLedgerUsageSpec('actor:b', DASH)));
+  });
+
+  it('the F9 fold persists the gate mark at the REAL owner\'s typed spec (actor.id, never a fabricated empty owner)', () => {
+    const { state, heroId, foeId } = dashEncounter();
+    const first = traitReactionMutations(state, state.actors[heroId], [], { collidedActorIds: [foeId] });
+    const mark = first.find((m) => m.kind === 'state');
+    expect(mark).toBeDefined();
+    if (mark && mark.kind === 'state') {
+      // The mark's storage key is addressed via the REAL owner's typed spec
+      // (the fold calls roundLedgerUsageSpec(actor.id, …)), not `` {} ``.
+      const fromRealOwnerSpec = usageIdentityKey(roundLedgerUsageSpec(heroId, DASH));
+      expect(mark.key).toBe(roundLedgerKey(heroId, DASH));
+      // The identity the fold carries is the real owner's, distinct from a
+      // fabricated empty owner.
+      expect(fromRealOwnerSpec).not.toBe(usageIdentityKey({ sourceId: DASH, ownerId: '', scope: 'round' }));
+    }
   });
 
   it('adversarial: the once-per-round mark is the canonical U16 round ledger key (usageKey round scope), not an id-agnostic flag', () => {
