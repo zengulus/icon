@@ -266,6 +266,78 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Demon Cutter: a Size 2 character whose ANCHOR is outside the Line but whose footprint intersects it takes the area fray exactly once', () => {
+    // ICON p.290 large characters count as "inside" an area when one of
+    // their spaces is hit. The Line 3 is (2,1),(3,1),(4,1); the Size 2 foe
+    // anchored at (3,0) occupies (3,0),(4,0),(3,1),(4,1) — its anchor is
+    // OUTSIDE the line, but its footprint overlaps it at two cells. It must
+    // take the unrestricted "Area effect: Fray" exactly once (never per
+    // cell, never anchor-only).
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 3, y: 0 }, ally: null });
+    state.actors[second.id].size = 2;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    const secondDamages = mutationsOf(result.events, 'demon-slayer:demon-cutter').filter((mutation) => mutation.kind === 'damage' && mutation.actorId === second.id);
+    expect(secondDamages).toHaveLength(1);
+    expect(secondDamages[0]).toMatchObject({ amount: 4, delivery: 'area' });
+    expect(result.state.actors[second.id].hp).toBe(28); // 32 - 4 fray, exactly once
+    expect(result.state.actors[foe.id].statuses).toContain('slashed'); // the attack-space target still takes the attack
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Comet: a Size 2 character whose anchor is OUTSIDE the medium blast but whose footprint intersects it is hit exactly once', () => {
+    // Blast center (4,1) radius 2 covers x 2..6. The Size 2 foe anchored at
+    // (1,2) occupies (1,2),(2,2),(1,3),(2,3): its anchor sits outside the
+    // blast (x=1) while its footprint overlaps it — membership is decided by
+    // the FOOTPRINT, never the anchor cell.
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 1, y: 2 }, second: { x: 9, y: 9 }, ally: null });
+    state.actors[foe.id].size = 2;
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:comet', targetIds: [],
+      input: { directions: { 'throw-direction': { x: 1, y: 0 } } },
+    }, scriptedDice());
+    const foeDamages = mutationsOf(result.events, 'demon-slayer:comet').filter((mutation) => mutation.kind === 'damage' && mutation.actorId === foe.id);
+    expect(foeDamages).toHaveLength(1);
+    expect(result.state.actors[foe.id].hp).toBe(30); // 32 - 2, exactly once
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross: a Size 2 character occupying several cells of a LATER (base-effect) area takes that area\'s fray exactly once', () => {
+    // The base Effect's REQUIRED second blast (E1) is centered (3,4)
+    // radius 1: cells (2..4, 3..5). The Size 2 foe anchored at (3,5)
+    // occupies (3,5),(4,5),(3,6),(4,6) — TWO cells inside E1 and no cell in
+    // the primary blast — so it takes exactly ONE area-fray instance.
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 5 }, ally: null });
+    state.actors[second.id].size = 2;
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
+    }, scriptedDice(12, 5, 6));
+    const secondDamages = mutationsOf(result.events, 'demon-slayer:draken-cross').filter((mutation) => mutation.kind === 'damage' && mutation.actorId === second.id);
+    expect(secondDamages).toHaveLength(1);
+    expect(secondDamages[0]).toMatchObject({ amount: 4, delivery: 'area' });
+    expect(result.state.actors[second.id].hp).toBe(28);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross Talent I on Exceed regenerates the area fray ONCE per area for a Size 2 multi-cell occupant', () => {
+    // "Exceed: Deal fray damage again to all characters in any area created
+    // by this ability." — a later separate effect, identity-deduplicated per
+    // area. The Size 2 foe inside E1 takes the E1 fray PLUS the Talent I
+    // regeneration (two instances total, each exactly once) while its
+    // multi-cell footprint stays one identity.
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 5 }, ally: null, talents: { 'demon-slayer:draken-cross': 1 } });
+    state.actors[second.id].size = 2;
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
+    }, scriptedDice(15, 5, 6)); // d20 15 = natural Exceed
+    const secondDamages = mutationsOf(result.events, 'demon-slayer:draken-cross').filter((mutation) => mutation.kind === 'damage' && mutation.actorId === second.id);
+    expect(secondDamages).toHaveLength(2); // the E1 fray, then the Exceed regeneration
+    expect(secondDamages.every((mutation) => mutation.kind === 'damage' && mutation.amount === 4 && mutation.delivery === 'area')).toBe(true);
+    expect(result.state.actors[second.id].hp).toBe(24); // 32 - 4 - 4
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Draken Cross: the base Effect is REQUIRED — a use without a recorded second blast fails closed', () => {
     // "Effect: You may rush 1, then target another small blast area in range
     // 3…" (p.128): like every other "You may Rush X, then …" construction the

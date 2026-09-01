@@ -11,6 +11,7 @@ import {
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
 import { areaHasCellWithinRange } from '../../../../area-geometry.js';
+import { footprintIntersectsCells } from '../../../primitives/spatial-intent.js';
 import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
@@ -113,7 +114,11 @@ const demonCutterEffects: RuleResolver = (context) => {
   // allies and foes alike — takes the unrestricted "Area effect: Fray".
   const areaFray = (cells: Position[], opts: { excludeAttackSpace?: boolean } = {}) => {
     for (const character of Object.values(context.state.actors)) {
-      if (!character.position || !cells.some((cell) => sameCell(cell, character.position!))) continue;
+      // Full-footprint membership (ICON p.290 large characters): a Size 2+
+      // character whose anchor sits OUTSIDE the line but whose occupied
+      // footprint intersects it counts as inside; a character occupying
+      // several cells of one area is still affected EXACTLY once.
+      if (!character.position || !footprintIntersectsCells({ position: character.position, size: character.size }, cells)) continue;
       if (opts.excludeAttackSpace && character.id === target.id) continue;
       mutations.push(damageMutation(context, character.id, source.fray, 'area'));
     }
@@ -144,7 +149,7 @@ const cometEffects: RuleResolver = (context) => {
   const blast = squareArea(center, 2);
   const mutations: RuleMutation[] = [];
   for (const character of Object.values(context.state.actors)) {
-    if (character.id === source.id || !character.position || !blast.some((cell) => sameCell(cell, character.position!))) continue;
+    if (character.id === source.id || !character.position || !footprintIntersectsCells({ position: character.position, size: character.size }, blast)) continue;
     mutations.push(damageMutation(context, character.id, 2, 'area'));
   }
   const blocked = (position: Position) => occupied(position, context, source.id)
@@ -227,7 +232,9 @@ const drakenCrossEffects: RuleResolver = (context) => {
     const excluded = new Set(opts.exclude ?? []);
     for (const character of Object.values(context.state.actors)) {
       if (excluded.has(character.id) || !character.position) continue;
-      if (!cells.some((cell) => sameCell(cell, character.position!))) continue;
+      // Full-footprint membership (ICON p.290 large characters), exactly one
+      // area-fray instance per character even for multi-cell footprints.
+      if (!footprintIntersectsCells({ position: character.position, size: character.size }, cells)) continue;
       mutations.push(damageMutation(context, character.id, source.fray, 'area'));
     }
   };
