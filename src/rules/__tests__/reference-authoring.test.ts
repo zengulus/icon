@@ -46,6 +46,7 @@ import { SEALER_RULE_RESOLVERS } from '../automation/content/jobs/programs/seale
 import { ENOCHIAN_RULE_RESOLVERS } from '../automation/content/jobs/programs/enochian-programs.js';
 import { CHANTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/chanter-programs.js';
 import { KNAVE_RULE_RESOLVERS } from '../automation/content/jobs/programs/knave-programs.js';
+import { HARVESTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/harvester-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -372,6 +373,52 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     // a shove of the chosen foe — the recorded input identity drives the spin.
     expect(mutations.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'foe' && mutation.movement === 'place')).toBe(true);
     expect(mutations.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'foe' && mutation.movement === 'shove')).toBe(true);
+    void hero;
+  });
+
+  it('Harvester Sow resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Sow's PURE live-slot reads (attack target + inline source read) now
+    // resolve through the adapter; a slot that NAMES a missing actor must
+    // reject on a malformed window rather than silently produce nothing.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => HARVESTER_RULE_RESOLVERS['harvester:sow:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Harvester Reap resolver: an absent optional attack-target slot stays a no-op (optional singleton semantics preserved)', () => {
+    // Reap's attack-target read is OPTIONAL in valid state (the resolver's
+    // `if (!source.position || !target?.position) return []` guard handles a
+    // genuinely targetless use); the adapter preserves absent-singular →
+    // undefined and the resolver no-ops as before.
+    const context = ctx();
+    expect(() => HARVESTER_RULE_RESOLVERS['harvester:sow:reap'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Harvester Blood Grove resolver: the protected DERIVED_OR_PRECEDENCE_BOUNDARY keeps its exact precedence — input center wins, source center is the fallback, and the dereference still reads current state', () => {
+    // The ONE repo-wide DERIVED_OR_PRECEDENCE_BOUNDARY is blood-grove's
+    // in-call `input.actorIds?.target?.[0] ? sourceActor(context,
+    // context.input.actorIds.target[0])?.position : undefined` center read —
+    // NOT migrated in this tranche. Its selection (recorded input target when
+    // present, else the source's position) and its dereference shape are
+    // unchanged: the higher-priority input identity wins when present, and
+    // the fallback (source position) is used only when absent.
+    const hero = ctx().state.actors.hero; // (4,4)
+    const foe = { ...ctx().state.actors.foe, id: 'foe', position: { x: 3, y: 4 } }; // distance 1 (in range 2)
+    const withInput = ctx({ state: { ...ctx().state, actors: { ...ctx().state.actors, foe } }, input: { actorIds: { target: ['foe'] } } });
+    const centerMutations = HARVESTER_RULE_RESOLVERS['harvester:blood-grove:effects'](withInput, defaultAction);
+    const created = centerMutations.find((mutation) => mutation.kind === 'terrain');
+    expect(created).toBeDefined();
+    if (created && created.kind === 'terrain') {
+      // Undegrowth grows around the INPUT-selected center (foe at 3,4).
+      expect(created.positions.some((cell) => cell.x === 3 && cell.y === 4)).toBe(true);
+    }
+    // Without the input identity, the fallback is the source's own position.
+    const noInput = ctx();
+    const fallbackMutations = HARVESTER_RULE_RESOLVERS['harvester:blood-grove:effects'](noInput, defaultAction);
+    const fallbackCreated = fallbackMutations.find((mutation) => mutation.kind === 'terrain');
+    expect(fallbackCreated).toBeDefined();
+    if (fallbackCreated && fallbackCreated.kind === 'terrain') {
+      expect(fallbackCreated.positions.some((cell) => cell.x === 4 && cell.y === 4)).toBe(true);
+    }
     void hero;
   });
 

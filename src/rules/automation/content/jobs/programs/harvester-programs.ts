@@ -11,6 +11,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
@@ -50,10 +51,10 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
 /** ICON p.185 Sow: auto-hit fray, seal the foe, and mark them. The post-attack
  * bless on the marked foe is a documented mark-trigger window. */
 const sowEffects: RuleResolver = (context) => {
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const target = resolveAttackTarget(context);
   if (!target) return [];
   const mutations: RuleMutation[] = [autohitAttack(context)];
-  mutations.push(damageMutation(context, target.id, sourceActor(context, context.actorId).fray, 'hit'));
+  mutations.push(damageMutation(context, target.id, resolveSourceActor(context).fray, 'hit'));
   mutations.push(conditionMutation(context, target.id, 'sealed'));
   mutations.push(markMutation(context, target.id, 'sow', {}));
   return mutations;
@@ -62,8 +63,8 @@ const sowEffects: RuleResolver = (context) => {
 /** ICON p.185 Sow combo (REAP): attack [D]+fray on hit (fray on miss), summon a
  * Thrall adjacent to the target, and on a Slay trigger repeat the effect. */
 const reapEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -88,7 +89,7 @@ const reapEffects: RuleResolver = (context) => {
  * after they end their turn (a documented turn-end window); a bloodied target
  * repeats it and additionally pacifies foes. */
 const growingSeasonEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Growing Season requires a character in range 4.');
@@ -100,7 +101,7 @@ const growingSeasonEffects: RuleResolver = (context) => {
  * in range 2. Refresh-on-slay and the end-of-turn blessing summons are
  * documented stance-trigger windows. */
 const gravebirthEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'gravebirth')];
   mutations.push(...summonEntity(context, source.id, 'thrall', source.position, {
@@ -114,8 +115,8 @@ const gravebirthEffects: RuleResolver = (context) => {
  * trigger, summon a Thrall for each foe in the area and deal 2 piercing damage
  * again to those foes. */
 const harvestEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -151,7 +152,7 @@ const harvestEffects: RuleResolver = (context) => {
  * fulfilled condition (slay / sacrifice / bloodied) is a documented
  * summon-trigger window. */
 const bloodGroveEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined;
   if (!source.position) return [];
   const centerCell = center ?? source.position;
@@ -167,7 +168,7 @@ const bloodGroveEffects: RuleResolver = (context) => {
  * regeneration condition (and defiance at 25%). Both interpretations live in
  * the closed source-ID projection in passive-projection.ts. */
 const rotEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Rot requires a character in range 4.');
@@ -187,7 +188,7 @@ const rotEffects: RuleResolver = (context) => {
  * detonates at 6 (sacrifice 6, gain 6 vigor, bonus damage, unstoppable) —
  * a documented damage-trigger / turn-end window. */
 const crimsonBloomEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Crimson Bloom requires a character in range 4.');
@@ -200,7 +201,7 @@ const crimsonBloomEffects: RuleResolver = (context) => {
  * ring is active, the Spirit Away interrupt teleports an entering or exiting
  * foe 2 and seals them without ending their movement. */
 const fairyRingEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const cells = squareArea(source.position, 2).filter((cell) => withinGrid(cell, context));
   return [
@@ -213,7 +214,7 @@ const fairyRingEffects: RuleResolver = (context) => {
  * or exited the ring, and seal them. The movement that triggered the window
  * is not ended. */
 const spiritAwayEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const foeId = context.triggerTargetIds?.[0] ?? context.input.actorIds?.target?.[0];
   const foe = foeId ? sourceActor(context, foeId) : undefined;
   if (!source.position || !foe?.position) return [];
@@ -249,8 +250,8 @@ const darkSliverPlacementRange = (context: RuleExecutionContext, scope: string):
  * marking it. The end-of-next-turn check (2 piercing, pacified, plant) is a
  * documented turn-end window; a Slay trigger creates a plant immediately. */
 const darkSliverEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);

@@ -126,7 +126,8 @@ their sites.
 > | `5f0de05` (post-Sealer) | 229 | 174 | 54 | 1 |
 > | `4a1ff76` (post-Enochian) | 211 | 156 | 54 | 1 |
 > | `3052eee` (post-Chanter) | 192 | 137 | 54 | 1 |
-> | current HEAD (post-Knave) | 175 | 120 | 54 | 1 |
+> | `81573a8` (post-Knave) | 175 | 120 | 54 | 1 |
+> | current HEAD (post-Harvester) | 160 | 105 | 54 | 1 |
 >
 > The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
 > (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
@@ -148,15 +149,15 @@ sites across 14 named program files (multi-line calls collapse to one site;
 MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
 provenance string):
 
-- **U1 reference identity — pure LIVE-slot reads (120, migrate family-by-
+- **U1 reference identity — pure LIVE-slot reads (105, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
-  Warden/Sealer/Enochian/Chanter/Knave migrated across tranches 2–6.
-  Remaining per-file: Demon Slayer 16, Harvester 15, Seer 15, Fool 15,
-  Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11, Sealer 4 (chain
-  sites' source reads — see boundary), Shade 3, Warden 2. Enochian 0,
-  Chanter 0, Knave 0 (their tranches).
+  Warden/Sealer/Enochian/Chanter/Knave/Harvester migrated across tranches
+  2–7. Remaining per-file: Demon Slayer 16, Seer 15, Fool 15, Geomancer 14,
+  Freelancer 14, Stormbender 11, Colossus 11, Sealer 4 (chain sites' source
+  reads — see boundary), Shade 3, Warden 2. Enochian 0, Chanter 0, Knave 0,
+  Harvester 0 (their tranches).
 - **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
   earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
@@ -500,17 +501,89 @@ captured/precedence reads alone do NOT trigger the pin.
 
 No direct `state.actors[context.…]` dereference remains anywhere in content.
 
-## U1 status after the Knave tranche
+## U1 tranche executed (fresh HEAD, 2026-09-01, seventh tranche — Harvester)
 
-U1 remains PARTIAL: the shared surface is proved and pinned across TEN
+### Migrated: Harvester pure LIVE-slot reference reads
+
+`content/jobs/programs/harvester-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **15 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Harvester: 15 → 0 PURE; CAPTURED
+54 and BOUNDARY 1 unchanged; whole-repo 175 → 160 = 105 + 54 + 1)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in Sow, REAP, Growing Season, Gravebirth,
+  Harvest, Blood Grove, Rot, Crimson Bloom, Fairy Ring, Spirit Away, and
+  Dark Sliver (11; Sow's inline `.fray` read included);
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Sow, REAP, Harvest, and Dark Sliver
+  (4) — identical LIVE re-read and absent-singular→undefined semantics.
+
+**Deliberately NOT migrated (inventoried):** the four `??`-chain captured
+sites — Growing Season / Rot / Crimson Bloom `targetId =
+input.actorIds?.target?.[0] ?? attackTargetId` and Spirit Away `foeId =
+triggerTargetIds?.[0] ?? input.actorIds?.target?.[0]` — stay caller-owned
+U4 precedence. `sourceActor(context, …)` remains imported for them.
+
+### The protected DERIVED_OR_PRECEDENCE_BOUNDARY (NOT resolved this tranche)
+
+Blood Grove's center read — `context.input.actorIds?.target?.[0] ?
+sourceActor(context, context.input.actorIds.target[0])?.position :
+undefined` — is the repo's ONE machine-classified
+DERIVED_OR_PRECEDENCE_BOUNDARY. Its identity-selection provenance is an
+in-call recorded-input read (the higher-priority identity is the
+player-selected `input.actorIds.target[0]`; the fallback is the source's
+own position, used only when the input identity is absent). The tranche
+PRESERVES this expression exactly — the selection and dereference behavior
+is unchanged, the classifier still reports it as ONE boundary, and no
+precedence decision moved into U1. Resolving it (a per-call-site source
+contract question) is a future tranche, not this one.
+
+### Guard
+
+The `u1-reference-routing` guard pins Harvester (resolveSourceActor,
+resolveAttackTarget) to the adapter; the retained boundary and `??`-chain
+captured dereferences are NOT banned (no blanket lexical ban). Mutation
+tests: a Harvester revert to `sourceActor(context, context.actorId)` drops
+the pinned calls and is caught with exactly one Harvester routing problem;
+and the protected boundary BY ITSELF (with the pins held) produces zero
+Harvester routing problems — the guard cannot force a lexical rewrite of
+an inventoried boundary.
+
+### Evidence
+
+- `reference-authoring.test.ts` +3: the production Harvester Sow resolver
+  fails closed (`reference.missing-actor`) on a gated-bypass ghost
+  `attackTargetId` (legacy silently no-opped); REAP keeps absent-singleton
+  → no-op (optional semantics); and the Blood Grove boundary resolver
+  proves BOTH precedence branches — the input-selected center wins when
+  present (undergrowth grows around the chosen foe) and the source position
+  is the fallback only when the input identity is absent (undergrowth grows
+  around the user).
+- `harvester.test.ts` +1: reversing actor INSERTION order (second foe added
+  before the target) produces byte-identical Sow outcomes and replay — the
+  migrated source/attack-target reads resolve by recorded slot identity,
+  never object-iteration order.
+- the full Harvester suite (32 tests) stays green through the engine path —
+  valid-state semantics preserved; replay byte-identical in every scenario;
+  the Rot projection/talent matrix and the Blood Grove boundary fixture
+  unchanged.
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
+
+## U1 status after the Harvester tranche
+
+U1 remains PARTIAL: the shared surface is proved and pinned across ELEVEN
 migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
-Chanter, Knave, Job-trait, Class resolvers), and the residual is a
-machine-derived classified inventory — 120 pure LIVE-slot reads (next
-tranches) + 54 captured/derived dereferences + 1 in-call boundary read = 175
-sites, 0 direct dereferences. A whole-consumer audit is NOT yet done, so U1
-cannot claim AUTHORITATIVE: 8 program files still resolve live slots through
-the legacy kernel-side convenience, and the U1×U4 captured-identity boundary
-has no shared surface yet.
+Chanter, Knave, Harvester, Job-trait, Class resolvers), and the residual is
+a machine-derived classified inventory — 105 pure LIVE-slot reads (next
+tranches) + 54 captured/derived dereferences + 1 in-call boundary read = 160
+sites, 0 direct dereferences. The single DERIVED_OR_PRECEDENCE_BOUNDARY
+remains inventoried and unresolved (BOUNDARY 1 → 1, as expected). A
+whole-consumer audit is NOT yet done, so U1 cannot claim AUTHORITATIVE: 7
+program files still resolve live slots through the legacy kernel-side
+convenience, and the U1×U4 captured-identity boundary has no shared surface
+yet.
 
 ## Coverage and verification invariants
 

@@ -142,13 +142,13 @@ assumption here, document the evidence and update this list before proceeding.
 > **U1 content-authoring surface (2026-09-01, commit 4bd0189) + Shade/Warden
 > live-slot tranche (2026-09-01, commit ea9526c) + Sealer live-slot tranche
 > + Enochian live-slot tranche + Chanter live-slot tranche + Knave live-slot
-> tranche (2026-09-01).**
+> tranche + Harvester live-slot tranche (2026-09-01).**
 > The named-content U1 residual
 > got ONE shared surface
 > (`content/glue/reference-authoring.ts`: resolveSourceActor /
 > resolveAttackTarget / resolveTriggerSource / resolveTriggerTargets /
 > resolveCapturedSelectedActors / resolveBoundActor, all composing
-> `primitives/reference.ts`), and TEN content families migrated:
+> `primitives/reference.ts`), and ELEVEN content families migrated:
 > Bastion/Spellblade programs, the Job-trait/Class resolvers' six direct
 > dereferences, then the pure LIVE-slot reads (source/attack-target
 > /Nocturne trigger-source) in Shade, Warden, Sealer (God Hand/Devil
@@ -167,16 +167,21 @@ assumption here, document the evidence and update this list before proceeding.
 > parameter dereference, Dire Parry's triggerSource ?? input precedence,
 > Strongarm/Intimidate/Sucker Punch input-actorIds targets, and the
 > passed-id loop deref stay caller-owned; Dark Knight's equidistant-foe
-> player-choice still fails closed) — the
+> player-choice still fails closed), and Harvester (all 11 source reads +
+> 4 attack-target reads in Sow/REAP/Growing Season/Gravebirth/Harvest/
+> Blood Grove/Rot/Crimson Bloom/Fairy Ring/Spirit Away/Dark Sliver — the
+> `??`-chain captured dereferences stay caller-owned; Blood Grove's in-call
+> `input.actorIds.target[0]` center read remains the repo's ONE
+> DERIVED_OR_PRECEDENCE_BOUNDARY, preserved not resolved) — the
 > last direct
 > `state.actors[context.…]` dereference in content
 > is gone. The `u1-reference-routing` guard scans the content layer
 > (adapter-keeps-U1, migrated-program pins incl. Sealer, Enochian, Chanter,
-> and Knave, deref
+> Knave, and Harvester, deref
 > rejection; no
 > blanket lexical ban on the inventoried residual). Residual is machine-
-> derived from the site inventory (`npm run audit:u1-residual`): 175
-> `sourceActor(context, …)` sites = 120 pure LIVE-slot reads + 54
+> derived from the site inventory (`npm run audit:u1-residual`): 160
+> `sourceActor(context, …)` sites = 105 pure LIVE-slot reads + 54
 > captured/derived-id dereferences + 1 in-call precedence-boundary read
 > (Harvester line 155) + 0 other, 0 direct dereferences — every count
 > regenerated from the same site list, no hand-maintained totals. (Census-
@@ -184,7 +189,8 @@ assumption here, document the evidence and update this list before proceeding.
 > each misclassified that ONE Harvester boundary site into BOTH buckets; the
 > exact figures are ea9526c 242 = 187 + 54 + 1, 5f0de05 229 = 174 + 54 + 1,
 > 4a1ff76 211 = 156 + 54 + 1 (Enochian −18), 3052eee 192 = 137 + 54 + 1
-> (Chanter −19), and current 175 = 120 + 54 + 1 (Knave −17).) U1 stays
+> (Chanter −19), 81573a8 175 = 120 + 54 + 1 (Knave −17), and current
+> 160 = 105 + 54 + 1 (Harvester −15).) U1 stays
 > PARTIAL; zero source promotion; census remains 427.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
@@ -204,6 +210,38 @@ assumption here, document the evidence and update this list before proceeding.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 7 — Harvester pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/harvester-programs.ts` now
+  routes every pure live-slot reference through the adapter: source reads →
+  `resolveSourceActor` in Sow, REAP, Growing Season, Gravebirth, Harvest,
+  Blood Grove, Rot, Crimson Bloom, Fairy Ring, Spirit Away, Dark Sliver
+  (11, incl. Sow's inline `.fray` read); primary attack-target reads →
+  `resolveAttackTarget` in Sow, REAP, Harvest, Dark Sliver (4) — identical
+  LIVE/absent-singular semantics with the resolvers' gates untouched. The
+  four `??`-chain captured sites (Growing Season / Rot / Crimson Bloom
+  `input.actorIds?.target?.[0] ?? attackTargetId`; Spirit Away
+  `triggerTargetIds?.[0] ?? input.actorIds?.target?.[0]`) stay caller-owned.
+  **The ONE DERIVED_OR_PRECEDENCE_BOUNDARY (Blood Grove's in-call
+  `input.actorIds.target[0]` center read) was deliberately NOT resolved** —
+  its input-wins / source-fallback precedence is preserved byte-for-byte
+  (proven both branches by a resolver test) and remains the repo's single
+  machine-classified boundary (BOUNDARY 1 → 1, the tranche's success
+  condition). Guard pins Harvester via contentAdapterSurface; mutation tests
+  cover a Harvester revert (exactly one routing violation) AND prove the
+  protected boundary by itself does NOT trigger the pin (no forced lexical
+  rewrite of an inventoried boundary). Evidence: +3 fail-closed/boundary-
+  precedence tests in `reference-authoring.test.ts` (Sow ghost
+  attackTargetId → `reference.missing-actor`; REAP absent-singleton no-op;
+  Blood Grove input-center-wins vs source-fallback), +1 engine-level
+  insertion-order test in `harvester.test.ts`, the full Harvester suite
+  (32) green through the engine path (valid-state semantics preserved;
+  malformed refs fail closed; replay byte-identical). The tranche removed
+  exactly 15 PURE_LIVE_REFERENCE sites (Harvester 15 → 0), moving the
+  machine-derived residual from 175 = 120 + 54 + 1 to 160 = 105 + 54 + 1
+  (per `npm run audit:u1-residual`; no hand-maintained totals). 0 direct
+  dereferences; U1 remains PARTIAL. Full suite 2006 green, audits green,
+  census byte-stable at 427, zero source promotion.
 
 - **U1 content-authoring tranche 6 — Knave pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/knave-programs.ts` now
