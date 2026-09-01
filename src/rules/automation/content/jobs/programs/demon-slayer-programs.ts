@@ -10,7 +10,7 @@ import {
   damageMutation, conditionMutation, rushMutation, shoveMutation, stateMutation,
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
-import { areaHasCellWithinRange } from '../../../../area-geometry.js';
+import { areaHasCellWithinRange, validateLine } from '../../../../area-geometry.js';
 import { footprintIntersectsCells } from '../../../primitives/spatial-intent.js';
 import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -40,9 +40,12 @@ import { consumeUsageMutation, ledgerAvailable } from '../../../primitives/usage
  *   an auto-selected or nearest-foe placement. The areas cannot overlap
  *   (p.128), and a selected area is legal when at least one of its cells is
  *   within the effective blast range of the post-rush origin (p.97).
- * - Demon Cutter's Charge repeat keeps the recorded second-line direction
- *   when supplied and otherwise uses the deterministic perpendicular
- *   default noted at the resolver.
+ * - Demon Cutter's Charge/Heroic repeat is a RECORDED player-selected
+ *   Line 3 (validated through the single canonical Line authority + the
+ *   shared at-least-one-cell-in-range placement rule + non-overlap) — never
+ *   a ray invented from the user's position and never a deterministic
+ *   perpendicular fallback. The repeat itself is mandatory once the source
+ *   fires; only the area is a choice.
  * - The Dark Wind Devil Blade mastery's optional teleport and divine
  *   splash remain UNRESOLVED: they need exact source Blast geometry and a
  *   recorded destination, neither of which this tranche approximates.
@@ -84,22 +87,26 @@ const demonCutterEffects: RuleResolver = (context) => {
   if (!source || !source.position || !target || !target.position) return [];
   const mutations: RuleMutation[] = [];
   let sourcePosition = source.position;
-  // Talent 2 (p.128): "Your can rush 1 before using Demon Cutter. Charge:
-  // Rush 3 instead." The first program-level talent variant (F7): a
-  // pre-ability movement that changes the line attack's origin, so it cannot
-  // be a post-mutation fold effect — the program reads the equipped choice
-  // through the projected `talents` surface and emits the rush itself, gated
-  // on the talent (never on the charge trigger alone). The direction is a
-  // caller choice, defaulting to the deterministic rush toward the nearest
-  // foe.
-  if (source.talents?.['demon-slayer:demon-cutter'] === 2) {
-    const rushDistance = context.triggers?.has('charge') ? 3 : 1;
-    const direction = context.input.directions?.['rush-before'] ?? rushTowardFoes(context, source.position);
-    const path = plannedRush(context, source.id, rushDistance, direction);
-    if (path.length > 0) {
-      mutations.push(rushMutation(context, source.id, path));
-      sourcePosition = { ...path[path.length - 1]! };
+  // Talent II (p.128): "You can rush 1 before using Demon Cutter. Charge:
+  // Rush 3 instead." This is OPTIONAL player movement: a recorded
+  // invoke/decline choice (`booleans['rush-before']`); when elected, the
+  // direction is a REQUIRED recorded path decision (never an auto-rush
+  // toward the nearest foe), and a path the movement authority cannot make
+  // (blocked/off-grid from the start) fails atomically. No decision, or a
+  // recorded decline, changes nothing.
+  const rushElected = source.talents?.['demon-slayer:demon-cutter'] === 2
+    && context.input.booleans?.['rush-before'] === true;
+  if (rushElected) {
+    const rushDirection = context.input.directions?.['rush-before'];
+    if (!rushDirection) {
+      throw new RuleProgramViolation('choice.position-required', 'Demon Cutter’s pre-use rush needs a recorded direction.');
     }
+    const rushPath = plannedRush(context, source.id, context.triggers?.has('charge') ? 3 : 1, rushDirection, sourcePosition);
+    if (rushPath.length === 0) {
+      throw new RuleProgramViolation('choice.position-range', 'Demon Cutter’s pre-use rush cannot be made along that path.');
+    }
+    mutations.push(rushMutation(context, source.id, rushPath));
+    sourcePosition = { ...rushPath[rushPath.length - 1]! };
   }
   const targetPosition = target.position;
   const primaryDirection = context.input.directions?.['line-direction'] ?? axisDirection(sourcePosition, targetPosition);
@@ -125,14 +132,36 @@ const demonCutterEffects: RuleResolver = (context) => {
   };
   areaFray(line, { excludeAttackSpace: true });
   if (context.triggers?.has('charge') || context.triggers?.has('heroic')) {
-    const perpendicular: Position = primaryDirection.x !== 0 ? { x: 0, y: 1 } : { x: 1, y: 0 };
-    // The repeated second line is a fresh area (no attack component), so
-    // every character in it takes the fray; the recorded direction wins
-    // when supplied, otherwise the deterministic perpendicular default.
-    const secondDirection = context.input.directions?.['second-line'] ?? perpendicular;
-    const secondLine = lineCells(sourcePosition, secondDirection, 3);
-    const overlaps = secondLine.some((cell) => line.some((first) => sameCell(cell, first)));
-    if (!overlaps) areaFray(secondLine);
+    // "Charge or Heroic: Gains range 2, and repeat the area effect in a new
+    // line 3 area in range. The areas cannot overlap." The grammar makes the
+    // REPEAT mandatory once the source fires ("and repeat", never "may");
+    // only the AREA is a choice — a recorded player-selected Line 3. The
+    // chosen path is validated through the SINGLE canonical Line authority
+    // (validateLine, area-geometry.ts — never a ray invented from the user's
+    // position, never a deterministic perpendicular fallback), placed by the
+    // shared area-placement rule (at least one space within the granted
+    // range 2 of the POST-rush origin — a ranged Line need not start
+    // adjacent to the user), fully on-grid, and non-overlapping with the
+    // first line. A missing or malformed chosen line fails closed before any
+    // mutation is emitted.
+    const recorded = context.input.positions?.['second-line'];
+    if (!recorded || recorded.length === 0) {
+      throw new RuleProgramViolation('choice.position-required', 'Demon Cutter’s repeated line needs a recorded Line 3 area.');
+    }
+    const secondLine = validateLine(recorded, 3);
+    if (!secondLine) {
+      throw new RuleProgramViolation('choice.position-range', 'Demon Cutter’s repeated line must be an orthogonal, strictly-straight Line 3.');
+    }
+    if (!secondLine.every((cell) => withinGrid(cell, context))) {
+      throw new RuleProgramViolation('choice.position-range', 'Demon Cutter’s repeated line must be inside the battlefield.');
+    }
+    if (!areaHasCellWithinRange(secondLine, sourcePosition, 2)) {
+      throw new RuleProgramViolation('choice.position-range', 'Demon Cutter’s repeated Line 3 needs at least one space within range 2 of you.');
+    }
+    if (secondLine.some((cell) => line.some((first) => sameCell(cell, first)))) {
+      throw new RuleProgramViolation('choice.area-overlap', 'Demon Cutter’s repeated line cannot overlap the first line.');
+    }
+    areaFray(secondLine);
   }
   return mutations;
 };

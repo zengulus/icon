@@ -142,15 +142,22 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(setup, result.events)).toEqual(result.state);
   });
 
-  it('Demon Cutter: Charge repeats the area effect in a second non-overlapping line', () => {
-    const { state, hero, foe, second } = demonSlayerEncounter({ second: { x: 1, y: 3 }, slowTurn: true });
+  it('Demon Cutter: Charge repeats the area effect in a recorded non-overlapping second line', () => {
+    // "Charge or Heroic: Gains range 2, and repeat the area effect in a new
+    // line 3 area in range. The areas cannot overlap." The repeat is
+    // MANDATORY once Charge fires — only the AREA is a recorded player
+    // choice (a Line 3 path, never an invented direction).
+    const { state, hero, foe, second } = demonSlayerEncounter({ second: { x: 3, y: 2 }, slowTurn: true });
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
       sourceId: 'demon-slayer:demon-cutter',
       actionId: 'default',
       timing: 'use',
-      input: { actorIds: { target: [foe.id] } },
+      input: {
+        actorIds: { target: [foe.id] },
+        positions: { 'second-line': [{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 4, y: 2 }] },
+      },
       attackTargetId: foe.id,
     }, scriptedDice(12, 5));
     const mutations = mutationsOf(result.events, 'demon-slayer:demon-cutter');
@@ -162,17 +169,108 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
       { kind: 'damage', actorId: foe.id, amount: 9 },
     ]);
     expect(result.state.actors[foe.id].hp).toBe(23); // attack only — excluded from the line fray
-    expect(result.state.actors[second.id].hp).toBe(28); // hit by the second line
+    expect(result.state.actors[second.id].hp).toBe(28); // hit by the repeated line
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Demon Cutter talent 2: rush 1 before the attack, and the line originates from the new position', () => {
-    // The first program-level talent variant (F7): the program reads the
-    // equipped choice through the projected `talents` surface and emits the
-    // pre-ability rush itself, so the changed attack origin rides the same
+  it('Demon Cutter: a missing repeated line under Charge fails closed with nothing emitted', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ second: { x: 9, y: 9 }, ally: null, slowTurn: true });
+    const before = structuredClone(state);
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'demon-slayer:demon-cutter',
+      actionId: 'default',
+      timing: 'use',
+      input: { actorIds: { target: [foe.id] } },
+      attackTargetId: foe.id,
+    }, scriptedDice(12, 5))).toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+    expect(state).toEqual(before);
+  });
+
+  it('Demon Cutter: a repeated line overlapping the first line is rejected atomically', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ second: { x: 9, y: 9 }, ally: null, slowTurn: true });
+    const before = structuredClone(state);
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'demon-slayer:demon-cutter',
+      actionId: 'default',
+      timing: 'use',
+      input: {
+        actorIds: { target: [foe.id] },
+        positions: { 'second-line': [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }] },
+      },
+      attackTargetId: foe.id,
+    }, scriptedDice(12, 5))).toThrowError(expect.objectContaining({ code: 'choice.area-overlap' }));
+    expect(state).toEqual(before);
+  });
+
+  it('Demon Cutter: a repeated line placed in range does NOT need to start adjacent to the user', () => {
+    // A ranged Line 3's placement is legal when at least one of its spaces is
+    // within the granted range 2 of the user (p.97) — its first space can be
+    // two spaces away, and every cell of the pattern is still a fresh area.
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 4, y: 2 }, slowTurn: true });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'demon-slayer:demon-cutter',
+      actionId: 'default',
+      timing: 'use',
+      input: {
+        actorIds: { target: [foe.id] },
+        positions: { 'second-line': [{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 5, y: 2 }] },
+      },
+      attackTargetId: foe.id,
+    }, scriptedDice(12, 5));
+    // (3,2) is Chebyshev distance 2 from (1,1) — in range but NOT adjacent.
+    expect(result.state.actors[second.id].hp).toBe(28); // fray from the repeated line
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Demon Cutter: a repeated line with no cell within range 2 is rejected', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ second: { x: 9, y: 9 }, ally: null, slowTurn: true });
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'demon-slayer:demon-cutter',
+      actionId: 'default',
+      timing: 'use',
+      input: {
+        actorIds: { target: [foe.id] },
+        positions: { 'second-line': [{ x: 5, y: 3 }, { x: 6, y: 3 }, { x: 7, y: 3 }] },
+      },
+      attackTargetId: foe.id,
+    }, scriptedDice(12, 5))).toThrowError(expect.objectContaining({ code: 'choice.position-range' }));
+  });
+
+  it('Demon Cutter: a repeated line that is not an orthogonal Line 3 is rejected', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ second: { x: 9, y: 9 }, ally: null, slowTurn: true });
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'demon-slayer:demon-cutter',
+      actionId: 'default',
+      timing: 'use',
+      input: {
+        actorIds: { target: [foe.id] },
+        positions: { 'second-line': [{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 3 }] }, // an L, not a straight line
+      },
+      attackTargetId: foe.id,
+    }, scriptedDice(12, 5))).toThrowError(expect.objectContaining({ code: 'choice.position-range' }));
+  });
+
+  it('Demon Cutter talent 2: a RECORDED rush 1 before the attack moves the line origin', () => {
+    // Talent II (p.128): "You can rush 1 before using Demon Cutter." The
+    // rush is OPTIONAL player movement: it requires the recorded
+    // invoke/decline choice AND a recorded direction — never an auto-rush
+    // toward the nearest foe. The changed attack origin rides the same
     // deterministic event (never a post-mutation fold effect).
     const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id],
+      input: { booleans: { 'rush-before': true }, directions: { 'rush-before': { x: 1, y: 0 } } },
+    }, scriptedDice(12, 5));
     const mutations = mutationsOf(result.events, 'demon-slayer:demon-cutter');
     expect(mutations).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
@@ -187,18 +285,87 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Demon Cutter talent 2: NO decision invents no rush — the attack keeps its origin', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    const mutations = mutationsOf(result.events, 'demon-slayer:demon-cutter');
+    expect(mutations.some((mutation) => mutation.kind === 'move')).toBe(false);
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(result.state.actors[foe.id].hp).toBe(23); // still hit from (1,1)
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Demon Cutter talent 2: a recorded DECLINE also keeps the attack origin', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 } });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id],
+      input: { booleans: { 'rush-before': false } },
+    }, scriptedDice(12, 5));
+    expect(mutationsOf(result.events, 'demon-slayer:demon-cutter').some((mutation) => mutation.kind === 'move')).toBe(false);
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Demon Cutter talent 2 + Charge: an elected rush moves 3 instead of 1', () => {
+    // The target gate validates against the PRE-rush origin (the foe at
+    // (4,2) is within the Line-3 reach of (1,1)); the recorded rush-3 moves
+    // the attack origin to (4,1), from which the charge line reaches it.
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 4, y: 2 }, second: { x: 9, y: 9 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 }, slowTurn: true });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id],
+      input: {
+        booleans: { 'rush-before': true },
+        directions: { 'rush-before': { x: 1, y: 0 } },
+        positions: { 'second-line': [{ x: 5, y: 1 }, { x: 6, y: 1 }, { x: 7, y: 1 }] },
+      },
+    }, scriptedDice(12, 5));
+    const moves = mutationsOf(result.events, 'demon-slayer:demon-cutter').filter((mutation) => mutation.kind === 'move');
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({ movement: 'rush', positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }] });
+    expect(result.state.actors[hero.id].position).toEqual({ x: 4, y: 1 });
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Demon Cutter talent 2: an elected rush the movement authority cannot make fails atomically', () => {
+    // The hero stands on the bottom grid row: an elected rush SOUTH has no
+    // path. The malformed choice fails before any mutation is emitted.
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 } });
+    state.actors[hero.id].position = { x: 1, y: 0 };
+    const before = structuredClone(state);
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id],
+      input: { booleans: { 'rush-before': true }, directions: { 'rush-before': { x: 0, y: -1 } } },
+    }, scriptedDice(12, 5))).toThrowError(expect.objectContaining({ code: 'choice.position-range' }));
+    expect(state).toEqual(before);
+  });
+
+  it('Demon Cutter talent 2: an elected rush without a recorded direction fails closed', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 7, y: 1 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 } });
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id],
+      input: { booleans: { 'rush-before': true } },
+    }, scriptedDice(12, 5))).toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+  });
+
   it('Demon Cutter talent 2: a slow turn rushes 3 instead, and the charge line follows the new origin', () => {
     // The range gate checks the target against the pre-rush origin, so the
     // foe sits within range 3 of (1,1); the rush-3 path (2,1),(3,1),(4,1) is
     // clear and the post-rush line from (4,1) reaches the foe at (4,2).
     const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 4, y: 2 }, second: { x: 6, y: 1 }, ally: null, talents: { 'demon-slayer:demon-cutter': 2 }, slowTurn: true });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id],
+      input: {
+        booleans: { 'rush-before': true },
+        directions: { 'rush-before': { x: 1, y: 0 } },
+        positions: { 'second-line': [{ x: 5, y: 1 }, { x: 6, y: 1 }, { x: 7, y: 1 }] },
+      },
+    }, scriptedDice(12, 5));
     const mutations = mutationsOf(result.events, 'demon-slayer:demon-cutter');
     expect(mutations).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'move', actorId: hero.id, movement: 'rush', positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }] },
       { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
-      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' }, // second line from the post-rush origin
+      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' }, // recorded second line from the post-rush origin
       { kind: 'attack', d20: 12, hit: true },
       { kind: 'damage', actorId: foe.id, amount: 9 },
     ]);
@@ -210,7 +377,10 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
 
   it('Demon Cutter: the pre-ability rush is gated on talent 2 — a slow turn alone never rushes', () => {
     const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 1, y: 3 }, slowTurn: true });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id],
+      input: { positions: { 'second-line': [{ x: 1, y: 2 }, { x: 1, y: 3 }, { x: 1, y: 4 }] } },
+    }, scriptedDice(12, 5));
     const mutations = mutationsOf(result.events, 'demon-slayer:demon-cutter');
     expect(mutations).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },

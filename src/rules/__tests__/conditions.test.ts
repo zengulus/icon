@@ -305,8 +305,13 @@ describe('combat condition pipeline (p.104–105)', () => {
     expect(slowTurn.actors[heroId].ruleState['slow-turn']).toBe(true);
     expect(slowTurn.actors[heroId].ruleState['six-hells:slow-turn']).toBeUndefined();
 
-    // Charge now fires automatically: Demon Cutter's second line frays Grim.
-    const used = executeCommand(slowTurn, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    // Charge now fires automatically: Demon Cutter's repeated line frays Grim.
+    // The repeated Line 3 is a recorded player area choice — the slow-turn
+    // lifecycle test records the vertical line through Grim's space.
+    const used = executeCommand(slowTurn, {
+      type: 'USE_ABILITY', actorId: heroId, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id],
+      input: { positions: { 'second-line': [{ x: 1, y: 2 }, { x: 1, y: 3 }, { x: 1, y: 4 }] } },
+    }, scriptedDice(12, 5));
     expect(used.state.actors[second.id].hp).toBe(28); // 32 - 4 second-line area fray
 
     const ended = executeCommand(used.state, { type: 'END_TURN', actorId: heroId }, scriptedDice()).state;
