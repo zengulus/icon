@@ -24,10 +24,10 @@
  * query), exactly as the selector authority has always read it.
  */
 import { footprintDistance } from '../primitives/spatial-intent.js';
-import { rollDamageDice } from '../primitives/job-kit.js';
+import { rollDamageDice } from '../primitives/damage-roll.js';
 import type { DistanceEndpoint, RuleActorView, RuleExecutionContext, RuleNumber, RuleSelector } from '../primitives/types.js';
 import { liveActorSlot, resolveActorSelectorReference, resolveReference } from '../primitives/reference.js';
-import type { SpatialOrigin } from '../primitives/anchor.js';
+import { entityAnchorPosition, type SpatialOrigin } from '../primitives/anchor.js';
 import { resolveSpatialAnchor } from './candidate.js';
 import { evaluateActorQuery, evaluateValueQuery } from './evaluate-query.js';
 import { effectiveDamageDie } from './attack-modifiers.js';
@@ -164,7 +164,10 @@ function resolveDistanceEndpoint(
     }
     const value = resolution.value;
     if (value.kind === 'actor') return value.actor.position ? { position: value.actor.position, size: value.actor.size } : null;
-    if (value.kind === 'entity') return value.entity.position ? { position: value.entity.position, size: 1 } : null;
+    if (value.kind === 'entity') {
+      const anchorPosition = entityAnchorPosition(value.entity);
+      return anchorPosition ? { position: anchorPosition, size: 1 } : null;
+    }
     if (value.kind === 'position') return { position: value.position, size: 1 };
     throw new RuleProgramViolation('value.distance-ref', 'Distance endpoint resolved to a non-spatial reference.');
   }

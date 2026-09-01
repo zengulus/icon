@@ -25,7 +25,7 @@
  * This module holds no source IDs and imports no kernels.
  */
 import type { Position } from '../../types.js';
-import type { RuleSelector } from './types.js';
+import type { RuleEntityView, RuleSelector } from './types.js';
 
 /** A resolved spatial origin: a battlefield position plus the footprint size
  * used by the canonical p.92 distance metric. */
@@ -64,4 +64,15 @@ export function anchorFromActorSelector(selector?: RuleSelector): SpatialAnchor 
 /** Pure constructor: a live entity footprint anchor. */
 export function anchorFromEntity(entityId: string): SpatialAnchor {
   return { kind: 'entity', entityId };
+}
+
+/**
+ * The explicit singular U7 anchor of an entity whose complete geometry is a
+ * region. Existing entity-centered rules use the first recorded cell as the
+ * anchor; callers that ask occupancy/intersection questions must consume the
+ * complete `positions` region instead.
+ */
+export function entityAnchorPosition(entity: Pick<RuleEntityView, 'positions'>): Position | null {
+  const anchor = entity.positions[0];
+  return anchor ? { ...anchor } : null;
 }

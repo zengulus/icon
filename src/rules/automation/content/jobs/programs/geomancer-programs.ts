@@ -2,6 +2,7 @@ import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import { entityKindOf } from '../../../primitives/entity-kind.js';
+import { entityAnchorPosition } from '../../../primitives/anchor.js';
 import { footprintCells } from '../../../primitives/spatial-intent.js';
 import { validateLine } from '../../../../area-geometry.js';
 import {
@@ -177,7 +178,8 @@ const helixHeelEffects: RuleResolver = (context) => {
     if (cells.length === 0) break;
     lines.push(cells);
     const end = cells.at(-1)!;
-    const object = Object.values(context.state.entities).find((entity) => entity.position && sameCell(entity.position, end));
+    const object = Object.values(context.state.entities).find((entity) =>
+      entity.positions.some((position) => sameCell(position, end)));
     if (!object) break;
     cursor = end;
     directionNow = context.input.directions?.extend ?? directionNow;
@@ -192,7 +194,7 @@ const helixHeelEffects: RuleResolver = (context) => {
     }
   }
   for (const entity of Object.values(context.state.entities)) {
-    const position = entity.position;
+    const position = entityAnchorPosition(entity);
     if (!position || !allCells.some((cell) => sameCell(cell, position))) continue;
     const burst = squareArea(position, 1);
     for (const character of Object.values(context.state.actors)) {
@@ -285,7 +287,8 @@ const terraformingEffects: RuleResolver = (context) => {
     Object.values(context.state.actors).some((actor) => !actor.defeated && actor.position !== null
       && footprintCells(actor.position, Math.max(1, actor.size)).some((foot) => sameCell(foot, cell)));
   const objectsAt = (cell: { x: number; y: number }) =>
-    Object.values(context.state.entities).filter((entity) => entity.position !== null && sameCell(entity.position, cell) && entityKindOf(entity) === 'object');
+    Object.values(context.state.entities).filter((entity) =>
+      entityKindOf(entity) === 'object' && entity.positions.some((position) => sameCell(position, cell)));
   const mutations: RuleMutation[] = [];
 
   for (const name of selected) {

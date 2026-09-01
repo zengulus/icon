@@ -660,7 +660,9 @@ violation codes (Rampart stays the spatial gateway's application-time
 check). Corrective pass (2026-08-30): the Dark Knight and Eye of the
 Storm nearest reads were retracted (player-choice clauses, §0), the
 `includeDefeated` flags they carried dropped, `rushTowardFoes` moved into
-this kernel, and `occupied` was corrected to an obstruction test.
+this kernel, and the later semantic-atomicity correction narrowed
+`finalSpaceOccupied` to final-space availability (live footprints plus full
+OBJECT regions; defeated/off-battlefield actors and summons excluded).
 T2 (2026-08-30): the actor-domain operators and the entity + terrain
 domains landed (see the Current state row), the p.108 placement-LoS
 boundary is resolved through the shared legality operator + position

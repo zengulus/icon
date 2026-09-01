@@ -14,6 +14,7 @@ import {
 import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
+import { entityAnchorPosition } from '../../../primitives/anchor.js';
 
 /**
  * Independently reviewed Sealer ability implementations (ICON p.189–196),
@@ -154,12 +155,13 @@ const spiritShrineEffects: RuleResolver = (context) => {
     .filter((entity) => entity.type === 'shrine' && entity.ownerId === source.id)
     .sort((a, b) => (Number(b.state.height ?? 1)) - (Number(a.state.height ?? 1)))[0];
   const sourcePosition = source.position;
-  if (existing && existing.position && sourcePosition && distance(sourcePosition, existing.position) <= 1) {
+  const existingAnchor = existing ? entityAnchorPosition(existing) : null;
+  if (existing && existingAnchor && sourcePosition && distance(sourcePosition, existingAnchor) <= 1) {
     const height = Math.min(3, Number(existing.state.height ?? 1) + 1);
     // The raised shrine replaces the previous one rather than stacking.
     const mutations: RuleMutation[] = [
-      { kind: 'entity', sourceId: context.sourceId, operation: 'remove', entityType: 'shrine', ownerId: source.id, positions: [existing.position], count: 1, state: {} },
-      { kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'shrine', ownerId: source.id, positions: [existing.position], count: 1, state: { height } },
+      { kind: 'entity', sourceId: context.sourceId, operation: 'remove', entityType: 'shrine', ownerId: source.id, positions: [existingAnchor], count: 1, state: {} },
+      { kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'shrine', ownerId: source.id, positions: [existingAnchor], count: 1, state: { height } },
     ];
     return mutations;
   }

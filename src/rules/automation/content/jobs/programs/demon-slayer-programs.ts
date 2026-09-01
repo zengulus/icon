@@ -148,7 +148,8 @@ const cometEffects: RuleResolver = (context) => {
     mutations.push(damageMutation(context, character.id, 2, 'area'));
   }
   const blocked = (position: Position) => occupied(position, context, source.id)
-    || Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, position));
+    || Object.values(context.state.entities).some((entity) =>
+      entity.positions.some((cell) => sameCell(cell, position)));
   const freeCells = [center, ...orthogonalNeighbors(center), ...squareArea(center, 1).filter((cell) => !sameCell(cell, center))];
   const placement = freeCells.find((cell) => withinGrid(cell, context) && !blocked(cell)) ?? center;
   mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'object', ownerId: source.id, positions: [placement], count: 1, state: { thrownWeapon: true } });
@@ -666,4 +667,3 @@ export const DEMON_SLAYER_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleS
     }],
   })], ['effect', 'on hit', 'miss', 'effect', 'effect', 'charge or heroic']),
 };
-

@@ -268,8 +268,11 @@ export function modifierGateHolds(gate: ModifierGate, view: ModifierFoldView): b
       return view.actor.slowTurn === true;
     case 'comeback':
     case 'self-bloodied': {
-      const maximum = actor.maximumHp ?? 0;
-      return maximum > 0 && (actor.hp ?? 0) <= maximum / 2;
+      const hp = actor.hp;
+      const maximum = actor.maximumHp;
+      return typeof hp === 'number' && typeof maximum === 'number'
+        && Number.isFinite(hp) && Number.isFinite(maximum)
+        && maximum > 0 && hp <= maximum / 2;
     }
     case 'round-at-least':
       return view.round >= gate.value;
@@ -283,7 +286,9 @@ export function modifierGateHolds(gate: ModifierGate, view: ModifierFoldView): b
       return view.selectedTalentSourceIds?.has(gate.sourceId) ?? false;
     case 'target-bloodied': {
       const target = view.target;
-      return Boolean(target && target.side !== actor.side && target.maxHp > 0 && target.hp <= target.maxHp / 2);
+      return Boolean(target && target.side !== actor.side
+        && Number.isFinite(target.hp) && Number.isFinite(target.maxHp)
+        && target.maxHp > 0 && target.hp <= target.maxHp / 2);
     }
     case 'target-has-condition': {
       const target = view.target;

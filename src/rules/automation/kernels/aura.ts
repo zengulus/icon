@@ -3,6 +3,7 @@ import type { RuleSourceUnit } from '../../source-units.js';
 import { auraRelationPerspectiveId, type RelationPerspective } from '../primitives/roles.js';
 import type { EncounterState, Position } from '../../types.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
+import { entityAnchorPosition } from '../primitives/anchor.js';
 import { hasMastery } from './mastery.js';
 import type { RuleAction, RuleClauseCompilation, RuleEffect, RuleProgramCompilation, RuleRuntimeState, RuleSelector } from '../primitives/types.js';
 
@@ -167,7 +168,7 @@ export interface AuraActorView {
 
 export interface AuraStateView {
   actors: Record<string, AuraActorView>;
-  entities?: Record<string, { id: string; type: string; ownerId: string | null; position: Position | null }>;
+  entities?: Record<string, { id: string; type: string; ownerId: string | null; anchor: Position | null }>;
 }
 
 const auraDefinitions: AuraDefinition[] = [];
@@ -290,14 +291,14 @@ export function auraOriginRefs(state: AuraStateView, definition: AuraDefinition)
   }
   if (origin.kind === 'entity-type') {
     for (const entity of Object.values(state.entities ?? {})) {
-      if (entity.type !== origin.entityType || !entity.position) continue;
+      if (entity.type !== origin.entityType || !entity.anchor) continue;
       // The entity's spatial origin is the ENTITY; the ally/foe perspective is
       // the entity's canonical OWNER/SUMMONER. U2 owns the rule — the kernel
       // supplies the owner fact and FAILS CLOSED on an ownerless entity (only
       // `characters` relations apply; a neutral origin never manufactures a
       // side). Defining the perspective here would make this kernel a second
       // U2 authority, so it must route through the U2 authority below.
-      origins.push({ actorId: null, entityId: entity.id, position: entity.position, size: 1, radius: definition.radius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'entity', ownerId: entity.ownerId }) });
+      origins.push({ actorId: null, entityId: entity.id, position: entity.anchor, size: 1, radius: definition.radius, perspectiveActorId: auraRelationPerspectiveId({ kind: 'entity', ownerId: entity.ownerId }) });
     }
   }
   return origins;
@@ -479,7 +480,7 @@ export function auraStateView(state: EncounterState): AuraStateView {
       id: entity.id,
       type: entity.type,
       ownerId: entity.ownerId,
-      position: entity.positions[0] ?? null,
+      anchor: entityAnchorPosition(entity),
     }])),
   };
 }
@@ -509,7 +510,7 @@ export function auraRuntimeView(state: RuleRuntimeState): AuraStateView {
       id: entity.id,
       type: entity.type,
       ownerId: entity.ownerId,
-      position: entity.position,
+      anchor: entityAnchorPosition(entity),
     }])),
   };
 }

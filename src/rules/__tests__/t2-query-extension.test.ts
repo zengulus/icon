@@ -98,8 +98,8 @@ function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContex
         gone: actorView('gone', 'foes', { x: 9, y: 4 }, { defeated: true }),
       },
       entities: {
-        beast: { id: 'beast', type: 'beast', ownerId: 'hero', position: { x: 7, y: 4 }, state: { actorId: 'summon1' } },
-        wisp: { id: 'wisp', type: 'wisp', ownerId: 'ally', position: { x: 11, y: 4 }, state: { actorId: 'summon1' } },
+        beast: { id: 'beast', type: 'beast', ownerId: 'hero', positions: [{ x: 7, y: 4 }], state: { actorId: 'summon1' } },
+        wisp: { id: 'wisp', type: 'wisp', ownerId: 'ally', positions: [{ x: 11, y: 4 }], state: { actorId: 'summon1' } },
       },
       terrainAt: () => new Set<string>(),
       elevationAt: () => 0,
@@ -342,6 +342,32 @@ describe('U3 entity domain — evaluateEntityQuery', () => {
     const context = ctx();
     const atBeastCell = evaluateEntityQuery({ atPosition: { x: 7, y: 4 } }, context).map((e) => e.id);
     expect(atBeastCell).toEqual(['beast']);
+  });
+
+  it('range and atPosition consume every cell of a multi-cell entity region', () => {
+    const base = ctx();
+    const context: RuleExecutionContext = {
+      ...base,
+      state: {
+        ...base.state,
+        entities: {
+          ...base.state.entities,
+          wall: {
+            id: 'wall', type: 'unlisted-wall', kind: 'object', ownerId: 'hero',
+            positions: [{ x: 12, y: 4 }, { x: 6, y: 4 }, { x: 6, y: 5 }], state: {},
+          },
+        },
+      },
+    };
+    expect(evaluateEntityQuery({
+      entityType: 'unlisted-wall',
+      rangeOrigin: { kind: 'captured-position', position: { x: 5, y: 4 } },
+      range: 1,
+    }, context).map((entity) => entity.id)).toEqual(['wall']);
+    expect(evaluateEntityQuery({ atPosition: { x: 6, y: 5 } }, context).map((entity) => entity.id)).toContain('wall');
+    expect(evaluateEntityQuery({ entityType: 'unlisted-wall' }, context)[0]?.positions).toEqual([
+      { x: 12, y: 4 }, { x: 6, y: 4 }, { x: 6, y: 5 },
+    ]);
   });
 });
 

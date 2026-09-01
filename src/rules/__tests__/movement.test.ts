@@ -70,6 +70,13 @@ describe('shared movement planner', () => {
 
   it('allows an ally waypoint while rejecting occupied final spaces', () => {
     const { state, hero, foe, ally } = activeEncounter({ allyPosition: { x: 2, y: 1 } });
+    // The same allied cell has different legality by path role (ICON p.88):
+    // it is a legal transit leg, but not a legal final space.
+    expect(planMovementPath(state, hero.id, [{ x: 2, y: 1 }, { x: 3, y: 1 }], 'standard'))
+      .toMatchObject({ legal: true, destination: { x: 3, y: 1 } });
+    expect(planMovementPath(state, hero.id, [{ x: 2, y: 1 }], 'standard'))
+      .toMatchObject({ legal: false, issue: { code: 'move.obstructed' } });
+
     const throughAlly = planMovement(state, hero.id, { x: 3, y: 1 }, 'standard');
     expect(throughAlly).toMatchObject({ legal: true, path: [{ x: 2, y: 1 }, { x: 3, y: 1 }], cost: 2 });
     expect(moveAccepted(state, hero.id, throughAlly.path, 'standard').accepted).toBe(true);

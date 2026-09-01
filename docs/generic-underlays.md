@@ -39,6 +39,23 @@ status), [`roadmap.md`](roadmap.md) (phase gates),
 
 ## Design test (apply before any new "underlay" or "primitive")
 
+### One-question ownership standard
+
+Every primitive semantic surface must belong to exactly one U1–U17
+responsibility or one named domain authority. A domain kernel may compose
+several underlays, but it must answer one domain question and delegate the
+meaning of references, roles, queries, choices, values, predicates, anchors,
+scopes, facts, flow, continuations, windows, modifiers, transactions, usage,
+and ordering to their owners. Content may register source-keyed recipes with
+those authorities; generic primitives and kernels must never branch on the
+source identity to decide behavior.
+
+This is a semantic review rule, not a promise that arbitrary atomicity is
+regex-auditable. Mechanical audits should pin concrete restored routes (for
+example, U4 calling U3 candidate validation or kernels importing an owning
+primitive instead of the content-authoring facade), while review applies the
+one-question test to the authority actually executed.
+
 For every proposed new generic mechanism, ask these questions IN ORDER and do
 not advance past them (the Part VII acceptance test, restated operationally):
 
@@ -218,8 +235,10 @@ minimum-distance set with no invented tie-break (ordering/tie resolution
 happens only where the SOURCE defines it; e.g. ICON p.143 grants the
 player a choice among equidistant foes); a mob member model does not
 exist yet (`createFoeFromProfile` rejects the mob role — TODO/roadmap B2).
-Corrective pass (2026-08-30): `occupied` is an obstruction test
-(characters + objects; intangible summons do not obstruct, p.95), and the
+Corrective pass (2026-09-01): `finalSpaceOccupied` is final-space availability,
+not generic movement obstruction: it includes live character footprints and
+complete OBJECT regions, while defeated/off-battlefield actors and intangible
+summons do not occupy a final character space (pp.95/101). The
 position slice is a free/unoccupied specialist — occupancy is an explicit
 query policy, not a property of a position candidate. The specialists
 keep their spatial models; the eligibility authorities still to merge

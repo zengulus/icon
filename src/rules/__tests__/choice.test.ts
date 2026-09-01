@@ -17,6 +17,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RuleChoice, RuleExecutionContext } from '../automation/primitives/types.js';
 import { resolveChoice, resolveChoices } from '../automation/kernels/choice.js';
+import { validatePositionCandidate } from '../automation/kernels/evaluate-query.js';
 import { RuleProgramViolation } from '../automation/kernels/runtime.js';
 
 function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContext {
@@ -141,6 +142,24 @@ describe('CHOOSE underlay — positions', () => {
     const upTo2: RuleChoice = { ...row, maximum: 2 };
     const context = ctx({ input: { positions: { center: [{ x: 5, y: 4 }, { x: 6, y: 4 }, { x: 7, y: 4 }] } } });
     expect(codeOf(() => resolveChoice(upTo2, context))).toBe('choice.position-count');
+  });
+
+  it('uses exactly the U3 candidate answer for every supplied position, including a large origin footprint', () => {
+    const base = ctx();
+    const context = ctx({
+      state: { ...base.state, actors: { ...base.state.actors, hero: { ...base.state.actors.hero, size: 2 } } },
+    });
+    const largeOriginRow: RuleChoice = { ...row, range: { kind: 'constant', value: 1 } };
+    for (const position of [{ x: 6, y: 4 }, { x: 7, y: 4 }, { x: -1, y: 4 }]) {
+      const candidate = validatePositionCandidate({ origin: { x: 4, y: 4 }, originSize: 2, range: 1 }, position, context);
+      const choiceContext = { ...context, input: { positions: { center: [position] } } };
+      if (candidate.legal) {
+        expect(resolveChoice(largeOriginRow, choiceContext)).toEqual({ kind: 'positions', positions: [position] });
+      } else {
+        expect(codeOf(() => resolveChoice(largeOriginRow, choiceContext)))
+          .toBe(candidate.problem === 'out-of-bounds' ? 'move.out-of-bounds' : 'move.range');
+      }
+    }
   });
 });
 

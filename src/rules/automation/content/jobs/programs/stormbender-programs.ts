@@ -142,7 +142,7 @@ const geyserEffects: RuleResolver = (context) => {
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
   if (distance(source.position, cell) > 4) throw new RuleProgramViolation('choice.actor-range', 'Geyser requires a space in range 4.');
-  const freeCell = evaluatePositions({ origin: source.position, radius: 4, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).find((candidate) => !Object.values(context.state.entities).some((entity) => entity.position && sameCell(entity.position, candidate))) ?? cell;
+  const freeCell = evaluatePositions({ origin: source.position, radius: 4, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).find((candidate) => !Object.values(context.state.entities).some((entity) => entity.positions.some((position) => sameCell(position, candidate)))) ?? cell;
   return [{
     kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'geyser', ownerId: source.id,
     positions: [freeCell], count: 1, state: { height: 1 },

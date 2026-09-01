@@ -52,13 +52,11 @@ import {
   footprintIntersectsCells,
 } from '../primitives/spatial-intent.js';
 import {
-  axisDirection,
   distance,
-  occupied,
-  sameCell,
-  squareArea,
+  finalSpaceOccupied,
   withinGrid,
-} from '../primitives/job-kit.js';
+} from '../primitives/battlefield.js';
+import { axisDirection, sameCell, squareArea } from '../../area-geometry.js';
 import { hasLineOfEffect, hasLineOfSight } from '../primitives/line-of-sight.js';
 import {
   anchorFromActorSelector,
@@ -71,6 +69,8 @@ import type {
   EntityQuery,
   PositionLegalityProblem,
   PositionLegalityQuery,
+  PositionCandidateProblem,
+  PositionCandidateQuery,
   PositionQuery,
   TerrainQuery,
   ValueQuery,
@@ -99,6 +99,8 @@ export type {
   EntityQuery,
   PositionLegalityProblem,
   PositionLegalityQuery,
+  PositionCandidateProblem,
+  PositionCandidateQuery,
   PositionOrderingPolicy,
   PositionQuery,
   PositionSpacePolicy,
@@ -283,9 +285,9 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
   const cells: Position[] = [];
   const view = query.lineOfSightFrom ? lineView(context) : null;
   for (const cell of squareArea(query.origin, query.radius)) {
-    if (!withinGrid(cell, context)) continue;
+    if (!validatePositionCandidate({ origin: query.origin, range: query.radius }, cell, context).legal) continue;
     if (!query.includeOrigin && sameCell(cell, query.origin)) continue;
-    if (query.space.kind === 'unoccupied' && occupied(cell, context, query.space.excludeActorId ?? '')) continue;
+    if (query.space.kind === 'unoccupied' && finalSpaceOccupied(cell, context, query.space.excludeActorId ?? '')) continue;
     if (view && !hasLineOfSight(view, query.lineOfSightFrom!, cell)) continue;
     cells.push(cell);
   }
@@ -293,6 +295,20 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
     cells.sort((a, b) => distance(query.origin, a) - distance(query.origin, b) || a.x - b.x || a.y - b.y);
   }
   return cells;
+}
+
+/** Shared U3 validation beneath automatic position queries and U4 choices. */
+export function validatePositionCandidate(
+  query: PositionCandidateQuery,
+  position: Position,
+  context: RuleExecutionContext,
+): { legal: true; problem: null } | { legal: false; problem: PositionCandidateProblem } {
+  if (!withinGrid(position, context)) return { legal: false, problem: 'out-of-bounds' };
+  if (footprintDistance(
+    { position: query.origin, size: Math.max(1, Math.floor(query.originSize ?? 1)) },
+    { position, size: 1 },
+  ) > query.range) return { legal: false, problem: 'range' };
+  return { legal: true, problem: null };
 }
 
 /** The TELEPORT/placement legality specialist: in-grid, within the canonical
@@ -313,7 +329,7 @@ export function validatePositionLegality(
   if (!withinGrid(position, context)) return { legal: false, problem: 'out-of-bounds' };
   const originFootprint = { position: query.origin, size: Math.max(1, Math.floor(query.originSize ?? 1)) };
   if (footprintDistance(originFootprint, { position, size: 1 }) > query.range) return { legal: false, problem: 'range' };
-  if (occupied(position, context, query.excludeActorId ?? '')) return { legal: false, problem: 'occupied' };
+  if (finalSpaceOccupied(position, context, query.excludeActorId ?? '')) return { legal: false, problem: 'occupied' };
   if (query.lineOfSightFrom && !hasLineOfSight(lineView(context), query.lineOfSightFrom, position)) {
     return { legal: false, problem: 'line-of-sight' };
   }
@@ -364,8 +380,10 @@ export function rushTowardFoes(context: RuleExecutionContext, position: Position
  * may have a null owner). Range uses the canonical p.92 footprint metric
  * from the query's anchor; `atPosition` is the occupying-position read.
  * Deterministic, de-duplicated by identity. Pure — no state is mutated. */
-export function evaluateEntityQuery(query: EntityQuery, context: RuleExecutionContext): Array<{ id: string; type: string; ownerId: string | null; position: Position | null }> {
+export function evaluateEntityQuery(query: EntityQuery, context: RuleExecutionContext): Array<{ id: string; type: string; ownerId: string | null; positions: readonly Position[] }> {
   const anchor = query.rangeOrigin === undefined ? null : resolveSpatialAnchor(query.rangeOrigin, context);
+  const maximumRange = query.range;
+  const requiredPosition = query.atPosition;
   const candidates = Object.values(context.state.entities).filter((entity) => {
     if (query.owner !== undefined) {
       const ownerId = query.owner.kind === 'self'
@@ -376,14 +394,15 @@ export function evaluateEntityQuery(query: EntityQuery, context: RuleExecutionCo
       if (ownerId === null ? entity.ownerId === null : entity.ownerId !== ownerId) return false;
     }
     if (query.entityType !== undefined && entity.type !== query.entityType) return false;
-    if (query.range !== undefined && entity.position !== null && anchor !== null) {
-      if (footprintDistance(anchor, { position: entity.position, size: 1 }) > query.range) return false;
+    if (maximumRange !== undefined && anchor !== null) {
+      if (entity.positions.length === 0
+        || entity.positions.every((position) => footprintDistance(anchor, { position, size: 1 }) > maximumRange)) return false;
     }
-    if (query.atPosition !== undefined && entity.position !== null) {
-      if (!footprintIntersectsCells({ position: entity.position, size: 1 }, [query.atPosition])) return false;
+    if (requiredPosition !== undefined) {
+      if (!entity.positions.some((position) => sameCell(position, requiredPosition))) return false;
     }
     return true;
-  }).map((entity) => ({ id: entity.id, type: entity.type, ownerId: entity.ownerId, position: entity.position }));
+  }).map((entity) => ({ id: entity.id, type: entity.type, ownerId: entity.ownerId, positions: entity.positions }));
   const seen = new Set<string>();
   return candidates.filter((entity) => {
     if (seen.has(entity.id)) return false;

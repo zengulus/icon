@@ -89,7 +89,7 @@ describe('job-kit building blocks', () => {
     expect(walk(ctx, { x: 1, y: 1 }, { x: 1, y: 0 }, 50, true, hero.id)).toEqual({ x: 9, y: 1 });
   });
 
-  it('occupied detects characters (with exclusion) and OBJECT entities, but NOT intangible summons', () => {
+  it('occupied reports final-space availability for characters and OBJECTs, but not intangible summons', () => {
     const { state, hero, foe } = board();
     const base = kitContext(state, hero.id, scriptedDice());
     expect(occupied({ x: 3, y: 1 }, base, hero.id)).toBe(true);
@@ -97,13 +97,13 @@ describe('job-kit building blocks', () => {
     expect(occupied({ x: 4, y: 1 }, base, hero.id)).toBe(false);
 
     // A bomb is an intangible SUMMON (ICON p.95: summons "don't cause
-    // obstruction or engagement") — its cell is NOT occupied by this generic
-    // obstruction test.
+    // obstruction or engagement") — its cell remains available under this
+    // final-space occupancy test.
     const withSummon: RuleExecutionContext = {
       ...base,
       state: {
         ...base.state,
-        entities: { ...base.state.entities, mine: { id: 'mine', type: 'bomb', ownerId: hero.id, position: { x: 4, y: 1 }, state: {} } },
+        entities: { ...base.state.entities, mine: { id: 'mine', type: 'bomb', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: {} } },
       },
     };
     expect(occupied({ x: 4, y: 1 }, withSummon, hero.id)).toBe(false);
@@ -114,7 +114,7 @@ describe('job-kit building blocks', () => {
       ...base,
       state: {
         ...base.state,
-        entities: { ...base.state.entities, boulder: { id: 'boulder', type: 'boulder', ownerId: hero.id, position: { x: 4, y: 1 }, state: {} } },
+        entities: { ...base.state.entities, boulder: { id: 'boulder', type: 'boulder', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: {} } },
       },
     };
     expect(occupied({ x: 4, y: 1 }, withObject, hero.id)).toBe(true);

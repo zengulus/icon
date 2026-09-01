@@ -42,6 +42,7 @@ import { relationPerspectiveIdFromContext, relationSourceFor, type RelationActor
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import {
   anchorFromActorSelector,
+  entityAnchorPosition,
   type SpatialAnchor,
   type SpatialOrigin,
 } from '../primitives/anchor.js';
@@ -93,10 +94,11 @@ export function resolveSpatialAnchor(
       if (!entity) {
         throw new RuleProgramViolation('selector.entity-missing', `Anchor entity ${anchor.entityId} does not exist.`);
       }
-      if (!entity.position) {
+      const anchorPosition = entityAnchorPosition(entity);
+      if (!anchorPosition) {
         throw new RuleProgramViolation('selector.origin-invalid', `Anchor entity ${anchor.entityId} has no battlefield position.`);
       }
-      return { position: { ...entity.position }, size: 1 };
+      return { position: anchorPosition, size: 1 };
     }
     case 'actor': {
       const views = anchorSelectorActors(anchor.selector, context);

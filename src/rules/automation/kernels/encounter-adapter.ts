@@ -301,7 +301,8 @@ export function encounterRuleState(state: EncounterState): RuleRuntimeState {
       id: entity.id,
       type: entity.type,
       ownerId: entity.ownerId,
-      position: entity.positions[0] ?? null,
+      positions: clone(entity.positions),
+      ...(entity.kind === undefined ? {} : { kind: entity.kind }),
       state: entity.state,
     }])),
     terrainEffects: state.terrainEffects.map((effect) => ({

@@ -9,6 +9,7 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { relative, dirname, join, extname } from 'node:path';
+import ts from 'typescript';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,30 +68,20 @@ export function layerFor(file: string, automationRoot: string): 'primitives' | '
  * Parse static import specifiers from .ts source code.
  * Returns the raw specifier strings (e.g. '../kernels/runtime.js').
  *
- * Handles three import forms on a single line:
+ * Handles static import/export declarations, including multiline forms:
  *   import '<specifier>';          (side-effect)
  *   import ... from '<specifier>';
  *   export ... from '<specifier>';
  */
 export function parseImports(code: string): string[] {
+  const source = ts.createSourceFile('architecture-audit-input.ts', code, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
   const specs: string[] = [];
-  for (const line of code.split('\n')) {
-    const trimmed = line.trimStart();
-    if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
-
-    // Side-effect import: import './foo.js';
-    const sideEffect = line.match(/^\s*import\s+'([^']+)'/);
-    if (sideEffect) {
-      if (sideEffect[1].startsWith('.') || sideEffect[1].startsWith('/'))
-        specs.push(sideEffect[1]);
-      continue;
-    }
-
-    // from-import: import/export ... from './foo.js';
-    const fromImport = line.match(/\b(?:import|export)\b.*\bfrom\s+'([^']+)'/);
-    if (fromImport) {
-      if (fromImport[1].startsWith('.') || fromImport[1].startsWith('/'))
-        specs.push(fromImport[1]);
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+    const specifier = statement.moduleSpecifier;
+    if (specifier && ts.isStringLiteral(specifier)
+      && (specifier.text.startsWith('.') || specifier.text.startsWith('/'))) {
+      specs.push(specifier.text);
     }
   }
   return specs;
@@ -178,6 +169,55 @@ export function isBespokeU16FieldName(name: string): boolean {
   return RESERVED_BESPOKE_U16_FIELDS.has(name)
     || /^[a-zA-Z0-9_]*TriggeredThisTurn$/.test(name)
     || /^[a-zA-Z0-9_]*(?:UsedThisTurn)$/.test(name);
+}
+
+/** Concrete semantic-atomicity guard: kernels may not obtain foundational
+ * operations through the content-authoring facade. */
+export function kernelAuthoringFacadeProblems(codeByFile: Readonly<Record<string, string>>): Violation[] {
+  const problems: Violation[] = [];
+  for (const [file, code] of Object.entries(codeByFile)) {
+    if (!file.startsWith('kernels/')) continue;
+    if (parseImports(code).some((specifier) => /(?:^|\/)primitives\/job-kit\.js$/.test(specifier))) {
+      problems.push({
+        check: 'kernel-authoring-facade-import',
+        file,
+        detail: 'kernel imports foundational semantics from primitives/job-kit.ts; import the owning primitive/domain surface directly',
+      });
+    }
+  }
+  return problems;
+}
+
+/** U4 must validate position membership through U3, not reinterpret bounds or
+ * footprint range locally. This pins the restored authority route without
+ * pretending arbitrary atomicity is regex-provable. */
+export function choiceCandidateRoutingProblems(choiceCode: string): string[] {
+  const problems: string[] = [];
+  if (!choiceCode.includes('validateActorCandidate(')) problems.push('actor choices no longer call U3 validateActorCandidate');
+  const source = ts.createSourceFile('choice.ts', choiceCode, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+  const positionResolver = source.statements.find((statement): statement is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(statement) && statement.name?.text === 'resolvePositions');
+  const body = positionResolver?.body?.getText(source) ?? '';
+  const candidateBinding = /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*validatePositionCandidate\s*\(/.exec(body)?.[1];
+  if (!candidateBinding) {
+    problems.push('position choices do not bind the U3 validatePositionCandidate result');
+  } else {
+    const escaped = candidateBinding.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!new RegExp(`\\b${escaped}\\.legal\\b`).test(body)
+      || !new RegExp(`\\b${escaped}\\.problem\\b`).test(body)) {
+      problems.push('position choices do not consume U3 legality and problem classification');
+    }
+  }
+  if (parseImports(choiceCode).some((specifier) => /(?:^|\/)primitives\/(?:battlefield|spatial-intent)\.js$/.test(specifier))) {
+    problems.push('choice kernel imports raw spatial semantics instead of U3 candidate validation');
+  }
+  if (/\b(?:withinGrid|footprintDistance)\s*\(/.test(body)
+    || /\.grid\.(?:width|height)\b/.test(body)
+    || /\bcell\.(?:x|y)\s*(?:<|<=|>|>=)\s*0\b/.test(body)
+    || /Math\.max\s*\([\s\S]*?Math\.abs\s*\(/.test(body)) {
+    problems.push('position choices locally reinterpret U3 bounds or footprint-range legality');
+  }
+  return problems;
 }
 
 // U2 (role/perspective) single-authority guard details.
@@ -552,6 +592,18 @@ export function auditArchitecture(automationRoot: string): AuditResult {
           detail: `kernels must not import from content (imports ${posixRelative(automationRoot, resolved)})`,
         });
       }
+    }
+  }
+
+  const genericLayerCode = Object.fromEntries(files
+    .filter((file) => ['primitives', 'kernels'].includes(layerFor(file, automationRoot)))
+    .map((file) => [posixRelative(automationRoot, file), readFileSync(file, 'utf8')]));
+  violations.push(...kernelAuthoringFacadeProblems(genericLayerCode));
+
+  const choiceCode = genericLayerCode['kernels/choice.ts'];
+  if (choiceCode) {
+    for (const detail of choiceCandidateRoutingProblems(choiceCode)) {
+      violations.push({ check: 'u4-u3-candidate-routing', file: 'kernels/choice.ts', detail });
     }
   }
 

@@ -11,6 +11,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
+import { entityAnchorPosition } from '../../../primitives/anchor.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
@@ -151,8 +152,7 @@ const lanceEffects: RuleResolver = (context) => {
   }
   if (context.triggers?.has('comeback') || (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true) {
     const objects = Object.values(context.state.entities).filter((entity) => {
-      const position = entity.position;
-      return position && line.has(`${position.x},${position.y}`);
+      return entity.positions.some((position) => line.has(`${position.x},${position.y}`));
     });
     if (objects.length > 0) mutations.push(damageMutation(context, target.id, objects.length, 'effect'));
   }
@@ -190,7 +190,8 @@ const volvagaEffects: RuleResolver = (context) => {
     if (character.id !== target.id) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
   for (const entity of Object.values(context.state.entities)) {
-    const position = entity.position;
+    const position = entity.positions.find((candidate) => width.some((cell) => sameCell(cell, candidate)))
+      ?? entityAnchorPosition(entity);
     if (position && width.some((cell) => sameCell(cell, position))) {
       mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'remove', entityType: entity.type, ownerId: entity.ownerId ?? '', positions: [position], count: 1, state: {} });
     }
