@@ -13,6 +13,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Freelancer ability implementations (ICON p.153–158),
@@ -55,8 +56,8 @@ const armedBoon = (context: Parameters<RuleResolver>[0], source: ReturnType<type
 /** ICON p.156: dash 1, a +1-boon attack, blind the foe, dash 1 again, and a
  * Finishing Blow/Exceed flurry against every foe at exactly range 3. */
 const strafeShot: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
   // The exceed fact is the ABILITY'S OWN attack roll at 15+ (ICON p.93) —
@@ -92,7 +93,7 @@ const strafeShot: RuleResolver = (context) => {
 /** ICON p.156: mark a foe in range 3 with a d4 power die that ticks and shoots
  * at turn end; a Finishing Blow sets the die immediately. */
 const exorcism: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Exorcism requires a foe in range 3.');
@@ -107,7 +108,7 @@ const exorcism: RuleResolver = (context) => {
 /** ICON p.156: arm the next ranged ability with unerring, +1 boon, and rebound;
  * a Finishing Blow grants stealth after it resolves. */
 const trickShot: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const mutations: RuleMutation[] = [stateMutation(context, source.id, 'trick-shot:armed', true)];
   if (context.triggers?.has('finishing-blow')) mutations.push(conditionMutation(context, source.id, 'stealth'));
   return mutations;
@@ -116,8 +117,8 @@ const trickShot: RuleResolver = (context) => {
 /** ICON p.156: 2[D]+fray attack, mark the foe, and celestial lightning at the
  * start of your turn (doubled at exactly range 3); Finishing Blow/Exceed fly 4. */
 const astralChain: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const roll = resolveAuthoritativeAttack(context, source, target, { boons: armedBoon(context, source) });
   const mutations: RuleMutation[] = [roll.attackMutation];
@@ -136,7 +137,7 @@ const astralChain: RuleResolver = (context) => {
 /** ICON p.157: mark a character in range 3 and gain the Divine Intervention
  * interrupt (teleport both closer together at the end of any turn). */
 const deusExMachina: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Deus Ex Machina requires a character in range 3.');
@@ -147,7 +148,7 @@ const deusExMachina: RuleResolver = (context) => {
 /** ICON p.157 Divine Intervention: the marked character teleports 1 toward the
  * user (deterministic; allies may decline at the table). */
 const divineIntervention: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Divine Intervention requires the marked character.');
@@ -160,7 +161,7 @@ const divineIntervention: RuleResolver = (context) => {
 /** ICON p.157: end the turn, dash 1, and arm the next attack with every Exceed
  * effect, daze, and unerring. */
 const ace: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const mutations: RuleMutation[] = [
     stanceMutation(context, source.id, 'enter', 'ace'),
     stateMutation(context, source.id, 'ace:armed', true),
@@ -176,7 +177,7 @@ const ace: RuleResolver = (context) => {
 
 /** ICON p.157 Ace refresh: re-arm the stance after a Finishing Blow. */
 const aceRefresh: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [stanceMutation(context, source.id, 'refresh', 'ace'), stateMutation(context, source.id, 'ace:armed', true)];
 };
 
@@ -184,7 +185,7 @@ const aceRefresh: RuleResolver = (context) => {
  * when their next turn ends (2 unerring twice if they flee to range 4+, or a
  * dash 2 to stay on them). A Finishing Blow deals 2 damage four times. */
 const showdown: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Showdown requires a foe in range 3.');
@@ -208,7 +209,7 @@ const showdown: RuleResolver = (context) => {
  * the retrigger damage through the shared aura kernel instead of replacing
  * it. (The "you can" choice is the deterministic mastered branch.) */
 const wardingBolts: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mastered = hasMastery(source, 'freelancer:warding-bolts');
   if (mastered) {
@@ -248,8 +249,8 @@ const wardingBolts: RuleResolver = (context) => {
 /** ICON p.158: a line-3 +1-boon attack that blinds, splashes fray along the
  * line, ignores allies, and detonates a large blast on Finishing Blow/Exceed. */
 const soulShot: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const sourcePosition = source.position;
   const targetPosition = target?.position;
   if (!sourcePosition || !targetPosition) return [];

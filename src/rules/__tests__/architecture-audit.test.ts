@@ -163,11 +163,11 @@ describe('U1 residual census (machine inventory)', () => {
     expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
   });
 
-  it('pins the exact repo figures (114 = 59 + 54 + 1) so docs cannot drift from the machine', () => {
+  it('pins the exact repo figures (100 = 45 + 54 + 1) so docs cannot drift from the machine', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
-    expect(inventory.total).toBe(114);
+    expect(inventory.total).toBe(100);
     expect(inventory.categoryCounts).toEqual({
-      PURE_LIVE_REFERENCE: 59,
+      PURE_LIVE_REFERENCE: 45,
       CAPTURED_ID_DEREFERENCE: 54,
       DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
       NON_U1_OTHER: 0,
