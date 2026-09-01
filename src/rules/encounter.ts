@@ -39,6 +39,11 @@ import { canDeclareHeroic } from './automation/content/jobs/heroic-entitlement.j
 // text), or validated-player-activation — so a trigger can never be forged
 // and natural + forced activation of the same trigger collapse to one.
 import { recordTriggerActivation, triggerActivationsFrom, type TriggerActivation, type TriggerProvenance } from './automation/primitives/trigger-provenance.js';
+// Source-forced once-per-combat triggers (Open The Gates's first-use forced
+// exceed, p.194): content registers the named rows; the generic seam checks
+// the U16 combat-scope entitlement at the command boundary and the reducer
+// records the consume on the ability's own event.
+import { consumeForcedCombatTrigger, forcedCombatTriggerAvailable, forcedCombatTriggerFor, forcedCombatTriggerKey } from './automation/kernels/forced-triggers.js';
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
 import './automation/content/registry.js';
@@ -1842,15 +1847,23 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // unerring half resolve when the attack lands in the reducer).
   if (attackAbility && !noAttackSpace && targets[0] && actor.ruleState['ace:armed'] === true) {
     forcedTrigger('exceed');
-  }
-  // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
-  // effects, hit or miss — the durable empowerment arm produces a
-  // SOURCE-FORCED slay activation (never a caller assertion) for the
-  // ability that consumes it.
-  if (actor.ruleState['gallows-humor:slay-armed'] === true) {
-    forcedTrigger('slay');
-  }
-  // F10 ability-use choice fold (Blessing of War / Rebirth, p.191/p.184):
+  }      // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
+      // effects, hit or miss — the durable empowerment arm produces a
+      // SOURCE-FORCED slay activation (never a caller assertion) for the
+      // ability that consumes it.
+      if (actor.ruleState['gallows-humor:slay-armed'] === true) {
+        forcedTrigger('slay');
+      }
+      // Source-forced once-per-combat trigger (Sealer Open The Gates, p.194:
+      // the first use in combat forces every exceed effect). The
+      // CONTENT-registered row + the PRE-command U16 entitlement decide the
+      // forced activation; the reducer records the consume on this ability's
+      // own event.
+      const forcedOncePerCombat = forcedCombatTriggerFor(ability.id);
+      if (forcedOncePerCombat && forcedCombatTriggerAvailable(actor, ability.id)) {
+        forcedTrigger(forcedOncePerCombat);
+      }
+      // F10 ability-use choice fold (Blessing of War / Rebirth, p.191/p.184):
   // optional source-backed choices the player made before this ability
   // resolves. The fold validates an eligible allied owner, the spend, and the
   // user's resource, emits the recorded resource-spend mutations, and feeds
@@ -2299,6 +2312,15 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       // ability that consumes it.
       if (actor.ruleState['gallows-humor:slay-armed'] === true) {
         forcedTrigger('slay');
+      }
+      // Source-forced once-per-combat trigger (Sealer Open The Gates, p.194:
+      // "triggers any exceed effects the first time it is used in combat"):
+      // the CONTENT-registered row + the PRE-command U16 entitlement decide
+      // the forced activation; the reducer records the consume on this
+      // ability's own event.
+      const forcedOncePerCombat = forcedCombatTriggerFor(unit.id);
+      if (forcedOncePerCombat && forcedCombatTriggerAvailable(actor, unit.id)) {
+        forcedTrigger(forcedOncePerCombat);
       }
       const ruleContext: RuleExecutionContext = {
         state: ruleStateView,
@@ -3629,6 +3651,13 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         if (actor.ruleState['gallows-humor:slay-armed'] === true) {
           delete actor.ruleState['gallows-humor:slay-armed'];
           delete actor.ruleStateOwners['gallows-humor:slay-armed'];
+        }
+        // Source-forced once-per-combat trigger: the boundary forced the
+        // activation from this entitlement's PRE-command availability, so the
+        // reducer records the consume exactly when that derivation happened —
+        // replay applies the recorded mark once, never re-deciding it.
+        if (forcedCombatTriggerFor(event.sourceId) && usageCount(actor, forcedCombatTriggerKey(event.sourceId)) === 0) {
+          consumeForcedCombatTrigger(actor, event.sourceId);
         }
         // ICON p.104 Stealth: using an attack ability breaks the user's stealth
         // before its effects resolve, so an ability that re-grants stealth as

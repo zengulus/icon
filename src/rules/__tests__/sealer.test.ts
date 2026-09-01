@@ -325,6 +325,42 @@ describe('Sealer ability automation (p.189–196)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Open The Gates: the first use in combat FORCES the exceed effect (source-forced, p.194) without a natural 15+ roll', () => {
+    // "This attack … triggers any exceed effects the first time it is used in
+    // combat." — the CONTENT-registered once-per-combat rule forces the
+    // exceed activation from the U16 combat-scope entitlement, so the shove /
+    // teleport hops resolve even though the roll (4 + boon 2 = 6) never
+    // exceeded. The provenance record proves source-forced; the SECOND use
+    // shows no forced exceed (the entitlement was consumed).
+    const { state, hero, foe } = sealerEncounter({ second: null });
+    const first = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'sealer:open-the-gates', actionId: 'default', timing: 'use',
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }], 'teleport-exceed-1': [{ x: 1, y: 3 }], 'teleport-exceed-2': [{ x: 2, y: 3 }] } }, attackTargetId: foe.id,
+    }, scriptedDice(4, 2));
+    const event = first.events.find((candidate) => candidate.type === 'RULE_MUTATIONS_APPLIED' && candidate.sourceId === 'sealer:open-the-gates');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'exceed' && provenance === 'source-forced')
+      : false).toBe(true);
+    expect(first.state.actors[hero.id].position).toEqual({ x: 2, y: 3 }); // forced exceed hops all resolved
+    expect(first.state.actors[foe.id].statuses).toContain('pacified');
+    expect(applyEvents(state, first.events)).toEqual(first.state);
+    // Second use later in the SAME combat (fresh turn): the once-per-combat
+    // entitlement is consumed, and a sub-15 roll now produces NO exceed hops
+    // — only the base teleport. (The turn boundary also clears the same-turn
+    // No Repeats gate.) The hero re-approaches the foe (range 1) first.
+    const foeTurn = endTurnTo(first.state, foe.id, scriptedDice());
+    const heroTurn = endTurnTo(foeTurn, hero.id, scriptedDice());
+    // Each forced exceed hop shoved the foe east (the p.194 hops re-shove
+    // before their teleports), so the hero re-approaches from the side.
+    const moved = executeCommand(heroTurn, { type: 'MOVE', actorId: hero.id, path: [{ x: 3, y: 3 }, { x: 3, y: 2 }], mode: 'standard' }, scriptedDice()).state;
+    const second = executeCommand(moved, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'sealer:open-the-gates', actionId: 'default', timing: 'use',
+      input: { positions: { 'teleport': [{ x: 4, y: 2 }] } }, attackTargetId: foe.id,
+    }, scriptedDice(3, 1));
+    expect(second.state.actors[hero.id].position).toEqual({ x: 4, y: 2 });
+    expect(applyEvents(moved, second.events)).toEqual(second.state);
+  });
+
   it('Open The Gates combo (CENTER THE TEMPLE): player-selected teleport the round number and attacks', () => {
     const { state, hero, foe } = sealerEncounter({ second: null });
     state.actors[hero.id].resources.combo = 1;
@@ -338,7 +374,11 @@ describe('Sealer ability automation (p.189–196)', () => {
       attackTargetId: foe.id,
     }, scriptedDice(12, 4));
     expect(result.state.actors[hero.id].resources.combo).toBe(0);
-    expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + fray 4)
+    // 32 - (4 + fray 4) attack damage - 1 forced exceed damage: this IS the
+    // ability's first use in combat, and p.194 forces the exceed effect
+    // ("triggers any exceed effects the first time it is used in combat")
+    // even though the 12 + boon 4 roll never naturally exceeded.
+    expect(result.state.actors[foe.id].hp).toBe(23);
     expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 }); // teleported to player choice
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
