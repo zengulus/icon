@@ -15,11 +15,13 @@ import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses
  * ability set (ICON p.133–138). Each scenario resolves through the shared
  * encounter reducer and must replay to the identical state through applyEvents.
  *
- * Triggered extras (Collide, Exceed, Heroic, Comeback) are exercised through
- * EXECUTE_RULE with an explicit trigger, matching the Bastion convention where
- * the resolver gates those branches on the asserted trigger. Boiling Blood's
- * defy-death and Massive Overhead's next-attack enhancement are reducer
- * lifecycle hooks wired into the damage and attack pipelines.
+ * Triggered extras derive from authoritative facts, never caller assertions:
+ * Exceed from the ability's OWN 15+ roll (the shared attack authority's
+ * exceed fact), Charge from the durable slow-turn flag, Heroic from a
+ * validated declaration, and Collide from the resolution's own shove/defeat
+ * facts. Boiling Blood's defy-death and Massive Overhead's next-attack
+ * enhancement are reducer lifecycle hooks wired into the damage and attack
+ * pipelines.
  */
 
 interface ColossusFixture {
@@ -156,6 +158,39 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(result.state.actors[hero.id].statuses).toContain('stunned');
     expect(result.state.actors[foe.id].statuses).toContain('stunned');
     expect(result.state.actors[foe.id].hp).toBe(24);
+  });
+
+  it('Takedown: Exceed grants True Strike ON the current attack — folded from the SAME 15+ roll, never a next-attack grant', () => {
+    // "Exceed or Heroic: Gains true strike and creates a pit under your
+    // target." (p.135) The exceed classification reads the PRE-fold roll
+    // total (d20 15), then the granted true strike applies to THIS attack:
+    // the authoritative attack mutation and its direct damage both carry the
+    // true-strike facts (dodge ignored) — and the same roll fires the exceed
+    // pit step afterwards.
+    const { state, hero, foe } = colossusEncounter({ second: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:takedown', targetIds: [foe.id] }, scriptedDice(15, 4));
+    const mutations = mutationsOf(result.events, 'colossus:takedown');
+    const attackMutation = mutations.find((mutation) => mutation.kind === 'attack') as { exceed?: boolean; trueStrike?: boolean } | undefined;
+    expect(attackMutation).toMatchObject({ exceed: true, trueStrike: true });
+    const hitDamage = mutations.find((mutation) => mutation.kind === 'damage' && mutation.actorId === foe.id);
+    expect(hitDamage && hitDamage.kind === 'damage' ? hitDamage.ignoreDodge === true : false).toBe(true);
+    expect(result.state.terrainEffects.some((effect) => effect.terrain === 'pit' && effect.positions.some((cell) => cell.x === foe.position.x && cell.y === foe.position.y))).toBe(true);
+    expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + fray 4)
+    expect(result.state.actors[foe.id].statuses).toContain('stunned');
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Takedown: without Exceed the same attack has no true strike and opens no pit', () => {
+    const { state, hero, foe } = colossusEncounter({ second: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:takedown', targetIds: [foe.id] }, scriptedDice(12, 4));
+    const mutations = mutationsOf(result.events, 'colossus:takedown');
+    const attackMutation = mutations.find((mutation) => mutation.kind === 'attack') as { exceed?: boolean; trueStrike?: boolean } | undefined;
+    expect(attackMutation).toMatchObject({ exceed: false, trueStrike: false });
+    const hitDamage = mutations.find((mutation) => mutation.kind === 'damage' && mutation.actorId === foe.id);
+    expect(hitDamage && hitDamage.kind === 'damage' ? hitDamage.ignoreDodge === true : false).toBe(false);
+    expect(result.state.terrainEffects.some((effect) => effect.terrain === 'pit')).toBe(false);
+    expect(result.state.actors[foe.id].hp).toBe(24);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
   it('Takedown: sacrificing 4 avoids the self-stun', () => {

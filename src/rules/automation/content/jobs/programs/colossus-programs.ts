@@ -146,12 +146,13 @@ const takedownEffects: RuleResolver = (context) => {
   }
   mutations.push(conditionMutation(context, target.id, 'stunned'));
   // "Exceed or Heroic: Gains true strike and creates a pit under your
-  // target." The pit's exceed half rides the program's `exceed` step (the
-  // ability's own 15+ roll); the heroic half stays caller-declared here. The
-  // "gains true strike" exceed half is documented as an UNRESOLVED boundary
-  // (see the Gigaton/Takedown blocking TODO) — it needs the exceed step's
-  // true-strike fold, which cannot retroactively affect the roll that
-  // determined the exceed.
+  // target." The exceed half of the true strike folds INSIDE the shared
+  // attack kernel (`trueStrikeOnExceed` on the program's attack step): the
+  // exceed classification uses the PRE-fold roll total, then the granted
+  // true strike applies to THE CURRENT attack (dodge ignored) before the
+  // hit/miss damage resolves — never a "next attack" grant. The pit's
+  // exceed half rides the program's `exceed` step (the same 15+ roll); the
+  // heroic half stays caller-declared here.
   if (target.position && context.triggers?.has('heroic')) {
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
   }
@@ -327,8 +328,14 @@ export const COLOSSUS_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourc
     resolverId: 'colossus:takedown:effects',
     steps: [
       {
+        // The ordinary attack folds the exceed-granted true strike ON the
+        // current attack (p.135 "Exceed or Heroic: Gains true strike …"):
+        // the kernel derives exceed from this roll's pre-fold total, then
+        // grants the true strike to THIS attack (dodge ignored) before the
+        // hit/miss damage resolves. The heroic arm is the separate
+        // attack-heroic step below.
         id: 'attack', timing: 'use', condition: notHeroic, effects: [{
-          kind: 'attack', target: attackTarget,
+          kind: 'attack', target: attackTarget, trueStrikeOnExceed: true,
           onHit: [normalDamage({ kind: 'add', values: [damageDie(1), fray()] })],
           onMiss: [normalDamage(fray(), 'miss')],
           onCritical: [normalDamage(damageDie(1))],

@@ -460,6 +460,7 @@ export class FlowPlanner {
             const attack = resolveAuthoritativeAttack(context, source, target, {
               boons: effect.boons ? Math.trunc(evaluateNumber(effect.boons, context)) : 0,
               trueStrike: effect.trueStrike ?? false,
+              trueStrikeOnExceed: effect.trueStrikeOnExceed ?? false,
               autoHit: effect.autoHit ?? false,
             });
             const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit } = attack;

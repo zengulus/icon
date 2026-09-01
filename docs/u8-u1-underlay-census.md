@@ -744,15 +744,21 @@ what is wired, and the smallest missing reusable capability.
    the durable area-cell record of the CURRENT resolution, applied through
    the shared movement authority before the status/divine-damage fold.
 
-2. **Takedown exceed true-strike half (p.136).** "Exceed or Heroic: Gains
-   true strike and creates a pit under your target." The pit fires through
-   the program's `exceed` trigger step (the ability's own 15+ roll); the
-   "gains true strike" half cannot fold into the same roll retroactively
-   (that roll determined the exceed — a second determination is forbidden by
-   the replay/determinism contract). Missing capability: a shared seam for a
-   modifier whose eligibility is only known after a roll resolves (e.g. an
-   armed "exceed true-strike" continuation for the NEXT attack). The heroic
-   arm is fully wired (attack-heroic step with true strike + resolver pit).
+2. **RESOLVED 2026-09-01 — Takedown exceed true-strike half (p.135).**
+   "Exceed or Heroic: Gains true strike and creates a pit under your
+   target." The exceed-granted true strike now folds ON THE CURRENT attack
+   through the generic staged seam (`trueStrikeOnExceed` in the shared
+   attack authority, kernels/attack-resolution.ts): exceed is derived from
+   the PRE-fold roll total (no circularity, no second determination), then
+   the granted true strike applies before the hit/miss damage resolves —
+   dodge ignored via the same shared damage provenance. NEVER a "next
+   attack" grant: the earlier draft here proposed armed next-attack
+   semantics, which the source does not support. The pit fires through the
+   program's `exceed` trigger step (the SAME 15+ roll) and the heroic arm
+   through the attack-heroic step; the resolver emits the heroic-only pit.
+   Remaining under the mastery: Fierce Elbow's per-elevation-difference 2
+   damage (once after the ability resolves, max three times), which needs
+   the recorded attack-start elevation difference — a separate blocker.
 
 3. **Gigaton Whip exceed half (p.137).** "Exceed or Heroic: Smash the ground
    when you land, creating difficult terrain under your foe and in two

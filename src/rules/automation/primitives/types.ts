@@ -237,7 +237,12 @@ export interface RuleContinuationState {
 }
 
 export type RuleEffect =
-  | { kind: 'attack'; target: RuleSelector; boons?: RuleNumber; autoHit?: boolean; trueStrike?: boolean; onHit: RuleEffect[]; onMiss: RuleEffect[]; onCritical?: RuleEffect[] }
+  | { kind: 'attack'; target: RuleSelector; boons?: RuleNumber; autoHit?: boolean; trueStrike?: boolean; /** Source-declared "Exceed: gains true strike" (Takedown p.135): the
+     attack's OWN exceed classification (its 15+/forced roll total) grants
+     True Strike ON THE CURRENT ATTACK. The fold happens inside the shared
+     attack authority after the exceed is derived from the PRE-fold roll
+     total and before the hit/miss damage resolves — never a "next attack"
+     grant. */ trueStrikeOnExceed?: boolean; onHit: RuleEffect[]; onMiss: RuleEffect[]; onCritical?: RuleEffect[] }
   | { kind: 'resolution-targets'; outcome: 'attack-targets' | 'collided' | 'slain'; effects: RuleEffect[] }
   | { kind: 'damage'; target: RuleSelector; amount: RuleNumber; damageType: 'normal' | 'piercing' | 'divine' | 'sacrifice'; instances?: RuleNumber; delivery?: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain'; ignoreCover?: boolean }
   | { kind: 'heal'; target: RuleSelector; amount: RuleNumber; maximum?: RuleNumber }

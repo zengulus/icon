@@ -49,6 +49,14 @@ export interface AuthoritativeAttackOptions {
   boons?: number;
   /** Ability-declared true strike (a RuleEffect's `trueStrike`). */
   trueStrike?: boolean;
+  /** Source-declared staged true strike (a RuleEffect's
+   * `trueStrikeOnExceed`, Takedown p.135 "Exceed or Heroic: Gains true
+   * strike"): the attack's OWN exceed classification grants True Strike ON
+   * THE CURRENT ATTACK. Folded AFTER the exceed is derived from the
+   * pre-fold roll total (no circularity) and BEFORE the hit/miss damage
+   * resolves — its dodge consequence rides the attack's damage provenance.
+   * Never a "next attack" grant. */
+  trueStrikeOnExceed?: boolean;
   /** Ability-declared auto-hit. */
   autoHit?: boolean;
   /** Attachment-declared unerring (for a mastered parent ability). */
@@ -125,20 +133,27 @@ export function resolveAuthoritativeAttack(
     unerring: Boolean(options.unerring) || traitModifier.unerring,
   }, context.dice);
   const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat, exceedThreshold } = attack;
-  const damageProvenance = { ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat };
-  rememberAttackDamage(context, target.id, damageProvenance);
   // The authoritative exceed fact: the natural 15+ (post-threshold) roll OR
   // a source-forced exceed (Pulverize p.134 "…it also triggers all exceed
   // effects"). Natural and forced activation of the same trigger collapse
   // to one semantic exceed (trigger-provenance.ts) — never double-fired.
   const forceExceed = traitModifier.forceExceed;
   const exceed = (total !== null && total >= (exceedThreshold ?? 15)) || forceExceed;
+  // Staged current-attack true strike (Takedown p.135 "Exceed or Heroic:
+  // Gains true strike and creates a pit…"): the exceed-granted true strike
+  // applies to THIS attack. It is folded after the exceed classification
+  // (from the PRE-fold roll total, so there is no circularity) and before
+  // the hit/miss damage resolves — its dodge consequence rides the same
+  // shared damage provenance. Never a "next attack" grant.
+  const trueStrikeEffective = attack.trueStrike || (options.trueStrikeOnExceed === true && exceed);
+  const damageProvenance = { ignoreDodge: trueStrikeEffective || ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat };
+  rememberAttackDamage(context, target.id, damageProvenance);
   const attackMutation: RuleMutation = {
     kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical,
-    exceed, exceedThreshold: exceedThreshold ?? 15, evasionRoll, trueStrike, autoHit,
+    exceed, exceedThreshold: exceedThreshold ?? 15, evasionRoll, trueStrike: trueStrikeEffective, autoHit,
   };
   return {
-    attackMutation, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
+    attackMutation, d20, boon, total, hit, critical, evasionRoll, trueStrike: trueStrikeEffective, autoHit,
     exceedThreshold: exceedThreshold ?? 15,
     forceExceed,
     damageProvenance,
