@@ -22,6 +22,12 @@ export interface TraitAttackModifier {
   damageDieOverride: number | null;
   bonusDamageFlat: number;
   exceedThreshold: number | null;
+  /** SOURCE-FORCED exceed (Pulverize p.134): the source's text forces every
+   * exceed effect without the ordinary 15+ natural condition. OR'd into the
+   * attack's authoritative exceed fact, so the VM exceed branches, resolver
+   * exceed readers, and the recorded provenance all agree. This is NOT a
+   * threshold reduction — the roll never re-decides anything. */
+  forceExceed: boolean;
   /** Unerring (p.105): the attack ignores cover and aetherwall. */
   unerring: boolean;
 }
@@ -53,7 +59,8 @@ export interface AttackModifierTarget {
  *   strike/d10) only apply while the owner's `armedKey` rule-state is true;
  *   the key is consumed by the next attack.
  * - Elevation rules (Pulverize) are permanent reads: flat bonus damage at one
- *   or more elevations lower, and an exceed-threshold override at two or more.
+ *   or more elevations lower, and a SOURCE-FORCED exceed at two or more (the
+ *   source's own text triggers every exceed effect regardless of the roll).
  */
 export interface AttackModifierRule {
   /** The exact source trait id that owns this rule. */
@@ -72,8 +79,11 @@ export interface AttackModifierRule {
   damageDieOverride?: number;
   /** Flat bonus damage at elevation diff >= 1 (source − target). */
   elevationBonusDamage?: number;
-  /** Exceed-threshold override at elevation diff >= 2. */
-  elevationExceedThreshold?: number;
+  /** SOURCE-FORCED exceed at elevation diff >= 2 (Pulverize p.134: "If you
+   * are two or more levels higher, it also triggers all exceed effects").
+   * The exceed fact is forced regardless of the roll — never approximated
+   * as a threshold reduction, which is not the same semantic. */
+  elevationForceExceed?: boolean;
   /** Flat bonus damage on attacks against a bloodied target (Blood Hunger:
    * "+2 damage with all abilities against bloodied foes"). The gate is the
    * shared bloodied predicate (at or under 50% of the target's maximum). */
@@ -106,6 +116,7 @@ export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: nu
     damageDieOverride: null,
     bonusDamageFlat: 0,
     exceedThreshold: null,
+    forceExceed: false,
     unerring: false,
   };
   for (const rule of attackModifierRules) {
@@ -119,7 +130,7 @@ export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: nu
     if (rule.trueStrike) modifier.trueStrike = true;
     if (rule.damageDieOverride) modifier.damageDieOverride = rule.damageDieOverride;
     if (rule.elevationBonusDamage && elevationDiff >= 1) modifier.bonusDamageFlat += rule.elevationBonusDamage;
-    if (rule.elevationExceedThreshold && elevationDiff >= 2) modifier.exceedThreshold = rule.elevationExceedThreshold;
+    if (rule.elevationForceExceed && elevationDiff >= 2) modifier.forceExceed = true;
     if (rule.targetBloodiedBonusDamage && target && target.hp <= target.maxHp / 2) modifier.bonusDamageFlat += rule.targetBloodiedBonusDamage;
     if (rule.unerring) modifier.unerring = true;
   }

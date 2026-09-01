@@ -22,10 +22,11 @@ import type { RuleMutation } from '../../primitives/types.js';
  *   arms the next attack with +1 boon, true strike, and a d10 damage die
  *   (`hissatsu:armed`), set by the turn-end lifecycle recipe and consumed
  *   by the next attack roll.
- * - **Pulverize** (colossus, p.142) — a pure elevation read, no armed
+ * - **Pulverize** (colossus, p.134) — a pure elevation read, no armed
  *   state: attacking a lower target deals +2 flat damage on the attack's
- *   direct damage; at two or more elevations lower the attack exceeds on a
- *   13+ instead of 15+.
+ *   direct damage; two or more elevations lower SOURCE-FORCES the exceed
+ *   fact ("…it also triggers all exceed effects" — the exceed condition
+ *   fires regardless of the roll, never approximated as a threshold cut).
  * - **Bull's Strength** (bastion, p.149) — abilities gain "collide: deal 2
  *   damage": when an ability's shove collides, the shoved character takes 2
  *   damage, and "Characters can't take this damage more than once a turn."
@@ -46,7 +47,7 @@ export const HISSATSU_ARMED_KEY = 'hissatsu:armed';
 
 registerAttackModifierRule({ traitId: DEMON_EDGE_TRAIT, armedKey: DEMON_EDGE_TRUESTRIKE_KEY, trueStrike: true });
 registerAttackModifierRule({ traitId: HISSATSU_TRAIT, armedKey: HISSATSU_ARMED_KEY, boons: 1, trueStrike: true, damageDieOverride: 10 });
-registerAttackModifierRule({ traitId: PULVERIZE_TRAIT, elevationBonusDamage: 2, elevationExceedThreshold: 13 });
+registerAttackModifierRule({ traitId: PULVERIZE_TRAIT, elevationBonusDamage: 2, elevationForceExceed: true });
 // ICON p.155 Freelancer Trigrammaton: "Your abilities used against foes at
 // exactly range 3 gain +1 boon on attack rolls and unerring." An exact-
 // distance attack modifier — it inspects the canonical p.92 distance and

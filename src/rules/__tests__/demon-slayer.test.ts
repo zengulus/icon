@@ -17,6 +17,13 @@ import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo, 
  * Mutation order documents the deterministic VM pipeline: action costs are
  * emitted first, then named-resolver effects, then step effects (attack roll
  * before its damage), matching the order executeRuleProgram produces.
+ *
+ * AoE attack semantics (ICON p.95 + part E of the trigger/AoE repair): the
+ * character in the attack space takes the ATTACK component instead of the
+ * area effect; every other character in the area — allies and foes alike —
+ * takes the source's unrestricted "Area effect". Draken Cross's base Effect
+ * is REQUIRED (only the rush is optional), its areas need the player's
+ * recorded centers and elected rush directions, and the areas cannot overlap.
  */
 
 interface DemonSlayerFixture {
@@ -48,6 +55,28 @@ function demonSlayerEncounter(options: { foe?: Position; second?: Position; ally
   return { state, hero, foe, second, ally: ally! };
 }
 
+/** Draken Corner fixtures need THREE foes plus the Charge state: a slow-turn
+ * demon-slayer with talent 2, the attack target at (3,1), and two area
+ * occupants for the base/second/repeated blast geometry. */
+function drakenRepeatEncounter(options: { third?: Position; talents?: Record<string, 1 | 2> } = {}): DemonSlayerFixture & { third: EncounterActor } {
+  let state = createEncounter('Draken repeat fixture');
+  const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
+  hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+  hero.chapter = 3;
+  hero.talents = { ...hero.talents, 'demon-slayer:draken-cross': 2, ...(options.talents ?? {}) };
+  hero.ruleState['slow-turn'] = true;
+  hero.ruleStateOwners['slow-turn'] = hero.id;
+  const foe = createFoe('Relict', { x: 3, y: 1 });
+  const second = createFoe('Grim', { x: 5, y: 4 });
+  const third = createFoe('Maw', options.third ?? { x: 2, y: 6 });
+  state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+  state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+  state = executeCommand(state, { type: 'ADD_ACTOR', actor: second }).state;
+  state = executeCommand(state, { type: 'ADD_ACTOR', actor: third }).state;
+  state = startEncounterTo(state, hero.id);
+  return { state, hero, foe, second, ally: undefined as never, third };
+}
+
 const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], sourceId: string) => {
   const event = events.find((candidate) => candidate.type === 'RULE_MUTATIONS_APPLIED' && candidate.sourceId === sourceId);
   return event && event.type === 'RULE_MUTATIONS_APPLIED' ? event.mutations : [];
@@ -69,19 +98,21 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     }
   });
 
-  it('Demon Cutter: line-3 true-strike attack, slashed target, and line-area fray', () => {
+  it('Demon Cutter: the attack-space target takes the ATTACK instead of the line fray', () => {
+    // ICON's AoE attack rule: the target at (3,1) sits INSIDE its own Line 3
+    // ((2,1),(3,1),(4,1)) but takes only the attack component — the line's
+    // "Area effect: Fray" is for every OTHER character in the line.
     const { state, hero, foe, second } = demonSlayerEncounter({ second: { x: 5, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
     expect(mutationsOf(result.events, 'demon-slayer:demon-cutter')).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
       { kind: 'attack', d20: 12, hit: true, critical: false },
       { kind: 'damage', actorId: foe.id, amount: 9 },
     ]);
     expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
     expect(result.state.actors[hero.id].attackedThisTurn).toBe(true);
-    expect(result.state.actors[foe.id].hp).toBe(19); // 32 - 4 area fray - 9 attack
+    expect(result.state.actors[foe.id].hp).toBe(23); // 32 - 9 attack; no line fray on the attack space
     expect(result.state.actors[foe.id].statuses).toContain('slashed');
     expect(result.state.actors[second.id].hp).toBe(32); // outside the line
     expect(applyEvents(state, result.events)).toEqual(result.state);
@@ -105,7 +136,7 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
     setup = startEncounterTo(setup, hero.id);
     const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
-    expect(result.state.actors[foe.id].hp).toBe(19); // 32 - 4 area fray - 9 attack
+    expect(result.state.actors[foe.id].hp).toBe(23); // 32 - 9 attack only
     expect(result.state.actors[foe.id].statuses).toContain('slashed');
     expect(result.state.actors[second.id].hp).toBe(32); // outside the line
     expect(applyEvents(setup, result.events)).toEqual(result.state);
@@ -126,11 +157,11 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(mutations).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
       { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' },
       { kind: 'attack', d20: 12, hit: true },
       { kind: 'damage', actorId: foe.id, amount: 9 },
     ]);
+    expect(result.state.actors[foe.id].hp).toBe(23); // attack only — excluded from the line fray
     expect(result.state.actors[second.id].hp).toBe(28); // hit by the second line
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
@@ -147,12 +178,11 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'move', actorId: hero.id, movement: 'rush', positions: [{ x: 2, y: 1 }] },
       { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
       { kind: 'attack', d20: 12, hit: true },
       { kind: 'damage', actorId: foe.id, amount: 9 },
     ]);
     expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 });
-    expect(result.state.actors[foe.id].hp).toBe(19); // 32 - 4 area fray - 9 attack, hit from the new origin
+    expect(result.state.actors[foe.id].hp).toBe(23); // 32 - 9 attack, hit from the new origin
     expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
@@ -168,13 +198,12 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'move', actorId: hero.id, movement: 'rush', positions: [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 4, y: 1 }] },
       { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
       { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' }, // second line from the post-rush origin
       { kind: 'attack', d20: 12, hit: true },
       { kind: 'damage', actorId: foe.id, amount: 9 },
     ]);
     expect(result.state.actors[hero.id].position).toEqual({ x: 4, y: 1 });
-    expect(result.state.actors[foe.id].hp).toBe(19);
+    expect(result.state.actors[foe.id].hp).toBe(23);
     expect(result.state.actors[second.id].hp).toBe(28);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
@@ -186,7 +215,6 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(mutations).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'condition', actorId: foe.id, conditionId: 'slashed' },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
       { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' }, // the charge line still fires
       { kind: 'attack', d20: 12, hit: true },
       { kind: 'damage', actorId: foe.id, amount: 9 },
@@ -225,178 +253,197 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-
-
-  it('Draken Cross: the optional Effect may be declined — a legal use resolves with only the primary blast', () => {
-    // "Effect: You may rush 1, then target another small blast area in range
-    // 3…" (p.128) is entirely OPTIONAL: a use without the recorded decision
-    // performs no rush and no second area, and a legal Draken Cross must
-    // still resolve.
-    const { state, hero, foe, second } = demonSlayerEncounter({ second: { x: 0, y: 0 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
-    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
-    expect(mutations).toMatchObject([
-      { kind: 'actions', operation: 'spend', amount: 2 },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
-      { kind: 'attack', d20: 12, hit: true },
-      { kind: 'damage', actorId: foe.id, amount: 15 }, // 2[D] = 11 + fray 4
-    ]);
-    expect(mutations.some((mutation) => mutation.kind === 'move')).toBe(false);
-    expect(result.state.actors[hero.id].actionsRemaining).toBe(0);
-    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 }); // never rushed
-    expect(result.state.actors[foe.id].hp).toBe(13);
-    expect(result.state.actors[second.id].hp).toBe(32); // outside the small blast
+  it('Comet: a large-footprint area hits each member ONCE (identity-deduplicated recipients)', () => {
+    // A medium blast is a 5×5 pattern, but a character occupies one space:
+    // recipient membership is decided per CHARACTER, never per cell — the foe
+    // inside the medium blast takes exactly one area-damage mutation even
+    // though its footprint spans many spaces.
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 6, y: 1 }, second: { x: 9, y: 4 } });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:comet', targetIds: [] }, scriptedDice());
+    const foeDamages = mutationsOf(result.events, 'demon-slayer:comet').filter((mutation) => mutation.kind === 'damage' && mutation.actorId === foe.id);
+    expect(foeDamages).toHaveLength(1);
+    expect(result.state.actors[foe.id].hp).toBe(30); // 32 - 2, exactly once
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Draken Cross: the Effect rushes 1, then its second-area legality is judged from the POST-rush position', () => {
-    // The center (4,5) is 4 spaces from the pre-rush cell (1,1) but 3 from
-    // the post-rush origin (1,2) — legal only because the supplied center is
-    // validated against the position AFTER the rush, and non-overlapping
-    // with the primary blast around the target (2,1).
-    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 5 }, ally: null });
-    // The eastward default rush is blocked by the adjacent foe, so the
-    // origin is still (1,1): the same center is now out of range 3 and the
-    // Effect fails closed rather than guessing another center.
+  it('Draken Cross: the base Effect is REQUIRED — a use without a recorded second blast fails closed', () => {
+    // "Effect: You may rush 1, then target another small blast area in range
+    // 3…" (p.128): like every other "You may Rush X, then …" construction the
+    // RUSH may be declined, but the SECOND BLAST remains part of the ability.
+    // A use without the recorded area center never resolves — Draken Cross is
+    // NOT complete with only the primary blast — and the rejected command
+    // leaves the table untouched.
+    const { state, hero, foe } = demonSlayerEncounter({ second: { x: 0, y: 0 }, ally: null });
+    const before = structuredClone(state);
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6)))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+    expect(state).toEqual(before);
+  });
+
+  it('Draken Cross: the attack-space character takes the ATTACK instead of the area effect', () => {
+    // ICON's AoE attack rule: the target at (3,1) sits INSIDE its own primary
+    // blast but takes only the 2[D]+fray hit — never a second primary-area
+    // fray. Other characters in the blast — the ally at (4,1) — take the
+    // unrestricted "Area effect: Fray". Source order (p.128): Attack, then
+    // its area effect, then the base Effect's required second blast.
+    const { state, hero, foe, second, ally } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, ally: { x: 4, y: 1 }, second: { x: 3, y: 4 } });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
+    }, scriptedDice(12, 5, 6));
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    expect(mutations).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'attack', d20: 12, hit: true, critical: false },
+      { kind: 'damage', actorId: foe.id, amount: 15 },
+      { kind: 'damage', actorId: ally.id, amount: 4, delivery: 'area' },
+      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' },
+    ]);
+    // The attack space never takes the area effect on top of the attack.
+    const foeAreaDamages = mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === foe.id && mutation.delivery === 'area');
+    expect(foeAreaDamages).toHaveLength(0);
+    expect(result.state.actors[foe.id].hp).toBe(17); // 32 - 15 attack only
+    expect(result.state.actors[second.id].hp).toBe(28); // 32 - 4 required second blast
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross: the base Effect rush may be declined — the required second blast still resolves', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 4 }, ally: null });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
+    }, scriptedDice(12, 5, 6));
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    expect(mutations.some((mutation) => mutation.kind === 'move')).toBe(false);
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 }); // never rushed
+    expect(result.state.actors[second.id].hp).toBe(28); // frayed by the required second blast
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross: the second blast is measured from the POST-rush origin, and an elected rush needs its recorded direction', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 4, y: 6 }, ally: null });
+    // Center (4,6): every cell is Chebyshev ≥ 4 from the pre-rush origin
+    // (1,1) — OUT of range 3. An area is legal when at least one of its cells
+    // is within the effective blast range of the POST-rush origin (ICON
+    // p.97), so without the rush the same center fails closed.
     expect(() => executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
-      input: { booleans: { effect: true }, positions: { 'effect-area-1': [{ x: 4, y: 5 }] } },
+      input: { positions: { 'effect-area-1': [{ x: 4, y: 6 }] } },
     }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'choice.position-range' }));
+    // An elected rush without its recorded direction is malformed too.
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { booleans: { 'effect-rush-1': true }, positions: { 'effect-area-1': [{ x: 4, y: 6 }] } },
+    }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
     // With the recorded SOUTH rush the origin becomes (1,2) and the same
-    // center is legal: the second blast frays the character lying there.
+    // center is legal (its cell (3,5) is Chebyshev 3 away): the effect frays
+    // the character there AFTER the recorded rush mutation — never before it.
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
-      input: { booleans: { effect: true }, directions: { 'effect-rush-1': { x: 0, y: 1 } }, positions: { 'effect-area-1': [{ x: 4, y: 5 }] } },
+      input: { booleans: { 'effect-rush-1': true }, directions: { 'effect-rush-1': { x: 0, y: 1 } }, positions: { 'effect-area-1': [{ x: 4, y: 6 }] } },
     }, scriptedDice(12, 5, 6));
     const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
     expect(mutations).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 2 },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
-      { kind: 'move', actorId: hero.id, movement: 'rush' },
-      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' },
       { kind: 'attack', d20: 12, hit: true },
       { kind: 'damage', actorId: foe.id, amount: 15 },
+      { kind: 'move', actorId: hero.id, movement: 'rush' },
+      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' },
     ]);
     expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 });
-    expect(result.state.actors[foe.id].hp).toBe(13);
+    expect(result.state.actors[foe.id].hp).toBe(17);
     expect(result.state.actors[second.id].hp).toBe(28);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Draken Cross: a supplied effect center that overlaps an area of this use fails closed', () => {
-    // p.128 "The areas cannot overlap": both overlap directions reject — a
-    // second area over the primary blast, and a repeated area over the
-    // first Effect area.
-    const overlapPrimary = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 5 }, ally: null });
-    expect(() => executeCommand(overlapPrimary.state, {
-      type: 'USE_ABILITY', actorId: overlapPrimary.hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [overlapPrimary.foe.id],
-      // South rush → origin (1,2); center (2,2) is in range but its small
-      // blast overlaps the primary around the target (2,1).
-      input: { booleans: { effect: true }, directions: { 'effect-rush-1': { x: 0, y: 1 } }, positions: { 'effect-area-1': [{ x: 2, y: 2 }] } },
+  it('Draken Cross: an overlapping selected area is rejected ATOMICALLY — no rush is left behind', () => {
+    // "The areas cannot overlap" (p.128). A second blast overlapping the
+    // primary fails closed BEFORE any mutation is emitted: the recorded rush
+    // is never half-applied, and the rejected command changes nothing.
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 4, y: 5 }, ally: null });
+    const before = structuredClone(state);
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { booleans: { 'effect-rush-1': true }, directions: { 'effect-rush-1': { x: 0, y: 1 } }, positions: { 'effect-area-1': [{ x: 3, y: 3 }] } },
     }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'choice.area-overlap' }));
-    // Repeat overlap: the repeated Effect's area equals the first Effect's
-    // (and reuses its rush chain) — rejected, never silently re-targeted.
-    const repeat = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 5 }, ally: null, slowTurn: true });
-    expect(() => executeCommand(repeat.state, {
-      type: 'USE_ABILITY', actorId: repeat.hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [repeat.foe.id],
-      input: {
-        booleans: { effect: true, repeat: true },
-        directions: { 'effect-rush-1': { x: 0, y: 1 }, 'effect-rush-2': { x: 0, y: 1 } },
-        positions: { 'effect-area-1': [{ x: 4, y: 5 }], 'effect-area-2': [{ x: 4, y: 5 }] },
-      },
-    }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'choice.area-overlap' }));
+    expect(state).toEqual(before);
   });
 
-  it('Draken Cross talent 2: medium blasts require the RECORDED player decision — chosen or left small', () => {
-    // Talent II is "all areas MAY be increased to medium blasts instead"
-    // (p.128): a REAL player choice (larger areas can include unintended
-    // characters/terrain), recorded durably on the command and applying to
-    // every area of the use. Declining keeps the areas small.
-    const declined = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
-    const declinedResult = executeCommand(declined.state, { type: 'USE_ABILITY', actorId: declined.hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [declined.foe.id] }, scriptedDice(12, 5, 6));
-    expect(declinedResult.state.actors[declined.second.id].hp).toBe(32); // outside the small primary
-    expect(mutationsOf(declinedResult.events, 'demon-slayer:draken-cross').filter((mutation) => mutation.kind === 'damage' && mutation.actorId === declined.second.id)).toHaveLength(0);
-    expect(applyEvents(declined.state, declinedResult.events)).toEqual(declinedResult.state);
-
-    const chosen = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
-    const chosenResult = executeCommand(chosen.state, {
-      type: 'USE_ABILITY', actorId: chosen.hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [chosen.foe.id],
-      input: { booleans: { 'medium-areas': true } },
-    }, scriptedDice(12, 5, 6));
-    const mutations = mutationsOf(chosenResult.events, 'demon-slayer:draken-cross');
-    expect(mutations).toMatchObject([
-      { kind: 'actions', operation: 'spend', amount: 2 },
-      { kind: 'damage', actorId: chosen.foe.id, amount: 4, delivery: 'area' },
-      { kind: 'damage', actorId: chosen.second.id, amount: 4, delivery: 'area' },
-      { kind: 'attack', d20: 12, hit: true },
-      { kind: 'damage', actorId: chosen.foe.id, amount: 15 },
-    ]);
-    expect(chosenResult.state.actors[chosen.foe.id].hp).toBe(13); // 32 - 4 fray - 15
-    expect(chosenResult.state.actors[chosen.second.id].hp).toBe(28); // the medium primary fray
-    expect(applyEvents(chosen.state, chosenResult.events)).toEqual(chosenResult.state);
-  });
-
-  it('Draken Cross: Charge/Heroic may repeat the WHOLE Effect — its own rush, its own area — and the foe is NOT re-damaged', () => {
-    // p.128 "Charge or Heroic: … may repeat the effect." The repeat is the
-    // whole optional operation again — a SECOND recorded rush and a SECOND
-    // independent area (non-overlapping with every prior one) — never another
-    // damage instance against an existing blast.
-    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 5, y: 5 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
+  it('Draken Cross talent 2 + Charge: all areas stay SMALL when the player declines the recorded medium decision', () => {
+    // Talent II (p.128): "all areas may be increased to medium blasts
+    // instead" — ONE recorded resolution-level decision. Declining keeps
+    // every area radius 1: the foe at (2,6) sits inside the radius-2 medium
+    // footprint of the second blast at (4,6) but outside its small radius-1
+    // square, so it is unhit.
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 6, y: 1 }, second: { x: 2, y: 6 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
-      input: {
-        booleans: { effect: true, repeat: true },
-        directions: { 'effect-rush-1': { x: 1, y: 0 }, 'effect-rush-2': { x: 0, y: 1 } },
-        positions: { 'effect-area-1': [{ x: 5, y: 5 }], 'effect-area-2': [{ x: 2, y: 6 }] },
-      },
+      input: { positions: { 'effect-area-1': [{ x: 4, y: 6 }] } },
+    }, scriptedDice(12, 5, 6));
+    expect(result.state.actors[second.id].hp).toBe(32);
+    expect(mutationsOf(result.events, 'demon-slayer:draken-cross').filter((mutation) => mutation.kind === 'damage' && mutation.actorId === second.id)).toHaveLength(0);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross talent 2 + Charge: the RECORDED medium decision sizes EVERY area medium', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 6, y: 1 }, second: { x: 2, y: 6 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { booleans: { 'medium-areas': true }, positions: { 'effect-area-1': [{ x: 4, y: 6 }] } },
     }, scriptedDice(12, 5, 6));
     const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
-    const rushes = mutations.filter((mutation) => mutation.kind === 'move' && mutation.movement === 'rush');
-    expect(rushes).toHaveLength(2); // the Effect's rush 1 + the repeated Effect's OWN rush 1
-    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 2 });
-    const secondDamages = mutations
-      .filter((mutation) => mutation.kind === 'damage')
-      .filter((mutation) => mutation.actorId === second.id);
-    expect(secondDamages).toHaveLength(1); // the FIRST Effect's fray — the repeat does NOT re-damage it
-    expect(secondDamages[0] && secondDamages[0].kind === 'damage' ? secondDamages[0].amount : 0).toBe(4);
+    expect(mutations).toMatchObject([
+      { kind: 'actions', operation: 'spend', amount: 2 },
+      { kind: 'attack', d20: 12, hit: true },
+      { kind: 'damage', actorId: foe.id, amount: 15 },
+      { kind: 'damage', actorId: second.id, amount: 4, delivery: 'area' }, // the medium E1 fringe
+    ]);
+    expect(result.state.actors[foe.id].hp).toBe(17);
     expect(result.state.actors[second.id].hp).toBe(28);
-    expect(result.state.actors[foe.id].hp).toBe(13); // 32 - 4 primary fray - 15
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Draken Cross: declining the repeat is legal — Charge resolves the Effect once', () => {
-    // Talent 2 widens the attack/effect range to 5 on the slow turn; the
-    // repeat stays DECLINED, so only one Effect invocation resolves.
-    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
-    const result = executeCommand(state, {
-      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
-      input: { booleans: { effect: true }, directions: { 'effect-rush-1': { x: 1, y: 0 } }, positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
+  it('Draken Cross talent 2: Heroic alone does NOT activate the Charge-only range or size upgrade', () => {
+    // Talent II is a "Charge:" clause — Charge and Heroic are distinct ICON
+    // triggered effects. With Heroic (a validated declaration) but no slow
+    // turn, the effective range stays 3 and the areas stay small even with
+    // the talent equipped.
+    const far = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
+    expect(() => executeCommand(far.state, {
+      type: 'EXECUTE_RULE', actorId: far.hero.id, sourceId: 'demon-slayer:draken-cross', actionId: 'default', timing: 'use',
+      input: {}, attackTargetId: far.foe.id, triggers: ['heroic'],
+    }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'ability.range' }));
+    // In range, the areas stay small: a foe in the medium-only fringe of the
+    // second blast is unhit.
+    const small = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 2, y: 6 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
+    const heroic = executeCommand(small.state, {
+      type: 'EXECUTE_RULE', actorId: small.hero.id, sourceId: 'demon-slayer:draken-cross', actionId: 'default', timing: 'use',
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } }, attackTargetId: small.foe.id, triggers: ['heroic'],
     }, scriptedDice(12, 5, 6));
-    const rushes = mutationsOf(result.events, 'demon-slayer:draken-cross').filter((mutation) => mutation.kind === 'move' && mutation.movement === 'rush');
-    expect(rushes).toHaveLength(1);
-    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 });
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    expect(heroic.state.actors[small.second.id].hp).toBe(32); // outside the small E1
+    expect(applyEvents(small.state, heroic.events)).toEqual(heroic.state);
   });
 
-  it('Draken Cross talent 2 + Charge: a LATER area can be medium — a foe in its medium-only fringe is hit', () => {
-    // "all areas may be increased to medium blasts" covers the Effect's area
-    // as well as the primary. With Charge + talent 2 + the recorded
-    // decision, the Effect's radius-2 square at (5,6) catches the foe at
-    // (5,4) — outside that area's small radius-1 square — while the medium
-    // primary around the target (5,1) does NOT reach it.
-    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 5, y: 4 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
-    const result = executeCommand(state, {
-      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
-      input: { booleans: { effect: true, 'medium-areas': true }, directions: { 'effect-rush-1': { x: 0, y: 1 } }, positions: { 'effect-area-1': [{ x: 5, y: 6 }] } },
+  it('Draken Cross talent 2: without a genuine Charge the range stays 3 even with the talent', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6)))
+      .toThrowError(expect.objectContaining({ code: 'ability.range' }));
+  });
+
+  it('Draken Cross: Charge without talent 2 also keeps range 3 — and a slow turn alone keeps the areas small', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, slowTurn: true });
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6)))
+      .toThrowError(expect.objectContaining({ code: 'ability.range' }));
+    // With an in-range target the areas stay radius 1 even on the slow turn:
+    // (2,6) is inside the medium footprint of the E1 at (3,4) but outside its
+    // small radius-1 square.
+    const small = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 2, y: 6 }, ally: null, slowTurn: true });
+    const result = executeCommand(small.state, {
+      type: 'USE_ABILITY', actorId: small.hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [small.foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
     }, scriptedDice(12, 5, 6));
-    const secondDamages = mutationsOf(result.events, 'demon-slayer:draken-cross')
-      .filter((mutation) => mutation.kind === 'damage')
-      .filter((mutation) => mutation.actorId === second.id);
-    expect(secondDamages).toHaveLength(1);
-    expect(secondDamages[0] && secondDamages[0].kind === 'damage' ? secondDamages[0].amount : 0).toBe(4);
-    expect(result.state.actors[second.id].hp).toBe(28);
-    expect(result.state.actors[foe.id].hp).toBe(13); // 32 - 4 primary fray - 15 attack
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+    expect(result.state.actors[small.second.id].hp).toBe(32);
+    expect(applyEvents(small.state, result.events)).toEqual(result.state);
   });
 
   it('Draken Cross: a forged \'charge\' trigger cannot activate Talent II without the authoritative slow turn', () => {
@@ -417,28 +464,17 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'rule.trigger-forged' }));
   });
 
-  it('Draken Cross talent 2: the medium-blast upgrade is gated on the slow turn', () => {
-    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
-    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
-    expect(mutations).toMatchObject([
-      { kind: 'actions', operation: 'spend', amount: 2 },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
-      { kind: 'attack', d20: 12, hit: true },
-      { kind: 'damage', actorId: foe.id, amount: 15 },
-    ]);
-    expect(result.state.actors[second.id].hp).toBe(32); // outside the small blast
-    expect(applyEvents(state, result.events)).toEqual(result.state);
-  });
-
   it('Draken Cross talent 2 + Charge: the attack target may legally be chosen at range 4/5 (shared charge-gated range rule)', () => {
     // ICON p.128 talent 2: "Charge: Increase range to 5…" — the range half is
     // the shared charge-gated range rule folded by the generic USE_ABILITY
     // gate, so a target at distance 4 is LEGAL on a slow turn with the talent
     // equipped (previously the gate kept the target capped at range 3).
     const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
-    expect(result.state.actors[foe.id].hp).toBe(13); // 32 - 4 primary fray - 15 (2[D] = 11 + fray 4)
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 7, y: 4 }] } },
+    }, scriptedDice(12, 5, 6));
+    expect(result.state.actors[foe.id].hp).toBe(17); // 32 - 15 attack; the attack space never takes the area fray too
     expect(result.state.actors[hero.id].actionsRemaining).toBe(0);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
@@ -449,55 +485,141 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
       .toThrowError(expect.objectContaining({ code: 'ability.range' }));
   });
 
-  it('Draken Cross: without talent 2, Charge does NOT expand the range', () => {
-    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, slowTurn: true });
-    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6)))
-      .toThrowError(expect.objectContaining({ code: 'ability.range' }));
-  });
-
-  it('Draken Cross talent 2: Heroic WITHOUT Charge does NOT activate the Charge-only range/area upgrade', () => {
-    // The Talent clause is "Charge:" — Charge and Heroic are distinct ICON
-    // triggered effects, so a Heroic alone (no slow turn) keeps range 3 and
-    // small blasts even with the talent equipped.
-    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
-    expect(() => executeCommand(state, {
-      type: 'EXECUTE_RULE',
-      actorId: hero.id,
-      sourceId: 'demon-slayer:draken-cross',
-      actionId: 'default',
-      timing: 'use',
-      input: {},
-      attackTargetId: foe.id,
-      triggers: ['heroic'],
-    }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'ability.range' }));
-    // With an in-range target, the areas stay small: a foe in the medium-only
-    // fringe of the primary blast is NOT hit on a Heroic alone.
-    const small = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
-    const heroic = executeCommand(small.state, {
-      type: 'EXECUTE_RULE',
-      actorId: small.hero.id,
-      sourceId: 'demon-slayer:draken-cross',
-      actionId: 'default',
-      timing: 'use',
-      input: {},
-      attackTargetId: small.foe.id,
-      triggers: ['heroic'],
+  it('Draken Cross + Charge: declining the repeat resolves the base Effect exactly once', () => {
+    // "Charge or Heroic: … may repeat the effect." The repeat is OPTIONAL and
+    // is another complete Effect operation — never a re-damage of an existing
+    // blast. Without the recorded repeat decision, only the base Effect's
+    // area frays: second (5,4) once, third (2,6) never.
+    const { state, hero, foe, second, third } = drakenRepeatEncounter();
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 5, y: 4 }] } },
     }, scriptedDice(12, 5, 6));
-    expect(heroic.state.actors[small.second.id].hp).toBe(32); // outside the small primary blast (r1)
-    expect(applyEvents(small.state, heroic.events)).toEqual(heroic.state);
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    expect(mutations.filter((mutation) => mutation.kind === 'move')).toHaveLength(0);
+    expect(mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === second.id)).toHaveLength(1);
+    expect(mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === third.id)).toHaveLength(0);
+    expect(result.state.actors[second.id].hp).toBe(28);
+    expect(result.state.actors[third.id].hp).toBe(32);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Draken Cross: the medium-blast upgrade also requires talent 2 — a slow turn alone keeps small blasts', () => {
-    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, slowTurn: true });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
+  it('Draken Cross + Charge: a recorded repeat creates a DISTINCT area — never duplicate damage on an existing one', () => {
+    // The repeated Effect is the whole operation again with its own area at
+    // (2,6): third is frayed by IT, and second at (5,4) is frayed only by the
+    // base Effect's area (a repeat must not re-damage an existing blast).
+    const { state, hero, foe, second, third } = drakenRepeatEncounter();
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { booleans: { repeat: true }, positions: { 'effect-area-1': [{ x: 5, y: 4 }], 'effect-area-2': [{ x: 2, y: 6 }] } },
+    }, scriptedDice(12, 5, 6));
     const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
-    expect(mutations).toMatchObject([
-      { kind: 'actions', operation: 'spend', amount: 2 },
-      { kind: 'damage', actorId: foe.id, amount: 4, delivery: 'area' },
-      { kind: 'attack', d20: 12, hit: true },
-      { kind: 'damage', actorId: foe.id, amount: 15 },
-    ]);
-    expect(result.state.actors[second.id].hp).toBe(32); // the charge repeat re-frays the second blast, not the primary
+    expect(mutations.filter((mutation) => mutation.kind === 'move')).toHaveLength(0); // both rushes declined
+    expect(mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === second.id)).toHaveLength(1);
+    expect(mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === third.id)).toHaveLength(1);
+    expect(result.state.actors[second.id].hp).toBe(28);
+    expect(result.state.actors[third.id].hp).toBe(28);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross + Charge: the repeated Effect has its OWN optional rush, measured from ITS post-rush origin', () => {
+    const { state, hero, foe, second, third } = drakenRepeatEncounter({ third: { x: 6, y: 8 } });
+    // E2 center (6,8): every cell is Chebyshev ≥ 6 from the pre-rush origin
+    // (1,1) — outside the charged range 5 — but its nearest cell (5,7) is
+    // Chebyshev 5 from the POST-rush origin (1,2), so the recorded repeat
+    // rush makes it legal. Without it, the same area fails closed.
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { booleans: { repeat: true }, positions: { 'effect-area-1': [{ x: 5, y: 4 }], 'effect-area-2': [{ x: 6, y: 8 }] } },
+    }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'choice.position-range' }));
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: {
+        booleans: { repeat: true, 'effect-rush-2': true },
+        directions: { 'effect-rush-2': { x: 0, y: 1 } },
+        positions: { 'effect-area-1': [{ x: 5, y: 4 }], 'effect-area-2': [{ x: 6, y: 8 }] },
+      },
+    }, scriptedDice(12, 5, 6));
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    const rushes = mutations.filter((mutation) => mutation.kind === 'move' && mutation.movement === 'rush');
+    expect(rushes).toHaveLength(1); // the base Effect declined its rush; only the repeat rushed
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 });
+    expect(result.state.actors[third.id].hp).toBe(28); // frayed by the repeated Effect's own area
+    expect(result.state.actors[second.id].hp).toBe(28); // frayed once by the base Effect — never twice
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross + Charge: the repeated area cannot overlap EITHER prior area of the use', () => {
+    const { state, hero, foe } = drakenRepeatEncounter();
+    // E2 centered on the first Effect's own center — overlaps the E1 area.
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { booleans: { repeat: true }, positions: { 'effect-area-1': [{ x: 5, y: 4 }], 'effect-area-2': [{ x: 5, y: 4 }] } },
+    }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'choice.area-overlap' }));
+    // E2 overlapping the PRIMARY blast (centered on the target (3,1)) is
+    // rejected too.
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { booleans: { repeat: true }, positions: { 'effect-area-1': [{ x: 5, y: 4 }], 'effect-area-2': [{ x: 3, y: 1 }] } },
+    }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'choice.area-overlap' }));
+  });
+
+  it('Draken Cross talent 1: Exceed re-frays ALL characters in every created area — including the attack-space target', () => {
+    // Talent I (p.128): "Exceed: Deal fray damage again to all characters in
+    // any area created by this ability." "All characters" is explicit — the
+    // attack-space target IS included, because this is a separate later
+    // effect, not the primary Area Effect repeated blindly. The Exceed fact
+    // reads the SAME authoritative roll (d20 15 → total 15 ≥ 15).
+    const { state, hero, foe, second, ally } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, ally: { x: 4, y: 1 }, second: { x: 3, y: 4 }, talents: { 'demon-slayer:draken-cross': 1 } });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
+    }, scriptedDice(15, 5, 6));
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    const attackMutation = mutations.find((mutation) => mutation.kind === 'attack') as { exceed?: boolean } | undefined;
+    expect(attackMutation?.exceed).toBe(true);
+    // Source order: attack, its damage, primary area fray, base Effect fray,
+    // THEN Talent I re-frays every created area in creation order.
+    const foeAreaDamages = mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === foe.id && mutation.delivery === 'area');
+    expect(foeAreaDamages).toHaveLength(1); // only Talent I — the attack space never takes the primary fray
+    const allyAreaDamages = mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === ally.id && mutation.delivery === 'area');
+    expect(allyAreaDamages).toHaveLength(2); // primary fray + Talent I
+    const secondAreaDamages = mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === second.id && mutation.delivery === 'area');
+    expect(secondAreaDamages).toHaveLength(2); // base Effect fray + Talent I
+    expect(result.state.actors[foe.id].hp).toBe(13); // 32 - 15 attack - 4 Talent I (the explicit primary-target Talent I case)
+    expect(result.state.actors[second.id].hp).toBe(24); // 32 - 4 - 4
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross talent 1: without Exceed the re-fray never fires', () => {
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 4 }, ally: null, talents: { 'demon-slayer:draken-cross': 1 } });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
+    }, scriptedDice(12, 5, 6));
+    const mutations = mutationsOf(result.events, 'demon-slayer:draken-cross');
+    const attackMutation = mutations.find((mutation) => mutation.kind === 'attack') as { exceed?: boolean } | undefined;
+    expect(attackMutation?.exceed).toBe(false);
+    expect(result.state.actors[foe.id].hp).toBe(17); // no Talent I fray on the attack space
+    expect(result.state.actors[second.id].hp).toBe(28); // base Effect fray only
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross: the Dark Wind Devil Blade mastery stays UNRESOLVED — no teleport or divine splash is invented', () => {
+    // "After using this ability you may teleport to any space of an area
+    // created, then all foes in created areas are slashed and take 2 divine
+    // damage" needs exact source Blast geometry and a RECORDED teleport
+    // destination. Neither is approximated: mastering the ability changes
+    // nothing observable about the base resolution.
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 4 }, ally: null });
+    state.actors[hero.id].masteredAbilityIds = ['demon-slayer:draken-cross'];
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 3, y: 4 }] } },
+    }, scriptedDice(12, 5, 6));
+    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 1 }); // never teleported
+    expect(mutationsOf(result.events, 'demon-slayer:draken-cross').some((mutation) => mutation.kind === 'move' && mutation.movement !== 'rush')).toBe(false);
+    expect(result.state.actors[second.id].hp).toBe(28); // ordinary E1 fray only — no 2 divine splash
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

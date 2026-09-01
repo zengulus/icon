@@ -236,8 +236,8 @@ describe('Hissatsu (p.141)', () => {
   });
 });
 
-describe('Pulverize (p.142)', () => {
-  it('attacking a lower target adds +2 flat damage, and only from two or more elevations higher does the exceed threshold drop', () => {
+describe('Pulverize (p.134)', () => {
+  it('attacking a lower target adds +2 flat damage; two or more elevations higher SOURCE-FORCES the exceed', () => {
     // Two elevations higher: +2 flat on the hit (control: no trait, same dice).
     const { state, hero, foe } = traitEncounter({
       traitIds: ['colossus:trait:pulverize'],
@@ -262,7 +262,7 @@ describe('Pulverize (p.142)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('the VM exceed trigger fires on a 13+ at two elevations higher, not at 12 and not without the trait', () => {
+  it('two or more elevations higher SOURCE-FORCES the VM exceed branch — regardless of the roll, and never without the trait', () => {
     const actor = (id: string, side: 'heroes' | 'foes', traitIds: string[], x: number) => ({
       id, side, position: { x, y: 0 }, hp: 20, maxHp: 40, vitality: 10, vigor: 0,
       defense: 6, armor: 0, speed: 4, dash: 2, fray: 4, damageDie: 6, actions: 2, attacked: false,
@@ -298,21 +298,55 @@ describe('Pulverize (p.142)', () => {
       input: { actorIds: { target: ['foe'] } }, dice, triggers: new Set(),
     }, {});
     const exceeded = (result: ReturnType<typeof executeRuleProgram>) => result.mutations.some((mutation) => mutation.kind === 'vigor');
-    // d20 13 + boon (elevation) 1 = total 14 → 13+ threshold fires.
-    expect(exceeded(run(['colossus:trait:pulverize'], scriptedDice(13, 1, 1)))).toBe(true);
-    // d20 12 + 1 = 13 → still fires (13+).
-    expect(exceeded(run(['colossus:trait:pulverize'], scriptedDice(12, 1, 1)))).toBe(true);
-    // d20 11 + 1 = 12 → below 13 → no exceed.
-    expect(exceeded(run(['colossus:trait:pulverize'], scriptedDice(11, 1, 1)))).toBe(false);
-    // No trait: 14 < 15 → no exceed.
+    const fact = (result: ReturnType<typeof executeRuleProgram>) => {
+      const attack = result.mutations.find((mutation) => mutation.kind === 'attack');
+      return attack && attack.kind === 'attack' ? attack.exceed === true : false;
+    };
+    // The source text is "…If you are two or more levels higher, it also
+    // triggers all exceed effects" — a SOURCE-FORCED exceed, not a threshold
+    // reduction. With the trait, the exceed FACT is true regardless of the
+    // roll: d20 6 + boon (elevation) 1 = 7 hits (defense 6) with a low total
+    // and the exceed branch still fires; a miss at d20 2 records the fact too.
+    expect(exceeded(run(['colossus:trait:pulverize'], scriptedDice(6, 1, 1)))).toBe(true);
+    expect(fact(run(['colossus:trait:pulverize'], scriptedDice(6, 1, 1)))).toBe(true);
+    expect(fact(run(['colossus:trait:pulverize'], scriptedDice(2, 1, 1)))).toBe(true); // miss — the elevation still forces the fact
+    // Without the trait, 14 < 15 → no natural exceed and nothing forces it.
     expect(exceeded(run([], scriptedDice(13, 1, 1)))).toBe(false);
+    expect(fact(run([], scriptedDice(13, 1, 1)))).toBe(false);
+  });
+
+  it('the command boundary records a SOURCE-FORCED exceed activation for a Pulverize attack (and never without the trait)', () => {
+    // The elevation condition produces the SAME trigger as the natural 15+
+    // roll, but with source-forced provenance (trigger-provenance.ts) — the
+    // boundary records how the trigger became active, it never forges one.
+    const { state, hero, foe } = traitEncounter({ traitIds: ['colossus:trait:pulverize'], abilityIds: ['freelancer:strafe-shot'], elevation: 2 });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'freelancer:strafe-shot', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [foe.id] } }, attackTargetId: foe.id,
+    }, scriptedDice(6, 1, 1));
+    const event = result.events.find((candidate) => candidate.type === 'RULE_MUTATIONS_APPLIED');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'exceed' && provenance === 'source-forced')
+      : false).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+
+    const control = traitEncounter({ traitIds: ['colossus:trait:furious-berserk'], abilityIds: ['freelancer:strafe-shot'], elevation: 2 });
+    const controlResult = executeCommand(control.state, {
+      type: 'EXECUTE_RULE', actorId: control.hero.id, sourceId: 'freelancer:strafe-shot', actionId: 'default', timing: 'use',
+      input: { actorIds: { target: [control.foe.id] } }, attackTargetId: control.foe.id,
+    }, scriptedDice(6, 1, 1));
+    const controlEvent = controlResult.events.find((candidate) => candidate.type === 'RULE_MUTATIONS_APPLIED');
+    expect(controlEvent && controlEvent.type === 'RULE_MUTATIONS_APPLIED'
+      ? controlEvent.triggerActivations?.some(({ trigger, provenance }) => trigger === 'exceed' && provenance === 'source-forced')
+      : false).toBe(false);
+    expect(applyEvents(control.state, controlResult.events)).toEqual(controlResult.state);
   });
 
   it('the kernel read is a pure elevation function (unit)', () => {
     const owner = { traitIds: ['colossus:trait:pulverize'], state: {} };
-    expect(traitAttackModifier(owner, 0)).toMatchObject({ bonusDamageFlat: 0, exceedThreshold: null });
-    expect(traitAttackModifier(owner, 1)).toMatchObject({ bonusDamageFlat: 2, exceedThreshold: null });
-    expect(traitAttackModifier(owner, 2)).toMatchObject({ bonusDamageFlat: 2, exceedThreshold: 13 });
+    expect(traitAttackModifier(owner, 0)).toMatchObject({ bonusDamageFlat: 0, forceExceed: false });
+    expect(traitAttackModifier(owner, 1)).toMatchObject({ bonusDamageFlat: 2, forceExceed: false });
+    expect(traitAttackModifier(owner, 2)).toMatchObject({ bonusDamageFlat: 2, forceExceed: true });
   });
 });
 

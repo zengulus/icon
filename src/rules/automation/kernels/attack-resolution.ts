@@ -21,7 +21,11 @@
  * - the aura projection (kernels/aura.ts) — the attacker's own aura boons/
  *   curses plus any defensive curse an aura projects against the target;
  * - `context.abilityUseModifiers` (F10) — per-resolution Blessing of War /
- *   Rebirth modifiers for this ability only.
+ *   Rebirth modifiers for this ability only;
+ * - the trait fold's SOURCE-FORCED exceed (Pulverize, p.134): two or more
+ *   elevations higher forces every exceed effect regardless of the roll —
+ *   OR'd into the authoritative exceed fact, never approximated as a
+ *   threshold change.
  *
  * The resolved rules facts (cover/dodge/aetherwall provenance, flat bonus
  * damage) are recorded against the execution context so the shared damage
@@ -66,6 +70,11 @@ export interface AuthoritativeAttackResult {
   autoHit: boolean;
   /** The effective Exceed threshold after trait overrides (default 15). */
   exceedThreshold: number;
+  /** SOURCE-FORCED exceed (Pulverize p.134): the trait's text forces the
+   * exceed fact without the 15+ natural condition. The attack mutation's
+   * `exceed` field already includes it — this is the classification the
+   * boundary uses to record source-forced provenance. */
+  forceExceed: boolean;
   /** The p.89/p.104/p.105 facts for this attack's direct damage only. */
   damageProvenance: AttackDamageProvenance;
   /** The F6 fold result — one-shot consumers read `consumedTraitModifier`. */
@@ -118,13 +127,20 @@ export function resolveAuthoritativeAttack(
   const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat, exceedThreshold } = attack;
   const damageProvenance = { ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat };
   rememberAttackDamage(context, target.id, damageProvenance);
+  // The authoritative exceed fact: the natural 15+ (post-threshold) roll OR
+  // a source-forced exceed (Pulverize p.134 "…it also triggers all exceed
+  // effects"). Natural and forced activation of the same trigger collapse
+  // to one semantic exceed (trigger-provenance.ts) — never double-fired.
+  const forceExceed = traitModifier.forceExceed;
+  const exceed = (total !== null && total >= (exceedThreshold ?? 15)) || forceExceed;
   const attackMutation: RuleMutation = {
     kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical,
-    exceed: total !== null && total >= (exceedThreshold ?? 15), exceedThreshold: exceedThreshold ?? 15, evasionRoll, trueStrike, autoHit,
+    exceed, exceedThreshold: exceedThreshold ?? 15, evasionRoll, trueStrike, autoHit,
   };
   return {
     attackMutation, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
     exceedThreshold: exceedThreshold ?? 15,
+    forceExceed,
     damageProvenance,
     traitModifier,
     damageDie: traitModifier.damageDieOverride ?? source.damageDie,

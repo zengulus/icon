@@ -110,3 +110,12 @@ export function arcCells(start: Position, path: readonly Position[]): Position[]
 export const cellKey = (cell: Position) => `${cell.x},${cell.y}`;
 
 export const sameCell = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
+
+/** ICON p.97 area-placement rule: an AoE pattern with a listed range may be
+ * placed in ANY configuration so long as AT LEAST ONE of its spaces is
+ * within the listed range of the origin — never the center alone. Pure
+ * geometry: a selected area is legal iff any of its cells is within `range`
+ * (Chebyshev, the engine's range metric) of `origin`. */
+export function areaHasCellWithinRange(cells: readonly Position[], origin: Position, range: number): boolean {
+  return cells.some((cell) => Math.max(Math.abs(cell.x - origin.x), Math.abs(cell.y - origin.y)) <= range);
+}

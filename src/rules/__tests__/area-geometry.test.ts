@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateLine } from '../area-geometry.js';
+import { areaHasCellWithinRange, sameCell, squareArea, validateLine } from '../area-geometry.js';
 
 /**
  * ICON p.97: a Line X is X spaces long, orthogonal only, and each successive
@@ -35,5 +35,52 @@ describe('validateLine (ICON p.97 canonical Line geometry)', () => {
   it('rejects wrong-length paths', () => {
     expect(validateLine([{ x: 0, y: 0 }, { x: 1, y: 0 }], 3)).toBeNull();
     expect(validateLine([{ x: 0, y: 0 }], 2)).toBeNull();
+  });
+});
+
+/**
+ * ICON p.97 area-placement rule: an AoE pattern with a listed range may be
+ * placed in ANY configuration so long as AT LEAST ONE of its spaces is within
+ * the listed range of the origin — never "the center must be in range".
+ * `areaHasCellWithinRange` is the single pure-geometry authority for that
+ * placement legality check.
+ */
+describe('areaHasCellWithinRange (ICON p.97 at-least-one-cell placement)', () => {
+  it('a blast whose CENTER is out of range is still legal when one of its cells is in range', () => {
+    // A small blast centered 4 away from the origin: the center is beyond
+    // range 3, but its nearest edge cells sit at Chebyshev 3 → legal.
+    const legal = areaHasCellWithinRange(squareArea({ x: 4, y: 0 }, 1), { x: 0, y: 0 }, 3);
+    expect(legal).toBe(true);
+    // The old center-distance rule is wrong: distance(origin, center) = 4 > 3.
+    expect(Math.max(Math.abs(4 - 0), Math.abs(0 - 0))).toBe(4);
+  });
+
+  it('an area whose EVERY cell is beyond range is rejected', () => {
+    const outOfRange = areaHasCellWithinRange(squareArea({ x: 5, y: 0 }, 1), { x: 0, y: 0 }, 3);
+    expect(outOfRange).toBe(false); // nearest cell (4,0) is Chebyshev 4 away
+  });
+
+  it('an area touching the range boundary exactly is legal', () => {
+    expect(areaHasCellWithinRange(squareArea({ x: 3, y: 0 }, 1), { x: 0, y: 0 }, 3)).toBe(true);
+    expect(areaHasCellWithinRange(squareArea({ x: 4, y: 1 }, 1), { x: 0, y: 0 }, 3)).toBe(true); // (3,1) is exactly 3
+  });
+
+  it('the origin itself counts as a cell inside any area containing it', () => {
+    expect(areaHasCellWithinRange(squareArea({ x: 0, y: 0 }, 2), { x: 0, y: 0 }, 3)).toBe(true);
+    expect(areaHasCellWithinRange([{ x: 0, y: 0 }], { x: 0, y: 0 }, 0)).toBe(true);
+  });
+
+  it('a large footprint is legal if ANY of its cells qualifies — identity never matters', () => {
+    const medium = squareArea({ x: 6, y: 4 }, 2); // the whole (4,2)..(8,6) pattern
+    // The nearest cell (4,2) is Chebyshev 4 from the origin: range 3 rejects
+    // the whole area, range 4 admits it — the cell, never the center.
+    expect(areaHasCellWithinRange(medium, { x: 0, y: 0 }, 3)).toBe(false);
+    expect(areaHasCellWithinRange(medium, { x: 0, y: 0 }, 4)).toBe(true);
+  });
+
+  it('the pattern is consulted as a SET — a single qualifying cell is enough', () => {
+    const cells = [{ x: 9, y: 9 }, { x: 1, y: 0 }];
+    expect(areaHasCellWithinRange(cells, { x: 0, y: 0 }, 1)).toBe(true);
+    expect(cells.some((cell) => sameCell(cell, { x: 1, y: 0 }))).toBe(true);
   });
 });

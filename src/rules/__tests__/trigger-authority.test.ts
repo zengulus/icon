@@ -159,9 +159,15 @@ describe('trigger authority: command triggers are provenance-checked', () => {
     stanced = executeCommand(stanced, { type: 'ADD_ACTOR', actor: foe }).state;
     stanced = startEncounterTo(stanced, hero.id);
     // A slow turn with the charge-gated range rule: the derived Charge makes
-    // the range-4 attack target legal through the shared range fold.
-    const result = executeCommand(stanced, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
-    expect(result.state.actors[foe.id].hp).toBe(13); // 32 - 4 primary fray - 15, at range 5 (charge range)
+    // the range-4 attack target legal through the shared range fold. The
+    // REQUIRED base Effect still needs its recorded area center (rule
+    // unaffected by the Charge) — supplied at (6,4), out of every occupant's
+    // way — and the attack-space target takes only the 15 attack damage.
+    const result = executeCommand(stanced, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id],
+      input: { positions: { 'effect-area-1': [{ x: 6, y: 4 }] } },
+    }, scriptedDice(12, 5, 6));
+    expect(result.state.actors[foe.id].hp).toBe(17); // 32 - 15, at range 5 (charge range); the attack space never takes the area fray too
     expect(applyEvents(stanced, result.events)).toEqual(result.state);
   });
 });

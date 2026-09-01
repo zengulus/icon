@@ -10,6 +10,7 @@ import {
   damageMutation, conditionMutation, rushMutation, shoveMutation, stateMutation,
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
+import { areaHasCellWithinRange } from '../../../../area-geometry.js';
 import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
@@ -29,10 +30,21 @@ import { consumeUsageMutation, ledgerAvailable } from '../../../primitives/usage
  *
  * Fidelity notes that stay visible on the resolved event (the full source
  * text is preserved on every RULE_MUTATIONS_APPLIED event):
- * - Area effects apply to every character in the area including the attack
- *   space, matching the source's "Area effect" wording (as in Land Waster).
- * - The second area of Demon Cutter / Draken Cross is placed at a
- *   deterministic non-overlapping center when the caller does not supply one.
+ * - ICON's AoE attack rule: the character in the attack space takes the
+ *   ATTACK component instead of the area effect; every OTHER character in
+ *   the area — allies and foes alike — takes the unrestricted "Area
+ *   effect: Fray" (the sources name no foe restriction).
+ * - Draken Cross's required second/repeated blast areas need the player's
+ *   RECORDED centers, and elected rushes need RECORDED directions — never
+ *   an auto-selected or nearest-foe placement. The areas cannot overlap
+ *   (p.128), and a selected area is legal when at least one of its cells is
+ *   within the effective blast range of the post-rush origin (p.97).
+ * - Demon Cutter's Charge repeat keeps the recorded second-line direction
+ *   when supplied and otherwise uses the deterministic perpendicular
+ *   default noted at the resolver.
+ * - The Dark Wind Devil Blade mastery's optional teleport and divine
+ *   splash remain UNRESOLVED: they need exact source Blast geometry and a
+ *   recorded destination, neither of which this tranche approximates.
  * - Slow-turn restrictions from delay effects are recorded on rule state but
  *   not yet enforced by the reducer's action gates.
  * - Counter retaliation and vigilance charge spends are represented as typed
@@ -95,15 +107,23 @@ const demonCutterEffects: RuleResolver = (context) => {
     throw new RuleProgramViolation('choice.position-range', 'Demon Cutter’s Line 3 must include the attack target; attack along an axis toward it.');
   }
   mutations.push(conditionMutation(context, target.id, 'slashed'));
-  const areaFray = (cells: Position[]) => {
-    for (const foe of Object.values(context.state.actors)) {
-      if (foe.side === source.side || !foe.position || !cells.some((cell) => sameCell(cell, foe.position!))) continue;
-      mutations.push(damageMutation(context, foe.id, source.fray, 'area'));
+  // ICON's AoE attack rule: the character in the attack space takes the
+  // ATTACK component instead of the area effect, so the attack-space target
+  // is EXCLUDED from the line's fray. Every other character in the line —
+  // allies and foes alike — takes the unrestricted "Area effect: Fray".
+  const areaFray = (cells: Position[], opts: { excludeAttackSpace?: boolean } = {}) => {
+    for (const character of Object.values(context.state.actors)) {
+      if (!character.position || !cells.some((cell) => sameCell(cell, character.position!))) continue;
+      if (opts.excludeAttackSpace && character.id === target.id) continue;
+      mutations.push(damageMutation(context, character.id, source.fray, 'area'));
     }
   };
-  areaFray(line);
+  areaFray(line, { excludeAttackSpace: true });
   if (context.triggers?.has('charge') || context.triggers?.has('heroic')) {
     const perpendicular: Position = primaryDirection.x !== 0 ? { x: 0, y: 1 } : { x: 1, y: 0 };
+    // The repeated second line is a fresh area (no attack component), so
+    // every character in it takes the fray; the recorded direction wins
+    // when supplied, otherwise the deterministic perpendicular default.
     const secondDirection = context.input.directions?.['second-line'] ?? perpendicular;
     const secondLine = lineCells(sourcePosition, secondDirection, 3);
     const overlaps = secondLine.some((cell) => line.some((first) => sameCell(cell, first)));
@@ -145,59 +165,47 @@ const cometEffects: RuleResolver = (context) => {
   return mutations;
 };
 
-/** Deterministic non-overlapping blast center within `blastRange` of the
- * POST-RUSH `origin`, sized `radius`, avoiding EVERY area already created by
- * this use (the source "The areas cannot overlap" constraint). Nearest legal
- * cell wins; grid bounds are enforced by construction. A caller-supplied
- * center is NOT routed through here — it is validated by the resolver's
- * authoritative geometry checks (battlefield, range from the post-rush
- * origin, non-overlap). */
-function secondBlastCenter(context: Parameters<RuleResolver>[0], origin: Position, areas: Position[][], radius: number, blastRange: number): Position | null {
-  const candidates: Position[] = [];
-  for (let dy = -blastRange; dy <= blastRange; dy += 1) {
-    for (let dx = -blastRange; dx <= blastRange; dx += 1) {
-      const cell = { x: origin.x + dx, y: origin.y + dy };
-      if (withinGrid(cell, context) && distance(origin, cell) <= blastRange) candidates.push(cell);
-    }
-  }
-  candidates.sort((a, b) => distance(a, origin) - distance(b, origin) || a.x - b.x || a.y - b.y);
-  for (const cell of candidates) {
-    const blast = squareArea(cell, radius);
-    if (areas.some((prior) => blast.some((candidate) => prior.some((first) => sameCell(candidate, first))))) continue;
-    return cell;
-  }
-  return null;
-}
 
 /** ICON p.128: small-blast attack (hit 2[D]+fray / miss fray / crit +[D])
- * with an OPTIONAL Effect and a Charge/Heroic repeat.
+ * with its Area effect, a REQUIRED base Effect, and a Charge/Heroic repeat.
  *
  * Re-read fidelity semantics:
- * - The Effect is ONE optional operation: "You may rush 1, then target
- *   another small blast area in range 3 with area effect: fray damage. The
- *   areas cannot overlap." Invoking it rushes 1, then selects another blast
- *   center from the POSITION AFTER that rush. The center's legality
- *   (battlefield, effective blast range, non-overlap with every prior area
- *   of this use) is enforced for BOTH supplied centers and the deterministic
- *   nearest fallback — a malformed supplied center fails closed.
+ * - The attack resolves FIRST (source order: Attack, then its Area effect,
+ *   then Effect, then Charge/Heroic, then Talent consequences). The
+ *   attack-space character gets the ATTACK component INSTEAD of the area
+ *   effect (ICON's AoE attack rule); every OTHER character in the primary
+ *   blast — allies, foes, even the user standing inside it — takes the area
+ *   effect: fray ("Area effect: Fray" names no foe restriction, and an
+ *   unrestricted area affects every character in it).
+ * - The base Effect is NOT optional as a whole: "You may rush 1, then target
+ *   another small blast area in range 3…" reads like every other "You may
+ *   Rush X, then …" construction — the RUSH may be declined, but the second
+ *   Small Blast area is REQUIRED. Both undertakings are player spatial
+ *   choices: the rush needs a recorded direction when elected, and the area
+ *   needs a recorded center — never a deterministic "nearest foe" or
+ *   auto-selected fallback.
+ * - Placement legality for the later areas is the ICON p.97 region rule: the
+ *   pattern is legal when AT LEAST ONE of its spaces is within the effective
+ *   blast range of the POST-RUSH origin (never the center alone), every cell
+ *   is on the battlefield, and no cell overlaps an area this use already
+ *   created. The whole operation is validated BEFORE any rush mutation is
+ *   emitted, so a malformed chosen area can never leave a half-applied rush
+ *   behind (atomic Effect execution).
  * - "Charge or Heroic: Gains true strike, and may repeat the effect." The
- *   true strike folds into the attack roll below (authoritative Charge =
- *   durable slow-turn fact; Heroic = caller declaration). The repeat is the
- *   WHOLE Effect performed again (its own rush 1 + its own area) — never a
- *   re-damage of an existing blast — and is itself optional.
+ *   true strike folds into the authoritative roll (Charge = durable
+ *   slow-turn fact; Heroic = validated declaration); the repeat is another
+ *   complete Effect operation (optional rush 1 + its own REQUIRED area,
+ *   non-overlapping with every prior area) and is itself optional.
  * - Talent II (p.128): "Charge: Increase range to 5, and all areas may be
- *   increased to medium blasts instead." "May … instead" is a REAL player
- *   choice (larger areas can include unintended characters/terrain), so the
- *   medium upgrade is a recorded durable decision
- *   (`booleans['medium-areas']`) — ONE decision applying to every area this
- *   use creates ("all areas"), and the player may decline. The range half
- *   folds through the generic charge-gated range rule at the command gates;
- *   `blastRange` here is the same widened authority used by the Effect
- *   center validation.
+ *   increased to medium blasts instead." ONE recorded resolution-level
+ *   decision (`booleans['medium-areas']`) sizes every created area small OR
+ *   medium ("all areas … instead"); the player may decline. The range half
+ *   folds through the generic charge-gated range rule; `blastRange` here is
+ *   the same widened authority.
  * - Talent I: "Exceed: Deal fray damage again to all characters in any area
- *   created by this ability." The exceed fact is this ability's OWN attack
- *   roll at 15+ (p.93) — derived from the authoritative roll, never a caller
- *   assertion.
+ *   created by this ability." "All characters" is explicit — it includes
+ *   the attack-space character (a later separate effect, not the primary
+ *   area effect repeated blindly) and is identity-deduplicated per area.
  */
 const drakenCrossEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
@@ -210,56 +218,61 @@ const drakenCrossEffects: RuleResolver = (context) => {
   const radius = medium ? 2 : 1;
   const blastRange = charged ? 5 : 3;
   const areas: Position[][] = [];
-  const blastFray = (cells: Position[]) => {
-    for (const foe of Object.values(context.state.actors)) {
-      if (foe.side === source.side || !foe.position || !cells.some((cell) => sameCell(cell, foe.position!))) continue;
-      mutations.push(damageMutation(context, foe.id, source.fray, 'area'));
+  // Area-effect recipient fold: every character in `cells` except the named
+  // exclusions takes ONE area-fray mutation (identity-deduplicated even for
+  // multi-cell footprints — a character inside the area is hit once). No
+  // side filter: "Area effect: Fray" affects every character in the area.
+  const frayArea = (cells: Position[], opts: { exclude?: readonly string[] } = {}) => {
+    const excluded = new Set(opts.exclude ?? []);
+    for (const character of Object.values(context.state.actors)) {
+      if (excluded.has(character.id) || !character.position) continue;
+      if (!cells.some((cell) => sameCell(cell, character.position!))) continue;
+      mutations.push(damageMutation(context, character.id, source.fray, 'area'));
     }
   };
-  // Primary blast (the header's attack space); the area effect includes the
-  // attack space (reviewed as in Land Waster).
-  const primary = squareArea(target.position, radius);
-  areas.push(primary);
-  blastFray(primary);
-  // One invocation of the optional Effect: rush 1, then one more area whose
-  // legality is judged from the POST-RUSH origin.
-  let origin = source.position;
-  const invocation = (index: number) => {
-    const direction = context.input.directions?.[`effect-rush-${index}`] ?? rushTowardFoes(context, origin);
-    const path = plannedRush(context, source.id, 1, direction, origin);
-    if (path.length > 0) {
-      mutations.push(rushMutation(context, source.id, path));
-      origin = { ...path[path.length - 1]! };
+  // One complete base-Effect operation: optional recorded rush 1 (direction
+  // REQUIRED when elected), then a REQUIRED player-chosen blast center whose
+  // legality (on-grid, at least one cell within the effective blast range of
+  // the post-rush origin, no overlap with any prior area of this use) is
+  // validated BEFORE anything is emitted. Returns the position after the
+  // operation's rush (the origin the NEXT invocation measures from).
+  const applyEffect = (index: number, origin: Position): Position => {
+    const rushKey = `effect-rush-${index}`;
+    const areaKey = `effect-area-${index}`;
+    let effectOrigin = { ...origin };
+    let rushPath: Position[] = [];
+    if (context.input.booleans?.[rushKey] === true) {
+      const direction = context.input.directions?.[rushKey];
+      if (!direction) {
+        throw new RuleProgramViolation('choice.position-required', `Draken Cross effect ${index} rush needs a recorded direction.`);
+      }
+      rushPath = plannedRush(context, source.id, 1, direction, effectOrigin);
+      if (rushPath.length > 0) effectOrigin = { ...rushPath[rushPath.length - 1]! };
     }
-    const supplied = context.input.positions?.[`effect-area-${index}`]?.[0];
-    const center = supplied ?? secondBlastCenter(context, origin, areas, radius, blastRange);
-    // No legal placement (the deterministic search found none without
-    // overlapping): the Effect cannot resolve here — decline the invocation.
-    if (center === null) return;
-    const blast = squareArea(center, radius);
+    const supplied = context.input.positions?.[areaKey]?.[0];
+    if (!supplied) {
+      throw new RuleProgramViolation('choice.position-required', `Draken Cross effect ${index} needs a recorded area center.`);
+    }
+    const blast = squareArea(supplied, radius);
     if (!blast.every((cell) => withinGrid(cell, context))) {
       throw new RuleProgramViolation('choice.position-range', `Draken Cross effect area ${index} must be fully inside the battlefield.`);
     }
-    if (distance(origin, center) > blastRange) {
-      throw new RuleProgramViolation('choice.position-range', `Draken Cross effect area ${index} must be within range ${blastRange} of the position after its rush.`);
+    if (!areaHasCellWithinRange(blast, effectOrigin, blastRange)) {
+      throw new RuleProgramViolation('choice.position-range', `Draken Cross effect area ${index} needs at least one space within range ${blastRange} of the position after its rush.`);
     }
     if (blast.some((cell) => areas.some((prior) => prior.some((first) => sameCell(cell, first))))) {
       throw new RuleProgramViolation('choice.area-overlap', `Draken Cross effect area ${index} cannot overlap an area already created by this use.`);
     }
+    // Atomic: every validation passed, so now emit the recorded rush and the
+    // area's recipients.
+    if (rushPath.length > 0) mutations.push(rushMutation(context, source.id, rushPath));
     areas.push(blast);
-    blastFray(blast);
+    frayArea(blast);
+    return effectOrigin;
   };
-  // The Effect is entirely optional — a legal use must resolve without it.
-  if (context.input.booleans?.['effect'] === true) invocation(1);
-  // "Charge or Heroic: … may repeat the effect" — a SECOND independent
-  // invocation with its own recorded rush/center, gated on the authoritative
-  // Charge fact / declared Heroic AND a recorded repeat decision.
-  if ((context.triggers?.has('charge') || context.triggers?.has('heroic')) && context.input.booleans?.['repeat'] === true) invocation(2);
   // Attack (p.128): hit 2[D]+fray, miss fray, crit +1[D]. "Charge or
-  // Heroic: Gains true strike" folds into the roll below. The roll is
-  // resolved AFTER the optional areas so the exceed fact (Talent I) covers
-  // every area this use created; the attack itself precedes any rush in
-  // source order, so the pre-flow view is the correct observation point.
+  // Heroic: Gains true strike" folds into the roll below; the exceed fact
+  // (Talent I) reads this SAME authoritative roll.
   const trueStrike = (context.triggers?.has('charge') || context.triggers?.has('heroic')) === true;
   const roll = resolveAuthoritativeAttack(context, source, target, { trueStrike });
   mutations.push(roll.attackMutation);
@@ -267,11 +280,28 @@ const drakenCrossEffects: RuleResolver = (context) => {
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   if (roll.critical) mutations.push(damageMutation(context, target.id, context.dice.die(roll.damageDie), 'hit'));
+  // Primary area recipients: the attack-space character gets the ATTACK
+  // component instead of the area effect; everyone else in the blast takes
+  // the area fray.
+  const primary = squareArea(target.position, radius);
+  areas.push(primary);
+  frayArea(primary, { exclude: [target.id] });
+  // The base Effect is part of the ability — its second (REQUIRED) blast
+  // resolves with the optional rush.
+  let origin = applyEffect(1, source.position);
+  // "Charge or Heroic: … may repeat the effect" — another complete Effect
+  // operation with its own recorded rush/center, gated on the authoritative
+  // Charge fact / declared Heroic AND a recorded repeat decision.
+  if ((context.triggers?.has('charge') || context.triggers?.has('heroic')) && context.input.booleans?.['repeat'] === true) {
+    applyEffect(2, origin);
+  }
   // Talent I (p.128): "Exceed: Deal fray damage again to all characters in
-  // any area created by this ability."
+  // any area created by this ability." — ALL characters, including the
+  // attack-space target, once per area (areas never overlap, so once per
+  // character).
   const attackMutation = roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>;
   if (attackMutation.exceed === true && (source.talents?.['demon-slayer:draken-cross'] ?? 0) >= 1) {
-    for (const area of areas) blastFray(area);
+    for (const area of areas) frayArea(area);
   }
   return mutations;
 };

@@ -1842,12 +1842,25 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
       actorView.resources = { ...actorView.resources, 'bonus-damage': (actorView.resources['bonus-damage'] ?? 0) + 1 };
     }
     if (targetInPit(state, targets[0])) forcedTrigger('exceed');
-  }
-  // ICON p.157 Ace: the next attack triggers every exceed effect (the daze and
-  // unerring half resolve when the attack lands in the reducer).
-  if (attackAbility && !noAttackSpace && targets[0] && actor.ruleState['ace:armed'] === true) {
-    forcedTrigger('exceed');
-  }      // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
+  }      // ICON p.157 Ace: the next attack triggers every exceed effect (the daze and
+      // unerring half resolve when the attack lands in the reducer).
+      if (attackAbility && !noAttackSpace && targets[0] && actor.ruleState['ace:armed'] === true) {
+        forcedTrigger('exceed');
+      }
+      // ICON p.134 Pulverize: "…If you are two or more levels higher, it also
+      // triggers all exceed effects." A SOURCE-FORCED exceed activation
+      // from the attack-start elevation condition, recorded with the same
+      // source-forced provenance as the armed exceeds; the attack kernel
+      // folds the identical fact so resolver exceed readers agree (never
+      // approximated as a threshold cut).
+      const pulverizeTarget = targets[0];
+      if (attackAbility && !noAttackSpace && pulverizeTarget
+        && (actor.traitIds ?? []).includes('colossus:trait:pulverize')
+        && actor.position && pulverizeTarget.position
+        && elevationAt(state, actor.position) - elevationAt(state, pulverizeTarget.position) >= 2) {
+        forcedTrigger('exceed');
+      }
+      // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
       // effects, hit or miss — the durable empowerment arm produces a
       // SOURCE-FORCED slay activation (never a caller assertion) for the
       // ability that consumes it.
@@ -2304,6 +2317,15 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       }
       // ICON p.157 Ace: the next attack triggers every exceed effect.
       if (command.attackTargetId && action.tags.includes('attack') && actor.ruleState['ace:armed'] === true) {
+        forcedTrigger('exceed');
+      }
+      // ICON p.134 Pulverize: the same source-forced exceed activation on the
+      // EXECUTE_RULE attack path, from the attack-start elevation condition.
+      const rulePulverizeTarget = command.attackTargetId ? state.actors[command.attackTargetId] : undefined;
+      if (command.attackTargetId && action.tags.includes('attack')
+        && (actor.traitIds ?? []).includes('colossus:trait:pulverize')
+        && actor.position && rulePulverizeTarget?.position
+        && elevationAt(state, actor.position) - elevationAt(state, rulePulverizeTarget.position) >= 2) {
         forcedTrigger('exceed');
       }
       // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
