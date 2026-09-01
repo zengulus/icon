@@ -188,8 +188,8 @@ assumption here, document the evidence and update this list before proceeding.
 > Knave, Harvester, Demon Slayer, and Seer, deref
 > rejection; no
 > blanket lexical ban on the inventoried residual). Residual is machine-
-> derived from the site inventory (`npm run audit:u1-residual`): 129
-> `sourceActor(context, …)` sites = 74 pure LIVE-slot reads + 54
+> derived from the site inventory (`npm run audit:u1-residual`): 114
+> `sourceActor(context, …)` sites = 59 pure LIVE-slot reads + 54
 > captured/derived-id dereferences + 1 in-call precedence-boundary read
 > (Harvester line 155) + 0 other, 0 direct dereferences — every count
 > regenerated from the same site list, no hand-maintained totals. (Census-
@@ -199,7 +199,8 @@ assumption here, document the evidence and update this list before proceeding.
 > 4a1ff76 211 = 156 + 54 + 1 (Enochian −18), 3052eee 192 = 137 + 54 + 1
 > (Chanter −19), 81573a8 175 = 120 + 54 + 1 (Knave −17), b6764e8
 > 160 = 105 + 54 + 1 (Harvester −15), d4d4cd9 144 = 89 + 54 + 1
-> (Demon Slayer −16), and current 129 = 74 + 54 + 1 (Seer −15).) U1 stays
+> (Demon Slayer −16), 71aeb59 129 = 74 + 54 + 1 (Seer −15), and current
+> 114 = 59 + 54 + 1 (Fool −15).) U1 stays
 > PARTIAL; zero source promotion; census remains 427.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
@@ -262,6 +263,23 @@ assumption here, document the evidence and update this list before proceeding.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 10 — Fool pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/fool-programs.ts` now
+  routes every pure live-slot reference through the adapter: source reads →
+  `resolveSourceActor(context)` and primary attack-target reads →
+  `resolveAttackTarget(context)` where the optional-slot contract matched.
+  The two retained CAPTURED sites stay caller-owned: Masquerade's
+  input-selected ally and Chronotemper's input-target-or-self dereference
+  the recorded player selection — U4 owns the choice; no cardinality/
+  selection moved into U1. Guard pins Fool via contentAdapterSurface;
+  mutation test covers a revert (exactly one routing violation) and proves
+  the retained captured dereferences alone do not trigger the pin. The
+  tranche removed exactly 15 PURE_LIVE_REFERENCE sites (Fool 15 → 0),
+  moving the machine-derived residual from 129 = 74 + 54 + 1 to
+  114 = 59 + 54 + 1 (per `npm run audit:u1-residual`; no hand-maintained
+  totals). 0 direct dereferences; U1 remains PARTIAL. Census byte-stable
+  at 427; zero source promotion.
 
 - **U1 content-authoring tranche 9 — Seer pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/seer-programs.ts` now

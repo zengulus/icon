@@ -129,7 +129,8 @@ their sites.
 > | `81573a8` (post-Knave) | 175 | 120 | 54 | 1 |
 > | `b6764e8` (post-Harvester) | 160 | 105 | 54 | 1 |
 > | `d4d4cd9` (post-Demon Slayer) | 144 | 89 | 54 | 1 |
-> | current HEAD (post-Seer) | 129 | 74 | 54 | 1 |
+> | `71aeb59` (post-Seer) | 129 | 74 | 54 | 1 |
+> | current HEAD (post-Fool) | 114 | 59 | 54 | 1 |
 >
 > The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
 > (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
@@ -145,7 +146,7 @@ their sites.
 > consistent; `188 + 55 = 243 ≠ 242` was the misclassification surfacing
 > through two hand-maintained buckets.
 >
-A machine scan at this HEAD finds 129 `sourceActor(context, …)` call
+A machine scan at this HEAD finds 114 `sourceActor(context, …)` call
 sites across 14 named program files (multi-line calls collapse to one site;
 `npm run audit:u1-residual` reproduces these figures — and now VERIFIES this
 prose against the machine inventory, so a stale total cannot silently
@@ -153,15 +154,15 @@ survive here again). Classified by
 MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
 provenance string):
 
-- **U1 reference identity — pure LIVE-slot reads (74, migrate family-by-
+- **U1 reference identity — pure LIVE-slot reads (59, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
-  Warden/Sealer/Enochian/Chanter/Knave/Harvester/Demon Slayer/Seer migrated
-  across tranches 2–9. Remaining per-file: Fool 15, Freelancer 14,
+  Warden/Sealer/Enochian/Chanter/Knave/Harvester/Demon Slayer/Seer/Fool
+  migrated across tranches 2–10. Remaining per-file: Freelancer 14,
   Geomancer 14, Stormbender 11, Colossus 11, Sealer 4 (chain sites' source
   reads — see boundary), Shade 3, Warden 2. Enochian 0, Chanter 0, Knave 0,
-  Harvester 0, Demon Slayer 0, Seer 0 (their tranches).
+  Harvester 0, Demon Slayer 0, Seer 0, Fool 0 (their tranches).
 - **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
   earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
@@ -688,20 +689,43 @@ alone do NOT trigger the pin.
 
 No direct `state.actors[context.…]` dereference remains anywhere in content.
 
-## U1 status after the Seer tranche
+## U1 tranche executed (fresh HEAD, 2026-09-01, tenth tranche — Fool)
 
-U1 remains PARTIAL: the shared surface is proved and pinned across THIRTEEN
+### Migrated: Fool pure LIVE-slot reference reads
+
+`content/jobs/programs/fool-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **15 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Fool: 15 → 0 PURE; CAPTURED 54 and
+BOUNDARY 1 unchanged; whole-repo 129 → 114 = 59 + 54 + 1)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` across the Fool resolvers with unambiguous
+  live source slots;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` where its optional-slot contract matched.
+
+The retained Fool sites (2 CAPTURED) stay caller-owned: Masquerade's
+input-selected ally and Chronotemper's input-target-or-self dereference the
+recorded player selection — U4 owns the choice, and nothing in this tranche
+moved cardinality/selection into U1. No arbitrary-id accessor was added; no
+source unit was promoted; valid/reachable-state semantics are preserved,
+and a slot naming a missing actor fails closed under the existing U1
+contract exactly as in the prior tranches.
+
+## U1 status after the Fool tranche
+
+U1 remains PARTIAL: the shared surface is proved and pinned across FOURTEEN
 migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
-Chanter, Knave, Harvester, Demon Slayer, Seer, Job-trait, Class resolvers),
-and the residual is a machine-derived classified inventory — 74 pure
-LIVE-slot reads (next tranches) + 54 captured/derived dereferences + 1
-in-call boundary read = 129 sites, 0 direct dereferences. The single
-DERIVED_OR_PRECEDENCE_BOUNDARY remains inventoried and unresolved
-(BOUNDARY 1 → 1). A whole-consumer audit is NOT yet done, so U1 cannot claim
-AUTHORITATIVE: 5 program files still resolve live slots through the legacy
-kernel-side convenience (Fool, Geomancer, Freelancer, Stormbender,
-Colossus), and the U1×U4 captured-identity boundary has no shared surface
-yet.
+Chanter, Knave, Harvester, Demon Slayer, Seer, Fool, Job-trait, Class
+resolvers), and the residual is a machine-derived classified inventory — 59
+pure LIVE-slot reads (next tranches) + 54 captured/derived dereferences + 1
+in-call boundary read = 114 sites, 0 direct dereferences. The single
+DERIVED_OR_PRECEDENCE_BOUNDARY remains inventoried and unresolved (BOUNDARY
+1 → 1). A whole-consumer audit is NOT yet done, so U1 cannot claim
+AUTHORITATIVE: 4 program files still resolve live slots through the legacy
+kernel-side convenience (Geomancer, Freelancer, Stormbender, Colossus), and
+the U1×U4 captured-identity boundary has no shared surface yet.
 
 ## Known blocking repairs (source-quoted, not future work)
 

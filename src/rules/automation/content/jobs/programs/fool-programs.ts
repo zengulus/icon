@@ -15,6 +15,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /** ICON p.150: a bomb can share a space with characters but NOT with other
  * bombs. The generic unoccupied placement policy (no obstructing character
@@ -65,8 +66,8 @@ function bombFreeCell(context: RuleExecutionContext, origin: Position, radius: n
 /** ICON p.150: dash 3 (phasing), dash 1 to the side, then a +1-boon attack
  * that dazes the target; a Finishing Blow or Slay summons a bomb. */
 const cavaliereEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source?.position) return [];
   const mutations: RuleMutation[] = [];
   const direction = context.input.directions?.['direction'] ?? (target?.position ? axisDirection(source.position, target.position) : { x: 1, y: 0 });
@@ -87,7 +88,7 @@ const cavaliereEffects: RuleResolver = (context) => {
 
 /** ICON p.150: summon two bombs in range 2, then arm the turn-end detonation. */
 const carnevaleEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source?.position) return [];
   const mutations: RuleMutation[] = [];
   const chosen = context.input.positions?.['bomb-positions'] ?? [];
@@ -104,7 +105,7 @@ const carnevaleEffects: RuleResolver = (context) => {
 /** ICON p.150: gamble, dash that many +2 spaces in one direction; moving the
  * full distance grants evasion until the start of the next turn. */
 const spinningTopEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source?.position) return [];
   const { roll: gamble } = gambleD6(context.dice);
   const spaces = gamble + 2;
@@ -134,8 +135,8 @@ const spinningTopEffects: RuleResolver = (context) => {
  * autohit 2[D]+fray there, fray along the line, and a large blast on a
  * Finishing Blow or Slay. A target at 8 hp or less takes 999 divine instead. */
 const deathEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source?.position || !target?.position) return [];
   const { roll: gamble } = gambleD6(context.dice);
   const direction = axisDirection(source.position, target.position);
@@ -169,7 +170,7 @@ const deathEffects: RuleResolver = (context) => {
  * 1. The die lives in ruleState so the empower resolver can read it through
  * the generic VM actor view; the reducer's stance-refresh hook ticks it up. */
 const gallowsHumorEnter: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [
     stanceMutation(context, source.id, 'enter', 'gallows-humor'),
     stateMutation(context, source.id, 'gallows-humor:die', 1),
@@ -179,7 +180,7 @@ const gallowsHumorEnter: RuleResolver = (context) => {
 /** ICON p.151: at maximum, reset the die to 1 to empower the next ability with
  * bonus damage (the slay effect is asserted by the empowered ability's caller). */
 const gallowsHumorEmpower: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const die = Number(source.state['gallows-humor:die'] ?? 0);
   if (die < 1) throw new RuleProgramViolation('stance.required', 'Gallows Humor empowerment requires the Gallows Humor stance.');
   if (die < 6) throw new RuleProgramViolation('stance.die-not-max', 'Gallows Humor can only empower an ability when its power die is at maximum.');
@@ -191,7 +192,7 @@ const gallowsHumorEmpower: RuleResolver = (context) => {
 
 /** ICON p.151: throw an explosive mine into a free space in range 3. */
 const partyFavorEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source?.position) return [];
   const chosen = context.input.positions?.['mine-position']?.[0];
   const cell = chosen ?? evaluatePositions({ origin: source.position, radius: 3, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
@@ -248,7 +249,7 @@ function partyFavorDetonationMutations(
  * effects stack (allies fly 1 and foes take 2 damage; 4+ blinds foes; 6 gives
  * allies stealth; a Finishing Blow doubles the foe damage). */
 const partyFavorDetonate: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source?.position) return [];
   const mine = context.input.positions?.['mine-position']?.[0] ?? null;
   const positions = mine ? [mine] : context.state.terrainEffects
@@ -301,7 +302,7 @@ registerMovementEntryTrigger({
  * 'teleport'): Rampart (p.104) can deny the swap and any "when you teleport"
  * semantics see it — this is NOT a remove/place swap. */
 const masqueradeEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   const allyId = context.input.actorIds?.target?.[0];
   const ally = allyId ? sourceActor(context, allyId) : undefined;
@@ -319,9 +320,9 @@ const masqueradeEffects: RuleResolver = (context) => {
  * edge of the cross; the area deals 2 damage per character in the cross's end
  * spaces to every foe in the cross. */
 const diabloEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const target = resolveAttackTarget(context);
   const targetPosition = target?.position;
   if (!sourcePosition || !target || !targetPosition) return [];
   const direction = axisDirection(sourcePosition, targetPosition);
@@ -348,7 +349,7 @@ const diabloEffects: RuleResolver = (context) => {
 
 /** ICON p.152: mark yourself or an ally in range 2 with Cheat Time. */
 const chronotemperEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   const targetId = context.input.actorIds?.target?.[0] ?? source.id;
   const target = sourceActor(context, targetId);
@@ -367,7 +368,7 @@ const chronotemperEffects: RuleResolver = (context) => {
 /** ICON p.152 Cheat Time: gamble, dash 1 space at a time, dealing 2 damage to
  * each adjacent foe at most once per turn. */
 const cheatTimeEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source?.position) return [];
   const { roll: gamble } = gambleD6(context.dice);
   const direction = context.input.directions?.['direction'] ?? { x: 1, y: 0 };
