@@ -140,7 +140,8 @@ const cometEffects: RuleResolver = (context) => {
   return mutations;
 };
 
-/** Deterministic non-overlapping second small-blast center within range 3. */
+/** Deterministic non-overlapping second-blast center within `blastRange`,
+ * sized `radius` (the charged reading passes radius 2 / range 5). */
 function secondBlastCenter(context: Parameters<RuleResolver>[0], sourcePosition: Position, firstCenter: Position, radius = 1, blastRange = 3): Position | null {
   const primary = squareArea(firstCenter, radius);
   const candidates: Position[] = [];
@@ -168,14 +169,18 @@ const drakenCrossEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   // Talent 2 (p.128): "Charge: Increase range to 5, and all areas may be
   // increased to medium blasts instead." A program-level charge variant gated
-  // on the equipped talent: on a slow turn both blasts become medium (radius
-  // 2) and the second blast may center anywhere within range 5. The "may"
-  // upgrade resolves deterministically as the charged reading (the player's
-  // option is only a downgrade from the talent's benefit). The attack target
-  // itself stays capped by the generic USE_ABILITY range gate (range 3), so
-  // the range boost lives in the resolver's second-blast search.
+  // on the equipped talent AND the Charge trigger only (the Talent clause is
+  // "Charge:" — Charge and Heroic are distinct ICON triggered effects, so a
+  // Heroic without a slow turn keeps range 3 and small blasts). On a slow
+  // turn both blasts become medium (radius 2) and the second blast may center
+  // anywhere within range 5. The "may" upgrade resolves deterministically as
+  // the charged reading (the player's option is only a downgrade from the
+  // talent's benefit). The attack target's range-5 legality is the shared
+  // charge-gated range rule in range-recipes.ts (the generic USE_ABILITY /
+  // EXECUTE_RULE gate folds it); the resolver's blastRange is the second
+  // blast's own placement search within that same widened range.
   const charged = source.talents?.['demon-slayer:draken-cross'] === 2
-    && (context.triggers?.has('charge') || context.triggers?.has('heroic'));
+    && context.triggers?.has('charge');
   const blastRadius = charged ? 2 : 1;
   const blastRange = charged ? 5 : 3;
   const primary = squareArea(targetPosition, blastRadius);
@@ -188,7 +193,10 @@ const drakenCrossEffects: RuleResolver = (context) => {
   blastFray(primary);
   const secondCenter = context.input.positions?.['second-area-center']?.[0] ?? secondBlastCenter(context, sourcePosition, targetPosition, blastRadius, blastRange);
   if (secondCenter) {
-    const second = squareArea(secondCenter, 1);
+    // The second blast inherits the charged radius: "all areas may be
+    // increased to medium blasts" covers the second blast as well as the
+    // primary (previously only the primary became radius 2).
+    const second = squareArea(secondCenter, blastRadius);
     const overlaps = second.some((cell) => primary.some((first) => sameCell(cell, first)));
     if (!overlaps) {
       blastFray(second);

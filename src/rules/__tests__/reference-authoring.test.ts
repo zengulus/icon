@@ -48,6 +48,7 @@ import { CHANTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/chan
 import { KNAVE_RULE_RESOLVERS } from '../automation/content/jobs/programs/knave-programs.js';
 import { HARVESTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/harvester-programs.js';
 import { DEMON_SLAYER_RULE_RESOLVERS } from '../automation/content/jobs/programs/demon-slayer-programs.js';
+import { SEER_RULE_RESOLVERS } from '../automation/content/jobs/programs/seer-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -451,6 +452,49 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     });
     const mutations = DEMON_SLAYER_RULE_RESOLVERS['demon-slayer:righteous-disdain'](context, interruptAction);
     expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'ally' && mutation.amount === 5)).toBe(true);
+  });
+
+  it('Seer Sleight Of Hand resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Sleight Of Hand's PURE live-slot reads (source + attack target) now
+    // resolve through the adapter; a slot that NAMES a missing actor must
+    // reject on a malformed window rather than silently produce nothing.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => SEER_RULE_RESOLVERS['seer:sleight-of-hand:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Seer The Tower resolver: an absent optional attack-target slot stays a no-op (The Tower has no targetless attack; optional singleton semantics preserved)', () => {
+    // The Tower's migrated attack-target read keeps the absent-singular →
+    // undefined contract; a genuinely targetless context (no attackTargetId)
+    // resolves through the resolver's own `!target?.position` guard as before.
+    const context = ctx();
+    expect(() => SEER_RULE_RESOLVERS['seer:the-tower:effects'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Seer Chaos Tarot resolver: the recorded input.actorIds center choice still wins over the attack target (caller-owned U4)', () => {
+    // Chaos Tarot's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is
+    // the caller's U4 precedence (inventoried); only the source read is the
+    // migrated PURE slot. A present input target wins even when a DIFFERENT
+    // attackTargetId is recorded — the wild card lands at the chosen center
+    // and the gamble frays the chosen identity, exactly as before.
+    const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 8, y: 4 } };
+    const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 12, y: 4 } };
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, chosen, other } },
+      input: { actorIds: { target: ['chosen'] } },
+      attackTargetId: 'other',
+    });
+    const mutations = SEER_RULE_RESOLVERS['seer:chaos-tarot:effects'](context, defaultAction);
+    // The wild card is summoned at the CHOSEN center (radius 1) — within 1 of
+    // 'chosen', never near 'other'.
+    const card = mutations.find((mutation) => mutation.kind === 'entity');
+    expect(card).toBeDefined();
+    if (card && card.kind === 'entity') {
+      expect(card.positions.some((cell) => Math.abs(cell.x - 8) <= 1 && Math.abs(cell.y - 4) <= 1)).toBe(true);
+      expect(card.positions.some((cell) => Math.abs(cell.x - 12) <= 1 && Math.abs(cell.y - 4) <= 1)).toBe(false);
+    }
+    // The gamble (scripted d6 = 1) frays characters in the chosen area.
+    expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'chosen')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'other')).toBe(false);
   });
 
   it('Chanter Monogatari resolver: the LIVE source read migrates; lifecycle/usage state mutations are untouched', () => {

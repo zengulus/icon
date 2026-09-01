@@ -279,6 +279,81 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Draken Cross talent 2 + Charge: the attack target may legally be chosen at range 4/5 (shared charge-gated range rule)', () => {
+    // ICON p.128 talent 2: "Charge: Increase range to 5…" — the range half is
+    // the shared charge-gated range rule folded by the generic USE_ABILITY
+    // gate, so a target at distance 4 is LEGAL on a slow turn with the talent
+    // equipped (previously the gate kept the target capped at range 3).
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));
+    expect(result.state.actors[foe.id].hp).toBe(13); // 32 - 4 primary fray - 15 (2[D] = 11 + fray 4)
+    expect(result.state.actors[hero.id].actionsRemaining).toBe(0);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross talent 2 + Charge: a target beyond range 5 is still rejected', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 7, y: 1 }, second: { x: 0, y: 0 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6)))
+      .toThrowError(expect.objectContaining({ code: 'ability.range' }));
+  });
+
+  it('Draken Cross: without talent 2, Charge does NOT expand the range', () => {
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, slowTurn: true });
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6)))
+      .toThrowError(expect.objectContaining({ code: 'ability.range' }));
+  });
+
+  it('Draken Cross talent 2 + Charge: the SECOND area becomes medium too — a foe in the medium-only fringe is hit', () => {
+    // "all areas may be increased to medium blasts" covers the second blast
+    // as well as the primary (previously the second stayed radius 1). The
+    // caller centers the second blast at (5,6) through the same caller-owned
+    // center-choice seam; its radius-2 square (x 3-7, y 4-8) is disjoint from
+    // the primary blast around the target (5,1) (x 3-7, y -1-3), and the foe
+    // at (5,4) lies in the medium-only fringe (outside radius 1).
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 5, y: 4 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 }, slowTurn: true });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id], input: { positions: { 'second-area-center': [{ x: 5, y: 6 }] } } }, scriptedDice(12, 5, 6));
+    const secondDamages = mutationsOf(result.events, 'demon-slayer:draken-cross')
+      .filter((mutation) => mutation.kind === 'damage')
+      .filter((mutation) => mutation.actorId === second.id);
+    expect(secondDamages).toHaveLength(2); // the second-blast fray + the Charge repeat
+    for (const mutation of secondDamages) expect(mutation.amount).toBe(4);
+    expect(result.state.actors[second.id].hp).toBe(24); // 32 - 4 - 4
+    expect(result.state.actors[foe.id].hp).toBe(13); // 32 - 4 primary fray - 15 attack
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Draken Cross talent 2: Heroic WITHOUT Charge does NOT activate the Charge-only range/area upgrade', () => {
+    // The Talent clause is "Charge:" — Charge and Heroic are distinct ICON
+    // triggered effects, so a Heroic alone (no slow turn) keeps range 3 and
+    // small blasts even with the talent equipped.
+    const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 5, y: 1 }, second: { x: 0, y: 0 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'demon-slayer:draken-cross',
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+      attackTargetId: foe.id,
+      triggers: ['heroic'],
+    }, scriptedDice(12, 5, 6))).toThrowError(expect.objectContaining({ code: 'ability.range' }));
+    // With an in-range target, the areas stay small: a foe in the medium-only
+    // fringe of the primary blast is NOT hit on a Heroic alone.
+    const small = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, talents: { 'demon-slayer:draken-cross': 2 } });
+    const heroic = executeCommand(small.state, {
+      type: 'EXECUTE_RULE',
+      actorId: small.hero.id,
+      sourceId: 'demon-slayer:draken-cross',
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+      attackTargetId: small.foe.id,
+      triggers: ['heroic'],
+    }, scriptedDice(12, 5, 6));
+    expect(heroic.state.actors[small.second.id].hp).toBe(32); // outside the small primary blast (r1)
+    expect(applyEvents(small.state, heroic.events)).toEqual(heroic.state);
+  });
+
   it('Draken Cross: the medium-blast upgrade also requires talent 2 — a slow turn alone keeps small blasts', () => {
     const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 2 }, ally: null, slowTurn: true });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:draken-cross', targetIds: [foe.id] }, scriptedDice(12, 5, 6));

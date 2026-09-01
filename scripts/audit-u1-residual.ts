@@ -12,7 +12,15 @@
  *
  * Generous exit: 0 when consistent (incompleteness is inventory, not failure);
  * non-zero when the invariant breaks.
+ *
+ * Doc-drift check (2026-09-01, census-integrity follow-up): the census prose
+ * in docs/u8-u1-underlay-census.md must not silently retain a stale total.
+ * The intro line of the fresh-residual section reads "A machine scan at this
+ * HEAD finds <N> sourceActor(context, …) call sites"; the runner extracts N
+ * and fails when it disagrees with the derived total — a stale prose total
+ * can no longer survive next to a regenerated machine inventory.
  */
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildU1ResidualInventory } from './u1-residual-inventory.js';
 
@@ -30,12 +38,22 @@ const perFileTotal = Object.values(inventory.perFile).reduce(
   0,
 );
 
+// ---- Doc-drift check: the census prose total must match the machine. ----
+const censusDoc = join(import.meta.dirname, '..', 'docs', 'u8-u1-underlay-census.md');
+const censusText = readFileSync(censusDoc, 'utf8');
+const proseTotalMatch = /A machine scan at this HEAD finds (\d+) `sourceActor\(context, …\)` call/.exec(censusText);
+
 const problems: string[] = [];
 if (!inventory.consistent || inventory.total !== categorySum) {
   problems.push(`total (${inventory.total}) !== sum of categories (${categorySum})`);
 }
 if (categorySum !== perFileTotal) {
   problems.push(`sum of categories (${categorySum}) !== sum of per-file counts (${perFileTotal})`);
+}
+if (!proseTotalMatch) {
+  problems.push('census doc is missing the machine-scan prose line (`A machine scan at this HEAD finds <N> sourceActor(context, …) call sites`)');
+} else if (Number(proseTotalMatch[1]) !== inventory.total) {
+  problems.push(`census doc prose total (${proseTotalMatch[1]}) !== machine-derived total (${inventory.total})`);
 }
 
 if (problems.length > 0) {

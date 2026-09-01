@@ -126,6 +126,9 @@ export function rangeStateView(state: EncounterState, selectedTalentSourceIds?: 
       abilityIds: actor.abilityIds,
       masteredAbilityIds: actor.masteredAbilityIds,
       talents: actor.talents,
+      // The durable slow-turn flag the shared `charge` gate reads (the same
+      // flag `deriveTriggers` turns into the `charge` trigger).
+      slowTurn: actor.ruleState['slow-turn'] === true,
     }]),
   );
   return { round: state.round, actors, conditionsFor: (actorId) => {

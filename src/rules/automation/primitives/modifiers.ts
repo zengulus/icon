@@ -103,6 +103,10 @@ export type ModifierGate =
   /** The acting actor is bloodied ("Comeback", at or under 50% of the
    * wounds-adjusted maximum). */
   | { kind: 'comeback' }
+  /** The acting actor is on a slow turn (the ICON Charge triggered effect —
+   * the same durable flag `deriveTriggers` turns into the `charge` trigger,
+   * so a charge-gated rule can never fire on a Heroic alone). */
+  | { kind: 'charge' }
   /** The current round is at least `value` (ICON "at round 4 or later"). */
   | { kind: 'round-at-least'; value: number }
   /** The acting actor has mastered the named parent ability. */
@@ -136,6 +140,10 @@ export interface ModifierFoldView {
     talents?: Readonly<Record<string, 1 | 2>>;
     conditions?: ReadonlySet<string>;
     side?: string;
+    /** The actor is on a slow turn (the `charge` gate — projected by the
+     * range kernel from the durable slow-turn flag; other folds leave it
+     * absent, so a charge-gated rule only ever folds where projected). */
+    slowTurn?: boolean;
   };
   /** Encounter condition lookup (the stealth gate). */
   conditionsFor(actorId: string): ReadonlySet<string>;
@@ -253,6 +261,11 @@ export function modifierGateHolds(gate: ModifierGate, view: ModifierFoldView): b
       return true;
     case 'stealth':
       return view.conditionsFor(actor.id).has('stealth');
+    case 'charge':
+      // The durable slow-turn flag — the same flag `deriveTriggers` turns
+      // into the `charge` trigger, so the gate can never fire on a Heroic
+      // alone (Charge and Heroic are distinct ICON triggered effects).
+      return view.actor.slowTurn === true;
     case 'comeback':
     case 'self-bloodied': {
       const maximum = actor.maximumHp ?? 0;

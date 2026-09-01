@@ -599,15 +599,18 @@ const PROGRAM_LEVEL_TALENT_RECIPES: Readonly<Record<string, { mechanic: string }
     mechanic: 'Rush 1 before using Demon Cutter (charged/slow turn: rush 3 instead); the line attack originates from the post-rush position.',
   },
   // ICON p.128 Draken Cross talent 2: "Charge: Increase range to 5, and all
-  // areas may be increased to medium blasts instead." The program reads the
-  // equipped choice and, on a slow turn, upgrades both blasts to medium
-  // (radius 2) and extends the second-blast search to range 5. The "may"
-  // upgrade resolves deterministically as the charged reading (the player's
-  // option is only a downgrade). The attack target itself stays capped by
-  // the generic USE_ABILITY range gate, so the range boost lives in the
-  // resolver's second-blast placement.
+  // areas may be increased to medium blasts instead." The Charge trigger is
+  // the gate (not Heroic — Charge and Heroic are distinct triggered effects
+  // and the Talent clause says "Charge:"). The range-5 half is the shared
+  // charge-gated range rule in range-recipes.ts, folded by the generic
+  // USE_ABILITY/EXECUTE_RULE gate, so the ATTACK TARGET may legally be
+  // chosen at range 5 on a slow turn. The program reads the equipped choice
+  // and the charge trigger and, on a slow turn, upgrades BOTH blasts to
+  // medium (radius 2) and extends the second-blast placement search to
+  // range 5. The "may" upgrade resolves deterministically as the charged
+  // reading (the player's option is only a downgrade).
   'demon-slayer:draken-cross:talent:2': {
-    mechanic: 'Charged (slow turn): both blasts become medium (radius 2) and the second blast may center within range 5; the attack target stays within the ability\u2019s listed range 3.',
+    mechanic: 'Charge (slow turn only, never Heroic): the attack target may be chosen at range 5 through the shared charge-gated range rule, and both blasts become medium (radius 2) with the second blast centering within range 5.',
   },
   // ICON p.209 Enochian Pyre talent 1: "Comeback: Allies are immune to
   // damage from this ability." The first program-level comeback clause: the

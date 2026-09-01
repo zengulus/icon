@@ -223,6 +223,32 @@ describe('F9.2 conditional and dynamic range (kernel gates)', () => {
     next = endAllTurns(next); // round 3
     expect(effectiveAbilityRange(rangeStateView(next), hero.id, 'sealer:open-the-gates', 1)).toBe(3);
   });
+
+  it('Draken Cross talent 2: the range-5 override is Charge-gated (durable slow turn, never Heroic)', () => {
+    // The shared `charge` gate reads the durable slow-turn flag — the same
+    // flag `deriveTriggers` turns into the `charge` trigger — so the range
+    // kernel can never widen on a Heroic alone (Charge and Heroic are
+    // distinct ICON triggered effects; the Talent clause says "Charge:").
+    const { state, hero } = rangeEncounter({
+      heroAbilities: ['demon-slayer:draken-cross'],
+      heroTalents: { 'demon-slayer:draken-cross': 2 },
+    });
+    const view = () => rangeStateView(state);
+    // No slow turn (plain use or Heroic): base range 3.
+    expect(effectiveAbilityRange(view(), hero.id, 'demon-slayer:draken-cross', 3)).toBe(3);
+    // Slow turn: the charge gate holds → range 5.
+    state.actors[hero.id].ruleState['slow-turn'] = true;
+    state.actors[hero.id].ruleStateOwners['slow-turn'] = hero.id;
+    expect(effectiveAbilityRange(view(), hero.id, 'demon-slayer:draken-cross', 3)).toBe(5);
+    // Ending the slow turn shrinks the range back immediately.
+    state.actors[hero.id].ruleState['slow-turn'] = false;
+    expect(effectiveAbilityRange(view(), hero.id, 'demon-slayer:draken-cross', 3)).toBe(3);
+    // Without the talent equipped, even a slow turn keeps the base range 3.
+    const { state: untalented, hero: untalentedHero } = rangeEncounter({ heroAbilities: ['demon-slayer:draken-cross'] });
+    untalented.actors[untalentedHero.id].ruleState['slow-turn'] = true;
+    untalented.actors[untalentedHero.id].ruleStateOwners['slow-turn'] = untalentedHero.id;
+    expect(effectiveAbilityRange(rangeStateView(untalented), untalentedHero.id, 'demon-slayer:draken-cross', 3)).toBe(3);
+  });
 });
 
 describe('F9.3 Trigrammaton (exact-distance attack modifier)', () => {

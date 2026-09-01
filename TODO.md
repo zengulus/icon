@@ -185,11 +185,11 @@ assumption here, document the evidence and update this list before proceeding.
 > `state.actors[context.…]` dereference in content
 > is gone. The `u1-reference-routing` guard scans the content layer
 > (adapter-keeps-U1, migrated-program pins incl. Sealer, Enochian, Chanter,
-> Knave, Harvester, and Demon Slayer, deref
+> Knave, Harvester, Demon Slayer, and Seer, deref
 > rejection; no
 > blanket lexical ban on the inventoried residual). Residual is machine-
-> derived from the site inventory (`npm run audit:u1-residual`): 144
-> `sourceActor(context, …)` sites = 89 pure LIVE-slot reads + 54
+> derived from the site inventory (`npm run audit:u1-residual`): 129
+> `sourceActor(context, …)` sites = 74 pure LIVE-slot reads + 54
 > captured/derived-id dereferences + 1 in-call precedence-boundary read
 > (Harvester line 155) + 0 other, 0 direct dereferences — every count
 > regenerated from the same site list, no hand-maintained totals. (Census-
@@ -198,8 +198,8 @@ assumption here, document the evidence and update this list before proceeding.
 > exact figures are ea9526c 242 = 187 + 54 + 1, 5f0de05 229 = 174 + 54 + 1,
 > 4a1ff76 211 = 156 + 54 + 1 (Enochian −18), 3052eee 192 = 137 + 54 + 1
 > (Chanter −19), 81573a8 175 = 120 + 54 + 1 (Knave −17), b6764e8
-> 160 = 105 + 54 + 1 (Harvester −15), and current 144 = 89 + 54 + 1
-> (Demon Slayer −16).) U1 stays
+> 160 = 105 + 54 + 1 (Harvester −15), d4d4cd9 144 = 89 + 54 + 1
+> (Demon Slayer −16), and current 129 = 74 + 54 + 1 (Seer −15).) U1 stays
 > PARTIAL; zero source promotion; census remains 427.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
@@ -219,6 +219,35 @@ assumption here, document the evidence and update this list before proceeding.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 9 — Seer pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/seer-programs.ts` now
+  routes every pure live-slot reference through the adapter: source reads →
+  `resolveSourceActor` in Sleight Of Hand, Chaos Tarot, Astra, FORTUNA,
+  Polaris, Sisyphus, Gran Reversa, Reverse Fate, Eclipse, Wish, The Tower
+  (11); primary attack-target reads → `resolveAttackTarget` in Sleight Of
+  Hand, Astra, FORTUNA, The Tower (4) — identical LIVE/absent-singular
+  semantics with the resolvers' gates untouched. The six retained CAPTURED
+  sites stay caller-owned: Chaos Tarot / Polaris / Sisyphus / Eclipse
+  `input.actorIds?.target?.[0] ?? attackTargetId` and Reverse Fate / Wish
+  `input.actorIds?.target?.[0] ?? triggerTargetIds?.[0]` — the `??` SELECT
+  is caller-owned U4 precedence, only the dereference of the chosen
+  identity is the captured shape. Guard pins Seer via
+  contentAdapterSurface; mutation test covers a revert (exactly one
+  routing violation) and proves the retained captured/precedence
+  dereferences alone do not trigger the pin. Evidence: +3
+  fail-closed/U4-parity tests in `reference-authoring.test.ts` (Sleight Of
+  Hand ghost attackTargetId → `reference.missing-actor`; The Tower
+  targetless no-op; Chaos Tarot recorded-input center still wins over a
+  DIFFERENT recorded attack target), +1 engine-level insertion-order test
+  in `seer.test.ts`, the full Seer suite (15) green through the engine
+  path (valid-state semantics preserved; malformed refs fail closed;
+  replay byte-identical). The tranche removed exactly 15
+  PURE_LIVE_REFERENCE sites (Seer 15 → 0), moving the machine-derived
+  residual from 144 = 89 + 54 + 1 to 129 = 74 + 54 + 1 (per
+  `npm run audit:u1-residual`; no hand-maintained totals). 0 direct
+  dereferences; U1 remains PARTIAL. Full suite 2023 green, audits green,
+  census byte-stable at 427, zero source promotion.
 
 - **U1 content-authoring tranche 8 — Demon Slayer pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/demon-slayer-programs.ts`

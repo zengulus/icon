@@ -206,4 +206,29 @@ describe('Seer ability automation (p.197–203)', () => {
     expect(result.state.actors[foe.id].marks.some(({ markId }) => markId === 'the-tower')).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
+
+  it('The Tower: reversing actor INSERTION order changes nothing — the migrated reference reads resolve by recorded slot identity, not iteration order', () => {
+    // The migrated source/attack-target reads are singular slot dereferences
+    // (context.actorId / attackTargetId → adapter), deterministic by the
+    // RECORDED identity; object-iteration order of state.actors cannot select
+    // who the ability user or its target is. Insert the second foe BEFORE the
+    // target so object order differs from the canonical fixture, and assert
+    // the same seal/mark/damage outcome and replay state.
+    let setup = createEncounter('Seer insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Fate Weaver'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 3, y: 1 });
+    const second = createFoe('Grim', { x: 5, y: 1 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:the-tower', targetIds: [foe.id] }, scriptedDice());
+    expect(result.state.actors[foe.id].hp).toBe(31); // 32 - 1
+    expect(result.state.actors[foe.id].statuses).toContain('sealed');
+    expect(result.state.actors[foe.id].marks.some(({ markId }) => markId === 'the-tower')).toBe(true);
+    expect(result.state.actors[second.id].hp).toBe(32); // untouched
+    expect(applyEvents(setup, result.events)).toEqual(result.state);
+  });
 });

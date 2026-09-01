@@ -104,6 +104,25 @@ registerRangeModifierRule({
   gate: { kind: 'mastery', abilityId: 'shade:umbra' },
 });
 
+// ICON p.128 Demon Slayer Draken Cross talent 2: "Charge: Increase range to
+// 5, and all areas may be increased to medium blasts instead." The range half
+// is a charge-gated override: the attack target may legally be chosen at
+// range 5 ONLY on a slow turn (the ICON Charge triggered effect — Charge and
+// Heroic are distinct, and the Talent clause says "Charge:"), so a Heroic
+// without Charge keeps the base range 3. The shared `charge` gate reads the
+// durable slow-turn flag projected by the range kernel, so this is
+// authoritative target legality at both command gates, never UI-only. The
+// medium-blast half is the program-level talent variant in the Draken Cross
+// program (both areas become radius 2 on the same charge-gated read).
+registerRangeModifierRule({
+  sourceId: 'demon-slayer:draken-cross:talent:2',
+  abilityId: 'demon-slayer:draken-cross',
+  mode: 'override',
+  value: 5,
+  talent: 2,
+  gate: { kind: 'charge' },
+});
+
 // ICON p.143 Knave Strongarm talent 1: "Comeback: this ability gains range 2."
 // A melee hold with no listed range (base 1 = adjacency); under Comeback
 // (user bloodied) the hold's target may be chosen at range 2. The rest of the

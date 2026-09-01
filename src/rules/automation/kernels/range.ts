@@ -56,6 +56,10 @@ export interface RangeStateView {
     /** The equipped talent choice per ability (1 or 2) — a talent-gated rule
      * applies only when the actor selected the rank that owns the rule. */
     talents?: Readonly<Record<string, 1 | 2>>;
+    /** The durable slow-turn flag (the `charge` gate — Charge fires on a
+     * slow turn; the same flag `deriveTriggers` turns into the `charge`
+     * trigger, so a charge-gated rule can never fire on a Heroic alone). */
+    slowTurn?: boolean;
   }>>;
   /** The encounter condition set for an actor (the stealth gate). */
   conditionsFor(actorId: string): ReadonlySet<string>;
@@ -191,6 +195,7 @@ function rangeFoldView(view: RangeStateView, actorId: string): ModifierFoldView 
       abilityIds: actor?.abilityIds,
       masteredAbilityIds: actor?.masteredAbilityIds,
       talents: actor?.talents,
+      slowTurn: view.actors[actorId]?.slowTurn === true,
     },
     conditionsFor: (id) => view.conditionsFor(id),
     ...(view.selectedTalentSourceIds ? { selectedTalentSourceIds: view.selectedTalentSourceIds } : {}),

@@ -14,6 +14,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Seer ability implementations (ICON p.197–203),
@@ -46,8 +47,8 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
 /** ICON p.201 Sleight Of Hand: auto-hit fray, pacify the foe, fray to the other
  * characters in the small blast, and summon a wild card in range 2 of the foe. */
 const sleightOfHandEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [autohitAttack(context)];
   mutations.push(damageMutation(context, target.id, source.fray, 'hit'));
@@ -69,7 +70,7 @@ const sleightOfHandEffects: RuleResolver = (context) => {
  * two; 6: choose two (deterministic: damage + difficult terrain). A wild card
  * is summoned in the area. */
 const chaosTarotEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -134,8 +135,8 @@ const chaosTarotEffects: RuleResolver = (context) => {
  * (dealing 2 damage to adjacent characters). Blessings removed from allies in
  * the area add one extra d6 each to the gamble (passed as `blessings`). */
 const astraEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -187,8 +188,8 @@ const astraEffects: RuleResolver = (context) => {
  * take fray, allies gain 3 vigor and are blessed, and a wild card is summoned
  * in the area. */
 const fortunaEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'FORTUNA requires a target in range 5.');
   if (distance(source.position, target.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'FORTUNA requires a target in range 5.');
   const mutations: RuleMutation[] = [];
@@ -217,7 +218,7 @@ const fortunaEffects: RuleResolver = (context) => {
  * space. The end-of-turn meteor gamble (one blast per active space, scaling
  * with the count) is a documented turn-boundary window. */
 const polarisEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) throw new RuleProgramViolation('choice.actor-count', 'Polaris requires a space in range 5.');
@@ -230,7 +231,7 @@ const polarisEffects: RuleResolver = (context) => {
  * position. The end-of-turn return (if still in range 3 of the start) and the
  * foe's end-of-turn save are documented mark-trigger windows. */
 const sisyphusEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Sisyphus requires a character in range 5.');
@@ -244,7 +245,7 @@ const sisyphusEffects: RuleResolver = (context) => {
  * end-of-turn vigor loss and the start-of-turn refresh (tick up by 1) are
  * documented stance windows. */
 const granReversaEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   // ICON p.202 Gran Reversa talent 1: "Your power die from this ability
   // starts at d6, with 6 charges." Grants a d6 at 6 instead of the base d4
   // at 4 (the durable die is still the recorded ruling below).
@@ -259,7 +260,7 @@ const granReversaEffects: RuleResolver = (context) => {
  * `ticks`), gamble with that many d6s, and grant the ally vigor equal to
  * double the result. */
 const reverseFateEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const allyId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0];
   const ally = allyId ? sourceActor(context, allyId) : undefined;
   if (!ally) throw new RuleProgramViolation('choice.actor-count', 'Reverse Fate requires an ally in the aura.');
@@ -278,7 +279,7 @@ const reverseFateEffects: RuleResolver = (context) => {
  * start-of-slow-turn detonation (2 divine + sealed, or a large blast with
  * dangerous terrain under every foe) is a documented turn-boundary window. */
 const eclipseEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -296,7 +297,7 @@ const eclipseEffects: RuleResolver = (context) => {
  * The trigger (an ally takes 25%+ max HP damage from a foe) is a held-damage
  * window. */
 const wishEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const allyId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0];
   const ally = allyId ? sourceActor(context, allyId) : undefined;
   if (!ally) throw new RuleProgramViolation('choice.actor-count', 'Wish requires an ally on the battlefield.');
@@ -313,8 +314,8 @@ const wishEffects: RuleResolver = (context) => {
  * die + 2) can resolve at the turn boundary, with a height 1 meteor object
  * created in the area. */
 const theTowerEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [autohitAttack(context)];
   mutations.push(damageMutation(context, target.id, 1, 'hit'));
