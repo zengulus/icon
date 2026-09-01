@@ -23,10 +23,12 @@ import type { RuleMutation } from '../../primitives/types.js';
  *   (`hissatsu:armed`), set by the turn-end lifecycle recipe and consumed
  *   by the next attack roll.
  * - **Pulverize** (colossus, p.134) — a pure elevation read, no armed
- *   state: attacking a lower target deals +2 flat damage on the attack's
- *   direct damage; two or more elevations lower SOURCE-FORCES the exceed
- *   fact ("…it also triggers all exceed effects" — the exceed condition
- *   fires regardless of the roll, never approximated as a threshold cut).
+ *   state: attacking a lower target deals GENUINE bonus damage (ICON p.102:
+ *   one extra damage die, keep the normal number of highest dice) on the
+ *   attack's direct damage; two or more elevations lower SOURCE-FORCES the
+ *   exceed fact ("…it also triggers all exceed effects" — the exceed
+ *   condition fires regardless of the roll, never approximated as a
+ *   threshold cut).
  * - **Bull's Strength** (bastion, p.149) — abilities gain "collide: deal 2
  *   damage": when an ability's shove collides, the shoved character takes 2
  *   damage, and "Characters can't take this damage more than once a turn."
@@ -47,7 +49,13 @@ export const HISSATSU_ARMED_KEY = 'hissatsu:armed';
 
 registerAttackModifierRule({ traitId: DEMON_EDGE_TRAIT, armedKey: DEMON_EDGE_TRUESTRIKE_KEY, trueStrike: true });
 registerAttackModifierRule({ traitId: HISSATSU_TRAIT, armedKey: HISSATSU_ARMED_KEY, boons: 1, trueStrike: true, damageDieOverride: 10 });
-registerAttackModifierRule({ traitId: PULVERIZE_TRAIT, elevationBonusDamage: 2, elevationForceExceed: true });
+// ICON p.134 Pulverize: "When you start an attack ability on higher elevation
+// than your target, it deals bonus damage." Bonus damage is the defined dice
+// mechanic (p.102: roll one extra die, keep the normal number of highest
+// dice) — one bonus die per trait at one or more elevations higher, never a
+// flat +2 substitute. Two or more elevations higher additionally source-
+// forces every exceed effect.
+registerAttackModifierRule({ traitId: PULVERIZE_TRAIT, elevationBonusDamageDice: 1, elevationForceExceed: true });
 // ICON p.155 Freelancer Trigrammaton: "Your abilities used against foes at
 // exactly range 3 gain +1 boon on attack rolls and unerring." An exact-
 // distance attack modifier — it inspects the canonical p.92 distance and

@@ -180,6 +180,77 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Takedown: a natural Exceed attack stays True Strike even against an evading target — the fold happens BEFORE evasion', () => {
+    // The staged attack seam (attack-resolution.ts) rolls the d20 ONCE,
+    // derives Exceed from that SAME pre-fold total, folds the exceed-granted
+    // true strike onto THIS attack, and only THEN consults Evasion — so the
+    // foe's evasion condition cannot cancel an attack whose own roll exceeded.
+    // Under a post-hoc relabel, the evasion d6 would have been rolled (and
+    // could have cancelled the attack) before the true strike existed.
+    const { state, hero, foe } = colossusEncounter({ second: null });
+    state.actors[foe.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:takedown', targetIds: [foe.id] }, scriptedDice(15, 6));
+    const mutations = mutationsOf(result.events, 'colossus:takedown');
+    const attackMutation = mutations.find((mutation) => mutation.kind === 'attack') as { exceed?: boolean; trueStrike?: boolean; evasionRoll?: number | null; d20?: number | null } | undefined;
+    // One roll only: the recorded d20 IS the pre-fold stage roll (15), and
+    // the exceed-granted true strike suppressed the evasion d6 entirely.
+    expect(attackMutation).toMatchObject({ d20: 15, exceed: true, trueStrike: true, evasionRoll: null, hit: true });
+    // The dodge consequence genuinely reaches the direct damage: without
+    // true strike this attack would have been dodged/evaded.
+    const hitDamage = mutations.find((mutation) => mutation.kind === 'damage' && mutation.actorId === foe.id);
+    expect(hitDamage && hitDamage.kind === 'damage' ? hitDamage.ignoreDodge === true : false).toBe(true);
+    expect(result.state.terrainEffects.some((effect) => effect.terrain === 'pit' && effect.positions.some((cell) => cell.x === foe.position.x && cell.y === foe.position.y))).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Takedown: a NON-Exceed attack keeps normal Evasion behavior against an evading target', () => {
+    // No exceed → no exceed-granted true strike → the attack keeps the
+    // ordinary evasion resolution: the target's evasion d6 rolls and, at 4+,
+    // cancels the attack (the recorded attack has no d20).
+    const { state, hero, foe } = colossusEncounter({ second: null });
+    state.actors[foe.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:takedown', targetIds: [foe.id] }, scriptedDice(12, 5, 4));
+    const mutations = mutationsOf(result.events, 'colossus:takedown');
+    const attackMutation = mutations.find((mutation) => mutation.kind === 'attack') as { exceed?: boolean; trueStrike?: boolean; evasionRoll?: number | null; d20?: number | null; hit?: boolean } | undefined;
+    // The foe's evasion d6 (5) cancels the attack before the d20 counts — a
+    // suppressed attack records no d20, exactly like the ordinary path.
+    expect(attackMutation).toMatchObject({ d20: null, exceed: false, trueStrike: false, evasionRoll: 5, hit: false });
+    const hitDamage = mutations.find((mutation) => mutation.kind === 'damage' && mutation.actorId === foe.id);
+    expect(hitDamage && hitDamage.kind === 'damage' ? hitDamage.ignoreDodge === true : false).toBe(false);
+    expect(result.state.terrainEffects.some((effect) => effect.terrain === 'pit')).toBe(false);
+    expect(result.state.actors[foe.id].hp).toBe(28); // miss damage = fray 4
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Takedown + Pulverize: a SOURCE-FORCED Exceed (elevation ≥ 2) follows the same staged path — true strike before evasion', () => {
+    // Pulverize (p.134) forces the exceed fact from the attack-START
+    // elevation regardless of the roll. When that forced exceed rides
+    // Takedown's exceed-gated true strike, the staged fold must grant the
+    // true strike BEFORE settling evasion — same seam, source-forced
+    // provenance.
+    let state = createEncounter('Staged forced-exceed fixture');
+    const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    hero.traitIds = ['colossus:trait:pulverize'];
+    const foe = createFoe('Relict', { x: 2, y: 1 });
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
+    state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
+    // Terrain elevation must be set before the encounter starts (SET_TERRAIN
+    // is setup-phase); the trait's source-forced exceed then reads it.
+    state = executeCommand(state, { type: 'SET_TERRAIN', cell: { position: hero.position, type: 'basic', elevation: 2 } }).state;
+    state = startEncounterTo(state, hero.id);
+    state.actors[foe.id].conditions.push({ id: 'evasion', sourceId: 'fixture', ownerId: null, potency: 'normal', duration: null });
+    // Low roll (d20 8) — the exceed comes from the elevation, not the roll.
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:takedown', targetIds: [foe.id] }, scriptedDice(8, 4));
+    const mutations = mutationsOf(result.events, 'colossus:takedown');
+    const attackMutation = mutations.find((mutation) => mutation.kind === 'attack') as { exceed?: boolean; trueStrike?: boolean; evasionRoll?: number | null; d20?: number | null; hit?: boolean } | undefined;
+    // The forced exceed granted true strike BEFORE evasion could roll.
+    expect(attackMutation).toMatchObject({ d20: 8, exceed: true, trueStrike: true, evasionRoll: null, hit: true });
+    expect(result.state.terrainEffects.some((effect) => effect.terrain === 'pit')).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Takedown: without Exceed the same attack has no true strike and opens no pit', () => {
     const { state, hero, foe } = colossusEncounter({ second: null });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:takedown', targetIds: [foe.id] }, scriptedDice(12, 4));

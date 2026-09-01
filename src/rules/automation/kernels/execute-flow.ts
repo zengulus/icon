@@ -500,7 +500,16 @@ export class FlowPlanner {
             // The amount expression evaluates per target with the RECIPIENT
             // threaded, so recipient-scoped bonus-damage rolls (Finesse, p.116)
             // distinguish each target's live state at the roll query point.
-            const recipientContext = { ...context, damageRecipientId: target.id };
+            // Genuine bonus damage (Pulverize p.134 "deals bonus damage"): the
+            // attack's provenance dice join the SAME keep-highest bonus-damage
+            // pool the damage-roll evaluation already applies to this recipient
+            // (ICON p.102) — scoped to the attack's direct target only, never
+            // collateral area or later effect damage. This is the defined dice
+            // mechanic, not a flat addition.
+            const attackBonusDice = attackDamage?.bonusDice ?? 0;
+            const recipientContext = attackBonusDice > 0
+              ? { ...context, damageRecipientId: target.id, abilityUseModifiers: { ...context.abilityUseModifiers, bonusDamageDice: (context.abilityUseModifiers?.bonusDamageDice ?? 0) + attackBonusDice } }
+              : { ...context, damageRecipientId: target.id };
             this.emit({
               kind: 'damage', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id,
               // The attack's direct-target damage instance also carries trait flat

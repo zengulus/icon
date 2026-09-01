@@ -95,8 +95,10 @@ describe('F6 attack-path trait registry', () => {
     }
     // Trigrammaton joined the wired rows through the range kernel's
     // exactly-range-3 attack fold, and the merge added additional attack
-    // path traits, so the closed inventory is now 27.
-    expect(Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired')).toHaveLength(27);
+    // path traits, so the closed inventory is now 27. The heroic-activation
+    // tranche (2026-09-01) added Demon Strength and Spite (the validated
+    // heroic transaction + attack-gate lockout), so it is now 29.
+    expect(Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired')).toHaveLength(29);
   });
 });
 
@@ -237,8 +239,12 @@ describe('Hissatsu (p.141)', () => {
 });
 
 describe('Pulverize (p.134)', () => {
-  it('attacking a lower target adds +2 flat damage; two or more elevations higher SOURCE-FORCES the exceed', () => {
-    // Two elevations higher: +2 flat on the hit (control: no trait, same dice).
+  it('attacking a lower target deals GENUINE bonus damage (one extra die, keep highest); two or more elevations higher SOURCE-FORCES the exceed', () => {
+    // ICON p.134: "When you start an attack ability on higher elevation than
+    // your target, it deals bonus damage." Bonus damage is the p.102 dice
+    // mechanic — roll one extra damage die, keep the normal number of
+    // highest dice — NOT a flat +2. With a light attack (1 [D] die) the
+    // trait rolls a second damage die and keeps the higher one.
     const { state, hero, foe } = traitEncounter({
       traitIds: ['colossus:trait:pulverize'],
       foeAt: { x: 3, y: 1 },
@@ -246,7 +252,7 @@ describe('Pulverize (p.134)', () => {
     });
     const result = executeCommand(state, {
       type: 'BASIC_ATTACK', actorId: hero.id, targetId: foe.id, weight: 'light',
-    }, scriptedDice(12, 6));
+    }, scriptedDice(12, 3, 6, 2, 5));
     const event = attackEventOf(result)!;
     const { state: control, hero: controlHero, foe: controlFoe } = traitEncounter({
       traitIds: ['colossus:trait:furious-berserk'],
@@ -255,10 +261,18 @@ describe('Pulverize (p.134)', () => {
     });
     const controlResult = executeCommand(control, {
       type: 'BASIC_ATTACK', actorId: controlHero.id, targetId: controlFoe.id, weight: 'light',
-    }, scriptedDice(12, 6));
+    }, scriptedDice(12, 3, 6, 2, 5));
     const controlEvent = attackEventOf(controlResult)!;
-    // Both hit with the same d20/boon; the trait adds exactly 2 to the damage.
-    expect(controlEvent.rawDamage).toBe(event.rawDamage - 2);
+    // Same d20 (12) and the same two boon rolls (3, 6 → modifier 6): the
+    // sustained d20 + boon total hits in both. The damage dice follow:
+    // control rolls one [D] die (2), the trait rolls an EXTRA die (5) and
+    // keeps the highest (5). rawDamage = kept 5 + fray 4 = 9 vs control
+    // 2 + 4 = 6 — the trait adds the KEPT DIE (3), never a flat +2 (which
+    // would yield 8, not 9 — the scripted dice discriminate the p.102
+    // keep-highest bonus-damage mechanic from a flat substitute).
+    expect(event.rawDamage).toBe(9);
+    expect(controlEvent.rawDamage).toBe(6);
+    expect(event.rawDamage).toBe(controlEvent.rawDamage + 3);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
@@ -344,9 +358,9 @@ describe('Pulverize (p.134)', () => {
 
   it('the kernel read is a pure elevation function (unit)', () => {
     const owner = { traitIds: ['colossus:trait:pulverize'], state: {} };
-    expect(traitAttackModifier(owner, 0)).toMatchObject({ bonusDamageFlat: 0, forceExceed: false });
-    expect(traitAttackModifier(owner, 1)).toMatchObject({ bonusDamageFlat: 2, forceExceed: false });
-    expect(traitAttackModifier(owner, 2)).toMatchObject({ bonusDamageFlat: 2, forceExceed: true });
+    expect(traitAttackModifier(owner, 0)).toMatchObject({ bonusDamageDice: 0, bonusDamageFlat: 0, forceExceed: false });
+    expect(traitAttackModifier(owner, 1)).toMatchObject({ bonusDamageDice: 1, bonusDamageFlat: 0, forceExceed: false });
+    expect(traitAttackModifier(owner, 2)).toMatchObject({ bonusDamageDice: 1, bonusDamageFlat: 0, forceExceed: true });
   });
 });
 

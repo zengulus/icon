@@ -36,6 +36,7 @@ describe('attack-resolution kernel', () => {
       ignoreAetherwall: false,
       netBoon: 0,
       bonusFlat: 0,
+      bonusDice: 0,
     });
   });
 

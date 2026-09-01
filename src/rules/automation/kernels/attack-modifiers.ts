@@ -21,6 +21,13 @@ export interface TraitAttackModifier {
   trueStrike: boolean;
   damageDieOverride: number | null;
   bonusDamageFlat: number;
+  /** GENUINE bonus damage dice (ICON p.102: "roll one more die than normal,
+   * then pick the highest") granted by a permanent elevation trait
+   * (Pulverize p.134 "deals bonus damage" against a lower target). The dice
+   * ride the attack's direct-target damage provenance and are rolled through
+   * the shared keep-highest bonus-damage authority — never approximated as
+   * flat damage. */
+  bonusDamageDice: number;
   exceedThreshold: number | null;
   /** SOURCE-FORCED exceed (Pulverize p.134): the source's text forces every
    * exceed effect without the ordinary 15+ natural condition. OR'd into the
@@ -77,8 +84,11 @@ export interface AttackModifierRule {
   trueStrike?: boolean;
   /** Damage die sides override (e.g. Hissatsu's d10). */
   damageDieOverride?: number;
-  /** Flat bonus damage at elevation diff >= 1 (source − target). */
-  elevationBonusDamage?: number;
+  /** GENUINE bonus damage dice (ICON p.102 keep-highest) at elevation diff
+   * >= 1 (source − target) — Pulverize p.134 "When you start an attack
+   * ability on higher elevation than your target, it deals bonus damage."
+   * Bonus damage is the defined dice mechanic, NOT a flat addition. */
+  elevationBonusDamageDice?: number;
   /** SOURCE-FORCED exceed at elevation diff >= 2 (Pulverize p.134: "If you
    * are two or more levels higher, it also triggers all exceed effects").
    * The exceed fact is forced regardless of the roll — never approximated
@@ -115,6 +125,7 @@ export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: nu
     trueStrike: false,
     damageDieOverride: null,
     bonusDamageFlat: 0,
+    bonusDamageDice: 0,
     exceedThreshold: null,
     forceExceed: false,
     unerring: false,
@@ -129,7 +140,7 @@ export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: nu
     if (rule.boons) modifier.boons += rule.boons;
     if (rule.trueStrike) modifier.trueStrike = true;
     if (rule.damageDieOverride) modifier.damageDieOverride = rule.damageDieOverride;
-    if (rule.elevationBonusDamage && elevationDiff >= 1) modifier.bonusDamageFlat += rule.elevationBonusDamage;
+    if (rule.elevationBonusDamageDice && elevationDiff >= 1) modifier.bonusDamageDice += rule.elevationBonusDamageDice;
     if (rule.elevationForceExceed && elevationDiff >= 2) modifier.forceExceed = true;
     if (rule.targetBloodiedBonusDamage && target && target.hp <= target.maxHp / 2) modifier.bonusDamageFlat += rule.targetBloodiedBonusDamage;
     if (rule.unerring) modifier.unerring = true;

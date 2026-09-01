@@ -31,6 +31,13 @@ export interface AttackIntent {
    * (Pulverize: +2 against a lower target). Rides the damage provenance so
    * the attack's direct-target damage (and only it) receives the flat. */
   bonusDamageFlat?: number;
+  /** GENUINE bonus damage (ICON p.102: "roll one more die than normal, then
+   * pick the highest") granted to this attack's direct damage by a trait
+   * (Pulverize p.134 "deals bonus damage" against a lower target). Rides the
+   * attack provenance so only the attack's direct-target damage rolls the
+   * extra die — never collateral area or later effect damage. This is the
+   * defined bonus-damage mechanic, distinct from a flat addition. */
+  bonusDamageDice?: number;
   /** Unerring (p.105): the attack ignores cover and aetherwall. Distinct from
    * True Strike, which ignores Dodge — unerring does not. */
   unerring?: boolean;
@@ -58,6 +65,9 @@ export interface AttackRoll {
   netBoon: number;
   /** Flat trait bonus damage applied to this attack's direct damage. */
   bonusFlat: number;
+  /** Genuine bonus damage dice (ICON p.102 keep-highest) granted to this
+   * attack's direct damage (Pulverize p.134). */
+  bonusDice: number;
 }
 
 export interface AttackDamageProvenance {
@@ -68,6 +78,9 @@ export interface AttackDamageProvenance {
   /** Flat trait bonus damage (Pulverize +2) that follows the attack into its
    * direct-target damage instance only. */
   bonusFlat: number;
+  /** Genuine bonus damage dice (ICON p.102 keep-highest) that follow the
+   * attack into its direct-target damage instance only. */
+  bonusDice: number;
 }
 
 /**
@@ -77,13 +90,62 @@ export interface AttackDamageProvenance {
  * p.104 gives True Strike an explicit Dodge exception.  Keep these as named
  * facts instead of asking later damage code to reconstruct an earlier roll.
  */
-export function attackDamageProvenance(intent: Pick<AttackIntent, 'elevationModifier' | 'trueStrike' | 'bonusDamageFlat' | 'unerring'>): AttackDamageProvenance {
+export function attackDamageProvenance(intent: Pick<AttackIntent, 'elevationModifier' | 'trueStrike' | 'bonusDamageFlat' | 'bonusDamageDice' | 'unerring'>): AttackDamageProvenance {
   return {
     ignoreDodge: intent.trueStrike ?? false,
     ignoreCover: Math.trunc(intent.elevationModifier ?? 0) > 0 || Boolean(intent.unerring),
     ignoreAetherwall: Boolean(intent.unerring),
     bonusFlat: Math.max(0, Math.trunc(intent.bonusDamageFlat ?? 0)),
+    bonusDice: Math.max(0, Math.trunc(intent.bonusDamageDice ?? 0)),
   };
+}
+
+/**
+ * A staged attack's PRE-FOLD roll: the d20 + boon/curse total ONLY, before
+ * any ability clause that the pre-fold total can change (Takedown p.135
+ * "Exceed or Heroic: Gains true strike") is folded in. Evasion is not
+ * consulted here — the caller derives the pre-fold facts (Exceed from this
+ * same total, or a source-forced exceed), folds them (e.g. grants true
+ * strike), and only then settles the attack. Never a second roll: the staged
+ * roll IS the attack's one roll.
+ */
+export interface AttackRollStage {
+  d20: number | null;
+  boon: number;
+  total: number | null;
+  netBoon: number;
+}
+
+/** Roll a staged attack ONCE: d20 (unless auto-hit) + boon/curse. Evasion is
+ * deliberately not consulted — pre-fold facts are derived from `total` first
+ * and folded by the caller (Takedown's exceed-granted true strike). */
+export function rollAttackStage(intent: AttackIntent, dice: DiceSource): AttackRollStage {
+  const netBoon = Math.trunc(intent.sourceBoon ?? 0)
+    + Math.trunc(intent.elevationModifier ?? 0)
+    - (intent.sourceDazed ? 1 : 0);
+  const d20 = intent.autoHit ? null : dice.die(20);
+  const boon = intent.autoHit ? 0 : rollBoonOrCurse(netBoon, dice).modifier;
+  return { d20, boon, total: d20 === null ? null : d20 + boon, netBoon };
+}
+
+/** Settle a staged roll with the caller's EFFECTIVE true strike (already
+ * folded from the pre-fold total): resolve Evasion (p.104 — a 4+ d6 cancels
+ * the attack), then hit and critical. An evaded/auto-hit attack records no
+ * d20 (null), so any fact derived from the pre-fold total must be re-derived
+ * from the SETTLED total afterwards (a suppressed natural exceed is not a
+ * fact the attack carries). */
+export function settleStagedAttackRoll(stage: AttackRollStage, intent: AttackIntent, dice: DiceSource): AttackRoll {
+  const trueStrike = intent.trueStrike ?? false;
+  const autoHit = intent.autoHit ?? false;
+  const damageProvenance = attackDamageProvenance({ ...intent, trueStrike });
+  const evasionRoll = !autoHit && !trueStrike && intent.targetEvasion ? dice.die(6) : null;
+  const evaded = evasionRoll !== null && evasionRoll >= 4;
+  const d20 = autoHit || evaded ? null : stage.d20;
+  const boon = autoHit || evaded ? 0 : stage.boon;
+  const total = autoHit || evaded ? null : stage.total;
+  const hit = autoHit || (!evaded && (total ?? 0) >= intent.defense);
+  const critical = !autoHit && hit && (total ?? 0) >= 20;
+  return { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, exceedThreshold: intent.exceedThreshold ?? null, ...damageProvenance, netBoon: stage.netBoon };
 }
 
 /**

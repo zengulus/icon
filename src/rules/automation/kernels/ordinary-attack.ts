@@ -17,8 +17,13 @@ export function resolveOrdinaryAttackMutations(
   const criticalDice = attack.hit && attack.critical
     ? [context.dice.die(attack.damageDie)]
     : [];
+  // Genuine bonus damage (ICON p.102 keep-highest): the attack's PROVENANCE
+  // dice (Pulverize elevation bonus) join the caller-passed bonus dice in the
+  // same pool — an extra die per grant, with the normal count of highest dice
+  // kept. A trait's elevation bonus is attack-derived, so it enters through
+  // the shared attack authority rather than a second source-specific path.
   const extraDice = attack.hit
-    ? Array.from({ length: Math.max(0, bonusDice) }, () => context.dice.die(attack.damageDie))
+    ? Array.from({ length: Math.max(0, bonusDice + attack.damageProvenance.bonusDice) }, () => context.dice.die(attack.damageDie))
     : [];
   const allDice = [...baseDice, ...criticalDice, ...extraDice];
   const keptDice = allDice.slice().sort((first, second) => second - first).slice(0, Math.max(0, diceCount));
