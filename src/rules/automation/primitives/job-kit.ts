@@ -1,7 +1,8 @@
 import { resolveCureMutations } from './status-saves.js';
 import { directAttackDamageProvenance, type AttackDamageProvenance } from './attack-resolution.js';
-import { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../../area-geometry.js';
+import { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, ringAround as ringAroundGeometry, sameCell, squareArea } from '../../area-geometry.js';
 import * as battlefield from './battlefield.js';
+import { footprintCells, footprintsOverlap } from './spatial-intent.js';
 import { rollDamageDice as rollDamageDicePrimitive } from './damage-roll.js';
 import type { Position } from '../../types.js';
 import type { RuleSourceUnit } from '../../source-units.js';
@@ -41,11 +42,12 @@ import type {
  * points, and the fixture pattern.
  *
  * Semantics notes:
- * - `walk` is entity-aware: non-phasing movement stops at other characters and
+ * - `walk` is a retained compatibility authoring helper, not the shared
+ *   movement authority. Non-phasing movement stops at other characters and
  *   entities; phasing movement passes through both. Both stop at impassable
- *   terrain and the grid edge. (This is the stricter, more correct of the two
- *   movement helpers the earlier jobs inlined — the Knave variant ignored
- *   entities.)
+ *   terrain and the grid edge. This preserves the stricter of the two legacy
+ *   helper behaviors; it does not claim p.88 Standard Move parity (notably,
+ *   ordinary ally transit belongs to the shared movement authority).
  * - Ordinary attacks made by named resolvers go through the shared
  *   authoritative attack kernel (`kernels/attack-resolution.ts`,
  *   `resolveAuthoritativeAttack`), which folds the F6 trait modifiers, aura
@@ -111,20 +113,21 @@ export const withinGrid = (position: Position, context: RuleExecutionContext) =>
 export const sourceActor = (context: RuleExecutionContext, id: string): RuleActorView =>
   context.state.actors[id];
 
-/** True when something OBSTRUCTS the cell: a character's footprint or an
- * OBJECT entity. ICON p.92: a Size-N actor occupies its whole N×N footprint,
- * so any cell inside a large actor's footprint is occupied — not only its
- * anchor cell. ICON p.95: summons are Size 1 and intangible — they do not
+/** True when a character's final space is unavailable because of a character
+ * footprint or OBJECT entity. ICON p.92: a Size-N actor occupies its whole
+ * N×N footprint, so any cell inside a large actor's footprint is occupied —
+ * not only its anchor cell. ICON p.95: summons are Size 1 and intangible — they do not
  * cause obstruction or engagement and may share a space with characters — so
  * a cell holding ONLY an intangible summon is NOT occupied by this generic
  * predicate (a bomb's own "can't share space with other bombs" rule is a
  * specialist placement constraint applied by the bomb placement resolver,
- * never this predicate). This is an OBSTRUCTION test; it does not answer
- * "is this space unavailable for a particular placement" (object stacking,
+ * never this predicate). This is not a generic transit-obstruction test
+ * (p.88 allows movement through allies); nor does it fully answer whether a
+ * space is available for a particular placement (object stacking,
  * teleport unoccupied, summon placement each carry their own specialist
  * rules on top of this predicate). */
 export const occupied = (position: Position, context: RuleExecutionContext, excludeId = '') =>
-  battlefield.occupied(position, context, excludeId);
+  battlefield.finalSpaceOccupied(position, context, excludeId);
 
 export const impassable = (position: Position, context: RuleExecutionContext) =>
   battlefield.impassable(position, context);
@@ -145,18 +148,41 @@ export function walk(
   moverId: string,
   options: { excludeIds?: ReadonlySet<string> } = {},
 ): Position {
-  return battlefield.walk(context, start, direction, steps, phasing, moverId, options);
+  const excludeIds = options.excludeIds ?? new Set<string>();
+  const moverSize = Math.max(1, context.state.actors[moverId]?.size ?? 1);
+  let position = { ...start };
+  for (let step = 0; step < steps; step += 1) {
+    const next = { x: position.x + Math.sign(direction.x), y: position.y + Math.sign(direction.y) };
+    if (footprintCells(next, moverSize).some((cell) => !withinGrid(cell, context)
+      || context.state.terrainAt(cell).has('impassable'))) break;
+    if (!phasing) {
+      const blockedByActor = Object.values(context.state.actors).some(
+        (actor) => actor.id !== moverId && !excludeIds.has(actor.id) && actor.position
+          && footprintsOverlap(
+            { position: next, size: moverSize },
+            { position: actor.position, size: actor.size ?? 1 },
+          ),
+      );
+      const blockedByEntity = Object.values(context.state.entities).some(
+        (entity) => entityKindOf(entity) === 'object' && entity.position && sameCell(entity.position, next),
+      );
+      if (blockedByActor || blockedByEntity) break;
+    }
+    position = next;
+  }
+  return position;
 }
 
 /** The first in-grid, unoccupied cell from a candidate list, else null. */
 export function firstFreeCell(context: RuleExecutionContext, cells: Position[], excludeId: string): Position | null {
-  return battlefield.firstFreeCell(context, cells, excludeId);
+  return cells.find((cell) => withinGrid(cell, context)
+    && !battlefield.finalSpaceOccupied(cell, context, excludeId)) ?? null;
 }
 
 // ── Selection ────────────────────────────────────────────────────────────────
 /** The eight surrounding cells in clockwise order, starting directly north. */
 export function ringAround(center: Position): Position[] {
-  return battlefield.ringAround(center);
+  return ringAroundGeometry(center);
 }
 
 // ── Durations ────────────────────────────────────────────────────────────────

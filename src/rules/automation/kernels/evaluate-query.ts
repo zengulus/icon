@@ -53,7 +53,7 @@ import {
 } from '../primitives/spatial-intent.js';
 import {
   distance,
-  occupied,
+  finalSpaceOccupied,
   withinGrid,
 } from '../primitives/battlefield.js';
 import { axisDirection, sameCell, squareArea } from '../../area-geometry.js';
@@ -287,7 +287,7 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
   for (const cell of squareArea(query.origin, query.radius)) {
     if (!validatePositionCandidate({ origin: query.origin, range: query.radius }, cell, context).legal) continue;
     if (!query.includeOrigin && sameCell(cell, query.origin)) continue;
-    if (query.space.kind === 'unoccupied' && occupied(cell, context, query.space.excludeActorId ?? '')) continue;
+    if (query.space.kind === 'unoccupied' && finalSpaceOccupied(cell, context, query.space.excludeActorId ?? '')) continue;
     if (view && !hasLineOfSight(view, query.lineOfSightFrom!, cell)) continue;
     cells.push(cell);
   }
@@ -329,7 +329,7 @@ export function validatePositionLegality(
   if (!withinGrid(position, context)) return { legal: false, problem: 'out-of-bounds' };
   const originFootprint = { position: query.origin, size: Math.max(1, Math.floor(query.originSize ?? 1)) };
   if (footprintDistance(originFootprint, { position, size: 1 }) > query.range) return { legal: false, problem: 'range' };
-  if (occupied(position, context, query.excludeActorId ?? '')) return { legal: false, problem: 'occupied' };
+  if (finalSpaceOccupied(position, context, query.excludeActorId ?? '')) return { legal: false, problem: 'occupied' };
   if (query.lineOfSightFrom && !hasLineOfSight(lineView(context), query.lineOfSightFrom, position)) {
     return { legal: false, problem: 'line-of-sight' };
   }

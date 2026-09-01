@@ -134,6 +134,50 @@ describe('U14 — gates flip deterministically with state', () => {
     expect(modifierGateHolds(choice, view({ selectedTalentSourceIds: new Set(['fixture:talent-choice']) }))).toBe(true);
   });
 
+  it('characterizes every retained gate before any U6 migration', () => {
+    const ability = owner();
+    const foe = (overrides: Partial<NonNullable<ModifierFoldView['target']>> = {}): NonNullable<ModifierFoldView['target']> => ({
+      id: 'foe', side: 'foes', hp: 4, maxHp: 10, conditions: new Set(['burning']), ...overrides,
+    });
+
+    expect(modifierGateHolds({ kind: 'always' }, view())).toBe(true);
+    expect(modifierGateHolds({ kind: 'charge' }, view({ actor: { slowTurn: true } }))).toBe(true);
+    expect(modifierGateHolds({ kind: 'charge' }, view({ actor: { slowTurn: false } }))).toBe(false);
+    expect(modifierGateHolds({ kind: 'round-at-least', value: 4 }, view({ round: 3 }))).toBe(false);
+    expect(modifierGateHolds({ kind: 'round-at-least', value: 4 }, view({ round: 4 }))).toBe(true);
+    expect(modifierGateHolds({ kind: 'self-bloodied' }, view({ actor: { hp: 10 } }))).toBe(true);
+    expect(modifierGateHolds({ kind: 'target-bloodied' }, view({ target: foe() }))).toBe(true);
+    expect(modifierGateHolds({ kind: 'target-has-condition' }, view({ target: foe() }))).toBe(true);
+    expect(modifierGateHolds({ kind: 'target-has-condition', conditionId: 'burning' }, view({ target: foe() }))).toBe(true);
+
+    // Mastery is conjunctive: mastered-but-unequipped and
+    // equipped-but-unmastered both remain false.
+    const mastery: ModifierGate = { kind: 'mastery', abilityId: ability };
+    expect(modifierGateHolds(mastery, view({ actor: { masteredAbilityIds: [ability] } }))).toBe(false);
+    expect(modifierGateHolds(mastery, view({ actor: { abilityIds: [ability] } }))).toBe(false);
+  });
+
+  it('fails target gates closed for missing/allied/malformed targets and never gains truth vacuously', () => {
+    const targetBloodied: ModifierGate = { kind: 'target-bloodied' };
+    const targetCondition: ModifierGate = { kind: 'target-has-condition' };
+    const allied = { id: 'ally', side: 'heroes', hp: 1, maxHp: 10, conditions: new Set(['burning']) };
+    const malformed = { id: 'foe', side: 'foes', hp: 0, maxHp: 0, conditions: new Set<string>() };
+
+    for (const gate of [targetBloodied, targetCondition]) {
+      expect(modifierGateHolds(gate, view())).toBe(false);
+      expect(modifierGateHolds(gate, view({ target: allied }))).toBe(false);
+    }
+    expect(modifierGateHolds(targetBloodied, view({ target: malformed }))).toBe(false);
+    expect(modifierGateHolds(targetCondition, view({ target: malformed }))).toBe(false);
+    expect(modifierGateHolds(targetBloodied, view({ target: { ...malformed, hp: 8, maxHp: 10 } }))).toBe(false);
+    expect(modifierGateHolds(targetCondition, view({ target: { ...malformed, maxHp: 10 } }))).toBe(false);
+
+    // The intended U6 composition must preserve this existential target
+    // requirement; `all([])` alone would incorrectly return true.
+    expect([].every(() => false)).toBe(true);
+    expect(modifierGateHolds(targetBloodied, view())).toBe(false);
+  });
+
   it('a predicate-gated rule flips on and off as state changes (never a stale fold)', () => {
     const ability = owner();
     registerModifierRule({ sourceId: 't3:gated', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: constantModifierValue(5), gates: [{ kind: 'comeback' }] });

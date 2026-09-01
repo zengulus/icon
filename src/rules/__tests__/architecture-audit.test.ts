@@ -48,7 +48,9 @@ describe('parseImports', () => {
     const code = [
       '// import "./bad.js";',
       "import './good.js';",
+      '/**',
       ' * import "./also-comment.js";',
+      ' */',
     ].join('\n');
     expect(parseImports(code)).toEqual(['./good.js']);
   });
@@ -60,6 +62,18 @@ describe('parseImports', () => {
       "import 'external-pkg';",
     ].join('\n');
     expect(parseImports(code)).toEqual(['./a.js', './b.js']);
+  });
+
+  it('extracts multiline static imports and exports', () => {
+    const code = [
+      'import {',
+      '  occupied,',
+      "} from '../primitives/job-kit.js';",
+      'export {',
+      '  resolveChoice,',
+      "} from './choice.js';",
+    ].join('\n');
+    expect(parseImports(code)).toEqual(['../primitives/job-kit.js', './choice.js']);
   });
 });
 
@@ -105,18 +119,42 @@ describe('auditArchitecture (real codebase)', () => {
 
   it('semantic atomicity: kernels cannot depend on job-kit for low-level semantics', () => {
     expect(kernelAuthoringFacadeProblems({
-      'kernels/query.ts': "import { occupied } from '../primitives/job-kit.js';",
+      'kernels/query.ts': "import {\n  occupied,\n} from '../primitives/job-kit.js';",
       'content/jobs/example.ts': "import { occupied } from '../../primitives/job-kit.js';",
     })).toEqual([expect.objectContaining({ check: 'kernel-authoring-facade-import', file: 'kernels/query.ts' })]);
   });
 
   it('semantic atomicity: U4 actor and position decisions remain routed through U3', () => {
-    expect(choiceCandidateRoutingProblems('validateActorCandidate(id); validatePositionCandidate(query);')).toEqual([]);
+    const routed = `
+      validateActorCandidate(id);
+      function resolvePositions() {
+        const candidate = validatePositionCandidate(query);
+        if (!candidate.legal && candidate.problem === 'out-of-bounds') throw new Error();
+        if (!candidate.legal) throw new Error(candidate.problem);
+      }
+    `;
+    expect(choiceCandidateRoutingProblems(routed)).toEqual([]);
     expect(choiceCandidateRoutingProblems("validateActorCandidate(id); import { withinGrid } from '../primitives/battlefield.js';"))
       .toEqual(expect.arrayContaining([
-        'position choices no longer call U3 validatePositionCandidate',
+        'position choices do not bind the U3 validatePositionCandidate result',
         'choice kernel imports raw spatial semantics instead of U3 candidate validation',
       ]));
+  });
+
+  it('semantic atomicity: a dead U3 call cannot conceal restored local position legality', () => {
+    const bypass = `
+      validateActorCandidate(id);
+      function resolvePositions() {
+        validatePositionCandidate(query);
+        if (cell.x < 0 || cell.y < 0 || cell.x >= context.state.grid.width) throw new Error('bounds');
+        const range = Math.max(Math.abs(cell.x - origin.x), Math.abs(cell.y - origin.y));
+        if (range > maximumRange) throw new Error('range');
+      }
+    `;
+    expect(choiceCandidateRoutingProblems(bypass)).toEqual(expect.arrayContaining([
+      'position choices do not bind the U3 validatePositionCandidate result',
+      'position choices locally reinterpret U3 bounds or footprint-range legality',
+    ]));
   });
 
   it('T6.4/(a) U16 guard flags bespoke entitlement fields but not retained specialists', () => {

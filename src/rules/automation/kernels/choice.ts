@@ -159,7 +159,9 @@ function resolveDirection(choice: RuleChoice, context: RuleExecutionContext): Ch
     throw choiceViolation('choice.direction-required', choice, 'requires a chosen direction.');
   }
   if (supplied.x === 0 && supplied.y === 0) {
-    // A direction is an axis unit vector; (0,0) is not a direction.
+    // The current compatibility bucket carries a displacement vector. U4 can
+    // reject the absence of direction, but must not invent a source-specific
+    // direction vocabulary here; a later closed candidate set belongs in U3.
     throw choiceViolation('choice.direction-invalid', choice, 'direction cannot be (0,0).');
   }
   return { kind: 'direction', direction: supplied };

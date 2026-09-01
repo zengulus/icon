@@ -77,6 +77,21 @@ export function orthogonalNeighbors(center: Position): Position[] {
   ];
 }
 
+/** Eight neighboring cells clockwise from north. This is pure geometry; the
+ * order is data returned to a caller, not U17 effect arbitration. */
+export function ringAround(center: Position): Position[] {
+  return [
+    { x: center.x, y: center.y - 1 },
+    { x: center.x + 1, y: center.y - 1 },
+    { x: center.x + 1, y: center.y },
+    { x: center.x + 1, y: center.y + 1 },
+    { x: center.x, y: center.y + 1 },
+    { x: center.x - 1, y: center.y + 1 },
+    { x: center.x - 1, y: center.y },
+    { x: center.x - 1, y: center.y - 1 },
+  ];
+}
+
 /**
  * Validate and return the cells of an orthogonal arc path (ICON p.97:
  * "Arc X: X contiguous spaces, with its first space drawn in range. Spaces

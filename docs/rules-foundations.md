@@ -180,13 +180,14 @@ player-chosen flight; the old "away from the nearest foe" direction was
 invented) are documented non-executable, their resolvers fail closed on
 those clauses, and the `includeDefeated: true` flags those call sites
 carried were dropped ("closest foe" cannot include defeated characters).
-`primitives/battlefield.ts::occupied` is the OBSTRUCTION authority (characters +
-OBJECT entities block, p.95; intangible summons do NOT obstruct — a bomb's
-cannot-share-with-bombs rule is a specialist constraint in the bomb
-placement resolver, never this predicate). `primitives/job-kit.ts` retains a
-compatibility wrapper for content authoring, but kernels import the owning
-battlefield surface directly; damage-roll policy similarly lives in
-`primitives/damage-roll.ts`.
+`primitives/battlefield.ts::finalSpaceOccupied` answers final-space occupancy
+(another character or OBJECT occupies the cell; intangible summons do not,
+p.95). It is not generic movement obstruction: p.88 permits ally transit but
+forbids ending in any character's space. `primitives/job-kit.ts` retains the
+old `occupied` name plus `walk` and `firstFreeCell` as compatibility authoring
+helpers; the latter two are explicitly not shared movement/query-ordering
+authorities. Kernels import the owning battlefield surface directly;
+damage-roll policy similarly lives in `primitives/damage-roll.ts`.
 
 T2 (2026-08-30) completed the T2 U3 contract on top of the landed actor/
 position slices: the query TYPES moved to `primitives/query.ts` (split-
