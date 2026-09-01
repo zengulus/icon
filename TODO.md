@@ -302,6 +302,37 @@ assumption here, document the evidence and update this list before proceeding.
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
 
+- **U1 content-authoring tranche 12 — Geomancer pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/geomancer-programs.ts`
+  now routes every pure live-slot reference through the adapter: source
+  reads → `resolveSourceActor(context)` in Bio, BIOTIC, Dragon Dive, Geo,
+  Helix Heel, Terraforming, Obsidian Flesh, Realignment, Midas, Quaking
+  Palm (10) and primary attack-target reads → `resolveAttackTarget(context)`
+  in Bio, BIOTIC, Geo, Quaking Palm (4) — identical LIVE/absent-singular
+  semantics with the resolvers' gates untouched. The four retained CAPTURED
+  sites stay caller-owned: Dragon Dive / Terraforming / Realignment
+  `input.actorIds?.target?.[0] ?? attackTargetId` and Midas
+  `input.actorIds?.target?.[0] ?? triggerTargetIds?.[0]` — the `??` SELECT
+  is caller-owned U4 precedence, only the dereference of the chosen identity
+  is the captured shape (no arbitrary-id accessor added). Guard pins
+  Geomancer via contentAdapterSurface; mutation test covers a revert
+  (exactly one routing violation) and proves the retained
+  captured/precedence dereferences alone do not trigger the pin. Evidence:
+  +4 fail-closed/U4-parity tests in `reference-authoring.test.ts` (Geo
+  ghost attackTargetId → `reference.missing-actor`; Quaking Palm targetless
+  no-op; Dragon Dive recorded-input target wins over a DIFFERENT recorded
+  attack target; Midas input target wins over triggerTargetIds), +1
+  engine-level insertion-order test in `geomancer.test.ts`, the full
+  Geomancer suite (41) green through the engine path (valid-state semantics
+  preserved; malformed refs fail closed; replay byte-identical). The tranche
+  removed exactly 14 PURE_LIVE_REFERENCE sites (Geomancer 14 → 0), moving
+  the machine-derived residual from 100 = 45 + 54 + 1 to 86 = 31 + 54 + 1
+  (per `npm run audit:u1-residual`; no hand-maintained totals). 0 direct
+  dereferences; U1 remains PARTIAL (Stormbender 11 / Colossus 11 /
+  Sealer 4 / Shade 3 / Warden 2 PURE remain). Full Geomancer suite green
+  through the engine path; census and architecture-audit pins regenerated
+  to the machine figures; zero source promotion.
+
 - **U1 content-authoring tranche 11 — Freelancer pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/freelancer-programs.ts`
   now routes every pure live-slot reference through the adapter: source

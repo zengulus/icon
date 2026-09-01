@@ -219,11 +219,11 @@ describe('U1 residual census (machine inventory)', () => {
     expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
   });
 
-  it('pins the exact repo figures (100 = 45 + 54 + 1) so docs cannot drift from the machine', () => {
+  it('pins the exact repo figures (86 = 31 + 54 + 1) so docs cannot drift from the machine', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
-    expect(inventory.total).toBe(100);
+    expect(inventory.total).toBe(86);
     expect(inventory.categoryCounts).toEqual({
-      PURE_LIVE_REFERENCE: 45,
+      PURE_LIVE_REFERENCE: 31,
       CAPTURED_ID_DEREFERENCE: 54,
       DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
       NON_U1_OTHER: 0,
@@ -375,6 +375,11 @@ describe('U1 Reference/Binding routing guard', () => {
     // dereferences (Masquerade's input-selected ally, Chronotemper's
     // input-target-or-self) stay inventoried at the caller.
     'content/jobs/programs/fool-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined; const targetId = context.input.actorIds?.target?.[0] ?? source.id; const chosen = sourceActor(context, targetId);',
+    // Migrated Geomancer keeps its pinned adapter surface; the retained
+    // captured/precedence dereferences (Dragon Dive / Terraforming /
+    // Realignment `input.actorIds ?? attackTargetId`, Midas
+    // `input.actorIds ?? triggerTargetIds`) stay inventoried at the caller.
+    'content/jobs/programs/geomancer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined; const interruptId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0]; const interruptTarget = interruptId ? sourceActor(context, interruptId) : undefined;',
     'content/jobs/job-trait-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); mutations.push({ kind: \'condition\', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id });',
     'content/classes/class-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); const inputTargets = context.input.actorIds?.target; if (inputTargets[0] !== context.attackTargetId) throw 0;',
   };
@@ -403,11 +408,12 @@ describe('U1 Reference/Binding routing guard', () => {
     const problems = u1ReferenceRoutingProblems({
       ...valid,
       ...validContent,
-      // Fool is now MIGRATED — use genuinely non-migrated families for the
-      // accepted-residual proof (Stormbender / Geomancer still route their
-      // live slots through the legacy convenience, inventoried).
+      // Geomancer is now MIGRATED — use the two remaining non-migrated
+      // families for the accepted-residual proof (Stormbender / Colossus
+      // still route their live slots through the legacy convenience,
+      // inventoried).
       'content/jobs/programs/stormbender-programs.ts': "const source = sourceActor(context, context.actorId);",
-      'content/jobs/programs/geomancer-programs.ts': "const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;",
+      'content/jobs/programs/colossus-programs.ts': "const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;",
     });
     expect(problems).toEqual([]);
   });
@@ -545,6 +551,23 @@ describe('U1 Reference/Binding routing guard', () => {
       expect.objectContaining({ file: 'content/jobs/programs/fool-programs.ts', detail: expect.stringContaining('no longer routes') }),
     ]));
     expect(problems.filter((problem) => problem.file === 'content/jobs/programs/fool-programs.ts').length).toBe(1);
+  });
+
+  it('T5c: catches a MIGRATED Geomancer program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    // Reverting Geomancer's migrated LIVE slots drops the pinned accessors;
+    // the retained captured/precedence dereferences (Dragon Dive /
+    // Terraforming / Realignment input ?? attackTarget chains, Midas input ??
+    // triggerTargets) must NOT themselves be flagged — only the missing pins
+    // bite.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/geomancer-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined; const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/geomancer-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
+    expect(problems.filter((problem) => problem.file === 'content/jobs/programs/geomancer-programs.ts').length).toBe(1);
   });
 
   it('T5c: catches a MIGRATED Seer program that reverts live-slot reads to legacy sourceActor(context, …)', () => {

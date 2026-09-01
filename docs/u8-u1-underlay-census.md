@@ -131,7 +131,8 @@ their sites.
 > | `d4d4cd9` (post-Demon Slayer) | 144 | 89 | 54 | 1 |
 > | `71aeb59` (post-Seer) | 129 | 74 | 54 | 1 |
 > | `582876b` (post-Fool) | 114 | 59 | 54 | 1 |
-> | current HEAD (post-Freelancer) | 100 | 45 | 54 | 1 |
+> | `ca94409` (post-Freelancer) | 100 | 45 | 54 | 1 |
+> | current HEAD (post-Geomancer) | 86 | 31 | 54 | 1 |
 >
 > The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
 > (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
@@ -147,7 +148,7 @@ their sites.
 > consistent; `188 + 55 = 243 ≠ 242` was the misclassification surfacing
 > through two hand-maintained buckets.
 >
-A machine scan at this HEAD finds 100 `sourceActor(context, …)` call
+A machine scan at this HEAD finds 86 `sourceActor(context, …)` call
 sites across 14 named program files (multi-line calls collapse to one site;
 `npm run audit:u1-residual` reproduces these figures — and now VERIFIES this
 prose against the machine inventory, so a stale total cannot silently
@@ -155,16 +156,16 @@ survive here again). Classified by
 MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
 provenance string):
 
-- **U1 reference identity — pure LIVE-slot reads (45, migrate family-by-
+- **U1 reference identity — pure LIVE-slot reads (31, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
   Warden/Sealer/Enochian/Chanter/Knave/Harvester/Demon Slayer/Seer/Fool/
-  Freelancer migrated across tranches 2–11. Remaining per-file: Geomancer
-  14, Stormbender 11, Colossus 11, Sealer 4 (chain sites' source reads —
-  see boundary), Shade 3, Warden 2. Enochian 0, Chanter 0, Knave 0,
-  Harvester 0, Demon Slayer 0, Seer 0, Fool 0, Freelancer 0 (their
-  tranches).
+  Freelancer/Geomancer migrated across tranches 2–12. Remaining per-file:
+  Stormbender 11, Colossus 11, Sealer 4 (chain sites' source reads — see
+  boundary), Shade 3, Warden 2. Geomancer 0 (its tranche); Enochian 0,
+  Chanter 0, Knave 0, Harvester 0, Demon Slayer 0, Seer 0, Fool 0,
+  Freelancer 0 (their tranches).
 - **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
   earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
@@ -715,18 +716,78 @@ source unit was promoted; valid/reachable-state semantics are preserved,
 and a slot naming a missing actor fails closed under the existing U1
 contract exactly as in the prior tranches.
 
-## U1 status after the Fool tranche
+## U1 tranche executed (fresh HEAD, 2026-09-01, twelfth tranche — Geomancer)
 
-U1 remains PARTIAL: the shared surface is proved and pinned across FIFTEEN
+### Migrated: Geomancer pure LIVE-slot reference reads
+
+`content/jobs/programs/geomancer-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **14 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Geomancer: 14 → 0 PURE;
+CAPTURED 54 and BOUNDARY 1 unchanged; whole-repo 100 → 86 = 31 + 54 + 1)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in all 10 Geomancer resolvers that reach the
+  source: Bio, BIOTIC, Dragon Dive, Geo, Helix Heel, Terraforming, Obsidian
+  Flesh, Realignment, Midas, Quaking Palm;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Bio, BIOTIC, Geo, Quaking Palm —
+  identical LIVE re-read and absent-singular→undefined semantics.
+
+**Deliberately NOT migrated (per-call-site U1×U4 boundary, inventoried —
+4 CAPTURED sites):** Dragon Dive's / Terraforming's / Realignment's
+`targetId = input.actorIds?.target?.[0] ?? attackTargetId` and Midas's
+`targetId = input.actorIds?.target?.[0] ?? triggerTargetIds?.[0]` — the
+`?.[0]` / `??` SELECT is caller-owned U4 choice/cardinality (which slot
+answers depends on the window contract), and only the dereference of the
+chosen identity is the U1 captured-identity shape (the next tranche
+family). `sourceActor(context, …)` remains imported for those four sites;
+the resolvers' own range/board-state gates (`choice.actor-count`,
+`choice.actor-range`, `!source.position`) are untouched.
+
+### Guard
+
+The `u1-reference-routing` guard pins Geomancer (resolveSourceActor,
+resolveAttackTarget) to the adapter; the retained captured/precedence
+dereferences are NOT banned (no blanket lexical ban). Mutation test: a
+Geomancer revert to `sourceActor(context, context.actorId)` drops the
+pinned calls, is caught with exactly one Geomancer routing problem, and the
+retained `input.actorIds ?? attackTargetId` / `?? triggerTargetIds`
+`sourceActor(context, targetId)` reads alone do NOT trigger the pin.
+
+### Evidence
+
+- `reference-authoring.test.ts` +4: the production Geomancer Geo resolver
+  fails closed (`reference.missing-actor`) on a gated-bypass ghost
+  `attackTargetId` (legacy silently no-opped); Quaking Palm keeps a
+  genuinely targetless use as a no-op (optional singleton semantics);
+  Dragon Dive's recorded `input.actorIds` target still wins over a
+  DIFFERENT recorded attack target (caller-owned U4 precedence); and
+  Midas's recorded input target wins over the interrupt's trigger targets,
+  becoming the held statue (caller-owned U4).
+- `geomancer.test.ts` +1: reversing actor INSERTION order (second foe added
+  before the target) produces byte-identical Geo outcomes and replay — the
+  migrated source/attack-target reads resolve by recorded slot identity,
+  never object-iteration order.
+- the full Geomancer suite stays green through the engine path — Geo's
+  charge blast, Terraforming's bullet budget/branches, Obsidian Flesh's
+  stance die, Realignment's purge burst, Midas's U16 twice-per-combat
+  ledger, and Quaking Palm's vulnerability/vibration mark all unchanged.
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
+
+## U1 status after the Geomancer tranche
+
+U1 remains PARTIAL: the shared surface is proved and pinned across SIXTEEN
 migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
-Chanter, Knave, Harvester, Demon Slayer, Seer, Fool, Freelancer, Job-trait,
-Class resolvers), and the residual is a machine-derived classified
-inventory — 45 pure LIVE-slot reads (next tranches) + 54 captured/derived
-dereferences + 1 in-call boundary read = 100 sites, 0 direct dereferences.
-The single DERIVED_OR_PRECEDENCE_BOUNDARY remains inventoried and
-unresolved (BOUNDARY 1 → 1). A whole-consumer audit is NOT yet done, so U1
-cannot claim AUTHORITATIVE: 3 program files still resolve live slots
-through the legacy kernel-side convenience (Geomancer, Stormbender,
+Chanter, Knave, Harvester, Demon Slayer, Seer, Fool, Freelancer,
+Geomancer, Job-trait, Class resolvers), and the residual is a machine-
+derived classified inventory — 31 pure LIVE-slot reads (next tranches) +
+54 captured/derived dereferences + 1 in-call boundary read = 86 sites, 0
+direct dereferences. The single DERIVED_OR_PRECEDENCE_BOUNDARY remains
+inventoried and unresolved (BOUNDARY 1 → 1). A whole-consumer audit is
+NOT yet done, so U1 cannot claim AUTHORITATIVE: 2 program files still
+resolve live slots through the legacy kernel-side convenience (Stormbender,
 Colossus), and the U1×U4 captured-identity boundary has no shared surface
 yet.
 

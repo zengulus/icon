@@ -365,6 +365,7 @@ export function u1ReferenceRoutingProblems(
     'content/jobs/programs/demon-slayer-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/programs/seer-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/programs/fool-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
+    'content/jobs/programs/geomancer-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/job-trait-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/classes/class-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
   };

@@ -49,6 +49,7 @@ import { KNAVE_RULE_RESOLVERS } from '../automation/content/jobs/programs/knave-
 import { HARVESTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/harvester-programs.js';
 import { DEMON_SLAYER_RULE_RESOLVERS } from '../automation/content/jobs/programs/demon-slayer-programs.js';
 import { SEER_RULE_RESOLVERS } from '../automation/content/jobs/programs/seer-programs.js';
+import { GEOMANCER_RULE_RESOLVERS } from '../automation/content/jobs/programs/geomancer-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -468,6 +469,58 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     // resolves through the resolver's own `!target?.position` guard as before.
     const context = ctx();
     expect(() => SEER_RULE_RESOLVERS['seer:the-tower:effects'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Geomancer Geo resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Geo's PURE live-slot reads (source + attack target) now resolve through
+    // the adapter; a slot that NAMES a missing actor must reject on a
+    // malformed window rather than silently produce nothing.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => GEOMANCER_RULE_RESOLVERS['geomancer:geo:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Geomancer Quaking Palm resolver: an absent optional attack-target slot stays a no-op (optional singleton semantics preserved)', () => {
+    // Quaking Palm's migrated attack-target read keeps the absent-singular →
+    // undefined contract; a genuinely targetless context resolves through the
+    // resolver's own `!target?.position` guard as before.
+    const context = ctx();
+    expect(() => GEOMANCER_RULE_RESOLVERS['geomancer:quaking-palm:effects'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Geomancer Dragon Dive resolver: the recorded input.actorIds target stays caller-owned (U4) — it wins over a DIFFERENT recorded attack target', () => {
+    // Dragon Dive's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is
+    // the caller's U4 precedence (inventoried); only the source read is the
+    // migrated PURE slot. A present input target wins even when a DIFFERENT
+    // attackTargetId is recorded — the dive is stored against the chosen
+    // identity, exactly as before.
+    const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 7, y: 4 } }; // in range 6 of hero (4,4)
+    const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 12, y: 4 } }; // out of range 6 — never selected
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, chosen, other } },
+      input: { actorIds: { target: ['chosen'] } },
+      attackTargetId: 'other',
+    });
+    const mutations = GEOMANCER_RULE_RESOLVERS['geomancer:dragon-dive:effects'](context, defaultAction);
+    expect(mutations.some((mutation) => mutation.kind === 'state' && mutation.key === 'dragon-dive:target' && mutation.value === 'chosen')).toBe(true);
+    // The out-of-range recorded attack target never participates: the caller's
+    // SELECT consumed only the recorded input identity.
+    expect(mutations.some((mutation) => mutation.kind === 'state' && mutation.value === 'other')).toBe(false);
+  });
+
+  it('Geomancer Midas resolver: the recorded interrupt target stays caller-owned (U4) — input.actorIds wins over triggerTargetIds', () => {
+    // Midas's `input.actorIds?.target?.[0] ?? triggerTargetIds?.[0]` SELECT is
+    // the caller's U4 precedence (inventoried); only the source read is the
+    // migrated PURE slot. The chosen identity becomes the statue held,
+    // unchanged.
+    const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 5, y: 4 } }; // in range 5 of hero (4,4)
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, chosen } },
+      input: { actorIds: { target: ['chosen'] } },
+      triggerTargetIds: ['foe'],
+    });
+    const mutations = GEOMANCER_RULE_RESOLVERS['geomancer:midas:effects'](context, interruptAction);
+    expect(mutations.some((mutation) => mutation.kind === 'entity' && mutation.operation === 'create' && mutation.entityType === 'statue' && mutation.state?.held === 'chosen')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'entity' && mutation.state?.held === 'foe')).toBe(false);
   });
 
   it('Seer Chaos Tarot resolver: the recorded input.actorIds center choice still wins over the attack target (caller-owned U4)', () => {

@@ -402,6 +402,30 @@ describe('Geomancer ability automation (p.215–221)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Geo under reversed actor insertion order is byte-identical: the migrated live slots resolve by recorded identity, never object order', () => {
+    // Rebuild the canonical Geo fixture with the second foe ADDED BEFORE the
+    // target, so the actors map iteration order differs from every other
+    // fixture in this file. The migrated source/attack-target reads must
+    // resolve by recorded slot identity (context.actorId / attackTargetId),
+    // never object iteration order — the outcome, the events, and the replay
+    // reproduce the canonical result exactly.
+    let setup = createEncounter('Geomancer insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Earth Shaper'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 3, y: 1 });
+    const second = createFoe('Grim', { x: 3, y: 0 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:geo', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[foe.id].hp).toBe(19); // 32 - (4 + 5 + fray 4)
+    expect(result.state.actors[second!.id].hp).toBe(28); // 32 - fray 4 (area)
+    expect(Object.values(result.state.entities).some((entity) => entity.type === 'boulder')).toBe(true);
+    expect(applyEvents(setup, result.events)).toEqual(result.state); // replay byte-identical
+  });
+
   it('Quaking Palm: [D]+1 on hit, makes the foe vulnerable, and sets up vibrations', () => {
     const { state, hero, foe } = geomancerEncounter({ second: null });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'geomancer:quaking-palm', targetIds: [foe.id] }, scriptedDice(12, 4));

@@ -16,6 +16,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { resolveSourceActor, resolveAttackTarget } from '../../glue/reference-authoring.js';
 import { midasOncePerCombatKey } from '../../../kernels/use-ledger.js';
 import { consumeUsageMutation, ledgerAvailable } from '../../../primitives/usage.js';
 
@@ -50,8 +51,8 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
  * fray to the other characters in the small blast. Charge: dangerous terrain
  * in the center space and under every foe in the area. */
 const bioEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [autohitAttack(context)];
   mutations.push(conditionMutation(context, target.id, 'shattered'));
@@ -80,8 +81,8 @@ const bioEffects: RuleResolver = (context) => {
 /** ICON p.218 Bio infuse (BIOTIC): the blast grows to a medium blast and every
  * character inside is shattered. */
 const bioticEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [autohitAttack(context)];
   mutations.push(conditionMutation(context, target.id, 'shattered'));
@@ -108,7 +109,9 @@ const bioticEffects: RuleResolver = (context) => {
  * release a burst 1 area effect (shove 1, 2 piercing). The dive is a
  * documented delay window. */
 const dragonDiveEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -124,8 +127,8 @@ const dragonDiveEffects: RuleResolver = (context) => {
  * in the area. Charge: the target explodes in a medium blast — 2 piercing again
  * to all characters and a pit under them. */
 const geoEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -160,7 +163,7 @@ const geoEffects: RuleResolver = (context) => {
  * and every object passed through resonates with a burst 1 area effect of 2
  * piercing. Charge: shatter any foe damaged by the ability. */
 const helixHeelEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
   const direction = context.input.directions?.line ?? { x: 1, y: 0 };
@@ -233,7 +236,9 @@ const helixHeelEffects: RuleResolver = (context) => {
  * area; Talent II adds 'dangerous' as a selectable effect.
  */
 const terraformingEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -384,7 +389,7 @@ const terraformingEffects: RuleResolver = (context) => {
  * damage-triggered ticks, resistance at 4+, and the stunned collapse are
  * documented stance windows. */
 const obsidianFleshEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [
     stanceMutation(context, source.id, 'enter', 'obsidian-flesh'),
     stateMutation(context, source.id, 'obsidian-flesh:die', 1),
@@ -396,7 +401,9 @@ const obsidianFleshEffects: RuleResolver = (context) => {
  * once for each effect purged (max 4). A foe target may also be shattered.
  * Charge: also end any marks of your choice, counting as purging an effect. */
 const realignmentEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Realignment requires an adjacent character with a status.');
@@ -425,7 +432,10 @@ const realignmentEffects: RuleResolver = (context) => {
  * height 1 statue object. The start-of-next-turn return and the twice-per-
  * combat permanence are documented turn-start windows. */
 const midasEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the interrupt's
+  // trigger targets — caller-owned U4 precedence; only the dereference is the
+  // captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Midas requires a character in range 5.');
@@ -448,8 +458,8 @@ const midasEffects: RuleResolver = (context) => {
  * turn they take 1 piercing damage for every object adjacent to them (max 4).
  * The vibration damage is a documented turn-end window. */
 const quakingPalmEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
