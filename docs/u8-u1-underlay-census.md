@@ -27,7 +27,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 
 | Underlay | State after audit | Smallest known residual |
 | --- | --- | --- |
-| U1 Reference / Binding | PARTIAL | named content resolvers still interpret implicit slots/input identities |
+| U1 Reference / Binding | PARTIAL | caller-owned U1×U4 captured-identity dereferences without a shared surface (scoping decision, not a competing authority) |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | PARTIAL | area/persistent-instance/rule-source domains and residual ordering |
 | U4 Choice / Decision | PARTIAL | ability/talent choice fold reads and remaining window-carried choice consumers |
@@ -132,7 +132,10 @@ their sites.
 > | `71aeb59` (post-Seer) | 129 | 74 | 54 | 1 |
 > | `582876b` (post-Fool) | 114 | 59 | 54 | 1 |
 > | `ca94409` (post-Freelancer) | 100 | 45 | 54 | 1 |
-> | current HEAD (post-Geomancer) | 86 | 31 | 54 | 1 |
+> | `fe152a2` (post-Geomancer) | 86 | 31 | 54 | 1 |
+> | (post-Stormbender) | 75 | 20 | 54 | 1 |
+> | (post-Sealer/Shade/Warden) | 66 | 11 | 54 | 1 |
+> | current HEAD (post-Colossus) | 55 | 0 | 54 | 1 |
 >
 > The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
 > (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
@@ -148,7 +151,7 @@ their sites.
 > consistent; `188 + 55 = 243 ≠ 242` was the misclassification surfacing
 > through two hand-maintained buckets.
 >
-A machine scan at this HEAD finds 86 `sourceActor(context, …)` call
+A machine scan at this HEAD finds 55 `sourceActor(context, …)` call
 sites across 14 named program files (multi-line calls collapse to one site;
 `npm run audit:u1-residual` reproduces these figures — and now VERIFIES this
 prose against the machine inventory, so a stale total cannot silently
@@ -156,16 +159,15 @@ survive here again). Classified by
 MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
 provenance string):
 
-- **U1 reference identity — pure LIVE-slot reads (31, migrate family-by-
-  family next)**: `sourceActor(context, context.actorId)` (the ability user)
-  and `sourceActor(context, context.attackTargetId)` (the primary attack
-  target) — the unambiguous U1 reference reads, exactly the family Shade/
-  Warden/Sealer/Enochian/Chanter/Knave/Harvester/Demon Slayer/Seer/Fool/
-  Freelancer/Geomancer migrated across tranches 2–12. Remaining per-file:
-  Stormbender 11, Colossus 11, Sealer 4 (chain sites' source reads — see
-  boundary), Shade 3, Warden 2. Geomancer 0 (its tranche); Enochian 0,
-  Chanter 0, Knave 0, Harvester 0, Demon Slayer 0, Seer 0, Fool 0,
-  Freelancer 0 (their tranches).
+- **U1 reference identity — pure LIVE-slot reads (0 — fully migrated)**:
+  `sourceActor(context, context.actorId)` (the ability user) and
+  `sourceActor(context, context.attackTargetId)` (the primary attack
+  target) — the unambiguous U1 reference reads, migrated family-by-family
+  across tranches 2–15 (Shade, Warden, Sealer, Enochian, Chanter, Knave,
+  Harvester, Demon Slayer, Seer, Fool, Freelancer, Geomancer, Stormbender,
+  Colossus) plus the final Sealer/Shade/Warden residue. All named program
+  families route their live slots through the shared content-authoring
+  adapter; no PURE site remains.
 - **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
   earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
@@ -776,20 +778,273 @@ retained `input.actorIds ?? attackTargetId` / `?? triggerTargetIds`
 
 No direct `state.actors[context.…]` dereference remains anywhere in content.
 
-## U1 status after the Geomancer tranche
+## U1 tranche executed (fresh HEAD, 2026-09-01, thirteenth tranche — Stormbender)
 
-U1 remains PARTIAL: the shared surface is proved and pinned across SIXTEEN
+### Migrated: Stormbender pure LIVE-slot reference reads
+
+`content/jobs/programs/stormbender-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **11 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Stormbender: 11 → 0 PURE;
+CAPTURED 54 and BOUNDARY 1 unchanged; whole-repo 86 → 75 = 20 + 54 + 1)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in all 9 Stormbender resolvers that reach
+  the source: Rime, Tsunami, Cryo, Geyser, Gust, Heave-Ho, Deepwrath,
+  Waterspout, Eye Of The Storm;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Rime and Cryo — identical LIVE re-read
+  and absent-singular→undefined semantics.
+
+**Deliberately NOT migrated (per-call-site U1×U4 boundary, inventoried —
+4 CAPTURED sites):** Geyser's / Deepwrath's / Waterspout's
+`targetId = input.actorIds?.target?.[0] ?? attackTargetId` and Eye Of The
+Storm's `centerId = input.actorIds?.target?.[0] ?? attackTargetId` — the
+`?.[0]` / `??` SELECT is caller-owned U4 choice/cardinality (which slot
+answers depends on the source contract per call site), and only the
+dereference of the chosen identity is the U1 captured-identity shape (the
+next tranche family). `sourceActor(context, …)` remains imported for those
+four sites; the resolvers' own range/board-state gates
+(`choice.actor-count` / `choice.actor-range` / `!source.position`) are
+untouched. Eye Of The Storm stays DOCUMENTED_NON_EXECUTABLE (the
+ally-center fly-4 player choice, p.236) — the migration changed no
+retraction status and no ability semantics.
+
+### Guard
+
+The `u1-reference-routing` guard pins Stormbender (resolveSourceActor,
+resolveAttackTarget) to the adapter; the retained captured/precedence
+dereferences are NOT banned (no blanket lexical ban). Mutation test: a
+Stormbender revert to `sourceActor(context, context.actorId)` drops the
+pinned calls, is caught with exactly one Stormbender routing problem, and
+the retained `input.actorIds ?? attackTargetId`
+`sourceActor(context, targetId)` reads alone do NOT trigger the pin.
+
+### Evidence
+
+- `reference-authoring.test.ts` +3: the production Stormbender Rime resolver
+  fails closed (`reference.missing-actor`) on a gated-bypass ghost
+  `attackTargetId` (legacy silently no-opped); Cryo keeps a genuinely
+  targetless use as a no-op (optional singleton semantics); Deepwrath's
+  recorded `input.actorIds` target still wins over a DIFFERENT recorded
+  attack target (caller-owned U4 precedence — the mark lands on the chosen
+  identity, the out-of-range recorded attack target never participates).
+- `stormbender.test.ts` +1: reversing actor INSERTION order (second foe
+  added before the target) produces byte-identical Rime outcomes and replay
+  — the migrated source/attack-target reads resolve by recorded slot
+  identity, never object-iteration order.
+- the full Stormbender suite stays green through the engine path — Rime's
+  line shove/summon, Tsunami's swell origin, Cryo's shattered shove and
+  aether gain, Geyser's free-space placement, Heave-Ho's interrupt wave,
+  Deepwrath's mark, Waterspout's difficult terrain, and Eye Of The Storm's
+  retracted fail-closed fixture all unchanged.
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
+
+## U1 tranche executed (fresh HEAD, 2026-09-01, fourteenth tranche — Sealer/Shade/Warden residue)
+
+### Migrated: the last Sealer / Shade / Warden pure LIVE-slot source reads
+
+The three already-pinned program families now route their remaining pure
+live-slot references through the content-authoring adapter — **9
+PURE_LIVE_REFERENCE sites removed per the machine inventory (Sealer 4 → 0,
+Shade 3 → 0, Warden 2 → 0 PURE; CAPTURED 54 and BOUNDARY 1 unchanged;
+whole-repo 75 → 66 = 11 + 54 + 1)**:
+
+- Sealer source reads → `resolveSourceActor(context)` in Grand Seal,
+  Sanctify, Grand Banishment, and Divine Aegis;
+- Shade source reads → `resolveSourceActor(context)` in Harrow, Shadow
+  Play, and Assassinate;
+- Warden source reads → `resolveSourceActor(context)` in Gwynt and
+  Stampede.
+
+**Deliberately NOT migrated (per-call-site U1×U4 boundary, inventoried —
+9 CAPTURED sites across the three files):** the input-selected identities
+beside each migrated read — Grand Seal / Sanctify / Grand Banishment
+`targetId = input.actorIds?.target?.[0] ?? attackTargetId`, Divine Aegis
+`allyId = input.actorIds?.target?.[0] ?? attackTargetId`, Harrow /
+Assassinate / Stampede `targetId = input.actorIds?.target?.[0]`, Shadow Play
+`firstId`/`secondId = input.actorIds?.target?.[0/1]`, and Gwynt `foeId` /
+`allyId = input.actorIds?.target?.[0/1]` — the `?.[0]` / `?.[1]` / `??`
+SELECT is caller-owned U4 choice/cardinality (which slot answers depends on
+the source contract per call site), and only the dereference of the chosen
+identity is the U1 captured-identity shape (the next tranche family).
+`sourceActor(context, …)` remains imported for those sites; the resolvers'
+own range/board-state gates (`choice.actor-count` / `choice.actor-range` /
+`!sourcePosition`) are untouched. No ability semantics, choices, movement,
+geometry, triggers, lifecycle, damage, or retraction status changed —
+Sealer's Open The Gates / Justice / Matsuri etc. were already migrated; the
+four Sealer resolvers here were the last files' residue.
+
+### Guard
+
+No new pins were needed: the `u1-reference-routing` guard already pins
+Sealer, Shade, and Warden (resolveSourceActor, resolveAttackTarget) to the
+adapter, so a revert of any of these new reads drops the pinned calls and is
+caught; the retained captured/precedence dereferences are NOT banned (no
+blanket lexical ban). With this tranche, Colossus is the ONLY remaining
+non-migrated named program family.
+
+### Evidence
+
+- `reference-authoring.test.ts` +5: the production Shade Shadow Play
+  resolver fails closed (`reference.missing-actor`) on a gated-bypass ghost
+  source actor (legacy would throw the misleading `choice.actor-count`);
+  Shadow Play still swaps the RECORDED input identities (U4); Sealer Grand
+  Seal's recorded `input.actorIds` target still wins over a DIFFERENT
+  recorded attack target (U4 precedence); Sealer Sanctify keeps the
+  source-center fallback for a genuinely absent optional target; and Warden
+  Gwynt's recorded foe/ally selections still drive the dashes (U4).
+- `sealer.test.ts` / `shade.test.ts` / `warden.test.ts` +1 each: reversing
+  actor INSERTION order (an extra actor added before the target) produces
+  byte-identical Grand Seal / Harrow / Gwynt outcomes and replay — the
+  migrated source reads resolve by recorded slot identity, never
+  object-iteration order.
+- the full Sealer (24), Shade (24), and Warden (19) suites stay green
+  through the engine path — all ability semantics unchanged.
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
+
+## U1 tranche executed (fresh HEAD, 2026-09-01, fifteenth tranche — Colossus)
+
+### Migrated: Colossus pure LIVE-slot reference reads
+
+`content/jobs/programs/colossus-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **11 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Colossus: 11 → 0 PURE; CAPTURED 54
+and BOUNDARY 1 unchanged; whole-repo 66 → 55 = 0 + 54 + 1; the named-
+program PURE family is now EMPTY)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in Valkyrie, Upheaval, Dropkick, Massive
+  Overhead, Takedown, Great Suplex, Gigaton Whip, Boiling Blood (8);
+- primary attack-target reads (`context.attackTargetId ? sourceActor(
+  context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Valkyrie, Takedown, Gigaton Whip (3) —
+  identical LIVE re-read and absent-singular→undefined semantics.
+
+The resolvers' guards tightened from `!source || !source.position` / `!target
+|| !target.position` to `!source.position || !target?.position` (the
+adapter's `resolveSourceActor` never returns undefined — an absent source
+now fails closed with `reference.missing-actor` instead of silently
+no-opping) — the exact pattern every earlier tranche used.
+
+**Deliberately NOT migrated (per-call-site U1×U4 boundary, inventoried —
+3 CAPTURED sites):** `plannedFly`'s helper-PARAMETER dereference
+(`sourceActor(context, actorId)` — the caller supplies an already-resolved
+identity for a movement plan; no live slot, no arbitrary-id adapter op) and
+Dropkick's / Great Suplex's `targetId = input.actorIds?.target?.[0]`
+recorded player selections. The `?.[0]` SELECT is caller-owned U4
+choice/cardinality; only the dereference of the chosen identity is the U1
+captured-identity shape (retained, inventoried with the 54).
+`sourceActor(context, …)` remains imported for those three sites. No
+ability semantics, choices, movement, geometry, triggers, lifecycle,
+damage, or retraction status changed; Raging Wolf stays absent from the
+registry; the documented Gigaton/Takedown exceed-terrain blockers are
+unchanged.
+
+### Guard
+
+Colossus joins the `u1-reference-routing` guard's pinned families
+(contentAdapterSurface: resolveSourceActor, resolveAttackTarget). Mutation
+test: a Colossus revert drops the pinned calls, is caught with exactly one
+Colossus routing problem, and the retained helper-parameter / input-target
+dereferences alone do NOT trigger the pin.
+
+### Evidence
+
+- `reference-authoring.test.ts` +4: Valkyrie fails closed
+  (`reference.missing-actor`) on a gated-bypass ghost `attackTargetId`
+  (legacy silently no-opped); Takedown keeps a genuinely targetless use as
+  a no-op (optional singleton semantics); Massive Overhead fails closed on
+  a ghost source actor instead of a silent no-op; Dropkick's recorded
+  `input.actorIds` target still takes the hit over a DIFFERENT recorded
+  attack target (caller-owned U4 — the chosen identity is flown toward and
+  damaged, the out-of-range recorded attack target never participates).
+- `colossus.test.ts` +1: reversing actor INSERTION order (an extra foe added
+  before the target) produces byte-identical Takedown outcomes and replay —
+  the migrated source/attack-target reads resolve by recorded slot identity,
+  never object-iteration order.
+- the full Colossus suite (24) stays green through the engine path —
+  Valkyrie's fly/weaken/pit, Upheaval's boulder shove, Dropkick's sacrifice,
+  Massive Overhead's next-attack arming, Takedown's exceed true-strike and
+  pit, Great Suplex's pick-up-and-drop, Gigaton Whip's collide landing, and
+  Boiling Blood's defy-death all unchanged.
+
+With this tranche, **every named program family routes its live slots
+through the shared adapter — the PURE bucket is machine-empty**.
+
+## U1 status after the Colossus tranche
+
+U1 remains PARTIAL: the shared surface is proved and pinned across EIGHTEEN
 migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
 Chanter, Knave, Harvester, Demon Slayer, Seer, Fool, Freelancer,
-Geomancer, Job-trait, Class resolvers), and the residual is a machine-
-derived classified inventory — 31 pure LIVE-slot reads (next tranches) +
-54 captured/derived dereferences + 1 in-call boundary read = 86 sites, 0
-direct dereferences. The single DERIVED_OR_PRECEDENCE_BOUNDARY remains
-inventoried and unresolved (BOUNDARY 1 → 1). A whole-consumer audit is
-NOT yet done, so U1 cannot claim AUTHORITATIVE: 2 program files still
-resolve live slots through the legacy kernel-side convenience (Stormbender,
-Colossus), and the U1×U4 captured-identity boundary has no shared surface
-yet.
+Geomancer, Stormbender, Colossus, Job-trait, Class resolvers), and the
+residual is a machine-derived classified inventory — 0 pure LIVE-slot reads
++ 54 captured/derived dereferences + 1 in-call boundary read = 55 sites,
+0 direct dereferences. The single DERIVED_OR_PRECEDENCE_BOUNDARY remains
+inventoried and unresolved (BOUNDARY 1 → 1).
+
+## Whole-consumer U1 audit (2026-09-01)
+
+The census's longstanding "whole-consumer audit is NOT yet done" pointer
+was executed at head. Findings, end-to-end:
+
+1. **Every generic consumer routes through the ONE U1 resolution authority —
+   except one site, now repaired.** The candidate/anchor
+   (`kernels/candidate.ts`), selector/value (`kernels/evaluate-value.ts`),
+   query (`kernels/evaluate-query.ts`), flow (`kernels/execute-flow.ts`),
+   core resolvers, foe recipes, attack-provenance
+   (`primitives/attack-resolution.ts` `directAttackDamageProvenance`), and
+   damage-recipient reads all call `resolveActorSelectorReference` /
+   `resolveReference` over the typed `Reference` vocabulary. The audit found
+   ONE legacy bypass: `execute-flow.ts`'s flow `attack` case read the source
+   through the raw kernel helper `actor(context, context.actorId)` (= the
+   literal `state.actors[context.actorId]` the guard bans in its other two
+   spellings), unreachable past the U2/U3 candidate gate but a competing
+   interpreter of the same source slot with a different failure code
+   (`selector.actor-missing`). It is migrated to
+   `resolveReference(liveActorSlot('source'), context)` with the flow layer's
+   own fail-closed problem code (`flow.attack-source`, the same family as
+   `flow.resolution-reference` / `flow.terrain-reference`); the
+   `u1-reference-routing` guard now pins ALL THREE legacy spellings
+   (literal dereference, `sourceActor` convenience, and the `actor` helper
+   form) so the bypass cannot silently return. Mutation + adversarial tests:
+   guard mutation (created spill restored), engine test proving the flow
+   attack's U1 source read is insertion-order independent and replays
+   byte-identical, and a ghost-source test proving the shared candidate gate
+   fails closed before any attack mutation is planned.
+2. **The 54 CAPTURED + 1 BOUNDARY sites are genuinely caller-owned.** Site-
+   by-site: every CAPTURED dereference resolves an identity that came from a
+   recorded player selection (`input.actorIds?.[n]`), a recorded
+   `?? attackTargetId` / `?? triggerTargetIds` fallback, a loop over a
+   recorded selection array, or a caller-owned algorithm/helper parameter
+   (`plannedRush` / `plannedFly` / a knock-back's passed-occupant loop) —
+   never a re-derived-at-use-time legacy slot. The one
+   DERIVED_OR_PRECEDENCE_BOUNDARY (Blood Grove's in-call
+   `input.actorIds.target[0]` center read) keeps its exact input-wins /
+   source-fallback precedence. No arbitrary-id accessor exists on the shared
+   surface (the six adapter accessors are the whole surface, verified by the
+   guard pin).
+3. **No `state.actors[context.…]` dereference remains in generic or content
+   code.** The generic-layer scan and the content-layer scan both pass;
+   `context.actorId` reads that remain are provenance on emitted mutations
+   (`sourceActorId:`), scheduling/ownership identity (cost payment, trigger
+   resolution identity, U8/U12 `capturedActor` keys), or U4 choice-identity
+   COMPARES — explicitly legitimate per the guard's documented semantics, and
+   U2's role-frame projection is the disjoint retained boundary.
+
+**Audit outcome: U1 remains PARTIAL, with one cause now resolved.** The
+whole-consumer review found the one bypass above and repaired/pinned it,
+and the Colossus tranche (below) closed the last PURE family. The single
+remaining PARTIAL cause is now precise: the caller-owned U1×U4 captured-
+identity dereferences (54 + the 1 boundary) remain without a shared
+surface — each was deliberately left at the caller as U4
+choice/cardinality, and the census does not count them as U1-complete until
+a decision is made whether to give the captured-identity dereference a
+shared surface or keep it permanently caller-owned. That is a scoping
+decision, not a competing authority. Full suite 2146 green; census
+byte-stable at 427; zero source promotion.
 
 ## Known blocking repairs (source-quoted, not future work)
 

@@ -382,4 +382,28 @@ describe('Sealer ability automation (p.189–196)', () => {
     expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 }); // teleported to player choice
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
+
+  it('Grand Seal under reversed actor insertion order is byte-identical: the migrated live slots resolve by recorded identity, never object order', () => {
+    // Rebuild the canonical Grand Seal fixture with the second actor ADDED
+    // BEFORE the target, so the actors map iteration order differs from every
+    // other fixture in this file. The migrated source read (and the retained
+    // caller-owned input chain) must resolve by recorded identity, never
+    // object iteration order — the outcome and the replay reproduce the
+    // canonical result exactly.
+    let setup = createEncounter('Sealer insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Exorcist'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 3, y: 1 });
+    const second = createFoe('Grim', { x: 5, y: 1 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:grand-seal', targetIds: [foe.id] }, scriptedDice());
+    expect(result.state.actors[foe.id].statuses).toContain('sealed');
+    expect(result.state.actors[foe.id].marks.some(({ markId, ownerId }) => markId === 'grand-seal' && ownerId === hero.id)).toBe(true);
+    expect(result.state.actors[second.id].marks).toHaveLength(0); // untouched
+    expect(applyEvents(setup, result.events)).toEqual(result.state); // replay byte-identical
+  });
 });

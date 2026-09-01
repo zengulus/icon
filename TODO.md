@@ -302,6 +302,130 @@ assumption here, document the evidence and update this list before proceeding.
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
 
+- **U1 content-authoring tranche 15 — Colossus pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/colossus-programs.ts`
+  routes every pure live-slot reference through the adapter: source reads →
+  `resolveSourceActor(context)` in Valkyrie, Upheaval, Dropkick, Massive
+  Overhead, Takedown, Great Suplex, Gigaton Whip, Boiling Blood (8) and
+  primary attack-target reads → `resolveAttackTarget(context)` in Valkyrie,
+  Takedown, Gigaton Whip (3) — identical LIVE/absent-singular semantics;
+  the resolvers' guards tightened from `!source || !source.position` /
+  `!target || !target.position` to `!source.position || !target?.position`
+  exactly as every earlier tranche did (an absent source now fails closed
+  with `reference.missing-actor`, never a silent no-op). The three retained
+  CAPTURED sites stay caller-owned: `plannedFly`'s helper-PARAMETER read
+  (`sourceActor(context, actorId)` — the caller supplies an already-
+  resolved identity), and Dropkick's / Great Suplex's
+  `input.actorIds?.target?.[0]` recorded selections (no arbitrary-id
+  accessor added). Guard pins Colossus via contentAdapterSurface; mutation
+  test covers a revert (exactly one routing violation) and proves the
+  retained helper/input dereferences alone do not trigger the pin.
+  Evidence: +4 fail-closed/U4-parity tests in `reference-authoring.test.ts`
+  (Valkyrie ghost attackTargetId → `reference.missing-actor`; Takedown
+  targetless no-op; Massive Overhead ghost source fails closed; Dropkick
+  recorded-input target takes the hit over a DIFFERENT recorded attack
+  target), +1 engine-level insertion-order/replay test in
+  `colossus.test.ts`, the full Colossus suite (24) green through the engine
+  path (valid-state semantics preserved; malformed refs fail closed; replay
+  byte-identical). The tranche removed exactly 11 PURE_LIVE_REFERENCE sites
+  (Colossus 11 → 0), moving the machine-derived residual from 66 = 11 + 54
+  + 1 to 55 = 0 + 54 + 1 (per `npm run audit:u1-residual`; no hand-
+  maintained totals). **The named-program PURE family is now machine-empty**
+  — every program family routes its live slots through the shared adapter.
+  0 direct dereferences; U1 remains PARTIAL for the single remaining cause
+  (the caller-owned U1×U4 captured-identity dereferences, 54 + 1 boundary,
+  without a shared surface — a scoping decision, not a competing authority);
+  zero source promotion; census byte-stable at 427. See
+  `docs/u8-u1-underlay-census.md`.
+
+- **Whole-consumer U1 audit (2026-09-01) — DONE.** Executed the census's
+  longstanding "whole-consumer audit not yet done" pointer at head. Every
+  generic consumer (candidate/anchor, selector/value, query, flow, core
+  resolvers, foe recipes, attack provenance, damage recipient, U8/U12/U14
+  key construction) was verified to route through the ONE U1 resolution
+  authority; the audit found ONE legacy bypass — `kernels/execute-flow.ts`'s
+  flow `attack` case read its source through the raw
+  `actor(context, context.actorId)` helper (= `state.actors[context.actorId]`
+  with a different failure code) — and repaired it: the source now resolves
+  `liveActorSlot('source')` through `resolveReference` with the flow layer's
+  fail-closed problem code (`flow.attack-source`, same family as
+  `flow.resolution-reference`/`flow.terrain-reference`). The
+  `u1-reference-routing` guard now pins ALL THREE legacy spellings of the
+  source-slot dereference (literal, `sourceActor` convenience, `actor`
+  helper); mutation test + engine tests added (flow attack U1 source read is
+  insertion-order independent and replays byte-identical; a ghost source
+  fails closed at the shared candidate gate before any attack mutation). The
+  54 CAPTURED + 1 BOUNDARY sites were re-verified site-by-site as
+  recorded-choice / recorded-fallback / loop / helper-parameter identities
+  (  never a re-derived legacy slot), and no arbitrary-id accessor exists on
+  the surface. Audit outcome: the generic-consumer review found the one
+  bypass and repaired/pinned it, so at audit HEAD U1 remained PARTIAL for
+  two precise reasons — (a) Colossus (11 PURE) was the sole non-migrated
+  program family (resolved by tranche 15 immediately after), and (b) the
+  caller-owned U1×U4 captured-identity dereferences remain without a shared
+  surface (by design caller-owned today). Full suite 2142 green; census
+  byte-stable at 427; zero source promotion.
+
+- **U1 content-authoring tranche 14 — Sealer/Shade/Warden residue pure
+  LIVE-slot reads (2026-09-01) — DONE.** The last PURE sites outside
+  Colossus are migrated: `sealer-programs.ts` source reads →
+  `resolveSourceActor(context)` in Grand Seal, Sanctify, Grand
+  Banishment, Divine Aegis (4); `shade-programs.ts` → `resolveSourceActor`
+  in Harrow, Shadow Play, Assassinate (3); `warden-programs.ts` →
+  `resolveSourceActor` in Gwynt, Stampede (2) — identical
+  LIVE/absent-singular semantics with the resolvers' gates untouched. The
+  eleven retained CAPTURED chain sites stay caller-owned (each Sealer
+  chain's `??`-SELECT preceding the migrated source read — Grand
+  Banishment's `input.actorIds?.target?.[0] ?? attackTargetId` etc.,
+  Shade Harrow/Shadow Play/Assassinate input-target derefs, Warden's
+  Gwynt/Stampede input-target derefs; no arbitrary-id accessor added). The
+  tranche removed exactly 9 PURE_LIVE_REFERENCE sites (Sealer 4 → 0,
+  Shade 3 → 0, Warden 2 → 0), moving the machine-derived residual from
+  75 = 20 + 54 + 1 to 66 = 11 + 54 + 1 (per `npm run audit:u1-residual`;
+  no hand-maintained totals). 0 direct dereferences; U1 remains PARTIAL
+  (Colossus 11 PURE is the sole remaining pure family). Evidence: +4
+  fail-closed/U4-parity tests in `reference-authoring.test.ts` (Grand
+  Seal ghost attackTargetId → `reference.missing-actor`; Sanctify
+  targetless no-op; Grand Banishment recorded-input chain target still
+  wins; Harrow input-selected target mark lands on the chosen identity),
+  +1 engine-level insertion-order/replay test each in `sealer.test.ts`,
+  `shade.test.ts`, `warden.test.ts` (reversing actor insertion order
+  produces byte-identical outcomes and replay). Full suite green through
+  the engine path; valid-state semantics preserved; malformed refs fail
+  closed; replay byte-identical; zero source promotion; census
+  byte-stable at 427; U1 remains PARTIAL (Colossus 11 PURE next).
+
+- **U1 content-authoring tranche 13 — Stormbender pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/stormbender-programs.ts`
+  now routes every pure live-slot reference through the adapter: source
+  reads → `resolveSourceActor(context)` in Rime, Tsunami, Cryo, Geyser,
+  Gust, Heave-Ho, Deepwrath, Waterspout, Eye Of The Storm (9) and primary
+  attack-target reads → `resolveAttackTarget(context)` in Rime, Cryo (2) —
+  identical LIVE/absent-singular semantics with the resolvers' gates
+  untouched. The four retained CAPTURED sites stay caller-owned: Geyser /
+  Deepwrath / Waterspout `input.actorIds?.target?.[0] ?? attackTargetId`
+  and Eye Of The Storm's recorded center selection — the `??` SELECT is
+  caller-owned U4 precedence, only the dereference of the chosen identity
+  is the captured shape (no arbitrary-id accessor added). Eye Of The Storm
+  stays DOCUMENTED_NON_EXECUTABLE; no semantics, retraction status, or
+  unresolved clause changed. Guard pins Stormbender via contentAdapterSurface;
+  mutation test covers a revert (exactly one routing violation) and proves
+  the retained captured/precedence dereferences alone do not trigger the
+  pin. Evidence: +3 fail-closed/U4-parity tests in
+  `reference-authoring.test.ts` (Rime ghost attackTargetId →
+  `reference.missing-actor`; Cryo targetless no-op; Deepwrath recorded-input
+  target wins over a DIFFERENT recorded attack target), +1 engine-level
+  insertion-order test in `stormbender.test.ts`, the full Stormbender suite
+  (18) green through the engine path (valid-state semantics preserved;
+  malformed refs fail closed; replay byte-identical). The tranche removed
+  exactly 11 PURE_LIVE_REFERENCE sites (Stormbender 11 → 0), moving the
+  machine-derived residual from 86 = 31 + 54 + 1 to 75 = 20 + 54 + 1 (per
+  `npm run audit:u1-residual`; no hand-maintained totals). 0 direct
+  dereferences; U1 remains PARTIAL (Colossus 11 / Sealer 4 / Shade 3 /
+  Warden 2 PURE remain). Full suite green through the engine path; census
+  and architecture-audit pins regenerated to the machine figures; zero
+  source promotion.
+
 - **U1 content-authoring tranche 12 — Geomancer pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/geomancer-programs.ts`
   now routes every pure live-slot reference through the adapter: source

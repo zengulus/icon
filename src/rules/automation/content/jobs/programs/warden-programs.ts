@@ -107,8 +107,10 @@ const apexEffects: RuleResolver = (context) => {
 /** ICON p.169: dash up to 2, deal 2 to an adjacent foe, an ally dashes 2 and
  * deals 2 if adjacent; Finishing Blow/Charge grants both stealth. */
 const gwyntEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
+  // Recorded player choices (input foe + ally) — caller-owned U4 selections;
+  // only the dereferences are the captured identities.
   const foeId = context.input.actorIds?.target?.[0];
   const allyId = context.input.actorIds?.target?.[1];
   const foe = foeId ? sourceActor(context, foeId) : undefined;
@@ -191,8 +193,10 @@ const mistStriderEffects: RuleResolver = (context) => {
 /** ICON p.170: mark a foe in range 4; the spirit beast charges at the end of the
  * foe's turn (2 damage, shove 1, coalescing into a beast summon) via the reducer. */
 const stampedeEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
+  // Recorded player choice (input target) — caller-owned U4 selection;
+  // only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!sourcePosition || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Stampede requires a foe in range 4.');

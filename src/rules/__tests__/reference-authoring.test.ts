@@ -50,6 +50,8 @@ import { HARVESTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/ha
 import { DEMON_SLAYER_RULE_RESOLVERS } from '../automation/content/jobs/programs/demon-slayer-programs.js';
 import { SEER_RULE_RESOLVERS } from '../automation/content/jobs/programs/seer-programs.js';
 import { GEOMANCER_RULE_RESOLVERS } from '../automation/content/jobs/programs/geomancer-programs.js';
+import { STORMBENDER_RULE_RESOLVERS } from '../automation/content/jobs/programs/stormbender-programs.js';
+import { COLOSSUS_RULE_RESOLVERS } from '../automation/content/jobs/programs/colossus-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -521,6 +523,166 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     const mutations = GEOMANCER_RULE_RESOLVERS['geomancer:midas:effects'](context, interruptAction);
     expect(mutations.some((mutation) => mutation.kind === 'entity' && mutation.operation === 'create' && mutation.entityType === 'statue' && mutation.state?.held === 'chosen')).toBe(true);
     expect(mutations.some((mutation) => mutation.kind === 'entity' && mutation.state?.held === 'foe')).toBe(false);
+  });
+
+  it('Stormbender Rime resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Rime's PURE live-slot reads (source + attack target) now resolve through
+    // the adapter; a slot that NAMES a missing actor must reject on a
+    // malformed window rather than silently produce nothing.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => STORMBENDER_RULE_RESOLVERS['stormbender:rime:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Stormbender Cryo resolver: an absent optional attack-target slot stays a no-op (optional singleton semantics preserved)', () => {
+    // Cryo's migrated attack-target read keeps the absent-singular → undefined
+    // contract; a genuinely targetless context resolves through the resolver's
+    // own `!target?.position` guard as before.
+    const context = ctx();
+    expect(() => STORMBENDER_RULE_RESOLVERS['stormbender:cryo:effects'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Stormbender Deepwrath resolver: the recorded input.actorIds target stays caller-owned (U4) — it wins over a DIFFERENT recorded attack target', () => {
+    // Deepwrath's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is the
+    // caller's U4 precedence (inventoried); only the source read is the
+    // migrated PURE slot. A present input target wins even when a DIFFERENT
+    // attackTargetId is recorded — the mark lands on the chosen identity and
+    // the out-of-range recorded attack target never participates.
+    const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 8, y: 4 } }; // in range 6 of hero (4,4)
+    const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 12, y: 4 } }; // out of range 6 — never selected
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, chosen, other } },
+      input: { actorIds: { target: ['chosen'] } },
+      attackTargetId: 'other',
+    });
+    const mutations = STORMBENDER_RULE_RESOLVERS['stormbender:deepwrath:effects'](context, defaultAction);
+    expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'chosen' && mutation.markId === 'deepwrath')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'other')).toBe(false);
+  });
+
+  it('Colossus Valkyrie resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Valkyrie's PURE live-slot reads (source + attack target) now resolve through
+    // the adapter; a slot that NAMES a missing actor must reject on a malformed
+    // window rather than silently produce nothing.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => COLOSSUS_RULE_RESOLVERS['colossus:valkyrie:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Colossus Takedown resolver: a genuinely absent optional attack target stays a no-op (optional singleton semantics preserved)', () => {
+    // Takedown's migrated attack-target read keeps the absent-singular →
+    // undefined contract; a context without an attack target resolves through
+    // the resolver's own `!target` guard as before.
+    const context = ctx();
+    expect(() => COLOSSUS_RULE_RESOLVERS['colossus:takedown:effects'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Colossus Massive Overhead resolver: a ghost source actor (gate bypassed) throws reference.missing-actor, never a silent no-op', () => {
+    // Massive Overhead's PURE source read now resolves through the adapter; a
+    // source slot that NAMES a missing actor fails closed (reference.missing-actor)
+    // instead of silently emitting nothing.
+    const context = ctx({ actorId: 'ghost' });
+    expectViolationCode(() => COLOSSUS_RULE_RESOLVERS['colossus:massive-overhead'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Colossus Dropkick resolver: the recorded input.actorIds target stays caller-owned (U4) — the adjacent chosen identity takes the hit', () => {
+    // Dropkick's `input.actorIds?.target?.[0]` SELECT is the caller's U4 choice
+    // (inventoried); only the source read is the migrated PURE slot. The
+    // recorded chosen identity is the one flown toward and damaged — a
+    // DIFFERENT recorded attack target never participates.
+    const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 5, y: 4 } }; // adjacent to hero (4,4)
+    const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 12, y: 4 } }; // out of adjacency — never selected
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, chosen, other } },
+      input: { actorIds: { target: ['chosen'] } },
+      attackTargetId: 'other',
+    });
+    const mutations = COLOSSUS_RULE_RESOLVERS['colossus:dropkick'](context, defaultAction);
+    expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'chosen')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'other')).toBe(false);
+  });
+
+  it('Shade Shadow Play resolver: a ghost source actor (gate bypassed) throws reference.missing-actor, never the misleading choice.actor-count', () => {
+    // Shadow Play's migrated PURE source read now resolves through the
+    // adapter; a source slot that NAMES a missing actor must reject with the
+    // U1 contract instead of the legacy resolver guard's misleading
+    // choice.actor-count (which blamed a character count the source read
+    // never confirmed).
+    const context = ctx({ actorId: 'ghost' });
+    expectViolationCode(() => SHADE_RULE_RESOLVERS['shade:shadow-play:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Shade Shadow Play resolver: the recorded input.actorIds selections stay caller-owned (U4) — the swap moves the RECORDED identities', () => {
+    // Shadow Play's `input.actorIds?.target?.[0]` / `?.[1]` SELECTs are the
+    // caller's U4 choices (inventoried); only the source read is the migrated
+    // PURE slot. The two recorded identities are the ones swapped, unchanged.
+    const first = { ...ctx().state.actors.foe, id: 'first', position: { x: 6, y: 4 } }; // in range 2 of hero (4,4)
+    const second = { ...ctx().state.actors.foe, id: 'second', position: { x: 8, y: 4 } }; // in range 3 of first
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, first, second } },
+      input: { actorIds: { target: ['first', 'second'] } },
+    });
+    const mutations = SHADE_RULE_RESOLVERS['shade:shadow-play:effects'](context, defaultAction);
+    const places = mutations.filter((mutation) => mutation.kind === 'move' && mutation.movement === 'place');
+    expect(places.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'first' && mutation.positions[0]!.x === 8)).toBe(true);
+    expect(places.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'second' && mutation.positions[0]!.x === 6)).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'condition' && mutation.conditionId === 'stealth')).toBe(false);
+  });
+
+  it('Sealer Grand Seal resolver: the recorded input.actorIds target stays caller-owned (U4) — it wins over a DIFFERENT recorded attack target', () => {
+    // Grand Seal's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is
+    // the caller's U4 precedence (inventoried); only the source read is the
+    // migrated PURE slot. A present input target wins even when a DIFFERENT
+    // attackTargetId is recorded — the out-of-range recorded attack target
+    // never participates.
+    const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 7, y: 4 } }; // in range 4 of hero (4,4)
+    const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 20, y: 4 } }; // out of range 4 — never selected
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, chosen, other } },
+      input: { actorIds: { target: ['chosen'] } },
+      attackTargetId: 'other',
+    });
+    const mutations = SEALER_RULE_RESOLVERS['sealer:grand-seal:effects'](context, defaultAction);
+    expect(mutations.some((mutation) => mutation.kind === 'condition' && mutation.actorId === 'chosen' && mutation.conditionId === 'sealed')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'chosen' && mutation.markId === 'grand-seal')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'other')).toBe(false);
+  });
+
+  it('Sealer Sanctify resolver: a genuinely absent optional target keeps the source-center fallback (resolver gate untouched)', () => {
+    // Sanctify's target read is a captured chain; with NO recorded target and
+    // NO attack target the caller's SELECT yields undefined and the resolver's
+    // `center = target?.position ?? source.position` fallback centers the salt
+    // on the source — the migrated source read still resolves and the gate is
+    // unchanged.
+    const context = ctx();
+    const mutations = SEALER_RULE_RESOLVERS['sealer:sanctify:effects'](context, defaultAction);
+    const salt = mutations.filter((mutation) => mutation.kind === 'terrain' && mutation.terrain === 'salt');
+    expect(salt).toHaveLength(1);
+    expect(salt.some((mutation) => mutation.kind === 'terrain' && mutation.positions.some((cell) => cell.x === 4 && cell.y === 4))).toBe(true);
+  });
+
+  it('Warden Gwynt resolver: the recorded input selections are caller-owned — the foe and ally identities drive the dashes (U4)', () => {
+    // Gwynt's `input.actorIds?.target?.[0]` (foe) / `?.[1]` (ally) SELECTs are
+    // the caller's U4 choices (inventoried); only the source read is the
+    // migrated PURE slot. The recorded foe is the dash target and damage
+    // recipient, unchanged: foe at (6,4) sits 2 cells east of hero (4,4) on
+    // the dash axis — the hero's 2-rush stops on the free cell (5,4) before
+    // the foe (the shared `walk` blocks on occupancy), distance 1, and deals
+    // 2; the recorded ally at (4,5) is range 3 from the foe, dashes east to
+    // (6,5) and also deals 2.
+    const foe = { ...ctx().state.actors.foe, id: 'foe', position: { x: 6, y: 4 } }; // two east of hero (4,4); dash axis clear until the foe
+    const ally = { ...ctx().state.actors.foe, id: 'ally', side: 'heroes' as const, position: { x: 4, y: 5 } }; // range 3 of foe, clear dash lane
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, foe, ally } },
+      input: { actorIds: { target: ['foe', 'ally'] } },
+    });
+    const mutations = WARDEN_RULE_RESOLVERS['warden:gwynt:effects'](context, defaultAction);
+    // The hero dashes 2 toward the recorded foe ((4,4) → (5,4), stopping on
+    // the free cell before it) and the recorded foe takes 2 damage from the
+    // hero and 2 from the dashing ally — the RECORDED identities drive both
+    // dashes, never a different foe/ally.
+    expect(mutations.some((mutation) => mutation.kind === 'move' && mutation.movement === 'rush' && mutation.actorId === 'hero' && mutation.positions[0]!.x === 5)).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'move' && mutation.movement === 'rush' && mutation.actorId === 'ally' && mutation.positions[0]!.x === 6 && mutation.positions[0]!.y === 5)).toBe(true);
+    expect(mutations.filter((mutation) => mutation.kind === 'damage' && mutation.actorId === 'foe' && mutation.amount === 2)).toHaveLength(2);
+    expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'ally')).toBe(false);
   });
 
   it('Seer Chaos Tarot resolver: the recorded input.actorIds center choice still wins over the attack target (caller-owned U4)', () => {

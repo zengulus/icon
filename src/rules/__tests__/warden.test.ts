@@ -223,6 +223,30 @@ describe('Warden ability automation (p.165–171)', () => {
     expect(flock.actors[foe.id].statuses).toContain('blind');
   });
 
+  it('Gwynt under reversed actor insertion order is byte-identical: the migrated live slots resolve by recorded identity, never object order', () => {
+    // Rebuild the canonical Gwynt fixture with a second actor ADDED BEFORE
+    // the target, so the actors map iteration order differs from every other
+    // fixture in this file. The migrated source read (and the retained
+    // caller-owned input chains) must resolve by recorded identity, never
+    // object iteration order — the outcome and the replay reproduce the
+    // canonical result exactly.
+    let setup = createEncounter('Warden insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Wild Hunter'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 3, y: 1 });
+    const second = createFoe('Grim', { x: 6, y: 1 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:gwynt', targetIds: [foe.id] }, scriptedDice());
+    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 }); // dashed 2 toward the foe
+    expect(result.state.actors[foe.id].hp).toBe(30); // 32 - 2
+    expect(result.state.actors[second.id].hp).toBe(32); // untouched
+    expect(applyEvents(setup, result.events)).toEqual(result.state); // replay byte-identical
+  });
+
   it('Sidhe: a melee boon attack that blinds, injects the toxin, and detonates it on the foe’s turn', () => {
     const { state, hero, foe } = wardenEncounter({ second: null });
     const injected = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:sidhe', targetIds: [foe.id] }, scriptedDice(15, 4, 4)).state;

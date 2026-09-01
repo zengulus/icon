@@ -114,8 +114,10 @@ const umbraComboEffects: RuleResolver = (context) => {
  * teleports the marked character 1 toward the user and deals 2 if they are a
  * foe. The once-a-round teleport trigger is a documented reactive window. */
 const harrowEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
+  // Recorded player choice (input target) — caller-owned U4 selection;
+  // only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!sourcePosition || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Harrow requires a character in range 3.');
@@ -196,8 +198,10 @@ const nightmareEffects: RuleResolver = (context) => {
  * teleport: no rampart boundary check and no teleport trigger surface.
  * Finishing Blow's "repeat" is a table-facing second choice. */
 const shadowPlayEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
+  // Recorded player choices (input targets) — caller-owned U4 selections;
+  // only the dereferences are the captured identities.
   const firstId = context.input.actorIds?.target?.[0];
   const secondId = context.input.actorIds?.target?.[1];
   const first = firstId ? sourceActor(context, firstId) : undefined;
@@ -232,8 +236,10 @@ const umbralEchoEffects: RuleResolver = (context) => {
  * adjacent, deal 2 three times or 2, blind, fly 2) resolves at the end of the
  * marked foe's turn in the reducer. */
 const assassinateEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
+  // Recorded player choice (input target) — caller-owned U4 selection;
+  // only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!sourcePosition || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Assassinate requires a foe in range 3.');

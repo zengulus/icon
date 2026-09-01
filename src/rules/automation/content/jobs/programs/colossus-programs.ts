@@ -11,6 +11,7 @@ import {
   terrainMutation, entityMutation,
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Colossus ability implementations (ICON p.133–138).
@@ -50,9 +51,9 @@ function plannedFly(context: Parameters<RuleResolver>[0], actorId: string, steps
 
 /** ICON p.133: fly 1, true-strike attack, weakened target, pit on Exceed/Heroic. */
 const valkyrieEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
-  if (!source || !source.position || !target || !target.position) return [];
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
+  if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const direction = axisDirection(source.position, target.position);
   const destination = plannedFly(context, source.id, 1, direction);
@@ -71,8 +72,8 @@ const valkyrieEffects: RuleResolver = (context) => {
 
 /** ICON p.133: create a height-1 boulder object and shove adjacent characters away. */
 const upheavalEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  if (!source || !source.position) return [];
+  const source = resolveSourceActor(context);
+  if (!source.position) return [];
   const defaultCells: Position[] = [];
   for (let radius = 1; radius <= 3; radius += 1) {
     for (const cell of squareArea(source.position, radius)) {
@@ -96,10 +97,12 @@ const upheavalEffects: RuleResolver = (context) => {
 
 /** ICON p.133: fly 1, sacrifice 6, and damage an adjacent foe; Heroic rushes 2. */
 const dropkickEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) — caller-owned U4 selection;
+  // only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
-  if (!source || !source.position || !target || !target.position) {
+  if (!source.position || !target?.position) {
     throw new RuleProgramViolation('choice.actor-count', 'Dropkick requires an adjacent foe.');
   }
   if (target.side === source.side || distance(source.position, target.position) > 1) {
@@ -121,8 +124,7 @@ const dropkickEffects: RuleResolver = (context) => {
 
 /** ICON p.134: end the turn and arm the next attack with bonus damage, a pit, and a Heroic blast. */
 const massiveOverheadEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  if (!source) return [];
+  const source = resolveSourceActor(context);
   const mutations: RuleMutation[] = [
     stateMutation(context, source.id, 'massive-overhead', true),
   ];
@@ -134,9 +136,9 @@ const massiveOverheadEffects: RuleResolver = (context) => {
 
 /** ICON p.134: attack, stun both characters, optional sacrifice 4 to avoid the self-stun, pit on Exceed/Heroic. */
 const takedownEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
-  if (!source || !target) return [];
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
+  if (!target) return [];
   const mutations: RuleMutation[] = [];
   const avoidStun = (context.input.numbers?.sacrifice ?? 0) >= 4;
   if (avoidStun) {
@@ -161,10 +163,12 @@ const takedownEffects: RuleResolver = (context) => {
 
 /** ICON p.134: pick up an adjacent foe, sacrifice up to 6, fly half that, then drop the foe with damage. */
 const greatSuplexEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) — caller-owned U4 selection;
+  // only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
-  if (!source || !source.position || !target || !target.position) {
+  if (!source.position || !target?.position) {
     throw new RuleProgramViolation('choice.actor-count', 'Great Suplex requires an adjacent foe.');
   }
   if (target.side === source.side || distance(source.position, target.position) > 1) {
@@ -192,9 +196,9 @@ const greatSuplexEffects: RuleResolver = (context) => {
 
 /** ICON p.135: attack, shove 2; Collide removes/flies/replaces the foe; Exceed/Heroic smashes difficult terrain. */
 const gigatonWhipEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
-  if (!source || !source.position || !target || !target.position) return [];
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
+  if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const direction = axisDirection(source.position, target.position);
   // ICON p.135 Gigaton Whip talent 2: "Fly 2 instead. Charge: Shove 3 and
@@ -235,8 +239,7 @@ const gigatonWhipEffects: RuleResolver = (context) => {
 
 /** ICON p.138: Defy Death — remain standing at 1 hp until the end of your next turn and deal bonus damage. */
 const boilingBloodEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  if (!source) return [];
+  const source = resolveSourceActor(context);
   const mutations: RuleMutation[] = [
     { kind: 'persistent', sourceId: context.sourceId, ownerId: source.id, operation: 'add', actorId: source.id, effectId: 'defy-death', duration: { kind: 'turn-end', actor: { kind: 'self' }, turns: 2 }, modifiers: [], triggers: ['defeated'], state: {} },
     { kind: 'resource', sourceId: context.sourceId, actorId: source.id, resourceId: 'bonus-damage', operation: 'gain', amount: 1, minimum: 0, maximum: null },

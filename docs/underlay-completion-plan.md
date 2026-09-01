@@ -317,10 +317,34 @@ not consumer-owned interpreters. U1 remains PARTIAL because named content
 resolvers still read those slots/input buckets directly; they require a
 shared content-authoring adapter plus behavior-preserving migration.
 
+**Whole-consumer audit (2026-09-01).** Every generic consumer —
+candidate/anchor, selector/value, query, flow, core resolvers, foe
+recipes, attack provenance, damage recipient, and the U8/U12/U14 key
+construction — was verified to route through the ONE U1 resolution
+authority. The audit found one legacy bypass (the flow `attack` case read
+its source through the raw `actor(context, context.actorId)` helper) and
+repaired it: the read now resolves `liveActorSlot('source')` through
+`resolveReference` with the flow layer's fail-closed problem code
+(`flow.attack-source`), and the `u1-reference-routing` guard pins all three
+legacy spellings of the source-slot dereference. The 54 caller-owned
+U1×U4 captured-identity dereferences and the 1 in-call boundary were
+re-verified site-by-site as recorded-choice / recorded-fallback / loop /
+helper-parameter identities — none re-derives a legacy slot at use time.
+Audit outcome: the generic-consumer review found the one bypass above and
+repaired/pinned it, and the Colossus tranche that followed closed the last
+PURE program family (all named program families now route their live slots
+through the shared adapter). U1's PARTIAL status rests on the single
+remaining cause: the captured-identity dereferences lacking a shared
+surface (by design caller-owned today — a scoping decision, not a
+competing authority). See `docs/u8-u1-underlay-census.md`.
+
 **Locations partially owning/duplicating.** Named content resolvers under
-`automation/content/classes/` and `automation/content/jobs/programs/` still
-interpret the implicit source/direct-target/trigger slots and actor-input
-buckets. Generic kernels/primitives are migrated and guarded. Explicit
+`automation/content/classes/` and `automation/content/jobs/programs/` no
+longer interpret the LIVE source/direct-target/trigger slots (all families
+do that through the shared adapter); the retained `sourceActor(context, …)`
+reads interpret only already-selected captured identities (recorded input,
+recorded fallback, loop, helper-parameter) — the inventoried U1×U4
+boundary. Generic kernels/primitives are migrated and guarded. Explicit
 actor/entity ids passed as already-resolved domain-operation parameters are
 retained facts, not implicit-reference interpreters.
 

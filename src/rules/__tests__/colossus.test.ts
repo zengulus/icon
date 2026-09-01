@@ -504,4 +504,32 @@ describe('Colossus ability automation (p.133–138)', () => {
     expect(blown.decisionWindows.every((window) => !windowHeldDamage(window))).toBe(true);
   });
 
+  it('Takedown under reversed actor insertion order is byte-identical: the migrated live slots resolve by recorded identity, never object order', () => {
+    // The canonical Takedown fixture with a second actor ADDED BEFORE the
+    // target: the migrated source/attack-target reads resolve by recorded slot
+    // identity, so the outcome and replay are identical to the canonical order.
+    let swapped = createEncounter('Colossus insertion');
+    const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 2, y: 1 });
+    const grim = createFoe('Grim', { x: 8, y: 1 });
+    swapped = executeCommand(swapped, { type: 'ADD_ACTOR', actor: grim }).state;
+    swapped = executeCommand(swapped, { type: 'ADD_ACTOR', actor: hero }).state;
+    swapped = executeCommand(swapped, { type: 'ADD_ACTOR', actor: foe }).state;
+    swapped = startEncounterTo(swapped, hero.id);
+    const result = executeCommand(swapped, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'colossus:takedown', targetIds: [foe.id] }, scriptedDice(15, 4));
+    const mutations = mutationsOf(result.events, 'colossus:takedown');
+    // Same recorded identities → same mutations as the canonical fixture: the
+    // attack hits the recorded target, the exceed fires from the same 15+ roll,
+    // and the stuns/terrain land on the recorded identities.
+    expect(mutations.some((mutation) => mutation.kind === 'attack' && mutation.actorId === hero.id && mutation.targetId === foe.id && mutation.d20 === 15 && mutation.exceed === true)).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'condition' && mutation.actorId === hero.id && mutation.conditionId === 'stunned')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'condition' && mutation.actorId === foe.id && mutation.conditionId === 'stunned')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'terrain' && mutation.terrain === 'pit')).toBe(true);
+    expect(result.state.actors[hero.id].statuses).toContain('stunned');
+    expect(result.state.actors[foe.id].statuses).toContain('stunned');
+    expect(applyEvents(swapped, result.events)).toEqual(result.state);
+  });
+
 });

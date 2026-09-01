@@ -68,7 +68,7 @@
 import type { EncounterState, Position } from '../../types.js';
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { applyRuleMutation, coMovedActorIdsForMove, deniedAtomicSpatialLegIndices, encounterRuleState } from './encounter-adapter.js';
-import { actor, evaluateNumber, integer, selectActors } from './evaluate-value.js';
+import { evaluateNumber, integer, selectActors } from './evaluate-value.js';
 import { evaluatePredicate } from './evaluate-predicate.js';
 import {
   bind,
@@ -448,7 +448,15 @@ export class FlowPlanner {
           break;
         }
         case 'attack': {
-          const source = actor(context, context.actorId);
+          // The attack source is the acting actor, resolved through the SAME
+          // U1 live-slot authority every other source read uses: a dangling
+          // source id fails closed (``flow.attack-source``) instead of the
+          // legacy ``selector.actor-missing`` code the raw helper threw.
+          const sourceResolution = resolveReference(liveActorSlot('source'), context);
+          if (!sourceResolution.ok || sourceResolution.value.kind !== 'actor') {
+            throw new RuleProgramViolation('flow.attack-source', `Attack source reference failed to resolve: ${sourceResolution.ok ? 'non-actor' : sourceResolution.problem}.`);
+          }
+          const source = sourceResolution.value.actor;
           for (const target of targets) {
             // The unified ordinary-attack authority folds the F6 trait
             // modifiers, the aura attacker boons/curses plus the target's

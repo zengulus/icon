@@ -488,3 +488,79 @@ describe('T5a U11 — replay of an ordered multi-step ability is byte-identical'
     expect(first.actors[foeA.id]!.hp).toBe(32 - 4 - 4 - 1);
   });
 });
+
+describe('T5a U11 — the flow attack source resolves through the ONE U1 live-slot authority', () => {
+  it('an attack node emits the ATTACK from the acting actor — the U1 source read resolves current state, insertion-order independent', () => {
+    const program = programWith([{
+      id: 'base', timing: 'use', effects: [
+        { kind: 'attack', target: { kind: 'input', key: 'target', relation: 'any' }, trueStrike: false, onHit: [], onMiss: [] },
+      ],
+    }]);
+    const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
+    const foeA = createFoe('foeA', { x: 3, y: 1 });
+    const foeB = createFoe('foeB', { x: 7, y: 1 });
+    const add = (state: EncounterState): EncounterState => state; // no-op helper for symmetry
+    // Canonical insertion order: hero, foeA, foeB.
+    let canonical = applyEvents(createEncounter('T5a U11 attack canonical'), [
+      { type: 'ACTOR_ADDED', actor: hero },
+      { type: 'ACTOR_ADDED', actor: foeA },
+      { type: 'ACTOR_ADDED', actor: foeB },
+    ]);
+    add(canonical);
+    canonical = startEncounterTo(canonical, hero.id);
+    // Reversed insertion order (foeB before the hero) — SAME actor identities,
+    // only the object iteration order differs.
+    let swapped = applyEvents(createEncounter('T5a U11 attack swapped'), [
+      { type: 'ACTOR_ADDED', actor: foeB },
+      { type: 'ACTOR_ADDED', actor: hero },
+      { type: 'ACTOR_ADDED', actor: foeA },
+    ]);
+    swapped = startEncounterTo(swapped, hero.id);
+    const input = { actorIds: { target: [foeA.id] } };
+    const canonicalResult = run(program, contextOf(canonical, hero.id, { input }), canonical);
+    const swappedResult = run(program, contextOf(swapped, hero.id, { input }), swapped);
+    const attacksOf = (mutations: RuleMutation[]): Extract<RuleMutation, { kind: 'attack' }>[] =>
+      mutations.filter((mutation): mutation is Extract<RuleMutation, { kind: 'attack' }> => mutation.kind === 'attack');
+    for (const result of [canonicalResult, swappedResult]) {
+      const attacks = attacksOf(result.mutations);
+      expect(attacks).toHaveLength(1);
+      // The attack mutation's actorId (the attacker) is the U1-resolved
+      // source: the acting actor, never a ghost and never a different actor.
+      expect(attacks[0]!.actorId).toBe(hero.id);
+      expect(attacks[0]!.targetId).toBe(foeA.id);
+    }
+    // Same identities, same recorded slots, same scripted dice → byte-identical
+    // mutations regardless of which order the actors entered the encounter.
+    expect(JSON.stringify(swappedResult.mutations)).toBe(JSON.stringify(canonicalResult.mutations));
+    // Replay is byte-identical and performs no new decisions.
+    const event = rmaEvent(hero.id, SOURCE, canonicalResult);
+    const applied = applyEvents(canonical, [event]);
+    const replayed = replayEncounter(canonical, [event]);
+    expect(JSON.stringify(replayed.eventLog)).toBe(JSON.stringify([event]));
+    const appliedRma = applied.eventLog.find((candidate): candidate is RMA => candidate.type === 'RULE_MUTATIONS_APPLIED')!;
+    const replayedRma = replayed.eventLog.find((candidate): candidate is RMA => candidate.type === 'RULE_MUTATIONS_APPLIED')!;
+    expect(JSON.stringify(replayedRma.mutations ?? [])).toBe(JSON.stringify(appliedRma.mutations ?? []));
+  });
+
+  it('a dangling source id cannot reach the attack read — the shared candidate gate fails closed before any attack mutation', () => {
+    const program = programWith([{
+      id: 'base', timing: 'use', effects: [
+        { kind: 'attack', target: { kind: 'input', key: 'target', relation: 'any' }, trueStrike: false, onHit: [], onMiss: [] },
+      ],
+    }]);
+    const { state, heroId, foes } = startedEncounter();
+    const foeA = foes.foeA!;
+    // The serialized source slot NAMES an actor absent from state. The shared
+    // candidate authority (U2 perspective + U3 eligibility) rejects it at the
+    // first relation read, BEFORE any attack mutation can be planned — the
+    // same fail-closed boundary the attack's own U1 source re-read defends.
+    // ``flow.attack-source`` remains the attack case's own defensive branch;
+    // the reachable path proves no ghost source ever produces a mutation.
+    const context = contextOf(state, 'ghost-source', { input: { actorIds: { target: [foeA] } } });
+    expect(() => run(program, context, state)).toThrowError(
+      expect.objectContaining({ code: 'selector.actor-missing' }),
+    );
+    // No partial result is committed: the violation aborts the whole command.
+    expect(state.actors[foeA]!.hp).toBe(32);
+  });
+});

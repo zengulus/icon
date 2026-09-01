@@ -12,6 +12,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { resolveSourceActor, resolveAttackTarget } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Stormbender ability implementations (ICON p.230–236),
@@ -47,8 +48,8 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
  * shove the attack target 1, and summon a salt sprite in range 2 of them.
  * Infuse 3 (DAGON) creates a watery pit under the target on a Collide. */
 const rimeEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -90,7 +91,7 @@ const rimeEffects: RuleResolver = (context) => {
  * opposite edge. The movement, drag, and collision effects are documented
  * terrain windows. */
 const tsunamiEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const origin = context.input.positions?.origin?.[0] ?? { x: 3, y: 1 };
   const cells = squareArea(origin, 2).filter((cell) => withinGrid(cell, context));
@@ -106,8 +107,8 @@ const tsunamiEffects: RuleResolver = (context) => {
  * gaining 1 aether. If any character is already shattered, a pit opens under
  * them. */
 const cryoEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   mutations.push(conditionMutation(context, target.id, 'shattered'));
@@ -136,7 +137,9 @@ const cryoEffects: RuleResolver = (context) => {
  * 4. The eruption on a character starting or ending their turn on it, and the
  * salt sprite that replaces it, are documented object windows. */
 const geyserEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -155,7 +158,7 @@ const geyserEffects: RuleResolver = (context) => {
  * in a direction of your choice. The movement-entry effects are documented
  * terrain windows. */
 const gustEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const direction = context.input.directions?.line ?? rushTowardFoes(context, source.position);
   const cells: { x: number; y: number }[] = [];
@@ -174,7 +177,7 @@ const gustEffects: RuleResolver = (context) => {
  * control — characters caught are shoved 1 and foes become vulnerable.
  * Collide: summon a salt sprite (documented). */
 const heaveHoEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const origin = context.input.positions?.origin?.[0] ?? source.position;
   const cells = squareArea(origin, 2).filter((cell) => withinGrid(cell, context));
@@ -197,7 +200,9 @@ const heaveHoEffects: RuleResolver = (context) => {
  * them at the start of their turn and the pit-to-pit drag when they end their
  * turn inside a pit are documented mark-trigger windows. */
 const deepwrathEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Deepwrath requires a character in range 6.');
@@ -209,7 +214,9 @@ const deepwrathEffects: RuleResolver = (context) => {
  * difficult terrain. The suck-in (at summon or at the start of your turn) and
  * the end-of-turn spit-out are documented terrain windows. */
 const waterspoutEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -235,7 +242,9 @@ const waterspoutEffects: RuleResolver = (context) => {
  * character) was retracted with the ability — its only execution path was
  * this resolver. */
 const eyeOfTheStormEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const centerId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const centerActor = centerId ? sourceActor(context, centerId) : undefined;
   if (!source.position) return [];

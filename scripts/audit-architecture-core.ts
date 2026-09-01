@@ -366,6 +366,8 @@ export function u1ReferenceRoutingProblems(
     'content/jobs/programs/seer-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/programs/fool-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/programs/geomancer-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
+    'content/jobs/programs/stormbender-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
+    'content/jobs/programs/colossus-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/job-trait-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/classes/class-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
   };
@@ -390,7 +392,12 @@ export function u1ReferenceRoutingProblems(
       if (rawSlot.test(executable)) {
         problems.push({ file, detail: 'interprets a legacy reference slot outside the U1 authority' });
       }
-      if (/context\.state\.actors\s*\[\s*context\.actorId\s*\]|sourceActor\s*\(\s*context\s*,\s*context\.actorId\s*\)/.test(executable)) {
+      // The source-slot dereference has three legacy spellings: the literal
+      // ``state.actors[context.actorId]``, the job-kit ``sourceActor(context,
+      // context.actorId)`` convenience, and the evaluate-value ``actor(context,
+      // context.actorId)`` helper. All three resolve the implicit source-actor
+      // reference; only the U1 live-slot authority may do that.
+      if (/context\.state\.actors\s*\[\s*context\.actorId\s*\]|sourceActor\s*\(\s*context\s*,\s*context\.actorId\s*\)|\bactor\s*\(\s*context\s*,\s*context\.actorId\s*\)/.test(executable)) {
         problems.push({ file, detail: 'resolves the implicit source-actor reference outside U1' });
       }
     }

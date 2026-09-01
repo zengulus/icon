@@ -138,6 +138,32 @@ describe('Stormbender ability automation (p.230–236)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Rime under reversed actor insertion order is byte-identical: the migrated live slots resolve by recorded identity, never object order', () => {
+    // Rebuild the canonical Rime fixture with the second foe ADDED BEFORE the
+    // target, so the actors map iteration order differs from every other
+    // fixture in this file. The migrated source/attack-target reads must
+    // resolve by recorded slot identity (context.actorId / attackTargetId),
+    // never object iteration order — the outcome and the replay reproduce the
+    // canonical result exactly.
+    let setup = createEncounter('Stormbender insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Elemental Savant'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 3, y: 1 });
+    const second = createFoe('Grim', { x: 4, y: 1 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:rime', targetIds: [foe.id] }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[foe.id].hp).toBe(19); // 32 - (4 + 5 + fray 4)
+    expect(result.state.actors[foe.id].position).toEqual({ x: 2, y: 1 }); // shoved 1 toward the user
+    expect(result.state.actors[second!.id].hp).toBe(28); // 32 - fray 4 (line)
+    expect(result.state.actors[second!.id].position).not.toEqual({ x: 4, y: 1 }); // shoved to a side
+    expect(Object.values(result.state.entities).some((entity) => entity.type === 'salt-sprite')).toBe(true);
+    expect(applyEvents(setup, result.events)).toEqual(result.state); // replay byte-identical
+  });
+
   it('Eye Of The Storm: retracted — the ally-center fly-4 is a free player-chosen flight (p.236)', () => {
     // ICON p.236: "If an ally is in the center space, they may fly 4 after
     // the ability resolves." The flight direction is a player choice the

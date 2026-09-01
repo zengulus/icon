@@ -349,4 +349,27 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 4, y: 1 }); // teleported to player choice
     expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
   });
+
+  it('Harrow under reversed actor insertion order is byte-identical: the migrated live slots resolve by recorded identity, never object order', () => {
+    // Rebuild the canonical Harrow fixture with the second actor ADDED BEFORE
+    // the target, so the actors map iteration order differs from every other
+    // fixture in this file. The migrated source read (and the retained
+    // caller-owned input chain) must resolve by recorded identity, never
+    // object iteration order — the outcome and the replay reproduce the
+    // canonical result exactly.
+    let setup = createEncounter('Shade insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Nightblade'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 4, y: 1 });
+    const second = createFoe('Grim', { x: 6, y: 1 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:harrow', targetIds: [foe.id] }, scriptedDice());
+    expect(result.state.actors[foe.id].marks.some(({ markId, ownerId }) => markId === 'harrow' && ownerId === hero.id)).toBe(true);
+    expect(result.state.actors[second.id].marks).toHaveLength(0); // untouched
+    expect(applyEvents(setup, result.events)).toEqual(result.state); // replay byte-identical
+  });
 });

@@ -219,11 +219,11 @@ describe('U1 residual census (machine inventory)', () => {
     expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
   });
 
-  it('pins the exact repo figures (86 = 31 + 54 + 1) so docs cannot drift from the machine', () => {
+  it('pins the exact repo figures (55 = 0 + 54 + 1) so docs cannot drift from the machine', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
-    expect(inventory.total).toBe(86);
+    expect(inventory.total).toBe(55);
     expect(inventory.categoryCounts).toEqual({
-      PURE_LIVE_REFERENCE: 31,
+      PURE_LIVE_REFERENCE: 0,
       CAPTURED_ID_DEREFERENCE: 54,
       DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
       NON_U1_OTHER: 0,
@@ -319,6 +319,28 @@ describe('U1 Reference/Binding routing guard', () => {
     ]));
   });
 
+  it('catches the evaluate-value actor(context, context.actorId) source-slot spelling', () => {
+    // The whole-consumer audit found execute-flow's attack case reading the
+    // source through the evaluate-value ``actor(context, context.actorId)``
+    // helper — a third legacy spelling of ``state.actors[context.actorId]``
+    // that bypassed the U1 live-slot authority. The guard now flags it the
+    // same way it flags the literal deref and the job-kit convenience.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      'kernels/execute-flow.ts': 'const source = actor(context, context.actorId);',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'kernels/execute-flow.ts', detail: 'resolves the implicit source-actor reference outside U1' }),
+    ]));
+    // A decoy: the same helper form with an already-resolved id (not the
+    // source slot) is NOT reference interpretation and must stay accepted —
+    // the file still makes its pinned U1 calls.
+    expect(u1ReferenceRoutingProblems({
+      ...valid,
+      'kernels/execute-flow.ts': `${valid['kernels/execute-flow.ts']!}\nconst foe = actor(context, resolvedId);`,
+    })).toEqual([]);
+  });
+
   // T5c — the content layer is now inside the U1 guard. The ONE content
   // reference surface is content/glue/reference-authoring.ts (composing the
   // U1 vocabulary); migrated programs must keep ROUTING through it. The
@@ -380,6 +402,11 @@ describe('U1 Reference/Binding routing guard', () => {
     // Realignment `input.actorIds ?? attackTargetId`, Midas
     // `input.actorIds ?? triggerTargetIds`) stay inventoried at the caller.
     'content/jobs/programs/geomancer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined; const interruptId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0]; const interruptTarget = interruptId ? sourceActor(context, interruptId) : undefined;',
+    // Migrated Stormbender keeps its pinned adapter surface; the retained
+    // captured/precedence dereferences (Geyser / Deepwrath / Waterspout
+    // `input.actorIds ?? attackTargetId`, Eye Of The Storm's recorded
+    // center selection) stay inventoried at the caller.
+    'content/jobs/programs/stormbender-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined; const centerId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const centerActor = centerId ? sourceActor(context, centerId) : undefined;',
     'content/jobs/job-trait-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); mutations.push({ kind: \'condition\', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id });',
     'content/classes/class-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); const inputTargets = context.input.actorIds?.target; if (inputTargets[0] !== context.attackTargetId) throw 0;',
   };
@@ -399,23 +426,35 @@ describe('U1 Reference/Binding routing guard', () => {
     }));
   });
 
-  it('T5c: non-migrated sourceActor(context, …) residual stays inventoried (accepted) — NOT a blanket ban; only the dereference + pins bite', () => {
-    // The remaining `sourceActor(context, …)` calls in NON-MIGRATED named
-    // program files are the classified U1 residual + U1×U4 boundary
-    // (docs/u8-u1-underlay-census.md) migrated family-by-family; the guard
-    // must not force a blind mechanical rewrite, nor silently accept a NEW
-    // direct dereference elsewhere.
+  it('T5c: retained CAPTURED dereferences in a migrated program stay accepted — NOT a blanket ban; only the direct dereference + pins bite', () => {
+    // With every named program family migrated (Colossus closed the last
+    // PURE family), the remaining `sourceActor(context, <var>)` calls are
+    // ONLY the classified U1×U4 captured-identity boundary: recorded input
+    // selections, recorded `??` fallbacks, loop elements, and helper
+    // parameters — caller-owned cardinality/choice whose dereference is the
+    // inventoried captured shape (docs/u8-u1-underlay-census.md). The guard
+    // must not force a blind mechanical rewrite of those (migrated-family
+    // pins + the retained-captured fixtures above prove they are accepted),
+    // nor silently accept a NEW direct `state.actors[context.…]` dereference.
     const problems = u1ReferenceRoutingProblems({
       ...valid,
       ...validContent,
-      // Geomancer is now MIGRATED — use the two remaining non-migrated
-      // families for the accepted-residual proof (Stormbender / Colossus
-      // still route their live slots through the legacy convenience,
-      // inventoried).
-      'content/jobs/programs/stormbender-programs.ts': "const source = sourceActor(context, context.actorId);",
-      'content/jobs/programs/colossus-programs.ts': "const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;",
+      // A fully-migrated family KEEPING its captured reads is clean: the
+      // helper-parameter plannedFly deref and the input-selected targets are
+      // caller-owned, not live-slot interpretation.
+      'content/jobs/programs/colossus-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const source2 = sourceActor(context, actorId); const targetId = context.input.actorIds?.target?.[0]; const chosen = targetId ? sourceActor(context, targetId) : undefined;',
     });
     expect(problems).toEqual([]);
+    // But a NEW direct dereference in the same file is still caught — the
+    // accepted-residual carve-out never legitimizes state.actors[context.…].
+    expect(u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/colossus-programs.ts': 'const source = resolveSourceActor(context); const target = context.state.actors[context.attackTargetId];',
+    })).toContainEqual(expect.objectContaining({
+      file: 'content/jobs/programs/colossus-programs.ts',
+      detail: expect.stringContaining('dereferences a legacy reference slot'),
+    }));
   });
 
   it('T5c: catches a MIGRATED Sealer program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
@@ -568,6 +607,38 @@ describe('U1 Reference/Binding routing guard', () => {
       expect.objectContaining({ file: 'content/jobs/programs/geomancer-programs.ts', detail: expect.stringContaining('no longer routes') }),
     ]));
     expect(problems.filter((problem) => problem.file === 'content/jobs/programs/geomancer-programs.ts').length).toBe(1);
+  });
+
+  it('T5c: catches a MIGRATED Stormbender program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    // Reverting Stormbender's migrated LIVE slots drops the pinned accessors;
+    // the retained captured/precedence dereferences (Geyser / Deepwrath /
+    // Waterspout input ?? attackTarget, Eye Of The Storm's recorded center)
+    // must NOT themselves be flagged — only the missing pins bite.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/stormbender-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined; const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/stormbender-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
+    expect(problems.filter((problem) => problem.file === 'content/jobs/programs/stormbender-programs.ts').length).toBe(1);
+  });
+
+  it('T5c: catches a MIGRATED Colossus program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    // Reverting Colossus's migrated LIVE slots drops the pinned accessors;
+    // the retained captured dereferences (plannedFly's helper-parameter read,
+    // Dropkick / Great Suplex `input.actorIds` targets) must NOT themselves
+    // be flagged — only the missing pins bite.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/colossus-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined; const targetId = context.input.actorIds?.target?.[0]; const chosen = targetId ? sourceActor(context, targetId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/colossus-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
+    expect(problems.filter((problem) => problem.file === 'content/jobs/programs/colossus-programs.ts').length).toBe(1);
   });
 
   it('T5c: catches a MIGRATED Seer program that reverts live-slot reads to legacy sourceActor(context, …)', () => {

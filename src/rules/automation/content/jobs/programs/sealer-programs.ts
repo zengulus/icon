@@ -103,7 +103,9 @@ const devilHandEffects: RuleResolver = (context) => {
  * divine retribution after a damaging ability and the end-of-turn save are
  * documented mark-trigger / save windows. */
 const grandSealEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Grand Seal requires a foe in range 4.');
@@ -174,7 +176,9 @@ const spiritShrineEffects: RuleResolver = (context) => {
  * divine damage to foes in the area. The save-curse/boon and pacify windows are
  * documented terrain-effect windows. */
 const sanctifyEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -194,7 +198,9 @@ const sanctifyEffects: RuleResolver = (context) => {
  * mark a foe in range 4. The 3 divine damage when the foe is moved closer is a
  * documented mark-trigger window. */
 const grandBanishmentEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input target) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -212,7 +218,9 @@ const grandBanishmentEffects: RuleResolver = (context) => {
  * 2 ("If your ally is at 25% hp or lower when marked, they also gain
  * defiance") reads the shared quarter predicate at mark time. */
 const divineAegisEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
+  // Recorded player choice (input ally) falls back to the attack target —
+  // caller-owned U4 precedence; only the dereference is the captured identity.
   const allyId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const ally = allyId ? sourceActor(context, allyId) : undefined;
   if (!source.position || !ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Divine Aegis requires an ally in range 4.');
