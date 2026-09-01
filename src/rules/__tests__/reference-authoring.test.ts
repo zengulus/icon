@@ -44,6 +44,7 @@ import { SHADE_RULE_RESOLVERS } from '../automation/content/jobs/programs/shade-
 import { WARDEN_RULE_RESOLVERS } from '../automation/content/jobs/programs/warden-programs.js';
 import { SEALER_RULE_RESOLVERS } from '../automation/content/jobs/programs/sealer-programs.js';
 import { ENOCHIAN_RULE_RESOLVERS } from '../automation/content/jobs/programs/enochian-programs.js';
+import { CHANTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/chanter-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -281,6 +282,50 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     // silently fall through to an empty mutation list on a malformed window.
     const context = ctx({ attackTargetId: 'ghost' });
     expectViolationCode(() => ENOCHIAN_RULE_RESOLVERS['enochian:pyre:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Chanter Chastise resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Chastise's PURE live-slot reads (source + attack target) now resolve
+    // through the adapter; a slot that NAMES a missing actor must reject on a
+    // malformed window rather than silently produce an empty mutation list.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => CHANTER_RULE_RESOLVERS['chanter:chastise:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Chanter Holy resolver: an absent optional attack-target slot stays undefined (optional singleton semantics preserved)', () => {
+    // Holy's attack-target read is OPTIONAL in valid state (the resolver's
+    // `if (!target) return []` guard handles a genuinely targetless use); the
+    // adapter preserves absent-singular → undefined.
+    const context = ctx();
+    expect(() => CHANTER_RULE_RESOLVERS['chanter:holy:effects'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Chanter Felicity resolver: the captured-input identity stays caller-owned — only the LIVE source slot migrated', () => {
+    // Felicity's `input.actorIds?.target?.[0]` SELECT is the caller's U4
+    // choice; the source-actor read is the migrated PURE slot. A present
+    // input target resolves as the ally (captured identity), unchanged.
+    const hero = ctx().state.actors.hero;
+    const ally = { ...hero, id: 'ally', side: 'heroes' as const, position: { x: 5, y: 4 } }; // in range 5 of hero
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, ally } },
+      input: { actorIds: { target: ['ally'] } },
+    });
+    const mutations = CHANTER_RULE_RESOLVERS['chanter:felicity:effects'](context, defaultAction);
+    expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'ally')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'resource' && mutation.actorId === 'ally' && mutation.resourceId === 'blessing')).toBe(true);
+  });
+
+  it('Chanter Monogatari resolver: the LIVE source read migrates; lifecycle/usage state mutations are untouched', () => {
+    // Monogatari's resolver only records source-owned lifecycle state on the
+    // user (monogatari:active / tale / charge); the migrated source read is a
+    // pure slot dereference and the mutations are byte-identical in shape
+    // (kind/actorId/key/value, same as the pre-migration resolver emitted).
+    const context = ctx();
+    const mutations = CHANTER_RULE_RESOLVERS['chanter:monogatari:effects'](context, defaultAction);
+    expect(mutations.filter((mutation) => mutation.kind === 'state' && mutation.actorId === 'hero')).toHaveLength(3);
+    expect(mutations.some((mutation) => mutation.kind === 'state' && mutation.key === 'monogatari:active')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'state' && mutation.key === 'monogatari:tale')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'state' && mutation.key === 'monogatari:charge')).toBe(true);
   });
 
   it('Enochian Pyroclast resolver: the captured-input identity stays caller-owned — the ?? chain survives, only the LIVE slots migrated', () => {

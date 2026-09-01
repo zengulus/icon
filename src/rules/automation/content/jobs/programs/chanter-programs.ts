@@ -16,6 +16,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Chanter ability implementations (ICON p.174–181), the
@@ -65,8 +66,8 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
 /** ICON p.177 Holy: pacify the foe, cure a character in range 2 of them, and on
  * a Charge grant 3 vigor to other characters in range 2 of the foe. */
 const holyEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   const mutations: RuleMutation[] = [];
   if (!target) return mutations;
   mutations.push(conditionMutation(context, target.id, 'pacified'));
@@ -92,8 +93,8 @@ const holyEffects: RuleResolver = (context) => {
  * target, deals fray to the other characters in the blast, and opens a pit
  * under the target. */
 const holyComboEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!target?.position || !source.position) return [];
   const targetPosition = target.position;
   const mutations: RuleMutation[] = [autohitAttack(context)];
@@ -111,7 +112,7 @@ const holyComboEffects: RuleResolver = (context) => {
 /** ICON p.177 Felicity: mark an ally in range and bless them (two blessings on
  * a Charge). The \"can fly 2\" and combo-spend flight are free-action windows. */
 const felicityEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const allyId = context.input.actorIds?.target?.[0];
   if (!allyId) throw new RuleProgramViolation('choice.actor-count', 'Felicity requires an ally in range 5.');
   const ally = sourceActor(context, allyId);
@@ -127,7 +128,7 @@ const felicityEffects: RuleResolver = (context) => {
  * (deterministic: along the dominant axis toward the nearest foe), and gains
  * 2 vigor per character passed over. */
 const felicityComboEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const allyId = context.input.actorIds?.target?.[0];
   if (!allyId) throw new RuleProgramViolation('choice.actor-count', 'FLEET requires an ally in range 5.');
   const ally = sourceActor(context, allyId);
@@ -155,8 +156,8 @@ const felicityComboEffects: RuleResolver = (context) => {
  * the area (a deterministic rotation). Charge widens to a large blast and
  * grants allies in the area 4 vigor. */
 const pandaemoniumEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!target?.position || !source.position) return [];
   const targetPosition = target.position;
   const radius = context.triggers?.has('charge') ? 3 : 2;
@@ -196,8 +197,8 @@ const pandaemoniumEffects: RuleResolver = (context) => {
  * other character in the medium blast, every pit in the area explodes for a
  * medium blast fray, and a pit opens under the attack target. */
 const pandaemoniumComboEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!target?.position || !source.position) return [];
   const targetPosition = target.position;
   const mutations: RuleMutation[] = [];
@@ -228,7 +229,7 @@ const pandaemoniumComboEffects: RuleResolver = (context) => {
 /** ICON p.178 Aria: end the turn and gain Delay; the stunning performance
  * resolves at the start of the user's (slow) next turn in the reducer. */
 const ariaEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [
     stateMutation(context, source.id, 'aria:pending', true),
     stateMutation(context, source.id, 'end-turn-requested', true),
@@ -242,7 +243,7 @@ const ariaEffects: RuleResolver = (context) => {
  * counter") adds the durable aura effect — the aura kernel interprets it
  * (aura-recipes.ts) and the turn-start duration expires it at the boundary. */
 const dervishEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   if (!sourcePosition) return [];
   const mutations: RuleMutation[] = [];
@@ -272,7 +273,7 @@ const dervishEffects: RuleResolver = (context) => {
  * turn. The +1 boon on saves and the start-of-turn saves are documented
  * save-window effects. */
 const dervishComboEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [conditionMutation(context, source.id, 'dervish:dawn-aura', 'normal', untilNextTurnEnd)];
 };
 
@@ -297,7 +298,7 @@ const firstMoteCell = (context: Parameters<RuleResolver>[0], start: { x: number;
  * creates two more spaces. Detonation resolves through the reducer's
  * movement-end / turn-start hooks. */
 const symphonyEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
   let remaining = 4;
@@ -336,7 +337,7 @@ const symphonyEffects: RuleResolver = (context) => {
  * the pacify save is the shared aura kernel's, evaluated against the resized
  * radius. */
 const gentlenessEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'gentleness')];
   if (hasMastery(source, 'chanter:gentleness')) {
     const choice = context.input.options?.['aura-resize'];
@@ -382,7 +383,7 @@ const gentlenessEffects: RuleResolver = (context) => {
  * boundary); allies that complete the tale's action are blessed and may fly 2
  * at the end of their turn, once per song. */
 const monogatariEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const mutations: RuleMutation[] = [
     stateMutation(context, source.id, 'monogatari:active', true),
     stateMutation(context, source.id, 'monogatari:tale', null),
@@ -396,8 +397,8 @@ const monogatariEffects: RuleResolver = (context) => {
  * end of their next turn, they take 1 divine damage three times then. Charge
  * protects both yourself and an ally. */
 const chastiseEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!target || !source.position || !target.position) return [];
   const mutations: RuleMutation[] = [];
   mutations.push(autohitAttack(context));
@@ -415,7 +416,7 @@ const chastiseEffects: RuleResolver = (context) => {
  * next turn, cure or bless allies in a small blast centered on it (defaulting
  * to cure), and open a pit under it if two or more allies were in the area. */
 const chastiseComboEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const foeId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const foe = foeId ? sourceActor(context, foeId) : undefined;
   if (!foe?.position || !source.position) throw new RuleProgramViolation('choice.actor-count', 'CHARISM requires a foe in range 5.');

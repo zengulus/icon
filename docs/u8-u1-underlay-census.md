@@ -124,7 +124,8 @@ their sites.
 > | --- | --- | --- | --- | --- |
 > | `ea9526c` (pre-Sealer) | 242 | 187 | 54 | 1 |
 > | `5f0de05` (post-Sealer) | 229 | 174 | 54 | 1 |
-> | current HEAD (post-Enochian) | 211 | 156 | 54 | 1 |
+> | `4a1ff76` (post-Enochian) | 211 | 156 | 54 | 1 |
+> | current HEAD (post-Chanter) | 192 | 137 | 54 | 1 |
 >
 > The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
 > (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
@@ -146,15 +147,15 @@ sites across 14 named program files (multi-line calls collapse to one site;
 MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
 provenance string):
 
-- **U1 reference identity — pure LIVE-slot reads (156, migrate family-by-
+- **U1 reference identity — pure LIVE-slot reads (137, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
-  Warden/Sealer/Enochian migrated across tranches 2–4. Remaining per-file:
-  Chanter 19, Knave 17, Demon Slayer 16, Harvester 15, Seer 15, Fool 15,
+  Warden/Sealer/Enochian/Chanter migrated across tranches 2–5. Remaining
+  per-file: Knave 17, Demon Slayer 16, Harvester 15, Seer 15, Fool 15,
   Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11, Sealer 4 (chain
-  sites' source reads — see boundary), Shade 3, Warden 2. Enochian 0 (this
-  tranche).
+  sites' source reads — see boundary), Shade 3, Warden 2. Enochian 0,
+  Chanter 0 (their tranches).
 - **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
   earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
@@ -349,17 +350,92 @@ calls, is caught with exactly one Enochian routing problem, and the retained
   proving the migration is behavior-preserving for valid/reachable state
   (applyEvents replay identical in every scenario).
 
-## U1 status after the Enochian tranche
+## U1 tranche executed (fresh HEAD, 2026-09-01, fifth tranche — Chanter)
 
-U1 remains PARTIAL: the shared surface is proved and pinned across eight
+### Migrated: Chanter pure LIVE-slot reference reads
+
+`content/jobs/programs/chanter-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **19 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Chanter: 19 → 0 PURE;
+CAPTURED and BOUNDARY unchanged: 54, 1; whole-repo 211 → 192 =
+137 + 54 + 1)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in all 14 Chanter resolvers that reach the
+  source: Holy, HADES, Felicity, FLEET, Pandaemonium, PURGATORIO, Aria,
+  Dervish, DAWN, Symphony, Gentleness, Monogatari, Chastise, CHARISM;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Holy, HADES, Pandaemonium, PURGATORIO,
+  and Chastise — identical LIVE re-read and absent-singular→undefined
+  semantics.
+
+**Deliberately NOT migrated (per-call-site U1×U4 boundary, inventoried):**
+Felicity's / FLEET's `allyId = context.input.actorIds?.target?.[0]`,
+Dervish's `allyIds[i]` loop-index element, and CHARISM's `foeId =
+context.input.actorIds?.target?.[0] ?? context.attackTargetId` — the
+`?.[0]` / loop SELECT is caller-owned U4 choice/cardinality, and only the
+dereference of the chosen identity is the U1 captured-identity shape (the
+next tranche family). `sourceActor(context, …)` remains imported for those
+four sites; the resolvers' own range/choice gates
+(`choice.actor-count` / `choice.actor-range` / `if (!target) return`) are
+untouched.
+
+### Monogatari / U8 / U16 protection (the reason this family is a proof tranche)
+
+The migrated reads are pure slot dereferences (ability user, primary attack
+target) with no lifecycle content: Monogatari's lifecycle identity (owner ×
+source × U8 instance), the per-song U16 ledger keys, recipient enumeration,
+once-per-song consumption, tale replacement, and the deterministic
+simultaneous-song enumeration all live in `lifecycle-recipes.ts` (U8/U16
+domain, outside the scanned program surface) and were NOT touched. The
+`monogatariEffects` resolver records only source-owned state
+(`monogatari:active` / `tale` / `charge`) on the user; its migrated source
+read is a pure slot dereference and its emitted mutations are shape-
+identical (proven by the resolver-level test below). No U8/U16 contract or
+lifecycle code changed.
+
+### Guard
+
+The `u1-reference-routing` guard pins Chanter (resolveSourceActor,
+resolveAttackTarget) to the adapter; the retained captured-input
+dereferences are NOT banned (no blanket lexical ban). Mutation test: a
+Chanter revert to `sourceActor(context, context.actorId)` drops the pinned
+calls, is caught with exactly one Chanter routing problem, and the retained
+`input.actorIds`-derived `sourceActor(context, allyId)` reads alone do NOT
+trigger the pin.
+
+### Evidence
+
+- `reference-authoring.test.ts` +4: the production Chanter Chastise resolver
+  fails closed (`reference.missing-actor`) on a gated-bypass ghost
+  `attackTargetId`; Holy keeps absent-singular → undefined (optional
+  singleton semantics, `if (!target) return` guard intact); Felicity's
+  `input.actorIds?.target?.[0]` captured identity still marks the chosen
+  ally (caller-owned U4); and Monogatari's resolver emits the three
+  source-owned lifecycle state mutations with byte-identical shape.
+- the Monogatari U8×U16 adversarial matrix (`monogatari-u8-u16.test.ts`,
+  14 tests) passes unchanged through the engine path — two independent
+  songs, one-song-only recipients, simultaneous consumes, replace-A-does-
+  not-touch-B, identical-tale separation, reversed actor insertion order,
+  and exact replay without re-deciding eligibility all still hold.
+- the full Chanter suite (25 tests) stays green through the engine path
+  (valid-state semantics preserved; applyEvents replay identical in every
+  scenario).
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
+
+## U1 status after the Chanter tranche
+
+U1 remains PARTIAL: the shared surface is proved and pinned across NINE
 migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
-Job-trait, Class resolvers), and the residual is a machine-derived classified
-inventory — 156 pure LIVE-slot reads (next tranches) + 54 captured/derived
-dereferences + 1 in-call boundary read = 211 sites, 0 direct dereferences. A
-whole-consumer audit is NOT yet done, so U1 cannot claim AUTHORITATIVE: 10
-program files still resolve live slots through the legacy kernel-side
-convenience, and the U1×U4 captured-identity boundary has no shared surface
-yet.
+Chanter, Job-trait, Class resolvers), and the residual is a machine-derived
+classified inventory — 137 pure LIVE-slot reads (next tranches) + 54
+captured/derived dereferences + 1 in-call boundary read = 192 sites, 0
+direct dereferences. A whole-consumer audit is NOT yet done, so U1 cannot
+claim AUTHORITATIVE: 9 program files still resolve live slots through the
+legacy kernel-side convenience, and the U1×U4 captured-identity boundary has
+no shared surface yet.
 
 ## Coverage and verification invariants
 

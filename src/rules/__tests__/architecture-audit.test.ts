@@ -163,11 +163,11 @@ describe('U1 residual census (machine inventory)', () => {
     expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
   });
 
-  it('pins the exact repo figures (211 = 156 + 54 + 1) so docs cannot drift from the machine', () => {
+  it('pins the exact repo figures (192 = 137 + 54 + 1) so docs cannot drift from the machine', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
-    expect(inventory.total).toBe(211);
+    expect(inventory.total).toBe(192);
     expect(inventory.categoryCounts).toEqual({
-      PURE_LIVE_REFERENCE: 156,
+      PURE_LIVE_REFERENCE: 137,
       CAPTURED_ID_DEREFERENCE: 54,
       DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
       NON_U1_OTHER: 0,
@@ -270,7 +270,7 @@ describe('U1 Reference/Binding routing guard', () => {
     // Non-migrated content: caller-owned U4 cardinality reads, incidental
     // provenance/ownership fields, and the inventoried sourceActor residual
     // are NOT reference interpretation.
-    'content/jobs/programs/chanter-programs.ts': 'const foeId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;',
+    'content/jobs/programs/chanter-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined; const foeId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;',
     'content/jobs/programs/knave-programs.ts': 'const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0];',
     // Migrated Shade/Warden keep their pinned adapter surface; the remaining
     // captured-input dereferences (`input.actorIds?.[n]` → sourceActor) are
@@ -356,6 +356,23 @@ describe('U1 Reference/Binding routing guard', () => {
       expect.objectContaining({ file: 'content/jobs/programs/enochian-programs.ts', detail: expect.stringContaining('no longer routes') }),
     ]));
     expect(problems.filter((problem) => problem.file === 'content/jobs/programs/enochian-programs.ts').length).toBe(1);
+  });
+
+  it('T5c: catches a MIGRATED Chanter program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    // Chanter is the lifecycle-heavy family (Monogatari U8/U16). The revert
+    // proof is the same as the other pinned families: reverting the migrated
+    // LIVE slots drops the pinned accessors, while the retained
+    // captured-input dereferences (allyIds from input.actorIds) alone must
+    // NOT trip the pin — U1 routing, not a lexical ban.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/chanter-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined; const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/chanter-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
+    expect(problems.filter((problem) => problem.file === 'content/jobs/programs/chanter-programs.ts').length).toBe(1);
   });
 
   it('T5c: catches a MIGRATED program that reverts to direct slot resolution (drops the adapter calls)', () => {
