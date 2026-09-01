@@ -6,20 +6,27 @@ import type { EncounterState } from '../types.js';
 import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 /**
- * Trigger provenance (ICON p.95 + the deriveTriggers contract): Charge,
+ * Trigger provenance (ICON p.95 + the trigger-authority gate): Charge,
  * Comeback, and Finishing Blow are derived from AUTHORITATIVE STATE (the
  * durable slow-turn flag, the bloodied target); Exceed is derived from the
  * ability's OWN attack roll at 15+; Collide and Slay derive from the
  * resolution's OWN shove/defeat facts. None of them may be asserted by a
  * command — a forged assertion fails closed before any cost, effect, or RNG
- * runs. Heroic and Infuse are genuine caller declarations (they gate a
- * resource spend / a Stalwart gambit decision) and remain assertable.
+ * runs.
  *
- * The direct-context clause tests elsewhere (conditions.test.ts,
- * harvester.test.ts, talents.test.ts) still prove resolver-local clauses by
- * constructing the recorded-fact context BY HAND — that is the documented
- * seam for clauses that the reactive append pass cannot re-enter, not a
- * command path.
+ * Heroic is a genuine caller DECLARATION — but intent only: it becomes a
+ * validated-player-activation when the character owns a heroic-granting
+ * trait (Strive / Demon Strength / Wolfheart / Spite); a character without
+ * entitlement fails closed. Infuse is NOT caller-assertable at all: it rides
+ * the source-backed infuse ACTION whose aether cost the economy gate
+ * validates ("caller named Infuse therefore Infuse is true" is never a valid
+ * semantic proof).
+ *
+ * Source-forced activations (Ace's armed next attack, Gallows Humor's
+ * empowered slay) are decided by the engine from durable armed state — the
+ * recorded event carries the provenance record
+ * (`triggerActivations: [{trigger, provenance}]`), and natural + forced
+ * activation of the same trigger collapse to ONE activation.
  */
 function triggerFixture(): { state: EncounterState; heroId: string; targetId: string } {
   let state = createEncounter('Trigger authority fixture');
@@ -43,6 +50,9 @@ const forged = (trigger: string) => (state: EncounterState, heroId: string, targ
     triggers: [trigger],
   }, scriptedDice());
 
+const ruleEvent = (result: ReturnType<typeof executeCommand>, sourceId: string) =>
+  result.events.find((event) => event.type === 'RULE_MUTATIONS_APPLIED' && event.sourceId === sourceId);
+
 describe('trigger authority: command triggers are provenance-checked', () => {
   it('rejects every state/resolution-derived trigger a caller forges on EXECUTE_RULE', () => {
     for (const trigger of ['charge', 'comeback', 'finishing-blow', 'exceed', 'slay', 'collide']) {
@@ -61,8 +71,22 @@ describe('trigger authority: command triggers are provenance-checked', () => {
     expect(state.actors[targetId].hp).toBe(32);
   });
 
-  it('still accepts the caller-authoritative triggers — heroic and infuse', () => {
+  it('rejects Infuse as a caller-asserted trigger — Infuse rides the source-backed infuse action whose aether economy the cost gate validates', () => {
+    // "Battering Ram + triggers:['infuse']" is NOT a valid semantic proof:
+    // naming `infuse` would forge a resource decision the engine must make.
+    // The legitimate path is the ability's infuse ACTION (e.g.
+    // stormbender:rime actionId 'infuse', which pays 3 aether through the
+    // cost gate and tags the resolution so the shared resolver sees it).
     const { state, heroId, targetId } = triggerFixture();
+    expect(() => forged('infuse')(state, heroId, targetId))
+      .toThrowError(expect.objectContaining({ code: 'rule.trigger-forged' }));
+  });
+
+  it('accepts a validated Heroic declaration from a heroic-capable character as a validated-player-activation', () => {
+    const { state, heroId, targetId } = triggerFixture();
+    // Aster is a Stalwart (Strive): entitled to declare Heroic. The Battering
+    // Ram Collide-or-Heroic reaction fires: the foe is slashed and the
+    // 1-action cost is refunded (2 actions: spent then returned).
     const heroic = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: heroId,
@@ -72,24 +96,48 @@ describe('trigger authority: command triggers are provenance-checked', () => {
       input: { actorIds: { target: [targetId] } },
       triggers: ['heroic'],
     }, scriptedDice());
-    // The Collide-or-Heroic reaction granted by the declared Heroic: the foe
-    // is slashed and the 1-action cost is refunded (2 actions: spent then
-    // returned).
     expect(heroic.state.actors[targetId].statuses).toContain('slashed');
     expect(heroic.state.actors[heroId].actionsRemaining).toBe(2); // spent 1, refunded 1
+    const event = ruleEvent(heroic, 'bastion:battering-ram');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'heroic' && provenance === 'validated-player-activation')
+      : false).toBe(true);
     expect(applyEvents(state, heroic.events)).toEqual(heroic.state);
+  });
 
-    const infuse = executeCommand(state, {
+  it('rejects a Heroic declaration from a character that cannot Heroic — "I choose Heroic" is intent only', () => {
+    // Strip the heroic-granting traits: the character has no source-entitled
+    // way to trigger heroic effects, so the declaration fails closed before
+    // any cost/effect/RNG — callers cannot add `heroic` to an arbitrary
+    // source.
+    const { state, heroId, targetId } = triggerFixture();
+    state.actors[heroId].traitIds = [];
+    expect(() => forged('heroic')(state, heroId, targetId))
+      .toThrowError(expect.objectContaining({ code: 'rule.trigger-forged' }));
+    expect(state.actors[targetId].hp).toBe(32); // nothing resolved
+    expect(state.actors[heroId].actionsRemaining).toBe(2);
+  });
+
+  it('Ace: the armed next attack forces Exceed as a SOURCE-FORCED activation (no natural 15+ roll required)', () => {
+    const { state, heroId, targetId } = triggerFixture();
+    state.actors[heroId].ruleState['ace:armed'] = true;
+    state.actors[heroId].ruleStateOwners['ace:armed'] = heroId;
+    // d20 4 (no boons) is NOT a natural exceed (15+) — only the armed Ace
+    // may force the exceed effects without the ordinary natural condition.
+    const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: heroId,
-      sourceId: 'bastion:battering-ram',
+      sourceId: 'demon-slayer:demon-cutter',
       actionId: 'default',
       timing: 'use',
-      input: { actorIds: { target: [targetId] } },
-      triggers: ['infuse'],
-    }, scriptedDice());
-    expect(infuse.events.some((event) => event.type === 'RULE_MUTATIONS_APPLIED')).toBe(true);
-    expect(applyEvents(state, infuse.events)).toEqual(infuse.state);
+      input: {},
+      attackTargetId: targetId,
+    }, scriptedDice(4));
+    const event = ruleEvent(result, 'demon-slayer:demon-cutter');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'exceed' && provenance === 'source-forced')
+      : false).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
   it('keeps the genuine derivation path intact (slow-turn → charge, resolution shove → collide)', () => {

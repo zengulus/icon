@@ -55,9 +55,11 @@ function bombFreeCell(context: RuleExecutionContext, origin: Position, radius: n
  * - Masquerade is fully wired: a `targeted-by-ability` window holds an ability
  *   aimed at the user, the interrupt swaps places with a willing ally in range
  *   3, and the window's `retarget` redirects the held effects to that ally.
- * - Gallows Humor's empowerment resets the die and grants bonus damage; the
- *   "triggers any slay effects" clause is asserted by the caller passing the
- *   `slay` trigger on the empowered ability.
+ * - Gallows Humor's empowerment resets the die, grants bonus damage, and
+ *   arms a durable slay-activation for the next ability the user resolves:
+ *   the command boundary turns the arm into a SOURCE-FORCED `slay` trigger
+ *   (hit or miss, p.151) and the reducer consumes it on that ability's event
+ *   — the caller never asserts `slay` (that would forge a trigger).
  * - Chronotemper's Cheat Time is executable by any actor that owns the
  *   ability; the mark itself is the provenance that grants it to the marked
  *   ally (the VM does not gate interrupt ownership on marks yet).
@@ -177,8 +179,14 @@ const gallowsHumorEnter: RuleResolver = (context) => {
   ];
 };
 
-/** ICON p.151: at maximum, reset the die to 1 to empower the next ability with
- * bonus damage (the slay effect is asserted by the empowered ability's caller). */
+/** ICON p.151: at maximum, reset the die to 1 to empower the next ability
+ * with bonus damage AND a durable source-authorized slay activation: "The
+ * ability deals bonus damage and triggers any slay effects, hit or miss."
+ * The arm lives in ruleState so the command boundary can fold the forced
+ * `slay` activation into that ability's resolution; the reducer consumes it
+ * on the ability's own event (replay applies the recorded consume exactly
+ * once). The caller can never name `slay` itself — that would forge a
+ * trigger; the arm is the durable source-backed proof. */
 const gallowsHumorEmpower: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   const die = Number(source.state['gallows-humor:die'] ?? 0);
@@ -186,6 +194,7 @@ const gallowsHumorEmpower: RuleResolver = (context) => {
   if (die < 6) throw new RuleProgramViolation('stance.die-not-max', 'Gallows Humor can only empower an ability when its power die is at maximum.');
   return [
     stateMutation(context, source.id, 'gallows-humor:die', 1),
+    stateMutation(context, source.id, 'gallows-humor:slay-armed', true),
     resourceMutation(context, source.id, 'bonus-damage', 'gain', 1),
   ];
 };

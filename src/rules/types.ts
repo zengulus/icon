@@ -1,4 +1,5 @@
 import type { ArmedContinuation, RuleChoice, RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
+import type { TriggerProvenance } from './automation/primitives/trigger-provenance.js';
 import type { Fact } from './automation/primitives/facts.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
 import type { TurnBoundaryPhasePlan, TurnTransitionIntent } from './automation/kernels/lifecycle.js';
@@ -820,7 +821,14 @@ export type EncounterEvent =
    * events replay the legacy appliedDamage + defianceTriggered fields. */
       ledger?: DamageLedgerEntry }
   | { type: 'ENCOUNTER_ENDED' }
-  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[]; resolutionFacts?: RuleResolutionFacts; /** The durable U10 fact history for this resolution, ID-scoped by
+  | { type: 'RULE_MUTATIONS_APPLIED'; actorId: string; sourceId: string; actionId: string; timing: RuleTiming; tags: string[]; mutations: RuleMutation[]; resolutionFacts?: RuleResolutionFacts; /** The durable trigger-activation provenance record (trigger-provenance.ts):
+     how each effective trigger of THIS resolution became active — natural
+     (derived from authoritative state/resolution facts), source-forced (the
+     source's own text), or validated-player-activation — merged with the
+     naturally-derived extensions the reactive pass produced. Replay consumes
+     the recorded mutations; this record is the audit trail proving a trigger
+     was never forged or double-fired. */
+    triggerActivations?: ReadonlyArray<{ trigger: string; provenance: TriggerProvenance }>; /** The durable U10 fact history for this resolution, ID-scoped by
      `resolutionId`. Carried so replay consumes the recorded outcomes (and
      their IDs) rather than re-deriving them from mutations. */
     facts?: Fact[]; /** The durable, replay-stable identity of this resolution (owned by the

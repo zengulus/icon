@@ -135,13 +135,129 @@ describe('Fool ability automation (p.150–152)', () => {
     expect(missed.actors[hero.id].ruleState['gallows-humor:die']).toBe(2);
   });
 
-  it('Gallows Humor: empowers at maximum, resetting the die and granting bonus damage', () => {
+  it('Gallows Humor: empowers at maximum, resetting the die, arming the source-authorized slay activation, and granting bonus damage', () => {
     const { state, hero } = foolEncounter({ second: null });
     state.actors[hero.id].stance = { id: 'stance', sourceId: 'fool:gallows-humor', ownerId: hero.id, stanceId: 'gallows-humor', state: {} };
     state.actors[hero.id].ruleState['gallows-humor:die'] = 6;
     const result = executeCommand(state, { type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'fool:gallows-humor', actionId: 'empower', timing: 'use', input: {} }, scriptedDice());
     expect(result.state.actors[hero.id].ruleState['gallows-humor:die']).toBe(1);
     expect(result.state.actors[hero.id].resources['bonus-damage']).toBe(1);
+    // p.151: "The ability deals bonus damage and triggers any slay effects,
+    // hit or miss" — the durable arm now produces the forced Slay activation
+    // at the command boundary (never a caller assertion).
+    expect(result.state.actors[hero.id].ruleState['gallows-humor:slay-armed']).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  // ── Gallows Humor forced-Slay authority (ICON p.151) ──────────────────────
+  // The empowered ability's "triggers any slay effects, hit or miss" clause
+  // must be SOURCE-FORCED from the durable empowerment arm: an ordinary
+  // non-kill has no natural slay; a Gallows-Humor empowered ability slays on
+  // a hit OR a miss; a natural kill alongside the forced activation fires
+  // the slay effect ONCE; and no caller can forge `slay`.
+
+  const gallowsRuleEvent = (result: ReturnType<typeof executeCommand>, sourceId: string) =>
+    result.events.find((event) => event.type === 'RULE_MUTATIONS_APPLIED' && event.sourceId === sourceId);
+
+  const empowerGallows = (state: EncounterState, heroId: string): EncounterState => {
+    state.actors[heroId].stance = { id: 'stance', sourceId: 'fool:gallows-humor', ownerId: heroId, stanceId: 'gallows-humor', state: {} };
+    state.actors[heroId].ruleState['gallows-humor:die'] = 6;
+    return executeCommand(state, { type: 'EXECUTE_RULE', actorId: heroId, sourceId: 'fool:gallows-humor', actionId: 'empower', timing: 'use', input: {} }, scriptedDice()).state;
+  };
+
+  const bombsOf = (state: EncounterState, ownerId: string) =>
+    Object.values(state.entities).filter((entity) => entity.type === 'bomb' && entity.ownerId === ownerId);
+
+  it('Gallows Humor: an ORDINARY non-kill produces no natural Slay — no activation, no bomb', () => {
+    const { state, hero, foe } = foolEncounter({ second: null });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id] }, scriptedDice(12, 4, 4));
+    const event = gallowsRuleEvent(result, 'fool:cavaliere');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? event.triggerActivations?.some(({ trigger }) => trigger === 'slay')
+      : true).toBe(false);
+    expect(result.state.actors[foe.id].hp).toBe(24); // hit, no kill
+    expect(bombsOf(result.state, hero.id)).toHaveLength(0);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Gallows Humor: an ORDINARY kill produces a NATURAL Slay activation (the resolution slew the foe)', () => {
+    // The kill is the resolution's own defeat fact — the slay activation
+    // derives with NATURAL provenance. Cavaliere's resolver-body bomb leg is
+    // a documented dormant seam (a resolver leg cannot re-enter after the
+    // fact); the durable activation + slain fact are the authority record.
+    const fixture = foolEncounter({ second: null });
+    fixture.state.actors[fixture.foe.id].hp = 6;
+    const result = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [fixture.foe.id] }, scriptedDice(12, 4, 4));
+    expect(result.state.actors[fixture.foe.id].defeated).toBe(true);
+    const event = gallowsRuleEvent(result, 'fool:cavaliere');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'slay' && provenance === 'natural')
+      : false).toBe(true);
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED' ? event.resolutionFacts?.slainActorIds : []).toContain(fixture.foe.id);
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Gallows Humor: an EMPOWERED non-kill triggers Slay without a kill — the bomb resolves once', () => {
+    const { state, hero, foe } = foolEncounter({ second: null });
+    const empowered = empowerGallows(state, hero.id);
+    const result = executeCommand(empowered, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id] }, scriptedDice(12, 4, 4));
+    const event = gallowsRuleEvent(result, 'fool:cavaliere');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'slay' && provenance === 'source-forced')
+      : false).toBe(true);
+    expect(result.state.actors[foe.id].hp).toBe(24); // hit, NOT a kill — slay fired anyway
+    expect(bombsOf(result.state, hero.id)).toHaveLength(1);
+    // The empowered ability consumed the durable arm exactly once.
+    expect(result.state.actors[hero.id].ruleState['gallows-humor:slay-armed']).toBeUndefined();
+    expect(applyEvents(empowered, result.events)).toEqual(result.state);
+  });
+
+  it('Gallows Humor: an EMPOWERED MISS triggers Slay too — the source says hit or miss (p.151)', () => {
+    const { state, hero, foe } = foolEncounter({ second: null });
+    const empowered = empowerGallows(state, hero.id);
+    const result = executeCommand(empowered, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id] }, scriptedDice(1, 2));
+    const event = gallowsRuleEvent(result, 'fool:cavaliere');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'slay' && provenance === 'source-forced')
+      : false).toBe(true);
+    expect(result.state.actors[foe.id].defeated).toBe(false); // missed, and NOT slain
+    expect(bombsOf(result.state, hero.id)).toHaveLength(1); // slay resolved hit or miss
+    expect(result.state.actors[hero.id].ruleState['gallows-humor:slay-armed']).toBeUndefined();
+    expect(applyEvents(empowered, result.events)).toEqual(result.state);
+  });
+
+  it('Gallows Humor: an EMPOWERED natural kill + the forced Slay collapse to ONE activation — the bomb fires once', () => {
+    // Natural and source-forced activation of the same trigger collapse to
+    // one semantic activation: the forced slay is active before the roll, the
+    // natural kill would re-derive it, and the effect still resolves exactly
+    // once — one slay activation on the recorded provenance, one bomb.
+    const fixture = foolEncounter({ second: null });
+    fixture.state.actors[fixture.foe.id].hp = 6;
+    const empowered = empowerGallows(fixture.state, fixture.hero.id);
+    const result = executeCommand(empowered, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [fixture.foe.id] }, scriptedDice(12, 4, 4));
+    expect(result.state.actors[fixture.foe.id].defeated).toBe(true);
+    const event = gallowsRuleEvent(result, 'fool:cavaliere');
+    const slayActivations = event && event.type === 'RULE_MUTATIONS_APPLIED'
+      ? (event.triggerActivations ?? []).filter(({ trigger }) => trigger === 'slay')
+      : [];
+    expect(slayActivations).toHaveLength(1); // collapsed: never double-fired
+    expect(slayActivations[0]?.provenance).toBe('source-forced'); // the boundary arm arrived first
+    expect(bombsOf(result.state, fixture.hero.id)).toHaveLength(1);
+    expect(applyEvents(empowered, result.events)).toEqual(result.state);
+  });
+
+  it('Gallows Humor: no caller can forge `slay` — only the durable arm produces the forced activation', () => {
+    const { state, hero, foe } = foolEncounter({ second: null });
+    expect(() => executeCommand(state, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'fool:cavaliere',
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+      attackTargetId: foe.id,
+      triggers: ['slay'],
+    }, scriptedDice(12, 4, 4))).toThrowError(expect.objectContaining({ code: 'rule.trigger-forged' }));
   });
 
   it('Party Favor: places a mine, and detonating it deals 2 damage (ally flight direction unresolved)', () => {

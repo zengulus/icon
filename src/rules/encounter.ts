@@ -29,6 +29,16 @@ import { capturedActor } from './automation/primitives/reference.js';
 // while keeping its recorded remaining-count storage on the durable record.
 import { boundaryEquals, clockForTiming, durationSurvivesCombatEnd } from './automation/primitives/scope.js';
 import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes.js';
+// Heroic entitlement: a caller-declared Heroic becomes a validated player
+// activation only when the character owns a heroic-granting trait (content
+// data — the predicate stays generic at the boundary).
+import { canDeclareHeroic } from './automation/content/jobs/heroic-entitlement.js';
+// U9 trigger activation provenance (trigger-provenance.ts): the boundary
+// records HOW each effective trigger became active — natural (derived from
+// authoritative state or resolution facts), source-forced (the source's own
+// text), or validated-player-activation — so a trigger can never be forged
+// and natural + forced activation of the same trigger collapse to one.
+import { recordTriggerActivation, triggerActivationsFrom, type TriggerActivation, type TriggerProvenance } from './automation/primitives/trigger-provenance.js';
 // Content registry: registers the lifecycle rows, passive projections, and
 // content hooks every kernel fold below reads. Must load before any command.
 import './automation/content/registry.js';
@@ -1270,13 +1280,35 @@ function isLineShaped(header: string): boolean {
   return /\bline\s+\d+/i.test(header);
 }
 
-/** The triggers a caller may legitimately assert on an EXECUTE_RULE command
- * (ICON p.95pp): Heroic is a declaration when using an ability, and Infuse
- * gates a gambit/resource spend. Every other combat trigger (charge,
- * comeback, finishing-blow, exceed, collide, slay, …) is derived from
- * authoritative state, the resolution's own roll/mutations, or armed
- * boundary facts — asserting one would forge a fact the engine must decide. */
-const CALLER_ASSERTABLE_TRIGGERS = new Set(['heroic', 'infuse']);
+/** Natural trigger-derived provenance map for a derived trigger set: every
+ * member the boundary derived from authoritative state (charge / comeback /
+ * finishing-blow) is `natural`. */
+function naturalProvenance(triggers: ReadonlySet<string>): Map<string, TriggerProvenance> {
+  const provenance = new Map<string, TriggerProvenance>();
+  for (const trigger of triggers) provenance.set(trigger, 'natural');
+  return provenance;
+}
+
+/** Validate a caller-asserted trigger on an EXECUTE_RULE command (ICON p.95).
+ * The ONLY declaration a command may carry is Heroic, and only as INTENT:
+ * it becomes a validated-player-activation when the character owns a
+ * heroic-granting trait (Strive / Demon Strength / Wolfheart / Spite).
+ * Nothing else is caller-assertable — charge/comeback/finishing-blow derive
+ * from authoritative state, exceed from the ability's own 15+ roll,
+ * collide/slay from the resolution's own shove/defeat facts, and Infuse
+ * rides the source-backed infuse ACTION whose aether economy the cost gate
+ * validates (naming `infuse` as a trigger would forge a spend the engine
+ * must decide). A forged assertion fails closed before any cost, effect, or
+ * RNG runs. */
+function validateCallerTrigger(trigger: string, actor: EncounterActor): void {
+  if (trigger === 'heroic') {
+    if (!canDeclareHeroic(actor.traitIds)) {
+      throw new RuleViolation('rule.trigger-forged', `Only a character with a heroic-granting trait (Strive, Demon Strength, Wolfheart, Spite) may declare Heroic; ${actor.name} cannot.`);
+    }
+    return;
+  }
+  throw new RuleViolation('rule.trigger-forged', `The '${trigger}' trigger is derived from authoritative state, the resolution's own facts, or a source-backed action's economy and cannot be asserted by a command.`);
+}
 
 /**
  * State-derived triggers (ICON p.95) are inferred from the current encounter
@@ -1330,7 +1362,7 @@ export function executeRuleProgramWithReactiveTriggers(
   resolvers: RuleResolverRegistry,
   state: EncounterState,
   resolutionId = '',
-): RuleExecutionResultWithWindow {
+): RuleExecutionResultWithWindow & { triggerActivations?: TriggerActivation[] } {
   const first = executeRuleProgram(program, context, resolvers);
   // U13/U11: a flow that suspended at an `open-window`/`suspend` node gates
   // the remaining execution behind the window — the reactive fold does NOT
@@ -1344,8 +1376,16 @@ export function executeRuleProgramWithReactiveTriggers(
   const executedStepIds = new Set(selectedSteps.map(({ id }) => id));
   const knownTriggers = new Set(context.triggers ?? []);
   const resolutionAction = context.actionId;
+  // U9: the boundary's provenance map rides the reactive fold. Newly derived
+  // reactive triggers (collide/slay from this resolution's own facts) are
+  // NATURAL activations; a trigger the boundary already activated (e.g. a
+  // source-forced slay) stays under its earlier provenance and is never
+  // re-offered — natural and source-forced activation of the same trigger
+  // collapse to one activation.
+  const provenance = new Map(context.triggerProvenance ?? []);
   const derived = deriveResolutionTriggers(state, mutations, knownTriggers, resolutionId, resolutionAction);
   const pending = new Set([...derived.triggers].filter((trigger) => !knownTriggers.has(trigger)));
+  for (const trigger of pending) recordTriggerActivation(provenance, trigger, 'natural');
 
   // Monotonic continuation: each source step executes at most once, while
   // newly emitted mutations may add further resolution facts. Costs and the
@@ -1375,6 +1415,7 @@ export function executeRuleProgramWithReactiveTriggers(
     const additional = executeRuleProgram(program, {
       ...context,
       triggers: new Set(derived.triggers),
+      triggerProvenance: provenance,
     }, resolvers, { onlyTriggers: batch });
     const freshSteps = additional.selectedSteps.filter(({ id }) => !executedStepIds.has(id));
     for (const trigger of batch) {
@@ -1392,6 +1433,7 @@ export function executeRuleProgramWithReactiveTriggers(
       if (!derived.triggers.has(trigger) && !knownTriggers.has(trigger)) {
         derived.triggers.add(trigger);
         pending.add(trigger);
+        recordTriggerActivation(provenance, trigger, 'natural');
       }
     }
   }
@@ -1429,6 +1471,10 @@ export function executeRuleProgramWithReactiveTriggers(
     // emit facts yet.)
     facts: [...resolvedTriggers, ...finalFacts.facts, ...(first.facts ?? [])],
     resolutionId: finalFacts.resolutionId,
+    // The durable trigger-activation provenance record for THIS resolution
+    // (boundary activations + the natural reactive extensions). Rides the
+    // event for audit; replay consumes the recorded mutations.
+    triggerActivations: triggerActivationsFrom(provenance),
     continuation: {
       executedStepIds: [...executedStepIds],
       derivedTriggers: [...finalFacts.triggers].sort(),
@@ -1761,7 +1807,20 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // hand-authored program declares it (e.g. Six Hells Trigram's "End your
   // turn" even though the extraction tags it as a delay/terrain effect).
   const endsTurn = ability.tags.includes('end turn') || programAction.tags.includes('end turn') || actor.statuses.includes('stunned');
+  // ICON p.95 trigger provenance: the boundary records HOW each effective
+  // trigger became active. Charge/comeback/finishing-blow derive from
+  // authoritative state (natural). The exhaustively-reviewed arms below are
+  // SOURCE-FORCED activations: the source's own text forces the trigger
+  // without its ordinary natural condition (Ace's armed next attack, p.157;
+  // Massive Overhead's armed exceed, p.134; Blessing of War's 3-blessing
+  // forced exceed, p.191; Gallows Humor's empowered slay hit or miss,
+  // p.151). A caller on USE_ABILITY has no trigger input at all.
   const abilityTriggers = deriveTriggers(state, actor, targets[0]?.id);
+  const triggerProvenance = naturalProvenance(abilityTriggers);
+  const forcedTrigger = (trigger: string) => {
+    abilityTriggers.add(trigger);
+    recordTriggerActivation(triggerProvenance, trigger, 'source-forced');
+  };
   // The resolution snapshot for this command. The command planner never
   // writes to the authoritative state; source-visible working changes that
   // must influence the resolution (Massive Overhead's extra bonus die) are
@@ -1777,12 +1836,19 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     if (actorView) {
       actorView.resources = { ...actorView.resources, 'bonus-damage': (actorView.resources['bonus-damage'] ?? 0) + 1 };
     }
-    if (targetInPit(state, targets[0])) abilityTriggers.add('exceed');
+    if (targetInPit(state, targets[0])) forcedTrigger('exceed');
   }
   // ICON p.157 Ace: the next attack triggers every exceed effect (the daze and
   // unerring half resolve when the attack lands in the reducer).
   if (attackAbility && !noAttackSpace && targets[0] && actor.ruleState['ace:armed'] === true) {
-    abilityTriggers.add('exceed');
+    forcedTrigger('exceed');
+  }
+  // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
+  // effects, hit or miss — the durable empowerment arm produces a
+  // SOURCE-FORCED slay activation (never a caller assertion) for the
+  // ability that consumes it.
+  if (actor.ruleState['gallows-humor:slay-armed'] === true) {
+    forcedTrigger('slay');
   }
   // F10 ability-use choice fold (Blessing of War / Rebirth, p.191/p.184):
   // optional source-backed choices the player made before this ability
@@ -1815,7 +1881,10 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
       pierce: resolved.pierce,
       ...(bonusDamageDice > 0 ? { bonusDamageDice } : {}),
     };
-    for (const trigger of resolved.triggers) abilityTriggers.add(trigger);
+    for (const trigger of resolved.triggers) {
+      abilityTriggers.add(trigger);
+      recordTriggerActivation(triggerProvenance, trigger, 'source-forced');
+    }
   } catch (error) {
     if (error instanceof AbilityUseChoiceViolation) {
       throw new RuleViolation('ability-use-choice.' + error.code, error.message);
@@ -1843,6 +1912,7 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     dice,
     ...(attackAbility && !noAttackSpace && targets[0] ? { attackTargetId: targets[0].id } : {}),
     triggers: abilityTriggers,
+    triggerProvenance,
     ...(abilityUseModifiers ? { abilityUseModifiers } : {}),
   };
   // Cost-payment transaction gate: aggregate mandatory program costs with all
@@ -1902,6 +1972,9 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
     tags: [...programAction.tags],
     mutations: eventMutations,
     ...(result.resolutionFacts ? { resolutionFacts: result.resolutionFacts } : {}),
+    // The durable trigger-activation provenance record for this resolution
+    // (natural / source-forced / validated-player-activation).
+    ...(result.triggerActivations && result.triggerActivations.length > 0 ? { triggerActivations: result.triggerActivations } : {}),
     // The durable U10 fact history + its resolution identity ride the event so
     // replay consumes the recorded outcomes (never re-deriving them).
     ...(result.facts ? { facts: result.facts } : {}),
@@ -2179,24 +2252,31 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
           requireLineOfSight: true,
         }, 'ability');
       }
-      const triggers = deriveTriggers(state, actor, command.attackTargetId);
       // ICON p.95 trigger provenance: Charge/comeback/finishing-blow are
-      // derived from authoritative state (slow-turn flag, bloodied), and
-      // exceed/collide/slay from the resolution's own roll/mutation facts — a
-      // caller may NEVER assert them. Heroic and Infuse are genuine caller
-      // declarations (they gate a resource spend or a Stalwart gambit
-      // decision, per the deriveTriggers contract), so only those ride
-      // command.triggers. A forged state-derived trigger fails closed before
-      // any cost, effect, or RNG runs.
+      // derived from authoritative state (slow-turn flag, bloodied) and are
+      // NATURAL activations. Exceed derives from the resolution's own 15+
+      // roll and collide/slay from its own shove/defeat facts (the reactive
+      // fold adds them as natural). A caller may NEVER assert any of those.
+      // The only declaration a command may carry is Heroic — and only as
+      // INTENT: it becomes a validated-player-activation when the character
+      // owns a heroic-granting trait, and fails closed otherwise. Infuse is
+      // NOT a caller trigger at all: it rides the source-backed infuse
+      // ACTION, whose aether economy the cost gate validates. A forged
+      // assertion fails closed before any cost, effect, or RNG runs.
+      const triggers = deriveTriggers(state, actor, command.attackTargetId);
+      const triggerProvenance = naturalProvenance(triggers);
       for (const trigger of command.triggers ?? []) {
-        if (!CALLER_ASSERTABLE_TRIGGERS.has(trigger)) {
-          throw new RuleViolation('rule.trigger-forged', `The '${trigger}' trigger is derived from authoritative state or resolution facts and cannot be asserted by a command.`);
-        }
+        validateCallerTrigger(trigger, actor);
         triggers.add(trigger);
+        recordTriggerActivation(triggerProvenance, trigger, 'validated-player-activation');
       }
       // The resolution snapshot for this command (same purity contract as
       // USE_ABILITY: the planner never writes to the authoritative state).
       const ruleStateView = encounterRuleState(state);
+      const forcedTrigger = (trigger: string) => {
+        triggers.add(trigger);
+        recordTriggerActivation(triggerProvenance, trigger, 'source-forced');
+      };
       // ICON p.134 Massive Overhead arms the next attack resolved through the
       // generic VM as well as through USE_ABILITY. The extra bonus die is
       // folded into the resolution snapshot only — the caller's state is
@@ -2207,11 +2287,18 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
           actorView.resources = { ...actorView.resources, 'bonus-damage': (actorView.resources['bonus-damage'] ?? 0) + 1 };
         }
         const overheadTarget = state.actors[command.attackTargetId];
-        if (overheadTarget && targetInPit(state, overheadTarget)) triggers.add('exceed');
+        if (overheadTarget && targetInPit(state, overheadTarget)) forcedTrigger('exceed');
       }
       // ICON p.157 Ace: the next attack triggers every exceed effect.
       if (command.attackTargetId && action.tags.includes('attack') && actor.ruleState['ace:armed'] === true) {
-        triggers.add('exceed');
+        forcedTrigger('exceed');
+      }
+      // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
+      // effects, hit or miss — the durable empowerment arm produces a
+      // SOURCE-FORCED slay activation (never a caller assertion) for the
+      // ability that consumes it.
+      if (actor.ruleState['gallows-humor:slay-armed'] === true) {
+        forcedTrigger('slay');
       }
       const ruleContext: RuleExecutionContext = {
         state: ruleStateView,
@@ -2226,6 +2313,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         ...(command.triggerSourceId ? { triggerSourceId: command.triggerSourceId } : {}),
         ...(command.triggerTargetIds ? { triggerTargetIds: command.triggerTargetIds } : {}),
         triggers,
+        triggerProvenance,
       };
       // Cost-payment transaction gate: the action's mandatory costs plus the
       // validated pre-use augmentation costs (e.g. Dark Sliver t2's
@@ -2237,7 +2325,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         .filter((cost): cost is Extract<RuleMutation, { kind: 'damage' }> => cost.kind === 'damage' && cost.damageType === 'sacrifice')
         .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: cost.amount } }));
       assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: [...action.costs, ...augmentationCosts] }, ruleContext);
-      let result: RuleExecutionResultWithWindow;
+      let result: RuleExecutionResultWithWindow & { triggerActivations?: TriggerActivation[] };
       const resolutionId = nextResolutionId(state, unit.id, 0);
       try {
         result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state, resolutionId);
@@ -2288,6 +2376,9 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         // F7 talent fold + F9 reactive job-trait fold: symmetric with USE_ABILITY.
         mutations: eventMutations,
         ...(result.resolutionFacts ? { resolutionFacts: result.resolutionFacts } : {}),
+        // The durable trigger-activation provenance record for this
+        // resolution (natural / source-forced / validated-player-activation).
+        ...(result.triggerActivations && result.triggerActivations.length > 0 ? { triggerActivations: result.triggerActivations } : {}),
         ...(result.facts ? { facts: result.facts } : {}),
         ...(result.resolutionId ? { resolutionId: result.resolutionId } : {}),
         ...(result.continuation ? { continuation: result.continuation } : {}),
@@ -3528,6 +3619,16 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
             delete actor.ruleState['trick-shot:armed'];
             delete actor.ruleStateOwners['trick-shot:armed'];
           }
+        }
+        // ICON p.151 Gallows Humor: the empowerment arm is consumed by the
+        // ability that used it. The command boundary derived THIS resolution's
+        // source-forced slay activation from the arm's PRE-command state, so
+        // the reducer deletes the arm exactly when that derivation happened —
+        // never on the empowerment event itself (which creates the arm), and
+        // never re-derived at replay (the recorded consume rides the event).
+        if (actor.ruleState['gallows-humor:slay-armed'] === true) {
+          delete actor.ruleState['gallows-humor:slay-armed'];
+          delete actor.ruleStateOwners['gallows-humor:slay-armed'];
         }
         // ICON p.104 Stealth: using an attack ability breaks the user's stealth
         // before its effects resolve, so an ability that re-grants stealth as

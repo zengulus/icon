@@ -9,6 +9,7 @@ import type { RoleSelector } from './roles.js';
 import type { SpatialAnchor } from './anchor.js';
 import type { ValueQuery } from './query.js';
 import type { UsagePeriod } from './usage.js';
+import type { TriggerProvenance } from './trigger-provenance.js';
 
 // Compatibility barrel: incremental underlay extraction re-exports new
 // primitive vocabulary here so consumers can keep importing from the
@@ -459,6 +460,13 @@ export interface RuleExecutionContext {
   triggerSourceId?: string;
   triggerTargetIds?: string[];
   triggers?: ReadonlySet<string>;
+  /** U9 trigger provenance (trigger-provenance.ts): how each effective
+   * trigger became active — natural (derived from authoritative state or
+   * resolution facts), source-forced (the source's own text forces it), or
+   * validated-player-activation (a caller declaration the engine validated).
+   * The `triggers` set is the effective union; natural and source-forced
+   * activation of the same trigger collapse to one activation. */
+  triggerProvenance?: ReadonlyMap<string, TriggerProvenance>;
   actionTags?: ReadonlySet<string>;
   delivery?: 'hit' | 'miss' | 'area' | 'effect' | 'save-success' | 'terrain';
   /** Durable outcomes supplied to continuation steps; never caller-predicted. */

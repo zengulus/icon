@@ -166,7 +166,12 @@ export function executeRuleProgram(
   if (!appendOnly && action.resolverId) {
     const resolver = resolvers[action.resolverId];
     if (!resolver) throw new RuleProgramViolation('program.resolver', `Named resolver ${action.resolverId} is not registered.`);
-    planner.absorb(resolver(context, action));
+    // The resolver observes the SAME action-tag overlay the step effects see
+    // (the selected action's tags): a resolver for a source-backed infuse
+    // action reads `actionTags.has('infuse')` to distinguish its variant
+    // from the base action — the same validated action selection the cost
+    // gate already owns. Tags are action metadata, never caller truth.
+    planner.absorb(resolver({ ...context, actionTags: new Set(action.tags) }, action));
   }
   // Each ordered step's effects run against the planner's SIMULATED view
   // (never the original context view); only the action tags are overlaid.

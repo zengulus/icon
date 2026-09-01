@@ -282,8 +282,13 @@ export const STORMBENDER_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSo
     }),
     action({
       id: 'infuse', name: 'DAGON', timing: 'use',
+      // The `infuse` tag makes the source-backed infuse ACTION distinct from
+      // the base action inside the SHARED resolver (the action's aether cost
+      // is the validated economy): actionTags now reaches resolvers, so the
+      // resolver's `actionTags.has('infuse')` arm keys on the validated
+      // action — never on a caller-forged `infuse` trigger.
       costs: [{ kind: 'aether', amount: constant(3) }],
-      tags: ['attack', 'summon', 'line'],
+      tags: ['attack', 'summon', 'line', 'infuse'],
       range: constant(6),
       resolverId: 'stormbender:rime:effects',
       steps: [],
