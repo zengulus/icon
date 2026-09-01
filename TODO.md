@@ -222,8 +222,9 @@ assumption here, document the evidence and update this list before proceeding.
 > Command-side trigger provenance now fails closed (p.95): charge/comeback/
 > finishing-blow (state-derived), exceed (the ability's OWN 15+ roll),
 > collide/slay (the resolution's own shove/defeat facts) can never be
-> asserted by a command (`CALLER_ASSERTABLE_TRIGGERS = {heroic, infuse}`,
-> `rule.trigger-forged` before any cost/effect/RNG). Exceed was previously
+> asserted by a command (`rule.trigger-forged` before any cost/effect/RNG;
+> at T10 only heroic AND infuse were still caller-assertable — T11 removed
+> the infuse carve-out, see below). Exceed was previously
 > reachable only via forged triggers in enochian/sealer/freelancer resolvers:
 > moved onto the shared `resolveAuthoritativeAttack` roll (pyre/lance/
 > blackstar/matsuri/open-the-gates/center-the-temple/soul-shot/astral-chain)
@@ -237,9 +238,11 @@ assumption here, document the evidence and update this list before proceeding.
 > collide fact from its own shoves; Great Giorgios's delayed shove now
 > derives its collide through the single shared spatial authority in the
 > continuation resolver and grants hatred after the ability resolves).
-> Draken Cross was rewritten to the p.128 text: the optional Effect is one
-> whole operation (rush 1 then a second area validated from the POST-rush
-> position; supplied centers fail closed on range/overlap, never guessed),
+> Draken Cross was rewritten to the p.128 text: the Effect is one whole
+> operation whose second blast is REQUIRED (only the rush may be declined —
+> the pre-T11 draft read the whole Effect as optional; the T11 repair below
+> corrected that grammar reading), validated from the POST-rush position;
+> supplied centers fail closed on range/overlap, never guessed,
 > Charge/Heroic repeats the WHOLE Effect with its OWN rush and OWN
 > non-overlapping area (declining the repeat is legal) instead of
 > re-damaging a blast, Talent II's "may be increased to medium blasts" is a
@@ -260,9 +263,67 @@ assumption here, document the evidence and update this list before proceeding.
 > blocking repairs". Full suite 2,031 passed (was 2,018); census byte-stable
 > at 427; zero source promotion; U1 residual unchanged at
 > 129 = 74 + 54 + 1.
+>
+> **T11 — trigger provenance model + Harvester-path AoE/source repairs
+> (2026-09-01).** The T10 gate's two remaining caller-assertable triggers
+> are closed off and the trigger authority gained a provenance model
+> (`primitives/trigger-provenance.ts`): every effective trigger activation
+> is classified NATURAL (derived from authoritative state/resolution
+> facts), SOURCE-FORCED (the source's own text forces it — Gallows Humor's
+> empowered slay hit or miss through the durable empowerment arm; Open The
+> Gates' once-per-combat forced exceed via the content-registered
+> `kernels/forced-triggers.ts`; Pulverize's "triggers all exceed effects"
+> at 2+ elevation, replacing the wrong 13+ threshold approximation with a
+> kernel `forceExceed` fold + boundary source-forced provenance) or
+> VALIDATED-PLAYER-ACTIVATION (Heroic, intent until entitlement is proven
+> by the heroic-granting trait registry; Infuse is NOT caller-assertable at
+> all — it rides the source-backed infuse action's aether economy, and the
+> wrong-suite tests establishing caller-named Infuse truth were removed).
+> Natural + source-forced activation of the same trigger collapse to ONE
+> activation (never double-fired). Draken Cross was repaired to the p.128
+> grammar: the base Effect's second blast is REQUIRED (only the rush is
+> optional) with RECORDED area centers and elected-rush directions,
+> validated atomically (no half-applied rush); the attack-space character
+> takes the ATTACK instead of the area effect (ICON AoE rule) and area
+> recipients are not foe-filtered (Demon Cutter and Draken both; Comet's
+> large footprints identity-deduplicate); Talent I re-frays all characters
+> from the SAME authoritative roll; Talent II's medium sizing is a recorded
+> decision gated on genuine Charge; the mastery remains blocked on exact
+> Blast geometry. Takedown's "Exceed or Heroic: Gains true strike" folds a
+> staged current-attack true strike through the shared attack authority
+> (`trueStrikeOnExceed` — exceed from the PRE-fold total, then true strike
+> before hit/miss resolves; never a next-attack grant, and the census
+> blocker proposing next-attack semantics is corrected). U1: the Freelancer
+> family (14 PURE) migrated to the adapter — residual now 100 = 45 + 54 + 1
+> (audit:u1-residual + architecture-audit pins updated to match; no
+> hand-maintained totals). Full suite green; architecture + automation
+> audits green.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 11 — Freelancer pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/freelancer-programs.ts`
+  now routes every pure live-slot reference through the adapter: source
+  reads → `resolveSourceActor(context)` (strafe-shot, exorcism, trick-
+  shot, astral-chain, deus-ex-machina, divine intervention, ace, ace
+  refresh, showdown, warding bolts, soul shot) and primary attack-target
+  reads → `resolveAttackTarget(context)` in strafe-shot, astral-chain,
+  soul shot — identical LIVE/absent-singular semantics with the
+  resolvers' gates untouched. The four retained CAPTURED sites stay
+  caller-owned: exorcism / deus-ex-machina / divine-intervention /
+  showdown `input.actorIds?.target?.[0] ?? attackTargetId` and
+  input-selected targets — the `??` SELECT is caller-owned U4
+  precedence, only the dereference of the chosen identity is the
+  captured shape (no arbitrary-id accessor added). The tranche removed
+  exactly 14 PURE_LIVE_REFERENCE sites (Freelancer 14 → 0), moving the
+  machine-derived residual from 114 = 59 + 54 + 1 to 100 = 45 + 54 + 1
+  (per `npm run audit:u1-residual`; no hand-maintained totals). 0
+  direct dereferences; U1 remains PARTIAL (Geomancer 14 / Stormbender
+  11 / Colossus 11 / Sealer 4 / Shade 3 / Warden 2 PURE remain). Full
+  freelancer suite (16) green through the engine path; census and
+  architecture-audit pins regenerated to the machine figures; zero
+  source promotion.
 
 - **U1 content-authoring tranche 10 — Fool pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/fool-programs.ts` now
