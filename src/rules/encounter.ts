@@ -33,6 +33,8 @@ import { tickGallowsHumorDie } from './automation/content/jobs/lifecycle-recipes
 // activation only when the character owns a heroic-granting trait (content
 // data — the predicate stays generic at the boundary).
 import { canDeclareHeroic } from './automation/content/jobs/heroic-entitlement.js';
+import { DEMON_STRENGTH_LOCKOUT_CONDITION } from './automation/content/jobs/heroic-activation-recipes.js';
+import { resolveHeroicActivation } from './automation/kernels/heroic-activation.js';
 // U9 trigger activation provenance (trigger-provenance.ts): the boundary
 // records HOW each effective trigger became active — natural (derived from
 // authoritative state or resolution facts), source-forced (the source's own
@@ -1095,6 +1097,11 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   if (!target || target.defeated || target.side === actor.side) throw new RuleViolation('attack.invalid-target', 'Basic attacks require a living foe.');
   if (usageCount(actor, attackOncePerTurnKey(actor.id)) >= 1) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
   if (actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
+  // ICON p.127 Demon Strength: the post-Heroic lockout also gates BASIC
+  // attacks (the same durable condition the Heroic transaction applied).
+  if (actor.conditions.some(({ id }) => id === DEMON_STRENGTH_LOCKOUT_CONDITION)) {
+    throw new RuleViolation('attack.locked', 'Demon Strength: you cannot attack or use Heroics until the end of your following turn.');
+  }
   if (actor.actionsRemaining < cost) throw new RuleViolation('action.insufficient', `A ${command.weight} attack costs ${cost} action${cost === 1 ? '' : 's'}.`);
   const attackTargetQuery = {
     relation: 'foe' as const,
@@ -1295,18 +1302,24 @@ function naturalProvenance(triggers: ReadonlySet<string>): Map<string, TriggerPr
 }
 
 /** Validate a caller-asserted trigger on an EXECUTE_RULE command (ICON p.95).
- * The ONLY declaration a command may carry is Heroic, and only as INTENT:
- * it becomes a validated-player-activation when the character owns a
- * heroic-granting trait (Strive / Demon Strength / Wolfheart / Spite).
- * Nothing else is caller-assertable — charge/comeback/finishing-blow derive
- * from authoritative state, exceed from the ability's own 15+ roll,
- * collide/slay from the resolution's own shove/defeat facts, and Infuse
- * rides the source-backed infuse ACTION whose aether economy the cost gate
- * validates (naming `infuse` as a trigger would forge a spend the engine
- * must decide). A forged assertion fails closed before any cost, effect, or
- * RNG runs. */
+ * The ONLY declaration a command may carry is Heroic — and only as INTENT:
+ * the Heroic activation TRANSACTION (`kernels/heroic-activation.ts`, rows
+ * in `content/jobs/heroic-activation-recipes.ts`) turns that intent into a
+ * validated-player-activation only when the character owns a heroic-
+ * granting trait AND the activation is legal (not locked out, round/cost
+ * satisfied). Everything else is caller-assertable only as outlined below.
+ * charge/comeback/finishing-blow derive from authoritative state, exceed
+ * from the ability's own 15+ roll, collide/slay from the resolution's own
+ * shove/defeat facts, and Infuse rides the source-backed infuse ACTION
+ * whose aether economy the cost gate validates (naming `infuse` as a
+ * trigger would forge a spend the engine must decide). A forged assertion
+ * fails closed before any cost, effect, or RNG runs. */
 function validateCallerTrigger(trigger: string, actor: EncounterActor): void {
   if (trigger === 'heroic') {
+    // Entitlement only — the deeper availability/cost validation lives in
+    // the activation transaction at the boundary. Kept here so a caller
+    // without ANY heroic-granting trait is rejected with the same code
+    // before the transaction runs.
     if (!canDeclareHeroic(actor.traitIds)) {
       throw new RuleViolation('rule.trigger-forged', `Only a character with a heroic-granting trait (Strive, Demon Strength, Wolfheart, Spite) may declare Heroic; ${actor.name} cannot.`);
     }
@@ -1757,6 +1770,11 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // key, distinct from the retained `attackedThisTurn` historical resolution fact).
   if (attackAbility && usageCount(actor, attackOncePerTurnKey(actor.id)) >= 1) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
   if (attackAbility && actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
+  // ICON p.127 Demon Strength: the post-Heroic lockout also gates ATTACKS
+  // (the same durable condition the Heroic transaction applied).
+  if (attackAbility && actor.conditions.some(({ id }) => id === DEMON_STRENGTH_LOCKOUT_CONDITION)) {
+    throw new RuleViolation('attack.locked', 'Demon Strength: you cannot attack or use Heroics until the end of your following turn.');
+  }
   const noAttackSpace = /\bno attack space\b/i.test(ability.rulesText);
   const targetIds = command.targetIds.length === 0 && ability.tags.includes('self') ? [actor.id] : [...command.targetIds];
   if (attackAbility && !noAttackSpace && targetIds.length !== 1) throw new RuleViolation('attack.target-count', 'Choose exactly one attack target.');
@@ -2251,6 +2269,15 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       }
       if (action.tags.includes('attack') && usageCount(actor, attackOncePerTurnKey(actor.id)) >= 1) throw new RuleViolation('attack.limit', 'A character can only use one attack ability per turn.');
       if (action.tags.includes('attack') && actor.ruleState['weapon-deployed'] === true) throw new RuleViolation('attack.deployed', 'You cannot attack while your thrown weapon is deployed.');
+      // ICON p.127 Demon Strength: after using a Heroic, "you can't attack
+      // or use Heroics until the end of your following turn" — the attack
+      // gate reads the SAME durable lockout condition the Heroic transaction
+      // applied, so the lockout genuinely prevents later illegal attack and
+      // Heroic declarations (the Heroic gate is the transaction's own
+      // `requiresNotLockedOut` row).
+      if (action.tags.includes('attack') && actor.conditions.some(({ id }) => id === DEMON_STRENGTH_LOCKOUT_CONDITION)) {
+        throw new RuleViolation('attack.locked', 'Demon Strength: you cannot attack or use Heroics until the end of your following turn.');
+      }
       // Pre-use talent augmentations resolve BEFORE target validation/effects/
       // RNG — the same authority USE_ABILITY consumes. The validated set feeds
       // the range kernel's choice gate (so a declared choice for another
@@ -2291,8 +2318,25 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       // assertion fails closed before any cost, effect, or RNG runs.
       const triggers = deriveTriggers(state, actor, command.attackTargetId);
       const triggerProvenance = naturalProvenance(triggers);
+      // The Heroic activation transaction's recorded mutations (Wolfheart's
+      // sacrifice + once-round commit; Strive/Demon Strength/Spite lockout;
+      // Spite's hatred+ of the chosen closest foe) ride this resolution's
+      // own event — replay applies exactly what the command decided. The
+      // transaction runs BEFORE any cost gate, effect, or RNG: a rejected
+      // activation (no entitlement, locked out, round spent, equidistant
+      // Spite tie unrecorded, sacrifice unpayable) throws atomically with
+      // nothing consumed. Spite's equidistant-closest-foe tie is the
+      // recorded U4 choice `input.actorIds['closest-foe']` — the engine
+      // never invents the tie-break.
+      const heroicActivationMutations: RuleMutation[] = [];
       for (const trigger of command.triggers ?? []) {
-        validateCallerTrigger(trigger, actor);
+        if (trigger === 'heroic') {
+          const activation = resolveHeroicActivation(state, actor, command.input?.actorIds?.['closest-foe']);
+          if (!activation.ok) throw new RuleViolation(activation.code, activation.detail);
+          heroicActivationMutations.push(...activation.mutations);
+        } else {
+          validateCallerTrigger(trigger, actor);
+        }
         triggers.add(trigger);
         recordTriggerActivation(triggerProvenance, trigger, 'validated-player-activation');
       }
@@ -2368,7 +2412,14 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const augmentationCosts = resolvedAugmentations.costMutations
         .filter((cost): cost is Extract<RuleMutation, { kind: 'damage' }> => cost.kind === 'damage' && cost.damageType === 'sacrifice')
         .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: cost.amount } }));
-      assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: [...action.costs, ...augmentationCosts] }, ruleContext);
+      // The Wolfheart heroic-sacrifice cost rides the SAME beginning-of-
+      // action gate (paid at the start of the ability, p.103) — it was
+      // validated by the transaction, and folding it here keeps the shared
+      // cost authority the single payability verdict.
+      const heroicSacrificeCosts = heroicActivationMutations
+        .filter((cost): cost is Extract<RuleMutation, { kind: 'damage' }> => cost.kind === 'damage' && cost.damageType === 'sacrifice')
+        .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: cost.amount } }));
+      assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: [...action.costs, ...augmentationCosts, ...heroicSacrificeCosts] }, ruleContext);
       let result: RuleExecutionResultWithWindow & { triggerActivations?: TriggerActivation[] };
       const resolutionId = nextResolutionId(state, unit.id, 0);
       try {
@@ -2402,7 +2453,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       // Pre-use augmentation payments ride the recorded event first (the same
       // ordering USE_ABILITY uses), so replay applies exactly what the command
       // decided — the validated sacrifice never re-decides and never drifts.
-      const eventMutations = [...resolvedAugmentations.costMutations, ...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations];
+      const eventMutations = [...heroicActivationMutations, ...resolvedAugmentations.costMutations, ...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations];
       // An action whose effect is an atomic spatial swap cannot be made when
       // the swap would be denied (Masquerade's interrupt-legality rule, p.151).
       assertLegalSpatialBatch(state, action, eventMutations);

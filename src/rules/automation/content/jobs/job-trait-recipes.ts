@@ -39,7 +39,7 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
   'bastion:trait:strive': {
     sourceId: 'bastion:trait:strive', name: 'Strive', status: 'documented',
     mechanic: '',
-    detail: 'Making any ability Heroic and the +1 shove distance are a Heroics-economy choice; the half-damage-until-next-turn penalty is a caller decision at the table.',
+    detail: 'Partially wired through the heroic-activation transaction (content/jobs/heroic-activation-recipes.ts): the declaration becomes a validated-player-activation only when not locked out, and the durable Strive lockout blocks further Heroics until the end of the owner\u2019s next turn. The source\u2019s other two halves have no generic seam yet: +1 shove distance (shove-distance-modifier) and dealing half damage during that turn (heroic-half-damage) — precise residual blockers, never a caller-side guess.',
   },
   'bastion:trait:press-the-advantage': {
     sourceId: 'bastion:trait:press-the-advantage', name: 'Press the Advantage', status: 'documented',
@@ -63,9 +63,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
     detail: '',
   },
   'demon-slayer:trait:demon-strength': {
-    sourceId: 'demon-slayer:trait:demon-strength', name: 'Demon Strength', status: 'documented',
-    mechanic: '',
-    detail: 'Making any ability Heroic and the no-attack/no-Heroics-until-next-turn lockout is a Heroics-economy choice at the table.',
+    sourceId: 'demon-slayer:trait:demon-strength', name: 'Demon Strength', status: 'wired',
+    mechanic: 'The heroic-activation transaction (content/jobs/heroic-activation-recipes.ts + kernels/heroic-activation.ts): a declared Heroic becomes a validated-player-activation only when the owner is not locked out, and the recorded `demon-strength:heroic-lockout` condition (until the end of the owner\u2019s following turn) blocks further Heroics THROUGH THE SAME TRANSACTION and attacks THROUGH THE SHARED ATTACK GATE (BASIC_ATTACK, USE_ABILITY and EXECUTE_RULE all read the identical durable condition) — the source\u2019s \u201ccan\u2019t attack or use Heroics until the end of your following turn\u201d half is enforced on every attack surface. Fixture + replay coverage: src/rules/__tests__/heroic-activation.test.ts.',
+    detail: '',
   },
   'demon-slayer:trait:hissatsu': {
     sourceId: 'demon-slayer:trait:hissatsu', name: 'Hissatsu', status: 'wired',
@@ -86,7 +86,7 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
   'colossus:trait:wolfheart': {
     sourceId: 'colossus:trait:wolfheart', name: 'Wolfheart', status: 'documented',
     mechanic: '',
-    detail: 'The once-a-round sacrifice-25%-to-make-Heroic and +1 flight/rush/dash distance is a Heroics-economy caller choice at the table.',
+    detail: 'Partially wired through the heroic-activation transaction (content/jobs/heroic-activation-recipes.ts): the once-per-round gate (U16 round ledger) and the real sacrifice of 25% of the owner\u2019s BASE maximum hp (p.107 \u201c% HEALTH\u201d; unpayable at 0 hp fails atomically) are exact, and no post-use lockout is granted (the source grants none). The source\u2019s other half has no generic seam yet: +1 flight/rush/dash distance as part of that move (movement-distance-modifier) — a precise residual blocker.',
   },
   'colossus:trait:pulverize': {
     sourceId: 'colossus:trait:pulverize', name: 'Pulverize', status: 'wired',
@@ -115,9 +115,9 @@ export const JOB_TRAIT_RECIPES: Readonly<Record<string, JobTraitRecipe>> = {
     detail: '',
   },
   'knave:trait:spite': {
-    sourceId: 'knave:trait:spite', name: 'Spite', status: 'documented',
-    mechanic: '',
-    detail: 'Choosing Heroic effects on any ability and the resulting Hatred+ / no-Heroics lockout is a Heroics-economy caller choice at the table.',
+    sourceId: 'knave:trait:spite', name: 'Spite', status: 'wired',
+    mechanic: 'The heroic-activation transaction (content/jobs/heroic-activation-recipes.ts + kernels/heroic-activation.ts): a declared Heroic becomes a validated-player-activation only when the owner is not locked out; the recorded mutations ride the resolution\u2019s event — Hatred+ of the closest foe (the shared `hatred` condition whose `hatred-of` provenance the damage pipeline halves against, p.104) and the durable Spite lockout, both until the end of the owner\u2019s next turn. An EQUIDISTANT closest-foe tie is a recorded U4 choice (the command input `closest-foe`); an unrecorded tie fails closed — never an invented tie-break. Fixture + replay coverage: src/rules/__tests__/heroic-activation.test.ts.',
+    detail: '',
   },
   // -------------------------------------------------------------------- fool
   'fool:trait:tumbling': {

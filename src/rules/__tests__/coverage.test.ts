@@ -127,15 +127,21 @@ describe('rules automation coverage gate', () => {
     // with no choice seam) plus the eye-of-the-storm talent 2 that only ran
     // inside the retracted ability's resolver (completePrograms 468→467,
     // completeClauses 1605→1604, talent unsupported 237→238).
+    // 2026-09-01 (heroic-activation tranche): `demon-slayer:trait:demon-strength`
+    // and `knave:trait:spite` became wired through the validated
+    // heroic-activation transaction (entitlement availability, recorded
+    // lockout / hatred+ consequences, attack-gate lockout) — their
+    // compilations are complete (completePrograms 467→469,
+    // completeClauses 1604→1606, job-trait unsupported 38→36).
     expect(audit).toMatchObject({
       totalPrograms: 3275,
       totalClauses: 4701,
-      completePrograms: 467,
-      unsupportedPrograms: 2808,
-      completeClauses: 1604,
-      unsupportedClauses: 3097,
+      completePrograms: 469,
+      unsupportedPrograms: 2806,
+      completeClauses: 1606,
+      unsupportedClauses: 3095,
       unsupportedByKind: {
-        core: 70, 'class-trait': 6, 'job-trait': 38, 'limit-break': 16, 'talent': 238, 'mastery': 129,
+        core: 70, 'class-trait': 6, 'job-trait': 36, 'limit-break': 16, 'talent': 238, 'mastery': 129,
         'relic-rank': 120, 'relic-aspect': 40, 'foe-ability': 1247, 'foe-trait': 590,
         'foe-phase': 19, 'foe-chapter-rule': 116, trophy: 68, 'camp-fixture': 16, 'camp-feature': 85, 'reward-rule': 9,
       },

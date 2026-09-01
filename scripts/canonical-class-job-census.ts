@@ -733,7 +733,7 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // ordered intermediate-state sequence plus durable command-time choices
   // before the conditional distance increase can be source-exact.
   // ── Colossus ──
-  'colossus:trait:wolfheart': ['heroics-economy', 'fly-distance-modifier', 'movement-distance-modifier'],
+  'colossus:trait:wolfheart': ['fly-distance-modifier', 'movement-distance-modifier'],
   // The first F4 regex missed the noun "flight". Wolfheart's optional,
   // once-a-round Heroic spend also increases any flight, rush, or dash in
   // that move by +1; those distance changes are separate from making the
@@ -1037,6 +1037,21 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // "shove objects … object triggers collide effects on the first character
   // it collides with" — objects as shove participants + an object-collide
   // effect rider
+  'bastion:battering-ram:mastery': ['use-cap'],
+  // "Once a turn, if you trigger Battering Ram's Collide or Heroic effect,
+  // the ability can be used one more time this turn." — a once-per-turn
+  // USE-CAP raise for a costed action ability over the p.91 No Repeats
+  // gate, conditioned on a recorded trigger. The U14 'use-cap' query point
+  // is registered but no fold raises an ordinary ability's same-turn use
+  // cap under a recorded trigger condition yet.
+  'bastion:trait:strive': ['shove-distance-modifier', 'heroic-half-damage'],
+  // Strive re-audit (2026-09-01, heroic-activation tranche): the Heroics-
+  // economy blocker is retired — the activation transaction validates the
+  // declaration and records the Strive lockout (until the end of the owner's
+  // next turn) exactly. The source ALSO grants +1 shove distance and half
+  // damage during that turn; those two halves have no generic
+  // shove-distance / source-damage-halving folds yet: precise residuals, no
+  // heroics-economy label remaining.
   'bastion:land-waster:talent:1': ['conditional-distance-stun'],
   // "If Land Waster's effect shockwave shoves 3 or more foes or allies,
   // it shoves +1 and stuns your target" — conditional shove distance
@@ -1837,10 +1852,20 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('entity-vacate');
   }
 
-  // Heroics economy: Heroic, heroics
-  if (/\bheroic\b/.test(text)) {
-    blockers.push('heroics-economy');
-  }
+  // Heroics economy: RETIRED (2026-09-01, heroic-activation tranche). The
+  // Heroics economy is a validated generic transaction
+  // (kernels/heroic-activation.ts + the content rows in
+  // content/jobs/heroic-activation-recipes.ts): a caller declaration becomes
+  // a validated-player-activation only when a content row proves availability
+  // (lockout / once-per-round), pays the cost (Wolfheart's 25%-of-base-max
+  // sacrifice), and records the consequences (lockout / hatred+) atomically
+  // before any cost/effect/RNG. Mentioning `heroic` in source text no longer
+  // represents a missing reusable capability — ANY ability with a Heroic
+  // triggered effect consumes the same validated activation. The four
+  // heroic-granting trait rows keep their precise residual seams where the
+  // source grants MORE than the transaction can attach (Strive's +1 shove /
+  // half damage; Wolfheart's +1 flight/rush/dash), named in
+  // RECLASSIFIED_BLOCKERS — never the retired generic label.
 
   // Pre-ability movement (rush): rush before ability
   if (/\brush\s+\d+\b/.test(text) && !/shove/.test(text)) {
