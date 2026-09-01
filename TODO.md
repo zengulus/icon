@@ -141,28 +141,35 @@ assumption here, document the evidence and update this list before proceeding.
 >
 > **U1 content-authoring surface (2026-09-01, commit 4bd0189) + Shade/Warden
 > live-slot tranche (2026-09-01, commit ea9526c) + Sealer live-slot tranche
-> (2026-09-01).** The named-content U1 residual got ONE shared surface
+> + Enochian live-slot tranche (2026-09-01).** The named-content U1 residual
+> got ONE shared surface
 > (`content/glue/reference-authoring.ts`: resolveSourceActor /
 > resolveAttackTarget / resolveTriggerSource / resolveTriggerTargets /
 > resolveCapturedSelectedActors / resolveBoundActor, all composing
-> `primitives/reference.ts`), and seven content families migrated:
+> `primitives/reference.ts`), and EIGHT content families migrated:
 > Bastion/Spellblade programs, the Job-trait/Class resolvers' six direct
 > dereferences, then the pure LIVE-slot reads (source/attack-target
 > /Nocturne trigger-source) in Shade, Warden, and Sealer (God Hand/Devil
 > Hand/Matsuri/Spirit Shrine/Justice/JUDGEMENT/Open The Gates/Center The
-> Temple) — the last direct `state.actors[context.…]` dereference in content
+> Temple, and Enochian (all 13 source reads + 5 attack-target reads in
+> Pyre/PYROTIC/Elden Rune/Lance/VOLVAGA/Soul Burn/INCANDIUS/Blazing Bond/
+> Heartfire/Aethershard/Implode/Pyroclast/Blackstar) — the last direct
+> `state.actors[context.…]` dereference in content
 > is gone. The `u1-reference-routing` guard scans the content layer
-> (adapter-keeps-U1, migrated-program pins incl. Sealer, deref rejection; no
+> (adapter-keeps-U1, migrated-program pins incl. Sealer and Enochian, deref
+> rejection; no
 > blanket lexical ban on the inventoried residual). Residual is machine-
-> derived from the site inventory (`npm run audit:u1-residual`): 229
-> `sourceActor(context, …)` sites = 174 pure LIVE-slot reads + 54
+> derived from the site inventory (`npm run audit:u1-residual`): 211
+> `sourceActor(context, …)` sites = 156 pure LIVE-slot reads + 54
 > captured/derived-id dereferences + 1 in-call precedence-boundary read
 > (Harvester line 155) + 0 other, 0 direct dereferences — every count
 > regenerated from the same site list, no hand-maintained totals. (Census-
 > integrity repair: the earlier prose "242 = 188 + 55" and "230 = 175 + 55"
 > each misclassified that ONE Harvester boundary site into BOTH buckets; the
-> exact figures are ea9526c 242 = 187 + 54 + 1 and current 229 = 174 + 54 +
-> 1.) U1 stays PARTIAL; zero source promotion; census remains 427.
+> exact figures are ea9526c 242 = 187 + 54 + 1, 5f0de05 229 = 174 + 54 + 1,
+> and current 211 = 156 + 54 + 1 — the Enochian tranche removed that file's
+> 18 PURE sites.) U1 stays PARTIAL; zero source promotion; census remains
+> 427.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
 > (2026-08-31; lifecycle follow-up 2026-09-01).** Migrated the last actor-local
@@ -181,6 +188,32 @@ assumption here, document the evidence and update this list before proceeding.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 4 — Enochian pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/enochian-programs.ts` now
+  routes every pure live-slot reference through the adapter: source reads →
+  `resolveSourceActor` in Pyre, PYROTIC, Elden Rune, Lance, VOLVAGA, Soul
+  Burn, INCANDIUS, Blazing Bond, Heartfire, Aethershard, Implode, Pyroclast,
+  Blackstar (13); primary attack-target reads → `resolveAttackTarget` in
+  Pyre, PYROTIC, Lance, VOLVAGA, Blackstar (5) — identical
+  LIVE/absent-singular semantics with the resolvers' board-state guards
+  untouched. The four U1×U4 captured/boundary sites (Blazing Bond `allyId`,
+  Heartfire `partnerId`, Implode `targetId`, Pyroclast `targetId` — all
+  `input.actorIds?.target?.[0] ?? …` selections whose dereference is the
+  captured-identity shape) stay inventoried caller-owned precedence.
+  Guard pins Enochian via contentAdapterSurface; mutation test covers an
+  Enochian revert (exactly one routing violation) and proves the retained
+  `??`-chain dereferences alone do not trigger the pin. Evidence: +2
+  fail-closed/U4-parity tests in `reference-authoring.test.ts` (Pyre ghost
+  attackTargetId → `reference.missing-actor`; Pyroclast input-target
+  precedence survives), +1 engine-level insertion-order test in
+  `enochian.test.ts`, the full Enochian suite (17) green
+  (valid-state semantics preserved; malformed refs fail closed). The tranche
+  removed exactly 18 PURE_LIVE_REFERENCE sites (Enochian 18 → 0), moving
+  the machine-derived residual from 229 = 174 + 54 + 1 to 211 = 156 + 54 +
+  1 (per `npm run audit:u1-residual`; no hand-maintained totals). 0 direct
+  dereferences; U1 remains PARTIAL. Full suite 1988 green, audits green,
+  census byte-stable at 427, zero source promotion.
 
 - **U1 content-authoring tranche 3 — Sealer pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/sealer-programs.ts` now

@@ -43,6 +43,7 @@ import {
 import { SHADE_RULE_RESOLVERS } from '../automation/content/jobs/programs/shade-programs.js';
 import { WARDEN_RULE_RESOLVERS } from '../automation/content/jobs/programs/warden-programs.js';
 import { SEALER_RULE_RESOLVERS } from '../automation/content/jobs/programs/sealer-programs.js';
+import { ENOCHIAN_RULE_RESOLVERS } from '../automation/content/jobs/programs/enochian-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -272,5 +273,25 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     // as the user's own position.
     const context = ctx({ triggerSourceId: 'ghost' });
     expectViolationCode(() => SHADE_RULE_RESOLVERS['shade:nocturne:effects'](context, interruptAction), 'reference.missing-actor');
+  });
+
+  it('Enochian Pyre resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Pyre's PURE live-slot reads (source actor + attack target) now resolve
+    // through the adapter; a slot that NAMES a missing actor must reject, never
+    // silently fall through to an empty mutation list on a malformed window.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => ENOCHIAN_RULE_RESOLVERS['enochian:pyre:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Enochian Pyroclast resolver: the captured-input identity stays caller-owned — the ?? chain survives, only the LIVE slots migrated', () => {
+    // Pyroclast's `input.actorIds?.target?.[0] ?? attackTargetId ?? source.id`
+    // SELECT is the caller's U4 precedence (inventoried); the migraiton touched
+    // only the PURE source-slot resolution. A present input target still wins
+    // over the attack-target fallback, and the resolver marks that chosen
+    // identity — U4 semantics unchanged.
+    const context = ctx({ attackTargetId: 'foe', input: { actorIds: { target: ['hero'] } } });
+    const mutations = ENOCHIAN_RULE_RESOLVERS['enochian:pyroclast:effects'](context, defaultAction);
+    expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'hero')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'foe')).toBe(false);
   });
 });

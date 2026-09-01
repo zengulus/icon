@@ -12,6 +12,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Enochian ability implementations (ICON p.206–214),
@@ -58,8 +59,8 @@ const charactersIn = (context: RuleExecutionContext, cells: { x: number; y: numb
  * for 2 piercing to all characters. Talent 1 gates the comeback ally-immunity
  * clause (below). */
 const pyreEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   // Talent 1 (p.209): "Comeback: Allies are immune to damage from this
@@ -93,8 +94,8 @@ const pyreEffects: RuleResolver = (context) => {
 /** ICON p.209 Pyre infuse (PYROTIC): the blast grows to a large blast and a pit
  * opens under the attack target. */
 const pyroticEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -114,7 +115,7 @@ const pyroticEffects: RuleResolver = (context) => {
  * on it adds +3 range to abilities with a listed range. The free-action
  * sacrifice version and the foe scrub-out rule are documented windows. */
 const eldenRuneEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   return [terrainMutation(context, 'create', 'elden-rune', [source.position])];
 };
@@ -123,8 +124,8 @@ const eldenRuneEffects: RuleResolver = (context) => {
  * vulnerable, and the other characters in the line take fray. Comeback or
  * Exceed: bonus damage for every unique object the line passed through. */
 const lanceEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -158,8 +159,8 @@ const lanceEffects: RuleResolver = (context) => {
 /** ICON p.209 Lance infuse (VOLVAGA): the line gains width +1 (adjacent cells
  * take fray as area damage) and melts any objects of your choice in its path. */
 const volvagaEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
@@ -198,7 +199,7 @@ const volvagaEffects: RuleResolver = (context) => {
  * automatic comeback triggers, the soul ember spark, and the start-of-turn
  * refresh are documented stance windows. */
 const soulBurnEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   return [stanceMutation(context, source.id, 'enter', 'soul-burn')];
 };
 
@@ -206,7 +207,7 @@ const soulBurnEffects: RuleResolver = (context) => {
  * and spark a soul ember at them (1 piercing). Collide (vulnerable on impact)
  * is documented as a reducer collision check. */
 const incandiusEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
   for (const character of Object.values(context.state.actors)) {
@@ -224,7 +225,7 @@ const incandiusEffects: RuleResolver = (context) => {
  * Comeback) is a held-damage window — the interrupt records the armoring flag
  * and the partner sacrifice. */
 const blazingBondEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const allyId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const ally = allyId ? sourceActor(context, allyId) : undefined;
   if (!source.position || !ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Blazing Bond requires an ally in range 4.');
@@ -236,7 +237,7 @@ const blazingBondEffects: RuleResolver = (context) => {
  * (recorded as `heartfire:armor` on the partner), and the other partner
  * sacrifices 3 (1 on a Comeback). */
 const heartfireEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const partnerId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0];
   const partner = partnerId ? sourceActor(context, partnerId) : undefined;
   if (!partner) throw new RuleProgramViolation('choice.actor-count', 'Heartfire requires the bonded partner.');
@@ -252,7 +253,7 @@ const heartfireEffects: RuleResolver = (context) => {
  * damage per shard caught in an ability, then destroy and gain 1 aether) is a
  * documented summon-trigger window. */
 const aethershardEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [
     damageMutation(context, source.id, context.triggers?.has('comeback') ? 1 : 3, 'effect', 'sacrifice'),
@@ -269,7 +270,7 @@ const aethershardEffects: RuleResolver = (context) => {
  * toward it (characters in the center must save or be stunned). The
  * detonation is a documented delay window. */
 const implodeEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source.position) return [];
@@ -287,7 +288,7 @@ const implodeEffects: RuleResolver = (context) => {
  * original character) is shoved 1 and takes 2 piercing. The eruption is a
  * documented turn-end window. */
 const pyroclastEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId ?? source.id;
   const target = sourceActor(context, targetId);
   if (!source.position || !target.position) return [];
@@ -301,8 +302,8 @@ const pyroclastEffects: RuleResolver = (context) => {
  * Comeback or Exceed: bonus damage, a pit under the center, and up to three
  * spaces of difficult terrain. */
 const blackstarEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);

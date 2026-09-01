@@ -318,6 +318,7 @@ export function u1ReferenceRoutingProblems(
     'content/jobs/programs/shade-programs.ts': ['resolveSourceActor', 'resolveAttackTarget', 'resolveTriggerSource'],
     'content/jobs/programs/warden-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/programs/sealer-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
+    'content/jobs/programs/enochian-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/job-trait-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/classes/class-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
   };

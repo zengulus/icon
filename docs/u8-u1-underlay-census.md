@@ -123,7 +123,8 @@ their sites.
 > | Commit | Total | PURE_LIVE_REFERENCE | CAPTURED_ID_DEREFERENCE | DERIVED_OR_PRECEDENCE_BOUNDARY |
 > | --- | --- | --- | --- | --- |
 > | `ea9526c` (pre-Sealer) | 242 | 187 | 54 | 1 |
-> | current HEAD (post-Sealer) | 229 | 174 | 54 | 1 |
+> | `5f0de05` (post-Sealer) | 229 | 174 | 54 | 1 |
+> | current HEAD (post-Enochian) | 211 | 156 | 54 | 1 |
 >
 > The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
 > (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
@@ -139,20 +140,21 @@ their sites.
 > consistent; `188 + 55 = 243 ≠ 242` was the misclassification surfacing
 > through two hand-maintained buckets.
 >
-A machine scan at this HEAD finds 229 `sourceActor(context, …)` call
+A machine scan at this HEAD finds 211 `sourceActor(context, …)` call
 sites across 14 named program files (multi-line calls collapse to one site;
 `npm run audit:u1-residual` reproduces these figures). Classified by
 MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
 provenance string):
 
-- **U1 reference identity — pure LIVE-slot reads (174, migrate family-by-
+- **U1 reference identity — pure LIVE-slot reads (156, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
-  Warden/Sealer migrated across tranches 2–3. Remaining per-file: Chanter 19,
-  Enochian 18, Knave 17, Harvester 15, Demon Slayer 16, Seer 15, Fool 15,
+  Warden/Sealer/Enochian migrated across tranches 2–4. Remaining per-file:
+  Chanter 19, Knave 17, Demon Slayer 16, Harvester 15, Seer 15, Fool 15,
   Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11, Sealer 4 (chain
-  sites' source reads — see boundary), Shade 3, Warden 2.
+  sites' source reads — see boundary), Shade 3, Warden 2. Enochian 0 (this
+  tranche).
 - **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
   earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
@@ -175,8 +177,9 @@ The residual census now lives in ONE machine-derived inventory
 per-category + per-file counts are computed from that list. The executable
 invariant `total === sum(mutually exclusive categories)` is enforced by
 `npm run audit:u1-residual` and by the architecture-audit suite
-(`U1 residual census (machine inventory)` — 6 tests, incl. exact repo pins
-229 = 174 + 54 + 1 and classifier mutations proving the Harvester in-call
+(`U1 residual census (machine inventory)` — incl. the exact repo pin at
+that HEAD, 229 = 174 + 54 + 1, since updated to the fresh machine figures
+after each tranche, and classifier mutations proving the Harvester in-call
 read is ONE boundary site). Docs must be regenerated from this inventory;
 prose totals that disagree with the machine are stale by construction.
 
@@ -290,14 +293,73 @@ dereference. It deliberately does not ban the inventoried
 rewrite), `context.input.actorIds` reads (U4 identity lives at the caller) or
 provenance `context.actorId` (never reference interpretation).
 
-U1 remains PARTIAL: the shared surface is proved and pinned across seven
-migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Job-trait, Class
-resolvers), and the residual is a machine-derived classified inventory — 174
-pure LIVE-slot reads (next tranches) + 54 captured/derived dereferences + 1
-in-call boundary read = 229 sites, 0 direct dereferences. A whole-consumer
-audit is NOT yet done, so U1 cannot claim AUTHORITATIVE: 11 program files
-still resolve live slots through the legacy kernel-side convenience, and the
-U1×U4 captured-identity boundary has no shared surface yet.
+## U1 tranche executed (fresh HEAD, 2026-09-01, fourth tranche — Enochian)
+
+### Migrated: Enochian pure LIVE-slot reference reads
+
+`content/jobs/programs/enochian-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **18 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Enochian: 18 → 0 PURE;
+CAPTURED and BOUNDARY unchanged: 54, 1; whole-repo 229 → 211 = 156 + 54 + 1)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in all 13 Enochian resolvers that reach the
+  source: Pyre, PYROTIC, Elden Rune, Lance, VOLVAGA, Soul Burn, INCANDIUS,
+  Blazing Bond, Heartfire, Aethershard, Implode, Pyroclast, Blackstar;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Pyre, PYROTIC, Lance, VOLVAGA, and
+  Blackstar — identical LIVE re-read and absent-singular→undefined
+  semantics.
+
+**Deliberately NOT migrated (per-call-site U1×U4 boundary, inventoried):**
+Blazing Bond's `allyId = context.input.actorIds?.target?.[0] ??
+context.attackTargetId`, Heartfire's `partnerId = …??
+context.triggerTargetIds?.[0]`, Implode's `targetId = … ?? attackTargetId`,
+and Pyroclast's `targetId = … ?? attackTargetId ?? source.id` — the
+`?.[0]` / `??`-precedence SELECT is caller-owned U4 choice/cardinality, and
+only the dereference of the chosen identity is the U1 captured-identity
+shape (the next tranche family). `sourceActor(context, …)` remains imported
+for those four sites; the resolvers' own range/board-state gates
+(`choice.actor-count`, `choice.actor-range`, `!source.position`) are
+untouched.
+
+### Guard
+
+The `u1-reference-routing` guard pins Enochian (resolveSourceActor,
+resolveAttackTarget) to the adapter; the retained captured-input
+dereferences are NOT banned (no blanket lexical ban). Mutation test: an
+Enochian revert to `sourceActor(context, context.actorId)` drops the pinned
+calls, is caught with exactly one Enochian routing problem, and the retained
+`??`-chain `sourceActor(context, allyId)` reads alone do NOT trigger the pin.
+
+### Evidence
+
+- `reference-authoring.test.ts` +2: the production Enochian Pyre resolver
+  fails closed (`reference.missing-actor`) on a gated-bypass ghost
+  `attackTargetId` (legacy silently no-opped), and the Pyroclast resolver
+  keeps the caller-owned `input.actorIds?.target?.[0]` precedence — a present
+  input target wins over the `attackTargetId` fallback; the `??` chain is
+  untouched by the migration.
+- `enochian.test.ts` +1: reversing actor INSERTION order (second foe added
+  before the target) produces byte-identical Pyre outcomes and replay — the
+  migrated source/attack-target reads resolve by recorded slot identity,
+  never object-iteration order.
+- the full Enochian suite (17 tests) stays green through the engine path,
+  proving the migration is behavior-preserving for valid/reachable state
+  (applyEvents replay identical in every scenario).
+
+## U1 status after the Enochian tranche
+
+U1 remains PARTIAL: the shared surface is proved and pinned across eight
+migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
+Job-trait, Class resolvers), and the residual is a machine-derived classified
+inventory — 156 pure LIVE-slot reads (next tranches) + 54 captured/derived
+dereferences + 1 in-call boundary read = 211 sites, 0 direct dereferences. A
+whole-consumer audit is NOT yet done, so U1 cannot claim AUTHORITATIVE: 10
+program files still resolve live slots through the legacy kernel-side
+convenience, and the U1×U4 captured-identity boundary has no shared surface
+yet.
 
 ## Coverage and verification invariants
 

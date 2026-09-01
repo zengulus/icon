@@ -236,6 +236,38 @@ describe('Enochian ability automation (p.206–214)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Pyre: reversing actor INSERTION order changes nothing — the migrated reference reads resolve by recorded slot identity, not iteration order', () => {
+    // The migrated source/attack-target reads are singular slot dereferences
+    // (context.actorId / attackTargetId → adapter), deterministic by the
+    // RECORDED identity; object-iteration order of state.actors cannot select
+    // who the ability user or its target is. Insert the second foe BEFORE the
+    // target so object order differs from the canonical fixture, and assert
+    // the same damage outcome and replay state.
+    let setup = createEncounter('Enochian insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Pyromancer'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 3, y: 1 });
+    const second = createFoe('Grim', { x: 5, y: 1 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, {
+      type: 'EXECUTE_RULE',
+      actorId: hero.id,
+      sourceId: 'enochian:pyre',
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+      attackTargetId: foe.id,
+      triggers: ['exceed'],
+    }, scriptedDice(12, 4, 5));
+    expect(result.state.actors[foe.id].hp).toBe(17); // 32 - (4 + 5 + fray 4) - 2 piercing (exceed)
+    expect(result.state.actors[second.id].hp).toBe(26); // 32 - fray 4 - 2 piercing (exceed)
+    expect(applyEvents(setup, result.events)).toEqual(result.state);
+  });
+
   it('Blackstar: 2[D]+fray to the target, [D]+fray to the large blast, shatters, and sacrifices half HP before round 6', () => {
     const { state, hero, foe, second } = enochianEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'enochian:blackstar', targetIds: [foe.id] }, scriptedDice(12, 4, 5, 2));

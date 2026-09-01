@@ -163,11 +163,11 @@ describe('U1 residual census (machine inventory)', () => {
     expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
   });
 
-  it('pins the exact repo figures (229 = 174 + 54 + 1) so docs cannot drift from the machine', () => {
+  it('pins the exact repo figures (211 = 156 + 54 + 1) so docs cannot drift from the machine', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
-    expect(inventory.total).toBe(229);
+    expect(inventory.total).toBe(211);
     expect(inventory.categoryCounts).toEqual({
-      PURE_LIVE_REFERENCE: 174,
+      PURE_LIVE_REFERENCE: 156,
       CAPTURED_ID_DEREFERENCE: 54,
       DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
       NON_U1_OTHER: 0,
@@ -280,6 +280,10 @@ describe('U1 Reference/Binding routing guard', () => {
     // Migrated Sealer keeps its pinned adapter surface; the U1×U4 chain reads
     // (`input.actorIds?.[0] ?? attackTargetId` → sourceActor) stay inventoried.
     'content/jobs/programs/sealer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined;',
+    // Migrated Enochian keeps its pinned adapter surface; the captured-input
+    // dereferences (blazing-bond allyId, heartfire partnerId, implode/pyroclast
+    // targetId from `??` chains) stay inventoried at the U1×U4 boundary.
+    'content/jobs/programs/enochian-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const allyId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const ally = allyId ? sourceActor(context, allyId) : undefined;',
     'content/jobs/job-trait-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); mutations.push({ kind: \'condition\', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id });',
     'content/classes/class-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); const inputTargets = context.input.actorIds?.target; if (inputTargets[0] !== context.attackTargetId) throw 0;',
   };
@@ -337,6 +341,21 @@ describe('U1 Reference/Binding routing guard', () => {
     expect(problems).toEqual(expect.arrayContaining([
       expect.objectContaining({ file: 'content/jobs/programs/shade-programs.ts', detail: expect.stringContaining('no longer routes') }),
     ]));
+  });
+
+  it('T5c: catches a MIGRATED Enochian program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    // Reverting Enochian's migrated LIVE slots drops the pinned adapter
+    // accessors; the retained captured-input dereferences (the `??`-chain ids)
+    // must NOT themselves be flagged — only the missing pins bite.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/enochian-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined; const allyId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const ally = allyId ? sourceActor(context, allyId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/enochian-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
+    expect(problems.filter((problem) => problem.file === 'content/jobs/programs/enochian-programs.ts').length).toBe(1);
   });
 
   it('T5c: catches a MIGRATED program that reverts to direct slot resolution (drops the adapter calls)', () => {
