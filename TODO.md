@@ -142,13 +142,14 @@ assumption here, document the evidence and update this list before proceeding.
 > **U1 content-authoring surface (2026-09-01, commit 4bd0189) + Shade/Warden
 > live-slot tranche (2026-09-01, commit ea9526c) + Sealer live-slot tranche
 > + Enochian live-slot tranche + Chanter live-slot tranche + Knave live-slot
-> tranche + Harvester live-slot tranche (2026-09-01).**
+> tranche + Harvester live-slot tranche + Demon Slayer live-slot tranche
+> (2026-09-01).**
 > The named-content U1 residual
 > got ONE shared surface
 > (`content/glue/reference-authoring.ts`: resolveSourceActor /
 > resolveAttackTarget / resolveTriggerSource / resolveTriggerTargets /
 > resolveCapturedSelectedActors / resolveBoundActor, all composing
-> `primitives/reference.ts`), and ELEVEN content families migrated:
+> `primitives/reference.ts`), and TWELVE content families migrated:
 > Bastion/Spellblade programs, the Job-trait/Class resolvers' six direct
 > dereferences, then the pure LIVE-slot reads (source/attack-target
 > /Nocturne trigger-source) in Shade, Warden, Sealer (God Hand/Devil
@@ -172,16 +173,23 @@ assumption here, document the evidence and update this list before proceeding.
 > Blood Grove/Rot/Crimson Bloom/Fairy Ring/Spirit Away/Dark Sliver — the
 > `??`-chain captured dereferences stay caller-owned; Blood Grove's in-call
 > `input.actorIds.target[0]` center read remains the repo's ONE
-> DERIVED_OR_PRECEDENCE_BOUNDARY, preserved not resolved) — the
+> DERIVED_OR_PRECEDENCE_BOUNDARY, preserved not resolved), and Demon Slayer
+> (all 12 source reads + 4 attack-target reads in Demon Cutter/Comet/Draken
+> Cross/Righteous Disdain/Demon Claw/Gates of Hell/Vigilance Rush/Soul
+> Blade enter-refresh-slash/Six Hells Trigram/Wicked Sheath — plannedRush's
+> helper-parameter dereference and Righteous Disdain's recorded ally choice
+> stay caller-owned; the Demon Cutter/Draken Cross geometry, Demon Claw
+> BASE-max mastery, Gates of Hell U16 vigilance ledger, and Soul Blade
+> power-die lifecycle untouched) — the
 > last direct
 > `state.actors[context.…]` dereference in content
 > is gone. The `u1-reference-routing` guard scans the content layer
 > (adapter-keeps-U1, migrated-program pins incl. Sealer, Enochian, Chanter,
-> Knave, and Harvester, deref
+> Knave, Harvester, and Demon Slayer, deref
 > rejection; no
 > blanket lexical ban on the inventoried residual). Residual is machine-
-> derived from the site inventory (`npm run audit:u1-residual`): 160
-> `sourceActor(context, …)` sites = 105 pure LIVE-slot reads + 54
+> derived from the site inventory (`npm run audit:u1-residual`): 144
+> `sourceActor(context, …)` sites = 89 pure LIVE-slot reads + 54
 > captured/derived-id dereferences + 1 in-call precedence-boundary read
 > (Harvester line 155) + 0 other, 0 direct dereferences — every count
 > regenerated from the same site list, no hand-maintained totals. (Census-
@@ -189,8 +197,9 @@ assumption here, document the evidence and update this list before proceeding.
 > each misclassified that ONE Harvester boundary site into BOTH buckets; the
 > exact figures are ea9526c 242 = 187 + 54 + 1, 5f0de05 229 = 174 + 54 + 1,
 > 4a1ff76 211 = 156 + 54 + 1 (Enochian −18), 3052eee 192 = 137 + 54 + 1
-> (Chanter −19), 81573a8 175 = 120 + 54 + 1 (Knave −17), and current
-> 160 = 105 + 54 + 1 (Harvester −15).) U1 stays
+> (Chanter −19), 81573a8 175 = 120 + 54 + 1 (Knave −17), b6764e8
+> 160 = 105 + 54 + 1 (Harvester −15), and current 144 = 89 + 54 + 1
+> (Demon Slayer −16).) U1 stays
 > PARTIAL; zero source promotion; census remains 427.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
@@ -210,6 +219,36 @@ assumption here, document the evidence and update this list before proceeding.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 8 — Demon Slayer pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/demon-slayer-programs.ts`
+  now routes every pure live-slot reference through the adapter: source
+  reads → `resolveSourceActor` in Demon Cutter, Comet, Draken Cross,
+  Righteous Disdain, Demon Claw, Gates of Hell, Vigilance Rush, Soul Blade
+  enter/refresh/slash, Six Hells Trigram, Wicked Sheath (12); primary
+  attack-target reads → `resolveAttackTarget` in Demon Cutter, Draken
+  Cross, Soul Blade slash, Wicked Sheath (4) — identical
+  LIVE/absent-singular semantics with the resolvers' gates untouched. The
+  two retained CAPTURED sites stay caller-owned: `plannedRush` (its
+  `actorId` is a helper PARAMETER, not the source slot — no arbitrary-id
+  adapter op invented) and Righteous Disdain (`input.actorIds?.target?.[0]`
+  recorded ally choice). Geometry/movement/lifecycle untouched: Demon
+  Cutter talent-2 rush, Draken Cross charged blasts, Demon Claw BASE-max
+  mastery, Gates of Hell U16 vigilance ledger, Soul Blade power die, Six
+  Hells Trigram delay. Guard pins Demon Slayer via contentAdapterSurface;
+  mutation test covers a revert (exactly one routing violation) and proves
+  the retained helper/captured dereferences alone do not trigger the pin.
+  Evidence: +3 fail-closed/U4-parity tests in `reference-authoring.test.ts`
+  (Demon Cutter ghost attackTargetId → `reference.missing-actor`; Comet
+  targetless no-op; Righteous Disdain recorded-ally split), +1
+  engine-level insertion-order test in `demon-slayer.test.ts`, the full
+  Demon Slayer suite (24) green through the engine path (valid-state
+  semantics preserved; malformed refs fail closed; replay byte-identical).
+  The tranche removed exactly 16 PURE_LIVE_REFERENCE sites (Demon Slayer
+  16 → 0), moving the machine-derived residual from 160 = 105 + 54 + 1 to
+  144 = 89 + 54 + 1 (per `npm run audit:u1-residual`; no hand-maintained
+  totals). 0 direct dereferences; U1 remains PARTIAL. Full suite 2011
+  green, audits green, census byte-stable at 427, zero source promotion.
 
 - **U1 content-authoring tranche 7 — Harvester pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/harvester-programs.ts` now

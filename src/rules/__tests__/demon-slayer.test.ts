@@ -87,6 +87,30 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Demon Cutter: reversing actor INSERTION order changes nothing — the migrated reference reads resolve by recorded slot identity, not iteration order', () => {
+    // The migrated source/attack-target reads are singular slot dereferences
+    // (context.actorId / attackTargetId → adapter), deterministic by the
+    // RECORDED identity; object-iteration order of state.actors cannot select
+    // who the ability user or its target is. Insert the second foe BEFORE the
+    // target so object order differs from the canonical fixture, and assert
+    // the same slash outcome and replay state.
+    let setup = createEncounter('Demon Slayer insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    const foe = createFoe('Relict', { x: 3, y: 1 });
+    const second = createFoe('Grim', { x: 5, y: 1 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-cutter', targetIds: [foe.id] }, scriptedDice(12, 5));
+    expect(result.state.actors[foe.id].hp).toBe(19); // 32 - 4 area fray - 9 attack
+    expect(result.state.actors[foe.id].statuses).toContain('slashed');
+    expect(result.state.actors[second.id].hp).toBe(32); // outside the line
+    expect(applyEvents(setup, result.events)).toEqual(result.state);
+  });
+
   it('Demon Cutter: Charge repeats the area effect in a second non-overlapping line', () => {
     const { state, hero, foe, second } = demonSlayerEncounter({ second: { x: 1, y: 3 } });
     const result = executeCommand(state, {

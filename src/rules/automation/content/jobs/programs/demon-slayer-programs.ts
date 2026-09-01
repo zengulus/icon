@@ -11,6 +11,7 @@ import {
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
 import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { vigilanceRushOncePerTurnKey } from '../../../kernels/use-ledger.js';
 import { consumeUsageMutation, ledgerAvailable } from '../../../primitives/usage.js';
 
@@ -60,8 +61,8 @@ function plannedRush(context: Parameters<RuleResolver>[0], actorId: string, step
 
 /** ICON p.128: line-3 true-strike attack; target slashed; line-area fray; Charge/Heroic repeats a second non-overlapping line. */
 const demonCutterEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !source.position || !target || !target.position) return [];
   const mutations: RuleMutation[] = [];
   let sourcePosition = source.position;
@@ -108,7 +109,7 @@ const demonCutterEffects: RuleResolver = (context) => {
 
 /** ICON p.128: medium blast area damage, thrown-weapon object with rampart, and a Charge/Heroic rush. */
 const cometEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
   const direction = context.input.directions?.['throw-direction'] ?? rushTowardFoes(context, source.position);
   const defaultCenter = { x: source.position.x + direction.x * 3, y: source.position.y + direction.y * 3 };
@@ -159,8 +160,8 @@ function secondBlastCenter(context: Parameters<RuleResolver>[0], sourcePosition:
 
 /** ICON p.128: small-blast attack with a second non-overlapping blast; Charge/Heroic adds true strike and repeats the second blast. */
 const drakenCrossEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !source.position || !target || !target.position) return [];
   const sourcePosition = source.position;
   const targetPosition = target.position;
@@ -199,7 +200,7 @@ const drakenCrossEffects: RuleResolver = (context) => {
 
 /** ICON p.128: interrupt that splits determined damage with resistance and grants sturdy. */
 const righteousDisdain: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const allyId = context.input.actorIds?.target?.[0];
   if (!source || !source.position || !allyId) throw new RuleProgramViolation('choice.actor-count', 'Righteous Disdain requires an ally target.');
   const ally = sourceActor(context, allyId);
@@ -220,7 +221,7 @@ const righteousDisdain: RuleResolver = (context) => {
 
 /** ICON p.129: rush 1 twice, dealing 2 damage to adjacent foes (all of them when the user has not attacked this turn). */
 const demonClaw: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
   const direction = context.input.directions?.['rush1'] ?? rushTowardFoes(context, source.position);
   const special = !source.attacked;
@@ -270,7 +271,7 @@ const demonClaw: RuleResolver = (context) => {
 
 /** ICON p.129: rush 2, gain vigilance, and counter until the start of the user's next turn. */
 const gatesOfHell: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
   const direction = context.input.directions?.['rush-direction'] ?? { x: 1, y: 0 };
   const path = plannedRush(context, source.id, 2, direction);
@@ -284,7 +285,7 @@ const gatesOfHell: RuleResolver = (context) => {
 
 /** ICON p.129: may rush 2 after activating vigilance, once per turn. */
 const gatesOfHellVigilanceRush: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
   // The once-per-turn gate routes through the U16 `any-turn` ledger
   // (vigilanceRushOncePerTurnKey): availability via the U16 ledger read over the
@@ -302,7 +303,7 @@ const gatesOfHellVigilanceRush: RuleResolver = (context) => {
 
 /** ICON p.129: enter the Soul Blade stance with a d6 power die at 2. */
 const soulBladeEnter: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
   const adjacentFoes = Object.values(context.state.actors)
     .filter((candidate) => candidate.id !== source.id && candidate.side !== source.side && candidate.position && distance(candidate.position!, source.position!) <= 1).length;
@@ -316,7 +317,7 @@ const soulBladeEnter: RuleResolver = (context) => {
 
 /** ICON p.129: refresh ticks the power die up by 1. */
 const soulBladeRefresh: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source) return [];
   const die = Number(source.state['soul-blade:die'] ?? 2);
   return [
@@ -327,8 +328,8 @@ const soulBladeRefresh: RuleResolver = (context) => {
 
 /** ICON p.129: the aether slash — a line-3 true-strike area that must include the target. */
 const soulBladeSlash: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !source.position || !target || !target.position) return [];
   const tick = Math.max(1, Math.floor(context.input.numbers?.tick ?? 0));
   const die = Number(source.state['soul-blade:die'] ?? 0);
@@ -357,7 +358,7 @@ const soulBladeSlash: RuleResolver = (context) => {
 
 /** ICON p.129: burst-2 (self) terrain effect that ends the turn and activates at the start of the user's next turn. */
 const sixHellsTrigram: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
   const mutations: RuleMutation[] = [];
   // The area lasts until this ability is used again: remove any previous
@@ -378,8 +379,8 @@ const sixHellsTrigram: RuleResolver = (context) => {
 
 /** ICON p.130: Wicked Sheath — rush per charge (Charge/Heroic), attack-boosting shove, and the charged-weapon state. */
 const wickedSheath: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !source.position) return [];
   const die = Number(source.resources['wicked-sheath-die'] ?? 0);
   const mutations: RuleMutation[] = [];

@@ -322,6 +322,7 @@ export function u1ReferenceRoutingProblems(
     'content/jobs/programs/chanter-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/programs/knave-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/programs/harvester-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
+    'content/jobs/programs/demon-slayer-programs.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/jobs/job-trait-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
     'content/classes/class-resolvers.ts': ['resolveSourceActor', 'resolveAttackTarget'],
   };

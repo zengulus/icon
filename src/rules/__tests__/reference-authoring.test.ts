@@ -47,6 +47,7 @@ import { ENOCHIAN_RULE_RESOLVERS } from '../automation/content/jobs/programs/eno
 import { CHANTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/chanter-programs.js';
 import { KNAVE_RULE_RESOLVERS } from '../automation/content/jobs/programs/knave-programs.js';
 import { HARVESTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/harvester-programs.js';
+import { DEMON_SLAYER_RULE_RESOLVERS } from '../automation/content/jobs/programs/demon-slayer-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -420,6 +421,36 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
       expect(fallbackCreated.positions.some((cell) => cell.x === 4 && cell.y === 4)).toBe(true);
     }
     void hero;
+  });
+
+  it('Demon Slayer Demon Cutter resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Demon Cutter's PURE live-slot reads (source + attack target) now resolve
+    // through the adapter; a slot that NAMES a missing actor must reject on a
+    // malformed window rather than silently produce nothing.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => DEMON_SLAYER_RULE_RESOLVERS['demon-slayer:demon-cutter:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Demon Slayer Comet resolver: an absent optional attack-target slot stays a no-op (Comet has no attack target; optional singleton semantics preserved)', () => {
+    // Comet is a blast/object ability with NO primary attack target; its
+    // source read is the migrated PURE slot and the resolver handles a
+    // genuinely targetless context as before.
+    const context = ctx();
+    expect(() => DEMON_SLAYER_RULE_RESOLVERS['demon-slayer:comet'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Demon Slayer Righteous Disdain resolver: the recorded input.actorIds ally stays caller-owned', () => {
+    // Righteous Disdain's `input.actorIds?.target?.[0]` SELECT is the caller's
+    // U4 choice; only the source-actor read is the migrated PURE slot. The
+    // chosen ally (input) receives half the shared damage, unchanged.
+    const hero = ctx().state.actors.hero;
+    const ally = { ...hero, id: 'ally', side: 'heroes' as const, position: { x: 5, y: 4 } }; // in range 2 of hero (4,4)
+    const context = ctx({
+      state: { ...ctx().state, actors: { ...ctx().state.actors, ally } },
+      input: { actorIds: { target: ['ally'] }, numbers: { damage: 10 } },
+    });
+    const mutations = DEMON_SLAYER_RULE_RESOLVERS['demon-slayer:righteous-disdain'](context, interruptAction);
+    expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'ally' && mutation.amount === 5)).toBe(true);
   });
 
   it('Chanter Monogatari resolver: the LIVE source read migrates; lifecycle/usage state mutations are untouched', () => {

@@ -127,7 +127,8 @@ their sites.
 > | `4a1ff76` (post-Enochian) | 211 | 156 | 54 | 1 |
 > | `3052eee` (post-Chanter) | 192 | 137 | 54 | 1 |
 > | `81573a8` (post-Knave) | 175 | 120 | 54 | 1 |
-> | current HEAD (post-Harvester) | 160 | 105 | 54 | 1 |
+> | `b6764e8` (post-Harvester) | 160 | 105 | 54 | 1 |
+> | current HEAD (post-Demon Slayer) | 144 | 89 | 54 | 1 |
 >
 > The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
 > (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
@@ -149,15 +150,15 @@ sites across 14 named program files (multi-line calls collapse to one site;
 MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
 provenance string):
 
-- **U1 reference identity — pure LIVE-slot reads (105, migrate family-by-
+- **U1 reference identity — pure LIVE-slot reads (89, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
-  Warden/Sealer/Enochian/Chanter/Knave/Harvester migrated across tranches
-  2–7. Remaining per-file: Demon Slayer 16, Seer 15, Fool 15, Geomancer 14,
+  Warden/Sealer/Enochian/Chanter/Knave/Harvester/Demon Slayer migrated
+  across tranches 2–8. Remaining per-file: Seer 15, Fool 15, Geomancer 14,
   Freelancer 14, Stormbender 11, Colossus 11, Sealer 4 (chain sites' source
   reads — see boundary), Shade 3, Warden 2. Enochian 0, Chanter 0, Knave 0,
-  Harvester 0 (their tranches).
+  Harvester 0, Demon Slayer 0 (their tranches).
 - **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
   earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
@@ -571,19 +572,75 @@ an inventoried boundary.
 
 No direct `state.actors[context.…]` dereference remains anywhere in content.
 
-## U1 status after the Harvester tranche
+## U1 tranche executed (fresh HEAD, 2026-09-01, eighth tranche — Demon Slayer)
 
-U1 remains PARTIAL: the shared surface is proved and pinned across ELEVEN
+### Migrated: Demon Slayer pure LIVE-slot reference reads
+
+`content/jobs/programs/demon-slayer-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **16 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Demon Slayer: 16 → 0 PURE;
+CAPTURED 54 and BOUNDARY 1 unchanged; whole-repo 160 → 144 = 89 + 54 + 1)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in all 12 Demon Slayer resolvers that reach
+  the source: Demon Cutter, Comet, Draken Cross, Righteous Disdain, Demon
+  Claw, Gates of Hell, Vigilance Rush, Soul Blade enter/refresh/slash, Six
+  Hells Trigram, Wicked Sheath;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Demon Cutter, Draken Cross, Soul Blade
+  slash, and Wicked Sheath — identical LIVE re-read and
+  absent-singular→undefined semantics.
+
+**Deliberately NOT migrated (inventoried):** `plannedRush(context, actorId)`'s
+internal `sourceActor(context, actorId)` — `actorId` is a helper PARAMETER,
+not the ability-user source slot (machine-classified CAPTURED; no
+arbitrary-id adapter operation invented); and Righteous Disdain's `allyId =
+input.actorIds?.target?.[0]` — recorded player-choice U4 identity (the `[0]`
+select and its dereference stay caller-owned). `sourceActor(context, …)`
+remains imported for those two sites.
+
+### Guard
+
+The `u1-reference-routing` guard pins Demon Slayer (resolveSourceActor,
+resolveAttackTarget) to the adapter; the retained helper/captured sites are
+NOT banned (no blanket lexical ban). Mutation test: a Demon Slayer revert to
+`sourceActor(context, context.actorId)` drops the pinned calls, is caught
+with exactly one Demon Slayer routing problem, and the retained
+helper-parameter / recorded-ally dereferences alone do NOT trigger the pin.
+
+### Evidence
+
+- `reference-authoring.test.ts` +3: the production Demon Cutter resolver
+  fails closed (`reference.missing-actor`) on a gated-bypass ghost
+  `attackTargetId` (legacy silently no-opped); Comet keeps a genuinely
+  targetless use as a no-op (optional singleton semantics); Righteous
+  Disdain still splits damage to the RECORDED `input.actorIds` ally
+  (caller-owned).
+- `demon-slayer.test.ts` +1: reversing actor INSERTION order (second foe
+  added before the target) produces byte-identical Demon Cutter outcomes
+  and replay — the migrated source/attack-target reads resolve by recorded
+  slot identity, never object-iteration order.
+- the full Demon Slayer suite (24 tests) stays green through the engine
+  path — the Demon Cutter talent-2 rush geometry, Draken Cross charged-blast
+  matrix, Demon Claw BASE-max mastery, Gates of Hell U16 vigilance-rush
+  ledger, and Soul Blade power-die lifecycle all unchanged.
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
+
+## U1 status after the Demon Slayer tranche
+
+U1 remains PARTIAL: the shared surface is proved and pinned across TWELVE
 migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
-Chanter, Knave, Harvester, Job-trait, Class resolvers), and the residual is
-a machine-derived classified inventory — 105 pure LIVE-slot reads (next
-tranches) + 54 captured/derived dereferences + 1 in-call boundary read = 160
-sites, 0 direct dereferences. The single DERIVED_OR_PRECEDENCE_BOUNDARY
-remains inventoried and unresolved (BOUNDARY 1 → 1, as expected). A
-whole-consumer audit is NOT yet done, so U1 cannot claim AUTHORITATIVE: 7
-program files still resolve live slots through the legacy kernel-side
-convenience, and the U1×U4 captured-identity boundary has no shared surface
-yet.
+Chanter, Knave, Harvester, Demon Slayer, Job-trait, Class resolvers), and
+the residual is a machine-derived classified inventory — 89 pure LIVE-slot
+reads (next tranches) + 54 captured/derived dereferences + 1 in-call
+boundary read = 144 sites, 0 direct dereferences. The single
+DERIVED_OR_PRECEDENCE_BOUNDARY remains inventoried and unresolved
+(BOUNDARY 1 → 1). A whole-consumer audit is NOT yet done, so U1 cannot claim
+AUTHORITATIVE: 6 program files still resolve live slots through the legacy
+kernel-side convenience, and the U1×U4 captured-identity boundary has no
+shared surface yet.
 
 ## Coverage and verification invariants
 

@@ -163,11 +163,11 @@ describe('U1 residual census (machine inventory)', () => {
     expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
   });
 
-  it('pins the exact repo figures (160 = 105 + 54 + 1) so docs cannot drift from the machine', () => {
+  it('pins the exact repo figures (144 = 89 + 54 + 1) so docs cannot drift from the machine', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
-    expect(inventory.total).toBe(160);
+    expect(inventory.total).toBe(144);
     expect(inventory.categoryCounts).toEqual({
-      PURE_LIVE_REFERENCE: 105,
+      PURE_LIVE_REFERENCE: 89,
       CAPTURED_ID_DEREFERENCE: 54,
       DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
       NON_U1_OTHER: 0,
@@ -293,6 +293,10 @@ describe('U1 Reference/Binding routing guard', () => {
     // `input.actorIds.target[0]` center read) and the `??`-chain
     // captured dereferences stay inventoried and must NOT be flagged.
     'content/jobs/programs/harvester-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined; const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined; const foeId = context.triggerTargetIds?.[0] ?? context.input.actorIds?.target?.[0]; const foe = foeId ? sourceActor(context, foeId) : undefined;',
+    // Migrated Demon Slayer keeps its pinned adapter surface; the retained
+    // helper-parameter dereference (plannedRush's actorId) and the recorded
+    // ally choice (Righteous Disdain's input.actorIds) stay inventoried.
+    'content/jobs/programs/demon-slayer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); function plannedRush(context, actorId) { return sourceActor(context, actorId); } const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined;',
     'content/jobs/job-trait-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); mutations.push({ kind: \'condition\', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id });',
     'content/classes/class-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); const inputTargets = context.input.actorIds?.target; if (inputTargets[0] !== context.attackTargetId) throw 0;',
   };
@@ -321,10 +325,11 @@ describe('U1 Reference/Binding routing guard', () => {
     const problems = u1ReferenceRoutingProblems({
       ...valid,
       ...validContent,
-      // Harvester is now MIGRATED — use genuinely non-migrated families for
-      // the accepted-residual proof (Demon Slayer / Geomancer still route
-      // their live slots through the legacy convenience, inventoried).
-      'content/jobs/programs/demon-slayer-programs.ts': "const source = sourceActor(context, context.actorId);",
+      // Harvester and Demon Slayer are now MIGRATED — use genuinely
+      // non-migrated families for the accepted-residual proof (Seer / Fool /
+      // Geomancer still route their live slots through the legacy
+      // convenience, inventoried).
+      'content/jobs/programs/seer-programs.ts': "const source = sourceActor(context, context.actorId);",
       'content/jobs/programs/geomancer-programs.ts': "const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;",
     });
     expect(problems).toEqual([]);
@@ -431,6 +436,22 @@ describe('U1 Reference/Binding routing guard', () => {
       'content/jobs/programs/harvester-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined;',
     });
     expect(problems.filter((problem) => problem.file === 'content/jobs/programs/harvester-programs.ts')).toEqual([]);
+  });
+
+  it('T5c: catches a MIGRATED Demon Slayer program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    // Reverting Demon Slayer's migrated LIVE slots drops the pinned
+    // accessors; the retained helper-parameter dereference (plannedRush) and
+    // the recorded ally choice (Righteous Disdain) must NOT themselves be
+    // flagged — only the missing pins bite.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/demon-slayer-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined; function plannedRush(context, actorId) { return sourceActor(context, actorId); } const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/demon-slayer-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
+    expect(problems.filter((problem) => problem.file === 'content/jobs/programs/demon-slayer-programs.ts').length).toBe(1);
   });
 
   it('T5c: catches a MIGRATED program that reverts to direct slot resolution (drops the adapter calls)', () => {
