@@ -88,13 +88,13 @@ function queryCtx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionC
 
 /** A minimal aura state view: actors + entities with the fields the aura
  * kernel reads (side/position/size/defeated/onBattlefield + entity
- * ownerId/type/position). */
+ * ownerId/type/anchor). */
 const AURA_ACTOR = (id: string, side: 'heroes' | 'foes', position: { x: number; y: number } | null): AuraStateView['actors'][string] => ({
   id, side, position, size: 1, defeated: false, onBattlefield: true,
 });
 
 const ENTITY = (id: string, type: string, ownerId: string | null, position: { x: number; y: number }): NonNullable<AuraStateView['entities']>[string] => ({
-  id, type, ownerId, position,
+  id, type, ownerId, anchor: position,
 });
 
 describe('U2 — relation perspective is the U2 source role (ROLE ≠ incidental actor)', () => {

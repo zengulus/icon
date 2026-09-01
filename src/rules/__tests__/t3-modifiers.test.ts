@@ -178,6 +178,41 @@ describe('U14 — gates flip deterministically with state', () => {
     expect(modifierGateHolds(targetBloodied, view())).toBe(false);
   });
 
+  it('bloodied gates require complete finite HP state before testing the half-HP boundary', () => {
+    for (const kind of ['comeback', 'self-bloodied'] as const) {
+      const gate: ModifierGate = { kind };
+      expect(modifierGateHolds(gate, view({ actor: { hp: 10, maximumHp: 20 } }))).toBe(true);
+      expect(modifierGateHolds(gate, view({ actor: { hp: 9, maximumHp: 20 } }))).toBe(true);
+      expect(modifierGateHolds(gate, view({ actor: { hp: 11, maximumHp: 20 } }))).toBe(false);
+      expect(modifierGateHolds(gate, view({ actor: { hp: undefined, maximumHp: 20 } }))).toBe(false);
+      expect(modifierGateHolds(gate, view({ actor: { hp: 5, maximumHp: undefined } }))).toBe(false);
+      expect(modifierGateHolds(gate, view({ actor: { hp: 0, maximumHp: 0 } }))).toBe(false);
+      expect(modifierGateHolds(gate, view({ actor: { hp: Number.NaN, maximumHp: 20 } }))).toBe(false);
+      expect(modifierGateHolds(gate, view({ actor: { hp: 5, maximumHp: Number.POSITIVE_INFINITY } }))).toBe(false);
+    }
+  });
+
+  it('target-bloodied requires an existing hostile target with complete finite HP state', () => {
+    const gate: ModifierGate = { kind: 'target-bloodied' };
+    const target = (hp: number, maxHp: number): NonNullable<ModifierFoldView['target']> => ({
+      id: 'foe', side: 'foes', hp, maxHp, conditions: new Set(),
+    });
+    expect(modifierGateHolds(gate, view({ target: target(10, 20) }))).toBe(true);
+    expect(modifierGateHolds(gate, view({ target: target(9, 20) }))).toBe(true);
+    expect(modifierGateHolds(gate, view({ target: target(11, 20) }))).toBe(false);
+    expect(modifierGateHolds(gate, view())).toBe(false);
+    expect(modifierGateHolds(gate, view({ target: { ...target(1, 20), side: 'heroes' } }))).toBe(false);
+    expect(modifierGateHolds(gate, view({ target: target(0, 0) }))).toBe(false);
+    expect(modifierGateHolds(gate, view({ target: target(Number.NaN, 20) }))).toBe(false);
+    expect(modifierGateHolds(gate, view({ target: target(5, Number.POSITIVE_INFINITY) }))).toBe(false);
+    expect(modifierGateHolds(gate, view({
+      target: { ...target(1, 20), hp: undefined } as unknown as NonNullable<ModifierFoldView['target']>,
+    }))).toBe(false);
+    expect(modifierGateHolds(gate, view({
+      target: { ...target(1, 20), maxHp: undefined } as unknown as NonNullable<ModifierFoldView['target']>,
+    }))).toBe(false);
+  });
+
   it('a predicate-gated rule flips on and off as state changes (never a stale fold)', () => {
     const ability = owner();
     registerModifierRule({ sourceId: 't3:gated', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: constantModifierValue(5), gates: [{ kind: 'comeback' }] });

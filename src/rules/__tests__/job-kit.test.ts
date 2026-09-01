@@ -103,7 +103,7 @@ describe('job-kit building blocks', () => {
       ...base,
       state: {
         ...base.state,
-        entities: { ...base.state.entities, mine: { id: 'mine', type: 'bomb', ownerId: hero.id, position: { x: 4, y: 1 }, state: {} } },
+        entities: { ...base.state.entities, mine: { id: 'mine', type: 'bomb', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: {} } },
       },
     };
     expect(occupied({ x: 4, y: 1 }, withSummon, hero.id)).toBe(false);
@@ -114,7 +114,7 @@ describe('job-kit building blocks', () => {
       ...base,
       state: {
         ...base.state,
-        entities: { ...base.state.entities, boulder: { id: 'boulder', type: 'boulder', ownerId: hero.id, position: { x: 4, y: 1 }, state: {} } },
+        entities: { ...base.state.entities, boulder: { id: 'boulder', type: 'boulder', ownerId: hero.id, positions: [{ x: 4, y: 1 }], state: {} } },
       },
     };
     expect(occupied({ x: 4, y: 1 }, withObject, hero.id)).toBe(true);

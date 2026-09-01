@@ -212,7 +212,7 @@ export function orderedFreeCellsNear(state: EncounterState, center: Position, ra
  * ignores intangible summons. */
 export function freeCellNear(state: EncounterState, center: Position, radius: number, orthogonalOnly = false): Position | null {
   const occupiedCell = (cell: Position) => Object.values(state.actors).some((candidate) => candidate.onBattlefield && !candidate.defeated && candidate.position && samePosition(candidate.position, cell))
-    || Object.values(state.entities).some((entity) => entity.positions[0] && samePosition(entity.positions[0], cell));
+    || Object.values(state.entities).some((entity) => entity.positions.some((position) => samePosition(position, cell)));
   const cells = orthogonalOnly ? orthogonalNeighbors(center) : squareArea(center, radius);
   const candidates: Position[] = [];
   for (const cell of cells) {
@@ -572,4 +572,3 @@ export function runLifecyclePhaseForAll(
     }
   }
 }
-

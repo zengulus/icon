@@ -235,8 +235,10 @@ minimum-distance set with no invented tie-break (ordering/tie resolution
 happens only where the SOURCE defines it; e.g. ICON p.143 grants the
 player a choice among equidistant foes); a mob member model does not
 exist yet (`createFoeFromProfile` rejects the mob role — TODO/roadmap B2).
-Corrective pass (2026-08-30): `occupied` is an obstruction test
-(characters + objects; intangible summons do not obstruct, p.95), and the
+Corrective pass (2026-09-01): `finalSpaceOccupied` is final-space availability,
+not generic movement obstruction: it includes live character footprints and
+complete OBJECT regions, while defeated/off-battlefield actors and intangible
+summons do not occupy a final character space (pp.95/101). The
 position slice is a free/unoccupied specialist — occupancy is an explicit
 query policy, not a property of a position candidate. The specialists
 keep their spatial models; the eligibility authorities still to merge

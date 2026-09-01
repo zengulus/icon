@@ -24,7 +24,8 @@ import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-au
  * of the shared query. */
 function bombFreeCells(context: RuleExecutionContext, origin: Position, radius: number): Position[] {
   return evaluatePositions({ origin, radius, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)
-    .filter((cell) => !Object.values(context.state.entities).some((entity) => entity.type === 'bomb' && entity.position && sameCell(entity.position, cell)));
+    .filter((cell) => !Object.values(context.state.entities).some((entity) =>
+      entity.type === 'bomb' && entity.positions.some((position) => sameCell(position, cell))));
 }
 
 function bombFreeCell(context: RuleExecutionContext, origin: Position, radius: number): Position | undefined {

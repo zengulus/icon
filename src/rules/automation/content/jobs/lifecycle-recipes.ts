@@ -14,6 +14,7 @@ import { clockForTiming } from '../../primitives/scope.js';
 import type { BoundaryRef, LifecycleIdentity } from '../../primitives/scope.js';
 import type { RuleTiming } from '../../primitives/types.js';
 import { capturedActor } from '../../primitives/reference.js';
+import { entityAnchorPosition } from '../../primitives/anchor.js';
 import { applyLifecycleScopedUsage, currentLifecycleInstanceFor, incubusOncePerRoundKey, lifecycleObservationForGroup, oneInterruptPerTurnWindowKey, recordLifecycleInstance, recordUsageKey, refreshUsageLedgerForBoundary, stampedeOncePerRoundKey, usageCount, usageLedgerHoldsForBoundary, useLedgerAvailable } from '../../kernels/use-ledger.js';
 import type { DiceSource } from '../../../dice.js';
 import type { EncounterActor, EncounterMark, EncounterState, Position } from '../../../types.js';
@@ -179,8 +180,9 @@ function detonateBombs(state: EncounterState, owner: EncounterActor, gamble: num
   if (bombs.length === 0) return;
   const affected = new Set<string>();
   for (const bomb of bombs) {
-    if (!bomb.positions[0]) continue;
-    for (const cell of squareArea(bomb.positions[0], 1)) {
+    const bombAnchor = entityAnchorPosition(bomb);
+    if (!bombAnchor) continue;
+    for (const cell of squareArea(bombAnchor, 1)) {
       for (const character of Object.values(state.actors)) {
         if (!character.defeated && character.onBattlefield && character.position && samePosition(character.position, cell)) affected.add(character.id);
       }
@@ -1094,7 +1096,7 @@ registerLifecycleRecipe({
       if (entity.type !== 'lightning-spike') continue;
       const owner = entity.ownerId ? state.actors[entity.ownerId] : undefined;
       if (!owner || !hasMastery(owner, 'spellblade:rampant-nail')) continue;
-      const spike = entity.positions[0];
+      const spike = entityAnchorPosition(entity);
       if (spike && distance(actor.position, spike) <= 1) return owner.id;
     }
     return null;
@@ -1105,7 +1107,7 @@ registerLifecycleRecipe({
       if (entity.type !== 'lightning-spike') continue;
       const owner = entity.ownerId ? state.actors[entity.ownerId] : undefined;
       if (!owner || !hasMastery(owner, 'spellblade:rampant-nail')) continue;
-      const spike = entity.positions[0];
+      const spike = entityAnchorPosition(entity);
       if (!spike) continue;
       if (distance(actor.position, spike) <= 1) {
         applyRuleMutations(state, [{
@@ -1523,4 +1525,3 @@ registerLifecycleRecipe({
     if (boundary !== null) refreshUsageLedgerForBoundary(actor, boundary);
   },
 });
-

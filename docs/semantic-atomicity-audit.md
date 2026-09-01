@@ -94,7 +94,7 @@ answer.
 | --- | --- | --- |
 | `distance` | Chebyshev distance between two points | Keep as atomic metric. Footprint distance remains in the spatial authority. |
 | `withinGrid` | Is this point inside the grid? | Keep as atomic static predicate. |
-| `occupied` | Is a cell unavailable as a final character space because another character or OBJECT occupies it? | Rename to `finalSpaceOccupied`; keep as occupancy/final-space policy, never describe it as ordinary movement obstruction. `job-kit.occupied` remains a compatibility name for content. |
+| `occupied` | Is a cell unavailable as a final character space because a live battlefield character or OBJECT occupies it? | Renamed to `finalSpaceOccupied`; defeated/off-battlefield actors do not occupy final space, and complete object regions are tested. Keep as occupancy/final-space policy, never describe it as ordinary movement obstruction. `job-kit.occupied` remains a compatibility name for content. |
 | `impassable` | Is the point off-grid or impassable terrain? | Keep as an atomic static point predicate. Movement modes decide whether/how it matters. |
 | `walk` | Sequential path construction plus mover footprint, phasing, actors, objects, terrain and stopping policy | Not a battlefield atom. Return it to `job-kit` as `TRANSITIONAL-COMPATIBILITY-SURFACE`; it preserves existing named-program behavior until an exact adapter to `movement.ts` exists. In particular, it is not evidence of a second authoritative Standard Move implementation. |
 | `firstFreeCell` | U3 qualification followed by caller-list “first” selection | Not atomic and no generic source ordering is established. Return it to `job-kit` as compatibility debt. Its three Colossus consumers need a later source audit and explicit U3 candidate set plus U4/U17/source-defined ordering before migration. |
@@ -129,13 +129,13 @@ it cannot be implemented as `selectActors(...).every(...)`, because
 | --- | --- | --- | --- | --- | --- | --- |
 | `always` | No additional applicability clause. | `true`. | `true`. | None. | Cannot fail from absent optional view fields. | Empty/minimal view still true. |
 | `stealth` | Acting character has Stealth now. | `conditionsFor(actor.id).has('stealth')`. | `has-condition(live(source), stealth)`. | Exact live-reference condition projection may need adapter unification. | Missing actor/condition projection must fail closed, not throw or infer Stealth. | Empty set false; exact Stealth true; unrelated status false. |
-| `comeback` | Acting character is Bloodied (at or below half its valid maximum HP). | `maximumHp > 0 && hp <= maximumHp / 2`, with absent HP read as `0`. | `bloodied(exists-one(live(source)))`. | Non-vacuous single-reference predicate and the same wounds-adjusted max-HP projection. | Missing/non-positive maximum false. | Boundary half true; above half false; maximum `0` false. |
+| `comeback` | Acting character is Bloodied (at or below half its valid maximum HP). | Requires finite `hp`, finite positive `maximumHp`, then evaluates `hp <= maximumHp / 2`. | `bloodied(exists-one(live(source)))`. | Non-vacuous single-reference predicate and the same wounds-adjusted max-HP projection. | Missing/non-finite HP, missing/non-finite/non-positive maximum, or missing actor false. | Exact/below half true; above half false; missing/NaN/Infinity/zero matrix false. |
 | `charge` | Modifier applies on the acting character's authoritative Slow Turn. | `actor.slowTurn === true`. | `on-turn-speed(live(source), slow)` (durable clock/state fact). | Typed slow-turn/turn-speed predicate. A `trigger('charge')` predicate is explicitly wrong. | Absent flag false; Heroic without Slow Turn false. | Slow true; false/absent false; ambient Charge trigger alone must not make it true. |
 | `round-at-least` | Current combat round is at least the source constant. | Numeric `view.round >= value`. | `compare(combat-round, >=, constant(value))`. | Likely none once U5 round is available to U6 comparison. | Non-finite/malformed round must fail closed at the adapter boundary. | `value-1` false, exact value true. |
 | `mastery` | Named parent ability is both equipped and mastered. | Conjunction of membership in `abilityIds` and `masteredAbilityIds`. | `all(equipped(source, ability), mastered(source, ability))`. | Typed equipped-ability and mastered-ability predicates/reference. Arbitrary rule-state keys are not parity. | Either array absent, either membership absent, or actor absent → false. | Equipped-only false; mastered-only false; both true. |
 | `choice` | Player made the named optional talent-use decision for this resolution. | Membership in `selectedTalentSourceIds`. | `captured-choice-includes(choice-ref, option-ref)` over the recorded U4 result. | Typed reference to a captured U4 decision and membership predicate. A raw command-input reread or source-id boolean is forbidden. | Missing capture false; malformed capture rejects/fails closed before fold; replay consumes the same captured answer. | Same raw input without capture false; recorded matching capture true on execution and replay. |
 | `self-bloodied` | Acting character is Bloodied; distinct name preserves source-row meaning. | Same calculation as `comeback`. | Same exact predicate as `comeback` (content provenance remains distinct). | Same as `comeback`. | Same as `comeback`. | Same boundary/malformed matrix as `comeback`. |
-| `target-bloodied` | An existing hostile attack target is Bloodied. | Target exists, side differs, valid positive max HP, and HP is at/below half. | `exists-one(attack-target, all(hostile-to(source), bloodied))`. | Non-vacuous cardinality/reference existence plus hostility composition. | Missing target, allied target, invalid max HP, or unresolved reference → false. | Missing false; allied qualifying false; hostile qualifying true; hostile healthy false. |
+| `target-bloodied` | An existing hostile attack target is Bloodied. | Target exists, side differs, HP/max HP are finite, max HP is positive, and HP is at/below half. | `exists-one(attack-target, all(hostile-to(source), bloodied))`. | Non-vacuous cardinality/reference existence plus hostility composition. | Missing/allied target, missing/non-finite HP, missing/non-finite/non-positive maximum, or unresolved reference → false. | Missing/allied/malformed false; hostile exact/below half true; hostile healthy false. |
 | `target-has-condition` | An existing hostile attack target has any status, or the named status. | Target exists, is not allied, then nonempty Set/array or exact ID membership. | `exists-one(attack-target, all(hostile-to(source), has-any-condition/has-condition(id)))`. | Non-vacuous target existence, hostility, and `has-any-condition`; normalize Set/record projections. | Missing/allied target and empty/malformed condition collection → false. | Missing false; allied with condition false; hostile matching true; hostile empty/nonmatching false. |
 
 The characterization suite now covers every retained gate and the hostile
@@ -160,9 +160,8 @@ Region = canonical distinct set of in-grid Position cells
 ResolvedArea {
   region: Region
   origin: resolved Position
-  attackSpacePolicy: none | attack-space(Position, owner-choice-on-overlap)
   placement: { qualifyingCells, rule: listed-range-any-cell | unlisted-adjacent-any-cell }
-  sourceExclusions: actor references
+  attackSelector: none | fixed-space(Position) | choose-character-in-region
 }
 RegionSpec = explicit cells | line path | arc path | burst(center,exact shape)
            | blast(exact template,center) | cross-boundary(configuration)
@@ -178,14 +177,26 @@ LoS, and effects consume that preserved origin.
 
 An AoE attack's attack space is not ordinary region membership: its occupant
 receives the attack component instead of the area effect unless an effect says
-it applies to all characters. Burst uses its center as origin and excludes the
-ability user by default unless the source says otherwise.
+it applies to all characters. Line and Arc expose U3 character candidates
+intersecting the region and U4 records the chosen attack character; the choice
+is not embedded in `ResolvedArea`. Blast and Burst use a fixed central space,
+so U3 only resolves its occupant if any. Burst's default user exclusion is a
+recipient rule, not removal of the user's cell from its Region.
 
-Large-character design tests must enforce the p.290 composition: a large foe
-using a self-origin AoE may choose any occupied cell as origin (U4 over its U3
-footprint candidates); a large target intersecting multiple area cells is
-affected once; and when it intersects both attack and area spaces the ability
-owner chooses which one applies. `insideArea` alone cannot decide these.
+Large-character design tests enforce three distinct U3/U4 compositions from
+p.290: (1) a large foe using a self-origin AoE chooses one U3 footprint-origin
+candidate before geometry resolves; (2) a bigger foe may opt in or out of its
+own area ability during recipient resolution; and (3) every recipient is
+identity-deduplicated, then a large target eligible for both attack and area
+branches requires a recorded ability-owner branch choice. Attack-space
+selection and recipient-branch arbitration are separate decisions;
+`insideArea` alone cannot decide either.
+
+`Region` answers **where**. Relation filters, “foes in the area”, “all except
+you”, Burst's default user exclusion, and other recipient rules answer
+**who** and belong in U3/effect policy. A cell is removed from Region only when
+source geometry actually removes that space. The typed design contract in
+`primitives/area-resolution.ts` contains no `sourceExclusions` field.
 
 Blast remains unresolved until the actual Small/Medium/Large templates are
 represented exactly; no Chebyshev-square/radius approximation is permitted.
@@ -200,7 +211,9 @@ and persistence authorities; Gran itself is not a named generic primitive.
 Retained deliberately: `RuleSelector`, `RuleChoice` constraint fields,
 `RuleNumber` input/roll forms, the `job-kit` `walk`/`firstFreeCell` compatibility
 helpers, modifier gate rows, and current source-ID exemptions. The next gate
-tranche begins only after the table above is representable in U6; the Region /
-ResolvedArea authority follows as its own implementation tranche. U5 roll
+tranche begins only after the table above is representable in U6; that bounded
+vocabulary-and-parity tranche is lower risk than implementing Region /
+ResolvedArea first, whose geometry, U3 recipients, several U4 decisions, and
+Blast templates cross more authorities. U5 roll
 cleanup and content-leak migration follow only after their replay/registration
 contracts are explicit.

@@ -390,7 +390,11 @@ export interface RuleEntityView {
   id: string;
   type: string;
   ownerId: string | null;
-  position: Position | null;
+  /** Complete authoritative battlefield extent. An entity anchor, when a
+   * singular frame is required, is derived explicitly through U7. */
+  positions: readonly Position[];
+  /** Explicit persisted category wins in the shared entity-kind authority. */
+  kind?: 'summon' | 'object';
   state: Readonly<Record<string, string | number | boolean | null>>;
 }
 

@@ -78,8 +78,8 @@ function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContex
         ghost: actorView('ghost', 'foes', null),
       },
       entities: {
-        beast: { id: 'beast', type: 'beast', ownerId: 'hero', position: { x: 7, y: 4 }, state: { actorId: 'summon1' } },
-        wisp: { id: 'wisp', type: 'wisp', ownerId: 'ally', position: { x: 11, y: 4 }, state: { actorId: 'summon1' } },
+        beast: { id: 'beast', type: 'beast', ownerId: 'hero', positions: [{ x: 7, y: 4 }], state: { actorId: 'summon1' } },
+        wisp: { id: 'wisp', type: 'wisp', ownerId: 'ally', positions: [{ x: 11, y: 4 }], state: { actorId: 'summon1' } },
       },
       terrainAt: () => new Set<string>(),
       elevationAt: () => 0,

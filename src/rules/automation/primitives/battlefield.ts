@@ -21,11 +21,11 @@ export const withinGrid = (position: Position, context: RuleExecutionContext): b
  */
 export const finalSpaceOccupied = (position: Position, context: RuleExecutionContext, excludeId = ''): boolean =>
   Object.values(context.state.actors).some((actor) => actor.id !== excludeId
+    && !actor.defeated
     && actor.position
     && footprintIntersectsCells({ position: actor.position, size: actor.size ?? 1 }, [position]))
   || Object.values(context.state.entities).some((entity) => entityKindOf(entity) === 'object'
-    && entity.position
-    && sameCell(entity.position, position));
+    && entity.positions.some((cell) => sameCell(cell, position)));
 
 export const impassable = (position: Position, context: RuleExecutionContext): boolean =>
   !withinGrid(position, context) || context.state.terrainAt(position).has('impassable');

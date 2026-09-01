@@ -380,8 +380,10 @@ export function rushTowardFoes(context: RuleExecutionContext, position: Position
  * may have a null owner). Range uses the canonical p.92 footprint metric
  * from the query's anchor; `atPosition` is the occupying-position read.
  * Deterministic, de-duplicated by identity. Pure — no state is mutated. */
-export function evaluateEntityQuery(query: EntityQuery, context: RuleExecutionContext): Array<{ id: string; type: string; ownerId: string | null; position: Position | null }> {
+export function evaluateEntityQuery(query: EntityQuery, context: RuleExecutionContext): Array<{ id: string; type: string; ownerId: string | null; positions: readonly Position[] }> {
   const anchor = query.rangeOrigin === undefined ? null : resolveSpatialAnchor(query.rangeOrigin, context);
+  const maximumRange = query.range;
+  const requiredPosition = query.atPosition;
   const candidates = Object.values(context.state.entities).filter((entity) => {
     if (query.owner !== undefined) {
       const ownerId = query.owner.kind === 'self'
@@ -392,14 +394,15 @@ export function evaluateEntityQuery(query: EntityQuery, context: RuleExecutionCo
       if (ownerId === null ? entity.ownerId === null : entity.ownerId !== ownerId) return false;
     }
     if (query.entityType !== undefined && entity.type !== query.entityType) return false;
-    if (query.range !== undefined && entity.position !== null && anchor !== null) {
-      if (footprintDistance(anchor, { position: entity.position, size: 1 }) > query.range) return false;
+    if (maximumRange !== undefined && anchor !== null) {
+      if (entity.positions.length === 0
+        || entity.positions.every((position) => footprintDistance(anchor, { position, size: 1 }) > maximumRange)) return false;
     }
-    if (query.atPosition !== undefined && entity.position !== null) {
-      if (!footprintIntersectsCells({ position: entity.position, size: 1 }, [query.atPosition])) return false;
+    if (requiredPosition !== undefined) {
+      if (!entity.positions.some((position) => sameCell(position, requiredPosition))) return false;
     }
     return true;
-  }).map((entity) => ({ id: entity.id, type: entity.type, ownerId: entity.ownerId, position: entity.position }));
+  }).map((entity) => ({ id: entity.id, type: entity.type, ownerId: entity.ownerId, positions: entity.positions }));
   const seen = new Set<string>();
   return candidates.filter((entity) => {
     if (seen.has(entity.id)) return false;

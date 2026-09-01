@@ -164,7 +164,8 @@ export function walk(
           ),
       );
       const blockedByEntity = Object.values(context.state.entities).some(
-        (entity) => entityKindOf(entity) === 'object' && entity.position && sameCell(entity.position, next),
+        (entity) => entityKindOf(entity) === 'object'
+          && entity.positions.some((cell) => sameCell(cell, next)),
       );
       if (blockedByActor || blockedByEntity) break;
     }

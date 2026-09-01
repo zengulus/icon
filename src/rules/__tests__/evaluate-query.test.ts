@@ -89,8 +89,8 @@ function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContex
         gone: actorView('gone', 'foes', { x: 9, y: 4 }, { defeated: true }),
       },
       entities: {
-        beast: { id: 'beast', type: 'beast', ownerId: 'hero', position: { x: 7, y: 4 }, state: { actorId: 'summon1' } },
-        wisp: { id: 'wisp', type: 'wisp', ownerId: 'ally', position: { x: 11, y: 4 }, state: { actorId: 'summon1' } },
+        beast: { id: 'beast', type: 'beast', ownerId: 'hero', positions: [{ x: 7, y: 4 }], state: { actorId: 'summon1' } },
+        wisp: { id: 'wisp', type: 'wisp', ownerId: 'ally', positions: [{ x: 11, y: 4 }], state: { actorId: 'summon1' } },
       },
       terrainAt: () => new Set<string>(),
       elevationAt: () => 0,
@@ -313,8 +313,8 @@ describe('position domain — generic space query, teleport legality, and the ne
         ...ctx().state,
         entities: {
           ...ctx().state.entities,
-          bomb: { id: 'bomb', type: 'bomb', ownerId: 'hero', position: { x: 4, y: 5 }, state: {} },
-          boulder: { id: 'boulder', type: 'boulder', ownerId: 'hero', position: { x: 3, y: 5 }, state: {} },
+          bomb: { id: 'bomb', type: 'bomb', ownerId: 'hero', positions: [{ x: 4, y: 5 }], state: {} },
+          boulder: { id: 'boulder', type: 'boulder', ownerId: 'hero', positions: [{ x: 3, y: 5 }], state: {} },
         },
       },
     };

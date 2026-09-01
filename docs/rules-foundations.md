@@ -181,9 +181,13 @@ invented) are documented non-executable, their resolvers fail closed on
 those clauses, and the `includeDefeated: true` flags those call sites
 carried were dropped ("closest foe" cannot include defeated characters).
 `primitives/battlefield.ts::finalSpaceOccupied` answers final-space occupancy
-(another character or OBJECT occupies the cell; intangible summons do not,
-p.95). It is not generic movement obstruction: p.88 permits ally transit but
-forbids ending in any character's space. `primitives/job-kit.ts` retains the
+(a live on-battlefield character or OBJECT occupies the cell; defeated and
+off-battlefield actors and intangible summons do not, pp.95/101). It consumes
+complete entity `positions`, never a lossy first-cell projection. The singular
+entity frame required by anchor consumers is explicitly derived by U7's
+`entityAnchorPosition`; it is not authoritative entity geometry. This is not
+generic movement obstruction: p.88 permits ally transit but forbids ending in
+any character's space. `primitives/job-kit.ts` retains the
 old `occupied` name plus `walk` and `firstFreeCell` as compatibility authoring
 helpers; the latter two are explicitly not shared movement/query-ordering
 authorities. Kernels import the owning battlefield surface directly;
