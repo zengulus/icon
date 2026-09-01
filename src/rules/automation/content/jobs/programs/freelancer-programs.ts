@@ -59,6 +59,9 @@ const strafeShot: RuleResolver = (context) => {
   const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
+  // The exceed fact is the ABILITY'S OWN attack roll at 15+ (ICON p.93) —
+  // derived here from the authoritative roll, never a caller assertion.
+  let exceeded = false;
   const direction = target?.position ? axisDirection(source.position, target.position) : context.input.directions?.direction ?? { x: 1, y: 0 };
   if (target?.position && distance(source.position, target.position) > 3) {
     const before = walk(context, source.position, direction, 1, false, source.id);
@@ -66,6 +69,7 @@ const strafeShot: RuleResolver = (context) => {
   }
   if (target) {
     const roll = resolveAuthoritativeAttack(context, source, target, { boons: 1 + armedBoon(context, source) });
+    exceeded = (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true;
     mutations.push(roll.attackMutation);
     mutations.push(roll.hit
       ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
@@ -76,7 +80,7 @@ const strafeShot: RuleResolver = (context) => {
     const after = walk(context, source.position, direction, 1, false, source.id);
     if (!sameCell(after, source.position)) mutations.push(rushMutation(context, source.id, after));
   }
-  if (context.triggers?.has('finishing-blow') || context.triggers?.has('exceed')) {
+  if (context.triggers?.has('finishing-blow') || exceeded) {
     for (const foe of Object.values(context.state.actors)) {
       if (foe.side === source.side || !foe.position || distance(foe.position, source.position) !== 3) continue;
       mutations.push(unerringDamage(context, foe.id, 2));
@@ -121,7 +125,7 @@ const astralChain: RuleResolver = (context) => {
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(markMutation(context, target.id, 'astral-chain', {}));
-  if (context.triggers?.has('finishing-blow') || context.triggers?.has('exceed')) {
+  if (context.triggers?.has('finishing-blow') || (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true) {
     const direction = axisDirection(source.position, target.position);
     const landing = walk(context, source.position, direction, 4, true, source.id);
     if (!sameCell(landing, source.position)) mutations.push(flyMutation(context, source.id, landing));
@@ -278,7 +282,7 @@ const soulShot: RuleResolver = (context) => {
     if (character.side === source.side) { passedAllies += 1; continue; }
     if (character.id !== target.id) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  if (context.triggers?.has('finishing-blow') || context.triggers?.has('exceed') || passedAllies >= 2) {
+  if (context.triggers?.has('finishing-blow') || (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true || passedAllies >= 2) {
     const blast = squareArea(targetPosition, 3);
     for (const character of Object.values(context.state.actors)) {
       const characterPosition = character.position;

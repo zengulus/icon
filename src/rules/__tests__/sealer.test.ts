@@ -213,6 +213,8 @@ describe('Sealer ability automation (p.189–196)', () => {
 
   it('Matsuri: player-selected Teleport 2, attacks 2[D]+fray, and an Exceed blasts the area', () => {
     const { state, hero, foe, second } = sealerEncounter({ foe: { x: 2, y: 1 }, second: { x: 2, y: 0 } });
+    // Exceed is the ability's own 15+ attack roll (ICON p.93) — scripted to
+    // 15 so the blast derives from the authoritative roll, never asserted.
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -221,8 +223,7 @@ describe('Sealer ability automation (p.189–196)', () => {
       timing: 'use',
       input: { positions: { 'teleport': [{ x: 2, y: 2 }] } },
       attackTargetId: foe.id,
-      triggers: ['exceed'],
-    }, scriptedDice(12, 4, 5));
+    }, scriptedDice(15, 4, 5));
     expect(result.state.actors[foe.id].hp).toBe(17); // 32 - (4 + 5 + fray 4) - 2 divine (exceed blast)
     expect(result.state.actors[second!.id].hp).toBe(30); // 32 - 2 divine (large blast, foes)
     expect(result.state.actors[hero.id].vigor).toBe(3); // allies in the blast gain 3 vigor
@@ -310,13 +311,17 @@ describe('Sealer ability automation (p.189–196)', () => {
 
   it('Open The Gates: player-selected Teleport 1, attacks with +1 boon that cannot miss, pacifying the foe', () => {
     const { state, hero, foe } = sealerEncounter({ second: null });
+    // The fixture's roll exceeds 15 (ICON p.93), so the ability's OWN exceed
+    // clause legitimately resolves: two player-selected 1-space teleports
+    // after each shove (the recorded positions are supplied on the same
+    // command input as the base teleport).
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'sealer:open-the-gates', actionId: 'default', timing: 'use',
-      input: { positions: { 'teleport': [{ x: 1, y: 2 }] } }, attackTargetId: foe.id,
-    }, scriptedDice(12, 6, 4));
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }], 'teleport-exceed-1': [{ x: 1, y: 3 }], 'teleport-exceed-2': [{ x: 2, y: 3 }] } }, attackTargetId: foe.id,
+    }, scriptedDice(16, 6, 4));
     expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + fray 4)
     expect(result.state.actors[foe.id].statuses).toContain('pacified');
-    expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 }); // teleported to player choice
+    expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 3 }); // after the exceed-1/exceed-2 hops
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

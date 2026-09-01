@@ -98,6 +98,10 @@ describe('Geomancer ability automation (p.215–221)', () => {
 
   it('Geo: 2[D]+fray on hit, frays the blast, creates a boulder, and a Charge explodes the target', () => {
     const { state, hero, foe, second } = geomancerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 } });
+    // Charge is the authoritative slow-turn fact (ICON p.95); the command
+    // asserts it by the actor being on a slow turn, never by raw triggers.
+    state.actors[hero.id].ruleState['slow-turn'] = true;
+    state.actors[hero.id].ruleStateOwners['slow-turn'] = hero.id;
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -106,7 +110,6 @@ describe('Geomancer ability automation (p.215–221)', () => {
       timing: 'use',
       input: {},
       attackTargetId: foe.id,
-      triggers: ['charge'],
     }, scriptedDice(12, 4, 5));
     expect(result.state.actors[foe.id].hp).toBe(17); // 32 - (4 + 5 + fray 4) - 2 piercing (charge blast)
     expect(result.state.actors[second!.id].hp).toBe(26); // 32 - fray 4 (area) - 2 piercing (charge blast)
@@ -117,6 +120,8 @@ describe('Geomancer ability automation (p.215–221)', () => {
 
   it('Helix Heel: shocks the line for 2 piercing and a Charge shatters damaged foes', () => {
     const { state, hero, foe, second } = geomancerEncounter({ foe: { x: 3, y: 1 }, second: { x: 4, y: 1 } });
+    state.actors[hero.id].ruleState['slow-turn'] = true;
+    state.actors[hero.id].ruleStateOwners['slow-turn'] = hero.id;
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -124,7 +129,6 @@ describe('Geomancer ability automation (p.215–221)', () => {
       actionId: 'default',
       timing: 'use',
       input: { directions: { line: { x: 1, y: 0 } } },
-      triggers: ['charge'],
     }, scriptedDice());
     expect(result.state.actors[foe.id].hp).toBe(30); // 32 - 2 piercing
     expect(result.state.actors[second!.id].hp).toBe(30); // 32 - 2 piercing
@@ -151,6 +155,8 @@ describe('Geomancer ability automation (p.215–221)', () => {
 
   it('Terraforming Charge: four distinct effect clauses are budgeted; boulders + pits each still produce their full count', () => {
     const { state, hero, foe } = geomancerEncounter({ second: null });
+    state.actors[hero.id].ruleState['slow-turn'] = true;
+    state.actors[hero.id].ruleStateOwners['slow-turn'] = hero.id;
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -160,7 +166,6 @@ describe('Geomancer ability automation (p.215–221)', () => {
       input: { actorIds: { target: [foe.id] }, options: { effects: 'boulders,pits,difficult,remove' },
         // Line 3 fully inside the burst so the difficult bullet lands in-area.
         positions: { line: [{ x: 4, y: 1 }, { x: 5, y: 1 }, { x: 6, y: 1 }] } },
-      triggers: ['charge'],
     }, scriptedDice());
     expect(Object.values(result.state.entities).filter((entity) => entity.type === 'boulder')).toHaveLength(2);
     expect(result.state.terrainEffects.filter((effect) => effect.terrain === 'pit')).toHaveLength(2);

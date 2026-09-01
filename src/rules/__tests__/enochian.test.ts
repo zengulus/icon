@@ -70,6 +70,9 @@ describe('Enochian ability automation (p.206–214)', () => {
 
   it('Pyre: 2[D]+fray to the target, fray to the medium blast, and an Exceed explodes the area for 2 piercing', () => {
     const { state, hero, foe, second } = enochianEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 } });
+    // Exceed is the ability's own 15+ attack roll (ICON p.93) — the roll is
+    // scripted to 15 so the re-explosion derives from the authoritative roll,
+    // never a command assertion.
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -78,8 +81,7 @@ describe('Enochian ability automation (p.206–214)', () => {
       timing: 'use',
       input: {},
       attackTargetId: foe.id,
-      triggers: ['exceed'],
-    }, scriptedDice(12, 4, 5));
+    }, scriptedDice(15, 4, 5));
     expect(result.state.actors[foe.id].hp).toBe(17); // 32 - (4 + 5 + fray 4) - 2 piercing (exceed)
     expect(result.state.actors[second!.id].hp).toBe(26); // 32 - fray 4 (area) - 2 piercing (exceed)
     expect(applyEvents(state, result.events)).toEqual(result.state);
@@ -261,8 +263,7 @@ describe('Enochian ability automation (p.206–214)', () => {
       timing: 'use',
       input: {},
       attackTargetId: foe.id,
-      triggers: ['exceed'],
-    }, scriptedDice(12, 4, 5));
+    }, scriptedDice(15, 4, 5));
     expect(result.state.actors[foe.id].hp).toBe(17); // 32 - (4 + 5 + fray 4) - 2 piercing (exceed)
     expect(result.state.actors[second.id].hp).toBe(26); // 32 - fray 4 - 2 piercing (exceed)
     expect(applyEvents(setup, result.events)).toEqual(result.state);

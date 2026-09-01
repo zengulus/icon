@@ -104,22 +104,33 @@ describe('Freelancer ability automation (p.153–158)', () => {
     expect(ended.actors[fixture.foe.id].marks.some(({ markId }) => markId === 'exorcism')).toBe(false);
   });
 
-  it('Trick Shot: arms the next attack, and an asserted Finishing Blow grants stealth', () => {
-    const { state, hero } = freelancerEncounter({ second: null });
+  it('Trick Shot: arms the next attack without stealth, then a bloodied attack slot derives the Finishing Blow stealth', () => {
+    // Control fixture: no bloodied attack target, so no Finishing Blow derives
+    // (ICON p.95) and the resolver only arms the next attack.
+    const { state, hero, foe } = freelancerEncounter({ foe: { x: 2, y: 1 }, second: null });
     const armed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:trick-shot', targetIds: [] }, scriptedDice()).state;
     expect(armed.actors[hero.id].ruleState['trick-shot:armed']).toBe(true);
     expect(armed.actors[hero.id].conditions.some(({ id }) => id === 'stealth')).toBe(false);
+    expect(applyEvents(state, executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:trick-shot', targetIds: [] }, scriptedDice()).events)).toEqual(armed);
 
-    const finishing = executeCommand(state, {
+    // Finishing Blow is derived from the bloodied attack-target slot (ICON
+    // p.95): an adjacent foe is bloodied and named as the attack target, so
+    // the boundary derives the trigger — never asserted on the command. A
+    // separate fixture keeps the no-repeat ability to a single use.
+    const finishingFixture = freelancerEncounter({ foe: { x: 2, y: 1 }, second: null });
+    finishingFixture.state.actors[finishingFixture.foe.id].hp = 16;
+    const finishing = executeCommand(finishingFixture.state, {
       type: 'EXECUTE_RULE',
-      actorId: hero.id,
+      actorId: finishingFixture.hero.id,
       sourceId: 'freelancer:trick-shot',
       actionId: 'default',
       timing: 'use',
       input: {},
-      triggers: ['finishing-blow'],
-    }, scriptedDice()).state;
-    expect(finishing.actors[hero.id].conditions.some(({ id }) => id === 'stealth')).toBe(true);
+      attackTargetId: finishingFixture.foe.id,
+    }, scriptedDice());
+    expect(finishing.state.actors[finishingFixture.hero.id].conditions.some(({ id }) => id === 'stealth')).toBe(true);
+    expect(finishing.state.actors[finishingFixture.hero.id].ruleState['trick-shot:armed']).toBe(true);
+    expect(applyEvents(finishingFixture.state, finishing.events)).toEqual(finishing.state);
   });
 
   it('Trick Shot: the armed next ranged ability gains +1 boon and is consumed on the attack', () => {
@@ -148,7 +159,9 @@ describe('Freelancer ability automation (p.153–158)', () => {
 
   it('Astral Chain: doubles the lightning to 4 at exactly range 3', () => {
     const { state, hero, foe } = freelancerEncounter({ foe: { x: 4, y: 1 }, second: null });
-    const chained = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:astral-chain', targetIds: [foe.id] }, scriptedDice(15, 4, 4)).state;
+    // d20 below 15: the chain's own Exceed fly (p.156) must not displace the
+    // user, because the point of THIS test is the range-3 lightning doubling.
+    const chained = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:astral-chain', targetIds: [foe.id] }, scriptedDice(12, 4, 4)).state;
     const foeTurn = endTurnTo(chained, foe.id, scriptedDice());
     const backToHero = endTurnTo(foeTurn, hero.id, scriptedDice());
     expect(backToHero.actors[foe.id].hp).toBe(16); // 20 - 4 lightning (range 3)
@@ -244,16 +257,29 @@ describe('Freelancer ability automation (p.153–158)', () => {
   it('Soul Shot: a line attack that blinds the target and splashes fray along the line', () => {
     const { state, hero, foe, second } = freelancerEncounter({ foe: { x: 4, y: 1 }, second: { x: 3, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'freelancer:soul-shot', targetIds: [foe.id] }, scriptedDice(15, 4, 4));
-    expect(mutationsOf(result.events, 'freelancer:soul-shot')).toMatchObject([
+    const damages = mutationsOf(result.events, 'freelancer:soul-shot').filter((mutation) => mutation.kind === 'damage');
+    expect(mutationsOf(result.events, 'freelancer:soul-shot').slice(0, 5)).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'attack', d20: 15, boon: 4, total: 19, hit: true },
       { kind: 'damage', actorId: foe.id, amount: 8, delivery: 'hit' },
       { kind: 'condition', actorId: foe.id, conditionId: 'blind' },
       { kind: 'damage', actorId: second!.id, amount: 4, delivery: 'area' },
     ]);
-    expect(result.state.actors[foe.id].hp).toBe(24);
+    // The roll totals 19 ≥ 15, so the ability's OWN Exceed burst legitimately
+    // resolves (ICON p.93): foes in the medium blast take unerring damage
+    // (2, or 4 if already blinded — the freshly-blinded ones take 2) and are
+    // blinded.
+    expect(damages.filter((mutation) => mutation.actorId === foe.id)).toMatchObject([
+      { kind: 'damage', amount: 8, delivery: 'hit' },
+      { kind: 'damage', amount: 2, delivery: 'effect' },
+    ]);
+    expect(damages.filter((mutation) => mutation.actorId === second!.id)).toMatchObject([
+      { kind: 'damage', amount: 4, delivery: 'area' },
+      { kind: 'damage', amount: 2, delivery: 'effect' },
+    ]);
+    expect(result.state.actors[foe.id].hp).toBe(22); // 32 - 8 - 2 (burst)
     expect(result.state.actors[foe.id].statuses).toContain('blind');
-    expect(result.state.actors[second!.id].hp).toBe(28); // 32 - 4 splash fray
+    expect(result.state.actors[second!.id].hp).toBe(26); // 32 - 4 - 2 (burst)
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 });

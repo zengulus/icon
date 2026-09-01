@@ -4,7 +4,10 @@ import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS, EXECUTABLE_JOB_ABILITY_IDS }
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { isInterruptWindowKind, windowHeldDamage } from '../automation/kernels/decision-window.js';
-import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
+import { encounterConditionSet, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
+import { executeRuleProgram } from '../automation/kernels/runtime.js';
+import { BASTION_RULE_RESOLVERS } from '../automation/content/jobs/programs/bastion-programs.js';
+import type { RuleExecutionContext } from '../automation/primitives/types.js';
 import { ABILITIES, JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
@@ -125,7 +128,10 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
     expect(result.state.actors[foe.id].position).toEqual({ x: 4, y: 1 });
 
-    const colliding = bastionEncounter({ foe: { x: 2, y: 1 }, ally: null });
+    // A genuine Collide (p.95): the 2-space shove is blocked by the second
+    // character, so the resolution derives the collide trigger from its own
+    // shove fact — never a caller-asserted trigger.
+    const colliding = bastionEncounter({ foe: { x: 2, y: 1 }, second: { x: 4, y: 1 }, ally: null });
     const collide = executeCommand(colliding.state, {
       type: 'EXECUTE_RULE',
       actorId: colliding.hero.id,
@@ -133,11 +139,10 @@ describe('Bastion ability automation (p.122–124)', () => {
       actionId: 'default',
       timing: 'use',
       input: { actorIds: { target: [colliding.foe.id] } },
-      triggers: ['collide'],
     }, scriptedDice());
     const foeAfter = collide.state.actors[colliding.foe.id];
     expect(foeAfter.statuses).toContain('slashed');
-    expect(foeAfter.position).toEqual({ x: 4, y: 1 });
+    expect(foeAfter.position).toEqual({ x: 3, y: 1 }); // stopped short of the blocker
     expect(collide.state.actors[colliding.hero.id].actionsRemaining).toBe(2); // refunded
   });
 
@@ -168,8 +173,44 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(result.state.actors[hero.id].position).toEqual({ x: 3, y: 1 });
     expect(result.state.actors[foe.id].position).toEqual({ x: 5, y: 1 });
     expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
+  });
 
-    const colliding = bastionEncounter({ foe: { x: 3, y: 1 }, second: { x: 7, y: 1 }, ally: null });
+  it('Valiant Collide clause: the resolver rushes a third time when the trigger is known at resolver start (direct-context proof)', () => {
+    // The "Collide or Heroic: Rush 1 again" repetition lives INSIDE the
+    // resolver, which decides its rush count from the trigger set present at
+    // resolver start. A caller can no longer forge collide at the command
+    // boundary, and the reactive append pass derives collide only AFTER the
+    // primary pass — so the clause is proven here at the resolver contract
+    // level (the same direct-context clause pattern as the Harvester Slay
+    // continuations). Heroic is the always-reachable production arm.
+    const { state, hero, foe } = bastionEncounter({ foe: { x: 3, y: 1 }, second: { x: 6, y: 1 }, ally: null });
+    const unit = findRuleSourceUnit('bastion:valiant')!;
+    const compilation = compileRuleSourceUnit(unit);
+    const context: RuleExecutionContext = {
+      state: encounterRuleState(state),
+      encounterState: state,
+      actorId: hero.id,
+      sourceId: unit.id,
+      actionId: 'default',
+      timing: 'use',
+      input: {},
+      dice: scriptedDice(),
+      triggers: new Set(['collide']),
+      resolutionFacts: { triggers: ['collide'], attackTargets: [], collidedActorIds: [foe.id], slainActorIds: [] },
+    };
+    const result = executeRuleProgram(compilation.program, context, BASTION_RULE_RESOLVERS);
+    const rushes = result.mutations.filter((mutation) => mutation.kind === 'move' && mutation.movement === 'rush');
+    expect(rushes).toHaveLength(3); // base 2 + the collide repeat
+    expect(executeRuleProgram(compilation.program, context, BASTION_RULE_RESOLVERS).mutations).toEqual(result.mutations);
+  });
+
+  it('Valiant: a base-rush shove that collides derives the collide fact in production (no step consumes it; the repeat needs the trigger at resolver start)', () => {
+    // The second rush's adjacent shove slams the foe into the second
+    // character, so the resolution genuinely derives a collide fact from its
+    // own shove mutations — even though resolver-only repetition cannot
+    // consume that derived trigger in a later pass (documented seam gap).
+    // This proves the derivation authority end-to-end without any forging.
+    const colliding = bastionEncounter({ foe: { x: 3, y: 1 }, second: { x: 5, y: 1 }, ally: null });
     const collide = executeCommand(colliding.state, {
       type: 'EXECUTE_RULE',
       actorId: colliding.hero.id,
@@ -177,10 +218,13 @@ describe('Bastion ability automation (p.122–124)', () => {
       actionId: 'default',
       timing: 'use',
       input: {},
-      triggers: ['collide'],
     }, scriptedDice());
-    expect(collide.state.actors[colliding.hero.id].position).toEqual({ x: 4, y: 1 });
-    expect(collide.state.actors[colliding.foe.id].position).toEqual({ x: 6, y: 1 });
+    // Base effect resolved: two rushes, the foe stopped short of the blocker.
+    expect(collide.state.actors[colliding.hero.id].position).toEqual({ x: 3, y: 1 });
+    expect(collide.state.actors[colliding.foe.id].position).toEqual({ x: 4, y: 1 });
+    const event = collide.events.find((candidate) => candidate.type === 'RULE_MUTATIONS_APPLIED' && candidate.sourceId === 'bastion:valiant');
+    expect(event && event.type === 'RULE_MUTATIONS_APPLIED' ? event.resolutionFacts?.triggers.includes('collide') : false).toBe(true);
+    expect(applyEvents(colliding.state, collide.events)).toEqual(collide.state);
   });
 
   it('Endless Battlement: enters the stance and grants the chosen ally aura 1', () => {
@@ -324,7 +368,11 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(result.state.actors[hero.id].actionsRemaining).toBe(2);
     expect(() => executeCommand(result.state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:catapult', targetIds: [ally.id] }, scriptedDice())).toThrow(/repeat/i);
 
-    const colliding = bastionEncounter({ foe: { x: 5, y: 1 }, second: { x: 6, y: 1 }, ally: { x: 2, y: 1 } });
+    // A genuine Collide: the 2-space shove of the ally is blocked by the foe
+    // at x:4, so the resolution derives the collide trigger from its own
+    // shove fact and the reaction grants vigor (the ally rush resolves as
+    // before without a caller-asserted direction).
+    const colliding = bastionEncounter({ foe: { x: 4, y: 1 }, second: { x: 6, y: 1 }, ally: { x: 2, y: 1 } });
     const collide = executeCommand(colliding.state, {
       type: 'EXECUTE_RULE',
       actorId: colliding.hero.id,
@@ -332,7 +380,6 @@ describe('Bastion ability automation (p.122–124)', () => {
       actionId: 'default',
       timing: 'interrupt',
       input: { actorIds: { target: [colliding.ally.id] } },
-      triggers: ['collide'],
     }, scriptedDice());
     expect(collide.state.actors[colliding.ally.id].vigor).toBe(2);
   });
@@ -462,9 +509,12 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 
-  it('Great Giorgios: Collide adds hatred of the user', () => {
+  it('Great Giorgios: a caller cannot forge the collide trigger', () => {
     const { state, hero, foe } = bastionEncounter({ foe: { x: 3, y: 1 }, ally: null });
-    const result = executeCommand(state, {
+    // Collide derives only from the resolution's own shove facts (p.95); the
+    // delayed rush shove is the ONLY shove Great Giorgios ever makes, so an
+    // immediate forged 'collide' must fail closed at the command boundary.
+    expect(() => executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
       sourceId: 'bastion:great-giorgios',
@@ -472,9 +522,27 @@ describe('Bastion ability automation (p.122–124)', () => {
       timing: 'use',
       input: { actorIds: { target: [foe.id] } },
       triggers: ['collide'],
-    }, scriptedDice());
-    expect(result.state.actors[foe.id].marks.some(({ markId }) => markId === 'great-giorgios')).toBe(true);
-    expect(result.state.actors[foe.id].statuses).toContain('hatred');
+    }, scriptedDice())).toThrow(/trigger.*derived|derived.*trigger/);
+  });
+
+  it('Great Giorgios: a delayed shove that collides grants hatred of the user', () => {
+    // The foe is delayed-rushed into at range 3; the shove (rushed spaces)
+    // is blocked by the second character, so the collide clause (p.124:
+    // "Collide or Heroic: Foe also gains hatred of you after this ability
+    // resolves") applies after the delayed resolution completes.
+    const { state, hero, foe } = bastionEncounter({ foe: { x: 4, y: 1 }, second: { x: 6, y: 1 }, ally: null });
+    const used = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:great-giorgios', targetIds: [foe.id] }, scriptedDice()).state;
+    const foeTurn = executeCommand(used, { type: 'TAKE_TURN', actorId: foe.id }, scriptedDice()).state;
+    const ended = executeCommand(foeTurn, { type: 'END_TURN', actorId: foe.id }, scriptedDice()).state;
+    const rushWindow = ended.decisionWindows.find((window) => window.kind === 'choice');
+    expect(rushWindow).toBeDefined();
+    const answered = executeCommand(ended, { type: 'ANSWER_DECISION_WINDOW', windowId: rushWindow!.id, input: { booleans: { rush: true } } }, scriptedDice());
+    const foeAfter = answered.state.actors[foe.id];
+    expect(foeAfter.statuses).toContain('hatred');
+    expect(foeAfter.ruleState['hatred-of']).toBe(hero.id);
+    expect(foeAfter.position).toEqual({ x: 5, y: 1 }); // shoved 1, stopped short of the blocker
+    expect(foeAfter.hp).toBe(28); // rushed 2 → damage 4
+    expect(applyEvents(ended, answered.events)).toEqual(answered.state);
   });
 
   it('executes every reviewed job ability through a resolver, never a generic approximation', () => {

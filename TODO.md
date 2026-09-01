@@ -216,6 +216,49 @@ assumption here, document the evidence and update this list before proceeding.
 > identity and recertified by the proof-consumer entry above. Census
 > byte-stable at 427; zero source promotion; the phase gate remains open on
 > the twelve partial underlays in the fresh matrix.
+>
+> **T10 — trigger-authority gate + Draken Cross semantic repair (2026-09-01).**
+> Command-side trigger provenance now fails closed (p.95): charge/comeback/
+> finishing-blow (state-derived), exceed (the ability's OWN 15+ roll),
+> collide/slay (the resolution's own shove/defeat facts) can never be
+> asserted by a command (`CALLER_ASSERTABLE_TRIGGERS = {heroic, infuse}`,
+> `rule.trigger-forged` before any cost/effect/RNG). Exceed was previously
+> reachable only via forged triggers in enochian/sealer/freelancer resolvers:
+> moved onto the shared `resolveAuthoritativeAttack` roll (pyre/lance/
+> blackstar/matsuri/open-the-gates/center-the-temple/soul-shot/astral-chain)
+> and the colossus Valkyrie/Takedown pits into program `exceed` trigger
+> steps (VM terrain at target-position) — with Open The Gates's exceed hop
+> origins corrected to flow semantics (each hop from the previous teleport
+> landing). Affected suites rewritten honestly: charge → durable slow-turn
+> fixtures, finishing-blow → bloodied target slots, exceed → 15+ rolls,
+> slay → recorded-fact direct-context clause tests, collide → GENUINE shove
+> collisions (battering-ram/catapult blocked shoves; valiant produces the
+> collide fact from its own shoves; Great Giorgios's delayed shove now
+> derives its collide through the single shared spatial authority in the
+> continuation resolver and grants hatred after the ability resolves).
+> Draken Cross was rewritten to the p.128 text: the optional Effect is one
+> whole operation (rush 1 then a second area validated from the POST-rush
+> position; supplied centers fail closed on range/overlap, never guessed),
+> Charge/Heroic repeats the WHOLE Effect with its OWN rush and OWN
+> non-overlapping area (declining the repeat is legal) instead of
+> re-damaging a blast, Talent II's "may be increased to medium blasts" is a
+> recorded player decision (chosen or left small; Heroic never activates
+> it), Charge true strike rides the authoritative slow-turn fact (forged
+> charge rejected), and Talent I's Exceed re-frays every area this use
+> created from the ability's own roll. New engine tests: the trigger-
+> authority suite (`trigger-authority.test.ts`); Draken adversarial matrix
+> (declined effect, post-
+> rush legality, out-of-range + overlap rejections, whole-effect repeat,
+> repeat-overlap, medium chosen/declined, later-area medium fringe, forged
+> charge); great-giorgios delayed-collide hatred. Resolver-internal "Collide
+> or Heroic" repetition (Valiant/Heracule) and resolver-local Slay
+> continuations (Harvester) remain reachable only via Heroic or recorded-
+> fact direct-context tests — the append pass derives those facts too late to
+> re-enter resolver-only code; the five source-quoted blocking seams are in
+> [`docs/u8-u1-underlay-census.md`](docs/u8-u1-underlay-census.md) "Known
+> blocking repairs". Full suite 2,031 passed (was 2,018); census byte-stable
+> at 427; zero source promotion; U1 residual unchanged at
+> 129 = 74 + 54 + 1.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):

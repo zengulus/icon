@@ -82,7 +82,10 @@ const pyreEffects: RuleResolver = (context) => {
       mutations.push(damageMutation(context, character.id, source.fray, 'area'));
     }
   }
-  if (context.triggers?.has('comeback') || context.triggers?.has('exceed')) {
+  // The exceed fact is the ABILITY'S OWN attack roll at 15+ (ICON p.93) —
+  // derived here from the authoritative roll, never a caller assertion.
+  const exceeded = (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true;
+  if (context.triggers?.has('comeback') || exceeded) {
     for (const character of charactersIn(context, blast, source.id)) {
       if (alliesImmune && character.side === source.side) continue;
       mutations.push(damageMutation(context, character.id, 2, 'area', 'piercing'));
@@ -146,7 +149,7 @@ const lanceEffects: RuleResolver = (context) => {
     if (!position || !line.has(`${position.x},${position.y}`)) continue;
     if (character.id !== target.id) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
-  if (context.triggers?.has('comeback') || context.triggers?.has('exceed')) {
+  if (context.triggers?.has('comeback') || (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true) {
     const objects = Object.values(context.state.entities).filter((entity) => {
       const position = entity.position;
       return position && line.has(`${position.x},${position.y}`);
@@ -321,7 +324,7 @@ const blackstarEffects: RuleResolver = (context) => {
   if (context.state.round < 6) {
     mutations.push(damageMutation(context, source.id, Math.ceil(source.maxHp / 2), 'effect', 'sacrifice'));
   }
-  if (context.triggers?.has('comeback') || context.triggers?.has('exceed')) {
+  if (context.triggers?.has('comeback') || (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true) {
     mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'effect'));
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
     const difficultCells = evaluatePositions({ origin: target.position, radius: 3, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).slice(0, 3);

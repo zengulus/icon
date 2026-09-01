@@ -159,6 +159,10 @@ describe('Fool ability automation (p.150–152)', () => {
   it('Party Favor: a Finishing Blow doubles foe damage and a 4+ gamble blinds them', () => {
     const { state, hero, foe } = foolEncounter({ foe: { x: 1, y: 2 }, second: null });
     const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [] }, scriptedDice()).state;
+    // Finishing Blow is derived from the bloodied attack-target slot (ICON
+    // p.95); the foe in the mine blast is bloodied, and naming it as the
+    // attack target lets the boundary derive the trigger — never asserted.
+    placed.actors[foe.id].hp = 16; // bloodied (half of 32)
     const detonated = executeCommand(placed, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -166,10 +170,11 @@ describe('Fool ability automation (p.150–152)', () => {
       actionId: 'detonate',
       timing: 'movement-end',
       input: {},
-      triggers: ['finishing-blow'],
+      attackTargetId: foe.id,
     }, scriptedDice(4));
-    expect(detonated.state.actors[foe.id].hp).toBe(26); // 32 - 2*3
+    expect(detonated.state.actors[foe.id].hp).toBe(10); // 16 - 2*3 (2 base + 2 + 2 finishing-blow)
     expect(detonated.state.actors[foe.id].statuses).toContain('blind');
+    expect(applyEvents(placed, detonated.events)).toEqual(detonated.state);
   });
 
   it('Masquerade: swaps places with a willing ally in range 3', () => {

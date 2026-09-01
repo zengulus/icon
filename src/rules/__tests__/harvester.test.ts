@@ -2,11 +2,13 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
-import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
+import { encounterConditionSet, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
+import { executeRuleProgram } from '../automation/kernels/runtime.js';
+import { HARVESTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/harvester-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
-import type { RuleMutation } from '../automation/primitives/types.js';
+import type { RuleExecutionContext, RuleMutation } from '../automation/primitives/types.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
 
@@ -109,28 +111,38 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Sow combo (REAP): attacks [D]+fray, summons a Thrall, and repeats on Slay', () => {
+  it('Sow combo (REAP): attacks [D]+fray, summons a Thrall, and the Slay clause repeats it', () => {
     const { state, hero, foe } = harvesterEncounter({ second: null });
     state.actors[hero.id].resources.combo = 1;
-    const result = executeCommand(state, {
-      type: 'EXECUTE_RULE',
+    // Direct-context clause proof (the repo's trigger-clause pattern): the
+    // REAP action's Slay continuation executes when the recorded reactive
+    // fact is present. The production delivery of a derived Slay into this
+    // resolver-local clause is a documented blocker — the append pass derives
+    // the fact but never re-enters resolver-only clauses (see the census doc).
+    const unit = findRuleSourceUnit('harvester:sow')!;
+    const compilation = compileRuleSourceUnit(unit);
+    const context: RuleExecutionContext = {
+      state: encounterRuleState(state),
+      encounterState: state,
       actorId: hero.id,
-      sourceId: 'harvester:sow',
+      sourceId: unit.id,
       actionId: 'combo',
       timing: 'use',
       input: {},
       attackTargetId: foe.id,
-      triggers: ['slay'],
-    }, scriptedDice(12, 4, 4));
-    expect(result.state.actors[hero.id].resources.combo).toBe(0);
-    expect(result.state.actors[foe.id].hp).toBe(16); // 32 - 8 (hit) - 8 (slay repeat)
-    // Slay fired (confirmed below), and the creation seam lands the slay bonus
-    // Thrall in a DISTINCT free adjacent cell — two Thralls total (base + slay),
-    // the source-correct outcome rather than the old duplicate-cell collapse to 1.
-    expect(thrallsOf(result.state)).toHaveLength(2);
-    const cells = thrallsOf(result.state).map((t) => t.positions[0]);
-    expect(new Set(cells.map((c) => `${c.x},${c.y}`)).size).toBe(2);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+      dice: scriptedDice(12, 4, 4),
+      triggers: new Set(['slay']),
+      resolutionFacts: { triggers: ['slay'], attackTargets: [foe.id], collidedActorIds: [], slainActorIds: [foe.id] },
+    };
+    const result = executeRuleProgram(compilation.program, context, HARVESTER_RULE_RESOLVERS);
+    const damages = result.mutations.filter((mutation) => mutation.kind === 'damage');
+    expect(damages).toHaveLength(2); // [D]+fray hit + the slay repeat
+    expect(damages.map((mutation) => (mutation.kind === 'damage' ? mutation.amount : 0))).toEqual([8, 8]);
+    expect(result.mutations.filter((mutation) => mutation.kind === 'entity')).toHaveLength(2); // base thrall + slay thrall
+    // Deterministic: re-running with equally seeded dice produces identical
+    // output (the scripted dice source is stateful, so the re-run gets a
+    // fresh copy of the same roll sequence).
+    expect(executeRuleProgram(compilation.program, { ...context, dice: scriptedDice(12, 4, 4) }, HARVESTER_RULE_RESOLVERS).mutations).toEqual(result.mutations);
   });
 
   it('Sow combo (REAP): reversing actor INSERTION order changes nothing — the migrated reference reads resolve by recorded slot identity, not iteration order', () => {
@@ -171,22 +183,32 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Harvest: 2[D]+fray to the target, fray to the small blast, and a Slay summons thralls and repeats damage', () => {
+  it('Harvest: 2[D]+fray to the target, fray to the small blast, and the Slay clause summons thralls and repeats damage', () => {
     const { state, hero, foe, second } = harvesterEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 } });
-    const result = executeCommand(state, {
-      type: 'EXECUTE_RULE',
+    // Direct-context clause proof: the Slay continuation (thrall per area foe
+    // + 2 piercing) executes when the recorded reactive fact is present; the
+    // derived-fact → resolver delivery is a documented blocker.
+    const unit = findRuleSourceUnit('harvester:harvest')!;
+    const compilation = compileRuleSourceUnit(unit);
+    const context: RuleExecutionContext = {
+      state: encounterRuleState(state),
+      encounterState: state,
       actorId: hero.id,
-      sourceId: 'harvester:harvest',
+      sourceId: unit.id,
       actionId: 'default',
       timing: 'use',
       input: {},
       attackTargetId: foe.id,
-      triggers: ['slay'],
-    }, scriptedDice(12, 4, 5));
-    expect(result.state.actors[foe.id].hp).toBe(17); // 32 - (4 + 5 + fray 4) - 2 (slay)
-    expect(result.state.actors[second!.id].hp).toBe(26); // 32 - fray 4 (area) - 2 (slay)
-    expect(thrallsOf(result.state).length).toBeGreaterThanOrEqual(1);
-    expect(applyEvents(state, result.events)).toEqual(result.state);
+      dice: scriptedDice(12, 4, 5),
+      triggers: new Set(['slay']),
+      resolutionFacts: { triggers: ['slay'], attackTargets: [foe.id], collidedActorIds: [], slainActorIds: [foe.id] },
+    };
+    const result = executeRuleProgram(compilation.program, context, HARVESTER_RULE_RESOLVERS);
+    const piercing = result.mutations.filter((mutation) => mutation.kind === 'damage' && mutation.damageType === 'piercing');
+    expect(piercing).toHaveLength(2); // the target and the blast foe, 2 each
+    expect(piercing.every((mutation) => mutation.kind === 'damage' && mutation.amount === 2)).toBe(true);
+    expect(result.mutations.filter((mutation) => mutation.kind === 'entity')).toHaveLength(2); // thrall per foe
+    expect(executeRuleProgram(compilation.program, { ...context, dice: scriptedDice(12, 4, 5) }, HARVESTER_RULE_RESOLVERS).mutations).toEqual(result.mutations);
   });
 
   it('Blood Grove: grows a medium blast of undergrowth centered in range 2', () => {
@@ -524,29 +546,42 @@ describe('Harvester ability automation (p.182–188)', () => {
     // ranges" scope too: under Comeback it becomes range 4. Blocking every
     // cell within distance 3 leaves the first free cell at distance 4 — the
     // plant lands there. With everything within distance 4 blocked, no plant
-    // is created even though distance-5 cells are free.
+    // is created even though distance-5 cells are free. The Slay continuation
+    // is proven through the direct-context pattern (the derived-fact →
+    // resolver delivery is a documented blocker); the Comeback range gate
+    // reads the durable bloodied state through the shared scoped-range rule.
     const fixture = harvesterEncounter({ second: null });
     fixture.state.actors[fixture.hero.id].talents = { 'harvester:dark-sliver': 1 };
     fixture.state.actors[fixture.hero.id].hp = 1; // bloodied
     fixture.state.actors[fixture.foe.id].position = { x: 0, y: 0 };
     fixture.state.actors[fixture.hero.id].position = { x: 2, y: 0 };
+    const run = (state: EncounterState) => {
+      const unit = findRuleSourceUnit('harvester:dark-sliver')!;
+      const compilation = compileRuleSourceUnit(unit);
+      const context: RuleExecutionContext = {
+        state: encounterRuleState(state),
+        encounterState: state,
+        actorId: fixture.hero.id,
+        sourceId: unit.id,
+        actionId: 'default',
+        timing: 'use',
+        input: {},
+        attackTargetId: fixture.foe.id,
+        dice: scriptedDice(12, 4),
+        triggers: new Set(['slay']),
+        resolutionFacts: { triggers: ['slay'], attackTargets: [fixture.foe.id], collidedActorIds: [], slainActorIds: [fixture.foe.id] },
+      };
+      return executeRuleProgram(compilation.program, context, HARVESTER_RULE_RESOLVERS);
+    };
     const range4 = blockCellsNear(fixture.state, { x: 0, y: 0 }, 3);
-    const slay4 = executeCommand(range4, {
-      type: 'EXECUTE_RULE', actorId: fixture.hero.id, sourceId: 'harvester:dark-sliver',
-      actionId: 'default', timing: 'use', attackTargetId: fixture.foe.id, input: {}, triggers: ['slay'],
-    }, scriptedDice(12, 4));
-    const plant = Object.values(slay4.state.entities).find((entity) => entity.type === 'plant');
+    const slay4 = run(range4);
+    const plant = slay4.mutations.find((mutation) => mutation.kind === 'entity');
     expect(plant).toBeDefined();
     expect(plant!.positions[0]).toEqual({ x: 0, y: 4 }); // the first free cell at exactly distance 4
-    expect(applyEvents(range4, slay4.events)).toEqual(slay4.state); // replay
 
     const range5 = blockCellsNear(fixture.state, { x: 0, y: 0 }, 4);
-    const noPlant = executeCommand(range5, {
-      type: 'EXECUTE_RULE', actorId: fixture.hero.id, sourceId: 'harvester:dark-sliver',
-      actionId: 'default', timing: 'use', attackTargetId: fixture.foe.id, input: {}, triggers: ['slay'],
-    }, scriptedDice(12, 4));
-    expect(Object.values(noPlant.state.entities).some((entity) => entity.type === 'plant')).toBe(false);
-    expect(applyEvents(range5, noPlant.events)).toEqual(noPlant.state);
+    const noPlant = run(range5);
+    expect(noPlant.mutations.some((mutation) => mutation.kind === 'entity')).toBe(false);
   });
 
   it('Dark Sliver talent 2: "Sacrifice 2: Ability gains range 6" (p.187)', () => {

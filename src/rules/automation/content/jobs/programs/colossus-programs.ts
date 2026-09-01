@@ -58,7 +58,12 @@ const valkyrieEffects: RuleResolver = (context) => {
   const destination = plannedFly(context, source.id, 1, direction);
   if (destination) mutations.push(flyMutation(context, source.id, destination));
   mutations.push(conditionMutation(context, target.id, 'weakened'));
-  if (context.triggers?.has('exceed') || context.triggers?.has('heroic')) {
+  // "Exceed or Heroic: Create a pit under your target". The heroic half is a
+  // caller declaration (resolver read); the EXCEED half is the ability's own
+  // attack roll at 15+ (p.93) — delivered by the program's `exceed` step
+  // (trigger: 'exceed', fired by the append pass from the recorded attack
+  // fact), so the pit is never forged by a command.
+  if (context.triggers?.has('heroic')) {
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
   }
   return mutations;
@@ -140,7 +145,14 @@ const takedownEffects: RuleResolver = (context) => {
     mutations.push(conditionMutation(context, source.id, 'stunned'));
   }
   mutations.push(conditionMutation(context, target.id, 'stunned'));
-  if (target.position && (context.triggers?.has('exceed') || context.triggers?.has('heroic'))) {
+  // "Exceed or Heroic: Gains true strike and creates a pit under your
+  // target." The pit's exceed half rides the program's `exceed` step (the
+  // ability's own 15+ roll); the heroic half stays caller-declared here. The
+  // "gains true strike" exceed half is documented as an UNRESOLVED boundary
+  // (see the Gigaton/Takedown blocking TODO) — it needs the exceed step's
+  // true-strike fold, which cannot retroactively affect the roll that
+  // determined the exceed.
+  if (target.position && context.triggers?.has('heroic')) {
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
   }
   return mutations;
@@ -205,7 +217,15 @@ const gigatonWhipEffects: RuleResolver = (context) => {
       mutations.push(damageMutation(context, target.id, source.fray, 'effect'));
     }
   }
-  if (context.triggers?.has('exceed') || context.triggers?.has('heroic')) {
+  // "Exceed or Heroic: Smash the ground when you land, creating difficult
+  // terrain under your foe and in two adjacent spaces." The HEROIC half is
+  // caller-declared and resolver-emitted. The EXCEED half is UNWIRED — it
+  // must fire from the ability's own 15+ attack roll AND its "when you land"
+  // geometry (difficult under the foe plus two specific adjacent spaces)
+  // ties it to the collide-bounce landing, which the generic terrain-step
+  // vocabulary cannot express; see the Gigaton/Takedown blocking TODO in
+  // docs/u8-u1-underlay-census.md.
+  if (context.triggers?.has('heroic')) {
     const cells = [target.position, ...orthogonalNeighbors(target.position).slice(0, 2)];
     for (const cell of cells) if (withinGrid(cell, context)) mutations.push(terrainMutation(context, 'create', 'difficult', [cell]));
   }
@@ -249,14 +269,25 @@ export const COLOSSUS_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourc
     tags: ['attack', 'true strike'],
     range: constant(1),
     resolverId: 'colossus:valkyrie:effects',
-    steps: [{
-      id: 'attack', timing: 'use', effects: [{
-        kind: 'attack', target: attackTarget, trueStrike: true,
-        onHit: [normalDamage({ kind: 'add', values: [damageDie(1), fray()] })],
-        onMiss: [normalDamage(fray(), 'miss')],
-        onCritical: [normalDamage(damageDie(1))],
-      }],
-    }],
+    steps: [
+      {
+        id: 'attack', timing: 'use', effects: [{
+          kind: 'attack', target: attackTarget, trueStrike: true,
+          onHit: [normalDamage({ kind: 'add', values: [damageDie(1), fray()] })],
+          onMiss: [normalDamage(fray(), 'miss')],
+          onCritical: [normalDamage(damageDie(1))],
+        }],
+      },
+      // Exceed (p.133): the pit opens when the ability's OWN attack rolled
+      // 15+ (the exceed fact rides the recorded attack mutation and this
+      // trigger step fires in the append pass). Heroic-only pits are emitted
+      // by the resolver; `condition: notHeroic` keeps a single pit when both
+      // an exceed AND a heroic declaration coincide.
+      {
+        id: 'exceed', timing: 'use', trigger: 'exceed', condition: notHeroic,
+        effects: [{ kind: 'terrain', operation: 'create', terrain: 'pit', positionInput: 'target-position' }],
+      },
+    ],
   })], ['effect', 'on hit', 'miss', 'effect', 'exceed or heroic']),
 
   'colossus:upheaval': (unit) => compilation(unit, [action({
@@ -310,6 +341,13 @@ export const COLOSSUS_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourc
           onMiss: [normalDamage(fray(), 'miss')],
           onCritical: [normalDamage(damageDie(1))],
         }],
+      },
+      // Exceed pit (p.135): fires from the ability's own 15+ attack roll in
+      // the append pass; heroic pits are resolver-emitted and this step's
+      // notHeroic condition keeps a single pit under both.
+      {
+        id: 'exceed', timing: 'use', trigger: 'exceed', condition: notHeroic,
+        effects: [{ kind: 'terrain', operation: 'create', terrain: 'pit', positionInput: 'target-position' }],
       },
     ],
   })], ['on hit', 'miss', 'effect', 'effect', 'exceed or heroic']),

@@ -129,7 +129,9 @@ const matsuriEffects: RuleResolver = (context) => {
   mutations.push(roll.hit
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
-  if (context.triggers?.has('exceed')) {
+  // The exceed fact is the ABILITY'S OWN attack roll at 15+ (ICON p.93) —
+  // derived from the authoritative roll, never a caller assertion.
+  if ((roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true) {
     const blast = squareArea(target.position, 3);
     for (const character of Object.values(context.state.actors)) {
       const position = character.position;
@@ -284,9 +286,13 @@ const openTheGatesEffects: RuleResolver = (context) => {
   mutations.push({ ...rolled, hit: true, total: Math.max(rolled.total ?? 0, target.defense) });
   mutations.push(damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit'));
   mutations.push(conditionMutation(context, target.id, 'pacified'));
-  if (context.triggers?.has('exceed')) {
+  if (rolled.exceed === true) {
     const toward = axisDirection(source.position, target.position);
-    let hopOrigin = source.position;
+    // Ordered-sequence semantics (p.85/p.107 §4): the first exceed hop is
+    // chosen from where the base teleport landed, and each later hop from
+    // the previous teleport destination — never from the pre-command
+    // position.
+    let hopOrigin = landing ?? source.position;
     for (let i = 0; i < 2; i += 1) {
       const shoved = walk(context, target.position, toward, 1, false, target.id);
       if (!sameCell(shoved, target.position)) mutations.push(shoveMutation(context, target.id, 1, toward));
@@ -318,7 +324,7 @@ const centerTheTempleEffects: RuleResolver = (context) => {
   mutations.push(roll.hit
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
-  if (context.triggers?.has('exceed')) {
+  if ((roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true) {
     mutations.push(damageMutation(context, target.id, context.state.round >= 4 ? 6 : 1, 'effect'));
   }
   return mutations;

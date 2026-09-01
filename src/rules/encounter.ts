@@ -1270,6 +1270,14 @@ function isLineShaped(header: string): boolean {
   return /\bline\s+\d+/i.test(header);
 }
 
+/** The triggers a caller may legitimately assert on an EXECUTE_RULE command
+ * (ICON p.95pp): Heroic is a declaration when using an ability, and Infuse
+ * gates a gambit/resource spend. Every other combat trigger (charge,
+ * comeback, finishing-blow, exceed, collide, slay, …) is derived from
+ * authoritative state, the resolution's own roll/mutations, or armed
+ * boundary facts — asserting one would forge a fact the engine must decide. */
+const CALLER_ASSERTABLE_TRIGGERS = new Set(['heroic', 'infuse']);
+
 /**
  * State-derived triggers (ICON p.95) are inferred from the current encounter
  * before a resolver runs, instead of relying on the caller to assert them:
@@ -2172,7 +2180,20 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         }, 'ability');
       }
       const triggers = deriveTriggers(state, actor, command.attackTargetId);
-      for (const trigger of command.triggers ?? []) triggers.add(trigger);
+      // ICON p.95 trigger provenance: Charge/comeback/finishing-blow are
+      // derived from authoritative state (slow-turn flag, bloodied), and
+      // exceed/collide/slay from the resolution's own roll/mutation facts — a
+      // caller may NEVER assert them. Heroic and Infuse are genuine caller
+      // declarations (they gate a resource spend or a Stalwart gambit
+      // decision, per the deriveTriggers contract), so only those ride
+      // command.triggers. A forged state-derived trigger fails closed before
+      // any cost, effect, or RNG runs.
+      for (const trigger of command.triggers ?? []) {
+        if (!CALLER_ASSERTABLE_TRIGGERS.has(trigger)) {
+          throw new RuleViolation('rule.trigger-forged', `The '${trigger}' trigger is derived from authoritative state or resolution facts and cannot be asserted by a command.`);
+        }
+        triggers.add(trigger);
+      }
       // The resolution snapshot for this command (same purity contract as
       // USE_ABILITY: the planner never writes to the authoritative state).
       const ruleStateView = encounterRuleState(state);

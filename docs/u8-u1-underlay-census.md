@@ -703,11 +703,65 @@ kernel-side convenience (Fool, Geomancer, Freelancer, Stormbender,
 Colossus), and the U1×U4 captured-identity boundary has no shared surface
 yet.
 
-## Coverage and verification invariants
+## Known blocking repairs (source-quoted, not future work)
 
-- Canonical Class/Job census: 427 unresolved (6 class-trait, 38 job-trait,
-  238 talent, 129 mastery, 16 limit-break), unchanged.
-- Automation audit: 3,275 programs / 4,701 clauses; 467 complete programs /
-  1,604 complete clauses; 3,097 clauses remain explicitly unsupported.
-- No source unit was promoted or reclassified by any tranche; U1 remains
-  PARTIAL.
+The trigger-authority gate (2026-09-01) closed the forged-assignment path but
+left several clauses reachable only through seams the current substrate does
+not provide. These are the precise blockers — each names the source passage,
+what is wired, and the smallest missing reusable capability.
+
+1. **Draken Cross mastery — DARK WIND DEVIL BLADE (p.128).**
+   "After using this ability, you may teleport to any space of any area
+   created, then all foes in any area you created with this ability are
+   slashed and take 2 divine damage." Nothing of it is wired: the resolver
+   tracks this use's area cells only locally, and there is no recorded
+   teleport-choice seam tied to a durable list of "areas this use created".
+   Missing capability: a U13-style recorded choice whose destination set is
+   the durable area-cell record of the CURRENT resolution, applied through
+   the shared movement authority before the status/divine-damage fold.
+
+2. **Takedown exceed true-strike half (p.136).** "Exceed or Heroic: Gains
+   true strike and creates a pit under your target." The pit fires through
+   the program's `exceed` trigger step (the ability's own 15+ roll); the
+   "gains true strike" half cannot fold into the same roll retroactively
+   (that roll determined the exceed — a second determination is forbidden by
+   the replay/determinism contract). Missing capability: a shared seam for a
+   modifier whose eligibility is only known after a roll resolves (e.g. an
+   armed "exceed true-strike" continuation for the NEXT attack). The heroic
+   arm is fully wired (attack-heroic step with true strike + resolver pit).
+
+3. **Gigaton Whip exceed half (p.137).** "Exceed or Heroic: Smash the ground
+   when you land, creating difficult terrain under your foe and in two
+   adjacent spaces." The heroic arm is wired; the exceed arm is unwired — it
+   must derive from the ability's own 15+ roll AND its "when you land"
+   geometry (under the foe plus two specific adjacent spaces) that tracks
+   the collide-bounce landing, which the generic terrain step (target
+   position only) cannot express. Missing capability: a terrain effect that
+   keys off the collision-resolution landing cell rather than the raw
+   attack-target cell.
+
+4. **ALL resolver-local "Collide/Slay" legs (the 12 audited sites).** The
+   outcome-trigger audit inventories 12 resolver-internal legs: bastion
+   Heracule/Valiant "Collide or Heroic" repetition (p.122 "use again"/"rush
+   1 again"), colossus Gigaton Whip collide-bounce (p.137), harvester
+   REAP/Harvest/Dark Sliver Slay continuations (p.182–188), knave Slay legs
+   (4 sites), spellblade Blitz Slay repeat (p.225, retained reachable via
+   its `infuse` leg), and stormbender collide pit (p.233, `infuse &&`
+   collide). Each resolves from the trigger set present at RESOLVER start;
+   the reactive append pass derives collide/slay only from mutations ALREADY
+   emitted and re-enters trigger STEPS only, never resolver code. The
+   bastion Valiant and harvester REAP/Harvest legs are proven at the
+   resolver contract level by direct-context clause tests (recorded facts),
+   and spellblade's GRAM leg is covered through its `infuse` arm. Every
+   other leg keeps a caller-assertable heroic/infuse arm EXCEPT knave line 110
+   (the Slay-only shove leg after the multi-hit attack), which has NO
+   caller-reachable arm and is fully dormant until the seam below lands. No
+   approximation was substituted anywhere. Missing capability: a re-entrant
+   resolver pass for newly derived triggers, or step-ized continuations
+   (valiant's rush-then-shove chain is not yet expressible as step effects;
+   Gigaton's difficult-terrain "when you land" geometry needs a
+   collision-landing terrain key — see (3)).
+
+These five are ALL deliberate retains: the trigger-authority gate never
+approximated, never routed a forge through, and never changed blocker census
+(427) or U1 (PARTIAL).

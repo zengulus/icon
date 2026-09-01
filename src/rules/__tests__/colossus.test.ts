@@ -81,6 +81,9 @@ describe('Colossus ability automation (p.133–138)', () => {
 
   it('Valkyrie: Exceed creates a pit under the target', () => {
     const { state, hero, foe } = colossusEncounter({ second: null });
+    // Exceed is the ability's own attack roll at 15+ (ICON p.93): the roll
+    // is scripted to 15 so the program's `exceed` trigger step fires from
+    // the recorded attack fact — never a command assertion.
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -89,9 +92,9 @@ describe('Colossus ability automation (p.133–138)', () => {
       timing: 'use',
       input: {},
       attackTargetId: foe.id,
-      triggers: ['exceed'],
-    }, scriptedDice(12, 4));
+    }, scriptedDice(15, 4));
     expect(result.state.terrainEffects.some((effect) => effect.terrain === 'pit' && effect.positions.some((cell) => cell.x === foe.position.x && cell.y === foe.position.y))).toBe(true);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
   it('Upheaval: creates a height-1 boulder and shoves adjacent characters away', () => {

@@ -83,6 +83,10 @@ describe('Chanter ability automation (p.174–181)', () => {
 
   it('Holy: a Charge grants 3 vigor to other characters in range 2 of the foe', () => {
     const { state, hero, foe, ally } = chanterEncounter({ second: null, ally: { x: 4, y: 1 } }); // ally at range 2; the hero at range 1 takes the cure
+    // Charge is the authoritative slow-turn fact (ICON p.95); the command
+    // asserts it with the actor on a slow turn, never by raw triggers.
+    state.actors[hero.id].ruleState['slow-turn'] = true;
+    state.actors[hero.id].ruleStateOwners['slow-turn'] = hero.id;
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -91,7 +95,6 @@ describe('Chanter ability automation (p.174–181)', () => {
       timing: 'use',
       input: {},
       attackTargetId: foe.id,
-      triggers: ['charge'],
     }, scriptedDice());
     expect(result.state.actors[ally!.id].vigor).toBe(3);
   });
@@ -289,7 +292,11 @@ describe('Chanter ability automation (p.174–181)', () => {
 
   it('Monogatari Charge: rolls two dice, both recorded durably (choice unresolved)', () => {
     const { state, hero, foe } = chanterEncounter({ second: null });
-    // Use Monogatari with the charge trigger via EXECUTE_RULE
+    // Use Monogatari with the Charge trigger via EXECUTE_RULE. Charge is the
+    // authoritative slow-turn fact (ICON p.95) — asserted by the actor being
+    // on a slow turn, never by raw triggers.
+    state.actors[hero.id].ruleState['slow-turn'] = true;
+    state.actors[hero.id].ruleStateOwners['slow-turn'] = hero.id;
     const used = executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
@@ -297,7 +304,6 @@ describe('Chanter ability automation (p.174–181)', () => {
       actionId: 'default',
       timing: 'use',
       input: {},
-      triggers: ['charge'],
     }, scriptedDice());
     expect(used.state.actors[hero.id].ruleState['monogatari:active']).toBe(true);
     expect(used.state.actors[hero.id].ruleState['monogatari:charge']).toBe(true);

@@ -17,7 +17,7 @@
 import type { ArmedContinuation, RuleMutation } from '../../../automation/primitives/types.js';
 import type { EncounterState, Position } from '../../../types.js';
 import { registerDecisionContinuation } from '../../../automation/kernels/continuation-runtime.js';
-import { registerMarkContinuationProgramId } from '../../../automation/kernels/encounter-adapter.js';
+import { collidingShoveTargets, registerMarkContinuationProgramId } from '../../../automation/kernels/encounter-adapter.js';
 
 const samePosition = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
 const distance = (first: Position, second: Position) => Math.max(Math.abs(first.x - second.x), Math.abs(first.y - second.y));
@@ -108,24 +108,20 @@ function greatGiorgiosRushMutations(state: EncounterState, continuation: ArmedCo
   const dx = target.position.x - position.x;
   const dy = target.position.y - position.y;
   const direction = Math.abs(dx) >= Math.abs(dy) ? { x: Math.sign(dx) || 0, y: 0 } : { x: 0, y: Math.sign(dy) || 0 };
-  // The shove: computed PURELY against current state (the target's LIVE
-  // position) — a local position, never a mutation of the encounter.
-  let shovedPosition = { ...target.position };
-  let shoved = 0;
-  while (shoved < rushed) {
-    const next = { x: shovedPosition.x + direction.x, y: shovedPosition.y + direction.y };
-    if (blockedCell(next, target.id)) break;
-    shovedPosition = next;
-    shoved += 1;
-  }
-  if (shoved > 0) {
+  // The shove expresses the FULL source distance (p.124: "shoved a number of
+  // spaces equal to the spaces you just moved"); the shared movement
+  // authority stops it at the first obstruction, so the target's final
+  // position and the p.95 Collide derivation come from the SAME spatial
+  // simulation — no pre-simulation truncation that would swallow the
+  // collision event.
+  if (rushed > 0) {
     mutations.push({
       kind: 'move',
       sourceId: 'stalwart:great-giorgios',
       sourceActorId: owner.id,
       actorId: target.id,
       movement: 'shove',
-      distance: shoved,
+      distance: rushed,
       positions: [],
       direction,
       phasing: false,
@@ -144,6 +140,23 @@ function greatGiorgiosRushMutations(state: EncounterState, continuation: ArmedCo
     delivery: 'effect',
     ignoreCover: true,
   });
+  // ICON p.124 "Collide or Heroic: Foe also gains hatred of you after this
+  // ability resolves." The only shove this ability ever makes is this
+  // delayed one, so its collide fact derives through the ONE shared spatial
+  // authority (the same fold the reactive trigger set uses) over the
+  // assembled mutations — a caller can never assert it at the command
+  // boundary. The hatred clause lands AFTER the damage, in mutation order.
+  if (collidingShoveTargets(state, mutations).includes(target.id)) {
+    mutations.push({
+      kind: 'condition',
+      sourceId: 'bastion:great-giorgios',
+      sourceActorId: owner.id,
+      actorId: target.id,
+      conditionId: 'hatred',
+      operation: 'apply',
+      potency: 'normal',
+    });
+  }
   return mutations;
 }
 
