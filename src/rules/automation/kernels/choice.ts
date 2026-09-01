@@ -16,8 +16,9 @@
  *     (`choice.<kind>-required`) — nothing is consumed, nothing resolves;
  *   - an OPTIONAL choice missing means "decline" (never "pick a default");
  *   - a supplied choice is validated against its declared constraints:
- *     cardinality (minimum/maximum/distinct), relation (self/ally/foe/any),
- *     range (footprint distance, p.92), option membership, numeric bounds;
+ *     U4 owns cardinality (minimum/maximum/distinct), closed options and
+ *     numeric bounds; actor/position membership delegates to U3 (whose range
+ *     frame composes U7);
  *   - the returned values are exactly what the buckets carried — this kernel
  *     derives legality and consequences, it never invents a value.
  *
@@ -34,11 +35,10 @@ import type {
   RuleChoice,
   RuleExecutionContext,
 } from '../primitives/types.js';
-import { footprintDistance } from '../primitives/spatial-intent.js';
-import { withinGrid } from '../primitives/job-kit.js';
 import { anchorFromActorSelector } from '../primitives/anchor.js';
 import { deriveRoles, resolveRoleSelector, roleFrameFromContext, type RoleFrame } from '../primitives/roles.js';
 import { resolveSpatialAnchor, validateActorCandidate } from './candidate.js';
+import { validatePositionCandidate } from './evaluate-query.js';
 import { RuleProgramViolation, evaluateNumber } from './runtime.js';
 
 /** The validated value for one `RuleChoice`: what the player supplied,
@@ -132,21 +132,15 @@ function resolvePositions(choice: RuleChoice, context: RuleExecutionContext): Ch
   // actors, a position-less actor) FAILS CLOSED rather than silently
   // skipping the range check.
   const origin = resolveSpatialAnchor(choice.rangeOrigin ?? anchorFromActorSelector(), context);
+  const maximumRange = choice.range === undefined ? Number.POSITIVE_INFINITY : evaluateNumber(choice.range, context);
   const positions: Position[] = [];
   for (const cell of supplied) {
-    // In-grid legality routes through the same shared predicate the U3
-    // position operators compose (`withinGrid`).
-    if (!withinGrid(cell, context)) {
+    const candidate = validatePositionCandidate({ origin: origin.position, originSize: origin.size, range: maximumRange }, cell, context);
+    if (!candidate.legal && candidate.problem === 'out-of-bounds') {
       throw choiceViolation('move.out-of-bounds', choice, `position (${cell.x},${cell.y}) is outside the battlefield.`);
     }
-    // Range through the canonical p.92 footprint metric from the anchor
-    // (a Size>1 origin measures from its footprint edge — the same metric
-    // the query authority uses).
-    if (choice.range) {
-      const maximumRange = evaluateNumber(choice.range, context);
-      if (footprintDistance({ position: origin.position, size: origin.size }, { position: cell, size: 1 }) > maximumRange) {
-        throw choiceViolation('move.range', choice, `position (${cell.x},${cell.y}) is outside range ${maximumRange}.`);
-      }
+    if (!candidate.legal) {
+      throw choiceViolation('move.range', choice, `position (${cell.x},${cell.y}) is outside range ${maximumRange}.`);
     }
     positions.push(cell);
   }

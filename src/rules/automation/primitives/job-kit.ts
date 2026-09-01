@@ -1,7 +1,8 @@
 import { resolveCureMutations } from './status-saves.js';
 import { directAttackDamageProvenance, type AttackDamageProvenance } from './attack-resolution.js';
 import { arcCells, axisDirection, cellKey, lineCells, orthogonalNeighbors, sameCell, squareArea } from '../../area-geometry.js';
-import { footprintCells, footprintIntersectsCells, footprintsOverlap } from './spatial-intent.js';
+import * as battlefield from './battlefield.js';
+import { rollDamageDice as rollDamageDicePrimitive } from './damage-roll.js';
 import type { Position } from '../../types.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import type { DiceSource } from '../../dice.js';
@@ -102,10 +103,10 @@ export const attackStep = (overrides: Partial<{ boons: number; trueStrike: boole
 
 // ── Geometry / state ─────────────────────────────────────────────────────────
 export const distance = (first: Position, second: Position) =>
-  Math.max(Math.abs(first.x - second.x), Math.abs(first.y - second.y));
+  battlefield.distance(first, second);
 
 export const withinGrid = (position: Position, context: RuleExecutionContext) =>
-  position.x >= 0 && position.y >= 0 && position.x < context.state.grid.width && position.y < context.state.grid.height;
+  battlefield.withinGrid(position, context);
 
 export const sourceActor = (context: RuleExecutionContext, id: string): RuleActorView =>
   context.state.actors[id];
@@ -123,11 +124,10 @@ export const sourceActor = (context: RuleExecutionContext, id: string): RuleActo
  * teleport unoccupied, summon placement each carry their own specialist
  * rules on top of this predicate). */
 export const occupied = (position: Position, context: RuleExecutionContext, excludeId = '') =>
-  Object.values(context.state.actors).some((actor) => actor.id !== excludeId && actor.position && footprintIntersectsCells({ position: actor.position, size: actor.size ?? 1 }, [position]))
-  || Object.values(context.state.entities).some((entity) => entityKindOf(entity) === 'object' && entity.position && sameCell(entity.position, position));
+  battlefield.occupied(position, context, excludeId);
 
 export const impassable = (position: Position, context: RuleExecutionContext) =>
-  !withinGrid(position, context) || context.state.terrainAt(position).has('impassable');
+  battlefield.impassable(position, context);
 
 // ── Movement ─────────────────────────────────────────────────────────────────
 /**
@@ -145,50 +145,18 @@ export function walk(
   moverId: string,
   options: { excludeIds?: ReadonlySet<string> } = {},
 ): Position {
-  const excludeIds = options.excludeIds ?? new Set<string>();
-  // ICON p.92: a Size-N mover occupies an N×N footprint, so every transit
-  // step must keep the whole footprint in bounds and off impassable terrain,
-  // and a blocker's footprint (not just its anchor cell) stops the walk.
-  // This keeps walk consistent with the SpatialIntent gateway the landing
-  // routes through. Size 1 degenerates to the anchor-cell checks.
-  const moverSize = Math.max(1, context.state.actors[moverId]?.size ?? 1);
-  let position = { ...start };
-  for (let step = 0; step < steps; step += 1) {
-    const next = { x: position.x + Math.sign(direction.x), y: position.y + Math.sign(direction.y) };
-    if (footprintCells(next, moverSize).some((cell) => !withinGrid(cell, context) || context.state.terrainAt(cell).has('impassable'))) break;
-    if (!phasing) {
-      const blockedByActor = Object.values(context.state.actors).some(
-        (actor) => actor.id !== moverId && !excludeIds.has(actor.id) && actor.position && footprintsOverlap({ position: next, size: moverSize }, { position: actor.position, size: actor.size ?? 1 }),
-      );
-      // ICON p.95: summons are intangible and do not cause obstruction, so
-      // only OBJECT entities stop non-phasing movement — a bomb or beast in
-      // the path is passed through, exactly as characters share their space.
-      const blockedByEntity = Object.values(context.state.entities).some((entity) => entityKindOf(entity) === 'object' && entity.position && sameCell(entity.position, next));
-      if (blockedByActor || blockedByEntity) break;
-    }
-    position = next;
-  }
-  return position;
+  return battlefield.walk(context, start, direction, steps, phasing, moverId, options);
 }
 
 /** The first in-grid, unoccupied cell from a candidate list, else null. */
 export function firstFreeCell(context: RuleExecutionContext, cells: Position[], excludeId: string): Position | null {
-  return cells.find((cell) => withinGrid(cell, context) && !occupied(cell, context, excludeId)) ?? null;
+  return battlefield.firstFreeCell(context, cells, excludeId);
 }
 
 // ── Selection ────────────────────────────────────────────────────────────────
 /** The eight surrounding cells in clockwise order, starting directly north. */
 export function ringAround(center: Position): Position[] {
-  return [
-    { x: center.x, y: center.y - 1 },
-    { x: center.x + 1, y: center.y - 1 },
-    { x: center.x + 1, y: center.y },
-    { x: center.x + 1, y: center.y + 1 },
-    { x: center.x, y: center.y + 1 },
-    { x: center.x - 1, y: center.y + 1 },
-    { x: center.x - 1, y: center.y },
-    { x: center.x - 1, y: center.y - 1 },
-  ];
+  return battlefield.ringAround(center);
 }
 
 // ── Durations ────────────────────────────────────────────────────────────────
@@ -205,12 +173,7 @@ export const untilNextTurnStart: RuleDuration = { kind: 'turn-start', actor: sel
  * die resolves. Deterministic: reads only the recorded dice source, so
  * replay applies the recorded roll exactly.
  */
-export const rollDamageDice = (dice: DiceSource, die: number, count: number, bonusDice: number): number => {
-  const safeCount = Math.max(0, Math.floor(count));
-  const safeBonus = Math.max(0, Math.floor(bonusDice));
-  const rolls = Array.from({ length: safeCount + safeBonus }, () => dice.die(die)).sort((first, second) => second - first);
-  return rolls.slice(0, safeCount).reduce((total, roll) => total + roll, 0);
-};
+export const rollDamageDice = rollDamageDicePrimitive;
 
 // ── Mutation builders ────────────────────────────────────────────────────────
 /**

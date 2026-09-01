@@ -180,6 +180,36 @@ export function isBespokeU16FieldName(name: string): boolean {
     || /^[a-zA-Z0-9_]*(?:UsedThisTurn)$/.test(name);
 }
 
+/** Concrete semantic-atomicity guard: kernels may not obtain foundational
+ * operations through the content-authoring facade. */
+export function kernelAuthoringFacadeProblems(codeByFile: Readonly<Record<string, string>>): Violation[] {
+  const problems: Violation[] = [];
+  for (const [file, code] of Object.entries(codeByFile)) {
+    if (!file.startsWith('kernels/')) continue;
+    if (parseImports(code).some((specifier) => /(?:^|\/)primitives\/job-kit\.js$/.test(specifier))) {
+      problems.push({
+        check: 'kernel-authoring-facade-import',
+        file,
+        detail: 'kernel imports foundational semantics from primitives/job-kit.ts; import the owning primitive/domain surface directly',
+      });
+    }
+  }
+  return problems;
+}
+
+/** U4 must validate position membership through U3, not reinterpret bounds or
+ * footprint range locally. This pins the restored authority route without
+ * pretending arbitrary atomicity is regex-provable. */
+export function choiceCandidateRoutingProblems(choiceCode: string): string[] {
+  const problems: string[] = [];
+  if (!choiceCode.includes('validateActorCandidate(')) problems.push('actor choices no longer call U3 validateActorCandidate');
+  if (!choiceCode.includes('validatePositionCandidate(')) problems.push('position choices no longer call U3 validatePositionCandidate');
+  if (/from ['"]\.\.\/primitives\/(?:battlefield|spatial-intent)\.js['"]/.test(choiceCode)) {
+    problems.push('choice kernel imports raw spatial semantics instead of U3 candidate validation');
+  }
+  return problems;
+}
+
 // U2 (role/perspective) single-authority guard details.
 //
 // These are the CONSUMERS migrated to derive semantic relation / controller /
@@ -552,6 +582,18 @@ export function auditArchitecture(automationRoot: string): AuditResult {
           detail: `kernels must not import from content (imports ${posixRelative(automationRoot, resolved)})`,
         });
       }
+    }
+  }
+
+  const genericLayerCode = Object.fromEntries(files
+    .filter((file) => ['primitives', 'kernels'].includes(layerFor(file, automationRoot)))
+    .map((file) => [posixRelative(automationRoot, file), readFileSync(file, 'utf8')]));
+  violations.push(...kernelAuthoringFacadeProblems(genericLayerCode));
+
+  const choiceCode = genericLayerCode['kernels/choice.ts'];
+  if (choiceCode) {
+    for (const detail of choiceCandidateRoutingProblems(choiceCode)) {
+      violations.push({ check: 'u4-u3-candidate-routing', file: 'kernels/choice.ts', detail });
     }
   }
 

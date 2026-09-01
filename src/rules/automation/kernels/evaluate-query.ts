@@ -52,13 +52,11 @@ import {
   footprintIntersectsCells,
 } from '../primitives/spatial-intent.js';
 import {
-  axisDirection,
   distance,
   occupied,
-  sameCell,
-  squareArea,
   withinGrid,
-} from '../primitives/job-kit.js';
+} from '../primitives/battlefield.js';
+import { axisDirection, sameCell, squareArea } from '../../area-geometry.js';
 import { hasLineOfEffect, hasLineOfSight } from '../primitives/line-of-sight.js';
 import {
   anchorFromActorSelector,
@@ -71,6 +69,8 @@ import type {
   EntityQuery,
   PositionLegalityProblem,
   PositionLegalityQuery,
+  PositionCandidateProblem,
+  PositionCandidateQuery,
   PositionQuery,
   TerrainQuery,
   ValueQuery,
@@ -99,6 +99,8 @@ export type {
   EntityQuery,
   PositionLegalityProblem,
   PositionLegalityQuery,
+  PositionCandidateProblem,
+  PositionCandidateQuery,
   PositionOrderingPolicy,
   PositionQuery,
   PositionSpacePolicy,
@@ -283,7 +285,7 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
   const cells: Position[] = [];
   const view = query.lineOfSightFrom ? lineView(context) : null;
   for (const cell of squareArea(query.origin, query.radius)) {
-    if (!withinGrid(cell, context)) continue;
+    if (!validatePositionCandidate({ origin: query.origin, range: query.radius }, cell, context).legal) continue;
     if (!query.includeOrigin && sameCell(cell, query.origin)) continue;
     if (query.space.kind === 'unoccupied' && occupied(cell, context, query.space.excludeActorId ?? '')) continue;
     if (view && !hasLineOfSight(view, query.lineOfSightFrom!, cell)) continue;
@@ -293,6 +295,20 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
     cells.sort((a, b) => distance(query.origin, a) - distance(query.origin, b) || a.x - b.x || a.y - b.y);
   }
   return cells;
+}
+
+/** Shared U3 validation beneath automatic position queries and U4 choices. */
+export function validatePositionCandidate(
+  query: PositionCandidateQuery,
+  position: Position,
+  context: RuleExecutionContext,
+): { legal: true; problem: null } | { legal: false; problem: PositionCandidateProblem } {
+  if (!withinGrid(position, context)) return { legal: false, problem: 'out-of-bounds' };
+  if (footprintDistance(
+    { position: query.origin, size: Math.max(1, Math.floor(query.originSize ?? 1)) },
+    { position, size: 1 },
+  ) > query.range) return { legal: false, problem: 'range' };
+  return { legal: true, problem: null };
 }
 
 /** The TELEPORT/placement legality specialist: in-grid, within the canonical

@@ -124,6 +124,17 @@ export type PositionSpacePolicy =
  * distance" scan) requests it explicitly. */
 export type PositionOrderingPolicy = { kind: 'none' } | { kind: 'distance-from-origin' };
 
+/** Base U3 legality for a battlefield-cell candidate. U7 resolves the origin
+ * before this query is evaluated; U3 owns only bounds and canonical p.92
+ * footprint range membership. */
+export interface PositionCandidateQuery {
+  origin: Position;
+  originSize?: number;
+  range: number;
+}
+
+export type PositionCandidateProblem = 'out-of-bounds' | 'range';
+
 /** A position-domain candidate query. */
 export interface PositionQuery {
   /** The center the radius is measured from. */

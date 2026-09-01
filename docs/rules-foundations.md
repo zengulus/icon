@@ -13,7 +13,8 @@ Related documents: [`deliverables.md`](deliverables.md) (artifact status),
 [`source-fidelity.md`](source-fidelity.md) (**generated** strict
 source-fidelity status), [`glossary-executable-inventory.md`](glossary-executable-inventory.md)
 (per-term combat-glossary detail), [`../TODO.md`](../TODO.md) (actionable
-backlog).
+backlog), and [`semantic-atomicity-audit.md`](semantic-atomicity-audit.md)
+(one-question ownership findings and migration order).
 
 ## Source-fidelity auditing (strict)
 
@@ -106,9 +107,10 @@ the row's declared constraints (cardinality min/max/distinct, relation,
 p.92 footprint range, option membership, numeric bounds, direction non-zero,
 position in-grid). Actor-candidate legality is delegated to the shared U3
 authority (`kernels/candidate.ts`, see below) — the kernel keeps only
-required/optional, cardinality, and distinctness. T2 (2026-08-30): position
-choices route their in-grid + footprint-range reads through the shared U3
-position predicates and the range frame is a U7 `RuleChoice.rangeOrigin`
+required/optional, cardinality, and distinctness. Atomicity pass (2026-09-01):
+position choices now call the same U3 `validatePositionCandidate` authority
+used by position queries for in-grid + footprint-range membership; the range
+frame remains a U7 `RuleChoice.rangeOrigin`
 anchor (default the acting actor; a malformed anchor rejects the choice
 instead of silently skipping the range check), and
 the U2 chooser/controller substrate is consumable
@@ -122,7 +124,8 @@ buckets (non-ability commands carry only the Blessing surface). Pre/post
 boundary: a choice whose candidate set depends on a roll/movement/future
 state is NOT representable here — it belongs to the future
 WINDOW/CONTINUATION underlays; never supply it speculatively. Tests:
-`choice.test.ts` (23 semantic cases) + protocol fixtures. Sequencing owner:
+`choice.test.ts` (24 semantic cases, including U3 parity over a Size-2 anchor)
++ protocol fixtures. Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
 ### Candidate sets (QUERY underlay) — PARTIAL: actor/position/entity/terrain query with the eligibility duplicates routed (T2, 2026-08-30)
@@ -177,10 +180,13 @@ player-chosen flight; the old "away from the nearest foe" direction was
 invented) are documented non-executable, their resolvers fail closed on
 those clauses, and the `includeDefeated: true` flags those call sites
 carried were dropped ("closest foe" cannot include defeated characters).
-`primitives/job-kit.ts::occupied` is now an OBSTRUCTION test (characters +
+`primitives/battlefield.ts::occupied` is the OBSTRUCTION authority (characters +
 OBJECT entities block, p.95; intangible summons do NOT obstruct — a bomb's
 cannot-share-with-bombs rule is a specialist constraint in the bomb
-placement resolver, never this predicate).
+placement resolver, never this predicate). `primitives/job-kit.ts` retains a
+compatibility wrapper for content authoring, but kernels import the owning
+battlefield surface directly; damage-roll policy similarly lives in
+`primitives/damage-roll.ts`.
 
 T2 (2026-08-30) completed the T2 U3 contract on top of the landed actor/
 position slices: the query TYPES moved to `primitives/query.ts` (split-

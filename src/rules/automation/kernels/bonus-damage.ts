@@ -24,7 +24,7 @@
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { DiceSource } from '../../dice.js';
-import { rollDamageDice } from '../primitives/job-kit.js';
+import { rollDamageDice } from '../primitives/damage-roll.js';
 import {
   constantModifierValue,
   foldNumberModifiers,

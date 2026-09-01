@@ -24,7 +24,7 @@
  * query), exactly as the selector authority has always read it.
  */
 import { footprintDistance } from '../primitives/spatial-intent.js';
-import { rollDamageDice } from '../primitives/job-kit.js';
+import { rollDamageDice } from '../primitives/damage-roll.js';
 import type { DistanceEndpoint, RuleActorView, RuleExecutionContext, RuleNumber, RuleSelector } from '../primitives/types.js';
 import { liveActorSlot, resolveActorSelectorReference, resolveReference } from '../primitives/reference.js';
 import type { SpatialOrigin } from '../primitives/anchor.js';

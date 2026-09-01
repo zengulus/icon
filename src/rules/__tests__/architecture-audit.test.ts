@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   auditArchitecture,
+  choiceCandidateRoutingProblems,
+  kernelAuthoringFacadeProblems,
   isBespokeU16FieldName,
   u1ReferenceRoutingProblems,
   u8EncounterRoutingProblems,
@@ -99,6 +101,22 @@ describe('auditArchitecture (real codebase)', () => {
     expect(result.checked.primitives).toBeGreaterThan(0);
     expect(result.checked.kernels).toBeGreaterThan(0);
     expect(result.checked.content).toBeGreaterThan(0);
+  });
+
+  it('semantic atomicity: kernels cannot depend on job-kit for low-level semantics', () => {
+    expect(kernelAuthoringFacadeProblems({
+      'kernels/query.ts': "import { occupied } from '../primitives/job-kit.js';",
+      'content/jobs/example.ts': "import { occupied } from '../../primitives/job-kit.js';",
+    })).toEqual([expect.objectContaining({ check: 'kernel-authoring-facade-import', file: 'kernels/query.ts' })]);
+  });
+
+  it('semantic atomicity: U4 actor and position decisions remain routed through U3', () => {
+    expect(choiceCandidateRoutingProblems('validateActorCandidate(id); validatePositionCandidate(query);')).toEqual([]);
+    expect(choiceCandidateRoutingProblems("validateActorCandidate(id); import { withinGrid } from '../primitives/battlefield.js';"))
+      .toEqual(expect.arrayContaining([
+        'position choices no longer call U3 validatePositionCandidate',
+        'choice kernel imports raw spatial semantics instead of U3 candidate validation',
+      ]));
   });
 
   it('T6.4/(a) U16 guard flags bespoke entitlement fields but not retained specialists', () => {
