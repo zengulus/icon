@@ -1546,6 +1546,61 @@ describe('U16 — migrated once-per-scope marks are not reintroduced as raw rule
 // ---------------------------------------------------------------------------
 
 describe('single action-cost authority', () => {
+  it('semantic repair: the Heroic activation KERNEL stays generic — the four named heroics live only in content recipes', () => {
+    // The generic Heroic kernel composes transaction/usage/continuation
+    // concepts only; Strive, Demon Strength, Wolfheart, and Spite are named
+    // source semantics owned by content/jobs/heroic-activation-recipes.ts.
+    // A bare `demon-strength` literal would escape the generic source-id
+    // audit (no colon), so this pin reads the REAL files directly.
+    const junctionDir = joinPath(import.meta.dirname, '..', 'automation');
+    const kernel = readFileSync(joinPath(junctionDir, 'kernels', 'heroic-activation.ts'), 'utf8');
+    const recipes = readFileSync(joinPath(junctionDir, 'content', 'jobs', 'heroic-activation-recipes.ts'), 'utf8');
+    const named = ['strive', 'demon-strength', 'wolfheart', 'spite'];
+    // The content side must keep owning them (the guard cannot be satisfied
+    // by deleting the mechanics everywhere).
+    for (const stem of named) expect(recipes.toLowerCase()).toContain(stem);
+    // The kernel must stay name-free in CODE (doc prose may name the sources
+    // it serves; a behavior branch or literal id must not).
+    const kernelCode = kernel.split('\n').filter((line) => !/^\s*(\/\/|\/\*|\*)/.test(line)).join('\n');
+    for (const stem of named) expect(kernelCode.toLowerCase()).not.toContain(stem);
+    // No opaque kind-switch on named heroics — the kernel's `kind` reads are
+    // generic recipe vocabulary only (continuation/gate/cost/effect kinds).
+    expect(/kind\s*===?\s*['"](strive|demon-strength|wolfheart|spite)['"]/i.test(kernel)).toBe(false);
+  });
+
+  it('semantic repair: Blast geometry is template-backed — square-radius canonization cannot return', () => {
+    // ICON p.97 defines Blast as three VISUAL templates, not a Chebyshev
+    // radius. The exact templates live in the geometry authority
+    // (`blastTemplateCells`) and every blast claim must route through them;
+    // re-introducing `medium blast = squareArea(2)` in the shared vocabulary
+    // or its tests regresses the repair.
+    const junctionDir = joinPath(import.meta.dirname, '..');
+    const geometry = readFileSync(joinPath(junctionDir, 'area-geometry.ts'), 'utf8');
+    expect(geometry).toContain('blastTemplateCells');
+    expect(/\bsmall blast\b[^\n]*radius 1/i.test(geometry)).toBe(false);
+    expect(/\bmedium blast\b[^\n]*radius 2/i.test(geometry)).toBe(false);
+    expect(/\bblastTemplateCells\s*\([^)]*\bsize\b[^)]*\)\s*\{\s*$/.test(geometry)).toBe(false);
+    const areaKernel = readFileSync(joinPath(junctionDir, 'automation', 'kernels', 'area.ts'), 'utf8');
+    expect(areaKernel).not.toContain('squareArea(origin, 2)');
+  });
+
+  it('semantic repair: Demon Slayer rushes advance through the shared walk authority — no local stepping loop', () => {
+    // #10: Demon Cutter's Talent II rush is a recorded movement PATH through
+    // `validateSpatialIntent`, and `plannedRush` accumulates over the shared
+    // `walk` authority. A manually-grid-stepped `position += direction` loop
+    // in the program file duplicates movement authority and must not return.
+    const program = readFileSync(
+      joinPath(import.meta.dirname, '..', 'automation', 'content', 'jobs', 'programs', 'demon-slayer-programs.ts'),
+      'utf8',
+    );
+    expect(/\.x\s*\+=\s*dir(ection)?\.x|\.y\s*\+=\s*dir(ection)?\.y/.test(program)).toBe(false);
+    // The one accumulation helper present must delegate every legality call
+    // to the shared walk authority.
+    const plannedRush = /function plannedRush[\s\S]*?^\}/m.exec(program);
+    expect(plannedRush).not.toBeNull();
+    expect(plannedRush![0]).toContain('walk(context');
+  });
+
   it('production code has no second action-cost fold outside cost-payment.ts', () => {
     // The cost-payment kernel (kernels/cost-payment.ts) is the single
     // reusable authority for action-cost overrides. A prior merge

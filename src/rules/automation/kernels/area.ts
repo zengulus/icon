@@ -24,9 +24,14 @@ import type { RuleAction, RuleClauseCompilation, RuleProgramCompilation } from '
  * shape the range kernel gives listed-range changes.
  *
  * Only the shapes with exact source authority are first-class here: `line`
- * and `arc`. Blast templates are visual-only in the PDF and are deliberately
- * NOT approximated by this kernel; a unit whose complete semantics need an
- * exact blast template stays unresolved (`blast-template`).
+ * and `arc`. The three Blast templates (small/medium/large) are encoded
+ * EXACTLY in `area-geometry.ts` (`blastTemplateCells`): small = center + 4
+ * orthogonal squares, medium = center + 8 surrounding squares (same as Burst
+ * 1), large = medium plus one extra square on each side against the small
+ * blast's orthogonal squares. A resolver whose area is a blast folds those
+ * exact cells — never a `squareArea` radius approximation. A unit whose
+ * blast clause still lacks resolver wiring stays unresolved
+ * (`blast-template`).
  *
  * A content module registers a reviewed `AreaModifierRule` per source unit
  * (`content/jobs/area-recipes.ts`). The kernel never branches on a source

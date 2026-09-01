@@ -55,6 +55,14 @@ export interface ContinuationResolver {
  *   mutations computed against THEN-CURRENT state at the command boundary
  *   and recorded on the answer event (no dice, no choices — the decision
  *   itself is the recorded command input).
+ * - `windowRequired` (optional): a content-declared gate over THEN-CURRENT
+ *   state at trigger time. When it returns FALSE the deterministic
+ *   `autoResolve` branch runs INSTEAD of opening the window — the source's
+ *   unique case never asks the player, and the window is reserved for the
+ *   genuine source-granted decision (e.g. Spite's equidistant-closest-foe
+ *   tie, p.141 "If multiple foes are equidistant, you can choose").
+ * - `autoResolve` (optional, REQUIRED when `windowRequired` is declared):
+ *   the deterministic THEN-CURRENT mutations for the no-window branch.
  *
  * U12 itself stays choice-free: the DECISION lives in the U13 window;
  * U12 only carries the deferred rule (what will resume). */
@@ -67,6 +75,12 @@ export interface DecisionContinuationRow {
   consume(state: EncounterState, continuation: ArmedContinuation): RuleMutation[];
   /** Applied at answer time on accept: deterministic THEN-CURRENT mutations. */
   resolve(state: EncounterState, continuation: ArmedContinuation): RuleMutation[];
+  /** Optional gate: when FALSE at trigger time, the deterministic
+   * `autoResolve` branch runs instead of opening the window. */
+  windowRequired?: (state: EncounterState, continuation: ArmedContinuation) => boolean;
+  /** Optional deterministic THEN-CURRENT mutations for the no-window branch
+   * (required when `windowRequired` is declared). */
+  autoResolve?: (state: EncounterState, continuation: ArmedContinuation) => RuleMutation[];
 }
 
 const continuationResolvers: Record<string, ContinuationResolver> = {};
@@ -93,6 +107,66 @@ export function registerDecisionContinuation(row: DecisionContinuationRow): void
 /** The closed decision registry (dispatch by recorded program id). */
 export function decisionContinuationFor(programId: string): DecisionContinuationRow | undefined {
   return decisionContinuationRows[programId];
+}
+
+/** Dispatch ONE due continuation through the registered row/resolver
+ * authority (decision continuation → U13 window or conditional auto-resolve;
+ * plain resolver → deferred-rule execution). The fired continuation is
+ * consumed (removed from the armed collection by the caller). */
+function dispatchDueContinuation(state: EncounterState, continuation: ArmedContinuation): void {
+  const payload = continuation.payload;
+  // Held results never resume at a boundary: window-gated held results are
+  // kept armed (drained by U13 window machinery), and a boundary-resume of
+  // a held result is a wiring error — fail closed rather than resume an
+  // already-determined result outside its owning window.
+  if (payload.kind === 'held-result') {
+    throw new Error(`Cannot resume held-result continuation ${continuation.id} at a boundary: it is gated by its owning decision window.`);
+  }
+  // U13: a DECISION continuation opens a choice window at its trigger
+  // instead of auto-resolving — the source's "may"/"can" language is
+  // preserved (the engine never chooses a default). The continuation is
+  // consumed (it armed the window); the recorded answer later resolves it.
+  const decisionRow = decisionContinuationFor(payload.resumeId ?? continuation.programId);
+  if (decisionRow) {
+    const ownerId = continuation.ownerRef.kind === 'captured-actor'
+      ? continuation.ownerRef.actorId
+      : undefined;
+    if (ownerId === undefined) {
+      throw new Error(`Cannot open a decision window for continuation ${continuation.id}: the owner reference is not a single actor.`);
+    }
+    // A CONDITIONAL decision window: when the row's THEN-CURRENT gate says
+    // the player decision is not required (the source's unique case), the
+    // deterministic auto-resolve branch runs instead — the window is
+    // reserved for the genuine source-granted decision.
+    if (decisionRow.windowRequired && !decisionRow.windowRequired(state, continuation)) {
+      if (!decisionRow.autoResolve) {
+        throw new Error(`Cannot auto-resolve continuation ${continuation.id}: the decision row declares windowRequired without autoResolve.`);
+      }
+      applyRuleMutations(state, decisionRow.autoResolve(state, continuation));
+      return;
+    }
+    const id = `decision:${continuation.id}`;
+    openDecisionWindow(state, {
+      id,
+      kind: 'choice',
+      actorId: ownerId,
+      provenance: { sourceId: continuation.programId },
+      heldPayload: continuation,
+      choice: decisionRow.choice,
+    });
+    // The trigger fired: consume the triggering resource deterministically
+    // (the window-open consumption mutations, e.g. the mark removal).
+    applyRuleMutations(state, decisionRow.consume(state, continuation));
+    return;
+  }
+  const resolver = continuationResolverFor(payload.resumeId ?? continuation.programId);
+  if (!resolver) {
+    throw new Error(`Cannot resume continuation ${continuation.id}: no deferred-rule resolver is registered for program ${payload.resumeId ?? continuation.programId}.`);
+  }
+  // Execute THEN-CURRENT state: the resolver re-resolves LIVE refs against
+  // the state at resume time; captured refs/values are literals. Emitted
+  // mutations apply through the shared authority — deterministic, no dice.
+  applyRuleMutations(state, resolver.resolve(state, continuation));
 }
 
 /** Resume every armed continuation whose trigger is due at the observed
@@ -137,50 +211,57 @@ export function resumeDueContinuations(
     if (firstKey !== secondKey) return firstKey < secondKey ? -1 : 1;
     return first.id < second.id ? -1 : first.id > second.id ? 1 : 0;
   });
-  for (const continuation of due) {
-    const payload = continuation.payload;
-    // Held results never reach this loop: window-gated held results are kept
-    // armed above (drained by U13 window machinery), and a boundary-resume
-    // of a held result is a wiring error — fail closed rather than resume
-    // an already-determined result outside its owning window.
-    if (payload.kind === 'held-result') {
-      throw new Error(`Cannot resume held-result continuation ${continuation.id} at a boundary: it is gated by its owning decision window.`);
-    }
-    // U13: a DECISION continuation opens a choice window at its trigger
-    // instead of auto-resolving — the source's "may"/"can" language is
-    // preserved (the engine never chooses a default). The continuation is
-    // consumed (it armed the window); the recorded answer later resolves it.
-    const decisionRow = decisionContinuationFor(payload.resumeId ?? continuation.programId);
-    if (decisionRow) {
-      const ownerId = continuation.ownerRef.kind === 'captured-actor'
-        ? continuation.ownerRef.actorId
-        : undefined;
-      if (ownerId === undefined) {
-        throw new Error(`Cannot open a decision window for continuation ${continuation.id}: the owner reference is not a single actor.`);
-      }
-      const id = `decision:${continuation.id}`;
-      openDecisionWindow(state, {
-        id,
-        kind: 'choice',
-        actorId: ownerId,
-        provenance: { sourceId: continuation.programId },
-        heldPayload: continuation,
-        choice: decisionRow.choice,
-      });
-      // The trigger fired: consume the triggering resource deterministically
-      // (the window-open consumption mutations, e.g. the mark removal).
-      applyRuleMutations(state, decisionRow.consume(state, continuation));
+  for (const continuation of due) dispatchDueContinuation(state, continuation);
+  state.continuations = stillArmed;
+}
+
+/** POST-RESOLUTION resume seam (U12): resume every armed continuation whose
+ * FACT trigger is satisfied by the recorded fact history (the events of one
+ * ability resolution). This is how a post-resolution consequence armed by a
+ * resolution (e.g. Spite's "after it resolves" hatred+ of the closest foe,
+ * p.141) fires against THEN-CURRENT state after the ability's own mutations
+ * applied — the seam is called by the reducer at the end of a
+ * RULE_MUTATIONS_APPLIED application with the event's recorded facts.
+ *
+ * Determinism/replay: a pure function of the armed record + the recorded
+ * facts; the unique branch re-derives the same deterministic mutations and
+ * the tie branch reopens the SAME serial-minted window (the recorded
+ * DECISION_ANSWERED event consumes the choice — never re-queried). No dice,
+ * no fresh decisions. Clock-triggered continuations are untouched (they
+ * stay armed for their boundary). */
+export function resumeDueFactContinuations(state: EncounterState, facts: readonly Fact[]): void {
+  const stillArmed: ArmedContinuation[] = [];
+  const due: ArmedContinuation[] = [];
+  for (const continuation of state.continuations) {
+    const trigger = continuation.trigger;
+    if (trigger.kind !== 'fact') {
+      stillArmed.push(continuation);
       continue;
     }
-    const resolver = continuationResolverFor(payload.resumeId ?? continuation.programId);
-    if (!resolver) {
-      throw new Error(`Cannot resume continuation ${continuation.id}: no deferred-rule resolver is registered for program ${payload.resumeId ?? continuation.programId}.`);
+    const satisfied = facts.some((fact) =>
+      fact.kind === trigger.factKind
+      && (trigger.instanceId === undefined || fact.instanceId === trigger.instanceId));
+    if (!satisfied) {
+      stillArmed.push(continuation);
+      continue;
     }
-    // Execute THEN-CURRENT state: the resolver re-resolves LIVE refs against
-    // the state at resume time; captured refs/values are literals. Emitted
-    // mutations apply through the shared authority — deterministic, no dice.
-    applyRuleMutations(state, resolver.resolve(state, continuation));
+    if (continuation.payload.kind === 'held-result') {
+      // Held results are gated by their owning window — never by a Fact.
+      stillArmed.push(continuation);
+      continue;
+    }
+    due.push(continuation);
   }
+  // U17 ordering identity: the RESUME sequence follows each continuation's
+  // declared ordering policy (else its durable identity) — never raw array
+  // order.
+  due.sort((first, second) => {
+    const firstKey = continuationOrderKey(first);
+    const secondKey = continuationOrderKey(second);
+    if (firstKey !== secondKey) return firstKey < secondKey ? -1 : 1;
+    return first.id < second.id ? -1 : first.id > second.id ? 1 : 0;
+  });
+  for (const continuation of due) dispatchDueContinuation(state, continuation);
   state.continuations = stillArmed;
 }
 

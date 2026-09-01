@@ -87,7 +87,7 @@ matching row, not just a happy-path unit:
 | Rampart dash/fly | rush/fly into a rampart cell → denied; free landing applies | done |
 | Immobile | a move mutation on an immobile actor → never applies | done (caller gate) |
 | Area center legality | burst center out of bounds or beyond the source's reach → denied; free-space center must be unoccupied and passable | done (`computeSpatialArea`) |
-| Area inclusion parity | kernel cells === `squareArea`/`lineCells`; inclusion matches manual filtering; foe blast resolver routed through it | done |
+| Area inclusion parity | kernel cells === `squareArea`/`lineCells`/exact `blastTemplateCells` (small = plus, medium = 3×3, large = 13-cell); inclusion matches manual filtering; foe flash-bomb blast resolver routed through the gateway's `blast` shape | done |
 | Footprint range | point-cell vs footprint (p.92) parity across the direct gate, VM selectors, and areas | TODO |
 | Line of effect | area/line cells through obstacles | TODO |
 | Arc shape | 90-degree arc geometry and legality | TODO |

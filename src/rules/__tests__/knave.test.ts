@@ -31,8 +31,11 @@ function knaveEncounter(options: { foe?: Position; second?: Position | null } = 
   hero.chapter = 3;
   // Isolate knave mechanics: the shared bastion fixture character carries
   // Bull's Strength, whose collide fold would add incidental 2 damage to
-  // shove tests.
-  hero.traitIds = hero.traitIds.filter((id) => id !== 'bastion:trait:bull-s-strength');
+  // shove tests, and the bastion Strive trait, whose Heroic path fails
+  // closed while its seams are missing. Spite is this job's heroic source
+  // and is fully executable; the explicit trait set makes the entitlement
+  // independent of catalog defaults.
+  hero.traitIds = ['knave:trait:spite'];
   const foe = createFoe('Relict', options.foe ?? { x: 2, y: 1 });
   const second = options.second === null ? null : createFoe('Grim', options.second ?? { x: 4, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;

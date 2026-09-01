@@ -212,6 +212,34 @@ describe('Size footprints (ICON p.92, p.290)', () => {
 describe('computeSpatialArea — inclusion and center authority', () => {
   const source = { id: 'caster', position: { x: 0, y: 0 }, onBattlefield: true, defeated: false };
 
+  it('the blast shape derives the EXACT template cells — the small template is a plus, not a radius square', () => {
+    // ICON p.97: small blast = center + 4 orthogonal squares. A size-1 actor
+    // diagonal to the center is OUTSIDE the small template but would be
+    // inside a radius-1 burst square — the gateway must use the template.
+    const diagonal = { id: 'diag', position: { x: 4, y: 3 }, onBattlefield: true, defeated: false };
+    const orthogonal = { id: 'ortho', position: { x: 3, y: 2 }, onBattlefield: true, defeated: false };
+    const small = computeSpatialArea({
+      grid: { width: 10, height: 10, terrain: [] },
+      actors: { caster: source, diagonal, orthogonal },
+    }, {
+      kind: 'area', sourceActorId: 'caster', sourceRuleId: 'fixture', shape: 'blast', blastSize: 'small',
+      center: { x: 3, y: 2 }, radius: 0, requireCenterInBounds: true,
+    });
+    expect(small.legal).toBe(true);
+    expect(small.includedActorIds).toContain('ortho'); // the (3,2) center cell is in the small template
+    expect(small.includedActorIds).not.toContain('diag'); // (4,3) is diagonal to the center
+    // The same center as a burst radius 1 is a 3×3 square and DOES include the
+    // diagonal cell — the two shapes are provably distinct.
+    const burst = computeSpatialArea({
+      grid: { width: 10, height: 10, terrain: [] },
+      actors: { caster: source, diagonal, orthogonal },
+    }, {
+      kind: 'area', sourceActorId: 'caster', sourceRuleId: 'fixture', shape: 'burst',
+      center: { x: 3, y: 2 }, radius: 1, requireCenterInBounds: true,
+    });
+    expect(burst.includedActorIds).toContain('diag');
+  });
+
   it('includes a large foe whose footprint — not its anchor cell — lies in the burst (p.290)', () => {
     // Burst centered (3,2) r1 covers x∈[2,4], y∈[1,3]. The size-2 actor
     // anchored at (4,0) has its (4,1) space inside; its anchor is outside.

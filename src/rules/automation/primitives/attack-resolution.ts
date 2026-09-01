@@ -103,11 +103,10 @@ export function attackDamageProvenance(intent: Pick<AttackIntent, 'elevationModi
 /**
  * A staged attack's PRE-FOLD roll: the d20 + boon/curse total ONLY, before
  * any ability clause that the pre-fold total can change (Takedown p.135
- * "Exceed or Heroic: Gains true strike") is folded in. Evasion is not
- * consulted here — the caller derives the pre-fold facts (Exceed from this
- * same total, or a source-forced exceed), folds them (e.g. grants true
- * strike), and only then settles the attack. Never a second roll: the staged
- * roll IS the attack's one roll.
+ * "Exceed or Heroic: Gains true strike") is folded in. Evasion is
+ * deliberately NOT consulted here — Evasion resolves BEFORE the attack roll
+ * (the PreRollDefenseWindow, ICON p.104), and an evaded attack never reaches
+ * the stage. Never a second roll: the staged roll IS the attack's one roll.
  */
 export interface AttackRollStage {
   d20: number | null;
@@ -116,36 +115,65 @@ export interface AttackRollStage {
   netBoon: number;
 }
 
-/** Roll a staged attack ONCE: d20 (unless auto-hit) + boon/curse. Evasion is
- * deliberately not consulted — pre-fold facts are derived from `total` first
- * and folded by the caller (Takedown's exceed-granted true strike). */
-export function rollAttackStage(intent: AttackIntent, dice: DiceSource): AttackRollStage {
-  const netBoon = Math.trunc(intent.sourceBoon ?? 0)
+/** The net boon/curse count for an attack intent (source boons + elevation −
+ * the Dazed curse). Pure. */
+export function netBoonFor(intent: AttackIntent): number {
+  return Math.trunc(intent.sourceBoon ?? 0)
     + Math.trunc(intent.elevationModifier ?? 0)
     - (intent.sourceDazed ? 1 : 0);
+}
+
+/** Roll a staged attack ONCE: d20 (unless auto-hit) + boon/curse. Evasion is
+ * deliberately not consulted — the PreRollDefenseWindow resolved it BEFORE
+ * the roll (an evaded attack never reaches the stage), and pre-roll facts
+ * (heroic / source-forced exceed) were folded into the effective true
+ * strike by the caller before this roll was made. */
+export function rollAttackStage(intent: AttackIntent, dice: DiceSource): AttackRollStage {
+  const netBoon = netBoonFor(intent);
   const d20 = intent.autoHit ? null : dice.die(20);
   const boon = intent.autoHit ? 0 : rollBoonOrCurse(netBoon, dice).modifier;
   return { d20, boon, total: d20 === null ? null : d20 + boon, netBoon };
 }
 
-/** Settle a staged roll with the caller's EFFECTIVE true strike (already
- * folded from the pre-fold total): resolve Evasion (p.104 — a 4+ d6 cancels
- * the attack), then hit and critical. An evaded/auto-hit attack records no
- * d20 (null), so any fact derived from the pre-fold total must be re-derived
- * from the SETTLED total afterwards (a suppressed natural exceed is not a
- * fact the attack carries). */
-export function settleStagedAttackRoll(stage: AttackRollStage, intent: AttackIntent, dice: DiceSource): AttackRoll {
-  const trueStrike = intent.trueStrike ?? false;
+/**
+ * The PreRollDefenseWindow (ICON p.104): Evasion checks BEFORE the attack
+ * roll. A 4+ d6 cancels the attack entirely — no d20 and no boon dice are
+ * consumed, and no natural Exceed exists (nothing was rolled). An EFFECTIVE
+ * TRUE STRIKE known before the roll (declared, heroic-derived, or
+ * source-forced-exceed-derived — all pre-roll facts) suppresses the check:
+ * no d6 is consumed. Consumes dice only when the check is genuinely made.
+ */
+export function resolvePreRollEvasion(
+  intent: Pick<AttackIntent, 'autoHit' | 'targetEvasion'>,
+  effectiveTrueStrike: boolean,
+  dice: DiceSource,
+): { evasionRoll: number | null; evaded: boolean } {
+  const evasionRoll = !intent.autoHit && !effectiveTrueStrike && intent.targetEvasion ? dice.die(6) : null;
+  return { evasionRoll, evaded: evasionRoll !== null && evasionRoll >= 4 };
+}
+
+/** Settle a rolled stage with the caller's EFFECTIVE true strike (the pre-roll
+ * facts already folded, plus any post-roll exceed-derived true strike) and
+ * the PRE-RESOLVED pre-roll Evasion outcome: hit and critical. Consumes NO
+ * dice: the Evasion d6 was consumed by the PreRollDefenseWindow, and the
+ * stage IS the attack's one roll. An evaded/auto-hit attack records no d20
+ * (null), so any fact derived from the roll must be re-derived from the
+ * SETTLED total afterwards (a suppressed natural exceed is not a fact the
+ * attack carries). */
+export function settleStagedAttackRoll(
+  stage: AttackRollStage,
+  intent: AttackIntent,
+  evasion: { evasionRoll: number | null; evaded: boolean },
+  effectiveTrueStrike: boolean,
+): AttackRoll {
   const autoHit = intent.autoHit ?? false;
-  const damageProvenance = attackDamageProvenance({ ...intent, trueStrike });
-  const evasionRoll = !autoHit && !trueStrike && intent.targetEvasion ? dice.die(6) : null;
-  const evaded = evasionRoll !== null && evasionRoll >= 4;
-  const d20 = autoHit || evaded ? null : stage.d20;
-  const boon = autoHit || evaded ? 0 : stage.boon;
-  const total = autoHit || evaded ? null : stage.total;
-  const hit = autoHit || (!evaded && (total ?? 0) >= intent.defense);
+  const damageProvenance = attackDamageProvenance({ ...intent, trueStrike: effectiveTrueStrike });
+  const d20 = autoHit || evasion.evaded ? null : stage.d20;
+  const boon = autoHit || evasion.evaded ? 0 : stage.boon;
+  const total = autoHit || evasion.evaded ? null : stage.total;
+  const hit = autoHit || (!evasion.evaded && (total ?? 0) >= intent.defense);
   const critical = !autoHit && hit && (total ?? 0) >= 20;
-  return { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, exceedThreshold: intent.exceedThreshold ?? null, ...damageProvenance, netBoon: stage.netBoon };
+  return { d20, boon, total, hit, critical, evasionRoll: evasion.evasionRoll, trueStrike: effectiveTrueStrike, autoHit, exceedThreshold: intent.exceedThreshold ?? null, ...damageProvenance, netBoon: stage.netBoon };
 }
 
 /**

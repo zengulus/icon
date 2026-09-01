@@ -113,7 +113,8 @@ registerRangeModifierRule({
 // durable slow-turn flag projected by the range kernel, so this is
 // authoritative target legality at both command gates, never UI-only. The
 // medium-blast half is the program-level talent variant in the Draken Cross
-// program (both areas become radius 2 on the same charge-gated read).
+// program (both areas become the exact MEDIUM template — center + 8
+// surrounding squares — on the same charge-gated read).
 registerRangeModifierRule({
   sourceId: 'demon-slayer:draken-cross:talent:2',
   abilityId: 'demon-slayer:draken-cross',

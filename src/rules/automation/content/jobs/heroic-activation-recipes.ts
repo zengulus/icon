@@ -1,6 +1,7 @@
 /**
  * Heroic-activation content recipes (ICON pp.116, 121, 127, 134, 141 — the
- * Stalwart class Heroics mechanic and the four heroic-granting job traits).
+ * Stalwart class Heroics mechanic, the four heroic-granting job traits, and
+ * the Stalwart Gambit).
  *
  * ICON p.116: "Stalwarts can push themselves beyond their normal limits,
  * performing heroics and activating any heroic triggered effects of an
@@ -13,55 +14,58 @@
  * transaction, and owning a trait alone is never proof of a legal
  * activation.
  *
- * These rows are CONTENT DATA: named source trait IDs live here (never in
- * the generic kernel); each row REGISTERS its activation contract into the
- * kernel's registry at module load (content → kernel). The kernel folds only
- * the declared fields:
+ * These rows are CONTENT DATA: named source trait/class ids live here (never
+ * in the generic kernel); each row REGISTERS its activation contract into
+ * the kernel's registry at module load (content → kernel). The kernel folds
+ * only the declared fields:
  *
  * - **Strive** (bastion, p.121): "You may cause any ability to trigger its
  *   heroic effects when you use it, and increase the distance of any shoves
  *   by +1. If you do, after that ability resolves, you can't use heroics
  *   until the end of your next turn, and deal half damage during that
- *   turn." Availability: not currently locked out. Consequence: a durable
- *   Heroic lockout until the end of the owner's NEXT turn. The "+1 shove
- *   distance" and "half damage during that turn" halves have no generic
- *   shove-distance / source-half-damage modifier seams yet — they are the
- *   row's precisely-blocked `missingSeams` (the lockout half is exact).
+ *   turn." FAILS CLOSED: the "+1 shove distance" and "half damage during
+ *   that turn" halves have no generic shove-distance / source-damage-halving
+ *   folds yet, and the half-damage clause is a mandatory DOWNside of taking
+ *   Heroic — granting the lockout while omitting the damage penalty would be
+ *   a partial source unit. The row stays registered (census/provenance) with
+ *   its precise `missingSeams`; the declaration is rejected until complete.
  *
  * - **Demon Strength** (demon-slayer, p.127): "You can make any ability
  *   Heroic when you use it. If you do, you can't attack or use Heroics
- *   until the end of your following turn." Availability: not locked out.
- *   Consequence: the same durable Heroic lockout; the attack gate reads the
- *   identical condition id (`encounter.ts` imports `DEMON_STRENGTH_LOCKOUT_CONDITION`),
- *   so the lockout genuinely prevents later illegal Heroic AND attack
- *   declarations.
+ *   until the end of your following turn." Fully executable: the durable
+ *   lockout condition blocks later Heroic declarations (this row's own
+ *   availability gate) AND later attacks (the attack gate in encounter.ts
+ *   reads the same condition id).
  *
  * - **Wolfheart** (colossus, p.134): "Once a round, you may sacrifice 25%
  *   of your max hp to make an ability Heroic and increase the distance of
- *   any flight, rush, or dash as part of that move by +1." Availability:
- *   once per ROUND (a round-scoped U16 utilization ledger). Cost: an actual
- *   sacrifice of 25% of the owner's BASE maximum hp (p.107 "% HEALTH" —
- *   percentage costs always consider the base max, never the wounds-
- *   adjusted bar; the declared rounding is deterministic content data).
- *   Sacrifice costs are paid at the start of an ability, cannot be reduced,
- *   ignored, transferred, or resisted, cannot bring your hp below 1, and
- *   can be paid even when the owner lacks the hp (p.97 glossary) — the ONLY
- *   legally unpayable case is an owner that cannot pay at all (0 hp), which
- *   fails the transaction atomically. Source text grants NO post-use
- *   lockout for Wolfheart (unlike Strive/Demon Strength/Spite). The "+1
- *   flight/rush/dash distance" half has no generic movement-distance
- *   modifier seam yet — it is the row's precisely-blocked `missingSeam`.
+ *   any flight, rush, or dash as part of that move by +1." FAILS CLOSED:
+ *   the once-per-round gate and the 25%-of-base-max sacrifice (p.107 "%
+ *   HEALTH" figure, p.97 glossary) are representable, but the "+1 flight/rush/dash
+ *   distance" half has no generic movement-distance modifier seam yet. The
+ *   benefit is a mandatory half of the sacrifice — a partial version never
+ *   executes. The row stays registered with its precise `missingSeam`.
  *
  * - **Spite** (knave, p.141): "You can choose to use the Heroic effects of
  *   any ability when you use it. However, after it resolves, gain Hatred+
  *   of the closest foe to you until the end of your next turn and you can't
  *   use Heroics again for the same duration. If multiple foes are
- *   equidistant, you can choose." Availability: not locked out; the
- *   nearest-foe tie is a recorded U4 choice (an EQUIDISTANT tie with no
- *   recorded choice FAILS — never an invented tie-break). Consequence:
- *   Hatred+ of the chosen closest foe (the shared `hatred` condition whose
- *   `hatred-of` provenance halves damage against every other foe) plus the
- *   same-duration Heroic lockout.
+ *   equidistant, you can choose." Fully executable: both consequences are a
+ *   POST-RESOLUTION continuation (U12) — evaluated against THEN-CURRENT
+ *   state after the ability's own movements/defeats are final. A unique
+ *   closest foe is source-determined and resolves without asking; an
+ *   equidistant tie opens the U13 window below (the recorded U4 choice —
+ *   never an invented tie-break).
+ *
+ * - **Stalwart Gambit** (stalwart class, p.116): "If you take a Stalwart
+ *   ability while your primary Job is not Stalwart, you gain Heroics and
+ *   may trigger one Heroic effect for free once per combat." Fully
+ *   executable: a non-Stalwart character (actor `classId` ≠ 'stalwart')
+ *   using a Stalwart-class ability (the ability catalog's `classId` ===
+ *   'stalwart' — Bastion/Demon Slayer/Colossus job abilities) may declare
+ *   Heroic once per combat with no cost. Ordinary Stalwart-class characters
+ *   (whose primary job IS Stalwart) are unaffected — their own job-trait
+ *   recipe governs; the gambit row never applies to them.
  *
  * The lockout condition rides the shared `condition` mutation surface with
  * an owner turn-end duration; "until the end of your NEXT turn" counted from
@@ -71,46 +75,190 @@
  * exactly as the existing intimidate-mastery "until the end of your next
  * turn" row, lifecycle-recipes.ts).
  */
-import { registerHeroicActivationRule, type HeroicActivationRule } from '../../kernels/heroic-activation.js';
+import { registerHeroicActivationRecipe, type HeroicActivationRecipe } from '../../kernels/heroic-activation.js';
+import { registerDecisionContinuation } from '../../kernels/continuation-runtime.js';
+import { findAbility } from '../../../catalog.js';
+import { footprintDistance } from '../../primitives/spatial-intent.js';
+import type { EncounterActor, EncounterState } from '../../../types.js';
+import type { RuleMutation } from '../../primitives/types.js';
 
 export const DEMON_STRENGTH_LOCKOUT_CONDITION = 'demon-strength:heroic-lockout';
 export const SPITE_LOCKOUT_CONDITION = 'spite:heroic-lockout';
 export const STRIVE_LOCKOUT_CONDITION = 'strive:heroic-lockout';
+/** The Spite post-resolution continuation's resume dispatch key. */
+export const SPITE_POST_RESOLUTION_PROGRAM = 'knave:trait:spite:post-resolution';
 
-/** The four heroics-granting trait rows (the closed content table — the
- * kernel never names a trait id). */
-const HEROIC_ACTIVATION_RULES: readonly HeroicActivationRule[] = [
+/** The Stalwart Gambit ledger key (the once-per-combat free Heroic). */
+const STALWART_GAMBIT_LEDGER = 'stalwart:gambit:heroics';
+
+/** The heroic-granting source rows (the closed content table — the kernel
+ * never names a trait/class id). Rows with non-empty `missingSeams` are
+ * REGISTERED but fail closed (never execute a partial version). */
+const HEROIC_ACTIVATION_RECIPES: readonly HeroicActivationRecipe[] = [
   {
-    kind: 'strive',
     sourceId: 'bastion:trait:strive',
-    requiresNotLockedOut: { conditionId: STRIVE_LOCKOUT_CONDITION },
-    applyLockout: { conditionId: STRIVE_LOCKOUT_CONDITION, durationTurns: 2 },
     missingSeams: ['shove-distance-modifier', 'heroic-half-damage'],
+    applies: ({ actor }) => (actor.traitIds ?? []).includes('bastion:trait:strive'),
+    availability: [{ kind: 'not-locked-out', conditionId: STRIVE_LOCKOUT_CONDITION }],
+    costs: [],
+    preResolutionEffects: [{ kind: 'apply-condition', conditionId: STRIVE_LOCKOUT_CONDITION, durationTurns: 2 }],
   },
   {
-    kind: 'demon-strength',
     sourceId: 'demon-slayer:trait:demon-strength',
-    requiresNotLockedOut: { conditionId: DEMON_STRENGTH_LOCKOUT_CONDITION },
-    applyLockout: { conditionId: DEMON_STRENGTH_LOCKOUT_CONDITION, durationTurns: 2 },
     missingSeams: [],
+    applies: ({ actor }) => (actor.traitIds ?? []).includes('demon-slayer:trait:demon-strength'),
+    availability: [{ kind: 'not-locked-out', conditionId: DEMON_STRENGTH_LOCKOUT_CONDITION }],
+    costs: [],
+    preResolutionEffects: [{ kind: 'apply-condition', conditionId: DEMON_STRENGTH_LOCKOUT_CONDITION, durationTurns: 2 }],
   },
   {
-    kind: 'wolfheart',
     sourceId: 'colossus:trait:wolfheart',
-    oncePerRound: { ledgerSourceId: 'colossus:trait:wolfheart' },
-    sacrifice: { percentOfBaseMaximumHp: 25, rounding: 'up' },
     missingSeams: ['movement-distance-modifier'],
+    applies: ({ actor }) => (actor.traitIds ?? []).includes('colossus:trait:wolfheart'),
+    availability: [{ kind: 'once-per-round', ledgerSourceId: 'colossus:trait:wolfheart' }],
+    costs: [{ kind: 'sacrifice-percent', percentOfBaseMaximumHp: 25, rounding: 'up' }],
+    preResolutionEffects: [],
   },
   {
-    kind: 'spite',
     sourceId: 'knave:trait:spite',
-    requiresNotLockedOut: { conditionId: SPITE_LOCKOUT_CONDITION },
-    applyLockout: { conditionId: SPITE_LOCKOUT_CONDITION, durationTurns: 2 },
-    applyHatred: { ofClosestFoe: true, tieIsRecordedChoice: true, durationTurns: 2 },
     missingSeams: [],
+    applies: ({ actor }) => (actor.traitIds ?? []).includes('knave:trait:spite'),
+    availability: [{ kind: 'not-locked-out', conditionId: SPITE_LOCKOUT_CONDITION }],
+    costs: [],
+    preResolutionEffects: [],
+    postResolutionContinuation: {
+      kind: 'hatred-of-closest-foe',
+      programId: SPITE_POST_RESOLUTION_PROGRAM,
+      durationTurns: 2,
+      tieIsRecordedChoice: true,
+    },
+  },
+  {
+    sourceId: 'stalwart:gambit',
+    missingSeams: [],
+    // Stalwart Gambit (p.116): a character whose primary job is NOT a
+    // Stalwart-class job gains Heroics for the Stalwart abilities they take.
+    // Identified through the durable ownership surface — the actor's classId
+    // (encounter construction) and the ability catalog's classId — never a
+    // name match. Ordinary Stalwart-class characters are covered by their own
+    // job-trait recipe; this row never applies to them.
+    applies: ({ actor, abilityId }) =>
+      actor.classId !== 'stalwart'
+      && typeof abilityId === 'string'
+      && findAbility(abilityId)?.classId === 'stalwart',
+    availability: [{ kind: 'once-per-combat', ledgerSourceId: STALWART_GAMBIT_LEDGER }],
+    costs: [],
+    preResolutionEffects: [],
   },
 ];
 
-for (const rule of HEROIC_ACTIVATION_RULES) {
-  registerHeroicActivationRule(rule);
+for (const recipe of HEROIC_ACTIVATION_RECIPES) {
+  registerHeroicActivationRecipe(recipe);
 }
+
+/** The living battlefield foes of `actorId` ordered by canonical footprint
+ * distance from the actor's current footprint, closest first. Pure function
+ * of state — the single closest-foe query both Spite branches share. */
+function closestFoesOf(state: EncounterState, actorId: string): EncounterActor[] {
+  const actor = state.actors[actorId];
+  if (!actor?.position) return [];
+  const foes = Object.values(state.actors).filter((candidate) =>
+    candidate.id !== actorId
+    && candidate.side !== actor.side
+    && !candidate.defeated
+    && candidate.onBattlefield
+    && candidate.position !== null);
+  if (foes.length === 0) return [];
+  const anchor = actor.position;
+  const distances = foes.map((foe) => ({
+    foe,
+    distance: footprintDistance({ position: anchor, size: actor.size }, { position: foe.position!, size: foe.size }),
+  }));
+  const minimum = Math.min(...distances.map((entry) => entry.distance));
+  return distances.filter((entry) => entry.distance === minimum).map((entry) => entry.foe);
+}
+
+/** Spite's post-resolution consequences: Hatred+ of the chosen closest foe
+ * (the shared `hatred` condition whose `sourceActorId` IS the hated foe —
+ * the apply path records `ruleState['hatred-of']` from it, and the damage
+ * authority halves damage against every other foe, p.104) plus the same-
+ * duration Heroic lockout. Both apply AFTER the ability resolves (p.141). */
+function spiteConsequenceMutations(ownerId: string, hatedId: string, durationTurns: number, sourceId: string): RuleMutation[] {
+  return [
+    {
+      kind: 'condition',
+      sourceId,
+      sourceActorId: hatedId, // ← the hated foe: the shared `hatred-of` provenance.
+      actorId: ownerId,
+      conditionId: 'hatred',
+      operation: 'apply',
+      potency: 'plus',
+      duration: { kind: 'turn-end', actor: { kind: 'self' }, turns: durationTurns },
+    },
+    {
+      kind: 'condition',
+      sourceId,
+      sourceActorId: ownerId,
+      actorId: ownerId,
+      conditionId: SPITE_LOCKOUT_CONDITION,
+      operation: 'apply',
+      potency: 'normal',
+      duration: { kind: 'turn-end', actor: { kind: 'self' }, turns: durationTurns },
+    },
+  ];
+}
+
+/** The Spite POST-RESOLUTION decision continuation (p.141 "after it
+ * resolves"): the armed U12 continuation is resumed by the reducer after the
+ * ability's own mutations apply, so the closest-foe query sees the RESOLVED
+ * battlefield (the ability may move the Knave, defeat the former closest
+ * foe, or change presence).
+ *
+ * - Unique closest foe → the source determines the target; the deterministic
+ *   `autoResolve` branch applies WITHOUT asking (`windowRequired` false).
+ * - Equidistant tie → the U13 window opens (`windowRequired` true) and the
+ *   owner records the choice among the tied foes; the recorded answer rides
+ *   the held continuation (`capturedValues.decision`) and `resolve` applies
+ *   it — never an invented tie-break.
+ */
+registerDecisionContinuation({
+  programId: SPITE_POST_RESOLUTION_PROGRAM,
+  choice: {
+    key: 'closest-foe',
+    label: 'Choose the closest foe to hate',
+    kind: 'actors',
+    relation: 'foe',
+    required: true,
+    minimum: 1,
+    maximum: 1,
+  },
+  // The window is reserved for the source-granted decision: an equidistant
+  // tie. A unique closest foe is source-determined — no window.
+  windowRequired: (state, continuation) => {
+    const ownerId = continuation.ownerRef.kind === 'captured-actor' ? continuation.ownerRef.actorId : '';
+    if (!ownerId) throw new Error('spite.post-resolution: the continuation owner is not a single actor.');
+    return closestFoesOf(state, ownerId).length > 1;
+  },
+  autoResolve: (state, continuation) => {
+    const ownerId = continuation.ownerRef.kind === 'captured-actor' ? continuation.ownerRef.actorId : '';
+    if (!ownerId) throw new Error('spite.post-resolution: the continuation owner is not a single actor.');
+    const closest = closestFoesOf(state, ownerId);
+    if (closest.length !== 1) {
+      throw new Error(`spite.post-resolution: expected a unique post-resolution closest foe (found ${closest.length}).`);
+    }
+    const durationTurns = Number(continuation.capturedValues?.durationTurns ?? 2);
+    return spiteConsequenceMutations(ownerId, closest[0]!.id, durationTurns, continuation.programId);
+  },
+  consume: () => [],
+  resolve: (state, continuation) => {
+    const ownerId = continuation.ownerRef.kind === 'captured-actor' ? continuation.ownerRef.actorId : '';
+    if (!ownerId) throw new Error('spite.post-resolution: the continuation owner is not a single actor.');
+    const chosenId = continuation.capturedValues?.decision;
+    const closest = closestFoesOf(state, ownerId);
+    if (typeof chosenId !== 'string' || !closest.some((foe) => foe.id === chosenId)) {
+      throw new Error('spite.post-resolution: the recorded closest-foe choice is not among the equidistant closest foes — fail closed, never an invented tie-break.');
+    }
+    const durationTurns = Number(continuation.capturedValues?.durationTurns ?? 2);
+    return spiteConsequenceMutations(ownerId, chosenId, durationTurns, continuation.programId);
+  },
+});

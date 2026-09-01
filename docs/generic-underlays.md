@@ -900,7 +900,7 @@ and tranche sections below state what disappears and in what order.
 | card-deck-system, card-consumption | U4 CHOICE + U5 | CARDS (Part C) |
 | member-count-scaling (mob) | U5 + U3 | MOB (Part C) |
 | foe-trigger-expansion / phase state | U10 + U17 | FOE PHASE MACHINE (Part C) |
-| blast-template (visual-only geometry) | U3 + U7 | AREA/TEMPLATE |
+| blast-template (exact small/medium/large templates encoded in area-geometry; per-unit resolver wiring pending) | U3 + U7 | AREA/TEMPLATE |
 | infrastructure / relic | U4 + U14 (registration) | RELIC REGISTRATION (Part C) |
 
 ---

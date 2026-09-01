@@ -31,6 +31,19 @@
  * became active (a trigger that arrived both ways is recorded once per
  * arrival order, first write wins).
  *
+ * DEFERRED (documented, execution-correct): an activation can have MULTIPLE
+ * causal provenances (e.g. a Gallows-Humor-empowered ability whose roll also
+ * naturally slew — the `slay` trigger is both source-forced AND natural; an
+ * armed/forced exceed alongside a natural 15+ roll). Execution already
+ * collapses to one semantic activation, so this is DIAGNOSTICS-ONLY
+ * lossiness: the durable per-resolution record keeps one `provenance`
+ * (first write wins) instead of a list. Promoting the record to a
+ * provenance LIST is a cross-cutting migration — the durable event-log
+ * schema in `src/rules/types.ts`, the replay consumers that read it, and
+ * the source-fidelity tests that assert single provenances all change — so
+ * it is deferred rather than rushed. Do not treat the single recorded
+ * provenance as proof that the other cause was absent.
+ *
  * This module is source-ID-free: it owns the vocabulary and the collapse
  * bookkeeping, never a named ability.
  */

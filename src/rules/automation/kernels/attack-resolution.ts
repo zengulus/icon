@@ -35,7 +35,7 @@
  * This module contains no source IDs. Content supplies provenance strings
  * verbatim; the kernel never interprets them.
  */
-import { rememberAttackDamage, resolveAttackRoll, rollAttackStage, settleStagedAttackRoll, type AttackDamageProvenance } from '../primitives/attack-resolution.js';
+import { rememberAttackDamage, rollAttackStage, settleStagedAttackRoll, netBoonFor, resolvePreRollEvasion, type AttackDamageProvenance, type AttackRoll } from '../primitives/attack-resolution.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import type { RuleActorView, RuleExecutionContext, RuleMutation } from '../primitives/types.js';
 import { traitAttackModifier, type TraitAttackModifier } from './attack-modifiers.js';
@@ -100,9 +100,35 @@ export interface AuthoritativeAttackResult {
 }
 
 /** Resolve one ordinary attack from `source` against `target` through the
- * shared authority. Deterministic: all reads come from the execution context
- * (including the recorded dice source), so replay applies the recorded
- * mutation rather than re-deciding anything. */
+ * shared authority, in the source's explicit phases:
+ *
+ * ```text
+ * AttackPreRollFacts
+ *     declared true strike
+ *     heroic-derived true strike
+ *     source-forced-exceed-derived true strike
+ *         ↓
+ * PreRollDefenseWindow
+ *     Evasion (p.104 — checked BEFORE the attack roll; a pre-roll true
+ *     strike suppresses it entirely)
+ *         ↓
+ * AttackRoll (ONCE)
+ *     d20 + boons/curses
+ *     total
+ *     natural Exceed
+ *     critical
+ *         ↓
+ * PostRollCurrentAttackFold
+ *     natural-Exceed-derived properties
+ *     e.g. Takedown p.135 true strike for the CURRENT attack's remaining
+ *     damage semantics (dodge / miss-damage treatment)
+ *         ↓
+ * Hit/miss + direct damage
+ * ```
+ *
+ * Deterministic: all reads come from the execution context (including the
+ * recorded dice source), so replay applies the recorded mutation rather than
+ * re-deciding anything. */
 export function resolveAuthoritativeAttack(
   context: RuleExecutionContext,
   source: RuleActorView,
@@ -134,7 +160,6 @@ export function resolveAuthoritativeAttack(
     trueStrike: (options.trueStrike ?? false) || traitModifier.trueStrike,
     autoHit: options.autoHit ?? false,
     bonusDamageFlat: traitModifier.bonusDamageFlat + (context.abilityUseModifiers?.bonusDamage ?? 0),
-    bonusDamageDice: traitModifier.bonusDamageDice,
     exceedThreshold: traitModifier.exceedThreshold ?? undefined,
     unerring: Boolean(options.unerring) || traitModifier.unerring,
   };
@@ -143,44 +168,70 @@ export function resolveAuthoritativeAttack(
   // effects"). Natural and forced activation of the same trigger collapse
   // to one semantic exceed (trigger-provenance.ts) — never double-fired.
   const forceExceed = traitModifier.forceExceed;
+  const exceedThreshold = traitModifier.exceedThreshold ?? 15;
   const exceededBy = (total: number | null, threshold: number | null) => total !== null && total >= (threshold ?? 15);
-  let attack: ReturnType<typeof resolveAttackRoll>;
+
+  // ── AttackPreRollFacts ──
+  // True Strike available BEFORE the attack roll:
+  //  * declared true strike (ability effect / armed trait);
+  //  * heroic-derived (Takedown p.135 "Exceed or Heroic: Gains true
+  //    strike" — the Heroic declaration exists before the roll);
+  //  * source-forced-exceed-derived (Pulverize p.134 elevation ≥ 2 forces
+  //    the exceed fact at attack START, never from a later roll; boundary
+  //    source-forced exceeds — Ace / Massive Overhead / Open The Gates —
+  //    arrive as a pre-existing `exceed` trigger on the context).
+  const heroicDerivedTrueStrike = options.trueStrikeOnExceed === true && context.triggers?.has('heroic') === true;
+  const forcedExceedTrueStrike = options.trueStrikeOnExceed === true && (forceExceed || context.triggers?.has('exceed') === true);
+  const preRollTrueStrike = intent.trueStrike || heroicDerivedTrueStrike || forcedExceedTrueStrike;
+
+  // ── PreRollDefenseWindow (Evasion, p.104) ──
+  // Resolved BEFORE the attack roll. An evaded attack is cancelled: no d20
+  // and no boon dice are consumed, and no natural Exceed exists (nothing
+  // was rolled — a suppressed natural exceed is not a fact this attack
+  // carries). Source-forced exceed never needs a roll and still stands. A
+  // pre-roll true strike suppresses the check entirely (no d6 consumed).
+  const autoHit = intent.autoHit ?? false;
+  const evasion = resolvePreRollEvasion(intent, preRollTrueStrike, context.dice);
+
+  // ── AttackRoll (ONCE) + PostRollCurrentAttackFold ──
+  // The attack rolls exactly ONCE: an evaded attack consumes nothing; a
+  // surviving attack rolls its one d20 + boon/curse stage. Natural Exceed
+  // exists only AFTER that roll, so Takedown's exceed-granted true strike
+  // applies to the CURRENT attack's remaining consequences (dodge /
+  // miss-damage treatment) — it can never retroactively erase the
+  // already-resolved Evasion check (an evaded attack never reaches the
+  // roll), and it is never a "next attack" grant.
+  let attack: AttackRoll;
   let rawStage: { d20: number | null; boon: number; total: number | null; netBoon: number };
-  if (options.trueStrikeOnExceed === true) {
-    // Staged current-attack fold (Takedown p.135 "Exceed or Heroic: Gains
-    // true strike and creates a pit…":
-    //   1. roll the attack ONCE (pre-fold stage, no evasion yet);
-    //   2. derive Exceed from THAT same roll's total (or source-forced);
-    //   3. fold the exceed-granted true strike onto THIS attack;
-    //   4. only then settle Evasion/Dodge/hit with the effective true
-    //      strike — the true-strike consequences (p.104 evasion/dodge
-    //      suppression) genuinely participate in THIS attack's outcome,
-    //      never a post-hoc relabel of an already-decided roll;
-    //   5. fire the exceed pit from the same recorded exceed fact.
-    const stage = rollAttackStage(intent, context.dice);
-    rawStage = stage;
-    const preFoldExceed = exceededBy(stage.total, traitModifier.exceedThreshold) || forceExceed;
-    const effectiveTrueStrike = intent.trueStrike || preFoldExceed;
-    attack = settleStagedAttackRoll(stage, { ...intent, trueStrike: effectiveTrueStrike }, context.dice);
+  if (evasion.evaded) {
+    // Cancelled: the attack consumed ONLY the pre-roll Evasion d6 — no d20,
+    // no boon dice. A suppressed natural exceed is not a fact this attack
+    // carries.
+    rawStage = { d20: null, boon: 0, total: null, netBoon: netBoonFor(intent) };
+    attack = settleStagedAttackRoll(rawStage, intent, evasion, preRollTrueStrike);
   } else {
-    attack = resolveAttackRoll(intent, context.dice);
-    rawStage = { d20: attack.d20, boon: attack.boon, total: attack.total, netBoon: attack.netBoon };
+    rawStage = rollAttackStage(intent, context.dice);
+    const naturalExceed = exceededBy(rawStage.total, exceedThreshold);
+    const effectiveTrueStrike = preRollTrueStrike || (options.trueStrikeOnExceed === true && naturalExceed);
+    // The genuinely-made pre-roll Evasion roll (which failed) is recorded on
+    // the attack — the check happened FIRST, then the single attack roll.
+    attack = settleStagedAttackRoll(rawStage, intent, evasion, effectiveTrueStrike);
   }
-  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat, bonusDice, exceedThreshold } = attack;
+  const { d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit: recordedAutoHit, ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat, bonusDice, exceedThreshold: recordedExceedThreshold } = attack;
   // The recorded exceed fact derives from the SETTLED roll (an evaded attack
   // records no total, so its suppressed natural exceed is not a fact this
   // attack carries — source-forced exceed, which never needs a roll, still
-  // stands). For staged attacks this is the same single pre-fold roll.
-  const exceed = exceededBy(total, traitModifier.exceedThreshold) || forceExceed;
+  // stands). For a surviving staged attack this is the same single roll.
+  const exceed = exceededBy(total, exceedThreshold) || forceExceed;
   const damageProvenance = { ignoreDodge: trueStrike || ignoreDodge, ignoreCover, ignoreAetherwall, bonusFlat, bonusDice };
   rememberAttackDamage(context, target.id, damageProvenance);
   const attackMutation: RuleMutation = {
     kind: 'attack', sourceId: context.sourceId, actorId: source.id, targetId: target.id, d20, boon, total, hit, critical,
-    exceed, exceedThreshold: exceedThreshold ?? 15, evasionRoll, trueStrike, autoHit,
+    exceed, exceedThreshold: recordedExceedThreshold ?? 15, evasionRoll, trueStrike, autoHit: recordedAutoHit,
   };
   return {
-    attackMutation, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit,
-    exceedThreshold: exceedThreshold ?? 15,
+    attackMutation, d20, boon, total, hit, critical, evasionRoll, trueStrike, autoHit: recordedAutoHit,
+    exceedThreshold: recordedExceedThreshold ?? 15,
     forceExceed,
     damageProvenance,
     traitModifier,

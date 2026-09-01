@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { executeRuleProgram } from '../automation/kernels/runtime.js';
 import { bullStrengthCollideMutations } from '../automation/content/jobs/attack-modifier-recipes.js';
 import { traitAttackModifier } from '../automation/kernels/attack-modifiers.js';
+import { bonusDamageDiceForUse } from '../automation/kernels/bonus-damage.js';
 import '../automation/content/registry.js';
 import { JOB_TRAIT_RECIPES } from '../automation/content/jobs/job-trait-recipes.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
@@ -356,11 +357,89 @@ describe('Pulverize (p.134)', () => {
     expect(applyEvents(control.state, controlResult.events)).toEqual(controlResult.state);
   });
 
-  it('the kernel read is a pure elevation function (unit)', () => {
+  it('the elevation BONUS-DAMAGE half is an ability-use fold, not an attack modifier (unit)', () => {
+    // "When you start an attack ability on higher elevation than your target,
+    // it deals bonus damage" (p.135) — "it" is the attack ABILITY, so the
+    // bonus die rides the shared ability-use bonus-damage fold
+    // (`bonusDamageDiceForUse`, kernels/bonus-damage.ts), never an attack-
+    // space-only provenance field. The attack-modifier trait fold keeps only
+    // the SOURCE-FORCED exceed half (two or more elevations higher).
     const owner = { traitIds: ['colossus:trait:pulverize'], state: {} };
-    expect(traitAttackModifier(owner, 0)).toMatchObject({ bonusDamageDice: 0, bonusDamageFlat: 0, forceExceed: false });
-    expect(traitAttackModifier(owner, 1)).toMatchObject({ bonusDamageDice: 1, bonusDamageFlat: 0, forceExceed: false });
-    expect(traitAttackModifier(owner, 2)).toMatchObject({ bonusDamageDice: 1, bonusDamageFlat: 0, forceExceed: true });
+    expect(traitAttackModifier(owner, 0)).toMatchObject({ bonusDamageFlat: 0, forceExceed: false });
+    expect(traitAttackModifier(owner, 1)).toMatchObject({ bonusDamageFlat: 0, forceExceed: false });
+    expect(traitAttackModifier(owner, 2)).toMatchObject({ bonusDamageFlat: 0, forceExceed: true });
+    // The ability-use fold awards the die at one or more elevations higher
+    // against the attack target, and none when the target is not lower.
+    const { state, hero, foe } = traitEncounter({ traitIds: ['colossus:trait:pulverize'], foeAt: { x: 3, y: 1 }, elevation: 1 });
+    expect(bonusDamageDiceForUse(state, hero, 'colossus:takedown', [foe.id])).toBe(1);
+    expect(bonusDamageDiceForUse(state, hero, 'colossus:takedown', [hero.id])).toBe(0); // self target — no lower foe
+    const { state: flat, hero: flatHero, foe: flatFoe } = traitEncounter({ traitIds: ['colossus:trait:pulverize'], foeAt: { x: 3, y: 1 } });
+    expect(bonusDamageDiceForUse(flat, flatHero, 'colossus:takedown', [flatFoe.id])).toBe(0); // same elevation
+  });
+
+  it('Pulverize bonus damage is ABILITY-WIDE: a collateral [D] roll of the same attack ability carries the die too (discriminating test)', () => {
+    // Source interpretation (documented in attack-modifier-recipes.ts /
+    // docs/rules-coverage.md): "it deals bonus damage" refers to the attack
+    // ABILITY — every damage roll the ability makes carries one extra die
+    // (p.102 keep-highest), including collateral [D] rolls of the same
+    // ability, never only the attack-space damage. Build a synthetic AoE
+    // attack program whose collateral effect rolls [D]: the boundary folds
+    // Pulverize's die into `abilityUseModifiers`, and BOTH damage rolls
+    // consume an extra die through the shared keep-highest evaluation.
+    const hero = (id: string, traitIds: string[], side: 'heroes' | 'foes') => ({
+      id, side, position: { x: side === 'heroes' ? 0 : 3, y: 0 }, hp: 20, maxHp: 40, vitality: 10, vigor: 0,
+      defense: 6, armor: 0, speed: 4, dash: 2, fray: 4, damageDie: 6, actions: 2, attacked: false,
+      size: 1, defeated: false, conditions: new Set<string>(), statuses: [],
+      statusSavePolicy: { cureDenied: false, statusSaveDenied: false, saveBoon: 0, saveCurse: 0 },
+      resources: {}, state: {}, traitIds, talents: {}, abilityIds: [], masteredAbilityIds: [], marks: [],
+    });
+    const state = {
+      round: 1, grid: { width: 10, height: 10 },
+      actors: { hero: hero('hero', ['colossus:trait:pulverize'], 'heroes'), foeA: hero('foeA', [], 'foes'), foeB: hero('foeB', [], 'foes') },
+      entities: {}, terrainEffects: [],
+      terrainAt: () => new Set<string>(),
+      elevationAt: (position: Position) => (position.x === 0 ? 2 : 0),
+    };
+    const program: RuleProgram = {
+      schemaVersion: 1, rulesVersion: '1.5', id: 'program:test', sourceId: 'test:aoe-attack',
+      source: { page: 1, sectionId: 'test' }, name: 'AoE attack', classification: 'encounter', dependencies: [],
+      actions: [{ id: 'use', name: 'AoE attack', timing: 'use', costs: [], tags: ['attack'], range: null, area: null, choices: [], steps: [
+        { id: 'attack', timing: 'use', effects: [{
+          kind: 'attack', target: { kind: 'input', key: 'target' },
+          onHit: [
+            // Direct attack damage: one [D] (keep-highest with the bonus die).
+            { kind: 'damage', target: { kind: 'input', key: 'target' }, amount: { kind: 'damage-roll', actor: { kind: 'self' }, dice: { kind: 'constant', value: 1 } }, damageType: 'normal', delivery: 'hit', ignoreCover: false },
+            // COLLATERAL [D] roll of the SAME ability (an AoE attack whose
+            // area effect rolls [D]) — under the ability-wide reading this
+            // roll also carries the bonus die.
+            { kind: 'damage', target: { kind: 'input', key: 'collateral' }, amount: { kind: 'damage-roll', actor: { kind: 'self' }, dice: { kind: 'constant', value: 1 } }, damageType: 'normal', delivery: 'area', ignoreCover: false },
+          ], onMiss: [],
+        }] },
+      ] }],
+    };
+    // The boundary would fold Pulverize's die into abilityUseModifiers at
+    // the ability-use query point; replay applies the recorded rolls.
+    const run = (abilityUseModifiers?: { bonusDamageDice?: number }) => executeRuleProgram(program, {
+      state, actorId: 'hero', sourceId: 'test:aoe-attack', actionId: 'use', timing: 'use',
+      // d20 12, boon d6s 3+6 → 6 (total 18 hits defense 6), base damage 2
+      // and 2, bonus damage dice 5 and 5.
+      input: { actorIds: { target: ['foeA'], collateral: ['foeB'] } }, dice: scriptedDice(12, 3, 6, 2, 2, 5, 5), triggers: new Set(),
+      ...(abilityUseModifiers ? { abilityUseModifiers } : {}),
+    }, {});
+    const without = run();
+    const withTrait = run({ bonusDamageDice: 1 });
+    const damageOf = (result: ReturnType<typeof executeRuleProgram>) => result.mutations
+      .filter((mutation): mutation is Extract<RuleMutation, { kind: 'damage' }> => mutation.kind === 'damage')
+      .map((mutation) => ({ actorId: mutation.actorId, amount: mutation.amount }));
+    // WITHOUT the trait each [D] roll keeps its single die (2 and 2). WITH
+    // the trait, EVERY damage roll of the ability rolls one extra die and
+    // keeps the higher (p.102): the direct roll keeps 2 (2 vs 2) AND the
+    // COLLATERAL roll keeps 5 (5 vs 5) — the collateral roll consumed a
+    // second die exactly because the bonus is ability-wide, never
+    // attack-space-only. (If the bonus were attack-space-only, the
+    // collateral roll would still consume just one die and keep 2.)
+    expect(damageOf(without)).toEqual([{ actorId: 'foeA', amount: 2 }, { actorId: 'foeB', amount: 2 }]);
+    expect(damageOf(withTrait)).toEqual([{ actorId: 'foeA', amount: 2 }, { actorId: 'foeB', amount: 5 }]);
   });
 });
 

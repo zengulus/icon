@@ -51,7 +51,7 @@ Recipe kinds (each maps to one generic resolver factory in `kernels/foe-recipes.
 | `mark` | Marks a foe within `range`; the mark's persistent benefit is wired into the affected abilities via `bonusDamage.mark` / `unerringWhenMarked` | Grapple, Hunt |
 | `swap` | Swaps the source with an adjacent ally (free action) | Redondo |
 | `dash-strike` | Dashes, then deals damage to the nearest foe within `range` of the landing cell | Strafe |
-| `blast` | Area damage (`small`/`medium`/`large` = Chebyshev radius 1/2/3), `instances`, `conditions` on foes, `alliesStealth` / `alliesVigor` for allies in the area | Flash Bomb |
+| `blast` | Area damage over the EXACT Blast template (ICON p.97: `small` = center + 4 orthogonal squares, `medium` = center + 8 surrounding squares, `large` = medium plus one extra square on each side — via `blastTemplateCells`, never a radius), `instances`, `conditions` on foes, `alliesStealth` / `alliesVigor` for allies in the area | Flash Bomb |
 | `terrain` | Creates a terrain effect in the nearest free cell within `range` | Set Trap |
 | `end-turn-stealth` | Dashes, gains stealth, and emits the `end-turn` mutation EXECUTE_RULE honors to auto-end the turn | Prowl |
 

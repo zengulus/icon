@@ -190,8 +190,6 @@ export type FoeRecipe =
 
 // ── Shared resolver helpers ──────────────────────────────────────────────────
 
-const blastRadius: Record<'small' | 'medium' | 'large', number> = { small: 1, medium: 2, large: 3 };
-
 function chosenTarget(context: RuleExecutionContext): RuleActorView | undefined {
   for (const selector of [{ kind: 'attack-target' } as const, { kind: 'input', key: 'target' } as const]) {
     const resolution = resolveActorSelectorReference(selector, context);
@@ -479,14 +477,18 @@ function blastResolver(recipe: FoeBlastRecipe): RuleResolver {
     const centerPosition = center.position;
     if (!centerPosition) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} needs a blast center.`);
     // The F1 spatial gateway decides center legality and derives the area
-    // cells (p.95); the resolver keeps its own deterministic actor ordering.
+    // cells from the EXACT Blast template (p.97: small = center + 4
+    // orthogonal squares, medium = center + 8 surrounding, large = medium +
+    // one extra square on each side) — never a squareArea radius; the
+    // resolver keeps its own deterministic actor ordering.
     const area = computeSpatialArea(context.state, {
       kind: 'area',
       sourceActorId: source.id,
       sourceRuleId: context.sourceId,
-      shape: 'burst',
+      shape: 'blast',
+      blastSize: recipe.shape,
       center: centerPosition,
-      radius: blastRadius[recipe.shape],
+      radius: 0,
       maximumRangeFromSource: recipe.range,
       requireCenterInBounds: true,
     });

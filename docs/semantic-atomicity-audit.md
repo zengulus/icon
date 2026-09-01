@@ -198,8 +198,11 @@ you”, Burst's default user exclusion, and other recipient rules answer
 source geometry actually removes that space. The typed design contract in
 `primitives/area-resolution.ts` contains no `sourceExclusions` field.
 
-Blast remains unresolved until the actual Small/Medium/Large templates are
-represented exactly; no Chebyshev-square/radius approximation is permitted.
+The Small/Medium/Large Blast templates are now represented exactly
+(`area-geometry.ts` `blastTemplateCells`, folded through the shared spatial
+gateway's `blast` shape and the Demon Slayer Comet/Draken Cross resolvers);
+no Chebyshev-square/radius approximation is permitted anywhere else, and a
+unit whose blast clause still lacks resolver wiring stays unresolved.
 Gran Levincross remains the stress test: validate its cross boundary, derive
 four connected sections, damage the boundary, remove/place into a chosen
 nearest-free cell on the save-selected side, and persist a wall that blocks

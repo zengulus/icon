@@ -24,6 +24,7 @@
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { DiceSource } from '../../dice.js';
+import { encounterRuleState } from './encounter-adapter.js';
 import { rollDamageDice } from '../primitives/damage-roll.js';
 import {
   constantModifierValue,
@@ -48,7 +49,14 @@ export type BonusDamageGate =
   /** The ability's attack target is suffering from a status ("if your foe is
    * suffering from a status"). Without `conditionId`, ANY status qualifies;
    * with one, only that exact condition. */
-  | { kind: 'target-has-condition'; conditionId?: string };
+  | { kind: 'target-has-condition'; conditionId?: string }
+  /** The acting character starts the ability on higher elevation than its
+   * attack target by at least `minimumLevels` (Pulverize p.135: "When you
+   * start an attack ability on higher elevation than your target, it deals
+   * bonus damage"). The elevation difference is the canonical p.89 metric
+   * (a pit counts one lower); evaluated once at the ability-use boundary
+   * against the recorded attack target's position. */
+  | { kind: 'elevation-above-target'; minimumLevels: number };
 
 /** The deterministic fold view handed to scaled `dice` rows. */
 export interface BonusDamageFoldView {
@@ -79,11 +87,44 @@ export interface BonusDamageRule {
 
 const scaledBonusDamageRules: BonusDamageRule[] = [];
 
+/** Whether a bonus-damage gate can ride the shared U14 modifier registry
+ * (the shared `ModifierGate` evaluator covers every gate except the
+ * elevation metric, whose canonical p.89 evaluation needs the raw
+ * encounter state's `elevationAt` — the local fold owns it). */
+function isSharedGate(gate: BonusDamageGate): gate is Extract<BonusDamageGate, import('../primitives/modifiers.js').ModifierGate> {
+  return gate.kind !== 'elevation-above-target';
+}
+
+/**
+ * A TRAIT-gated ability-use bonus-damage rule. Unlike the ability-keyed rows
+ * above, the rule fires for EVERY ability the trait owner uses while the
+ * gate holds — it never needs the parent ability id. This is the home for
+ * trait-wide "your abilities gain bonus damage under condition X" clauses
+ * (Pulverize p.135: any attack ability started on higher elevation than its
+ * target deals bonus damage — the bonus rides the ability's damage rolls,
+ * never an attack-space-only provenance field). The dice are folded into
+ * the SAME ability-use authority (`abilityUseModifiers.bonusDamageDice`) the
+ * ability-keyed rows use, so every damage roll of the use carries them
+ * through the shared keep-highest evaluation.
+ */
+export interface TraitBonusDamageRule {
+  /** Exact source id of the granting unit (trait). */
+  sourceId: string;
+  /** The trait id whose ownership arms the rule. */
+  traitId: string;
+  /** Source conditions (default: unconditional). */
+  gate?: BonusDamageGate;
+  /** Bonus dice for the use. */
+  dice: number;
+}
+
+const traitBonusDamageRules: TraitBonusDamageRule[] = [];
+
 /** Register a bonus-damage grant rule (content/jobs/bonus-damage-recipes.ts).
  * Numeric rows convert to the shared U14 `bonus-damage-dice` query point;
  * function rows (scaled counts) stay in the local specialist fold. */
 export function registerBonusDamageRule(rule: BonusDamageRule): void {
-  if (typeof rule.dice === 'number') {
+  if (typeof rule.dice === 'number' && (rule.gate === undefined || isSharedGate(rule.gate))) {
     registerModifierRule({
       sourceId: rule.sourceId,
       ownerId: rule.abilityId,
@@ -97,6 +138,13 @@ export function registerBonusDamageRule(rule: BonusDamageRule): void {
   } else {
     scaledBonusDamageRules.push(rule);
   }
+}
+
+/** Register a trait-gated bonus-damage rule (content/jobs/bonus-damage-
+ * recipes.ts). Fired for every ability the trait owner uses while the gate
+ * holds. */
+export function registerTraitBonusDamageRule(rule: TraitBonusDamageRule): void {
+  traitBonusDamageRules.push(rule);
 }
 
 function targetActor(state: EncounterState, targetIds: readonly string[]): EncounterActor | undefined {
@@ -160,8 +208,23 @@ export function bonusDamageDiceForUse(
     if (rule.talent !== undefined && actor.talents?.[abilityId] !== rule.talent) continue;
     const gate = rule.gate;
     if (gate && !bonusDamageFoldGateHolds(gate, state, actor.id, targetIds)) continue;
-    const dice = (rule.dice as (view: BonusDamageFoldView) => number)({ state, actorId: actor.id, abilityId, targetIds });
+    // Numeric rows land here when their gate is not expressible on the shared
+    // U14 registry (the elevation metric); function rows are the scaled
+    // specialist. Both fold identically against the same gate authority.
+    const dice = typeof rule.dice === 'function'
+      ? rule.dice({ state, actorId: actor.id, abilityId, targetIds })
+      : rule.dice;
     scaled += Math.max(0, Math.floor(dice));
+  }
+  // Trait-gated rows: fired for every ability the trait owner uses while the
+  // gate holds (Pulverize p.135 elevation bonus — the ability deals bonus
+  // damage, so the die rides the ability-use fold, never an attack-space-
+  // only provenance field).
+  for (const rule of traitBonusDamageRules) {
+    if (!actor.traitIds.includes(rule.traitId)) continue;
+    const gate = rule.gate;
+    if (gate && !bonusDamageFoldGateHolds(gate, state, actor.id, targetIds)) continue;
+    scaled += Math.max(0, Math.floor(rule.dice));
   }
   return shared + scaled;
 }
@@ -184,6 +247,14 @@ function bonusDamageFoldGateHolds(gate: BonusDamageGate, state: EncounterState, 
       return gate.conditionId === undefined
         ? target.conditions.length > 0
         : target.conditions.some((condition) => condition.id === gate.conditionId);
+    }
+    case 'elevation-above-target': {
+      const target = targetActor(state, targetIds);
+      if (!target || !actor.position || !target.position) return false;
+      // The canonical p.89 elevation metric (a pit counts one lower) — the
+      // same authority the attack kernel uses for the elevation modifier.
+      const view = encounterRuleState(state);
+      return view.elevationAt(actor.position) - view.elevationAt(target.position) >= gate.minimumLevels;
     }
   }
 }
@@ -239,7 +310,8 @@ export function registerRecipientBonusDamageRule(rule: RecipientBonusDamageRule)
 export function hasBonusDamageRule(sourceId: string): boolean {
   return modifierRulesForSource(sourceId, 'bonus-damage-dice').length > 0
     || scaledBonusDamageRules.some((rule) => rule.sourceId === sourceId)
-    || recipientBonusDamageRules.some((rule) => rule.sourceId === sourceId);
+    || recipientBonusDamageRules.some((rule) => rule.sourceId === sourceId)
+    || traitBonusDamageRules.some((rule) => rule.sourceId === sourceId);
 }
 
 /**

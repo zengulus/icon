@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areaHasCellWithinRange, sameCell, squareArea, validateLine } from '../area-geometry.js';
+import { areaHasCellWithinRange, blastTemplateCells, sameCell, squareArea, validateLine } from '../area-geometry.js';
 
 /**
  * ICON p.97: a Line X is X spaces long, orthogonal only, and each successive
@@ -82,5 +82,52 @@ describe('areaHasCellWithinRange (ICON p.97 at-least-one-cell placement)', () =>
     const cells = [{ x: 9, y: 9 }, { x: 1, y: 0 }];
     expect(areaHasCellWithinRange(cells, { x: 0, y: 0 }, 1)).toBe(true);
     expect(cells.some((cell) => sameCell(cell, { x: 1, y: 0 }))).toBe(true);
+  });
+});
+
+/**
+ * The three exact Blast templates: "Small blast — 1 square plus 4 adjacent
+ * squares. Medium blast — 1 square plus 8 surrounding squares, same as
+ * burst. Large blast — 1 square plus 8 surrounding squares plus one extra
+ * square each side sitting against the adjacent 4 squares of a small blast."
+ * (ICON 1.5 AoE patterns). `blastTemplateCells` is the single authority.
+ */
+describe('blastTemplateCells (ICON p.97 exact Blast templates)', () => {
+  const key = (cell: { x: number; y: number }) => `${cell.x},${cell.y}`;
+
+  it('small = the central square plus its 4 orthogonal neighbors (5 cells, a plus)', () => {
+    const small = blastTemplateCells('small', { x: 0, y: 0 });
+    expect(small).toHaveLength(5);
+    expect(new Set(small.map(key))).toEqual(new Set(['0,0', '1,0', '-1,0', '0,1', '0,-1']));
+  });
+
+  it('medium = the central square plus all 8 surrounding squares (9 cells, same as Burst 1)', () => {
+    const medium = blastTemplateCells('medium', { x: 0, y: 0 });
+    expect(medium).toHaveLength(9);
+    expect(new Set(medium.map(key))).toEqual(new Set(squareArea({ x: 0, y: 0 }, 1).map(key)));
+  });
+
+  it('large = the medium 3×3 plus one extra square on each side against the small blast\'s orthogonal squares (13 cells)', () => {
+    const large = blastTemplateCells('large', { x: 0, y: 0 });
+    expect(large).toHaveLength(13);
+    const expected = new Set([
+      // the medium 3×3
+      ...squareArea({ x: 0, y: 0 }, 1).map(key),
+      // one extra square each side, sitting against the orthogonal neighbors
+      '0,2', '0,-2', '2,0', '-2,0',
+    ]);
+    expect(new Set(large.map(key))).toEqual(expected);
+  });
+
+  it('a diagonal square is in medium but NOT in small — the small template is a plus, never a square', () => {
+    expect(blastTemplateCells('small', { x: 0, y: 0 }).some((cell) => sameCell(cell, { x: 1, y: 1 }))).toBe(false);
+    expect(blastTemplateCells('medium', { x: 0, y: 0 }).some((cell) => sameCell(cell, { x: 1, y: 1 }))).toBe(true);
+    expect(blastTemplateCells('large', { x: 0, y: 0 }).some((cell) => sameCell(cell, { x: 2, y: 2 }))).toBe(false);
+  });
+
+  it('an origin offset shifts every template cell by the same vector', () => {
+    const centered = blastTemplateCells('small', { x: 0, y: 0 });
+    const offset = blastTemplateCells('small', { x: 4, y: 1 });
+    expect(new Set(offset.map((cell) => key({ x: cell.x - 4, y: cell.y - 1 })))).toEqual(new Set(centered.map(key)));
   });
 });

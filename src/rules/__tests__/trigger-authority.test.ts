@@ -32,6 +32,10 @@ function triggerFixture(): { state: EncounterState; heroId: string; targetId: st
   let state = createEncounter('Trigger authority fixture');
   const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
   hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+  // Demon Strength is the fully-executable heroic source (Strive fails
+  // closed while its shove/half-damage seams are missing). The explicit
+  // trait set makes the entitlement independent of catalog defaults.
+  hero.traitIds = ['demon-slayer:trait:demon-strength'];
   const foe = createFoe('Relict', { x: 2, y: 1 });
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: hero }).state;
   state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
@@ -84,7 +88,7 @@ describe('trigger authority: command triggers are provenance-checked', () => {
 
   it('accepts a validated Heroic declaration from a heroic-capable character as a validated-player-activation', () => {
     const { state, heroId, targetId } = triggerFixture();
-    // Aster is a Stalwart (Strive): entitled to declare Heroic. The Battering
+    // Aster owns Demon Strength: entitled to declare Heroic. The Battering
     // Ram Collide-or-Heroic reaction fires: the foe is slashed and the
     // 1-action cost is refunded (2 actions: spent then returned).
     const heroic = executeCommand(state, {
@@ -144,10 +148,10 @@ describe('trigger authority: command triggers are provenance-checked', () => {
     // The gate never replaces derivation: authoritative state and resolution
     // facts still produce the same triggers command paths consume. Charge
     // flows from the durable slow-turn flag into both the shared range
-    // authority and resolver reads (geomancer/chanter charge suites), and
-    // Collide derives from the resolution's own shove mutations (bastion
-    // collide suites) — both were converted to gate-free fixtures when the
-    // gate landed.
+    // authority and resolver reads (Draken Cross talent 2's charge-gated
+    // range-5 fold, geomancer/chanter charge suites), and Collide derives
+    // from the resolution's own shove mutations (bastion collide suites) —
+    // both were converted to gate-free fixtures when the gate landed.
     let stanced = createEncounter('Trigger authority derive fixture');
     const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
     hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];

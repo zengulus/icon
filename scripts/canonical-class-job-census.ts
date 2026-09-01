@@ -506,11 +506,11 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // Storm t2) are executable and dropped out of the census entirely.
   //
   // The remaining singletons were re-audited: `area-define` conflated
-  // several genuinely different families. Small/medium/large blast
-  // templates are visual-only in the PDF and deliberately NOT approximated
-  // (the classifier now emits `blast-template` for them); the other rows
-  // were misclassified or need a distinct delivery/lifecycle seam,
-  // reclassified below.
+  // several genuinely different families. Blast sizes carry the
+  // `blast-template` marker for their unresolved blast clause (the exact
+  // templates are encoded in area-geometry.ts); the other rows were
+  // misclassified or need a distinct delivery/lifecycle seam, reclassified
+  // below.
   'vagabond:trait:dodge': ['delivery-immunity'],
   // "Immune to damage from missed attacks, successful saves, and area
   // effects" — a damage-delivery immunity predicate on the trait owner,
@@ -527,14 +527,16 @@ const RECLASSIFIED_BLOCKERS: Readonly<Record<string, string[]>> = {
   // a mastery-owned ability needs the per-ability attack-modifier
   // attachment gate (the same family as Umbra's unerring)
   'warden:sidhe:talent:2': ['blast-template'],
-  // "your foe explodes with a medium blast area effect" — exact medium
-  // blast geometry is visual-only in the source
+  // "your foe explodes with a medium blast area effect" — the exact medium
+  // template is encoded (blastTemplateCells); the expiry-triggered
+  // explosion still needs a wired resolver
   'seer:eclipse:talent:2': ['choice-input'],
   // "dealing 3 damage again to up to three characters in its area effect"
   // — the player chooses up to three targets in the area
   'enochian:elden-rune:mastery': ['blast-template'],
-  // "Arkenrunes … extend to a small blast area" — exact small blast
-  // geometry is visual-only in the source
+  // "Arkenrunes … extend to a small blast area" — the exact small template
+  // is encoded (blastTemplateCells); the Arkenrune variant still needs a
+  // wired resolver
   'geomancer:midas:talent:2': ['entity-vacate'],
   // "When your chosen character returns, the shell explodes off them" —
   // the shell-entity vacate/return lifecycle; the burst-1 area is
@@ -1654,12 +1656,14 @@ function classifyBlockers(unit: RuleSourceUnit): string[] {
     blockers.push('condition-grant');
   }
 
-  // Blast template: a small/medium/large blast area whose exact template
-  // geometry is visual-only in the source (the area kernel implements the
-  // deterministic line/arc/burst patterns with exact authority; blast
-  // templates are deliberately NOT approximated). Distinct from `area-define`
-  // — a unit that names a blast size needs the template, not a shape/size
-  // modifier.
+  // Blast template: a small/medium/large blast area clause. The three exact
+  // templates are encoded in area-geometry.ts (`blastTemplateCells`): small =
+  // center + 4 orthogonal squares, medium = center + 8 surrounding squares,
+  // large = medium plus one extra square on each side against the small
+  // blast's orthogonal squares (ICON p.97). The blocker now means the unit's
+  // blast clause still needs resolver wiring through that authority (the same
+  // treatment `area-define` gets) — NOT that the geometry is missing; it is
+  // never a squareArea approximation.
   const blastTemplate = /\b(?:small|medium|large)\s+blast\b/.test(text);
   if (blastTemplate) {
     blockers.push('blast-template');

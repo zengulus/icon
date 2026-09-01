@@ -15,7 +15,25 @@
  * files.
  */
 import { findAbility } from '../../../catalog.js';
-import { isBloodied, registerBonusDamageRule, registerRecipientBonusDamageRule } from '../../kernels/bonus-damage.js';
+import { isBloodied, registerBonusDamageRule, registerRecipientBonusDamageRule, registerTraitBonusDamageRule } from '../../kernels/bonus-damage.js';
+
+// ICON p.135 Pulverize (colossus trait): "When you start an attack ability on
+// higher elevation than your target, it deals bonus damage." Ability-WIDE
+// interpretation (documented in docs/rules-coverage.md and the trait row in
+// attack-modifier-recipes.ts): "it" is the attack ability, so EVERY damage
+// roll the ability makes carries one bonus die (ICON p.102 keep-highest) —
+// the attack's direct [D] rolls AND any collateral [D] rolls of the same
+// ability. It is a TRAIT-gated rule (any attack ability the owner starts on
+// higher elevation than its attack target), folded through the same
+// ability-use authority the talent rows use. One or more levels higher → one
+// bonus die; two or more levels higher additionally source-forces every
+// exceed effect (that half stays in the attack-modifier trait fold).
+registerTraitBonusDamageRule({
+  sourceId: 'colossus:trait:pulverize',
+  traitId: 'colossus:trait:pulverize',
+  gate: { kind: 'elevation-above-target', minimumLevels: 1 },
+  dice: 1,
+});
 
 // ICON p.139 Knave Low Blow talent 1: "Deals bonus damage if your foe is
 // suffering from a status." Any status on the attack target qualifies.

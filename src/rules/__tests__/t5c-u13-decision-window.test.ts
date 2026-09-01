@@ -45,6 +45,10 @@ function u13Encounter(options: { foe?: Position; second?: Position | null; ally?
   const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
   hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
   hero.chapter = 3;
+  // Spite is the knave's heroic source and is fully executable (Strive fails
+  // closed while its seams are missing); the explicit trait set makes the
+  // entitlement independent of catalog defaults.
+  hero.traitIds = ['knave:trait:spite'];
   const foe = createFoe('Relict', options.foe ?? { x: 2, y: 1 });
   const second = options.second === null ? null : createFoe('Grim', options.second ?? { x: 4, y: 1 });
   const ally = options.ally === null || options.ally === undefined ? null : actorFromCharacter(validCharacter('Mira'), options.ally);

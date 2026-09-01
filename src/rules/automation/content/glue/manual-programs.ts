@@ -376,6 +376,14 @@ export const EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([
  * Its talent 2 (piercing per area character) is likewise retracted, since
  * its only execution path is the retracted ability resolver.
  *
+ * The exact Blast templates (ICON p.97: "There are three blast templates,
+ * small, medium, and large") are encoded in `area-geometry.ts`
+ * (`blastTemplateCells`): small = center + 4 orthogonal squares, medium =
+ * center + 8 surrounding squares (same as Burst 1), large = medium plus one
+ * extra square on each side against the small blast's orthogonal squares.
+ * Abilities using them (Comet's Medium Blast, Draken Cross's Small Blast)
+ * fold that EXACT geometry — never squareArea approximations.
+ *
  * Tests assert the allowlist + catalog lockstep against this documented
  * set so a silent re-promotion is caught. */
 export const DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS: ReadonlySet<string> = new Set([

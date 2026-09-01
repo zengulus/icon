@@ -180,25 +180,6 @@ const gallowsHumorEnter: RuleResolver = (context) => {
   ];
 };
 
-/** ICON p.151: at maximum, reset the die to 1 to empower the next ability
- * with bonus damage AND a durable source-authorized slay activation: "The
- * ability deals bonus damage and triggers any slay effects, hit or miss."
- * The arm lives in ruleState so the command boundary can fold the forced
- * `slay` activation into that ability's resolution; the reducer consumes it
- * on the ability's own event (replay applies the recorded consume exactly
- * once). The caller can never name `slay` itself — that would forge a
- * trigger; the arm is the durable source-backed proof. */
-const gallowsHumorEmpower: RuleResolver = (context) => {
-  const source = resolveSourceActor(context);
-  const die = Number(source.state['gallows-humor:die'] ?? 0);
-  if (die < 1) throw new RuleProgramViolation('stance.required', 'Gallows Humor empowerment requires the Gallows Humor stance.');
-  if (die < 6) throw new RuleProgramViolation('stance.die-not-max', 'Gallows Humor can only empower an ability when its power die is at maximum.');
-  return [
-    stateMutation(context, source.id, 'gallows-humor:die', 1),
-    stateMutation(context, source.id, 'gallows-humor:slay-armed', true),
-    resourceMutation(context, source.id, 'bonus-damage', 'gain', 1),
-  ];
-};
 
 /** ICON p.151: throw an explosive mine into a free space in range 3. */
 const partyFavorEffects: RuleResolver = (context) => {
@@ -405,7 +386,6 @@ export const FOOL_RULE_RESOLVERS: RuleResolverRegistry = {
   'fool:spinning-top': spinningTopEffects,
   'fool:death': deathEffects,
   'fool:gallows-humor:enter': gallowsHumorEnter,
-  'fool:gallows-humor:empower': gallowsHumorEmpower,
   'fool:party-favor:effects': partyFavorEffects,
   'fool:party-favor:detonate': partyFavorDetonate,
   'fool:masquerade': masqueradeEffects,
@@ -461,15 +441,6 @@ export const FOOL_ABILITY_PROGRAMS: Readonly<Record<string, (unit: RuleSourceUni
       costs: [{ kind: 'action', amount: constant(1) }],
       tags: ['stance', 'power die'],
       resolverId: 'fool:gallows-humor:enter',
-      steps: [],
-    }),
-    action({
-      id: 'empower',
-      name: 'Gallows Humor empower',
-      timing: 'use',
-      costs: [],
-      tags: ['power die'],
-      resolverId: 'fool:gallows-humor:empower',
       steps: [],
     }),
   ], ['stance', 'effect', 'refresh']),

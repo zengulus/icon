@@ -49,13 +49,17 @@ export const HISSATSU_ARMED_KEY = 'hissatsu:armed';
 
 registerAttackModifierRule({ traitId: DEMON_EDGE_TRAIT, armedKey: DEMON_EDGE_TRUESTRIKE_KEY, trueStrike: true });
 registerAttackModifierRule({ traitId: HISSATSU_TRAIT, armedKey: HISSATSU_ARMED_KEY, boons: 1, trueStrike: true, damageDieOverride: 10 });
-// ICON p.134 Pulverize: "When you start an attack ability on higher elevation
-// than your target, it deals bonus damage." Bonus damage is the defined dice
-// mechanic (p.102: roll one extra die, keep the normal number of highest
-// dice) — one bonus die per trait at one or more elevations higher, never a
-// flat +2 substitute. Two or more elevations higher additionally source-
-// forces every exceed effect.
-registerAttackModifierRule({ traitId: PULVERIZE_TRAIT, elevationBonusDamageDice: 1, elevationForceExceed: true });
+// ICON p.135 Pulverize: "When you start an attack ability on higher elevation
+// than your target, it deals bonus damage." "It" is the attack ABILITY — the
+// bonus damage is ability-wide: every damage roll the ability makes carries
+// the extra die through the shared ability-use bonus-damage fold
+// (kernels/bonus-damage.ts `registerTraitBonusDamageRule`, the same authority
+// Blessing of War / F6a talent grants use), never an attack-space-only
+// provenance field. The bonus-damage half therefore lives in
+// bonus-damage-recipes.ts; this row keeps ONLY the SOURCE-FORCED exceed half
+// (two or more elevations higher forces every exceed effect regardless of
+// the roll — never approximated as a threshold cut).
+registerAttackModifierRule({ traitId: PULVERIZE_TRAIT, elevationForceExceed: true });
 // ICON p.155 Freelancer Trigrammaton: "Your abilities used against foes at
 // exactly range 3 gain +1 boon on attack rolls and unerring." An exact-
 // distance attack modifier — it inspects the canonical p.92 distance and

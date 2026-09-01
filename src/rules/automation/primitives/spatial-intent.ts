@@ -1,5 +1,5 @@
 import type { EncounterState, Position } from '../../types.js';
-import { lineCells, sameCell, squareArea } from '../../area-geometry.js';
+import { blastTemplateCells, lineCells, sameCell, squareArea, type BlastSize } from '../../area-geometry.js';
 import { hasLineOfSight, type SpatialLineView } from './line-of-sight.js';
 
 // ── Footprint (Size) ─────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ export function applySpatialIntent(state: EncounterState, intent: SpatialIntent)
 
 // ── Areas (burst/line) ───────────────────────────────────────────────────────
 
-export type AreaShape = 'burst' | 'line';
+export type AreaShape = 'burst' | 'line' | 'blast';
 
 /** One validated area request: shape, center, reach, and center legality.
  * The area cells come from the shared deterministic geometry (p.95 AoE
@@ -201,6 +201,11 @@ export interface SpatialAreaIntent {
   /** Burst center or line origin. */
   center: Position;
   radius: number;
+  /** The exact Blast template (ICON p.97: small = center + 4 orthogonal
+   * squares, medium = center + 8 surrounding squares, large = medium plus
+   * one extra square on each side). Required when shape is 'blast'; the
+   * cells come from `blastTemplateCells`, never a squareArea radius. */
+  blastSize?: BlastSize;
   /** Required for line areas (dominant-axis direction). */
   direction?: Position;
   /** The center must be within this Chebyshev range of the source. */
@@ -273,7 +278,9 @@ export function computeSpatialArea(state: SpatialAreaStateView, intent: SpatialA
   }
   const cells = intent.shape === 'line'
     ? lineCells(center, intent.direction ?? { x: 1, y: 0 }, intent.radius)
-    : squareArea(center, intent.radius);
+    : intent.shape === 'blast'
+      ? blastTemplateCells(intent.blastSize ?? 'medium', center)
+      : squareArea(center, intent.radius);
   // ICON p.95 Burst X includes only spaces with line of sight from the burst
   // center. The filter uses the shared line-of-sight kernel so the VM and the
   // reducer agree on exactly what an impassable blocker hides.

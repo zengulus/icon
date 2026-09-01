@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type {
-  AreaOriginChoiceRequirement,
-  AreaRecipientBranchEligibility,
-  AreaRecipientChoiceRequirement,
-  RecordedAreaChoice,
-  ResolvedArea,
+import {
+  recipientBranchEligibility,
+  resolveRecipientBranch,
+  resolveRecipientBranches,
+  type AreaOriginChoiceRequirement,
+  type AreaRecipientBranchEligibility,
+  type AreaRecipientChoiceRequirement,
+  type RecordedAreaChoice,
+  type RecipientBranchScope,
+  type ResolvedArea,
 } from '../automation/primitives/area-resolution.js';
 
 const placement = {
@@ -76,5 +80,62 @@ describe('Region / ResolvedArea compile-level contract', () => {
     expect(inclusion.kind).toBe('choose-own-area-inclusion');
     expect(recordedOrigin.kind).toBe('self-origin');
     expect(recordedInclusion).toMatchObject({ kind: 'own-area-inclusion', included: false });
+  });
+});
+
+describe('large-target branch arbitration seam (p.290)', () => {
+  /** A fixed-center blast every scenario shares: a medium template centered
+   * (3,2); the attack space is the central cell; the area-only cells are the
+   * other template cells. This is a SYNTHETIC Region fixture — labeled only
+   * by its real template source, never approximated. */
+  const scope = (actors: RecipientBranchScope['actors']): RecipientBranchScope => ({
+    areaCells: [{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 4, y: 2 }, { x: 2, y: 3 }, { x: 4, y: 3 }, { x: 2, y: 4 }, { x: 3, y: 4 }, { x: 4, y: 4 }],
+    attackSpaceCells: [{ x: 3, y: 3 }],
+    actors,
+  });
+
+  it('a size-1 character in the attack space is attack-branch only (no area branch, no choice)', () => {
+    const rows = recipientBranchEligibility(scope([{ id: 'solo', position: { x: 3, y: 3 } }]));
+    expect(rows).toEqual([{ actorId: 'solo', branches: ['attack'] }]);
+    expect(resolveRecipientBranch(rows[0]!)).toBe('attack');
+  });
+
+  it('a size-1 character in the area-only cells is area-branch only', () => {
+    const rows = recipientBranchEligibility(scope([{ id: 'solo', position: { x: 4, y: 3 } }]));
+    expect(rows).toEqual([{ actorId: 'solo', branches: ['area'] }]);
+    expect(resolveRecipientBranch(rows[0]!)).toBe('area');
+  });
+
+  it('a size-2 target straddling the attack space AND area cells carries BOTH branches — the owner must choose', () => {
+    // Anchor at (2,2), size 2 → footprint (2,2),(3,2),(2,3),(3,3): the (3,3)
+    // attack-space cell plus the area-only cells (2,2),(3,2),(2,3).
+    const rows = recipientBranchEligibility(scope([{ id: 'large', position: { x: 2, y: 2 }, size: 2 }]));
+    expect(rows).toEqual([{ actorId: 'large', branches: ['attack', 'area'] }]);
+    // A recorded owner decision resolves it to ONE branch…
+    expect(resolveRecipientBranch(rows[0]!, 'attack')).toBe('attack');
+    expect(resolveRecipientBranch(rows[0]!, 'area')).toBe('area');
+    // …and a missing decision fails closed ('unresolved'), never a default.
+    expect(resolveRecipientBranch(rows[0]!)).toBe('unresolved');
+  });
+
+  it('a multi-cell area-only large target is one row, applied once', () => {
+    // Size-2 anchor at (2,4) → footprint (2,4),(3,4),(2,5),(3,5): (2,4),(3,4)
+    // are area cells, the rest are outside — one area row, not per-cell.
+    const rows = recipientBranchEligibility(scope([{ id: 'areaonly', position: { x: 2, y: 4 }, size: 2 }]));
+    expect(rows).toEqual([{ actorId: 'areaonly', branches: ['area'] }]);
+    const resolved = resolveRecipientBranches(rows);
+    const applied = resolved.filter((row) => row.actorId === 'areaonly');
+    expect(applied).toHaveLength(1);
+    expect(applied[0]).toEqual({ actorId: 'areaonly', branch: 'area' });
+  });
+
+  it('a both-eligible row applies exactly one branch once under a recorded owner choice', () => {
+    const rows = recipientBranchEligibility(scope([{ id: 'large', position: { x: 2, y: 2 }, size: 2 }]));
+    const resolved = resolveRecipientBranches(rows, { large: 'attack' });
+    expect(resolved).toEqual([{ actorId: 'large', branch: 'attack' }]);
+    // The same row under the area answer is still exactly one row.
+    expect(resolveRecipientBranches(rows, { large: 'area' })).toEqual([{ actorId: 'large', branch: 'area' }]);
+    // And a missing answer surfaces as unresolved so the caller fails closed.
+    expect(resolveRecipientBranches(rows)).toEqual([{ actorId: 'large', branch: 'unresolved' }]);
   });
 });

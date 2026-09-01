@@ -18,13 +18,12 @@ const shoveMutations = (mutations: readonly RuleMutation[]) =>
  *
  * The area kernel is the shared authority for ICON's p.97 AoE patterns: the
  * geometry module owns the deterministic pattern math (line cells, arc path
- * validation, blast/burst squares), and the kernel folds registered area
- * modifiers (shape/length overrides under round/talent/mastery gates) into an
- * EFFECTIVE area descriptor that the parent resolver reads at command time —
- * the same discipline as the range kernel. Blast templates are visual-only in
- * the source and are deliberately NOT approximated: units that need an exact
- * blast template stay unresolved (`blast-template`), and every test here uses
- * a shape with exact source authority (line, arc, burst squares).
+ * validation, the three exact Blast templates, burst squares), and the kernel
+ * folds registered area modifiers (shape/length overrides under
+ * round/talent/mastery gates) into an EFFECTIVE area descriptor that the
+ * parent resolver reads at command time — the same discipline as the range
+ * kernel. Every test here uses a shape with exact source authority (line,
+ * arc, burst squares, or the encoded Blast templates in `blastTemplateCells`).
  */
 
 interface AreaFixture {

@@ -835,7 +835,13 @@ export type EncounterEvent =
      command/event boundary); every fact instance id is scoped under it, so
      two separate uses of the same ability never collide and a replayed event
      reproduces the identical fact history. */
-    resolutionId?: string; continuation?: RuleContinuationState; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] }; /** U13/U11: when the planned flow suspended at an `open-window` node, the
+    resolutionId?: string; continuation?: RuleContinuationState; reroll?: { roll: number; boon: number; total: number; success: boolean; mutations: RuleMutation[] }; /** U12: a declared POST-RESOLUTION continuation armed by the Heroic
+     transaction (Spite's "after it resolves" hatred+ of the closest foe).
+     The reducer arms it after the ability's own mutations apply and resumes
+     it against THEN-CURRENT state (the post-resolution seam); its trigger is
+     correlated to THIS resolution's `ability-used` fact, so a later ability
+     use can never cross-fire it. */
+    heroicPostResolution?: ArmedContinuation; /** U13/U11: when the planned flow suspended at an `open-window` node, the
      durable window request rides the event — the reducer opens the window
      (kind `choice`) carrying the recorded choice spec and the remaining flow
      nodes + bound names to resume when answered. Mutations-so-far apply now;

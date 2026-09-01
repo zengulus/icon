@@ -21,7 +21,7 @@ import { executeFlowResume } from './automation/kernels/execute-flow.js';
 import { resolveSaveWindow } from './automation/primitives/save-window.js';
 import { bonusDamageDiceForUse } from './automation/kernels/bonus-damage.js';
 import { applyCombatStartTraitEffects, planTurnStartParticipants, planTurnTransition, resolveLifecycleRecipeById, runLifecyclePhase, runLifecyclePhaseForAll, type TurnTransitionIntent } from './automation/kernels/lifecycle.js';
-import { resumeDueContinuations } from './automation/kernels/continuation-runtime.js';
+import { resumeDueContinuations, resumeDueFactContinuations } from './automation/kernels/continuation-runtime.js';
 import { clockObservationForBoundary } from './automation/primitives/continuation.js';
 import { capturedActor } from './automation/primitives/reference.js';
 // U8 boundary authority: the reducer composes the Clock for the boundary
@@ -1115,13 +1115,20 @@ function attackEvents(state: EncounterState, command: Extract<EncounterCommand, 
   const sourceView = { ...projected.actors[actor.id], conditions: encounterConditionSet(actor, state), state: actor.ruleState, traitIds: actor.traitIds };
   const targetView = { ...projected.actors[target.id], conditions: encounterConditionSet(target, state), state: target.ruleState, traitIds: target.traitIds };
   const overheadBonus = massiveOverheadArmed(actor) ? 1 : 0;
+  // F6a trait-gated ability-use bonus damage (Pulverize p.135: an attack
+  // ability started on higher elevation than its target "deals bonus
+  // damage" — ability-wide). Basic attacks are abilities in ICON, so the
+  // same ability-use fold supplies their bonus dice; the bonus rides the
+  // shared keep-highest authority with the armed-overhead dice.
+  const attackSourceId = command.weight === 'heavy' ? 'core:heavy-attack' : 'core:light-attack';
+  const bonusDamageDice = overheadBonus + bonusDamageDiceForUse(state, actor, attackSourceId, [target.id]);
   const ordinary = resolveOrdinaryAttackMutations(
-    { state: projected, actorId: actor.id, sourceId: command.weight === 'heavy' ? 'core:heavy-attack' : 'core:light-attack', actionId: command.weight, timing: 'use', input: {}, dice },
+    { state: projected, actorId: actor.id, sourceId: attackSourceId, actionId: command.weight, timing: 'use', input: {}, dice },
     sourceView,
     targetView,
     command.weight === 'heavy' ? 2 : 1,
     {},
-    overheadBonus,
+    bonusDamageDice,
   );
   const authoritative = ordinary.attack;
   const { d20, boon, total, hit, critical, evasionRoll } = authoritative;
@@ -1343,6 +1350,41 @@ function deriveTriggers(state: EncounterState, actor: EncounterActor, attackTarg
   const target = attackTargetId ? state.actors[attackTargetId] : undefined;
   if (target && target.side !== actor.side && isBloodied(target)) triggers.add('finishing-blow');
   return triggers;
+}
+
+/** ICON p.151 Gallows Humor: "When the Gallows Humor die is at maximum, you
+ * may reset it to 1 when you or an ally uses an ability to empower it. The
+ * ability deals bonus damage and triggers any slay effects, hit or miss."
+ *
+ * The empowerment decision is a U4 choice recorded ON the ability-use command
+ * itself (`input.options['gallows-humor:empower']` names the empowering
+ * Fool's actor id), so the power-die read is the PRE-command truth — never an
+ * "arm now, empower next" state the caller sets up beforehand. An absent
+ * choice is a decline. A present choice must name an eligible owner (the user
+ * or a living, on-battlefield ally of the user) whose Gallows Humor die is at
+ * maximum, or the boundary fails closed BEFORE any cost, area, RNG, or object
+ * mutation. On success the ONLY durable change is the die-reset mutation the
+ * caller rides on THIS ability's own recorded event: the bonus die attaches
+ * to this resolution's damage fold and the source-forced slay activation is
+ * recorded with this resolution's provenance — nothing leaks to a later use. */
+function resolveGallowsHumorEmpowerment(
+  state: EncounterState,
+  actor: EncounterActor,
+  input?: { options?: Readonly<Record<string, string>> },
+): RuleMutation[] {
+  const ownerId = input?.options?.['gallows-humor:empower'];
+  if (!ownerId) return [];
+  const owner = state.actors[ownerId];
+  if (!owner || owner.defeated || !owner.onBattlefield || owner.side !== actor.side) {
+    throw new RuleViolation('gallows-humor.empower-unavailable', 'Gallows Humor can only empower an ability the Fool or one of their allies uses.');
+  }
+  if (owner.stance?.stanceId !== 'gallows-humor') {
+    throw new RuleViolation('gallows-humor.stance-required', 'Gallows Humor empowerment requires the Gallows Humor stance.');
+  }
+  if (Number(owner.ruleState['gallows-humor:die'] ?? 0) < 6) {
+    throw new RuleViolation('gallows-humor.die-not-max', 'Gallows Humor can only empower an ability while its power die is at maximum.');
+  }
+  return [{ kind: 'state', sourceId: 'fool:gallows-humor', sourceActorId: owner.id, actorId: owner.id, key: 'gallows-humor:die', operation: 'set', value: 1 }];
 }
 
 /**
@@ -1878,13 +1920,6 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
         && elevationAt(state, actor.position) - elevationAt(state, pulverizeTarget.position) >= 2) {
         forcedTrigger('exceed');
       }
-      // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
-      // effects, hit or miss — the durable empowerment arm produces a
-      // SOURCE-FORCED slay activation (never a caller assertion) for the
-      // ability that consumes it.
-      if (actor.ruleState['gallows-humor:slay-armed'] === true) {
-        forcedTrigger('slay');
-      }
       // Source-forced once-per-combat trigger (Sealer Open The Gates, p.194:
       // the first use in combat forces every exceed effect). The
       // CONTENT-registered row + the PRE-command U16 entitlement decide the
@@ -1945,6 +1980,18 @@ function abilityEvents(state: EncounterState, command: Extract<EncounterCommand,
   // declared choice is ignored entirely. The mutations ride the ability's
   // recorded event so replay applies exactly what the command decided.
   abilityUseCostMutations.push(...resolvedAugmentations.costMutations);
+  // ICON p.151 Gallows Humor: empowering THIS ability use (a recorded U4
+  // choice naming the Fool, resolved against PRE-command state) resets the
+  // Fool's die to 1 — a mutation riding this ability's OWN event — adds one
+  // bonus die to THIS resolution's damage fold, and SOURCE-FORCES the slay
+  // activation hit or miss. Replay applies the recorded event; nothing arms
+  // a later use.
+  const gallowsHumorMutations = resolveGallowsHumorEmpowerment(state, actor, command.input);
+  if (gallowsHumorMutations.length > 0) {
+    abilityUseCostMutations.push(...gallowsHumorMutations);
+    abilityUseModifiers = { ...abilityUseModifiers, bonusDamageDice: (abilityUseModifiers?.bonusDamageDice ?? 0) + 1 };
+    forcedTrigger('slay');
+  }
   const ruleContext: RuleExecutionContext = {
     state: ruleStateView,
     encounterState: state,
@@ -2188,7 +2235,17 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         // window-open). The engine never chooses a default.
         const row = decisionContinuationFor(window.heldPayload.programId);
         if (!row) throw new RuleViolation('window.no-resolver', 'That decision window has no registered resolution.');
-        if (decision.value === true || decision.value === 'accept' || decision.value === 1) {
+        // A VALUE-carrying answer (actors/positions/direction/number/option)
+        // rides a LOCAL copy of the held continuation so the resolver
+        // consumes EXACTLY what the player recorded — never re-queries the
+        // choice. A required value choice cannot be declined, so the
+        // resolver always runs. The copy keeps the durable window record
+        // pristine: a resolver rejection fails closed WITHOUT mutating the
+        // still-open window.
+        if (window.choice && window.choice.kind !== 'boolean') {
+          const heldPayload = { ...window.heldPayload, capturedValues: { ...(window.heldPayload.capturedValues ?? {}), decision: decision.value as string | number | boolean } };
+          mutations = row.resolve(state, heldPayload);
+        } else if (decision.value === true || decision.value === 'accept' || decision.value === 1) {
           mutations = row.resolve(state, window.heldPayload);
         }
       } else {
@@ -2318,22 +2375,34 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       // assertion fails closed before any cost, effect, or RNG runs.
       const triggers = deriveTriggers(state, actor, command.attackTargetId);
       const triggerProvenance = naturalProvenance(triggers);
+      // The deterministic resolution identity this command resolves under,
+      // computed ONCE before the Heroic transaction so a declared
+      // post-resolution continuation can correlate its U12 arm to THIS
+      // resolution's `ability-used` fact (a later ability use can never
+      // cross-fire it). The flow below consumes the same id.
+      const resolutionId = nextResolutionId(state, unit.id, 0);
       // The Heroic activation transaction's recorded mutations (Wolfheart's
-      // sacrifice + once-round commit; Strive/Demon Strength/Spite lockout;
-      // Spite's hatred+ of the chosen closest foe) ride this resolution's
-      // own event — replay applies exactly what the command decided. The
-      // transaction runs BEFORE any cost gate, effect, or RNG: a rejected
-      // activation (no entitlement, locked out, round spent, equidistant
-      // Spite tie unrecorded, sacrifice unpayable) throws atomically with
-      // nothing consumed. Spite's equidistant-closest-foe tie is the
-      // recorded U4 choice `input.actorIds['closest-foe']` — the engine
-      // never invents the tie-break.
+      // sacrifice + once-round commit; the Strive/Demon Strength lockout)
+      // ride this resolution's own event — replay applies exactly what the
+      // command decided. The transaction runs BEFORE any cost gate, effect,
+      // or RNG: a rejected activation (no entitlement, locked out, round or
+      // combat spent, sacrifice unpayable, or a fail-closed partial recipe
+      // with missing seams) throws atomically with nothing consumed. A
+      // declared POST-RESOLUTION continuation (Spite's "after it resolves"
+      // hatred+ of the closest foe) is armed as a durable U12 record
+      // correlated to THIS resolution — the reducer resumes it after the
+      // ability's own mutations apply, so the closest-foe query sees the
+      // RESOLVED battlefield (movements/defeats final); an equidistant tie
+      // is a recorded U4 choice through the post-resolution window, never an
+      // invented tie-break.
       const heroicActivationMutations: RuleMutation[] = [];
+      let heroicPostResolution: ArmedContinuation | undefined;
       for (const trigger of command.triggers ?? []) {
         if (trigger === 'heroic') {
-          const activation = resolveHeroicActivation(state, actor, command.input?.actorIds?.['closest-foe']);
+          const activation = resolveHeroicActivation(state, actor, { abilityId: unit.id, resolutionId });
           if (!activation.ok) throw new RuleViolation(activation.code, activation.detail);
           heroicActivationMutations.push(...activation.mutations);
+          if (activation.postResolutionContinuation) heroicPostResolution = activation.postResolutionContinuation;
         } else {
           validateCallerTrigger(trigger, actor);
         }
@@ -2372,13 +2441,6 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         && elevationAt(state, actor.position) - elevationAt(state, rulePulverizeTarget.position) >= 2) {
         forcedTrigger('exceed');
       }
-      // ICON p.151 Gallows Humor: an EMPOWERED ability triggers any slay
-      // effects, hit or miss — the durable empowerment arm produces a
-      // SOURCE-FORCED slay activation (never a caller assertion) for the
-      // ability that consumes it.
-      if (actor.ruleState['gallows-humor:slay-armed'] === true) {
-        forcedTrigger('slay');
-      }
       // Source-forced once-per-combat trigger (Sealer Open The Gates, p.194:
       // "triggers any exceed effects the first time it is used in combat"):
       // the CONTENT-registered row + the PRE-command U16 entitlement decide
@@ -2388,6 +2450,20 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       if (forcedOncePerCombat && forcedCombatTriggerAvailable(actor, unit.id)) {
         forcedTrigger(forcedOncePerCombat);
       }
+      // F6a trait-gated ability-use bonus damage (Pulverize p.135) folded at
+      // the same command boundary USE_ABILITY folds it — the ability's
+      // recorded damage rolls carry exactly what the command decided, and
+      // replay never re-evaluates the elevation gate.
+      const ruleTargetIds = command.attackTargetId
+        ? [command.attackTargetId]
+        : [...(command.input?.actorIds?.target ?? [])];
+      const bonusDamageDice = bonusDamageDiceForUse(state, actor, unit.id, ruleTargetIds);
+      // ICON p.151 Gallows Humor: the same empowerment fold USE_ABILITY runs —
+      // the recorded choice binds the Fool's die reset, one bonus die, and the
+      // SOURCE-FORCED slay activation to THIS resolution (hit or miss).
+      const gallowsHumorMutations = resolveGallowsHumorEmpowerment(state, actor, command.input);
+      const effectiveBonusDamageDice = bonusDamageDice + (gallowsHumorMutations.length > 0 ? 1 : 0);
+      if (gallowsHumorMutations.length > 0) forcedTrigger('slay');
       const ruleContext: RuleExecutionContext = {
         state: ruleStateView,
         encounterState: state,
@@ -2397,6 +2473,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         timing: command.timing,
         input: command.input,
         dice,
+        ...(effectiveBonusDamageDice > 0 ? { abilityUseModifiers: { bonusDamageDice: effectiveBonusDamageDice } } : {}),
         ...(command.attackTargetId ? { attackTargetId: command.attackTargetId } : {}),
         ...(command.triggerSourceId ? { triggerSourceId: command.triggerSourceId } : {}),
         ...(command.triggerTargetIds ? { triggerTargetIds: command.triggerTargetIds } : {}),
@@ -2421,7 +2498,6 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         .map((cost) => ({ kind: 'sacrifice' as const, amount: { kind: 'constant' as const, value: cost.amount } }));
       assertProgramCostsPayable(state, actor, unit.name, unit.id, { costs: [...action.costs, ...augmentationCosts, ...heroicSacrificeCosts] }, ruleContext);
       let result: RuleExecutionResultWithWindow & { triggerActivations?: TriggerActivation[] };
-      const resolutionId = nextResolutionId(state, unit.id, 0);
       try {
         result = executeRuleProgramWithReactiveTriggers(compilation.program, ruleContext, RULE_RESOLVERS, state, resolutionId);
       } catch (error) {
@@ -2453,7 +2529,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       // Pre-use augmentation payments ride the recorded event first (the same
       // ordering USE_ABILITY uses), so replay applies exactly what the command
       // decided — the validated sacrifice never re-decides and never drifts.
-      const eventMutations = [...heroicActivationMutations, ...resolvedAugmentations.costMutations, ...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations];
+      const eventMutations = [...heroicActivationMutations, ...gallowsHumorMutations, ...resolvedAugmentations.costMutations, ...result.mutations, ...talentTriggerMutations(state, actor, unit.id, result.mutations, command.attackTargetId ? [command.attackTargetId] : [], reactive, new Set(command.input?.talentChoices ?? [])), ...traitReactionMutations(state, actor, result.mutations, reactive), ...demonEdgeMutations];
       // An action whose effect is an atomic spatial swap cannot be made when
       // the swap would be denied (Masquerade's interrupt-legality rule, p.151).
       assertLegalSpatialBatch(state, action, eventMutations);
@@ -2477,6 +2553,11 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         ...(result.facts ? { facts: result.facts } : {}),
         ...(result.resolutionId ? { resolutionId: result.resolutionId } : {}),
         ...(result.continuation ? { continuation: result.continuation } : {}),
+        // U12: the declared post-resolution continuation (Spite's hatred+ of
+        // the closest foe) rides the event — the reducer arms it after the
+        // ability's mutations apply and resumes it against then-current
+        // state (the post-resolution seam).
+        ...(heroicPostResolution ? { heroicPostResolution } : {}),
         // U13/U11: a suspended flow carries its window request (the choice
         // spec + remaining nodes + binder) so the reducer opens the window
         // and the controller can answer it.
@@ -3715,17 +3796,7 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
             delete actor.ruleStateOwners['trick-shot:armed'];
           }
         }
-        // ICON p.151 Gallows Humor: the empowerment arm is consumed by the
-        // ability that used it. The command boundary derived THIS resolution's
-        // source-forced slay activation from the arm's PRE-command state, so
-        // the reducer deletes the arm exactly when that derivation happened —
-        // never on the empowerment event itself (which creates the arm), and
-        // never re-derived at replay (the recorded consume rides the event).
-        if (actor.ruleState['gallows-humor:slay-armed'] === true) {
-          delete actor.ruleState['gallows-humor:slay-armed'];
-          delete actor.ruleStateOwners['gallows-humor:slay-armed'];
-        }
-        // Source-forced once-per-combat trigger: the boundary forced the
+        // The source-forced once-per-combat trigger: the boundary forced the
         // activation from this entitlement's PRE-command availability, so the
         // reducer records the consume exactly when that derivation happened —
         // replay applies the recorded mark once, never re-deciding it.
@@ -3738,6 +3809,28 @@ export function applyEvents(input: EncounterState, events: EncounterEvent[]): En
         // the newly granted stealth.
         if (event.tags.includes('attack')) breakStealth(actor);
         applyRuleMutations(state, appliedMutations);
+        // U12 POST-RESOLUTION seam (Spite p.141 "after it resolves"): a
+        // declared post-resolution continuation (the armed record rides the
+        // event) is armed here — the reducer is the single arming point — and
+        // resumed against THEN-CURRENT state, so the closest-foe query sees
+        // the RESOLVED battlefield (this ability's own movements/defeats are
+        // final). The trigger is correlated to THIS resolution's recorded
+        // `ability-used` fact instance; a later unrelated ability use can
+        // never cross-fire it. A unique closest foe resolves deterministically
+        // (no window); an equidistant tie opens the recorded U4 choice window.
+        // An interrupt-HELD ability (its effects deferred to a window) does
+        // not reach the post-resolution hook: fail closed (documented seam)
+        // rather than evaluate against a partially resolved battlefield.
+        if (event.heroicPostResolution && held.size === 0) {
+          const continuation = event.heroicPostResolution;
+          const due = (event.facts ?? []).some((fact) =>
+            fact.kind === 'ability-used'
+            && (continuation.trigger.kind !== 'fact' || continuation.trigger.instanceId === undefined || fact.instanceId === continuation.trigger.instanceId));
+          if (due) {
+            if (!state.continuations.some((candidate) => candidate.id === continuation.id)) state.continuations.push(continuation);
+            resumeDueFactContinuations(state, event.facts ?? []);
+          }
+        }
         // T6.2: ONE event that opens two or more interrupt windows for the
         // same responder at the same instant (e.g. an area blast opening two
         // when-damaged windows for one owner) is a p.107 same-owner ordering

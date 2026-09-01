@@ -1,11 +1,17 @@
 import type { Position } from './types.js';
 
 /**
- * Deterministic ICON area geometry (source p.95: "AoE patterns").
+ * Deterministic ICON area geometry (source p.97: "AoE patterns").
  *
  * - Line X: X orthogonal spaces, each strictly further from the origin.
- * - Blast/Burst X: all spaces within range X (square/Chebyshev distance) of
- *   the central space, in line of sight.
+ * - Arc X: X contiguous orthogonal spaces drawn in any pattern.
+ * - Blast: three exact templates (small/medium/large) — see
+ *   `blastTemplateCells` below.
+ * - Burst X: all spaces within range X (square/Chebyshev distance) of the
+ *   central space, in line of sight.
+ *
+ * `squareArea` is the Burst/terrain square-radius helper and is NOT a blast
+ * template; blast cell membership goes through `blastTemplateCells` only.
  *
  * These helpers are used by resolver programs for area effects and are also
  * exercised directly by golden fixtures so the VTT and the rules package share
@@ -64,6 +70,42 @@ export function squareArea(center: Position, radius: number): Position[] {
       cells.push({ x: center.x + dx, y: center.y + dy });
     }
   }
+  return cells;
+}
+
+/** The three ICON Blast template sizes (p.97: "There are three blast
+ * templates, small, medium, and large. The origin space and the attack space
+ * (if there is one) is the central space"). The cell layouts are exact source
+ * geometry, never approximated by `squareArea`:
+ *
+ * - small:  the central square plus its 4 adjacent (orthogonal) squares —
+ *   5 cells (a plus).
+ * - medium: the central square plus all 8 surrounding squares — the same
+ *   cell set as Burst 1 (a 3×3 square, 9 cells).
+ * - large:  the medium 3×3 plus one extra square on each side, sitting
+ *   against the small blast's 4 orthogonal squares — 3×3 plus the four
+ *   orthogonal spaces at distance 2 (a 5-wide plus, 13 cells).
+ */
+export type BlastSize = 'small' | 'medium' | 'large';
+
+/** The exact cells of a Blast template centered on `center`. */
+export function blastTemplateCells(size: BlastSize, center: Position): Position[] {
+  const cells: Position[] = squareArea(center, 1); // medium: center + 8 surrounding
+  if (size === 'medium') return cells;
+  if (size === 'small') {
+    // Small is the central square plus ONLY its 4 orthogonal neighbors.
+    return cells.filter((cell) => {
+      const dx = Math.abs(cell.x - center.x);
+      const dy = Math.abs(cell.y - center.y);
+      return dx + dy <= 1;
+    });
+  }
+  // Large: the medium 3×3 plus one extra square on each side against the
+  // small blast's 4 orthogonal squares (the orthogonal spaces at distance 2).
+  cells.push({ x: center.x + 2, y: center.y });
+  cells.push({ x: center.x - 2, y: center.y });
+  cells.push({ x: center.x, y: center.y + 2 });
+  cells.push({ x: center.x, y: center.y - 2 });
   return cells;
 }
 
