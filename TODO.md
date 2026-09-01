@@ -141,43 +141,51 @@ assumption here, document the evidence and update this list before proceeding.
 >
 > **U1 content-authoring surface (2026-09-01, commit 4bd0189) + Shade/Warden
 > live-slot tranche (2026-09-01, commit ea9526c) + Sealer live-slot tranche
-> + Enochian live-slot tranche + Chanter live-slot tranche (2026-09-01).**
+> + Enochian live-slot tranche + Chanter live-slot tranche + Knave live-slot
+> tranche (2026-09-01).**
 > The named-content U1 residual
 > got ONE shared surface
 > (`content/glue/reference-authoring.ts`: resolveSourceActor /
 > resolveAttackTarget / resolveTriggerSource / resolveTriggerTargets /
 > resolveCapturedSelectedActors / resolveBoundActor, all composing
-> `primitives/reference.ts`), and NINE content families migrated:
+> `primitives/reference.ts`), and TEN content families migrated:
 > Bastion/Spellblade programs, the Job-trait/Class resolvers' six direct
 > dereferences, then the pure LIVE-slot reads (source/attack-target
 > /Nocturne trigger-source) in Shade, Warden, Sealer (God Hand/Devil
 > Hand/Matsuri/Spirit Shrine/Justice/JUDGEMENT/Open The Gates/Center The
 > Temple), Enochian (all 13 source reads + 5 attack-target reads in
 > Pyre/PYROTIC/Elden Rune/Lance/VOLVAGA/Soul Burn/INCANDIUS/Blazing Bond/
-> Heartfire/Aethershard/Implode/Pyroclast/Blackstar), and Chanter (all 14
+> Heartfire/Aethershard/Implode/Pyroclast/Blackstar), Chanter (all 14
 > source reads + 5 attack-target reads in Holy/HADES/Felicity/FLEET/
 > Pandaemonium/PURGATORIO/Aria/Dervish/DAWN/Symphony/Gentleness/Monogatari/
 > Chastise/CHARISM — Monogatari's resolver change is a pure slot dereference;
 > the U8/U16 lifecycle/usage/song-ownership logic in lifecycle-recipes.ts
-> was untouched, and the full U8×U16 adversarial matrix still passes) — the
+> was untouched, and the full U8×U16 adversarial matrix still passes), and
+> Knave (all 13 source reads + 4 attack-target reads in Low Blow/The Hook/
+> Provoke/Revenge/Indignation/Riposte/Dire Parry/Dark Knight/Strongarm/
+> Intimidate/Sucker Punch/Bleak Mercy/Sweet Torment — plannedRush's
+> parameter dereference, Dire Parry's triggerSource ?? input precedence,
+> Strongarm/Intimidate/Sucker Punch input-actorIds targets, and the
+> passed-id loop deref stay caller-owned; Dark Knight's equidistant-foe
+> player-choice still fails closed) — the
 > last direct
 > `state.actors[context.…]` dereference in content
 > is gone. The `u1-reference-routing` guard scans the content layer
-> (adapter-keeps-U1, migrated-program pins incl. Sealer, Enochian, and
-> Chanter, deref
+> (adapter-keeps-U1, migrated-program pins incl. Sealer, Enochian, Chanter,
+> and Knave, deref
 > rejection; no
 > blanket lexical ban on the inventoried residual). Residual is machine-
-> derived from the site inventory (`npm run audit:u1-residual`): 192
-> `sourceActor(context, …)` sites = 137 pure LIVE-slot reads + 54
+> derived from the site inventory (`npm run audit:u1-residual`): 175
+> `sourceActor(context, …)` sites = 120 pure LIVE-slot reads + 54
 > captured/derived-id dereferences + 1 in-call precedence-boundary read
 > (Harvester line 155) + 0 other, 0 direct dereferences — every count
 > regenerated from the same site list, no hand-maintained totals. (Census-
 > integrity repair: the earlier prose "242 = 188 + 55" and "230 = 175 + 55"
 > each misclassified that ONE Harvester boundary site into BOTH buckets; the
 > exact figures are ea9526c 242 = 187 + 54 + 1, 5f0de05 229 = 174 + 54 + 1,
-> 4a1ff76 211 = 156 + 54 + 1 (Enochian −18), and current 192 = 137 + 54 + 1
-> (Chanter −19).) U1 stays PARTIAL; zero source promotion; census remains
-> 427.
+> 4a1ff76 211 = 156 + 54 + 1 (Enochian −18), 3052eee 192 = 137 + 54 + 1
+> (Chanter −19), and current 175 = 120 + 54 + 1 (Knave −17).) U1 stays
+> PARTIAL; zero source promotion; census remains 427.
 >
 > **U16 residual-mark census & migration (2026-08-31) + semantic correction
 > (2026-08-31; lifecycle follow-up 2026-09-01).** Migrated the last actor-local
@@ -196,6 +204,39 @@ assumption here, document the evidence and update this list before proceeding.
 
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
+
+- **U1 content-authoring tranche 6 — Knave pure LIVE-slot reads
+  (2026-09-01) — DONE.** `content/jobs/programs/knave-programs.ts` now
+  routes every pure live-slot reference through the adapter: source reads →
+  `resolveSourceActor` in Low Blow, The Hook, Provoke, Revenge, Indignation,
+  Riposte, Dire Parry, Dark Knight, Strongarm, Intimidate, Sucker Punch,
+  Bleak Mercy, Sweet Torment (13); primary attack-target reads →
+  `resolveAttackTarget` in Low Blow, The Hook, Indignation, Bleak Mercy (4)
+  — identical LIVE/absent-singular semantics with the resolvers' gates
+  untouched. The six retained CAPTURED sites stay caller-owned: `plannedRush`
+  (its `actorId` is a helper PARAMETER, not the source slot — no arbitrary-id
+  adapter op invented), Dire Parry (`triggerSourceId ??
+  input.actorIds?.target?.[0]` precedence), Strongarm (`input.actorIds`
+  target + `passedId` loop deref), Intimidate and Sucker Punch
+  (`input.actorIds` targets). Dark Knight's nearest-foe read is U3 query + U4
+  player-choice (p.143 equidistant-choice) and was NOT touched: equidistant
+  foes still fail closed with no id tie-break or iteration-order resolution.
+  Guard pins Knave via contentAdapterSurface; mutation test covers a Knave
+  revert (exactly one routing violation) and proves the retained
+  captured/precedence dereferences alone do not trigger the pin. Evidence:
+  +5 fail-closed/U4-parity tests in `reference-authoring.test.ts` (Low Blow
+  ghost attackTargetId → `reference.missing-actor`; Bleak Mercy
+  absent-singleton no-op; Dark Knight equidistant →
+  `choice.direction-ambiguous`; Dire Parry trigger-source precedence;
+  Strongarm recorded-input target), +1 engine-level insertion-order test in
+  `knave.test.ts`, the full Knave suite (23) green through the engine path
+  (valid-state semantics preserved; malformed refs fail closed; replay
+  byte-identical). The tranche removed exactly 17 PURE_LIVE_REFERENCE sites
+  (Knave 17 → 0), moving the machine-derived residual from
+  192 = 137 + 54 + 1 to 175 = 120 + 54 + 1 (per `npm run audit:u1-residual`;
+  no hand-maintained totals). 0 direct dereferences; U1 remains PARTIAL.
+  Full suite 2000 green, audits green, census byte-stable at 427, zero
+  source promotion.
 
 - **U1 content-authoring tranche 5 — Chanter pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/chanter-programs.ts` now

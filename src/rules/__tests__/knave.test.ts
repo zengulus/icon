@@ -98,6 +98,30 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(applyEvents(dodging.state, missed.events)).toEqual(missed.state);
   });
 
+  it('Low Blow: reversing actor INSERTION order changes nothing — the migrated reference reads resolve by recorded slot identity, not iteration order', () => {
+    // The migrated source/attack-target reads are singular slot dereferences
+    // (context.actorId / attackTargetId → adapter), deterministic by the
+    // RECORDED identity; object-iteration order of state.actors cannot select
+    // who the ability user or its target is. Insert the second foe BEFORE the
+    // target so object order differs from the canonical fixture, and assert
+    // the same slash outcome and replay state.
+    let setup = createEncounter('Knave insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Aster'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    hero.traitIds = hero.traitIds.filter((id) => id !== 'bastion:trait:bull-s-strength');
+    const foe = createFoe('Relict', { x: 2, y: 1 });
+    const second = createFoe('Grim', { x: 4, y: 1 });
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: second }).state; // second BEFORE target
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:low-blow', targetIds: [foe.id] }, scriptedDice(12, 4));
+    expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + fray 4)
+    expect(result.state.actors[foe.id].statuses).toContain('slashed');
+    expect(applyEvents(setup, result.events)).toEqual(result.state);
+  });
+
   it('Low Blow talent 1: "Deals bonus damage if your foe is suffering from a status" (p.139)', () => {
     // F6a: the registered bonus-damage rule folds one bonus die at the
     // USE_ABILITY boundary when the attack target already suffers a status;

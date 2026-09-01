@@ -125,7 +125,8 @@ their sites.
 > | `ea9526c` (pre-Sealer) | 242 | 187 | 54 | 1 |
 > | `5f0de05` (post-Sealer) | 229 | 174 | 54 | 1 |
 > | `4a1ff76` (post-Enochian) | 211 | 156 | 54 | 1 |
-> | current HEAD (post-Chanter) | 192 | 137 | 54 | 1 |
+> | `3052eee` (post-Chanter) | 192 | 137 | 54 | 1 |
+> | current HEAD (post-Knave) | 175 | 120 | 54 | 1 |
 >
 > The Sealer tranche removed exactly **13 PURE_LIVE_REFERENCE sites**
 > (Sealer: 17 → 4 PURE; CAPTURED and BOUNDARY unchanged: 54, 1), so
@@ -147,15 +148,15 @@ sites across 14 named program files (multi-line calls collapse to one site;
 MUTUALLY EXCLUSIVE semantic category (each site carries a machine-derived
 provenance string):
 
-- **U1 reference identity — pure LIVE-slot reads (137, migrate family-by-
+- **U1 reference identity — pure LIVE-slot reads (120, migrate family-by-
   family next)**: `sourceActor(context, context.actorId)` (the ability user)
   and `sourceActor(context, context.attackTargetId)` (the primary attack
   target) — the unambiguous U1 reference reads, exactly the family Shade/
-  Warden/Sealer/Enochian/Chanter migrated across tranches 2–5. Remaining
-  per-file: Knave 17, Demon Slayer 16, Harvester 15, Seer 15, Fool 15,
+  Warden/Sealer/Enochian/Chanter/Knave migrated across tranches 2–6.
+  Remaining per-file: Demon Slayer 16, Harvester 15, Seer 15, Fool 15,
   Geomancer 14, Freelancer 14, Stormbender 11, Colossus 11, Sealer 4 (chain
   sites' source reads — see boundary), Shade 3, Warden 2. Enochian 0,
-  Chanter 0 (their tranches).
+  Chanter 0, Knave 0 (their tranches).
 - **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
   decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
   earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
@@ -425,17 +426,91 @@ trigger the pin.
 
 No direct `state.actors[context.…]` dereference remains anywhere in content.
 
-## U1 status after the Chanter tranche
+## U1 tranche executed (fresh HEAD, 2026-09-01, sixth tranche — Knave)
 
-U1 remains PARTIAL: the shared surface is proved and pinned across NINE
+### Migrated: Knave pure LIVE-slot reference reads
+
+`content/jobs/programs/knave-programs.ts` routes every pure live-slot
+reference through the content-authoring adapter — **17 PURE_LIVE_REFERENCE
+sites removed per the machine inventory (Knave: 17 → 0 PURE; CAPTURED and
+BOUNDARY unchanged: 54, 1; whole-repo 192 → 175 = 120 + 54 + 1)**:
+
+- source-actor reads (`sourceActor(context, context.actorId)`) →
+  `resolveSourceActor(context)` in all 13 Knave resolvers that reach the
+  source: Low Blow, The Hook, Provoke, Revenge, Indignation, Riposte,
+  Dire Parry, Dark Knight, Strongarm, Intimidate, Sucker Punch, Bleak
+  Mercy, Sweet Torment;
+- primary attack-target reads (`context.attackTargetId ?
+  sourceActor(context, context.attackTargetId) : undefined`) →
+  `resolveAttackTarget(context)` in Low Blow, The Hook, Indignation, and
+  Bleak Mercy — identical LIVE re-read and absent-singular→undefined
+  semantics.
+
+**Deliberately NOT migrated (per-call-site U1×U4 / caller-owned boundary,
+inventoried — 6 CAPTURED sites):**
+
+- `plannedRush(context, actorId)`'s internal `sourceActor(context, actorId)`
+  — `actorId` is a HELPER PARAMETER, not the ability user's source slot;
+  it is machine-classified CAPTURED and stays (no arbitrary-id adapter
+  operation was invented for it);
+- Dire Parry's `foeId = context.triggerSourceId ??
+  context.input.actorIds?.target?.[0]` — the trigger-source/recorded-input
+  precedence is meaningful caller-owned contract; only the source-actor read
+  migrated;
+- Strongarm's `targetId = context.input.actorIds?.target?.[0]` (chosen
+  target) and its `passedId` loop dereference — recorded-input U4 choice;
+- Intimidate's and Sucker Punch's `targetId = input.actorIds?.target?.[0]`
+  — recorded-input U4 choice.
+
+Dark Knight's nearest-foe read is U3 query + U4 player-choice semantics
+(p.143 "If multiple foes are equidistant, you may choose") and was NOT
+touched: a UNIQUE closest foe applies hatred; equidistant closest foes still
+fail closed (`choice.direction-ambiguous`) with no invented id tie-break and
+no object-iteration ordering.
+
+### Guard
+
+The `u1-reference-routing` guard pins Knave (resolveSourceActor,
+resolveAttackTarget) to the adapter; the retained captured/precedence
+dereferences (plannedRush's parameter, Dire Parry's chain, Strongarm /
+Intimidate / Sucker Punch input targets, passed-id loop) are NOT banned (no
+blanket lexical ban). Mutation test: a Knave revert to
+`sourceActor(context, context.actorId)` drops the pinned calls, is caught
+with exactly one Knave routing problem, and the retained
+captured/precedence reads alone do NOT trigger the pin.
+
+### Evidence
+
+- `reference-authoring.test.ts` +5: the production Knave Low Blow resolver
+  fails closed (`reference.missing-actor`) on a gated-bypass ghost
+  `attackTargetId` (legacy silently no-opped); Bleak Mercy keeps
+  absent-singleton → no-op (optional semantics); Dark Knight still throws
+  `choice.direction-ambiguous` with two equidistant foes (no tie-break
+  acquired); Dire Parry's trigger-source ?? recorded-input precedence still
+  resolves to the trigger source when present (caller-owned); Strongarm
+  still spins the RECORDED input.actorIds target (caller-owned).
+- `knave.test.ts` +1: reversing actor INSERTION order (second foe added
+  before the target) produces byte-identical Low Blow outcomes and replay —
+  the migrated source/attack-target reads resolve by recorded slot identity,
+  never object-iteration order.
+- the full Knave suite (23 tests) stays green through the engine path,
+  including Dark Knight's retraction fixture, Strongarm's talent-1 gating
+  matrix, and the Sucker Punch save-window suite — valid-state semantics
+  preserved; replay byte-identical in every scenario.
+
+No direct `state.actors[context.…]` dereference remains anywhere in content.
+
+## U1 status after the Knave tranche
+
+U1 remains PARTIAL: the shared surface is proved and pinned across TEN
 migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
-Chanter, Job-trait, Class resolvers), and the residual is a machine-derived
-classified inventory — 137 pure LIVE-slot reads (next tranches) + 54
-captured/derived dereferences + 1 in-call boundary read = 192 sites, 0
-direct dereferences. A whole-consumer audit is NOT yet done, so U1 cannot
-claim AUTHORITATIVE: 9 program files still resolve live slots through the
-legacy kernel-side convenience, and the U1×U4 captured-identity boundary has
-no shared surface yet.
+Chanter, Knave, Job-trait, Class resolvers), and the residual is a
+machine-derived classified inventory — 120 pure LIVE-slot reads (next
+tranches) + 54 captured/derived dereferences + 1 in-call boundary read = 175
+sites, 0 direct dereferences. A whole-consumer audit is NOT yet done, so U1
+cannot claim AUTHORITATIVE: 8 program files still resolve live slots through
+the legacy kernel-side convenience, and the U1×U4 captured-identity boundary
+has no shared surface yet.
 
 ## Coverage and verification invariants
 

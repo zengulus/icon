@@ -16,6 +16,7 @@ import {
   untilNextTurnEnd, action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluateActorQuery, evaluatePositions, nearestCandidates } from '../../../kernels/evaluate-query.js';
+import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Knave ability implementations (ICON p.139–144).
@@ -55,8 +56,8 @@ function plannedRush(context: Parameters<RuleResolver>[0], actorId: string, step
 
 /** ICON p.139: rush 1, true-strike attack, slash; a target already slashed gains hatred. */
 const lowBlowEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !source.position) return [];
   const mutations: RuleMutation[] = [];
   if (target?.position && distance(source.position, target.position) > 1) {
@@ -76,8 +77,8 @@ const lowBlowEffects: RuleResolver = (context) => {
 
 /** ICON p.139 Combo (The Hook): range 2 and shove the target 1 toward the user. */
 const lowBlowComboEffects: RuleResolver = (context, action) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !source.position || !target || !target.position) return [];
   const mutations: RuleMutation[] = [...lowBlowEffects(context, action)];
   mutations.push(shoveMutation(context, target.id, 1, axisDirection(target.position, source.position)));
@@ -86,7 +87,7 @@ const lowBlowComboEffects: RuleResolver = (context, action) => {
 
 /** ICON p.139: adjacent foes deal 1 piercing damage back, then 2 damage to all adjacent foes (up to three times). */
 const provokeEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
   const range = context.triggers?.has('heroic') ? 2 : 1;
   const direction = context.input.directions?.['rush-direction'] ?? { x: 1, y: 0 };
@@ -116,7 +117,7 @@ const provokeEffects: RuleResolver = (context) => {
 
 /** ICON p.139: attack, gain unstoppable + counter until the end of your next turn. */
 const revengeEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source) return [];
   const mutations: RuleMutation[] = [
     conditionMutation(context, source.id, 'unstoppable', 'normal', untilNextTurnEnd),
@@ -130,8 +131,8 @@ const revengeEffects: RuleResolver = (context) => {
 
 /** ICON p.139 Combo (Indignation): true strike, vigilance per foe status (max 3), counter. */
 const revengeComboEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source) return [];
   const statuses = target ? target.conditions.size : 0;
   const vigilance = Math.min(3, statuses);
@@ -143,7 +144,7 @@ const revengeComboEffects: RuleResolver = (context) => {
 
 /** ICON p.140: enter the Riposte stance and arm the Dire Parry interrupt. */
 const riposteEnter: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source) return [];
   const mutations: RuleMutation[] = [
     stanceMutation(context, source.id, 'enter', 'riposte'),
@@ -159,7 +160,7 @@ const riposteEnter: RuleResolver = (context) => {
 
 /** ICON p.140 Dire Parry: gamble, deal that much damage to the triggering foe; a 6 slashes and shoves 1. */
 const direParry: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0];
   if (!source || !foeId) throw new RuleProgramViolation('choice.actor-count', 'Dire Parry requires a triggering foe.');
   const foe = sourceActor(context, foeId);
@@ -189,7 +190,7 @@ const direParry: RuleResolver = (context) => {
  * inventing an id tie-break. Defeated foes are never candidates ("closest foe
  * to you" — a defeated character is removed from the battlefield). */
 const darkKnightEnter: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
   const mutations: RuleMutation[] = [
     stanceMutation(context, source.id, 'enter', 'dark-knight'),
@@ -211,7 +212,7 @@ const darkKnightEnter: RuleResolver = (context) => {
 
 /** ICON p.141: circular shove with pass-through damage and a final shove. */
 const strongarmEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   // ICON p.143 Strongarm talent 1: "Comeback: this ability gains range 2.
@@ -284,7 +285,7 @@ const strongarmEffects: RuleResolver = (context) => {
 
 /** ICON p.142: mark a distant foe and end the turn. */
 const intimidateEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source || !source.position || !target || !target.position) {
@@ -306,7 +307,7 @@ const intimidateEffects: RuleResolver = (context) => {
  * resolver records the usage and, on Heroic, marks the target so the re-roll
  * is rolled with +1 curse. */
 const suckerPunchEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   const targetId = context.input.actorIds?.target?.[0];
   const target = targetId ? sourceActor(context, targetId) : undefined;
   if (!source || !source.position || !target || !target.position || target.side === source.side) {
@@ -323,8 +324,8 @@ const suckerPunchEffects: RuleResolver = (context) => {
 
 /** ICON p.144: 2[D]+fray attack that becomes true strike and ignores defenses at 3+ statuses. */
 const bleakMercyEffects: RuleResolver = (context) => {
-  const source = sourceActor(context, context.actorId);
-  const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined;
+  const source = resolveSourceActor(context);
+  const target = resolveAttackTarget(context);
   if (!source || !target || !target.position) return [];
   // ICON p.144: Bleak Mercy escalates against three or more *statuses* on the
   // target. Counting the broad projected condition set would let passive
@@ -374,7 +375,7 @@ const bleakMercyEffects: RuleResolver = (context) => {
  * (combat duration, the engine's indefinite boundary) and, on a re-use while
  * it is active, deals the status-counted damage instead of re-gaining it. */
 const bleakMercyComboEffects: RuleResolver = (context, action) => {
-  const source = sourceActor(context, context.actorId);
+  const source = resolveSourceActor(context);
   if (!source) return [];
   const mastered = hasMastery(source, 'knave:bleak-mercy');
   const auraActive = (source.activeEffects ?? []).some((effect) => effect.effectId === 'sweet-torment');

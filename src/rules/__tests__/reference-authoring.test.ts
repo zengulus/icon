@@ -45,6 +45,7 @@ import { WARDEN_RULE_RESOLVERS } from '../automation/content/jobs/programs/warde
 import { SEALER_RULE_RESOLVERS } from '../automation/content/jobs/programs/sealer-programs.js';
 import { ENOCHIAN_RULE_RESOLVERS } from '../automation/content/jobs/programs/enochian-programs.js';
 import { CHANTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/chanter-programs.js';
+import { KNAVE_RULE_RESOLVERS } from '../automation/content/jobs/programs/knave-programs.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -313,6 +314,65 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     const mutations = CHANTER_RULE_RESOLVERS['chanter:felicity:effects'](context, defaultAction);
     expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'ally')).toBe(true);
     expect(mutations.some((mutation) => mutation.kind === 'resource' && mutation.actorId === 'ally' && mutation.resourceId === 'blessing')).toBe(true);
+  });
+
+  it('Knave Low Blow resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor instead of silently no-opping', () => {
+    // Low Blow's PURE live-slot reads (source + attack target) now resolve
+    // through the adapter; a slot that NAMES a missing actor must reject on a
+    // malformed window rather than silently fall through.
+    const context = ctx({ attackTargetId: 'ghost' });
+    expectViolationCode(() => KNAVE_RULE_RESOLVERS['knave:low-blow:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Knave Bleak Mercy resolver: an absent optional attack-target slot stays a no-op (optional singleton semantics preserved)', () => {
+    // Bleak Mercy's attack-target read is OPTIONAL in valid state (the
+    // resolver's `if (!source || !target || !target.position) return []`
+    // guard handles a genuinely targetless use); the adapter preserves
+    // absent-singular → undefined and the resolver no-ops as before.
+    const context = ctx();
+    expect(() => KNAVE_RULE_RESOLVERS['knave:bleak-mercy:effects'](context, defaultAction)).not.toThrow();
+  });
+
+  it('Knave Dark Knight resolver: equidistant-foe ambiguity still fails closed — no deterministic tie-break acquired', () => {
+    // Dark Knight's nearest-foe read is U3 query + U4 player-choice semantics
+    // (p.143 "If multiple foes are equidistant, you may choose"); it is NOT a
+    // U1 reference read and was NOT migrated. Two foes at equal distance must
+    // still fail closed rather than resolve by object iteration order.
+    const hero = ctx().state.actors.hero; // (4,4)
+    const foeA = { ...ctx().state.actors.foe, id: 'foeA', position: { x: 5, y: 4 } }; // distance 1
+    const foeB = { ...ctx().state.actors.foe, id: 'foeB', position: { x: 4, y: 5 } }; // distance 1 (equidistant)
+    const context = ctx({ state: { ...ctx().state, actors: { ...ctx().state.actors, foeA, foeB } } });
+    expectViolationCode(() => KNAVE_RULE_RESOLVERS['knave:dark-knight:enter'](context, defaultAction), 'choice.direction-ambiguous');
+  });
+
+  it('Knave Dire Parry resolver: the trigger-source ?? recorded-input precedence stays caller-owned', () => {
+    // Dire Parry's `context.triggerSourceId ?? context.input.actorIds?.target?.[0]`
+    // SELECT is meaningful caller-owned precedence (which slot answers depends
+    // on the window contract); only the dereference of the chosen id is the
+    // captured-identity shape, and only the SOURCE slot read was migrated.
+    const foe = ctx().state.actors.foe;
+    const context = ctx({ triggerSourceId: 'foe', input: { actorIds: { target: ['hero'] } } });
+    const mutations = KNAVE_RULE_RESOLVERS['knave:riposte:dire-parry'](context, interruptAction);
+    // The trigger source (foe) wins over the recorded input target; the foe
+    // takes the gamble damage.
+    expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'foe')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'hero')).toBe(false);
+    void foe;
+  });
+
+  it('Knave Strongarm resolver: the recorded input.actorIds target stays caller-owned', () => {
+    // Strongarm's `input.actorIds?.target?.[0]` SELECT is the caller's U4
+    // choice; the source read is the migrated PURE slot. The chosen target
+    // (input) is what gets spun, unchanged.
+    const hero = ctx().state.actors.hero;
+    const foe = { ...ctx().state.actors.foe, id: 'foe', position: { x: 5, y: 4 } }; // adjacent to hero (4,4)
+    const context = ctx({ state: { ...ctx().state, actors: { ...ctx().state.actors, foe } }, input: { actorIds: { target: ['foe'] } } });
+    const mutations = KNAVE_RULE_RESOLVERS['knave:strongarm'](context, defaultAction);
+    // The spin ends with a place (a `move` mutation with movement 'place') and
+    // a shove of the chosen foe — the recorded input identity drives the spin.
+    expect(mutations.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'foe' && mutation.movement === 'place')).toBe(true);
+    expect(mutations.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'foe' && mutation.movement === 'shove')).toBe(true);
+    void hero;
   });
 
   it('Chanter Monogatari resolver: the LIVE source read migrates; lifecycle/usage state mutations are untouched', () => {

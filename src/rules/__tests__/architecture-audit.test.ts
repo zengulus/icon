@@ -163,11 +163,11 @@ describe('U1 residual census (machine inventory)', () => {
     expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
   });
 
-  it('pins the exact repo figures (192 = 137 + 54 + 1) so docs cannot drift from the machine', () => {
+  it('pins the exact repo figures (175 = 120 + 54 + 1) so docs cannot drift from the machine', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
-    expect(inventory.total).toBe(192);
+    expect(inventory.total).toBe(175);
     expect(inventory.categoryCounts).toEqual({
-      PURE_LIVE_REFERENCE: 137,
+      PURE_LIVE_REFERENCE: 120,
       CAPTURED_ID_DEREFERENCE: 54,
       DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
       NON_U1_OTHER: 0,
@@ -271,7 +271,11 @@ describe('U1 Reference/Binding routing guard', () => {
     // provenance/ownership fields, and the inventoried sourceActor residual
     // are NOT reference interpretation.
     'content/jobs/programs/chanter-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined; const foeId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;',
-    'content/jobs/programs/knave-programs.ts': 'const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0];',
+    // Migrated Knave keeps its pinned adapter surface; the retained
+    // captured/precedence dereferences (plannedRush's actorId parameter,
+    // Dire Parry's triggerSource ?? input chain, Strongarm's input.actorIds
+    // target, passed-id loop derefs) stay inventoried at the caller.
+    'content/jobs/programs/knave-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); function plannedRush(context, actorId) { return sourceActor(context, actorId); } const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0]; const foe = foeId ? sourceActor(context, foeId) : undefined; const targetId = context.input.actorIds?.target?.[0]; const chosen = targetId ? sourceActor(context, targetId) : undefined; const passedId = "x"; const passedActor = passedId ? sourceActor(context, passedId) : undefined;',
     // Migrated Shade/Warden keep their pinned adapter surface; the remaining
     // captured-input dereferences (`input.actorIds?.[n]` → sourceActor) are
     // the inventoried U1×U4 boundary and must NOT be flagged.
@@ -373,6 +377,23 @@ describe('U1 Reference/Binding routing guard', () => {
       expect.objectContaining({ file: 'content/jobs/programs/chanter-programs.ts', detail: expect.stringContaining('no longer routes') }),
     ]));
     expect(problems.filter((problem) => problem.file === 'content/jobs/programs/chanter-programs.ts').length).toBe(1);
+  });
+
+  it('T5c: catches a MIGRATED Knave program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
+    // Reverting Knave's migrated LIVE slots drops the pinned accessors; the
+    // retained captured/precedence dereferences (plannedRush's actorId
+    // parameter, Dire Parry's triggerSource ?? input chain, Strongarm's
+    // input.actorIds target) must NOT themselves be flagged — only the
+    // missing pins bite.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/knave-programs.ts': 'const source = sourceActor(context, context.actorId); const target = context.attackTargetId ? sourceActor(context, context.attackTargetId) : undefined; function plannedRush(context, actorId) { return sourceActor(context, actorId); } const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0]; const foe = foeId ? sourceActor(context, foeId) : undefined;',
+    });
+    expect(problems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/knave-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
+    expect(problems.filter((problem) => problem.file === 'content/jobs/programs/knave-programs.ts').length).toBe(1);
   });
 
   it('T5c: catches a MIGRATED program that reverts to direct slot resolution (drops the adapter calls)', () => {
