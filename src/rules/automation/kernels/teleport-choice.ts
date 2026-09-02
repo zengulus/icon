@@ -83,11 +83,20 @@ export function chosenTeleportDestination(
   // mover id is an already-resolved identity supplied by the caller; reading
   // its factual size alongside the equally-factual current position is a
   // frame read, never a new identity interpretation. A Size-1 mover is
-  // unchanged (originSize 1 ≡ today's point-cell metric).
+  // unchanged (originSize 1 ≡ today's point-cell metric). The mover record
+  // is REQUIRED: a missing mover has no footprint to measure from, and
+  // absence must never be silently treated as Size 1 — that would restore
+  // the degenerate point frame this seam exists to repudiate. The caller's
+  // id is already-resolved, so a missing record is invalid/unreachable
+  // state and fails closed with the shared missing-actor violation before
+  // any destination legality is accepted.
   const mover = context.state.actors[actorId];
+  if (!mover) {
+    throw new RuleProgramViolation('selector.actor-missing', `Teleport mover ${actorId} does not exist; p.92 range cannot be measured from a missing footprint.`);
+  }
   const legality = validatePositionLegality({
     origin,
-    originSize: mover?.size ?? 1,
+    originSize: mover.size,
     range,
     excludeActorId: actorId,
     lineOfSightFrom: origin,

@@ -146,6 +146,25 @@ describe('U7 — teleport origin frame measures from the mover p.92 footprint ed
     )).toThrow(/limited to 1 space/);
   });
 
+  it('a MISSING mover fails closed — absence is never inferred as a Size-1 point frame', () => {
+    const { state } = fixture();
+    // The mover record is absent from state. The supplied destination (8,9)
+    // is a fully legal in-grid / unoccupied / LoS-clear cell one space from
+    // the origin (9,9) — the pre-repair code, masking the missing mover as
+    // `originSize 1` (the `mover?.size ?? 1` point frame), would have
+    // ACCEPTED this command and executed a teleport for a mover that does
+    // not exist. The kernel must reject BEFORE destination legality is
+    // consulted: a p.92 range cannot be measured from a missing footprint.
+    const view = {
+      ...context(state, 'ghost-mover'),
+      actorId: 'ghost-mover',
+      input: { positions: { teleport: [{ x: 8, y: 9 }] } },
+    };
+    expect(() => chosenTeleportDestination(
+      view, 'ghost-mover', 'teleport', { x: 9, y: 9 }, 1, 'fixture',
+    )).toThrow(/does not exist/);
+  });
+
   it('the mover\'s own cells are not self-blocking under the edge metric', () => {
     const { state, foe } = fixture();
     const view = context(state, foe.id);

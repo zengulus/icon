@@ -527,8 +527,9 @@ ban on `.side`/`ownerId`/`actorId`.
 **U2 is AUTHORITATIVE** (completion criteria §8 met; all eight adversarial
 U2-M1..M4 / U16-M1..M4 mutations CAUGHT; suite green; no source promotion;
 census unchanged). After the 2026-09-01 fresh census, the UNDERLAY PHASE gate
-stays OPEN on U1/U3/U4/U5/U6/U7/U9/U10/U11/U12/U14/U15; U8 and U16 have
-since joined U2/U13/U17 at the strict authority bar.
+stays OPEN on U1/U3/U4/U5/U6/U9/U10/U11/U12/U14/U15; U8 and U16 have
+since joined U2/U13/U17 at the strict authority bar, and U1 (tranche 18)
+and U7 (tranche 21, 2026-09-02) completed after the census was written.
 
 **Locations partially owning/duplicating.** (post-T7 residual audit)
 `RuleExecutionContext.actorId` legacy-slot abuse across `kernels/runtime.ts`
@@ -1064,94 +1065,133 @@ separates placement REGION from CREATOR LoS/range ORIGIN (p.95/p.107/p.108,
 the ORIGIN for cover/LoS while effects on the original user still apply to
 the original user.
 
-**Current state.** `PARTIAL`. The unified anchor VOCABULARY landed
-(2026-08-30): `primitives/anchor.ts` (`SpatialAnchor` — LIVE actor selector
-| CAPTURED position — + `SpatialOrigin`) with kernel-side resolution
+**Current state.** `AUTHORITATIVE` (decision 2026-09-02, tranche 21). The
+unified anchor VOCABULARY landed (2026-08-30): `primitives/anchor.ts`
+(`SpatialAnchor` — LIVE actor footprint named by the typed U1
+`Reference<'actor'>` | LIVE entity footprint | CAPTURED position — +
+`SpatialOrigin`) with the ONE kernel-side resolution path
 (`kernels/candidate.ts` `resolveSpatialAnchor`, consumed by U3
-`rangeOrigin`; fail-closed on query-shaped selectors / zero-multi actors /
-position-less anchors; relation stays with the acting actor while range
-moves to the anchor). T2 (2026-08-30) added the LIVE ENTITY footprint
-anchor (`{ kind: 'entity'; entityId }`, resolved to the entity's size-1
-cell; fail-closed `selector.entity-missing` / position-less) — consumed by
-the U3 entity-domain range origin and the U5 `distance` anchor endpoints.
-Specialist anchor ideas still exist and are NOT yet unified onto
-`SpatialAnchor`, each with a written boundary: `RuleArea.origin`
-(`self|target|position|entity`, `primitives/types.ts`) is DECLARATIVE
-ONLY — no runtime consumer exists yet (areas compute through
-`computeSpatialArea` intents), so typing it as an anchor is churn without
-a semantic seam; entity `creationSpatial` (origin selector + size +
-maxRange, `primitives/types.ts`, `kernels/entity-creation.ts`) is a
-RESOLVED-position contract evaluated at command time and carried on the
-mutation for replay — it names the same frame but travels with the
-creation record (documented retained specialist); `teleport-choice` origin
-positions are resolved positions consumed by the shared
-`validatePositionLegality` (a captured-position anchor in effect); since
-2026-09-02 (tranche 20) the teleport legality call threads the MOVER's
-footprint as `originSize` from the resolved mover record, so p.92 range is
-measured from the mover's footprint edge, not a degenerate size-1 point
-(guard: `u7-teleport-footprint-origin`);
-`SpatialIntent.from` and aura origins (`kernels/aura.ts`) stay with the
-movement gateway / aura kernel (U2 migration is T3+); rebound origin
-absent (U12 continuation records).
+`rangeOrigin` and the position/choice/LoS/distance consumers; fail-closed
+on query-shaped selectors / zero-multi actors / position-less anchors
+(`selector.origin-invalid` / `selector.actor-missing` /
+`selector.entity-missing`); relation stays with the acting actor while
+range moves to the anchor). T2 (2026-08-30) added the LIVE ENTITY
+footprint anchor (resolved to the entity's size-1 cell) — consumed by the
+U3 entity-domain range origin and the U5 `distance` anchor endpoints.
+Tranche 20 (2026-09-02) repaired the one genuine measurement gap —
+`chosenTeleportDestination` measured p.92 range from a degenerate size-1
+point regardless of the mover's footprint; the legality call now threads
+the MOVER's footprint as `originSize` from the resolved mover record
+(guard: `u7-teleport-footprint-origin`). Tranche 21 (this decision)
+closed the remaining fail-open in that seam (a MISSING mover now fails
+closed with `selector.actor-missing` instead of being masked as Size 1 —
+`mover?.size ?? 1` is rejected by the guard) and completed the U7
+completion audit: every generic range/distance/LoS/legality consumer
+resolves through the anchor vocabulary or receives an already-resolved
+frame, no subsystem independently reinterprets LIVE vs CAPTURED semantics,
+and no point-frame approximation remains for a multi-space actor. The
+specialist carriers below are RETAINED with written non-competing
+boundaries — none is a competing U7 vocabulary (see the completion
+decision).
 
-**PARTIAL / scaffolding (corrective pass 2026-08-30) — seam CLOSED
-2026-09-02.** U7 remains PARTIAL and must not be extended as if it were
-U1 REFERENCE. The corrective pass's named seam is now executed: with U1
-AUTHORITATIVE (tranche 18), the LIVE actor anchor's identity is the typed
-U1 `Reference<'actor'>` (`primitives/anchor.ts` `SpatialAnchor` actor
-kind = `{ kind: 'actor'; ref: Reference<'actor'> }`, constructed via
-`anchorFromActorRef` / `defaultActorAnchor` / `anchorFromActorSelector` —
-the single selector→reference mapping through the U1
-`actorReferenceForSelector` adapter, fail-closed at construction for
-input-without-context and query-shaped selectors). Resolution composes
-the ONE `resolveReference` authority in `kernels/candidate.ts`; the
-former `{ kind: 'actor'; selector: RuleSelector }` scaffolding is removed
-and the `u1-reference-routing` guard pins candidate.ts to
-`resolveReference`. U2 ROLE / PERSPECTIVE remains responsible for
-"relative to whom" entirely independently of U7 — relation stays with the
-acting actor while the anchor carries only the spatial frame.
+**Completion decision (2026-09-02) — specialist carriers are STORAGE for
+already-resolved frames, not competing U7 vocabularies.** U7 owns the
+generic notions: the LIVE actor/entity frame, the CAPTURED position frame,
+footprint size, and spatial-origin resolution. A subsystem may
+legitimately STORE an aura bearer + perspective (`AuraOriginRef`
+carrier-scan over durable state — live re-derivation only, membership
+measured with the canonical footprint metric), a creation-time resolved
+frame for replay (`creationSpatial` record carried on the mutation —
+computed ONCE at command time, never re-derived from later state),
+area-shape origin metadata (`RuleArea.origin` — inert declarative, no
+runtime consumer), or continuation/rebound provenance (U12 records +
+provenance flag, unwired) WITHOUT those storage formats becoming second
+anchor authorities, because none of them maps a selector to a frame,
+re-decides LIVE vs CAPTURED, or defines an alternative distance metric.
+Migrating those schemas onto `SpatialAnchor` (the structural reading of
+"every declared origin kind on the typed vocabulary") would be uniform-
+anchor churn for zero semantic gain — the ontology's ownership test is:
+WHICH authority interprets an anchor (U7, one) vs WHICH subsystem stores
+an already-interpreted frame for its own domain (many, disjoint). The
+`context.actorId` reads in `kernels/runtime.ts` are U1 source identity
+for cost/targeting, classified non-spatial; the movement gateway's
+`SpatialIntent.from` is movement legality (explicit U7
+non-responsibility). Aura origin derivation performs a bearer ELIGIBILITY
+scan (aura-domain), never selector→frame resolution; teleport origins are
+resolved positions consumed by the shared `validatePositionLegality`
+operator with the mover's factual footprint size (fail-closed on a
+missing mover); `summonEntity`'s content-sugar `originSize ?? 1` default
+is a CAPTURED-position point baseline (matching `anchorFromPosition`'s
+documented size-1 default) — all current creators are Size 1, and the
+flow path (`execute-flow.ts`) resolves the origin actor's factual size for
+declared creation contracts.
 
-**Locations partially owning/duplicating.** `primitives/spatial-intent.ts`
-(footprint/anchor primitives + area gateway); `RuleArea.origin`;
-`RuleEffect` entity `spatial` contract; `kernels/teleport-choice.ts` origin
-handling; `kernels/aura.ts` `auraOriginRefs`; `kernels/encounter-adapter.ts`
-movement origins; `context.actorId` as de-facto anchor in
-`kernels/runtime.ts`. (`kernels/candidate.ts::rangeOrigin` migrated onto
-the anchor vocabulary, 2026-08-30.)
+**Locations with written specialist boundaries (non-competing).**
+`primitives/spatial-intent.ts` (footprint primitives + the movement/area
+gateway authority); `RuleArea.origin` (inert declarative, no runtime
+consumer); `RuleEffect` entity `spatial` + mutation `creationSpatial`
+(record-carried CAPTURED contract for replay); `kernels/teleport-choice.ts`
+origin handling (resolved origin + factual mover footprint through the
+shared legality operator); `kernels/aura.ts` `auraOriginRefs` (LIVE
+carrier-scan with U2-branded perspective); `kernels/encounter-adapter.ts`
+and foe/attack measurement sites (canonical metric over factual live
+records); `context.actorId` in `kernels/runtime.ts` (U1 source identity
+for cost, not a spatial frame). (`kernels/candidate.ts::rangeOrigin`
+migrated onto the anchor vocabulary, 2026-08-30.)
 
 **Intended authority.** `primitives/anchor.ts` (barrel re-exported):
-`SpatialAnchor` union (actor footprint, chosen position, bound ref (U1),
-area center, source, carrier, captured/snapshot, live) with explicit
-LIVE/CAPTURED; kernel-side `resolveSpatialAnchor(anchor, context)`
-(landed for the LIVE actor selector | CAPTURED position kinds); consumers
-read anchors via the shared footprint-distance primitive. Dependencies: U1
-(refs), U2 (role ≠ anchor). Consumed by U3 (`rangeOrigin` — landed), U5
-(`distance(ref,ref)`), domain authorities (targeting, area, movement, aura,
-entity creation, rebound).
+`SpatialAnchor` union (LIVE actor footprint named by typed U1 ref, LIVE
+entity footprint, CAPTURED position) with explicit LIVE/CAPTURED;
+kernel-side `resolveSpatialAnchor(anchor, context)` — the ONE
+resolution path; consumers read anchors via the shared footprint-distance
+primitive. Dependencies: U1 (refs), U2 (role ≠ anchor). Consumed by U3
+(`rangeOrigin` — landed), U5 (`distance(ref,ref)` — landed), U4 (position
+legality over a resolved anchor — landed), and the domain authorities
+(targeting, area, movement, aura, entity creation, rebound) which either
+resolve through the vocabulary or carry already-resolved frames with
+written boundaries.
 
-**Typed vocabulary.** `SpatialAnchor`; `RuleArea.origin` typed as an anchor;
-entity `creationSpatial.origin` typed as an anchor; `rangeOrigin` typed as
-an anchor; captured-anchor records ride U12 continuation state.
+**Typed vocabulary.** `SpatialAnchor` (the three kinds) + its
+LIVE/CAPTURED contract; `rangeOrigin` typed as an anchor on queries and
+choices; captured-anchor records ride U12 continuation state. The
+specialist CARRIER schemas (`RuleArea.origin`, entity `creationSpatial`,
+aura origin records, rebound provenance) remain specialist-owned storage
+of already-resolved frames per the completion decision — they are not
+second anchor vocabularies and are not migrated for structural
+uniformity.
 
 **Replay semantics.** Anchors resolve from durable state (live) or from
 captured records (captured); never from serialized convenience fields that
-lose the frame. Rebound fixtures prove ROLE ≠ ANCHOR on replay.
+lose the frame; creation `creationSpatial` records are computed once at
+command time and consumed as recorded by the reducer (replay never
+re-decides a captured frame). Rebound fixtures prove ROLE ≠ ANCHOR on
+replay.
 
 **Acceptance tests.** Positive: non-self `rangeOrigin` actually resolves
-through the anchor (fix the inert seam with a fixture: a query measured from
-an ally's position); area centered on a captured position after the actor
-moved; creation origin from an entity. Negative: anchor with no resolvable
-referent rejects. Boundary: anchor to a defeated actor (source permits) vs
-off-board actor (rejects); size>1 footprint anchor edges (p.92). Replay:
+through the anchor (a query measured from an ally's position — fixture in
+`candidate.test.ts`); Size-2 footprint-edge range is measured from the
+mover's footprint edge, not the anchor cell (p.92 — `battlefield.test.ts`
+adversarial fixtures: edge-adjacent legal, one-past illegal, point-frame
+would reject). Negative: anchor with no resolvable referent rejects;
+a MISSING teleport mover rejects with `selector.actor-missing` BEFORE any
+destination legality is accepted (never masked as a Size-1 point frame);
+query-shaped/input-without-context anchors fail closed at construction.
+Boundary: anchor to a defeated actor (source permits) vs off-board actor
+(rejects); size>1 footprint anchor edges (p.92). Replay:
 teleport planned-path + rebound-origin fixture replays byte-identical.
+Guard: `u7-teleport-footprint-origin` rejects a restored point-frame or
+optional-chained (`mover?.size`) mover read, mutation-tested both ways.
 
-**Consumers to migrate.** `candidate.ts` (resolve `rangeOrigin`) — DONE;
-`teleport-choice` origin reads — the positions are already consumed
-through the shared `validatePositionLegality` (a captured-position
-anchor in effect); `RuleArea.origin` consumers — none exist (declarative
-shape only, documented retained specialist); aura origin derivation —
-U2/T3+; `runtime.ts` `context.actorId`-as-anchor reads — T2+ de-dup
-work.
+**Consumers.** All migrated or retained with written boundaries:
+`candidate.ts` resolve `rangeOrigin` — DONE; `choice.ts` position legality
+over a resolved anchor — DONE; `evaluate-value.ts`/`evaluate-query.ts`
+distance/LoS/entity anchors — DONE; `teleport-choice` origin reads —
+consumed through the shared `validatePositionLegality` with the mover's
+factual footprint (fail-closed on a missing mover) — DONE; `RuleArea.origin`
+— no runtime consumer (inert declarative, retained); `creationSpatial` —
+record-carried CAPTURED contract (retained); aura origin derivation — LIVE
+carrier-scan, U2-branded perspective (retained); `runtime.ts`
+`context.actorId` — U1 source identity for cost (non-spatial, retained).
 
 **Blocker families enabled (information only).** rebound, entity-distance-
 selection, object-distance, range-gated-teleport, multi-actor-teleport,

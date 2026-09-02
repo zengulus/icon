@@ -679,6 +679,19 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     subject: 'Usage / Entitlement Ledger (U16 underlay)',
     binding: legacy('U16 HUMAN-CERTIFIED recertification 2026-09-01: fresh residual census found no remaining unresolved U16 consumer and no competing usage authority after the Monogatari once-per-song consumer was integrated onto the U8 lifecycle scope (proven by monogatari-u8-u16.test.ts); 2026-09-01 multi-owner correction re-audited the same contract — every active song runs its own U16 applyLifecycleScopedUsage transaction, multiple simultaneous Chanters stay independent ledger identities, and no content path reconstructs a lifecycle ledger key. NOT machine-verified: no strict fidelity scope.'),
   },
+  {
+    id: 'claim:foundations:u7-authoritative',
+    file: 'docs/rules-foundations.md',
+    anchor: '### Anchor / Spatial Frame (U7 underlay) — AUTHORITATIVE (completion audit + teleport fail-closed repair, 2026-09-02)',
+    anchors: [
+      { file: 'docs/rules-foundations.md', anchor: 'remains honestly PARTIAL; U7 (Anchor / Spatial Frame) is AUTHORITATIVE as' },
+      { file: 'TODO.md', anchor: 'completion audit; U7 becomes AUTHORITATIVE; next = U5-core (2026-09-02)' },
+      { file: 'TODO.md', anchor: 'DEPENDENCY-DRIVEN TRANCHE: **U5-core** — with U7 authoritative' },
+    ],
+    strength: 'authoritative',
+    subject: 'Anchor / Spatial Frame (U7 underlay)',
+    binding: legacy('U7 HUMAN-CERTIFIED 2026-09-02 (twenty-first tranche): fresh end-to-end audit establishes ONE generic spatial-frame vocabulary (primitives/anchor.ts SpatialAnchor — LIVE actor footprint named by the typed U1 Reference, LIVE entity footprint, CAPTURED position) and ONE resolution authority (resolveSpatialAnchor composing the ONE resolveReference) for the DECLARED SCOPE (vocabulary + resolution + the canonical p.92 footprint metric); every generic range/distance/LoS/legality consumer either resolves through it or receives an already-resolved frame with a written specialist boundary; the teleport mover-footprint seam measures range from the mover p.92 footprint edge with a fail-closed missing-mover guard (select.actor-missing before any destination legality; u7-teleport-footprint-origin rejects a restored point-frame or optional-chained mover-size read); specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance, runtime.ts context.actorId-for-cost) store already-resolved frames and do not reinterpret LIVE vs CAPTURED semantics, map selectors to frames, or define a second distance metric; the ResolvedReference strict-vs-weak bound is documented, not redesigned. NOT machine-verified: no strict fidelity scope.'),
+  },
   // LANDED is explicitly SLICE-PROGRESS, deliberately weaker than 'complete':
   // a landed slice is NOT an underlay-completeness claim, and the fresh
   // U1–U17 underlay census keeps U9/U14 PARTIAL. The strength below says

@@ -33,7 +33,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U4 Choice / Decision | PARTIAL | ability/talent choice fold reads and remaining window-carried choice consumers |
 | U5 Value / Expression | PARTIAL | inline resolver arithmetic and missing typed value families |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
-| U7 Anchor / Spatial Frame | PARTIAL | LIVE actor anchor identity typed (tranche 19); teleport boundary now measures from the mover p.92 footprint (tranche 20); aura/creation/rebound/RuleArea.origin consumers stay specialist-owned with written boundaries |
+| U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
 | U8 Scope / Clock | AUTHORITATIVE | none |
 | U9 Provenance / Cause | PARTIAL | legacy trigger/damage/movement provenance reconstruction |
 | U10 Fact / Outcome | PARTIAL | movement/save distinction proof remains incomplete |
@@ -45,14 +45,17 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U16 Usage / Entitlement | COMPLETE/AUTHORITATIVE | none after Monogatari lifecycle integration |
 | U17 Ordering / Arbitration | COMPLETE/AUTHORITATIVE | none |
 
-Six underlays meet the strict authority bar (U1 since the eighteenth
-tranche, 2026-09-02); eleven remain partial. U1 is the dependency root: it
+Seven underlays meet the strict authority bar (U1 since the eighteenth
+tranche; U7 since the twenty-first, 2026-09-02); ten remain partial. U1 is
+the dependency root: it
 has no underlay dependency and is consumed by U3, U5, U6, U7, U9, U10,
 U12, U14, and U16 — which is why it stayed the selected next tranche until
 its declared-scope authority completed. With U1 and U2 authoritative, the
 next dependency-complete underlay was U7 (Anchor/Spatial Frame depends only
 on U1+U2; U3 additionally waits on U5-core); the nineteenth tranche
-migrated U7's LIVE actor anchor identity onto the typed U1 vocabulary.
+migrated U7's LIVE actor anchor identity onto the typed U1 vocabulary, and
+the twenty-first tranche closed the teleport mover footprint seam and
+completed the U7 authority decision.
 
 ## U1 tranche executed
 
@@ -1430,6 +1433,111 @@ files clean; automation clean; source-fidelity strict clean; tests 2175
 consumers stay specialist-owned with written boundaries (only the teleport
 boundary was repaired), so the completion gate's "every declared origin kind
 on the typed vocabulary" is not yet demonstrable end-to-end.
+
+## U7 tranche executed (fresh HEAD, 2026-09-02, twenty-first tranche — teleport missing-mover fail-closed repair; U7 completion audit; AUTHORITATIVE decision)
+
+**Verdict on tranche 20: keep, with one real correctness repair.** The
+verification passed in full: the five-family U7 residual classification
+(aura B carrier-scan, creationSpatial B record-carried, RuleArea.origin C
+inert, teleport B-with-gap, rebound C unwired, runtime.ts actorId C U1
+identity); teleport range genuinely was measured from a degenerate size-1
+POINT before the fix (the legality call carried no `originSize`, so the
+operator's point baseline applied regardless of the mover's footprint);
+p.92 requires measurement from the edge of the mover's actual footprint
+("range is measured from the edge of the origin space (or character)"); the
+new Size-2 edge behavior is correct (edge-adjacent legal, one-past
+illegal, point-frame would reject); Size-1 behavior is unchanged
+(originSize 1 ≡ the point-cell metric); the specialist boundaries are
+genuine (aura is a bearer-eligibility carrier-scan with U2-branded
+perspective — never selector→frame resolution; creationSpatial is a
+record-carried CAPTURED contract for replay; RuleArea.origin is inert;
+rebound is an unwired provenance flag); skipping the `ResolvedReference`
+kind-indexed redesign is reasonable (zero runtime change, bound/collection
+cases equally conservative); and no source-unit promotion or unrelated
+source semantics changed (9 files, all kernel/tests/guards/docs). ONE
+issue: `originSize: mover?.size ?? 1` silently MASKS a missing mover as
+Size 1 — the exact point-frame fail-open the tranche repudiates. `size` is
+a REQUIRED field on `RuleActorView`/`EncounterActor`, so the fallback can
+only ever fire for a missing mover: presence is conflated with Size 1.
+
+**The repair.** `chosenTeleportDestination` now reads the mover record
+fail-closed: a missing mover throws the established `selector.actor-missing`
+violation BEFORE any destination legality is accepted — never an inferred
+Size-1 frame. All existing callers pass already-resolved valid mover ids,
+so behavior is unchanged for every real command; Size-1 and Size-2 valid
+behavior is pinned by the tranche-20 fixtures. The
+`u7-teleport-footprint-origin` guard was tightened to require a NON-OPTIONAL
+`.size` read (`mover?.size` — any optional-chained or `?? 1` fallback — is
+now REJECTED by the architecture audit), with mutation tests pinning the
+masked-fallback restoration.
+
+**Adversarial evidence.** A missing mover with a fully legal destination
+input (in-grid, unoccupied, LoS-clear, within range of the point) fails
+closed with `selector.actor-missing`; under the pre-repair code the same
+command was ACCEPTED (the point frame executed a teleport for a mover that
+does not exist).
+
+**U7 completion audit — every remaining origin/frame consumer classified.**
+(A) RESOLVES THROUGH THE U7 VOCABULARY: `candidate.ts` `rangeOrigin`;
+`choice.ts` position legality (origin.size from `resolveSpatialAnchor`);
+`evaluate-value.ts` `distance` endpoints (anchors/refs via
+`resolveSpatialAnchor`); `evaluate-query.ts` LoS/area-adjacency anchor
+reads. (B) CARRIES AN ALREADY-RESOLVED FRAME with a written boundary:
+teleport-choice (resolved origin + factual mover footprint through the
+shared legality operator); creationSpatial (command-time RESOLVED record
+ridden by the mutation; the reducer consumes it as recorded — replay never
+re-decides a captured frame; `execute-flow` fills an undeclared origin size
+from the origin actor's FACTUAL size); aura origins (LIVE carrier-scan —
+bearer eligibility, position+size from durable state, canonical metric;
+never a selector→frame mapping, live-only so no LIVE-vs-CAPTURED
+decision); foe-recipes/encounter-adapter/attack-resolution/range.ts
+measurement (canonical metric over factual live records). (C) INERT OR
+NON-SPATIAL: RuleArea.origin (declarative, no runtime consumer); rebound
+(provenance flag + unwired blocker); `runtime.ts` `context.actorId`
+(U1 source identity for cost). No duplicate implementation of origin
+selection, footprint sizing, range-from-actor-as-point, entity origin
+geometry, captured-vs-live re-derivation, implicit `context.actorId`
+fallback, or Size-1 fallback for a multi-space actor remains in a GENERIC
+measurement path. The `size?: number` `?? 1` projections on view types
+(aura/foe-recipes/range views) and the `summonEntity` content-sugar
+`originSize ?? 1` default (a CAPTURED-position point baseline matching
+`anchorFromPosition`'s documented size-1 default; all current creators are
+Size 1; flow-path creation resolves the factual origin-actor size) are
+domain parameters, not frame re-interpretations — noted, not migrated.
+
+**U7 AUTHORITATIVE — the completion-boundary decision.** U7's declared
+scope (generic-underlays.md: "name every spatial relationship's frame
+explicitly"; plan Non-responsibilities: not distance metric, not movement
+legality, not LoS computation) is VOCABULARY + RESOLUTION + the canonical
+metric. Specialist carriers store already-resolved frames for their OWN
+domain questions; none independently reinterprets LIVE vs CAPTURED frame
+semantics, maps a selector to a frame, or defines a second metric — so the
+"every declared origin kind on the typed vocabulary" structural gate is
+broader than the ownership model the ontology actually states (the plan's
+own Consumers-to-migrate rows and the t8c/t8d authority proofs already
+classified RuleArea.origin and creationSpatial as disjoint Q carriers).
+Clarified, not redefined: the typed vocabulary is `SpatialAnchor` (actor /
+entity / captured-position) + its resolution; carrier schemas are NOT
+migrated to it. This is the exact ownership distinction this tranche
+decides, and it does not manufacture authority — the audit above is the
+fresh evidence.
+
+**Next dependency-driven tranche — U5-core** (see the DAG section). U3's
+declared gate is U1✓ + U2✓ + U5-core + U7✓; with U7 authoritative the ONLY
+remaining blocker is U5-core, so U3 cannot be next. U9 (U1+U2) is
+independently dependency-complete, but the canonical plan's phase order
+(T2: U7/U3/U5/U6-core/U4 before T4: U9/U10) selects the T2 continuation
+(U5-core, then U3) — the same phase-order tiebreak tranche 19 used to pick
+U7 over U9. No source-unit promotion; underlay phase remains UNDERLAY
+COMPLETION.
+
+**Census.** Tests 2177 (+2: missing-mover fail-closed adversarial fixture;
++1 guard-restoration mutation test for the tightened optional-chained
+rejection); architecture audit clean with the tightened guard; automation /
+source-fidelity strict / build clean (source-fidelity.md regenerated by its
+owner to register `claim:foundations:u7-authoritative`); blocker census
+byte-stable (no source-unit change). U7 row moves to AUTHORITATIVE;
+U1 residual unchanged at 4 = 0+0+0+4.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

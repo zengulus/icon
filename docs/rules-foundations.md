@@ -173,7 +173,10 @@ an opt-in `distance-from-origin` ordering policy),
 — consumed by the teleport kernel's violation mapping; the teleport
 kernel threads the MOVER's p.92 footprint as `originSize` from the
 resolved mover record, so a Size-2 mover measures range from its footprint
-edge — guarded by `u7-teleport-footprint-origin`), and
+edge — a MISSING mover fails closed with `selector.actor-missing` (never
+masked as a Size-1 point frame); guarded by
+`u7-teleport-footprint-origin`, which rejects a restored point-frame OR
+optional-chained mover-size call), and
 `nearestCandidates` (the full minimum-distance set over an evaluated
 CandidateSet — NO invented tie-break; ordering/tie resolution happens only
 where the source defines it). `primitives/job-kit.ts` dropped the
@@ -227,8 +230,9 @@ the min-distance set + the opt-in distance-from-origin cell order
 (first/last/nth land only where a SOURCE defines them); and the
 `rushTowardFoes` direction fallback remains a flagged player-choice
 approximation (a movement-direction read, not an eligibility query). U3
-and U7 remain honestly PARTIAL. The tracked completion task is TODO.md
-§"Underlay-phase task ledger" (U3 audit correction + T2 expression
+remains honestly PARTIAL; U7 (Anchor / Spatial Frame) is AUTHORITATIVE as
+of 2026-09-02 (see its section below). The tracked completion task is
+TODO.md §"Underlay-phase task ledger" (U3 audit correction + T2 expression
 algebra). Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
@@ -354,6 +358,45 @@ Tests: `roles.test.ts` + `t7-u2-role-consumers.test.ts` (relation
 perspective, aura entity-origin owner≠origin, ownerless-neutral reject,
 ROLE≠ANCHOR geometry, source≠target controller, underivable responder
 rejects, replay determinism).
+
+### Anchor / Spatial Frame (U7 underlay) — AUTHORITATIVE (completion audit + teleport fail-closed repair, 2026-09-02)
+
+`primitives/anchor.ts` owns the typed frame vocabulary every spatial
+relationship is measured from ("range is measured from the edge of the
+origin space (or character)", p.92): `SpatialAnchor` = LIVE actor
+footprint named by the typed U1 `Reference<'actor'>` | LIVE entity
+footprint (a size-1 cell) | CAPTURED position (size defaults to 1, a
+point cell). Resolution is the ONE kernel path
+(`kernels/candidate.ts` `resolveSpatialAnchor`), composing the single U1
+`resolveReference` authority, and every generic range/distance/LoS/
+legality consumer either resolves through it (candidate `rangeOrigin`,
+choice position legality, `evaluate-value.ts` distance endpoints,
+`evaluate-query.ts` LoS/entity reads) or receives an already-resolved
+frame with a written specialist boundary: `teleport-choice` origin
+positions (consumed by the shared `validatePositionLegality` with the
+MOVER's factual footprint as `originSize` — a MISSING mover fails closed
+with `selector.actor-missing`, never masked as Size 1: the
+`mover?.size ?? 1` point-frame approximation is rejected by the
+`u7-teleport-footprint-origin` architecture guard), entity
+`creationSpatial` (a command-time RESOLVED contract carried on the
+mutation for replay — the reducer consumes the recorded frame; replay
+never re-decides), aura origins (`auraOriginRefs`: bearer-ELIGIBILITY
+carrier-scan over durable state, U2-branded perspective, canonical
+metric), `RuleArea.origin` (inert declarative, no runtime consumer — areas
+compute through `computeSpatialArea` intents), rebound (unwired
+provenance flag), and `runtime.ts` `context.actorId` (U1 source identity
+for cost, not a spatial frame). The 2026-09-02 completion audit
+classified every remaining origin/frame consumer (A resolves through the
+vocabulary / B carries an already-resolved frame / C inert or non-
+spatial); no subsystem independently reinterprets LIVE vs CAPTURED frame
+semantics, maps a selector to a frame, or defines a second distance
+metric, and no point-frame approximation remains for a multi-space actor.
+Carrier schemas are STORAGE for already-resolved frames, not second U7
+vocabularies — they are not migrated for structural uniformity. Tests:
+`candidate.test.ts` anchor surface + `battlefield.test.ts` Size-2
+footprint-edge adversarial fixtures + the missing-mover fail-closed
+fixture; guard mutation tests in `architecture-audit.test.ts`. See
+`docs/underlay-completion-plan.md` §U7 for the completion decision.
 
 ### Scope / Clock (U8 underlay) — AUTHORITATIVE (residual audit + combat-cleanup repair, 2026-09-01)
 

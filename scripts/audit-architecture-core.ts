@@ -239,10 +239,16 @@ export function teleportFootprintOriginProblems(code: string): string[] {
   // The legality call must carry the MOVER's footprint as originSize AND the
   // mover footprint must be READ from the resolved mover record (bound as
   // `state.actors[actorId]`, then `.size` — the binding name is incidental;
-  // both the originSize key and the footprint read are the semantics).
-  const footprintsMover = /\bactors\s*\[\s*actorId\s*\]/.test(code) && /\b(?:mover|actor|source)\??\.\s*size/.test(code);
+  // both the originSize key and the footprint read are the semantics). The
+  // read must be NON-OPTIONAL: `mover?.size ?? 1` (any `?.size`) masks a
+  // MISSING mover as a Size-1 point cell — the exact fail-open this seam
+  // repudiates — so an optional-chained size read is rejected even though
+  // the originSize key and the state read are present.
+  const sizeRead = /\b(?:mover|actor|source)\.\s*size\b/.test(code);
+  const optionalSizeRead = /\b(?:mover|actor|source)\?\s*\.\s*size\b/.test(code);
+  const footprintsMover = /\bactors\s*\[\s*actorId\s*\]/.test(code) && sizeRead && !optionalSizeRead;
   if (!/originSize\s*:/.test(query) || !footprintsMover) {
-    problems.push('teleport legality does not measure from the mover\'s p.92 footprint (originSize must come from the mover record read via state.actors[actorId].size — a size-1 point frame is a dropped-frame regression)');
+    problems.push('teleport legality does not measure from the mover\'s p.92 footprint (originSize must come from the mover record read via state.actors[actorId].size — a size-1 point frame is a dropped-frame regression, and an optional-chained size read (`mover?.size`) masks a missing mover as Size 1)');
   }
   return problems;
 }

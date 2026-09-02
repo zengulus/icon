@@ -146,9 +146,12 @@ describe('auditArchitecture (real codebase)', () => {
   it('U7 guard accepts a teleport legality call that measures from the mover footprint', () => {
     const routed = `
       const mover = context.state.actors[actorId];
+      if (!mover) {
+        throw new RuleProgramViolation('selector.actor-missing', 'Teleport mover does not exist.');
+      }
       const legality = validatePositionLegality({
         origin,
-        originSize: mover?.size ?? 1,
+        originSize: mover.size,
         range,
         excludeActorId: actorId,
         lineOfSightFrom: origin,
@@ -168,6 +171,22 @@ describe('auditArchitecture (real codebase)', () => {
     `;
     expect(teleportFootprintOriginProblems(dropped)).toEqual(expect.arrayContaining([
       expect.stringContaining('size-1 point frame'),
+    ]));
+  });
+
+  it('U7 guard catches a restored optional-chained mover size (missing mover masked as Size 1)', () => {
+    const masked = `
+      const mover = context.state.actors[actorId];
+      const legality = validatePositionLegality({
+        origin,
+        originSize: mover?.size ?? 1,
+        range,
+        excludeActorId: actorId,
+        lineOfSightFrom: origin,
+      }, destination, context);
+    `;
+    expect(teleportFootprintOriginProblems(masked)).toEqual(expect.arrayContaining([
+      expect.stringContaining('masks a missing mover as Size 1'),
     ]));
   });
 
