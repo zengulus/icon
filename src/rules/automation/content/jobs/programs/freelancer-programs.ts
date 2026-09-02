@@ -256,7 +256,7 @@ const soulShot: RuleResolver = (context) => {
   // choice and the current round, so the line generation (and the must-
   // include-the-target validation below) uses the authoritative descriptor.
   const { length } = effectiveAreaFor(
-    { round: context.state.round, actor: { ...source, maximumHp: source.maxHp } },
+    { round: context.state.round, actor: { ...source, maximumHp: source.baseMaxHp } },
     source.id,
     'freelancer:soul-shot',
     'line',

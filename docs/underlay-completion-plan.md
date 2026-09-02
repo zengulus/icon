@@ -907,7 +907,7 @@ T2: usage reads (U16, T3), status/member counts (domain reads the
 area-size, and typed non-numeric values (positions/refs/colors stay
 typed in the surrounding vocabulary — no number collapse).
 
-**U5-core dependency gate (tranche 22, 2026-09-02) — MET for U3.** The
+**U5-core dependency gate (tranches 22-23, 2026-09-02) — MET for U3.** The
 numeric forms U3 actually requires — constants, stat/resource reads,
 the `input` bucket, `count`/`count-query`, `distance`, min/max/clamp,
 add/multiply/if, and the percent pair — are all represented on the one

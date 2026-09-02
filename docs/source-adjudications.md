@@ -75,25 +75,33 @@ not drift into a second full copy. Add or change fields in
    rule — once per turn — implemented as a per-actor `any-turn` usage mark
    (`dangerousOncePerTurnKey` in `src/rules/automation/kernels/use-ledger.ts`)
    re-opened at each turn start, matching p.89.
-4. **Bloodied and percent-of-maximum-HP thresholds** — the primary HP/Wound
-   rule (p.81) defines bloodied as "at or below 50% your **base maximum hp"**
-   and, in the very next bullet, defines the wound as "temporarily reducing
-   your maximum HP". The terse Special States (p.94, "at or under 50%
-   maximum HP") and Combat Glossary (p.104, "at or under 50% hp") recaps
-   drop the "base" qualifier, which admits the reading that the threshold
-   measures the wound-reduced bar (the engine's long-standing `isBloodied`,
-   canonized by the U5 tranche-22 `percent-max-hp` scalar). Advanced Combat
-   stakes out the same base-maximum policy for percent-of-health
-   costs/damage (p.107: "always considers maximum base hp, and not max hp
-   based on wounds"), and the Harvester's own 25% gate language (p.183/
-   p.186) uses percent-of-health without any wound qualification. The
-   conflict is recorded and the engine adopts the BASE maximum: bloodied is
-   `hp·2 <= baseMaxHp`, the quarter is `hp·4 <= baseMaxHp`, wounds shrink
-   the live bar (heal/vigor caps, the `max-hp` stat read) but never move a
-   threshold. Implemented in `kernels/hp-threshold.ts`, the U6
-   bloodied/quarter predicates, the Rot p.186 gate, and every
-   comeback/self/target-bloodied fold gate (adjudication
-   `icon-1.5:combat:bloodied-base-max`, boundary
+4. **Bloodied and percent-of-maximum-HP thresholds** — this record bundles
+   two logically separate decisions. **Part 1 (conflict-resolved):** the
+   primary HP/Wound rule (p.81) defines bloodied as "at or below 50% your
+   **base maximum hp"** and, in the very next bullet, defines the wound as
+   "temporarily reducing your maximum HP". The terse Special States (p.94,
+   "at or under 50% maximum HP") and Combat Glossary (p.104, "at or under
+   50% hp") recaps drop the "base" qualifier, which admits the reading that
+   the threshold measures the wound-reduced bar (the engine's long-standing
+   `isBloodied`, canonized by the U5 tranche-22 `percent-max-hp` scalar).
+   **Part 2 (derived interpretation, not a second conflict):** the "at 25%
+   hp or lower" family (Rot p.186, the marks/status Regeneration "cure
+   yourself" gate, the Harvester 25% gates, sealer/relic "at or under 25%
+   hp" gates, and the p.86 post-combat healing segment rule) reads the same
+   base bar — derived from p.81's definition that "25% of your maximum HP"
+   equals VIT ("a multiple of your VIT value (25% of your maximum HP)",
+   and the wound bullet filling "25% of your HP (a value equal to your VIT
+   value)"), p.86's base-defined hp-bar segments, and p.107's
+   base-maximum percent-of-health policy ("always considers maximum base
+   hp, and not max hp based on wounds", with "VIT (25% HP) as a quick
+   shorthand"); no passage anywhere measures a percent-of-HP threshold
+   against the wound-reduced bar. The engine adopts the BASE maximum for
+   the whole family: bloodied is `hp·2 <= baseMaxHp`, the quarter is
+   `hp·4 <= baseMaxHp`, wounds shrink the live bar (heal/vigor caps, the
+   `max-hp` stat read) but never move a threshold. Implemented in
+   `kernels/hp-threshold.ts`, the U6 bloodied/quarter predicates, the Rot
+   p.186 gate, and every comeback/self/target-bloodied fold gate
+   (adjudication `icon-1.5:combat:bloodied-base-max`, boundary
    `{ kind: 'hp-threshold-base', baseMaximum: true }`).
 
 ## Tests

@@ -15,6 +15,7 @@ import { recipientBranchEligibility, resolveRecipientBranch } from '../../../pri
 import { footprintIntersectsCells, validateSpatialIntent } from '../../../primitives/spatial-intent.js';
 import { rampartObstructs } from '../../../kernels/encounter-adapter.js';
 import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { vigilanceRushOncePerTurnKey } from '../../../kernels/use-ledger.js';
@@ -468,13 +469,17 @@ const demonClaw: RuleResolver = (context) => {
   // calculation, so p.107's rule applies: "Any ability that costs or damages
   // a certain percent of health always considers maximum BASE hp, and not
   // max hp based on wounds". The denominator (and the missing amount) is
-  // therefore the BASE class maximum — never the wounds-adjusted maximum the
-  // bloodied/quarter STATE thresholds use (hp-threshold kernel) — so a
-  // wound's temporary max reduction counts as missing hp for the bonus. The
-  // flat bonus reads the mastered gate (parent equipped AND mastered through
-  // the shared hasMastery surface) and applies to every 2-damage instance
-  // this ability emits.
-  const baseMaximum = context.encounterState ? context.encounterState.actors[source.id]?.baseMaxHp ?? source.maxHp : source.maxHp;
+  // therefore the BASE class maximum — the SAME bar the p.81 bloodied /
+  // quarter state thresholds read (adjudication icon-1.5:combat:bloodied-
+  // base-max; the tranche-22 "state thresholds are wounds-adjusted"
+  // distinction was retracted) — so a wound's temporary max reduction counts
+  // as missing hp for the bonus. The read FAILS CLOSED
+  // (`value.base-max-missing`) when the view does not project the durable
+  // base maximum: a silent read of the wounds-adjusted `maxHp` would change
+  // the meaning of the percent. The flat bonus reads the mastered gate
+  // (parent equipped AND mastered through the shared hasMastery surface) and
+  // applies to every 2-damage instance this ability emits.
+  const baseMaximum = baseMaximumHp(source);
   const ragingBonus = hasMastery(source, 'demon-slayer:demon-claw')
     ? Math.min(3, Math.floor((baseMaximum - source.hp) / (baseMaximum / 4)))
     : 0;

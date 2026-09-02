@@ -318,7 +318,7 @@ const sturmreitenEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   if (!source.position) return [];
   const { shape, length } = effectiveAreaFor(
-    { round: context.state.round, actor: { ...source, maximumHp: source.maxHp } },
+    { round: context.state.round, actor: { ...source, maximumHp: source.baseMaxHp } },
     source.id,
     'spellblade:sturmreiten',
     'line',

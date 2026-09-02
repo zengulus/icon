@@ -608,6 +608,44 @@ assumption here, document the evidence and update this list before proceeding.
   / diff-check clean; no source-unit promotion. Underlay phase remains
   UNDERLAY COMPLETION. See `docs/u8-u1-underlay-census.md`.
 
+- **U5 tranche 24 — residual audit of tranche 23 (2026-09-02) — DONE.**
+  Adversarial re-review of da3ea90 (the bloodied base-bar repair)
+  verified the repair end-to-end — every bloodied/quarter/25%/
+  percent-cost gate reads the p.81 BASE bar, `percent-max-hp` is fully
+  removed, and the only live-bar `maxHp` reads are heal/vigor caps, the
+  `max-hp` stat, and rescue — and closed three small residuals. (1)
+  FAIL-OPEN REPAIR: the Demon Slayer Raging Demon missing-HP percent
+  read (`demon-slayer-programs.ts`) computed its base maximum as
+  `encounterState ? actors[id]?.baseMaxHp ?? source.maxHp : source.maxHp`
+  — a silent fallback to the wounds-adjusted live bar whenever the
+  authoritative state or the projected base max was absent, the same
+  fail-open class repaired for the teleport mover in tranche 21; its
+  comment also asserted the retracted tranche-22 distinction (state
+  thresholds = wounds-adjusted). Now `baseMaximumHp(source)` FAILS
+  CLOSED (`value.base-max-missing`); the existing wound-divergence
+  fixture pins the base-bar behavior. (2) FOLD-VIEW PROJECTION: the
+  inline `effectiveAreaFor` views in spellblade (Sturmreiten) and
+  freelancer (Soul Shot) projected `maximumHp: source.maxHp` (live bar)
+  into the field tranche 23 defined as the BASE bloodied-gate bar — a
+  latent contract inconsistency (no bloodied-gated area modifier exists
+  on those abilities today); now `source.baseMaxHp`, matching the
+  adapter. (3) ADJUDICATION STRUCTURE: `icon-1.5:combat:bloodied-base-
+  max` bundled two logically different decisions — the genuine
+  p.81-vs-p.94/104 bloodied conflict (part 1, conflict-resolved) and the
+  quarter-family base-bar reading (part 2, DERIVED — no passage
+  qualifies the 25% gates themselves; derived from p.81's "a multiple of
+  your VIT value (25% of your maximum HP)", the wound bullet's VIT =
+  25%-of-HP definition, p.86's base-defined hp-bar segments, and p.107's
+  percent-health base-max policy; no passage anywhere measures a percent
+  gate against the wound-reduced bar). The record now labels both parts
+  and cites the derivation evidence; no new registry category — the
+  registry header documents bundled derived interpretations. U5-core
+  gate STILL MET for U3; **U3 remains the next dependency-complete
+  underlay**. EVIDENCE: 2189 tests; typecheck / architecture /
+  automation / source-fidelity strict / build / diff-check clean; no
+  source-unit promotion. Underlay phase remains UNDERLAY COMPLETION.
+  See `docs/u8-u1-underlay-census.md`.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

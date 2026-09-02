@@ -1631,6 +1631,29 @@ already-executable row's boundary semantics toward the adjudicated
 BASE-max quarter). U5 row stays PARTIAL with the gate-met note; U1/U7
 residuals unchanged.
 
+**Tranche 24 — residual audit of tranche 23 (2026-09-02).** The bloodied
+base-bar repair was verified end-to-end and three residuals closed: (1)
+the Demon Slayer Raging Demon missing-HP percent read no longer falls
+back to the wounds-adjusted bar — `baseMaximumHp(source)` fails closed
+(`value.base-max-missing`) and the `encounterState ? … ??
+source.maxHp : source.maxHp` fallback is removed; (2) the inline
+Sturmreiten / Soul Shot `effectiveAreaFor` fold views now project the
+BASE bar (`maximumHp: source.baseMaxHp`, matching the adapter), closing
+the last producer whose `maximumHp` meant the wounds-adjusted live bar;
+(3) adjudication `icon-1.5:combat:bloodied-base-max` now labels its two
+logical parts — the conflict-resolved bloodied reading (p.81 "base
+maximum hp" vs the unqualified p.94/p.104 recaps) and the DERIVED
+quarter-family reading (the same base bar, derived from p.81's
+VIT = 25%-of-maximum-HP definition, p.86's base-defined hp-bar
+segments, and p.107's percent-health base-max policy) — citing the
+derivation evidence rather than presenting the quarter extension as a
+second passage conflict. Sweep confirms no remaining `maxHp / 2` /
+`/ 4` percent-gate site reads the live bar; the live-bar `maxHp` reads
+remaining are heal/vigor caps, the `max-hp` stat, and rescue. U5-core
+gate STILL MET; **U3 remains the next dependency-complete underlay**
+(the plan's T2 order U7 → U5-core → U3); U9 stays the parallel T4
+candidate.
+
 ## Whole-consumer U1 audit (2026-09-01)
 
 The census's longstanding "whole-consumer audit is NOT yet done" pointer
