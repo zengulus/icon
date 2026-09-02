@@ -310,6 +310,69 @@ describe('U6 (CORE) — predicate extensions', () => {
     expect(evaluatePredicate(predicate, { ...ctx(), attackTargetId: 'near' })).toBe(false); // 1 >= 3
   });
 
+describe('U5 — percent-max-hp (p.94/p.104 wound-state thresholds, distinct from the p.107 BASE-max read)', () => {
+  // The context fixture's hero view defaults to maxHp 10; a dedicated actor
+  // view with a NON-divisible maximum pins the exact-threshold semantics.
+  function woundedContext(hp: number, maxHp: number): RuleExecutionContext {
+    const base = ctx();
+    const actors = { ...base.state.actors, hero: actorView('hero', 'heroes', { x: 4, y: 4 }, { maxHp, hp }) };
+    return { ...base, state: { ...base.state, actors } } as RuleExecutionContext;
+  }
+
+  it('down rounding reproduces the exact state-threshold comparisons (hp·100 <= maxHp·percent)', () => {
+    const quarter = { kind: 'percent-max-hp' as const, target: { kind: 'self' as const }, percent: 25, rounding: 'down' as const };
+    const half = { ...quarter, percent: 50 };
+    // 30-max: 25% = 7.5 → floor 7; a character at 7 IS at the quarter
+    // (7·4 <= 30), at 8 is NOT (8·4 = 32 > 30 — the old over-inclusive ceil).
+    expect(evaluateNumber(quarter, woundedContext(1, 30))).toBe(7);
+    expect(evaluateNumber(half, woundedContext(1, 30))).toBe(15);
+    // Divisible maximum: exactly a quarter is 8 of 32.
+    expect(evaluateNumber(quarter, woundedContext(1, 32))).toBe(8);
+    // Determinism: a pure function of state — identical on re-evaluation.
+    expect(evaluateNumber(quarter, woundedContext(1, 30))).toBe(7);
+  });
+
+  it('up / nearest rounding name their own reads; down is the exact-threshold default', () => {
+    const quarter = { kind: 'percent-max-hp' as const, target: { kind: 'self' as const }, percent: 25, rounding: 'down' as const };
+    expect(evaluateNumber({ ...quarter, rounding: 'up' }, woundedContext(1, 30))).toBe(8); // ceil(7.5)
+    expect(evaluateNumber({ ...quarter, rounding: 'nearest' }, woundedContext(1, 30))).toBe(8); // round(7.5)
+    expect(evaluateNumber({ ...quarter, rounding: 'down' }, woundedContext(1, 31))).toBe(7); // floor(7.75)
+    expect(evaluateNumber({ ...quarter, rounding: 'up' }, woundedContext(1, 31))).toBe(8); // ceil(7.75)
+  });
+
+  it('the U6 bloodied/quarter predicates consume the scalar: exactly at the threshold inside, one above outside', () => {
+    const quarter = { kind: 'quarter' as const, target: { kind: 'self' as const } };
+    const bloodied = { kind: 'bloodied' as const, target: { kind: 'self' as const } };
+    // 30-max quarter: 7 is at 25% (28 <= 30), 8 is one point above.
+    expect(evaluatePredicate(quarter, woundedContext(7, 30))).toBe(true);
+    expect(evaluatePredicate(quarter, woundedContext(8, 30))).toBe(false);
+    // Bloodied at exactly half (15 <= 15), not one above.
+    expect(evaluatePredicate(bloodied, woundedContext(15, 30))).toBe(true);
+    expect(evaluatePredicate(bloodied, woundedContext(16, 30))).toBe(false);
+  });
+
+  it('the value re-reads the CURRENT bar at every evaluation (LIVE), pure of recorded dice', () => {
+    const quarter = { kind: 'percent-max-hp' as const, target: { kind: 'self' as const }, percent: 25, rounding: 'down' as const };
+    const liveActor = actorView('hero', 'heroes', { x: 4, y: 4 }, { maxHp: 30, hp: 0 });
+    const base = ctx();
+    const liveContext = { ...base, state: { ...base.state, actors: { hero: liveActor } } } as RuleExecutionContext;
+    expect(evaluateNumber(quarter, liveContext)).toBe(7);
+    liveActor.maxHp = 32; // the same live view object is re-read, not cached
+    expect(evaluateNumber(quarter, liveContext)).toBe(8);
+    // No RNG exists in the percentage path: the value is byte-stable.
+    expect(evaluateNumber(quarter, liveContext)).toBe(8);
+  });
+
+  it('a malformed target fails closed with the value algebra violation', () => {
+    expect(() => evaluateNumber({
+      kind: 'percent-max-hp',
+      target: { kind: 'bound', name: 'no-such-bound' },
+      percent: 25,
+      rounding: 'down',
+    }, ctx())).toThrow(RuleProgramViolation);
+  });
+});
+
   it('a missing value read inside a predicate fails closed through the value algebra', () => {
     expect(() => evaluatePredicate({
       kind: 'compare',

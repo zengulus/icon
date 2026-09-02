@@ -31,7 +31,7 @@
  * (the `marked` default mark key and the `inside-aura` provenance lookup).
  */
 import type { RuleExecutionContext, RulePredicate } from '../primitives/types.js';
-import { selectActors, evaluateNumber } from './evaluate-value.js';
+import { percentOfMaximum, selectActors, evaluateNumber } from './evaluate-value.js';
 import { auraDefinitionFor, auraRuntimeView, isInAura } from './aura.js';
 import { usageCount, usageKey } from '../primitives/usage.js';
 import { effectExistsLive, type EffectInstanceIdentity } from '../primitives/facts.js';
@@ -56,11 +56,17 @@ export function evaluatePredicate(predicate: RulePredicate, context: RuleExecuti
     // p.94/p.104: bloodied is at or under 50% of the wounds-adjusted maximum
     // (RuleActorView.maxHp is already wounds-adjusted); "at 25% hp or lower"
     // is the exact quarter mark. Both are the canonical HP-threshold
-    // predicates (`kernels/hp-threshold.ts`) evaluated through the shared
-    // `stat max-hp` read — the p.107 "% HEALTH" BASE-max semantics
-    // (`percent-base-max`) deliberately do NOT apply to state thresholds.
-    case 'bloodied': return selectActors(predicate.target, context).every((target) => target.hp <= target.maxHp / 2);
-    case 'quarter': return selectActors(predicate.target, context).every((target) => target.hp <= target.maxHp / 4);
+    // predicates (the same authority `kernels/hp-threshold.ts` answers on the
+    // raw reducer surface) consuming the SINGLE U5 wound-state percentage
+    // scalar (`percentOfMaximum` — the `percent-max-hp` value family) with
+    // `rounding: 'down'`, which reproduces the exact `hp * 100 <= maxHp *
+    // percent` comparison: for integer HP `hp <= maxHp/2` ≡
+    // `hp <= floor(maxHp/2)` and `hp <= maxHp/4` ≡ `hp <= floor(maxHp/4)`,
+    // so a character at exactly the threshold is inside and one point above
+    // is not. The p.107 "% HEALTH" BASE-max semantics (`percent-base-max`)
+    // deliberately do NOT apply to state thresholds.
+    case 'bloodied': return selectActors(predicate.target, context).every((target) => target.hp <= percentOfMaximum(target.maxHp, 50, 'down'));
+    case 'quarter': return selectActors(predicate.target, context).every((target) => target.hp <= percentOfMaximum(target.maxHp, 25, 'down'));
     case 'defeated': return selectActors(predicate.target, context).every((target) => target.defeated);
     case 'in-terrain': return selectActors(predicate.target, context).every((target) => target.position && context.state.terrainAt(target.position).has(predicate.terrain));
     // p.94: a mark is a durable marker the target carries; absent `markId`

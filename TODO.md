@@ -521,6 +521,50 @@ assumption here, document the evidence and update this list before proceeding.
   census byte-stable. Zero source-unit promotion; underlay phase remains
   UNDERLAY COMPLETION. See `docs/u8-u1-underlay-census.md`.
 
+- **U5 tranche 22 — the singular wounds-adjusted HP-percent scalar;
+  U5-core dependency gate MET for U3 (2026-09-02) — DONE.** (a) FRESH
+  U5-CORE AUDIT before editing: the full surface (RuleNumber kinds,
+  `evaluateNumber`/`integer` in `evaluate-value.ts`, count-query/distance
+  composing U3/U7, every inline Math.* site) classified A/B/C — genuine
+  U5-value candidate: the wounds-adjusted HP-percent threshold (identical
+  formulas in the U6 bloodied/quarter predicates + one DIVERGENT
+  `Math.ceil(maxHp/4)` in the Rot p.186 resolver, granting the "25% or
+  lower" state at hp == ceil(max/4) — e.g. 8 of 30 = 26.7% — one point
+  over the exact quarter); compose-don't-own (count-query U3, distance
+  U7, round U8, usage U16, range modifiers U14); specialist (roll dice
+  consume recorded rolls; reducer-side hp-threshold/talent-recipes reads
+  are the raw-surface twin; gamble halves are composable `percent 50
+  floor` + `clamp min 1`, content-local). Timing audit: stat/percent
+  LIVE, input CAPTURED, damage-roll DERIVED FROM RECORDED RESULT, bound
+  via U1. (b) THE LANDING: `{ kind: 'percent-max-hp'; target; percent;
+  rounding }` on RuleNumber + the pure `percentOfMaximum(maxHp, percent,
+  rounding)` in evaluate-value.ts — now the SINGLE formula behind
+  percent-max-hp, percent-base-max, the U6 bloodied(50)/quarter(25)
+  predicate thresholds (`rounding: 'down'` ≡ the exact `hp·100 <=
+  maxHp·percent` comparisons; integer-equal to the old `hp <= max/2` /
+  `hp <= max/4`, verified by the full suite), and the Rot mark read
+  (ceil divergence REPAIRED to the canonical exact quarter; 30-max
+  boundary fixture pins 8-above-false / 7-exactly-true). (c) GATE
+  DECISION: every gate condition for U5-core holds on HEAD (all numeric
+  forms U3 requires represented; U3 consumes evaluateNumber, never its
+  own scalar evaluation; dynamic ranges/counts/thresholds ride U5;
+  pure/side-effect-free; LIVE-vs-CAPTURED explicit; no duplicate core
+  scalar evaluator remains in the VM value domain) so the U5-core
+  DEPENDENCY GATE IS MET — but **full U5 authority is NOT claimed**: the
+  extended typed families (traversed-distance, elevation, area-size,
+  U16 usage reads, typed non-numeric values) and the residual
+  content inline-arithmetic sites remain, each composable, none an
+  independent authority. The two statuses are deliberately distinct. (d)
+  DAG RECALCULATION: with U5-core met, U3's edge (U1✓+U2✓+U5-core✓+U7✓)
+  clears — **U3 is the next dependency-complete underlay** (canonical T2
+  order U7 → U5-core → U3); U9 stays the parallel T4 candidate. EVIDENCE:
+  2183 tests (+6); typecheck / build clean; architecture / automation /
+  source-fidelity strict clean; blocker census + source-fidelity doc
+  byte-stable (the Rot repair changes only an already-executable row's
+  boundary semantics to match the engine's singular quarter authority —
+  no promotion). Underlay phase remains UNDERLAY COMPLETION. See
+  `docs/u8-u1-underlay-census.md`.
+
 
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`

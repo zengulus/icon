@@ -11,6 +11,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { percentOfMaximum } from '../../../kernels/evaluate-value.js';
 import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
@@ -172,12 +173,20 @@ const rotEffects: RuleResolver = (context) => {
   const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Rot requires a character in range 4.');
   if (distance(source.position, target.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Rot requires a character in range 4.');
+  // ICON p.186: "If that character is at 25% hp or lower when marked" — the
+  // canonical exact quarter read (hp·4 <= max, the engine's singular
+  // `isAtOrUnderQuarterHp`/`quarter` authority), computed through the SINGLE
+  // U5 wound-state percent scalar (`percentOfMaximum(…, 25, 'down')` =
+  // floor(max/4)). The former Math.ceil(maxHp/4) granted the state at
+  // hp == ceil(max/4) for non-divisible maxima (e.g. 8 of 30 = 26.7%,
+  // above 25%) — one point over the source's "25% or lower".
+  const atQuarter = target.hp <= percentOfMaximum(target.maxHp, 25, 'down');
   const mutations: RuleMutation[] = [];
   if (target.side === source.side) {
     mutations.push(markMutation(context, target.id, 'rot', { kind: 'ally' }));
-    if (target.hp <= Math.ceil(target.maxHp / 4)) mutations.push(conditionMutation(context, target.id, 'defiance'));
+    if (atQuarter) mutations.push(conditionMutation(context, target.id, 'defiance'));
   } else {
-    mutations.push(markMutation(context, target.id, 'rot', { kind: 'foe', noDefiance: target.hp <= Math.ceil(target.maxHp / 4) }));
+    mutations.push(markMutation(context, target.id, 'rot', { kind: 'foe', noDefiance: atQuarter }));
   }
   return mutations;
 };

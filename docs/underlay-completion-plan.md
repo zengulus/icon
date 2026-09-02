@@ -877,17 +877,47 @@ list: `count-query` over the general U3 domains (actors/entities/
 positions/terrain cells via `evaluateValueQuery`),
 `distance` between arbitrary ENDPOINTS (RuleSelector | U1 reference |
 U7 anchor — always the canonical p.92 footprint metric, an unresolvable
-ref FAILS CLOSED), and `percent-base-max` (ICON p.107 "% HEALTH":
+ref FAILS CLOSED), `percent-base-max` (ICON p.107 "% HEALTH":
 percentage costs/damage use the BASE maximum, never the wounds-adjusted
 bar; the durable base max is now projected onto `RuleActorView`
 `baseMaxHp` by the encounter adapter, and a view without it fails
-closed). The existing core (constant/stat/resource/round/input/count
+closed), and — tranche 22 (2026-09-02) — `percent-max-hp` (percentage of
+the WOUNDS-ADJUSTED state bar, the p.94/p.104 bloodied/quarter maximum;
+`rounding: 'down'` reproduces the exact `hp · 100 <= maxHp · percent`
+integer comparisons). Both percentage scalars fold through the one pure
+`percentOfMaximum(maxHp, percent, rounding)` formula in
+`kernels/evaluate-value.ts`, and the U6 `bloodied`/`quarter` predicate
+thresholds + the Rot p.186 "at 25% hp or lower" mark read now consume
+that single scalar (the Rot site's former `Math.ceil(maxHp / 4)` granted
+the state at hp == ceil(max/4) for non-divisible maxima — e.g. 8 of 30 =
+26.7%, one point over "25% or lower" — repaired to the canonical exact
+quarter). The existing core (constant/stat/resource/round/input/count
 (selector)/distance(actor-to-actor)/die/damage-die/damage-roll/if/
 percent/add/multiply/minimum/maximum/clamp) is unchanged. Missing after
 T2: usage reads (U16, T3), status/member counts (domain reads the
 `count-query` value now expresses), traversed-distance, elevation,
 area-size, and typed non-numeric values (positions/refs/colors stay
 typed in the surrounding vocabulary — no number collapse).
+
+**U5-core dependency gate (tranche 22, 2026-09-02) — MET for U3.** The
+numeric forms U3 actually requires — constants, stat/resource reads,
+the `input` bucket, `count`/`count-query`, `distance`, min/max/clamp,
+add/multiply/if, and the percent pair — are all represented on the one
+`RuleNumber` vocabulary, U3 consumes `evaluateNumber` and never runs its
+own scalar evaluation, dynamic ranges/counts/thresholds are supplied
+through U5, evaluation is pure and side-effect free (dice rides recorded
+rolls; no RNG/choice/query inside the scalars), LIVE-vs-CAPTURED timing
+is explicit (stat/round/percent families re-read live state; `input`
+reads recorded command buckets; `damage-roll` consumes recorded dice),
+and the one remaining duplicate VM-side scalar formula — the wounds-
+adjusted percentage thresholds, previously re-inlined in the U6
+predicates and once more (divergently) in the Rot resolver — is now the
+single `percentOfMaximum` scalar. This makes U5-core DEPENDENCY-COMPLETE
+for U3 (the DAG edge U3 → U5-core clears); U5 as a whole stays PARTIAL —
+full authority still needs the extended typed families (traversed,
+elevation, area-size, U16 usage reads, typed non-numeric values) and the
+residual content inline-arithmetic sites (each composable on the current
+vocabulary, none an independent evaluation authority).
 
 **Locations partially owning/duplicating.** `evaluateNumber`
 (`kernels/runtime.ts`) — MOVED to `kernels/evaluate-value.ts` (2026-08-30),
@@ -906,7 +936,8 @@ U7 (distance anchors), U8 (round/turn), U16 (usage reads). Consumed by U6,
 U14 (value on the recipe), domain authorities (damage, cost, movement).
 
 **Typed vocabulary.** Extended `RuleNumber`: `count(query)`,
-`distance(ref, ref)`, `percent-base-max`, `usage(key, scope)`,
+`distance(ref, ref)`, `percent-base-max`, `percent-max-hp` (tranche 22),
+`usage(key, scope)`,
 `status-count`/`member-count`, `traversed`, `elevation`, `area-size`,
 `value` for typed non-numeric reads. Percent always names its base
 explicitly (BASE max vs wounds-adjusted).
@@ -922,13 +953,20 @@ rejects. Boundary: quarter mark exactly; 0-count; traversal of 0.
 Replay: a damage-roll expression with recipient-scoped bonus dice replays
 byte-identical (existing Finesse fixture extended).
 
-**Consumers to migrate.** Resolver inline arithmetic → typed expressions
-(REMAINS); `hp-threshold.ts` state-threshold reads stay the threshold
-authority (the `stat max-hp` read is the wounds-adjusted bar the
-bloodied/quarter predicates already fold; `percent-base-max` is the
-BASE-max % cost/damage read — the p.107 vs p.94 distinction is now
-TESTED in `t2-expression-algebra.test.ts`); bonus-damage recipient reads
-stay at the ROLL query point but through the value vocabulary.
+**Consumers to migrate.** `bloodied`/`quarter` predicate thresholds —
+DONE (consume the single `percentOfMaximum(…, 50|25, 'down')` scalar,
+behavior-preserving: `hp <= max/2` ≡ `hp <= floor(max/2)` for integer
+HP); Rot p.186 mark threshold — DONE + REPAIRED (`Math.ceil(maxHp/4)`
+was one point over the exact quarter for non-divisible maxima; now the
+canonical exact read, pinned by a 30-max boundary fixture); the BASE-max
+% cost/damage read stays `percent-base-max` (the p.107 vs p.94
+distinction TESTED in `t2-expression-algebra.test.ts`); resolver inline
+arithmetic → typed expressions (REMAINS — each site is composable on the
+represented algebra, none an independent authority); `hp-threshold.ts`
+state-threshold reads stay the REDUCER-side threshold authority (raw
+`{baseMaxHp, wounds, vitality}` surface; documented twin of the
+projected `RuleActorView.maxHp` bar); bonus-damage recipient reads stay
+at the ROLL query point but through the value vocabulary.
 
 **Blocker families enabled (information only).** effect-count,
 status-count-scaling, member-count-scaling, damage-count-scaling,

@@ -126,6 +126,13 @@ export type RuleNumber =
    * wounds-adjusted bar). Fails closed when the view does not project the
    * durable base max. */
   | { kind: 'percent-base-max'; target: RuleSelector; percent: number; rounding: 'up' | 'down' | 'nearest' }
+  /** Percent of the WOUNDS-ADJUSTED maximum HP readability: the p.94/p.104
+   * state bar (`RuleActorView.maxHp` — the wounds-adjusted maximum), DISTINCT
+   * from the p.107 "% HEALTH" BASE-max read (`percent-base-max`). With
+   * `rounding: 'down'` this reproduces the EXACT state-threshold
+   * comparisons (`hp * 100 <= maxHp * percent`), so a character at exactly
+   * the threshold is inside and one point above is not. */
+  | { kind: 'percent-max-hp'; target: RuleSelector; percent: number; rounding: 'up' | 'down' | 'nearest' }
   | { kind: 'die'; sides: number; count?: RuleNumber }
   | { kind: 'damage-die'; actor: RuleSelector; count: RuleNumber }
   | { kind: 'damage-roll'; actor: RuleSelector; dice: RuleNumber; bonusDice?: RuleNumber; flat?: RuleNumber }

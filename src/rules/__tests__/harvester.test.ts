@@ -248,6 +248,27 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Rot: the 25%-or-lower mark uses the canonical exact quarter read (hp·4 <= max), never ceil (p.186)', () => {
+    // Non-divisible maximum: 30-max ⇒ 25% = 7.5 ⇒ exact quarter is hp 7
+    // (7·4 = 28 ≤ 30). hp 8 is 26.7% — above 25% — so NO noDefiance here,
+    // even though the old Math.ceil(maxHp/4) formula granted it at 8.
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    state.actors[foe.id].baseMaxHp = 30; // wounds 0 → maxHp 30
+    state.actors[foe.id].hp = 8;
+    const above = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:rot', targetIds: [foe.id] }, scriptedDice());
+    const mark = above.state.actors[foe.id].marks.find(({ markId }) => markId === 'rot');
+    expect(mark?.state.noDefiance).toBe(false); // 8 of 30 is above 25%
+    expect(applyEvents(state, above.events)).toEqual(above.state);
+
+    // Exactly at the quarter (7·4 = 28 ≤ 30): the noDefiance state records.
+    const at = harvesterEncounter({ second: null });
+    at.state.actors[at.foe.id].baseMaxHp = 30;
+    at.state.actors[at.foe.id].hp = 7;
+    const atQuarter = executeCommand(at.state, { type: 'USE_ABILITY', actorId: at.hero.id, abilityId: 'harvester:rot', targetIds: [at.foe.id] }, scriptedDice());
+    expect(atQuarter.state.actors[at.foe.id].marks.find(({ markId }) => markId === 'rot')?.state.noDefiance).toBe(true);
+    expect(applyEvents(at.state, atQuarter.events)).toEqual(atQuarter.state);
+  });
+
   it('Rot: a noDefiance foe-mark suppresses Defiance while the mark is active (p.186)', () => {
     const { state, hero, foe } = harvesterEncounter({ second: null });
     // Marking a foe at 25% of Relict's 32 HP (8) records noDefiance; the

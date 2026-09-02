@@ -267,8 +267,17 @@ export function evaluateNumber(expression: RuleNumber, context: RuleExecutionCon
       if (typeof target.baseMaxHp !== 'number' || !Number.isFinite(target.baseMaxHp)) {
         throw new RuleProgramViolation('value.base-max-missing', `The actor view does not project the base maximum HP (percent-base-max).`);
       }
-      const value = target.baseMaxHp * expression.percent / 100;
-      return expression.rounding === 'up' ? Math.ceil(value) : expression.rounding === 'down' ? Math.floor(value) : Math.round(value);
+      return percentOfMaximum(target.baseMaxHp, expression.percent, expression.rounding);
+    }
+    case 'percent-max-hp': {
+      // Percent of the WOUNDS-ADJUSTED state bar (ICON p.94/p.104
+      // bloodied/quarter thresholds): `RuleActorView.maxHp` is the
+      // wounds-adjusted maximum, the SAME bar the U6 bloodied/quarter
+      // predicates and the (reducer-side) hp-threshold authority read — the
+      // p.107 "% HEALTH" BASE-max semantics deliberately do not apply to
+      // state thresholds. `rounding: 'down'` reproduces the exact integer
+      // comparisons (`hp * 100 <= maxHp * percent`).
+      return percentOfMaximum(oneActor(expression.target, context).maxHp, expression.percent, expression.rounding);
     }
     case 'add': return expression.values.reduce((total, value) => total + evaluateNumber(value, context), 0);
     case 'multiply': return expression.values.reduce((total, value) => total * evaluateNumber(value, context), 1);
@@ -285,4 +294,24 @@ export function evaluateNumber(expression: RuleNumber, context: RuleExecutionCon
 
 export function integer(expression: RuleNumber, context: RuleExecutionContext) {
   return Math.max(0, Math.floor(evaluateNumber(expression, context)));
+}
+
+/** The pure U5 wound-state percentage scalar: `percent`% of `maxHp` (the
+ * p.94/p.104 WOUNDS-ADJUSTED bar — consume `RuleActorView.maxHp` or the
+ * adapter/reducer projection of it), rounded as declared. `'down'` (floor)
+ * reproduces the EXACT integer threshold comparisons (`hp * 100 <= maxHp *
+ * percent`): for integer HP, `hp <= maxHp * percent / 100` is equivalent to
+ * `hp <= floor(maxHp * percent / 100)`, so a character at exactly the
+ * threshold is inside and one point above is not. This is the SINGLE
+ * scalar formula behind `percent-max-hp` values, the U6 bloodied/quarter
+ * predicate threshold reads, and the state-threshold content reads — the
+ * p.107 "% HEALTH" BASE-max formula is the distinct `percent-base-max`
+ * kind. Pure and deterministic: no state, no RNG, no choice.
+ *
+ * `maxHp` is expected to be the durable projected wounds-adjusted maximum
+ * (≥ 1 by the projection contract); `percent` is the source-declared
+ * percent (0–100). */
+export function percentOfMaximum(maxHp: number, percent: number, rounding: 'up' | 'down' | 'nearest'): number {
+  const value = maxHp * percent / 100;
+  return rounding === 'up' ? Math.ceil(value) : rounding === 'down' ? Math.floor(value) : Math.round(value);
 }
