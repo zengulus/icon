@@ -310,62 +310,88 @@ describe('U6 (CORE) — predicate extensions', () => {
     expect(evaluatePredicate(predicate, { ...ctx(), attackTargetId: 'near' })).toBe(false); // 1 >= 3
   });
 
-describe('U5 — percent-max-hp (p.94/p.104 wound-state thresholds, distinct from the p.107 BASE-max read)', () => {
-  // The context fixture's hero view defaults to maxHp 10; a dedicated actor
-  // view with a NON-divisible maximum pins the exact-threshold semantics.
-  function woundedContext(hp: number, maxHp: number): RuleExecutionContext {
+describe('U5 — percent-of-BASE-maximum (p.81 bloodied/quarter thresholds; p.107 "% HEALTH" costs/damage)', () => {
+  // A dedicated actor view with a NON-divisible BASE maximum pins the
+  // exact-threshold semantics; a wounded live bar proves wounds never move
+  // the threshold (adjudication icon-1.5:combat:bloodied-base-max).
+  function baseContext(hp: number, baseMaxHp: number, maxHp: number = baseMaxHp): RuleExecutionContext {
     const base = ctx();
-    const actors = { ...base.state.actors, hero: actorView('hero', 'heroes', { x: 4, y: 4 }, { maxHp, hp }) };
+    const actors = { ...base.state.actors, hero: actorView('hero', 'heroes', { x: 4, y: 4 }, { maxHp, baseMaxHp, hp }) };
     return { ...base, state: { ...base.state, actors } } as RuleExecutionContext;
   }
 
-  it('down rounding reproduces the exact state-threshold comparisons (hp·100 <= maxHp·percent)', () => {
-    const quarter = { kind: 'percent-max-hp' as const, target: { kind: 'self' as const }, percent: 25, rounding: 'down' as const };
+  it('down rounding reproduces the exact state-threshold comparisons (hp·100 <= baseMaxHp·percent)', () => {
+    const quarter = { kind: 'percent-base-max' as const, target: { kind: 'self' as const }, percent: 25, rounding: 'down' as const };
     const half = { ...quarter, percent: 50 };
-    // 30-max: 25% = 7.5 → floor 7; a character at 7 IS at the quarter
+    // 30 base-max: 25% = 7.5 → floor 7; a character at 7 IS at the quarter
     // (7·4 <= 30), at 8 is NOT (8·4 = 32 > 30 — the old over-inclusive ceil).
-    expect(evaluateNumber(quarter, woundedContext(1, 30))).toBe(7);
-    expect(evaluateNumber(half, woundedContext(1, 30))).toBe(15);
+    expect(evaluateNumber(quarter, baseContext(1, 30))).toBe(7);
+    expect(evaluateNumber(half, baseContext(1, 30))).toBe(15);
     // Divisible maximum: exactly a quarter is 8 of 32.
-    expect(evaluateNumber(quarter, woundedContext(1, 32))).toBe(8);
+    expect(evaluateNumber(quarter, baseContext(1, 32))).toBe(8);
     // Determinism: a pure function of state — identical on re-evaluation.
-    expect(evaluateNumber(quarter, woundedContext(1, 30))).toBe(7);
+    expect(evaluateNumber(quarter, baseContext(1, 30))).toBe(7);
   });
 
   it('up / nearest rounding name their own reads; down is the exact-threshold default', () => {
-    const quarter = { kind: 'percent-max-hp' as const, target: { kind: 'self' as const }, percent: 25, rounding: 'down' as const };
-    expect(evaluateNumber({ ...quarter, rounding: 'up' }, woundedContext(1, 30))).toBe(8); // ceil(7.5)
-    expect(evaluateNumber({ ...quarter, rounding: 'nearest' }, woundedContext(1, 30))).toBe(8); // round(7.5)
-    expect(evaluateNumber({ ...quarter, rounding: 'down' }, woundedContext(1, 31))).toBe(7); // floor(7.75)
-    expect(evaluateNumber({ ...quarter, rounding: 'up' }, woundedContext(1, 31))).toBe(8); // ceil(7.75)
+    const quarter = { kind: 'percent-base-max' as const, target: { kind: 'self' as const }, percent: 25, rounding: 'down' as const };
+    expect(evaluateNumber({ ...quarter, rounding: 'up' }, baseContext(1, 30))).toBe(8); // ceil(7.5)
+    expect(evaluateNumber({ ...quarter, rounding: 'nearest' }, baseContext(1, 30))).toBe(8); // round(7.5)
+    expect(evaluateNumber({ ...quarter, rounding: 'down' }, baseContext(1, 31))).toBe(7); // floor(7.75)
+    expect(evaluateNumber({ ...quarter, rounding: 'up' }, baseContext(1, 31))).toBe(8); // ceil(7.75)
   });
 
-  it('the U6 bloodied/quarter predicates consume the scalar: exactly at the threshold inside, one above outside', () => {
+  it('the U6 bloodied/quarter predicates consume the base-bar scalar: exactly at the threshold inside, one above outside', () => {
     const quarter = { kind: 'quarter' as const, target: { kind: 'self' as const } };
     const bloodied = { kind: 'bloodied' as const, target: { kind: 'self' as const } };
-    // 30-max quarter: 7 is at 25% (28 <= 30), 8 is one point above.
-    expect(evaluatePredicate(quarter, woundedContext(7, 30))).toBe(true);
-    expect(evaluatePredicate(quarter, woundedContext(8, 30))).toBe(false);
+    // 30 base-max quarter: 7 is at 25% (28 <= 30), 8 is one point above.
+    expect(evaluatePredicate(quarter, baseContext(7, 30))).toBe(true);
+    expect(evaluatePredicate(quarter, baseContext(8, 30))).toBe(false);
     // Bloodied at exactly half (15 <= 15), not one above.
-    expect(evaluatePredicate(bloodied, woundedContext(15, 30))).toBe(true);
-    expect(evaluatePredicate(bloodied, woundedContext(16, 30))).toBe(false);
+    expect(evaluatePredicate(bloodied, baseContext(15, 30))).toBe(true);
+    expect(evaluatePredicate(bloodied, baseContext(16, 30))).toBe(false);
   });
 
-  it('the value re-reads the CURRENT bar at every evaluation (LIVE), pure of recorded dice', () => {
-    const quarter = { kind: 'percent-max-hp' as const, target: { kind: 'self' as const }, percent: 25, rounding: 'down' as const };
-    const liveActor = actorView('hero', 'heroes', { x: 4, y: 4 }, { maxHp: 30, hp: 0 });
+  it('wounds never move the threshold: base 40 with a wound (live max 30) still thresholds at base/2 = 20 (p.81)', () => {
+    const bloodied = { kind: 'bloodied' as const, target: { kind: 'self' as const } };
+    const quarter = { kind: 'quarter' as const, target: { kind: 'self' as const } };
+    // baseMaxHp 40, one wound (vitality 10) → live maxHp 30. The p.81 base
+    // bar thresholds at 20 / 10; a wounds-adjusted reading (half of 30 = 15,
+    // quarter of 30 = 7) would reject 20 and 10 — the rejected reading.
+    expect(evaluatePredicate(bloodied, baseContext(20, 40, 30))).toBe(true);
+    expect(evaluatePredicate(bloodied, baseContext(21, 40, 30))).toBe(false);
+    expect(evaluatePredicate(bloodied, baseContext(19, 40, 30))).toBe(true);
+    expect(evaluatePredicate(quarter, baseContext(10, 40, 30))).toBe(true);
+    expect(evaluatePredicate(quarter, baseContext(11, 40, 30))).toBe(false);
+    // The scalar read itself is the base bar regardless of the live max.
+    const half = { kind: 'percent-base-max' as const, target: { kind: 'self' as const }, percent: 50, rounding: 'down' as const };
+    expect(evaluateNumber(half, baseContext(1, 40, 30))).toBe(20);
+  });
+
+  it('the value re-reads the CURRENT base bar at every evaluation (LIVE), pure of recorded dice', () => {
+    const half = { kind: 'percent-base-max' as const, target: { kind: 'self' as const }, percent: 50, rounding: 'down' as const };
+    const liveActor = actorView('hero', 'heroes', { x: 4, y: 4 }, { maxHp: 30, baseMaxHp: 30, hp: 0 });
     const base = ctx();
     const liveContext = { ...base, state: { ...base.state, actors: { hero: liveActor } } } as RuleExecutionContext;
-    expect(evaluateNumber(quarter, liveContext)).toBe(7);
-    liveActor.maxHp = 32; // the same live view object is re-read, not cached
-    expect(evaluateNumber(quarter, liveContext)).toBe(8);
+    expect(evaluateNumber(half, liveContext)).toBe(15);
+    liveActor.baseMaxHp = 32; // the same live view object is re-read, not cached
+    expect(evaluateNumber(half, liveContext)).toBe(16);
     // No RNG exists in the percentage path: the value is byte-stable.
-    expect(evaluateNumber(quarter, liveContext)).toBe(8);
+    expect(evaluateNumber(half, liveContext)).toBe(16);
+  });
+
+  it('the predicates fail closed when the view does not project the base maximum', () => {
+    // The default actorView carries no baseMaxHp — a silent wounds-adjusted
+    // read would change the meaning of the threshold, so it must reject.
+    expect(() => evaluatePredicate({ kind: 'bloodied', target: { kind: 'self' } }, ctx()))
+      .toThrowError(expect.objectContaining({ code: 'value.base-max-missing' }));
+    expect(() => evaluatePredicate({ kind: 'quarter', target: { kind: 'self' } }, ctx()))
+      .toThrowError(expect.objectContaining({ code: 'value.base-max-missing' }));
   });
 
   it('a malformed target fails closed with the value algebra violation', () => {
     expect(() => evaluateNumber({
-      kind: 'percent-max-hp',
+      kind: 'percent-base-max',
       target: { kind: 'bound', name: 'no-such-bound' },
       percent: 25,
       rounding: 'down',

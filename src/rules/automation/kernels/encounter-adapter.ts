@@ -122,7 +122,11 @@ export function rangeStateView(state: EncounterState, selectedTalentSourceIds?: 
       position: actor.onBattlefield ? actor.position : null,
       size: actor.size,
       hp: actor.hp,
-      maximumHp: Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality),
+      // The fold views' `maximumHp` is the BLOODIED-GATE BAR — the BASE
+      // maximum (p.81; adjudication icon-1.5:combat:bloodied-base-max).
+      // Wounds shrink the live max (heal/vigor caps read the reducer actor
+      // directly) but never this threshold bar.
+      maximumHp: actor.baseMaxHp,
       abilityIds: actor.abilityIds,
       masteredAbilityIds: actor.masteredAbilityIds,
       talents: actor.talents,
@@ -147,7 +151,9 @@ export function areaStateView(state: EncounterState, actorId: string): AreaState
     round: state.round,
     actor: {
       hp: actor?.hp,
-      maximumHp: actor ? Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) : undefined,
+      // The BASE maximum — the bloodied-gate bar (p.81; adjudication
+      // icon-1.5:combat:bloodied-base-max).
+      maximumHp: actor?.baseMaxHp,
       abilityIds: actor?.abilityIds,
       masteredAbilityIds: actor?.masteredAbilityIds,
       talents: actor?.talents,
@@ -162,7 +168,9 @@ export function masteryFoldStateView(state: EncounterState): MasteryFoldStateVie
   const actors: MasteryFoldStateView['actors'] = Object.fromEntries(
     Object.values(state.actors).map((actor): [string, MasteryFoldActorView] => [actor.id, {
       hp: actor.hp,
-      maximumHp: Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality),
+      // The BASE maximum — the bloodied-gate bar (p.81; adjudication
+      // icon-1.5:combat:bloodied-base-max).
+      maximumHp: actor.baseMaxHp,
       abilityIds: actor.abilityIds,
       masteredAbilityIds: actor.masteredAbilityIds,
     }]),
@@ -479,11 +487,13 @@ function guardArmorBonus(state: EncounterState, target: EncounterActor): number 
   return armorBonusSources.reduce((total, source) => total + source.bonus(state, target), 0);
 }
 
-/** ICON p.94 Bloodied: at or below 50% of the wounds-adjusted maximum. The
- * canonical predicate lives in the HP-threshold kernel (`kernels/
- * hp-threshold.ts`), the single reusable authority for bloodied and 25%
- * threshold questions; re-exported here so every existing caller keeps the
- * same name and the engine never defines the boundary twice. */
+/** ICON p.81 Bloodied: at or below 50% of the BASE maximum (the p.94/p.104
+ * recaps drop the "base" qualifier; adjudication
+ * icon-1.5:combat:bloodied-base-max records the conflict and the adopted
+ * reading). The canonical predicate lives in the HP-threshold kernel
+ * (`kernels/hp-threshold.ts`), the single reusable authority for bloodied
+ * and 25% threshold questions; re-exported here so every existing caller
+ * keeps the same name and the engine never defines the boundary twice. */
 export { isBloodied } from './hp-threshold.js';
 
 /**
@@ -1487,8 +1497,10 @@ export function applyRuleMutation(state: EncounterState, mutation: RuleMutation,
       // and wounded-max-HP vigor calculation.  Shattered independently bars
       // vigor (p.104), but its normal-status save still follows this mutation.
       if (actor && !actor.defeated && !encounterStatusSavePolicy(state, actor).cureDenied) {
-        const maximumHp = Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality);
-        gainVigor(state, actor, actor.hp <= maximumHp / 2 ? actor.vitality : 4);
+        // The bloodied side of Cure's "+4 vigor, or a vigor surge while
+        // bloodied" reads the p.81 BASE bar (adjudication
+        // icon-1.5:combat:bloodied-base-max) — never the wounds-adjusted max.
+        gainVigor(state, actor, actor.hp <= actor.baseMaxHp / 2 ? actor.vitality : 4);
       }
       break;
     }

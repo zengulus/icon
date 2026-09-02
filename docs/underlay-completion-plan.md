@@ -881,18 +881,26 @@ ref FAILS CLOSED), `percent-base-max` (ICON p.107 "% HEALTH":
 percentage costs/damage use the BASE maximum, never the wounds-adjusted
 bar; the durable base max is now projected onto `RuleActorView`
 `baseMaxHp` by the encounter adapter, and a view without it fails
-closed), and — tranche 22 (2026-09-02) — `percent-max-hp` (percentage of
-the WOUNDS-ADJUSTED state bar, the p.94/p.104 bloodied/quarter maximum;
-`rounding: 'down'` reproduces the exact `hp · 100 <= maxHp · percent`
-integer comparisons). Both percentage scalars fold through the one pure
-`percentOfMaximum(maxHp, percent, rounding)` formula in
-`kernels/evaluate-value.ts`, and the U6 `bloodied`/`quarter` predicate
-thresholds + the Rot p.186 "at 25% hp or lower" mark read now consume
-that single scalar (the Rot site's former `Math.ceil(maxHp / 4)` granted
-the state at hp == ceil(max/4) for non-divisible maxima — e.g. 8 of 30 =
-26.7%, one point over "25% or lower" — repaired to the canonical exact
-quarter). The existing core (constant/stat/resource/round/input/count
-(selector)/distance(actor-to-actor)/die/damage-die/damage-roll/if/
+closed). Tranche 22 (2026-09-02) briefly landed a second kind,
+`percent-max-hp` (percent of the WOUNDS-ADJUSTED state bar) — RETRACTED
+by tranche 23 (2026-09-02) under the recorded adjudication
+`icon-1.5:combat:bloodied-base-max`: the primary HP/Wound rule (p.81)
+defines bloodied as "at or below 50% your **base maximum hp**" and
+immediately defines wounds as "temporarily reducing your maximum HP", so
+percent-of-maximum-HP thresholds (bloodied/quarter, Rot p.186 "at 25%
+hp or lower") measure the BASE bar exactly like p.107 "% HEALTH"
+costs/damage — the wounds-adjusted `percent-max-hp` kind had no
+source-backed consumer and was removed. The ONE pure scalar is now
+`percentOfMaximum(baseMaximum, percent, rounding)` in
+`kernels/evaluate-value.ts` behind `percent-base-max`, the U6
+`bloodied`/`quarter` predicate thresholds (`rounding: 'down'` reproduces
+the exact `hp · 100 <= baseMaxHp · percent` comparisons), and the Rot
+p.186 mark read. The Rot site's former `Math.ceil(maxHp / 4)` was
+repaired TWICE over the two tranches — the ceil over-inclusiveness (8 of
+30 = 26.7% is one point over "25% or lower") AND the bar itself
+(wounds-adjusted max instead of base). The existing core
+(constant/stat/resource/round/input/count(selector)/
+distance(actor-to-actor)/die/damage-die/damage-roll/if/
 percent/add/multiply/minimum/maximum/clamp) is unchanged. Missing after
 T2: usage reads (U16, T3), status/member counts (domain reads the
 `count-query` value now expresses), traversed-distance, elevation,
@@ -909,21 +917,25 @@ through U5, evaluation is pure and side-effect free (dice rides recorded
 rolls; no RNG/choice/query inside the scalars), LIVE-vs-CAPTURED timing
 is explicit (stat/round/percent families re-read live state; `input`
 reads recorded command buckets; `damage-roll` consumes recorded dice),
-and the one remaining duplicate VM-side scalar formula — the wounds-
-adjusted percentage thresholds, previously re-inlined in the U6
-predicates and once more (divergently) in the Rot resolver — is now the
-single `percentOfMaximum` scalar. This makes U5-core DEPENDENCY-COMPLETE
-for U3 (the DAG edge U3 → U5-core clears); U5 as a whole stays PARTIAL —
-full authority still needs the extended typed families (traversed,
-elevation, area-size, U16 usage reads, typed non-numeric values) and the
-residual content inline-arithmetic sites (each composable on the current
-vocabulary, none an independent evaluation authority).
+and the duplicate percentage-threshold formula sites (previously
+re-inlined in the U6 predicates and once more — divergently — in the
+Rot resolver) now fold through the single `percentOfMaximum` BASE-bar
+scalar under the adopted bloodied adjudication
+(`icon-1.5:combat:bloodied-base-max`); the wounds-adjusted bar remains
+exclusively the live `maxHp` projection (heal/vigor caps, the `max-hp`
+stat read) and no percent read uses it. This makes U5-core
+DEPENDENCY-COMPLETE for U3 (the DAG edge U3 → U5-core clears); U5 as a
+whole stays PARTIAL — full authority still needs the extended typed
+families (traversed, elevation, area-size, U16 usage reads, typed
+non-numeric values) and the residual content inline-arithmetic sites
+(each composable on the current vocabulary, none an independent
+evaluation authority).
 
 **Locations partially owning/duplicating.** `evaluateNumber`
 (`kernels/runtime.ts`) — MOVED to `kernels/evaluate-value.ts` (2026-08-30),
 runtime re-exports; `hp-threshold.ts` (bloodied/quarter state-threshold
-reads — the p.94/p.104 wounds-adjusted bar, distinct from the p.107 BASE
-max the `percent-base-max` value reads); `kernels/bonus-damage.ts`
+reads — the BASE bar per p.81/adjudication `icon-1.5:combat:bloodied-
+base-max`, the same bar `percent-base-max` reads); `kernels/bonus-damage.ts`
 (roll/recipient reads stay at the ROLL query point but through the value
 vocabulary); inline per-resolver arithmetic (e.g. `integer()` callers,
 gamble sums in `content/jobs/programs/*`); `RuleNumber` type
@@ -936,11 +948,14 @@ U7 (distance anchors), U8 (round/turn), U16 (usage reads). Consumed by U6,
 U14 (value on the recipe), domain authorities (damage, cost, movement).
 
 **Typed vocabulary.** Extended `RuleNumber`: `count(query)`,
-`distance(ref, ref)`, `percent-base-max`, `percent-max-hp` (tranche 22),
+`distance(ref, ref)`, `percent-base-max`,
 `usage(key, scope)`,
 `status-count`/`member-count`, `traversed`, `elevation`, `area-size`,
-`value` for typed non-numeric reads. Percent always names its base
-explicitly (BASE max vs wounds-adjusted).
+`value` for typed non-numeric reads. Every percent-of-maximum-HP read
+uses the BASE maximum (p.81 thresholds + p.107 costs/damage — the
+wounds-adjusted `percent-max-hp` kind was retracted by tranche 23 under
+adjudication `icon-1.5:combat:bloodied-base-max`); the wounds-adjusted
+bar exists only as the live `maxHp` projection.
 
 **Replay semantics.** Expression evaluation is a pure function of state +
 recorded input + recorded dice results; no second RNG path; percent-base
@@ -954,19 +969,25 @@ Replay: a damage-roll expression with recipient-scoped bonus dice replays
 byte-identical (existing Finesse fixture extended).
 
 **Consumers to migrate.** `bloodied`/`quarter` predicate thresholds —
-DONE (consume the single `percentOfMaximum(…, 50|25, 'down')` scalar,
-behavior-preserving: `hp <= max/2` ≡ `hp <= floor(max/2)` for integer
-HP); Rot p.186 mark threshold — DONE + REPAIRED (`Math.ceil(maxHp/4)`
-was one point over the exact quarter for non-divisible maxima; now the
-canonical exact read, pinned by a 30-max boundary fixture); the BASE-max
-% cost/damage read stays `percent-base-max` (the p.107 vs p.94
-distinction TESTED in `t2-expression-algebra.test.ts`); resolver inline
-arithmetic → typed expressions (REMAINS — each site is composable on the
-represented algebra, none an independent authority); `hp-threshold.ts`
-state-threshold reads stay the REDUCER-side threshold authority (raw
-`{baseMaxHp, wounds, vitality}` surface; documented twin of the
-projected `RuleActorView.maxHp` bar); bonus-damage recipient reads stay
-at the ROLL query point but through the value vocabulary.
+DONE (consume the single `percentOfMaximum(baseMaxHp, 50|25, 'down')`
+scalar against the BASE maximum — the p.81 bar, adjudication
+`icon-1.5:combat:bloodied-base-max`; a view without `baseMaxHp` fails
+closed with `value.base-max-missing`); Rot p.186 mark threshold — DONE +
+REPAIRED twice (`Math.ceil(maxHp/4)` was one point over the exact
+quarter for non-divisible maxima, AND the bar was the wounds-adjusted
+max rather than the base; both pinned by the 30-max boundary fixture +
+a wound-divergence fixture: base 30 + one wound → hp 7 still drops
+defiance); the BASE-max % cost/damage read stays `percent-base-max` (the
+SAME base bar the thresholds now use — the p.81/p.107 agreement is
+TESTED in `t2-expression-algebra.test.ts`); the fold bloodied gates
+(comeback/self-bloodied/target-bloodied in `modifiers.ts`, the
+range/area/mastery/bonus-damage fold views' `maximumHp` projections)
+all read the BASE bar; resolver inline arithmetic → typed expressions
+(REMAINS — each site is composable on the represented algebra, none an
+independent authority); `hp-threshold.ts` state-threshold reads stay the
+REDUCER-side threshold authority (raw `{hp, baseMaxHp}` surface;
+documented twin of the projected predicate bar); bonus-damage recipient
+reads stay at the ROLL query point but through the value vocabulary.
 
 **Blocker families enabled (information only).** effect-count,
 status-count-scaling, member-count-scaling, damage-count-scaling,

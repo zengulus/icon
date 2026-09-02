@@ -39,7 +39,7 @@ const damageMutations = (mutations: RuleMutation[]): DamageMutation[] =>
  */
 
 const actor = (id: string, side: 'heroes' | 'foes', traitIds: string[], x: number, extra: Record<string, unknown> = {}): RuleActorView => ({
-  id, side, position: { x, y: 0 }, hp: 20, maxHp: 40, vitality: 10, vigor: 0,
+  id, side, position: { x, y: 0 }, hp: 20, maxHp: 40, baseMaxHp: 40, vitality: 10, vigor: 0,
   defense: 6, armor: 0, speed: 4, dash: 2, fray: 4, damageDie: 6, actions: 2, attacked: false,
   size: 1, defeated: false, conditions: new Set<string>(), statuses: [],
   statusSavePolicy: { cureDenied: false, statusSaveDenied: false, saveBoon: 0, saveCurse: 0 },

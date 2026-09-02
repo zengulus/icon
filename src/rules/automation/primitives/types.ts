@@ -121,18 +121,13 @@ export type RuleNumber =
    * typed U1 reference (actor/entity/position), or a U7 SpatialAnchor.
    * Always the canonical p.92 footprint metric. */
   | { kind: 'distance'; from: DistanceEndpoint; to: DistanceEndpoint }
-  /** Percent of the target's BASE maximum HP (ICON p.107 "% HEALTH":
-   * percentage costs/damage use the BASE maximum — never the
-   * wounds-adjusted bar). Fails closed when the view does not project the
-   * durable base max. */
+  /** Percent of the target's BASE maximum HP — the ONE percent-of-maximum
+   * read: ICON p.107 "% HEALTH" (percentage costs/damage) AND the p.81
+   * bloodied/quarter state thresholds (adjudication
+   * `icon-1.5:combat:bloodied-base-max`) both use the base maximum, never
+   * the wounds-adjusted bar. Fails closed when the view does not project
+   * the durable base max. */
   | { kind: 'percent-base-max'; target: RuleSelector; percent: number; rounding: 'up' | 'down' | 'nearest' }
-  /** Percent of the WOUNDS-ADJUSTED maximum HP readability: the p.94/p.104
-   * state bar (`RuleActorView.maxHp` — the wounds-adjusted maximum), DISTINCT
-   * from the p.107 "% HEALTH" BASE-max read (`percent-base-max`). With
-   * `rounding: 'down'` this reproduces the EXACT state-threshold
-   * comparisons (`hp * 100 <= maxHp * percent`), so a character at exactly
-   * the threshold is inside and one point above is not. */
-  | { kind: 'percent-max-hp'; target: RuleSelector; percent: number; rounding: 'up' | 'down' | 'nearest' }
   | { kind: 'die'; sides: number; count?: RuleNumber }
   | { kind: 'damage-die'; actor: RuleSelector; count: RuleNumber }
   | { kind: 'damage-roll'; actor: RuleSelector; dice: RuleNumber; bonusDice?: RuleNumber; flat?: RuleNumber }
@@ -325,12 +320,18 @@ export interface RuleActorView {
   side: 'heroes' | 'foes';
   position: Position | null;
   hp: number;
-  /** The wounds-adjusted maximum (base minus wounds×vitality) — the bar
-   * HP thresholds (bloodied/quarter) are measured against. */
+  /** The wounds-adjusted CURRENT maximum (base minus wounds×vitality,
+   * p.81 wound rule) — caps healing/vigor and is the live "maximum HP"
+   * read. It is NOT the bar percent-of-maximum-HP thresholds measure:
+   * bloodied/quarter (p.81) and % costs/damage (p.107) use `baseMaxHp`
+   * (adjudication `icon-1.5:combat:bloodied-base-max`). */
   maxHp: number;
-  /** The durable BASE maximum (p.107 "% HEALTH": percentage costs/damage
-   * use the BASE maximum, never the wounds-adjusted bar). Optional: views
-   * that do not project it fail closed on `percent-base-max` reads. */
+  /** The durable BASE maximum (4×VIT, the un-wounded bar) — the bar every
+   * percent-of-maximum-HP read uses: p.81 bloodied/quarter state
+   * thresholds and p.107 "% HEALTH" costs/damage. Optional: views that do
+   * not project it fail closed on `percent-base-max` reads and the
+   * bloodied/quarter predicates rather than silently reading the
+   * wounds-adjusted bar. */
   baseMaxHp?: number;
   vitality: number;
   vigor: number;

@@ -42,13 +42,14 @@ export interface TraitModifierOwner {
 }
 
 /** The minimal target read surface for target-threshold and distance-gated
- * modifiers: the target's HP vs its wounds-adjusted maximum, plus the
- * canonical source→target distance (computed by the caller through the
- * shared range kernel, so the fold and the targeting gates agree on the same
- * metric). */
+ * modifiers: the target's HP vs its BASE maximum (p.81 bloodied bar — the
+ * caller passes `baseMaxHp`, never the wounds-adjusted live max;
+ * adjudication icon-1.5:combat:bloodied-base-max), plus the canonical
+ * source→target distance (computed by the caller through the shared range
+ * kernel, so the fold and the targeting gates agree on the same metric). */
 export interface AttackModifierTarget {
   hp: number;
-  maxHp: number;
+  baseMaxHp: number;
   distance?: number;
 }
 
@@ -89,7 +90,8 @@ export interface AttackModifierRule {
   elevationForceExceed?: boolean;
   /** Flat bonus damage on attacks against a bloodied target (Blood Hunger:
    * "+2 damage with all abilities against bloodied foes"). The gate is the
-   * shared bloodied predicate (at or under 50% of the target's maximum). */
+   * shared bloodied predicate (at or under 50% of the target's BASE
+   * maximum — p.81, adjudication icon-1.5:combat:bloodied-base-max). */
   targetBloodiedBonusDamage?: number;
   /** Exact-distance gate: the rule applies only when the target is at exactly
    * this range from the source (Trigrammaton: "against foes at exactly range
@@ -133,7 +135,7 @@ export function traitAttackModifier(owner: TraitModifierOwner, elevationDiff: nu
     if (rule.trueStrike) modifier.trueStrike = true;
     if (rule.damageDieOverride) modifier.damageDieOverride = rule.damageDieOverride;
     if (rule.elevationForceExceed && elevationDiff >= 2) modifier.forceExceed = true;
-    if (rule.targetBloodiedBonusDamage && target && target.hp <= target.maxHp / 2) modifier.bonusDamageFlat += rule.targetBloodiedBonusDamage;
+    if (rule.targetBloodiedBonusDamage && target && target.hp <= target.baseMaxHp / 2) modifier.bonusDamageFlat += rule.targetBloodiedBonusDamage;
     if (rule.unerring) modifier.unerring = true;
   }
   return modifier;

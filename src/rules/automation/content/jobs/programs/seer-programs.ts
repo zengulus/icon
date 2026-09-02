@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
@@ -296,7 +297,10 @@ const wishEffects: RuleResolver = (context) => {
   const ally = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveTriggerTargets(context)[0];
   if (!ally) throw new RuleProgramViolation('choice.actor-count', 'Wish requires an ally on the battlefield.');
   const mutations: RuleMutation[] = [
-    damageMutation(context, source.id, Math.ceil(source.maxHp / 4), 'effect', 'sacrifice'),
+    // Wish's quarter-max sacrifice is a percent-of-health cost — p.107 "%
+    // HEALTH" uses the BASE maximum (adjudication
+    // icon-1.5:combat:bloodied-base-max).
+    damageMutation(context, source.id, Math.ceil(baseMaximumHp(source) / 4), 'effect', 'sacrifice'),
     ...cureMutations(context, ally.id),
     stateMutation(context, ally.id, 'wish:shield', true),
   ];

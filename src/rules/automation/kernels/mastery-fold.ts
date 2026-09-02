@@ -80,6 +80,8 @@ export type MasteryModifier =
  * actor and the resolver runtime actor view. */
 export interface MasteryFoldActorView extends MasteryOwnerView {
   hp?: number;
+  /** The BASE maximum — the p.81 bloodied-gate bar (the adapter projects
+   * `baseMaxHp`; adjudication icon-1.5:combat:bloodied-base-max). */
   maximumHp?: number;
 }
 

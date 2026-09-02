@@ -269,6 +269,31 @@ describe('Harvester ability automation (p.182–188)', () => {
     expect(applyEvents(at.state, atQuarter.events)).toEqual(atQuarter.state);
   });
 
+  it('Rot (p.81 adjudication): a wound on the target never moves the 25% bar — the BASE maximum governs', () => {
+    // baseMaxHp 30 with one wound (vitality 5) → live max 25. The p.81 base
+    // bar quarters at floor(30/4) = 7, so hp 7 still drops defiance even
+    // though 7 is 28% of the reduced 25-max bar (the rejected wounds-
+    // adjusted reading would quarter at floor(25/4) = 6 and refuse).
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    state.actors[foe.id].baseMaxHp = 30;
+    state.actors[foe.id].wounds = 1;
+    state.actors[foe.id].vitality = 5; // live maxHp 25
+    state.actors[foe.id].hp = 7;
+    const at = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:rot', targetIds: [foe.id] }, scriptedDice());
+    expect(at.state.actors[foe.id].marks.find(({ markId }) => markId === 'rot')?.state.noDefiance).toBe(true);
+    expect(applyEvents(state, at.events)).toEqual(at.state);
+
+    // One point above the base quarter is above 25% regardless of the wound.
+    const above = harvesterEncounter({ second: null });
+    above.state.actors[above.foe.id].baseMaxHp = 30;
+    above.state.actors[above.foe.id].wounds = 1;
+    above.state.actors[above.foe.id].vitality = 5;
+    above.state.actors[above.foe.id].hp = 8;
+    const mark = executeCommand(above.state, { type: 'USE_ABILITY', actorId: above.hero.id, abilityId: 'harvester:rot', targetIds: [above.foe.id] }, scriptedDice());
+    expect(mark.state.actors[above.foe.id].marks.find(({ markId }) => markId === 'rot')?.state.noDefiance).toBe(false);
+    expect(applyEvents(above.state, mark.events)).toEqual(mark.state);
+  });
+
   it('Rot: a noDefiance foe-mark suppresses Defiance while the mark is active (p.186)', () => {
     const { state, hero, foe } = harvesterEncounter({ second: null });
     // Marking a foe at 25% of Relict's 32 HP (8) records noDefiance; the

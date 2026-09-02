@@ -108,7 +108,7 @@ Status legend:
 
 | Glossary term | Contract | Path | Status | Gap |
 | --- | --- | --- | --- | --- |
-| Bloodied | at or under 50% base HP (104) | `isBloodied` (wound-aware) | EXECUTABLE | — |
+| Bloodied | at or under 50% base HP (81, 94, 104) | `isBloodied` (BASE maximum — adjudication icon-1.5:combat:bloodied-base-max) | EXECUTABLE | — |
 | Immobile | can't move, be moved, be removed (104) | `spatial-intent` | EXECUTABLE | — |
 | Incapacitated / Defeated | no turn; effects/summons end; rescue (101, 104) | `defeatActor` + `removeOwnedEphemera` | EXECUTABLE | — |
 

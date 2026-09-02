@@ -279,7 +279,7 @@ describe('Pulverize (p.134)', () => {
 
   it('two or more elevations higher SOURCE-FORCES the VM exceed branch — regardless of the roll, and never without the trait', () => {
     const actor = (id: string, side: 'heroes' | 'foes', traitIds: string[], x: number) => ({
-      id, side, position: { x, y: 0 }, hp: 20, maxHp: 40, vitality: 10, vigor: 0,
+      id, side, position: { x, y: 0 }, hp: 20, maxHp: 40, baseMaxHp: 40, vitality: 10, vigor: 0,
       defense: 6, armor: 0, speed: 4, dash: 2, fray: 4, damageDie: 6, actions: 2, attacked: false,
       size: 1, defeated: false, conditions: new Set<string>(), statuses: [],
       statusSavePolicy: { cureDenied: false, statusSaveDenied: false, saveBoon: 0, saveCurse: 0 },
@@ -387,7 +387,7 @@ describe('Pulverize (p.134)', () => {
     // Pulverize's die into `abilityUseModifiers`, and BOTH damage rolls
     // consume an extra die through the shared keep-highest evaluation.
     const hero = (id: string, traitIds: string[], side: 'heroes' | 'foes') => ({
-      id, side, position: { x: side === 'heroes' ? 0 : 3, y: 0 }, hp: 20, maxHp: 40, vitality: 10, vigor: 0,
+      id, side, position: { x: side === 'heroes' ? 0 : 3, y: 0 }, hp: 20, maxHp: 40, baseMaxHp: 40, vitality: 10, vigor: 0,
       defense: 6, armor: 0, speed: 4, dash: 2, fray: 4, damageDie: 6, actions: 2, attacked: false,
       size: 1, defeated: false, conditions: new Set<string>(), statuses: [],
       statusSavePolicy: { cureDenied: false, statusSaveDenied: false, saveBoon: 0, saveCurse: 0 },

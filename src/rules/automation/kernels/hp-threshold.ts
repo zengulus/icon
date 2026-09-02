@@ -6,15 +6,24 @@ import type { RuleAction, RuleClauseCompilation, RuleEffect, RuleProgramCompilat
  *
  * ICON defines two canonical HP states that passives key off:
  *
- *   - Bloodied — "at or under 50% hp" (p.94/p.104 special states). The
- *     threshold is measured against the character's CURRENT maximum after
- *     wounds (the same authority as the engine's long-standing `isBloodied`):
- *     `hp <= max(1, baseMaxHp - wounds * vitality) / 2`.
- *   - At or under 25% hp — the quarter mark of the same wounds-adjusted
- *     maximum: `hp <= max(1, baseMaxHp - wounds * vitality) / 4`. (The p.107
- *     "% HEALTH" rule — percentage COSTS/DAMAGE use the base maximum — does
- *     not apply to state thresholds; a character at 26% of a 30-max bar is
- *     not "at or under 25%", so the exact comparison is `hp * 4 <= maxHp`.)
+ *   - Bloodied — "at or below 50% your base maximum hp" (p.81, the primary
+ *     HP/Wound rule). The threshold is measured against the character's
+ *     BASE maximum (4×VIT, the un-wounded bar): `hp <= baseMaxHp / 2 `
+ *     (exactly: `hp * 2 <= baseMaxHp`). Wounds "temporarily reduc[e] your
+ *     maximum HP" (p.81) — they shrink the LIVE bar (`maxHp =
+ *     baseMaxHp − wounds×vitality`) but NEVER move the threshold.
+ *   - At or under 25% hp — the quarter mark of the same BASE maximum:
+ *     `hp <= baseMaxHp / 4` (exactly: `hp * 4 <= baseMaxHp`). A character
+ *     at 26% of a 30-max bar is not "at or under 25%", so the exact
+ *     comparison is required, never a round-up.
+ *
+ * The p.94/p.104 recaps ("at or under 50% maximum HP") drop the "base"
+ * qualifier; the engine's long-standing wounds-adjusted reading of those
+ * terse summaries conflicts with the p.81 qualifier. The adopted reading
+ * (BASE maximum for every percent-of-maximum-HP threshold AND cost/damage,
+ * p.107 "% HEALTH" stating the same policy for costs) is recorded as
+ * adjudication `icon-1.5:combat:bloodied-base-max` in
+ * `src/rules/source-adjudications.ts`.
  *
  * This module is the single reusable, source-ID-free authority answering the
  * two generic questions:
@@ -44,34 +53,29 @@ import type { RuleAction, RuleClauseCompilation, RuleEffect, RuleProgramCompilat
 export type HpThreshold = 'bloodied' | 'quarter';
 
 /** The minimal actor read surface both `EncounterActor` and the rule runtime
- * view satisfy (all threshold inputs live on the actor itself). */
+ * view satisfy. Thresholds read ONLY `baseMaxHp` (the p.81 base bar); the
+ * wounds-adjusted live maximum is deliberately absent — wounds do not move
+ * the threshold (adjudication `icon-1.5:combat:bloodied-base-max`). */
 export interface HpThresholdActor {
   hp: number;
   baseMaxHp: number;
-  wounds: number;
-  vitality: number;
   traitIds?: readonly string[];
 }
 
-/** The wounds-adjusted maximum: every HP threshold is measured against the
- * current maximum after wounds, matching the engine's `isBloodied` authority
- * (p.94: "at or below 50% of maximum HP"; wounds shrink the bar). */
-export function maximumHp(actor: Pick<HpThresholdActor, 'baseMaxHp' | 'wounds' | 'vitality'>): number {
-  return Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality);
-}
-
-/** ICON p.94/p.104 Bloodied: "at or under 50% hp" of the wounds-adjusted
- * maximum. Exact comparison (integers: `hp <= floor(max/2)`), so a character
- * at exactly half is bloodied and one point above is not. */
+/** ICON p.81 Bloodied: "at or below 50% your base maximum hp" — at or under
+ * half the BASE maximum. Exact comparison (integer HP: `hp * 2 <=
+ * baseMaxHp`), so a character at exactly half is bloodied and one point
+ * above is not. Wounds never shift this bar. */
 export function isBloodied(actor: HpThresholdActor): boolean {
-  return actor.hp <= maximumHp(actor) / 2;
+  return actor.hp <= actor.baseMaxHp / 2;
 }
 
-/** "At 25% hp or lower": at or under 25% of the wounds-adjusted maximum.
- * Exact comparison (`hp * 4 <= max`), so a character at exactly a quarter is
- * at the threshold and one point above it is not. */
+/** "At 25% hp or lower" (Rot p.186): at or under a quarter of the BASE
+ * maximum. Exact comparison (`hp * 4 <= baseMaxHp`), so a character at
+ * exactly a quarter is at the threshold and one point above it is not.
+ * Wounds never shift this bar. */
 export function isAtOrUnderQuarterHp(actor: HpThresholdActor): boolean {
-  return actor.hp <= maximumHp(actor) / 4;
+  return actor.hp <= actor.baseMaxHp / 4;
 }
 
 /** The reusable question at boundaries: "is this passive's threshold met?"

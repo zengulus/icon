@@ -50,6 +50,8 @@ export interface RangeStateView {
     position: Position | null;
     size?: number;
     hp?: number;
+    /** The BASE maximum — the p.81 bloodied-gate bar (the adapter projects
+     * `baseMaxHp`; adjudication icon-1.5:combat:bloodied-base-max). */
     maximumHp?: number;
     abilityIds?: readonly string[];
     masteredAbilityIds?: readonly string[];

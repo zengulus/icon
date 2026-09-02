@@ -100,8 +100,8 @@ export type ModifierGate =
   | { kind: 'always' }
   /** The acting actor has the stealth condition. */
   | { kind: 'stealth' }
-  /** The acting actor is bloodied ("Comeback", at or under 50% of the
-   * wounds-adjusted maximum). */
+  /** The acting actor is bloodied ("Comeback", at or under 50% of the BASE
+   * maximum — p.81; adjudication icon-1.5:combat:bloodied-base-max). */
   | { kind: 'comeback' }
   /** The acting actor is on a slow turn (the ICON Charge triggered effect —
    * the same durable flag `deriveTriggers` turns into the `charge` trigger,
@@ -134,6 +134,9 @@ export interface ModifierFoldView {
   actor: {
     id: string;
     hp?: number;
+    /** The actor's BASE maximum HP — the p.81 bloodied-gate bar (the
+     * fold adapters project `baseMaxHp`, never the wound-reduced live
+     * bar; adjudication icon-1.5:combat:bloodied-base-max). */
     maximumHp?: number;
     abilityIds?: readonly string[];
     masteredAbilityIds?: readonly string[];
@@ -150,7 +153,8 @@ export interface ModifierFoldView {
   /** Player-declared talent-use source IDs at command time (the `choice`
    * gate). Absent = no choices declared. */
   selectedTalentSourceIds?: ReadonlySet<string>;
-  /** The attack target (the target-bloodied / target-has-condition gates). */
+  /** The attack target (the target-bloodied / target-has-condition gates).
+   * `maxHp` is the target's BASE maximum (the p.81 bloodied bar). */
   target?: {
     id: string;
     side: string;

@@ -6,7 +6,11 @@
  * count(selector), count-query over the general U3 domains,
  * distance-between-endpoints (selector / U1 reference / U7 anchor),
  * die/damage-die/damage-roll, if, percent, percent-of-BASE-max,
- * add/multiply/minimum/maximum/clamp. This module also owns the
+ * add/multiply/minimum/maximum/clamp. Every percent-of-maximum-HP read —
+ * the p.107 "% HEALTH" costs/damage AND the p.81 bloodied/quarter state
+ * thresholds — uses the BASE maximum (adjudication
+ * `icon-1.5:combat:bloodied-base-max`); there is no percent-of-the-
+ * wounds-adjusted-bar value kind. This module also owns the
  * selector→views read surface (`selectActors`, the RuleSelector authority)
  * because the expression algebra resolves selector reads intrinsically —
  * splitting the two would put the value algebra's every actor read behind a
@@ -258,26 +262,15 @@ export function evaluateNumber(expression: RuleNumber, context: RuleExecutionCon
       return expression.rounding === 'up' ? Math.ceil(value) : expression.rounding === 'down' ? Math.floor(value) : Math.round(value);
     }
     case 'percent-base-max': {
-      // ICON p.107 "% HEALTH": percentage costs/damage use the BASE maximum,
-      // never the wounds-adjusted bar. The view must project the durable base
-      // max; a view without it FAILS CLOSED rather than silently reading the
-      // wounds-adjusted maximum (which would change the meaning of "percent
-      // of your maximum HP").
+      // ICON p.107 "% HEALTH" (costs/damage) and, under adjudication
+      // `icon-1.5:combat:bloodied-base-max`, the p.81 state thresholds
+      // (bloodied/quarter): every percent-of-maximum-HP read uses the BASE
+      // maximum, never the wounds-adjusted bar. The view must project the
+      // durable base max; a view without it FAILS CLOSED rather than
+      // silently reading the wounds-adjusted maximum (which would change
+      // the meaning of "percent of your maximum HP").
       const target = oneActor(expression.target, context);
-      if (typeof target.baseMaxHp !== 'number' || !Number.isFinite(target.baseMaxHp)) {
-        throw new RuleProgramViolation('value.base-max-missing', `The actor view does not project the base maximum HP (percent-base-max).`);
-      }
-      return percentOfMaximum(target.baseMaxHp, expression.percent, expression.rounding);
-    }
-    case 'percent-max-hp': {
-      // Percent of the WOUNDS-ADJUSTED state bar (ICON p.94/p.104
-      // bloodied/quarter thresholds): `RuleActorView.maxHp` is the
-      // wounds-adjusted maximum, the SAME bar the U6 bloodied/quarter
-      // predicates and the (reducer-side) hp-threshold authority read — the
-      // p.107 "% HEALTH" BASE-max semantics deliberately do not apply to
-      // state thresholds. `rounding: 'down'` reproduces the exact integer
-      // comparisons (`hp * 100 <= maxHp * percent`).
-      return percentOfMaximum(oneActor(expression.target, context).maxHp, expression.percent, expression.rounding);
+      return percentOfMaximum(baseMaximumHp(target), expression.percent, expression.rounding);
     }
     case 'add': return expression.values.reduce((total, value) => total + evaluateNumber(value, context), 0);
     case 'multiply': return expression.values.reduce((total, value) => total * evaluateNumber(value, context), 1);
@@ -296,22 +289,35 @@ export function integer(expression: RuleNumber, context: RuleExecutionContext) {
   return Math.max(0, Math.floor(evaluateNumber(expression, context)));
 }
 
-/** The pure U5 wound-state percentage scalar: `percent`% of `maxHp` (the
- * p.94/p.104 WOUNDS-ADJUSTED bar — consume `RuleActorView.maxHp` or the
- * adapter/reducer projection of it), rounded as declared. `'down'` (floor)
- * reproduces the EXACT integer threshold comparisons (`hp * 100 <= maxHp *
- * percent`): for integer HP, `hp <= maxHp * percent / 100` is equivalent to
- * `hp <= floor(maxHp * percent / 100)`, so a character at exactly the
- * threshold is inside and one point above is not. This is the SINGLE
- * scalar formula behind `percent-max-hp` values, the U6 bloodied/quarter
- * predicate threshold reads, and the state-threshold content reads — the
- * p.107 "% HEALTH" BASE-max formula is the distinct `percent-base-max`
- * kind. Pure and deterministic: no state, no RNG, no choice.
- *
- * `maxHp` is expected to be the durable projected wounds-adjusted maximum
- * (≥ 1 by the projection contract); `percent` is the source-declared
+/** Read the p.81 BASE maximum (4×VIT) off an actor view for a percent-of-
+ * maximum-HP gate or read, FAILING CLOSED when the view does not project
+ * it — a silent read of the wounds-adjusted `maxHp` would change the
+ * meaning of the percent (adjudication `icon-1.5:combat:bloodied-base-
+ * max`). Pure and deterministic. */
+export function baseMaximumHp(target: Pick<RuleActorView, 'baseMaxHp'>): number {
+  if (typeof target.baseMaxHp !== 'number' || !Number.isFinite(target.baseMaxHp)) {
+    throw new RuleProgramViolation('value.base-max-missing', 'The actor view does not project the base maximum HP (p.81 percent-of-maximum reads).');
+  }
+  return target.baseMaxHp;
+}
+
+/** The pure U5 percentage-of-maximum scalar: `percent`% of `baseMaximum`
+ * rounded as declared. `'down'` (floor) reproduces the EXACT integer
+ * threshold comparisons (`hp * 100 <= baseMaximum * percent`): for integer
+ * HP, `hp <= baseMaximum * percent / 100` is equivalent to
+ * `hp <= floor(baseMaximum * percent / 100)`, so a character at exactly the
+ * threshold is inside and one point above is not. `baseMaximum` is ALWAYS
+ * the BASE maximum (4×VIT, the un-wounded bar): this is the SINGLE scalar
+ * behind `percent-base-max` values (p.107 "% HEALTH" costs/damage) and the
+ * U6 bloodied/quarter predicate threshold reads + state-threshold content
+ * reads (p.81 — adjudication `icon-1.5:combat:bloodied-base-max`). The
+ * wounds-adjusted live bar (`RuleActorView.maxHp`) exists for heal/vigor
+ * caps and the current-max read, never for percent semantics. Pure and
+ * deterministic: no state, no RNG, no choice. Callers pass the durable
+ * projected base maximum (≥ 1 by the projection contract) and FAIL CLOSED
+ * when the view cannot project it; `percent` is the source-declared
  * percent (0–100). */
-export function percentOfMaximum(maxHp: number, percent: number, rounding: 'up' | 'down' | 'nearest'): number {
-  const value = maxHp * percent / 100;
+export function percentOfMaximum(baseMaximum: number, percent: number, rounding: 'up' | 'down' | 'nearest'): number {
+  const value = baseMaximum * percent / 100;
   return rounding === 'up' ? Math.ceil(value) : rounding === 'down' ? Math.floor(value) : Math.round(value);
 }

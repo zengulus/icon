@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
@@ -222,7 +223,10 @@ const divineAegisEffects: RuleResolver = (context) => {
   if (!source.position || !ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Divine Aegis requires an ally in range 4.');
   if (ally.side !== source.side || distance(source.position, ally.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Divine Aegis requires an ally in range 4.');
   const mutations: RuleMutation[] = [markMutation(context, ally.id, 'divine-aegis', {})];
-  if (source.talents?.['sealer:divine-aegis'] === 2 && ally.hp <= ally.maxHp / 4) {
+  // Divine Aegis talent 2's "ally at 25% hp or lower" reads the p.81 BASE
+  // bar (adjudication icon-1.5:combat:bloodied-base-max), like the U6
+  // quarter predicate — never the wounds-adjusted max.
+  if (source.talents?.['sealer:divine-aegis'] === 2 && ally.hp <= baseMaximumHp(ally) / 4) {
     mutations.push(conditionMutation(context, ally.id, 'defiance'));
   }
   return mutations;

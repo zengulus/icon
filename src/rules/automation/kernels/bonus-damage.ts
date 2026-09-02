@@ -161,9 +161,10 @@ function bonusDamageFoldView(state: EncounterState, actor: EncounterActor, targe
     actor: {
       id: actor.id,
       hp: actor.hp,
-      // The wounds-adjusted maximum — the same bar isBloodied measures
-      // against (the self-bloodied gate compares hp <= maxHp/2).
-      maximumHp: Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality),
+      // The BASE maximum — the same bar isBloodied measures against (the
+      // self-bloodied gate compares hp <= baseMaxHp/2; p.81 adjudication
+      // icon-1.5:combat:bloodied-base-max).
+      maximumHp: actor.baseMaxHp,
       side: actor.side,
       abilityIds: actor.abilityIds,
       masteredAbilityIds: actor.masteredAbilityIds,
@@ -176,9 +177,9 @@ function bonusDamageFoldView(state: EncounterState, actor: EncounterActor, targe
         id: target.id,
         side: target.side,
         hp: target.hp,
-        // The wounds-adjusted maximum — the same bar isBloodied measures
-        // against (the shared target-bloodied gate compares hp <= maxHp/2).
-        maxHp: Math.max(1, target.baseMaxHp - target.wounds * target.vitality),
+        // The BASE maximum — the same bar isBloodied measures against (the
+        // shared target-bloodied gate compares hp <= baseMaxHp/2; p.81).
+        maxHp: target.baseMaxHp,
         conditions: target.conditions,
       },
     } : {}),

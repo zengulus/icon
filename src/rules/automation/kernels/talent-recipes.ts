@@ -32,11 +32,13 @@ import { sacrificeMutation } from '../primitives/cost-payment.js';
 import { rangeModifierRuleScopes } from './range.js';
 import { hasBonusDamageRule } from './bonus-damage.js';
 
-/** ICON p.102: bloodied at or below half maximum HP (same formula as the
- * kernel's isBloodied — inlined here to keep the module graph acyclic: the
- * adapter imports manual-programs, which imports this module). */
+/** ICON p.81: bloodied at or below half the BASE maximum (same formula as
+ * the kernel's isBloodied — adjudication icon-1.5:combat:bloodied-base-max:
+ * wounds shrink the live max but never the threshold; inlined here to keep
+ * the module graph acyclic: the adapter imports manual-programs, which
+ * imports this module). */
 function isBloodied(actor: EncounterActor): boolean {
-  return actor.hp <= Math.max(1, actor.baseMaxHp - actor.wounds * actor.vitality) / 2;
+  return actor.hp <= actor.baseMaxHp / 2;
 }
 
 export type TalentStatus = 'wired' | 'program-level' | 'passive-projection' | 'range-modifier' | 'area-modifier' | 'bonus-damage' | 'mark-modifier' | 'documented';

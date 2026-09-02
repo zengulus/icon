@@ -11,6 +11,7 @@ const actor = (id: string, side: RuleActorView['side'], x: number, overrides: Pa
   position: { x, y: 0 },
   hp: 20,
   maxHp: 40,
+  baseMaxHp: 40, // the encounter adapter always projects the base bar (p.81 percent reads)
   vitality: 10,
   vigor: 0,
   defense: 8,

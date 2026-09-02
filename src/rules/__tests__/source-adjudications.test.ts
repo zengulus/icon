@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LIMIT_BREAK_UNLOCK_LEVEL, abilityPointAllowance, awardXp, spendLevelUp } from '../character.js';
 import { SOURCE_ADJUDICATIONS, findAdjudication } from '../source-adjudications.js';
 import { dangerousOncePerTurnKey } from '../automation/kernels/use-ledger.js';
+import { isAtOrUnderQuarterHp, isBloodied } from '../automation/kernels/hp-threshold.js';
 import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
 
 describe('source adjudication registry invariants', () => {
@@ -104,7 +105,8 @@ describe('adopted advancement boundary — Limit Break unlock (icon-1.5:advancem
 
   it('the engine boundary constant matches the adjudication and cannot drift', () => {
     expect(LIMIT_BREAK_UNLOCK_LEVEL).toBe(1);
-    expect(LIMIT_BREAK_UNLOCK_LEVEL).toBe(adjudication?.boundary?.value);
+    const boundary = adjudication?.boundary;
+    expect(LIMIT_BREAK_UNLOCK_LEVEL).toBe(boundary && boundary.kind === 'level' ? boundary.value : undefined);
     // Level 0 sits below the boundary (p.240: level 0 has no limit break).
     expect(0).toBeLessThan(LIMIT_BREAK_UNLOCK_LEVEL);
   });
@@ -136,5 +138,30 @@ describe('adopted combat boundary — dangerous terrain cadence (icon-1.5:danger
     const key = dangerousOncePerTurnKey();
     expect(key.startsWith('ledger:any-turn:')).toBe(true);
     expect(key).not.toMatch(/^ledger:(turn|round):/);
+  });
+});
+
+describe('adopted combat boundary — bloodied / HP-percent thresholds (icon-1.5:combat:bloodied-base-max)', () => {
+  const adjudication = findAdjudication('icon-1.5:combat:bloodied-base-max');
+  it('is an adopted record pinning the BASE-maximum bar (never the wounds-adjusted bar)', () => {
+    expect(adjudication?.status).toBe('adopted');
+    expect(adjudication?.boundary).toEqual({ kind: 'hp-threshold-base', baseMaximum: true });
+    const pages = adjudication?.sources.map(({ page }) => page).sort((a, b) => a - b);
+    expect(pages).toEqual([81, 81, 94, 104]);
+    expect(adjudication?.adopted).toMatch(/BASE maximum/i);
+  });
+
+  it('bloodied measures the BASE maximum even with wounds in play (hp·2 <= baseMaxHp)', () => {
+    // base 40, one wound (vitality 10) → live max 30. The p.81 base bar is
+    // 20: a character at 20 is bloodied, where the rejected wounds-adjusted
+    // reading (half of 30 = 15) would demand 15 or less.
+    expect(isBloodied({ hp: 20, baseMaxHp: 40 })).toBe(true);
+    expect(isBloodied({ hp: 21, baseMaxHp: 40 })).toBe(false);
+    expect(isBloodied({ hp: 15, baseMaxHp: 40 })).toBe(true);
+  });
+
+  it('the quarter reads the same base bar (hp·4 <= baseMaxHp)', () => {
+    expect(isAtOrUnderQuarterHp({ hp: 7, baseMaxHp: 30 })).toBe(true); // 28 <= 30
+    expect(isAtOrUnderQuarterHp({ hp: 8, baseMaxHp: 30 })).toBe(false); // 32 > 30
   });
 });

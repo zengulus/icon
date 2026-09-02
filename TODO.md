@@ -521,8 +521,12 @@ assumption here, document the evidence and update this list before proceeding.
   census byte-stable. Zero source-unit promotion; underlay phase remains
   UNDERLAY COMPLETION. See `docs/u8-u1-underlay-census.md`.
 
-- **U5 tranche 22 — the singular wounds-adjusted HP-percent scalar;
-  U5-core dependency gate MET for U3 (2026-09-02) — DONE.** (a) FRESH
+- **U5 tranche 22 — the singular HP-percent scalar + U5-core dependency
+  gate MET for U3 (2026-09-02) — DONE. NOTE: the wounds-adjusted claims
+  below are SUPERSEDED by tranche 23 — `percent-max-hp` was retracted;
+  every percent-of-maximum-HP threshold/cost/damage read uses the BASE
+  maximum (p.81/p.107, adjudication `icon-1.5:combat:bloodied-base-max`).**
+  (a) FRESH
   U5-CORE AUDIT before editing: the full surface (RuleNumber kinds,
   `evaluateNumber`/`integer` in `evaluate-value.ts`, count-query/distance
   composing U3/U7, every inline Math.* site) classified A/B/C — genuine
@@ -565,6 +569,44 @@ assumption here, document the evidence and update this list before proceeding.
   no promotion). Underlay phase remains UNDERLAY COMPLETION. See
   `docs/u8-u1-underlay-census.md`.
 
+- **U5 tranche 23 — Bloodied/HP-percent thresholds use the BASE maximum;
+  the wounds-adjusted `percent-max-hp` family is retracted (2026-09-02)
+  — DONE.** Independent adjudication against ICON 1.5.pdf, not the
+  commit message. p.81 (primary HP/Wound rule) defines bloodied as "at
+  or below 50% your base maximum hp" and, in the very next bullet,
+  defines a wound as "temporarily reducing your maximum HP" — the
+  threshold base and the wound-reduced live bar are deliberately
+  different numbers. The terse p.94 ("at or under 50% maximum HP") /
+  p.104 ("at or under 50% hp") recaps drop the "base" qualifier, which
+  admitted the engine's long-standing wounds-adjusted reading (canonized
+  by tranche 22's `percent-max-hp`); Advanced Combat (p.107 "% HEALTH")
+  stakes the same base-bar policy for percent costs/damage, and Rot
+  p.186 / the Harvester p.183 recap use "25%" with no wound
+  qualification. The conflict is recorded as adjudication
+  `icon-1.5:combat:bloodied-base-max` (boundary `{ kind:
+  'hp-threshold-base', baseMaximum: true }`) and the engine is REPAIRED:
+  (1) `percent-max-hp` REMOVED from `RuleNumber` (no source-backed
+  consumer remains once bloodied/quarter/Rot read the base bar);
+  `percentOfMaximum` is now the single percent-of-BASE-maximum scalar
+  behind `percent-base-max`, the U6 bloodied(50)/quarter(25) predicates
+  (which fail closed with `value.base-max-missing` when the view lacks
+  `baseMaxHp`), and the Rot p.186 "at 25% hp or lower" mark gate; (2)
+  canonical `hp-threshold.ts` measures `hp·2 <= baseMaxHp` /
+  `hp·4 <= baseMaxHp` (the raw wounds-adjusted `maximumHp` helper is
+  gone); (3) every inline bloodied gate reads the BASE bar —
+  talent-recipes and bonus-damage folds, the range/area/mastery fold
+  `maximumHp` projections, the modifiers comeback/self-bloodied/
+  target-bloodied gates, and the Cure/regeneration bloodied reads in
+  encounter-adapter. Rot is repaired TWICE across 22→23: the ceil
+  over-inclusiveness AND the bar itself (30-max boundary fixture + new
+  wound-divergence fixture: base 30 + one wound → hp 7 still drops
+  defiance). U5-core dependency gate REMAINS MET for U3 (the scalar set
+  U3 needs is unchanged); U3 stays the next dependency-complete underlay.
+  EVIDENCE: 2189 tests (+6 across 22→23 on 2183); adjudication registry
+  + boundary pins;
+  architecture / automation / source-fidelity strict / typecheck / build
+  / diff-check clean; no source-unit promotion. Underlay phase remains
+  UNDERLAY COMPLETION. See `docs/u8-u1-underlay-census.md`.
 
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`

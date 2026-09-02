@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import { effectiveAreaFor } from '../../../kernels/area.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { Position } from '../../../../types.js';
@@ -152,7 +153,9 @@ const nothungEffects: RuleResolver = (context) => {
   // bonus-damage rule rides abilityUseModifiers) and resolves through the
   // shared keep-highest bonus-die roll; the extra 1-piercing instance is a
   // separate on-hit effect gated on the same source condition.
-  const nothungHoldBonus = source.talents?.['spellblade:nothung'] === 1 && target.hp <= target.maxHp / 2;
+  // Nothung's bloodied gate reads the p.81 BASE bar (adjudication
+  // icon-1.5:combat:bloodied-base-max) — never the wounds-adjusted max.
+  const nothungHoldBonus = source.talents?.['spellblade:nothung'] === 1 && target.hp <= baseMaximumHp(target) / 2;
   mutations.push(roll.hit
     ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 2, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));

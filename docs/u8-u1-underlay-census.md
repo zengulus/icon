@@ -31,7 +31,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | PARTIAL | area/persistent-instance/rule-source domains and residual ordering |
 | U4 Choice / Decision | PARTIAL | ability/talent choice fold reads and remaining window-carried choice consumers |
-| U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranche 22: percent-max-hp landed; the single percentOfMaximum scalar now feeds the U6 bloodied/quarter predicates + the Rot 25% read; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
+| U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
 | U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
 | U8 Scope / Clock | AUTHORITATIVE | none |
@@ -1539,7 +1539,7 @@ owner to register `claim:foundations:u7-authoritative`); blocker census
 byte-stable (no source-unit change). U7 row moves to AUTHORITATIVE;
 U1 residual unchanged at 4 = 0+0+0+4.
 
-## U5 tranche executed (fresh HEAD, 2026-09-02, twenty-second tranche — the singular wounds-adjusted HP-percent scalar; U5-core dependency gate met)
+## U5 tranche executed (fresh HEAD, 2026-09-02, twenty-second + twenty-third tranches — the singular HP-percent scalar, then its BASE-bar correction under adjudication icon-1.5:combat:bloodied-base-max; U5-core dependency gate met)
 
 **Audit first (no immediate migration).** The full U5 surface was
 fresh-audited before editing: `RuleNumber` (constant/stat/resource/round/
@@ -1572,26 +1572,34 @@ values are LIVE re-reads; `input` is CAPTURED from command buckets;
 resolve the U1 binding. No RNG, choice, query execution, spatial geometry,
 clock reconstruction, or modifier stacking exists inside the scalars.
 
-**The one missing family + replicate.** The plan's typed-vocabulary
-contract says "Percent always names its base explicitly (BASE max vs
-wounds-adjusted)" — `percent-base-max` (p.107 BASE) existed; the
-wounds-adjusted sibling (p.94/p.104 state bar) did NOT, and its formula
-lived inline in three places (U6 predicates ×2, Rot resolver ×1 with a
-rounding DIVERGENCE). Tranche 22 lands it:
-
-- `{ kind: 'percent-max-hp'; target; percent; rounding }` on `RuleNumber`
-  (types.ts); `kernels/evaluate-value.ts` gains the pure
-  `percentOfMaximum(maxHp, percent, rounding)` — the SINGLE formula now
-  behind `percent-max-hp`, `percent-base-max`, the U6 `bloodied`(50)/
-  `quarter`(25) predicate thresholds (`rounding: 'down'` reproduces the
-  exact `hp·100 <= maxHp·percent` comparisons: `hp <= max/2` ≡
-  `hp <= floor(max/2)` for integer HP — behavior-preserving, verified by
-the full suite), and the Rot p.186 "at 25% hp or lower" mark read (the
-ceil divergence REPAIRED to the canonical exact quarter; new 30-max
-boundary fixtures pin 8-above false / 7-exactly true on the VM view).
-- `hp-threshold.ts`/`talent-recipes`/reducer-side reads stay the
-  documented reducer-side threshold authority (raw surface, out of U5
-  scope) — not migrated for structural uniformity.
+**The one missing family + replicate — then an adjudication corrected it.**
+The plan's typed-vocabulary contract says "Percent always names its base
+explicitly (BASE max vs wounds-adjusted)" — `percent-base-max` (p.107
+BASE) existed; the wounds-adjusted sibling (p.94/p.104 state bar) did
+NOT, and its formula lived inline in three places (U6 predicates ×2, Rot
+resolver ×1 with a rounding DIVERGENCE). Tranche 22 landed
+`{ kind: 'percent-max-hp'; … }` + the pure
+`percentOfMaximum(maxHp, percent, rounding)` behind it. TRANCHES 22→23
+ADJUDICATION REPAIR: the p.81 primary HP/Wound rule defines bloodied as
+"at or below 50% your **base maximum hp**" and immediately defines
+wounds as "temporarily reducing your maximum HP" — so percent-of-
+maximum-HP thresholds measure the BASE bar exactly like p.107 "%
+HEALTH" costs/damage. The wounds-adjusted `percent-max-hp` kind had no
+source-backed consumer (p.81 bloodied; p.107 costs; Rot p.186 "25% hp";
+the Harvester p.183 25% gate all read base) and was REMOVED. The single
+scalar is now `percentOfMaximum(baseMaximum, percent, rounding)` behind
+`percent-base-max`, the U6 `bloodied`(50)/`quarter`(25) predicate
+thresholds (`rounding: 'down'` reproduces the exact `hp·100 <=
+baseMaxHp·percent` comparisons: `hp <= base/2` ≡ `hp <= floor(base/2)`
+for integer HP), and the Rot p.186 "at 25% hp or lower" mark read —
+repaired twice: the ceil divergence (8 of 30 = 26.7% is one point over
+"25% or lower"; 30-max boundary fixtures pin 8-above false /
+7-exactly true) AND the bar (wounds-adjusted max → base; a
+wound-divergence fixture proves base 30 + one wound still quarters at
+hp 7).
+- `hp-threshold.ts`/`talent-recipes`/the fold bloodied gates read the
+  SAME BASE bar on the raw reducer surface — the documented reducer-side
+  threshold authority (out of U5 scope), never a second formula.
 
 **U5-core DEPENDENCY GATE — MET for U3 (distinct from full U5 authority).**
 The gate's six conditions all hold on the code at HEAD: every numeric
@@ -1613,14 +1621,15 @@ underlay** (the plan's own T2 phase order U7 → U5-core → U3). U9 remains
 the parallel-ready T4 candidate, still later in canonical phase order.
 No source-unit promotion; underlay phase remains UNDERLAY COMPLETION.
 
-**Census.** Tests 2183 (+6: four percent-max-hp/semantics/parity/LIVE/
-fail-closed value tests, one U6-predicate boundary pair, one Rot 30-max
-boundary fixture); architecture / automation / source-fidelity strict /
+**Census (22→23 combined).** Tests 2189 (+6 on 2183: tranche-22
+percent-pair + predicate boundary + Rot 30-max fixtures, tranche-23
+predicate fail-closed pair + wound-divergence fixture + adjudication
+boundary pins); architecture / automation / source-fidelity strict /
 typecheck / build clean; blocker census and source-fidelity doc
 byte-stable (no source-unit promotion; the Rot repair changes only an
-already-executable row's boundary semantics to match the engine's
-singular quarter authority). U5 row stays PARTIAL with the gate-met note;
-U1/U7 residuals unchanged.
+already-executable row's boundary semantics toward the adjudicated
+BASE-max quarter). U5 row stays PARTIAL with the gate-met note; U1/U7
+residuals unchanged.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from './runtime.js';
+import { baseMaximumHp } from './evaluate-value.js';
 import type { RuleSourceUnit } from '../../source-units.js';
 import { computeSpatialArea } from '../primitives/spatial-intent.js';
 import { evaluateActorQuery, evaluatePositions, rushTowardFoes } from './evaluate-query.js';
@@ -370,7 +371,9 @@ function attackResolver(recipe: FoeAttackRecipe): RuleResolver {
     }
     for (const conditionId of recipe.effectConditions ?? []) mutations.push(conditionMutation(context, target.id, conditionId));
     if (atRange) for (const conditionId of recipe.atRange?.conditions ?? []) mutations.push(conditionMutation(context, target.id, conditionId));
-    if (recipe.bloodiedEffect && target.hp <= target.maxHp / 2) {
+    // Bloodied-effect foe recipes gate on the p.81 BASE bar (adjudication
+    // icon-1.5:combat:bloodied-base-max) — never the wounds-adjusted max.
+    if (recipe.bloodiedEffect && target.hp <= baseMaximumHp(target) / 2) {
       if (recipe.bloodiedEffect.shove) mutations.push(shoveMutation(context, target.id, recipe.bloodiedEffect.shove, axisDirection(attackOrigin, target.position)));
       for (const conditionId of recipe.bloodiedEffect.conditions ?? []) mutations.push(conditionMutation(context, target.id, conditionId));
     }
@@ -424,7 +427,9 @@ function vigorResolver(recipe: FoeVigorRecipe): RuleResolver {
   return (context) => {
     const source = referencedSource(context);
     if (!source) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires the source actor.`);
-    const bloodied = source.hp <= source.maxHp / 2;
+    // The bloodied side of a foe vigor recipe reads the p.81 BASE bar
+    // (adjudication icon-1.5:combat:bloodied-base-max).
+    const bloodied = source.hp <= baseMaximumHp(source) / 2;
     const amount = bloodied && recipe.bloodiedAmount !== undefined ? recipe.bloodiedAmount : recipe.amount;
     return [vigorMutation(context, source.id, amount)];
   };

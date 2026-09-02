@@ -289,12 +289,19 @@ typed rather than collapsing through number/string.
 Percent-health uses maximum BASE HP, not wounds-adjusted max HP — the reason
 expressions need explicit stat/value semantics, not resolver arithmetic.
 Do NOT create `statusCountDamageKernel` / `memberCountDamageKernel` /
-`missingHpQuarterKernel`; express them.
+`missingHpQuarterKernel`; express them. The BASE bar covers bloodied /
+quarter state thresholds TOO: p.81 defines bloodied as "at or below 50%
+your base maximum hp" immediately before wounds "temporarily reduc[e]
+your maximum HP" (adjudication `icon-1.5:combat:bloodied-base-max`), so
+the wounds-adjusted live bar (`RuleActorView.maxHp`) exists only for
+heal/vigor caps and the `max-hp` stat read — never for a percent read.
 
-Today: `RuleNumber` + `evaluateNumber` (`kernels/runtime.ts`); `hp-threshold`.
-Missing source forms: count(query), distance-between-arbitrary-refs,
-percent-of-BASE-max, usage reads, status/member counts, traversed-distance,
-elevation, conditional typed values.
+Today: `RuleNumber` + `evaluateNumber` (`kernels/runtime.ts`);
+`hp-threshold`; `count-query`, `distance` between arbitrary refs, and
+`percent-base-max` (the one percent-of-maximum scalar; the tranche-22
+wounds-adjusted `percent-max-hp` kind was retracted).
+Missing source forms: usage reads, status/member counts, traversed-
+distance, elevation, conditionally-typed values.
 
 ## U6 Predicate / Condition
 

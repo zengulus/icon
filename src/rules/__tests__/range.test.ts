@@ -254,7 +254,7 @@ describe('F9.2 conditional and dynamic range (kernel gates)', () => {
 describe('F9.3 Trigrammaton (exact-distance attack modifier)', () => {
   it('the kernel read: +1 boon and unerring at exactly range 3 only (unit)', () => {
     const owner = { traitIds: ['freelancer:trait:trigrammaton'], state: {} };
-    const target = (distance: number) => ({ hp: 20, maxHp: 40, distance });
+    const target = (distance: number) => ({ hp: 20, baseMaxHp: 40, distance });
     expect(traitAttackModifier(owner, 0, target(2))).toMatchObject({ boons: 0, unerring: false });
     expect(traitAttackModifier(owner, 0, target(3))).toMatchObject({ boons: 1, unerring: true });
     expect(traitAttackModifier(owner, 0, target(4))).toMatchObject({ boons: 0, unerring: false });

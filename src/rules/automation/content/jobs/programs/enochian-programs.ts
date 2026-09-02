@@ -1,4 +1,5 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
+import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
@@ -319,7 +320,9 @@ const blackstarEffects: RuleResolver = (context) => {
   }
   mutations.push(conditionMutation(context, target.id, 'shattered'));
   if (context.state.round < 6) {
-    mutations.push(damageMutation(context, source.id, Math.ceil(source.maxHp / 2), 'effect', 'sacrifice'));
+    // The half-max sacrifice is a percent-of-health cost — p.107 "% HEALTH"
+    // uses the BASE maximum (adjudication icon-1.5:combat:bloodied-base-max).
+    mutations.push(damageMutation(context, source.id, Math.ceil(baseMaximumHp(source) / 2), 'effect', 'sacrifice'));
   }
   if (context.triggers?.has('comeback') || (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true) {
     mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'effect'));

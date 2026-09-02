@@ -39,6 +39,7 @@ import { rememberAttackDamage, rollAttackStage, settleStagedAttackRoll, netBoonF
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import type { RuleActorView, RuleExecutionContext, RuleMutation } from '../primitives/types.js';
 import { traitAttackModifier, type TraitAttackModifier } from './attack-modifiers.js';
+import { baseMaximumHp } from './evaluate-value.js';
 import { auraRuntimeView, projectedAuraAttackModifiers } from './aura.js';
 
 /** The ability/effect-declared part of an attack. Everything else (F6 trait
@@ -150,7 +151,7 @@ export function resolveAuthoritativeAttack(
   const distance = source.position && target.position
     ? footprintDistance({ position: source.position, size: source.size }, { position: target.position, size: target.size })
     : undefined;
-  const traitModifier = traitAttackModifier(source, elevationModifier, { hp: target.hp, maxHp: target.maxHp, distance });
+  const traitModifier = traitAttackModifier(source, elevationModifier, { hp: target.hp, baseMaxHp: baseMaximumHp(target), distance });
   const intent = {
     defense: target.defense,
     sourceBoon: (options.boons ?? 0) + traitModifier.boons + (context.abilityUseModifiers?.boons ?? 0) + (auraAttack.boons ?? 0) - (auraAttack.curses ?? 0) - targetAuraCurse,
