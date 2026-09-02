@@ -346,7 +346,48 @@ assumption here, document the evidence and update this list before proceeding.
   by transmission today, they need the same reference-vs-plumbing
   classification (and any enabling surface/guard) before AUTHORITATIVE.
   Next dependency-driven tranche: the U1 fold-consumer adjudication. See
-  `docs/u8-u1-underlay-census.md`.
+  `docs/u8-u1-underlay-census.md`. *(That tranche landed as tranche 17
+  below; the NEXT tranche is the optional captured-actor resolution.)*
+
+- **U1 tranche 17 — scope-aware classifier repair + fold-consumer
+  adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
+  reclassified plain-identifier sites by whole-file name coincidence (any
+  `function(…, actorId: string)` or earlier `for (const X of …)` anywhere
+  in the file) — unsound, since an unrelated function's same-named
+  parameter or an earlier unrelated loop cannot make a dereference inside
+  ANOTHER function algorithm plumbing. The fix resolves the LEXICAL binding
+  at the call site via the TypeScript compiler AST: nearest governing
+  construct only (enclosing function parameter, unshadowed for-of loop
+  variable over a NON-recorded iterable, or a same-block `const`/`let`
+  declared before the call). Machine result unchanged but now provable:
+  the SAME 4 sites = 0 + 0 + 0 + 4, each with a lexical provenance
+  string; tests pin the site IDENTITIES (file + exact call shape), not
+  just the count, and the classifier-mutation suite covers all adversarial
+  cases (enclosing helper param → NON_U1; same param name in an unrelated
+  function → CAPTURED; enclosing loop var → NON_U1; same loop-var name in
+  an earlier unrelated loop → CAPTURED; shadowing both directions →
+  CAPTURED; loop over a recorded selection → CAPTURED; ordinary
+  input/precedence shapes → U1). (2) FOLD-CONSUMER ADJUDICATION: new
+  `scanActorDerefs` AST scanner enumerates EVERY `state.actors[…]` deref
+  in `content/jobs` — **43 sites = 25 fact-carried + 5 recorded-forwarded
+  + 13 forwarded-identifier + 0 algorithm/other + 0 legacy-slot**; the
+  load-bearing 0 legacy-slot (no fold-surface site interprets the legacy
+  context bag) and the family split are test-pinned, and the U12
+  continuation family is shown already carrying typed `captured-actor`
+  refs with presence-guarded derefs. ADJUDICATION: all 43 consume
+  identities selected/stamped/carried by shared authorities (recorded
+  commands → encounter.ts reducer → shared fold kernels → content
+  callbacks; facts; U12 refs) — none is a live legacy-slot interpretation
+  — and migration needs the smallest missing capability: OPTIONAL
+  captured-actor resolution (id absent/`''` → undefined; present but
+  removed → fail closed; present → resolved), since U1's captured-actor
+  kind is strict and would turn valid-state guarded no-ops (expiring
+  continuations, targetless augmentations) into failures; the 25
+  fact-carried sites additionally need a lifecycle-safety study
+  (mark/mote/entity owners that may outlive their actor). U1 stays
+  PARTIAL with exactly that residual. Zero source promotion; no ability
+  semantics changed; census 4 = 0 + 0 + 0 + 4 unchanged and now
+  scope-aware. See `docs/u8-u1-underlay-census.md`.
 
 - **U1 content-authoring tranche 15 — Colossus pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/colossus-programs.ts`

@@ -43,9 +43,18 @@
  *    decision, inventoried, not migrated.
  *  - NON_U1_OTHER: a site that is not reference resolution at all (only used
  *    if the scan surfaces one — provenance/mode plumbing).
+ *
+ * The file-context refinement (2026-09-02) is LEXICAL-SCOPE based, never
+ * whole-file name coincidence: a plain-identifier site reclassifies to
+ * NON_U1_OTHER only when the identifier is a parameter of the LEXICALLY
+ * ENCLOSING function (call inside its body) or an unshadowed loop variable
+ * of a lexically containing `for (const X of …)` over a NON-recorded
+ * iterable. An unrelated function's parameter, an earlier unrelated loop,
+ * or a same-name recorded-selection local leaves the site CAPTURED.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 
 export type U1ResidualCategory =
   | 'PURE_LIVE_REFERENCE'
@@ -132,22 +141,116 @@ export function categorizeSourceActorArgument(arg: string): U1ResidualCategory {
   return classifySite(arg.trim()).category;
 }
 
-/** Refine a plain-identifier CAPTURED site using FILE CONTEXT: a dereference
- * of an ALGORITHM-INTERNAL identity is not a reference at all. The U1×U4
- * adjudication (2026-09-02) classifies two shapes as caller-owned, machine-
- * detected here from the file text:
- *  - helper-parameter: the identifier is a declared parameter of a shared
- *    movement/planning helper (`function plannedRush(context, actorId, …)`,
- *    `function plannedFly(context, actorId, …)`) — the identity was ALREADY
- *    resolved by the caller (e.g. `source.id` from the U1 source accessor)
- *    and is re-dereferenced inside the algorithm; no U1 surface should exist
- *    for arbitrary ids.
- *  - derived-loop variable: `for (const passedId of passed)` over an
- *    algorithm-built collection (the dash/knockback occupant worklist) — the
- *    identities are computed by the algorithm, not recorded/live/bound.
- * These are NOT CAPTURED references: they are algorithm plumbing. A plain
- * identifier that is neither a helper parameter nor a loop variable stays
- * CAPTURED (the caller-owned recorded-selection U1×U4 shape). */
+/* ------------------------------------------------------------------------
+ * Scope-aware refinements (2026-09-02). The U1×U4 adjudication classifies
+ * two plain-identifier shapes as caller-owned ALGORITHM PLUMBING rather than
+ * references:
+ *  - helper-parameter: the identifier is a PARAMETER OF THE LEXICALLY
+ *    ENCLOSING function (e.g. `plannedRush(context, actorId, …)` restoring
+ *    its geometry from an already-resolved id) and the call lies INSIDE that
+ *    function's body;
+ *  - derived-loop variable: the call lies INSIDE a `for (const X of …)`
+ *    body whose unshadowed loop variable is the identifier, over a
+ *    NON-RECORDED iterable (an algorithm-built collection — NOT
+ *    `input.actorIds`/`triggerTargetIds`/a context.slot).
+ * A whole-file name coincidence does NOT reclassify a site: the call must
+ * be lexically inside the binding's scope, with no nearer binding of the
+ * same name (shadowing) between the binding and the call. This was the
+ * classifier-repair 2026-09-02 (the previous whole-file regex could let an
+ * unrelated `function helper(…, actorId: string)` or an earlier unrelated
+ * `for (const X of …)` reclassify a genuine recorded-selection deref).
+ */
+
+type ScopeBinding =
+  | { kind: 'param' }
+  | { kind: 'loop'; iterableText: string }
+  | { kind: 'local' }
+  | { kind: 'none' };
+
+function bindingNameMatches(name: ts.BindingName, id: string): boolean {
+  return ts.isIdentifier(name) && name.text === id;
+}
+
+function declarationListBinds(list: ts.VariableDeclarationList | undefined, id: string): boolean {
+  return list !== undefined && list.declarations.some((decl) => bindingNameMatches(decl.name, id));
+}
+
+/** True when `block` declares `id` in a `const`/`let`/`var` statement whose
+ * declaration precedes the call position (a same-block binding governs a
+ * reference at that position; a later declaration cannot — TDZ). */
+function blockDeclaresBefore(block: ts.Block, id: string, position: number): boolean {
+  for (const statement of block.statements) {
+    if (ts.isVariableStatement(statement) && statement.getStart() < position && declarationListBinds(statement.declarationList, id)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Resolve the nearest LEXICAL binding of `id` visible at the call site by
+ * walking its ancestor chain outward ENCOUNTERING the governing construct:
+ *  - a same-block `const/let/var` declaration BEFORE the call (block scan),
+ *  - a `for (const X of …)` loop that lexically contains the call,
+ *  - a function whose parameter is the identifier and whose body contains
+ *    the call (with any nearer function checked first),
+ *  - a catch-clause variable binding its whole block.
+ * The closest binding wins: an inner block-local shadows an outer loop
+ * variable or helper parameter; a construct from an unrelated function or
+ * an earlier loop is never an ancestor, so name coincidence cannot
+ * reclassify a site. */
+function scopeBindingOf(id: ts.Identifier): ScopeBinding {
+  const start = id.getStart();
+  let node: ts.Node | undefined = id.parent;
+  while (node !== undefined && !ts.isSourceFile(node)) {
+    if (ts.isBlock(node) && blockDeclaresBefore(node, id.text, start)) return { kind: 'local' };
+    if (ts.isForOfStatement(node)) {
+      if (declarationListBinds(node.initializer as ts.VariableDeclarationList, id.text)) {
+        return { kind: 'loop', iterableText: node.expression.getText().trim() };
+      }
+    } else if (ts.isForInStatement(node)) {
+      if (declarationListBinds(node.initializer as ts.VariableDeclarationList, id.text)) {
+        // for-in keys are a distinct primitive collection; conservative -
+        // never reclassify on a for-in binding.
+        return { kind: 'none' };
+      }
+    } else if (ts.isForStatement(node) && declarationListBinds(node.initializer as ts.VariableDeclarationList, id.text)) {
+      return { kind: 'local' };
+    } else if (ts.isCatchClause(node) && node.variableDeclaration !== undefined && bindingNameMatches(node.variableDeclaration.name, id.text)) {
+      return { kind: 'local' };
+    } else if (ts.isFunctionLike(node)) {
+      const params = (node as ts.SignatureDeclaration).parameters;
+      if (params.some((param) => bindingNameMatches(param.name, id.text))) return { kind: 'param' };
+    }
+    node = node.parent;
+  }
+  return { kind: 'none' };
+}
+
+/** Iterable expressions that NAME a recorded/live selection — a loop over
+ * one of these is a genuine reference loop, never algorithm plumbing. */
+const RECORDED_ITERABLE_RE = /actorIds|triggerTargetIds|attackTargetId|context\.input/;
+
+/** Parse `fileText` once and map each `sourceActor(` call line to the scope
+ * binding of its PLAIN-IDENTIFIER second argument (undefined otherwise). */
+function lexicalSiteBindings(fileText: string): Map<number, ScopeBinding | undefined> {
+  const sourceFile = ts.createSourceFile('inventory.ts', fileText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const bindings = new Map<number, ScopeBinding | undefined>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && node.expression.getText(sourceFile).trim() === 'sourceActor') {
+      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+      const second = node.arguments[1];
+      bindings.set(line, second !== undefined && ts.isIdentifier(second) ? scopeBindingOf(second) : undefined);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return bindings;
+}
+
+/** Refine a plain-identifier CAPTURED site using LEXICAL SCOPE (not whole-file
+ * name coincidence): algorithm-plumbing derefs (helper parameters, derived
+ * loop variables over non-recorded iterables) reclassify to NON_U1_OTHER;
+ * everything else stays CAPTURED (the recorded-selection U1×U4 shape). */
 export function refineSiteWithContext(
   site: U1ResidualSite,
   arg: string,
@@ -156,20 +259,13 @@ export function refineSiteWithContext(
   if (site.category !== 'CAPTURED_ID_DEREFERENCE' || fileText === undefined) return site;
   const trimmed = arg.trim();
   if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(trimmed)) return site;
-  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Helper-parameter: appears as a declared parameter in a function header
-  // in the SAME file (`function <name>(context: …, actorId: string, …)` or
-  // `(context, actorId: string`). The identity was resolved by the caller
-  // and the helper re-dereferences it for geometry — algorithm plumbing.
-  if (new RegExp(`function\\s+\\w+\\s*\\([^)]*\\b${escaped}\\s*:\\s*(?:string|Parameters<RuleResolver>\\[0\\])`).test(fileText)) {
-    return { ...site, category: 'NON_U1_OTHER', provenance: 'helper-parameter deref of an already-resolved identity (function parameter of a shared movement/planning algorithm) — caller-owned algorithm plumbing, not a reference; no U1 surface for arbitrary ids' };
+  const binding = lexicalSiteBindings(fileText).get(site.line);
+  if (binding === undefined) return site;
+  if (binding.kind === 'param') {
+    return { ...site, category: 'NON_U1_OTHER', provenance: 'helper-parameter deref of an already-resolved identity (parameter of the LEXICALLY ENCLOSING function, call inside its body) — caller-owned algorithm plumbing, not a reference; no U1 surface for arbitrary ids' };
   }
-  // Derived-loop variable: `for (const passedId of …)` over an
-  // algorithm-built collection (dash/knockback occupant worklist), with the
-  // loop header at or before the site line (the deref sits in the loop body).
-  const untilSite = fileText.split('\n').slice(0, site.line).join('\n');
-  if (new RegExp(`for\\s*\\(\\s*(?:const|let)\\s+${escaped}\\s+of\\b`).test(untilSite)) {
-    return { ...site, category: 'NON_U1_OTHER', provenance: 'derived-loop deref over an algorithm-built identity collection (loop variable) — caller-owned algorithm plumbing, not a reference; no U1 surface for arbitrary ids' };
+  if (binding.kind === 'loop' && !RECORDED_ITERABLE_RE.test(binding.iterableText)) {
+    return { ...site, category: 'NON_U1_OTHER', provenance: 'derived-loop deref: call is lexically inside a for-of body whose unshadowed loop variable this is, over a NON-recorded iterable (algorithm-built collection) — caller-owned algorithm plumbing, not a reference; no U1 surface for arbitrary ids' };
   }
   return site;
 }
@@ -257,6 +353,100 @@ export function buildU1ResidualInventory(programsRoot: string): U1ResidualInvent
   const total = sites.length;
   const categorySum = CATEGORY_KEYS.reduce((acc, key) => acc + categoryCounts[key], 0);
   return { sites, total, categoryCounts, perFile, consistent: total === categorySum };
+}
+
+/* ------------------------------------------------------------------------
+ * Fold-surface actor deref inventory (2026-09-02, fold-consumer
+ * adjudication). The kernel-fold-driven recipe/lifecycle/continuation
+ * surfaces outside the program families dereference `state.actors[EXPR]`
+ * where EXPR is a transmitted/fact-carried identity. This scanner enumerates
+ * EVERY such deref site and tags its index-expression FAMILY so the
+ * adjudication is machine-derived:
+ *  - recorded-forwarded: EXPR indexes a recorded command selection array
+ *    (`targetIds[n]`, `triggerTargetIds[n]`, `actorIds[n]`, …) forwarded by
+ *    a shared fold/parameter;
+ *  - fact-carried: EXPR is a member of a durable fact (`.ownerId`,
+ *    `.sourceActorId`, `.actorId`, `.id` on marks/motes/mutations/…);
+ *  - forwarded-identifier: EXPR is a plain identifier parameter/local
+ *    carrying an identity transmitted by caller or algorithm;
+ *  - algorithm/other: any other computed index;
+ *  - legacy-slot: EXPR starts with `context.` — a legacy context-bag
+ *    interpretation. This family MUST be 0 across the fold surface; the test
+ *    pins that, because the U1 guard's whole point is that no consumer
+ *    interprets the legacy slots outside the authority.
+ */
+export type ActorDerefFamily = 'recorded-forwarded' | 'fact-carried' | 'forwarded-identifier' | 'algorithm/other' | 'legacy-slot';
+
+export interface ActorDerefSite {
+  file: string;
+  line: number;
+  family: ActorDerefFamily;
+  shape: string;
+}
+
+const RECORDED_INDEX_RE = /(?:targetIds|triggerTargetIds|collidedActorIds|slainActorIds|actorIds)\s*\[/;
+const FACT_CARRIED_RE = /\.(?:ownerId|sourceActorId|actorId|id)\b/;
+const PLAIN_IDENTIFIER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** Recursively list every `*.ts` file under `dir` (relative paths). */
+function listTypeScriptFiles(dir: string): string[] {
+  const names: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (name.endsWith('.ts')) names.push(full);
+    else if (name !== 'node_modules' && !name.startsWith('.')) {
+      let isDir = false;
+      try {
+        isDir = readdirSync(full).length >= 0;
+      } catch {
+        isDir = false;
+      }
+      if (isDir) names.push(...listTypeScriptFiles(full));
+    }
+  }
+  return names;
+}
+
+/** Scan every `*.ts` file under `root` (recursively) for `state.actors[…]`
+ * dereferences and tag the index-expression family. AST-based: only real
+ * element accesses on the actors map; comments/strings never match. */
+export function scanActorDerefs(root: string): ActorDerefSite[] {
+  const files = listTypeScriptFiles(root).map((path) => ({
+    file: path.slice(root.length + 1).replaceAll('\\', '/'),
+    text: readFileSync(path, 'utf8'),
+  }));
+  return scanActorDerefsIn(files);
+}
+
+/** AST element-access scan over an explicit (file, text) list — the testable
+ * core of the fold-surface inventory. */
+export function scanActorDerefsIn(files: ReadonlyArray<{ file: string; text: string }>): ActorDerefSite[] {
+  const sites: ActorDerefSite[] = [];
+  for (const { file, text } of files) {
+    const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const visit = (node: ts.Node): void => {
+      if (ts.isElementAccessExpression(node)) {
+        const base = node.expression.getText(sourceFile).trim();
+        if (base === 'state.actors' || base === 'context.state.actors') {
+          const index = node.argumentExpression.getText(sourceFile).trim();
+          const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+          const family: ActorDerefFamily = index.startsWith('context.')
+            ? 'legacy-slot'
+            : RECORDED_INDEX_RE.test(index)
+              ? 'recorded-forwarded'
+              : FACT_CARRIED_RE.test(index)
+                ? 'fact-carried'
+                : PLAIN_IDENTIFIER_RE.test(index)
+                  ? 'forwarded-identifier'
+                  : 'algorithm/other';
+          sites.push({ file, line, family, shape: index });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return sites;
 }
 
 const programsRoot = join(import.meta.dirname, '..', 'src', 'rules', 'automation', 'content', 'jobs', 'programs');

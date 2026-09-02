@@ -178,18 +178,36 @@ provenance string):
   precedence (which recorded slot answers) stays caller-owned U4
   cardinality — the adapter deliberately has no first-element collapse and
   performs no choice.
-- **NON-U1 algorithm plumbing (4 — caller-owned, reclassified; NOT
-  references)**: the remaining `sourceActor(context, <var>)` sites deref
-  identities the caller algorithm itself produced — the shared
+- **NON-U1 algorithm plumbing (4 — caller-owned, reclassified by LEXICAL
+  SCOPE; NOT references)**: the remaining `sourceActor(context, <var>)`
+  sites deref identities the caller algorithm itself produced — the shared
   movement/planning helpers' parameters (plannedFly / plannedRush,
   colossus / demon-slayer / knave) and one derived-loop variable over an
-  algorithm-built set (knave). No reference intent, no legacy slot, and no
-  arbitrary-id U1 accessor exists (or should) — the machine classifier
-  reclassifies them with file context (helper-parameter / loop-variable
-  provenance), inventoried but NOT a U1 gap.
+  algorithm-built set (knave). The machine classifier (2026-09-02 repair)
+  reclassifies them ONLY by lexical scope: the identifier is a parameter of
+  the LEXICALLY ENCLOSING function (call inside its body) or an unshadowed
+  loop variable of a lexically containing `for (const X of …)` over a
+  NON-recorded iterable — never whole-file name coincidence (an unrelated
+  function's same-named parameter, an earlier unrelated loop, or a
+  same-name recorded-selection local leaves a site CAPTURED). The four
+  SITE IDENTITIES (file + exact call shape) are pinned by test. Inventoried
+  but NOT a U1 gap.
 - **U9 provenance / plumbing (never migrate)**: `sourceActorId:` on emitted
   mutations, `actorId: context.actorId` commands, and `context.attackTargetId
   ?` gate tests remain at their sites.
+- **Fold-surface actor derefs (43 sites outside the program census — U1
+  completion audit, 2026-09-02)**: `scanActorDerefs` enumerates every
+  `state.actors[…]` deref in `content/jobs` (recursive, AST-based):
+  **25 fact-carried** (`mark.ownerId` ×12, `mote.ownerId` ×3, `entity.ownerId`
+  ×3, `candidate.ownerId` ×2, `mutation.sourceActorId`/`actorId` ×2,
+  `origin.actorId`, `mine.ownerId`), **5 recorded-forwarded** (`targetIds[0]`
+  / `targetIds[0] ?? ''` in talent/bonus-damage callbacks), **13
+  forwarded-identifier** (fold-carried ability-user ids, U12
+  continuation-carried `ownerId`/`targetId`, the algorithm-combined area
+  set, reactive collided id, an adjacency-helper param), and **0
+  legacy-slot** — no fold-surface site interprets the legacy context bag.
+  See the seventeenth-tranche section below for the adjudication and the
+  optional-captured blocker.
 
 ## U1 tranche executed (fresh HEAD, 2026-09-01, third tranche — Sealer)
 
@@ -1066,32 +1084,111 @@ survivors are proven non-references.
   semantics, choices, geometry, triggers, lifecycle, or damage changed,
   and no source unit was promoted.
 
-## U1 status after the U1×U4 captured-reference adjudication
+## U1 tranche executed (fresh HEAD, 2026-09-02, seventeenth tranche — scope-aware classifier repair + fold-consumer adjudication)
 
-U1 remains PARTIAL — but with a precise, changed blocker. The adjudication
-closed the captured-dereference question for the named program families:
-51 recorded-selection dereferences now resolve through the shared
-`resolveCapturedSelectedActors` surface (the completed bastion/spellblade
-surface), the Harvester in-call read is migrated with its precedence
-intact, and the 4 surviving program sites are machine-reclassified
-NON_U1_OTHER (caller-owned algorithm plumbing, not references). The
-residual census is now 4 = 0 + 0 + 0 + 4; the CAPTURED and BOUNDARY
-buckets are machine-empty; 0 direct dereferences remain in the program
-families.
+### Scope-aware classifier repair
 
-The one remaining cause of PARTIAL is the completion audit's surface
-coverage: reference-shaped consumption also exists in the kernel-fold-driven
-content surfaces OUTSIDE `programs/` (talent / mark-modifier / bonus-damage
-/ attack-modifier / lifecycle / continuation / heroic-activation recipe
-callbacks and encounter hooks — e.g. `state.actors[targetIds[0]]` reads and
-fact-carried `mark.ownerId` / `mote.ownerId` dereferences). Those identities
-are transmitted by shared kernel folds or embedded in recorded facts rather
-than read from the legacy context bag, so today they are caller-owned by
-transmission — but a completion claim requires the same reference-vs-plumbing
-classification, and any enabling surface or guard, for that consumer surface
-before U1 can truthfully become AUTHORITATIVE. That is the next
-dependency-driven tranche (the U1 fold-consumer adjudication); it unblocks
-nothing in the program families, which are complete.
+The file-context refinement previously reclassified a plain-identifier
+CAPTURED site by WHOLE-FILE name coincidence: any function in the file
+declaring `<id>: string` (helper-parameter) or any earlier
+`for (const <id> of …)` loop in the file (loop-variable) triggered
+NON_U1_OTHER. Unsound — an unrelated `function helper(…, actorId: string)`
+or an earlier unrelated loop cannot turn a dereference inside ANOTHER
+function into algorithm plumbing. The repair resolves the LEXICAL binding
+of the identifier at the call site with the TypeScript compiler AST (an
+existing project dependency):
+
+- the nearest enclosing construct that introduces the identifier governs:
+  a parameter of the lexically enclosing function (call inside its body),
+  an unshadowed `for (const X of …)` that lexically contains the call over
+  a NON-recorded iterable (never `input.actorIds` / `triggerTargetIds` / a
+  `context.` slot), or a same-block `const`/`let` declared before the call
+  — a shadowing inner recorded-selection local named like an outer helper
+  param / loop variable keeps the site CAPTURED;
+- constructs from unrelated functions or earlier loops are never ancestors,
+  so name coincidence cannot reclassify a site.
+
+Machine result: still 4 = 0 + 0 + 0 + 4 — the SAME four sites (colossus
+plannedFly param, demon-slayer plannedRush param, knave plannedRush param,
+knave derived-loop var over the wall-occupant worklist), each now with a
+lexical provenance string. Tests pin the SITE IDENTITIES (file + exact
+call shape), not just the number 4, and the classifier-mutation suite
+covers: enclosing helper param → NON_U1; same param name in an unrelated
+function → CAPTURED; enclosing loop var → NON_U1; same loop-var name in an
+earlier unrelated loop → CAPTURED; shadowing in both directions → CAPTURED;
+loop over a recorded selection → CAPTURED; ordinary recorded-input /
+precedence shapes → U1.
+
+### Fold-consumer adjudication
+
+The completion audit's second content surface is now machine-inventoried:
+`scanActorDerefs` enumerates EVERY `state.actors[…]` deref in `content/jobs`
+(recursive, AST-based): **43 sites = 25 fact-carried + 5 recorded-forwarded
++ 13 forwarded-identifier + 0 algorithm/other + 0 legacy-slot**.
+
+- **0 legacy-slot is load-bearing**: no fold-surface site interprets the
+  legacy context bag (`context.actorId` / `attackTargetId` /
+  `triggerSourceId` / …). The U1 guard's boundary holds there by machine.
+- **recorded-forwarded (5)**: `targetIds[0]` / `targetIds[0] ?? ''` in
+  talent / bonus-damage callbacks — recorded command selections forwarded
+  by the shared fold kernel (encounter.ts reducer → `talentTriggerMutations`
+  → content callback). The presence/absence decision is the CALLER's (empty
+  list or the `''` sentinel = "no target"); the deref of a present id is
+  captured-identity resolution against current state.
+- **fact-carried (25)**: `mark.ownerId` (12), `mote.ownerId` (3),
+  `entity.ownerId` (3), `candidate.ownerId` (2), `mutation.sourceActorId` /
+  `mutation.actorId` (2), `origin.actorId`, `mine.ownerId` — identities
+  stamped into durable facts at creation, dereferenced later to READ
+  CURRENT state (owner talents, sides, positions).
+- **forwarded-identifier (13)**: fold/kernel-forwarded ability-user ids
+  (talent / heroic-activation callbacks, 6), U12 continuation-carried ids
+  (`continuation-resolvers.ts` ×4, where the refs themselves are ALREADY
+  typed `captured-actor`), the algorithm-combined area-evidence set loop
+  (`areaIds`, 1), a reactive collided id (trait-reactions, 1), and the
+  adjacent-foes helper param (1).
+
+**Adjudication.** All 43 sites consume identities that were selected
+(recorded command), stamped (facts/mutations), or carried (U12 refs) by
+shared authorities — none is a live legacy-slot interpretation; each deref
+is "resolve an already-captured identity against current state," which is
+U1's captured-reference semantics. The U12 continuation family is closest
+to U1 already: `continuation.refs[?]` holds the typed `captured-actor`
+references and the residual deref (`ownerId ? state.actors[ownerId]`
+: undefined) is presence-guarded — a REMOVED owner silently expires the
+continuation, which is valid-state behavior.
+
+**Smallest missing capability (the exact residual).** Faithful migration of
+the recorded-forwarded, continuation, and fact-carried families through the
+shared surface requires OPTIONAL captured-actor resolution: id absent (or
+the `''` sentinel) → undefined; id present but the actor was REMOVED →
+fail closed `reference.missing-actor`; id present and resolvable → the
+resolved actor. U1's captured-actor kind is STRICT today (present id +
+removed actor = violation) — migrating without the optional form would turn
+valid-state no-ops (continuations expiring, targetless augmentations
+skipping) into failures. The 25 fact-carried sites additionally require a
+lifecycle-safety study (do marks/motes/entities legitimately outlive their
+owner actor in the map?) before routing through the same op.
+
+## U1 status after the seventeenth tranche (classifier repair + fold adjudication)
+
+U1 remains PARTIAL with exactly this residual. On the declared-scope
+authority — one typed Reference/Binding vocabulary, one resolution
+authority, no live/captured slot interpreted outside it — the program
+families and generic consumers are complete and guarded, and the census
+`4 = 0 + 0 + 0 + 4` is now LEXICALLY machine-supported (the four survivors
+are proven scope-contained algorithm plumbing; site identities pinned).
+The fold surfaces are fully inventoried and family-classified, with the
+load-bearing zero (0 legacy-slot interpretation) pinned by test.
+
+The single remaining cause of PARTIAL, stated precisely: the
+fold/lifecycle/continuation surfaces' guarded-optional captured derefs
+need the OPTIONAL captured-actor resolution capability (and the
+fact-carried lifecycle-safety answer) before their 43 sites can route
+through the shared surface — that is the next dependency-driven tranche
+(optional captured-actor resolution in primitives/adapters + replay tests,
+then the recorded-forwarded/continuation migration, then the fact-carried
+lifecycle study). No source unit was promoted; no ability semantics
+changed; zero arbitrary-ID accessor exists.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

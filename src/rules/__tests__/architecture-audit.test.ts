@@ -17,6 +17,7 @@ import {
 import {
   buildU1ResidualInventory,
   categorizeSourceActorArgument,
+  scanActorDerefs,
   scanFileSites,
 } from '../../../scripts/u1-residual-inventory.js';
 import { join as joinPath } from 'node:path';
@@ -230,6 +231,27 @@ describe('U1 residual census (machine inventory)', () => {
     });
   });
 
+  it('pins the SITE IDENTITIES behind the count, not just the number (a false-positive swap cannot keep 4)', () => {
+    // The 4 NON_U1_OTHER survivors must be exactly the four scope-contained
+    // algorithm-plumbing derefs — identified by (file, exact call shape), so
+    // a wrong site cannot silently replace a true one while preserving the
+    // total. The categories stay as the classifier proves them.
+    const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
+    const identities = inventory.sites.map((site) => `${site.file}:${site.shape}`).sort();
+    expect(identities).toEqual([
+      'colossus-programs.ts:sourceActor(context, actorId)',
+      'demon-slayer-programs.ts:sourceActor(context, actorId)',
+      'knave-programs.ts:sourceActor(context, actorId)',
+      'knave-programs.ts:sourceActor(context, passedId)',
+    ]);
+    for (const site of inventory.sites) {
+      expect(site.category).toBe('NON_U1_OTHER');
+      // Scope-aware provenance: primed with the lexical reason, never a
+      // whole-file name coincidence.
+      expect(site.provenance).toMatch(/LEXICALLY ENCLOSING|lexically inside a for-of/);
+    }
+  });
+
   it('census prose total matches the machine inventory (no stale prose can silently survive)', () => {
     // The fresh-residual section's intro line claims a total; it must equal
     // the machine-derived inventory total, or the prose is stale by
@@ -243,6 +265,46 @@ describe('U1 residual census (machine inventory)', () => {
     expect(Number(match![1])).toBe(inventory.total);
   });
 
+  describe('fold-surface actor deref inventory (U1 completion audit — fold-consumer adjudication, 2026-09-02)', () => {
+    const FOLD_ROOT = joinPath(import.meta.dirname, '../automation/content/jobs');
+
+    it('enumerates every state.actors deref in the fold/recipe/lifecycle/continuation surfaces and pins the family split, with ZERO legacy-slot interpretation', () => {
+      const sites = scanActorDerefs(FOLD_ROOT);
+      expect(sites.length).toBe(43);
+      const counts: Record<string, number> = {
+        'recorded-forwarded': 0,
+        'fact-carried': 0,
+        'forwarded-identifier': 0,
+        'algorithm/other': 0,
+        'legacy-slot': 0,
+      };
+      for (const site of sites) counts[site.family] += 1;
+      expect(counts).toEqual({
+        'recorded-forwarded': 5,
+        'fact-carried': 25,
+        'forwarded-identifier': 13,
+        'algorithm/other': 0,
+        'legacy-slot': 0,
+      });
+    });
+
+    it('no fold-surface deref interprets the legacy context bag — the U1 guard\u2019s whole point (0 legacy-slot)', () => {
+      expect(scanActorDerefs(FOLD_ROOT).filter((site) => site.family === 'legacy-slot')).toEqual([]);
+    });
+
+    it('the U12 continuation family already resolves typed captured-actor refs off the recorded continuation; the deref is presence-guarded — the optional-captured residual', () => {
+      const continuation = scanActorDerefs(FOLD_ROOT).filter((site) => site.file === 'continuation-resolvers.ts');
+      expect(continuation.map((site) => `${site.line}:${site.shape}`)).toEqual(['53:ownerId', '54:targetId', '180:ownerId', '181:targetId']);
+      expect(continuation.every((site) => site.family === 'forwarded-identifier')).toBe(true);
+      // The refs themselves are ALREADY the typed U1 captured-actor kind:
+      // `continuation.refs[0]?.kind === 'captured-actor'` decides the id. Only
+      // the presence-guarded map deref (`ownerId ? state.actors[ownerId]`)
+      // remains direct — a removed owner silently expires the continuation,
+      // which is the valid-state behavior a strict captured resolution would
+      // break. The missing capability is OPTIONAL captured-actor resolution.
+    });
+  });
+
   it('every site carries a machine-derived provenance string (auditable classification)', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
     for (const site of inventory.sites) {
@@ -252,25 +314,96 @@ describe('U1 residual census (machine inventory)', () => {
     }
   });
 
-  it('classifier mutation: pure slots stay PURE; the U1×U4 adjudication moved recorded-selection derefs out; helper/derived args reclassify with file context', () => {
+  it('classifier mutation: shape-level categories stay precise; file-context refinement is LEXICAL, never whole-file name coincidence', () => {
     expect(categorizeSourceActorArgument('context.actorId')).toBe('PURE_LIVE_REFERENCE');
     expect(categorizeSourceActorArgument('context.attackTargetId')).toBe('PURE_LIVE_REFERENCE');
     expect(categorizeSourceActorArgument('context.input.actorIds.target[0]')).toBe('DERIVED_OR_PRECEDENCE_BOUNDARY');
     expect(categorizeSourceActorArgument('targetId')).toBe('CAPTURED_ID_DEREFERENCE');
     expect(categorizeSourceActorArgument('allyIds[i]')).toBe('CAPTURED_ID_DEREFERENCE');
-    // File-context refinement: a plannedRush/plannedFly parameter and a
-    // derived-loop variable are algorithm plumbing, not U1 references — the
-    // recorded-selection derefs migrated; these four stay caller-owned.
-    const helperFile = [
-      'function plannedRush(context, actorId: string, steps: number) { return null; }',
-      'const x = sourceActor(context, actorId);',
-      'for (const passedId of passed) { sourceActor(context, passedId); }',
-    ].join('\n');
-    const sites = scanFileSites('helper.ts', helperFile);
-    expect(sites[0].category).toBe('NON_U1_OTHER');
-    expect(sites[1].category).toBe('NON_U1_OTHER');
-    // A plain input-bound alias with no helper context stays CAPTURED.
-    expect(scanFileSites('plain.ts', ['const targetId = context.input.actorIds?.target?.[0];', 'sourceActor(context, targetId);'].join('\n'))[0].category).toBe('CAPTURED_ID_DEREFERENCE');
+
+    const sites = (text: string) => scanFileSites('fixture.ts', text);
+
+    // 1. ACTUAL enclosing helper parameter (call inside the helper body) —
+    //    algorithm plumbing, not a reference.
+    expect(sites([
+      'function plannedRush(context, actorId: string, steps: number) {',
+      '  const source = sourceActor(context, actorId);',
+      '  return null;',
+      '}',
+    ].join('\n'))[0].category).toBe('NON_U1_OTHER');
+
+    // 2. SAME parameter name in an UNRELATED function — the call is a
+    //    recorded-selection local lexically outside `helper`; must NOT
+    //    reclassify (the old whole-file regex did).
+    expect(sites([
+      'function helper(context, actorId: string) { return null; }',
+      'function someResolver(context) {',
+      '  const actorId = context.input.actorIds?.target?.[0];',
+      '  const actor = sourceActor(context, actorId);',
+      '  return [];',
+      '}',
+    ].join('\n'))[0].category).toBe('CAPTURED_ID_DEREFERENCE');
+
+    // 3. ACTUAL enclosing loop variable (call lexically inside the loop) —
+    //    derived loop over an algorithm-built collection.
+    expect(sites([
+      'function resolver(context) {',
+      '  for (const passedId of passed) {',
+      '    const actor = sourceActor(context, passedId);',
+      '  }',
+      '}',
+    ].join('\n'))[0].category).toBe('NON_U1_OTHER');
+
+    // 4. SAME loop-variable name in an EARLIER UNRELATED loop — the site is
+    //    a recorded-selection local after the loop; must NOT reclassify.
+    expect(sites([
+      'function resolver(context) {',
+      '  for (const passedId of unrelated) { void passedId; }',
+      '  const passedId = context.input.actorIds?.target?.[0];',
+      '  const actor = sourceActor(context, passedId);',
+      '  return [];',
+      '}',
+    ].join('\n'))[0].category).toBe('CAPTURED_ID_DEREFERENCE');
+
+    // 5. SHADOWING: a loop variable, then an inner recorded-selection local
+    //    of the SAME name in a nested block — the inner call stays CAPTURED.
+    expect(sites([
+      'function resolver(context) {',
+      '  for (const actorId of worklist) {',
+      '    { const actorId = context.input.actorIds?.target?.[0];',
+      '      const actor = sourceActor(context, actorId); }',
+      '  }',
+      '}',
+    ].join('\n'))[0].category).toBe('CAPTURED_ID_DEREFERENCE');
+
+    // 5b. SHADOWING the other way: a helper PARAMETER, then an inner
+    //     recorded-selection local of the SAME name in a nested arrow.
+    expect(sites([
+      'function plannedRush(context, actorId: string) {',
+      '  const g = () => {',
+      '    const actorId = context.input.actorIds?.target?.[0];',
+      '    return sourceActor(context, actorId);',
+      '  };',
+      '  return null;',
+      '}',
+    ].join('\n'))[0].category).toBe('CAPTURED_ID_DEREFERENCE');
+
+    // 6. A loop over a RECORDED selection is a reference loop (captured), never
+    //    algorithm plumbing.
+    expect(sites([
+      'function resolver(context) {',
+      '  for (const targetId of context.input.actorIds.target) {',
+      '    const actor = sourceActor(context, targetId);',
+      '  }',
+      '}',
+    ].join('\n'))[0].category).toBe('CAPTURED_ID_DEREFERENCE');
+
+    // 7. Ordinary recorded input / precedence-chain shapes still classify U1.
+    expect(sites([
+      'const targetId = context.input.actorIds?.target?.[0];',
+      'const actor = sourceActor(context, targetId);',
+    ].join('\n'))[0].category).toBe('CAPTURED_ID_DEREFERENCE');
+    expect(sites('const center = sourceActor(context, context.input.actorIds.target[0]);')[0].category).toBe('DERIVED_OR_PRECEDENCE_BOUNDARY');
   });
 
   it('scanner survival: multi-line calls count as ONE site; harness, not hand grep', () => {

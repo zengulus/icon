@@ -333,36 +333,45 @@ helper-parameter identities — none re-derives a legacy slot at use time.
 Audit outcome: the generic-consumer review found the one bypass above and
 repaired/pinned it, and the Colossus tranche that followed closed the last
 PURE program family. The U1×U4 adjudication (2026-09-01, sixteenth
-tranche) then split the 54 + 1 captured-identity sites by semantic
-ownership: the 51 recorded-selection dereferences (pure recorded reads,
-`??`/`?.` precedence chains, and the in-call Harvester center read)
-migrated through the shared `resolveCapturedSelectedActors` surface
-(completing the decided bastion/spellblade surface; live-slot chain sides
-through the trigger/attack accessors), and the 4 helper-parameter /
-derived-loop sites were machine-reclassified NON_U1_OTHER (caller-owned
-algorithm plumbing — no arbitrary-id accessor exists by design). U1's
-PARTIAL status now rests on exactly one precise cause: a second completion-
-audit surface — the kernel-fold-transmitted recipe/lifecycle/continuation
-callbacks OUTSIDE `programs/` consume recorded/fact-carried identities
-(`targetIds[0]`, `mark.ownerId`, `mote.ownerId`) directly; those need the
-same reference-vs-plumbing classification, and any enabling surface or
-guard, before AUTHORITATIVE. See `docs/u8-u1-underlay-census.md`.
+tranche) split the 54 + 1 captured-identity sites by semantic ownership:
+the 51 recorded-selection dereferences migrated through the shared
+`resolveCapturedSelectedActors` surface, and the 4 helper-parameter /
+derived-loop sites were machine-reclassified NON_U1_OTHER (no arbitrary-id
+accessor exists by design). The classifier repair (2026-09-02,
+seventeenth tranche) made that reclassification LEXICAL: the identifier
+must be a parameter of the lexically enclosing function or an unshadowed
+loop variable of a lexically containing `for-of` over a NON-recorded
+iterable — whole-file name coincidence no longer reclassifies a site, and
+the four surviving site identities (file + exact shape) are pinned. The
+fold-consumer adjudication then inventoried the second completion surface:
+**43 `state.actors[…]` derefs across the recipe/lifecycle/continuation
+surfaces = 25 fact-carried + 5 recorded-forwarded + 13 forwarded-
+identifier + 0 legacy-slot** — no fold-surface site interprets the legacy
+context bag. U1's PARTIAL status now rests on exactly one precise cause:
+faithful migration of those 43 guarded-optional captured derefs requires
+an OPTIONAL captured-actor resolution (id absent/`''` → undefined; present
+but removed → fail closed; present → resolved) that U1's strict
+captured-actor kind lacks, plus a fact-carried lifecycle-safety study for
+mark/mote/entity owners that may outlive their actor. See
+`docs/u8-u1-underlay-census.md`.
 
 **Locations partially owning/duplicating.** Named content resolvers under
 `automation/content/classes/` and `automation/content/jobs/programs/` no
 longer interpret LIVE slots or captured identities directly: live
 source/direct-target/trigger reads and recorded-selection dereferences all
 route through the shared content-authoring adapter (the four surviving
-program sites are machine-classified NON_U1_OTHER algorithm plumbing).
-Generic kernels/primitives are migrated and guarded. The kernel-fold-driven
-content surfaces outside `programs/` (talent / mark-modifier /
-bonus-damage / attack-modifier / lifecycle / continuation /
-heroic-activation recipes, encounter hooks) consume identities transmitted
-by shared folds or embedded in recorded facts (`targetIds[0]`,
-`mark.ownerId`, `mote.ownerId`) — caller-owned by transmission today,
-inventoried as the remaining completion-audit surface before AUTHORITATIVE.
-Explicit actor/entity ids passed as already-resolved domain-operation
-parameters are retained facts, not implicit-reference interpreters.
+program sites are lexically machine-classified NON_U1_OTHER algorithm
+plumbing). Generic kernels/primitives are migrated and guarded. The
+kernel-fold-driven content surfaces outside `programs/` (talent /
+mark-modifier / bonus-damage / attack-modifier / lifecycle / continuation
+/ heroic-activation recipes, encounter hooks) consume identities
+transmitted by shared folds or embodied in recorded facts (`targetIds[0]`,
+`mark.ownerId`, `mote.ownerId`, U12 `captured-actor` refs) — 43 sites, 0
+legacy-slot interpretation (machine-inventoried and test-pinned); they
+remain direct because migrating them needs the OPTIONAL captured-actor
+resolution capability (the exact residual). Explicit actor/entity ids
+passed as already-resolved domain-operation parameters are retained facts,
+not implicit-reference interpreters.
 
 **Intended authority.** `primitives/reference.ts` (barrel re-exported from
 `primitives/types.ts`): `Reference<T>` with `{ kind, live | captured }`,
