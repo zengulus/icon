@@ -33,7 +33,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U4 Choice / Decision | PARTIAL | ability/talent choice fold reads and remaining window-carried choice consumers |
 | U5 Value / Expression | PARTIAL | inline resolver arithmetic and missing typed value families |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
-| U7 Anchor / Spatial Frame | PARTIAL | LIVE actor anchor identity now typed (tranche 19); remaining aura/creation/rebound-origin consumers stay specialist-owned |
+| U7 Anchor / Spatial Frame | PARTIAL | LIVE actor anchor identity typed (tranche 19); teleport boundary now measures from the mover p.92 footprint (tranche 20); aura/creation/rebound/RuleArea.origin consumers stay specialist-owned with written boundaries |
 | U8 Scope / Clock | AUTHORITATIVE | none |
 | U9 Provenance / Cause | PARTIAL | legacy trigger/damage/movement provenance reconstruction |
 | U10 Fact / Outcome | PARTIAL | movement/save distinction proof remains incomplete |
@@ -1372,6 +1372,64 @@ build clean. U7 remains PARTIAL:
 the aura-origin, entity `creationSpatial`, `RuleArea.origin`, teleport, and
 rebound-origin consumers stay specialist-owned per their documented
 boundaries — this tranche only closed the LIVE actor anchor identity seam.
+
+## U1–U7 tranche executed (fresh HEAD, 2026-09-02, twentieth tranche — U7 verification, teleport footprint-frame repair, strict-vs-weak type bound documented)
+
+**Verdict on the nineteenth tranche: verified, no repair needed.** The DAG
+claim holds (U7 depends only on U1+U2, both authoritative; U3 still waits
+on U5-core AND U7 — the plan's own table), `SpatialAnchor`'s actor kind is
+the typed `Reference<'actor'>`, `anchorFromActorSelector` is the single
+selector→reference mapping (fail-closed at construction for query shapes
+and input-without-context), `resolveSpatialAnchor` composes the ONE
+`resolveReference` authority, relation perspective stays U2-owned in
+`kernels/candidate.ts` (`relationPerspectiveIdFromContext`), zero source
+promotion, and the specialist-origin consumers were genuinely outside the
+tranche.
+
+**Strict-vs-weak `ResolvedReference` typing — documented bound, no redesign.**
+The domain-level union keeps `{ kind: 'absent' }` on the actor domain not
+as sloppiness but as the runtime-widest truth: a weak member can appear
+directly, INSIDE a collection, or beneath a BOUND name — none of which the
+domain-level type can see. Removing `absent` from strict kinds requires
+`ResolvedReferenceFor<R extends Reference>` kind-indexed resolution, a
+redesign that would make every strict call site's `absent` narrowing dead
+code while leaving bound/collection cases exactly as conservative — zero
+runtime change for a type-only distinction. The kinds themselves are typed
+(`capturedActor` vs `capturedActorWeak`) and the public accessors encode
+the contract exactly (`resolveCapturedActor` rejects vs
+`resolveCapturedActorWeak` maps `absent`→`undefined`). Bound documented in
+`primitives/reference.ts`; runtime exclusivity already test-pinned.
+
+**U7 residual audit — five families classified.** (A) NO genuine anchor
+duplication remains: (1) aura origins — B, carrier-scan identity (durable
+states), emits `position`+`size` + U2-branded `perspectiveActorId`, live
+re-derivation; specialist-owned with written boundary, no migration;
+(2) entity `creationSpatial` — B, record-carried RESOLVED frame for
+replay, documented retained specialist; (3) `RuleArea.origin` — C, inert
+declarative with no runtime consumer; (4) teleport origins — B with a REAL
+gap repaired below; (5) rebound — C, provenance flag + unwired blocker;
+runtime.ts `context.actorId` de-facto anchor — C, U1 source identity for
+cost, not a spatial frame.
+
+**Teleport footprint-frame repair (the one genuine gap).**
+`chosenTeleportDestination` was measuring p.92 range from a degenerate
+size-1 point regardless of the mover's actual footprint — for a Size-2
+mover, teleport range under-reached. The legality query now threads the
+mover's footprint from the already-resolved mover record
+(`originSize: mover?.size ?? 1` in the shared `validatePositionLegality`
+call), matching every other measurement consumer. Behavior-preserving for
+all Size-1 movers (verified: spellblade/sealer/shade/harvester suites, 111
+tests, green); Size-2 edge measurement proven by adversarial fixtures
+(edge-adjacent cell legal, one-past illegal, point-frame would reject it).
+New `u7-teleport-footprint-origin` guard in `scripts/audit-architecture-core.ts`
+rejects a restored point-frame call; mutation tests pin both directions.
+
+**Census.** U1 residual consistent at 4 = 0+0+0+4; architecture audit 125
+files clean; automation clean; source-fidelity strict clean; tests 2175
+(+6); build clean. U7 remains PARTIAL: aura/creation/rebound/RuleArea.origin
+consumers stay specialist-owned with written boundaries (only the teleport
+boundary was repaired), so the completion gate's "every declared origin kind
+on the typed vocabulary" is not yet demonstrable end-to-end.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

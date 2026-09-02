@@ -170,7 +170,10 @@ query with an EXPLICIT space policy — `any` per p.92 "Space: Any space in
 range, and any characters or objects occupying it", or `unoccupied` — and
 an opt-in `distance-from-origin` ordering policy),
 `validatePositionLegality` (teleport specialist: in-grid/range/unoccupied
-— consumed by the teleport kernel's violation mapping), and
+— consumed by the teleport kernel's violation mapping; the teleport
+kernel threads the MOVER's p.92 footprint as `originSize` from the
+resolved mover record, so a Size-2 mover measures range from its footprint
+edge — guarded by `u7-teleport-footprint-origin`), and
 `nearestCandidates` (the full minimum-distance set over an evaluated
 CandidateSet — NO invented tie-break; ordering/tie resolution happens only
 where the source defines it). `primitives/job-kit.ts` dropped the

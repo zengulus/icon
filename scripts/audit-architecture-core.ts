@@ -220,6 +220,33 @@ export function choiceCandidateRoutingProblems(choiceCode: string): string[] {
   return problems;
 }
 
+// U7 (anchor/spatial frame) — the TELEPORT legality boundary measures range
+// from the mover's own p.92 footprint edge, never from a degenerate size-1
+// point. The kernel must thread the resolved founder (`context.state.actors[
+// actorId].size`) into the shared position-legality operator as `originSize`;
+// dropping it would silently re-introduce the point-frame measurement.
+export function teleportFootprintOriginProblems(code: string): string[] {
+  const problems: string[] = [];
+  if (!/validatePositionLegality\s*\(/.test(code)) {
+    problems.push('teleport legality no longer routes through the shared validatePositionLegality operator');
+    return problems;
+  }
+  // The legality call must carry the MOVER footprint as originSize. Match the
+  // object-literal argument between the braces of the validatePositionLegality
+  // call so a restored point-frame call (no originSize key) is caught.
+  const call = /validatePositionLegality\s*\(\s*\{([^{}]*)\}/.exec(code);
+  const query = call?.[1] ?? '';
+  // The legality call must carry the MOVER's footprint as originSize AND the
+  // mover footprint must be READ from the resolved mover record (bound as
+  // `state.actors[actorId]`, then `.size` — the binding name is incidental;
+  // both the originSize key and the footprint read are the semantics).
+  const footprintsMover = /\bactors\s*\[\s*actorId\s*\]/.test(code) && /\b(?:mover|actor|source)\??\.\s*size/.test(code);
+  if (!/originSize\s*:/.test(query) || !footprintsMover) {
+    problems.push('teleport legality does not measure from the mover\'s p.92 footprint (originSize must come from the mover record read via state.actors[actorId].size — a size-1 point frame is a dropped-frame regression)');
+  }
+  return problems;
+}
+
 // U2 (role/perspective) single-authority guard details.
 //
 // These are the CONSUMERS migrated to derive semantic relation / controller /
@@ -617,6 +644,13 @@ export function auditArchitecture(automationRoot: string): AuditResult {
   if (choiceCode) {
     for (const detail of choiceCandidateRoutingProblems(choiceCode)) {
       violations.push({ check: 'u4-u3-candidate-routing', file: 'kernels/choice.ts', detail });
+    }
+  }
+
+  const teleportCode = genericLayerCode['kernels/teleport-choice.ts'];
+  if (teleportCode) {
+    for (const detail of teleportFootprintOriginProblems(teleportCode)) {
+      violations.push({ check: 'u7-teleport-footprint-origin', file: 'kernels/teleport-choice.ts', detail });
     }
   }
 

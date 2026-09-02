@@ -433,6 +433,41 @@ assumption here, document the evidence and update this list before proceeding.
   boundary; zero source promotion, no ability semantics changed. See
   `docs/u8-u1-underlay-census.md`.
 
+- **U1–U7 tranche 20 — teleport p.92 footprint-frame repair + strict-vs-
+  weak type bound documented (2026-09-02) — DONE.** (a) VERIFICATION of
+  tranche 19: DAG (U7 = U1+U2 only; U3 still waits on U5-core+U7), typed
+  anchor identity, single selector→ref mapping, fail-closed construction,
+  ONE-resolveReference composition, U2 relation independence, zero
+  promotion — all confirmed; no repair needed. (b) STRICT-vs-WEAK TYPING
+  DECISION: the actor-domain `absent` is NOT a leak — it is the
+  runtime-widest truth, since a weak member can occur directly, inside a
+  collection, or beneath a bound name (none statically visible at the
+  domain level). Precise per-kind typing (`ResolvedReferenceFor<R>`) would
+  be a zero-runtime redesign that leaves bound/collection cases equally
+  conservative; DOCUMENTED bound added in `primitives/reference.ts`, kinds
+  (`capturedActor` vs `capturedActorWeak`) and adapter accessors already
+  encode the exact contract. (c) U7 RESIDUAL AUDIT: NO genuine anchor
+  duplication remains — five families classified (aura B carrier-scan with
+  written boundary; creationSpatial B record-carried retained specialist;
+  RuleArea.origin C inert; teleport B-with-gap REPAIRED; rebound C
+  unwired; runtime.ts actorId C U1-identity). (d) THE FIX:
+  `chosenTeleportDestination` measured p.92 range from a degenerate size-1
+  point regardless of the mover's footprint; it now threads the mover's
+  size from the resolved mover record into the shared
+  `validatePositionLegality` call (`originSize: mover?.size ?? 1`) — a
+  Size-2 mover's teleport range now reaches its footprint edge, matching
+  every other measurement consumer. Behavior-preserving (spellblade /
+  sealer / shade / harvester / ability-use-choices, 111 tests green); +
+  Size-2 edge adversarial fixtures (edge-adjacent legal, one-past illegal,
+  point-frame would reject). New `u7-teleport-footprint-origin`
+  architecture guard rejects a restored point-frame call (mutation-tested
+  both directions). EVIDENCE: 2175 tests (+6); U1 residual 4 = 0+0+0+4
+  consistent; architecture (125) / automation / source-fidelity strict
+  audits clean; build clean. U7 stays PARTIAL — aura / creationSpatial /
+  RuleArea.origin / rebound consumers remain specialist-owned with written
+  boundaries; zero source promotion, no ability semantics changed. See
+  `docs/u8-u1-underlay-census.md`.
+
 
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`

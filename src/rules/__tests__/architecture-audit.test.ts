@@ -6,6 +6,7 @@ import {
   auditArchitecture,
   choiceCandidateRoutingProblems,
   kernelAuthoringFacadeProblems,
+  teleportFootprintOriginProblems,
   isBespokeU16FieldName,
   u1ReferenceRoutingProblems,
   u8EncounterRoutingProblems,
@@ -140,6 +141,34 @@ describe('auditArchitecture (real codebase)', () => {
         'position choices do not bind the U3 validatePositionCandidate result',
         'choice kernel imports raw spatial semantics instead of U3 candidate validation',
       ]));
+  });
+
+  it('U7 guard accepts a teleport legality call that measures from the mover footprint', () => {
+    const routed = `
+      const mover = context.state.actors[actorId];
+      const legality = validatePositionLegality({
+        origin,
+        originSize: mover?.size ?? 1,
+        range,
+        excludeActorId: actorId,
+        lineOfSightFrom: origin,
+      }, destination, context);
+    `;
+    expect(teleportFootprintOriginProblems(routed)).toEqual([]);
+  });
+
+  it('U7 guard catches a restored size-1 point frame (footprint size dropped)', () => {
+    const dropped = `
+      const legality = validatePositionLegality({
+        origin,
+        range,
+        excludeActorId: actorId,
+        lineOfSightFrom: origin,
+      }, destination, context);
+    `;
+    expect(teleportFootprintOriginProblems(dropped)).toEqual(expect.arrayContaining([
+      expect.stringContaining('size-1 point frame'),
+    ]));
   });
 
   it('semantic atomicity: a dead U3 call cannot conceal restored local position legality', () => {

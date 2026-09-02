@@ -75,8 +75,19 @@ export function chosenTeleportDestination(
   // — save-driven or swap legs whose LoS source the source text does not
   // define — stay the movement gateway's application-time authority; this
   // gate governs player-chosen Teleport X destinations.)
+  //
+  // p.92: "range is measured from the edge of the origin space (or
+  // character)" — the mover's own FOOTPRINT (size 1 → the origin point cell;
+  // size N → the edge of the N×N footprint), the same canonical frame every
+  // other legality/measurement consumer reads from the resolved anchor. The
+  // mover id is an already-resolved identity supplied by the caller; reading
+  // its factual size alongside the equally-factual current position is a
+  // frame read, never a new identity interpretation. A Size-1 mover is
+  // unchanged (originSize 1 ≡ today's point-cell metric).
+  const mover = context.state.actors[actorId];
   const legality = validatePositionLegality({
     origin,
+    originSize: mover?.size ?? 1,
     range,
     excludeActorId: actorId,
     lineOfSightFrom: origin,

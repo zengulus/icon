@@ -1085,7 +1085,11 @@ RESOLVED-position contract evaluated at command time and carried on the
 mutation for replay — it names the same frame but travels with the
 creation record (documented retained specialist); `teleport-choice` origin
 positions are resolved positions consumed by the shared
-`validatePositionLegality` (a captured-position anchor in effect);
+`validatePositionLegality` (a captured-position anchor in effect); since
+2026-09-02 (tranche 20) the teleport legality call threads the MOVER's
+footprint as `originSize` from the resolved mover record, so p.92 range is
+measured from the mover's footprint edge, not a degenerate size-1 point
+(guard: `u7-teleport-footprint-origin`);
 `SpatialIntent.from` and aura origins (`kernels/aura.ts`) stay with the
 movement gateway / aura kernel (U2 migration is T3+); rebound origin
 absent (U12 continuation records).

@@ -121,7 +121,28 @@ export interface CapturedActorWeakReference {
  * priced into the vocabulary ONLY where a lifecycle-sensitive reference kind
  * can produce it — the weak captured-actor kind, whose domain is `actor`;
  * since collections preserve their element domain, an actor collection can
- * carry absent items but no non-actor domain can ever resolve to absent. */
+ * carry absent items but no non-actor domain can ever resolve to absent.
+ *
+ * STRICT-vs-WEAK ACTOR PRECISION BOUND (documented, deliberately not
+ * over-typed): `ResolvedReference<'actor'>` keeps the `absent` member even
+ * though STRICT actor kinds (captured-actor, live source/attack-target/
+ * trigger-source slots, live ids, live bound names bound to a strict ref,
+ * the plural-slot collection) can never produce it. The runtime-producible
+ * set is exactly: a `captured-actor-weak` literal, any COLLECTION whose
+ * items contain a weak member, and any BOUND name whose bound referent is
+ * (or contains) a weak member. The domain-level union cannot express that
+ * distinction without indexing the resolution by the reference KIND
+ * (`ResolvedReferenceFor<R extends Reference>`) — a redesign that would make
+ * every strict call site's earlier `kind === 'absent'` narrowing dead code
+ * while leaving bound/collection cases conservative in exactly the same
+ * way, for zero runtime change. The public accessor surface already encodes
+ * the distinction exactly: `resolveCapturedActor` (strict) returns the actor
+ * or rejects; `resolveCapturedActorWeak` maps `absent` to `undefined`. The
+ * runtime contract is pinned by tests: only the weak kind ever resolves to
+ * absent, and strict actor resolutions never do. Consumers that need the
+ * exact contract at the vocabulary level use the strict/weak kinds directly
+ * (`capturedActor` vs `capturedActorWeak`) — the kinds themselves are typed;
+ * only the union-level resolution type is conservative by design. */
 export type ResolvedReference<D extends ReferenceDomain> =
   | (D extends 'actor' ? { kind: 'actor'; actor: RuleActorView }
     : D extends 'entity' ? { kind: 'entity'; entity: RuleEntityView }
