@@ -16,6 +16,7 @@
  */
 import { findAbility } from '../../../catalog.js';
 import { isBloodied, registerBonusDamageRule, registerRecipientBonusDamageRule, registerTraitBonusDamageRule } from '../../kernels/bonus-damage.js';
+import { resolveCapturedActor } from '../glue/reference-authoring.js';
 
 // ICON p.135 Pulverize (colossus trait): "When you start an attack ability on
 // higher elevation than your target, it deals bonus damage." Ability-WIDE
@@ -68,7 +69,9 @@ registerBonusDamageRule({
   talent: 2,
   gate: { kind: 'always' },
   dice: ({ state, targetIds }) => {
-    const target = state.actors[targetIds[0]];
+    // The recorded command target is guaranteed present in this same-command
+    // fold (strict captured resolution; absent recorded target → undefined).
+    const target = resolveCapturedActor({ state }, targetIds[0]);
     if (!target?.position) return 0;
     return Object.values(state.actors).filter((candidate) =>
       candidate.id !== target.id

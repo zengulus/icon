@@ -268,9 +268,21 @@ describe('U1 residual census (machine inventory)', () => {
   describe('fold-surface actor deref inventory (U1 completion audit — fold-consumer adjudication, 2026-09-02)', () => {
     const FOLD_ROOT = joinPath(import.meta.dirname, '../automation/content/jobs');
 
-    it('enumerates every state.actors deref in the fold/recipe/lifecycle/continuation surfaces and pins the family split, with ZERO legacy-slot interpretation', () => {
+    it('enumerates every state.actors deref in the fold/recipe/lifecycle/continuation surfaces and pins the family split, with ZERO legacy-slot interpretation (migrated: only caller-owned algorithm/helper plumbing survives)', () => {
       const sites = scanActorDerefs(FOLD_ROOT);
-      expect(sites.length).toBe(43);
+      expect(sites).toEqual([
+        expect.objectContaining({ file: 'heroic-activation-recipes.ts', family: 'forwarded-identifier', shape: 'actorId' }),
+        expect.objectContaining({ file: 'talent-recipes.ts', family: 'forwarded-identifier', shape: 'actorId' }),
+        expect.objectContaining({ file: 'talent-recipes.ts', family: 'forwarded-identifier', shape: 'id' }),
+        expect.objectContaining({ file: 'trait-reactions.ts', family: 'forwarded-identifier', shape: 'collidedId' }),
+      ]);
+      // EXACT survivors — a false positive can never swap in while keeping 4.
+      expect(sites.map((site) => `${site.file}:${site.line}:${site.shape}`)).toEqual([
+        'heroic-activation-recipes.ts:163:actorId',
+        'talent-recipes.ts:46:actorId',
+        'talent-recipes.ts:480:id',
+        'trait-reactions.ts:28:collidedId',
+      ]);
       const counts: Record<string, number> = {
         'recorded-forwarded': 0,
         'fact-carried': 0,
@@ -280,9 +292,9 @@ describe('U1 residual census (machine inventory)', () => {
       };
       for (const site of sites) counts[site.family] += 1;
       expect(counts).toEqual({
-        'recorded-forwarded': 5,
-        'fact-carried': 25,
-        'forwarded-identifier': 13,
+        'recorded-forwarded': 0,
+        'fact-carried': 0,
+        'forwarded-identifier': 4,
         'algorithm/other': 0,
         'legacy-slot': 0,
       });
@@ -292,16 +304,36 @@ describe('U1 residual census (machine inventory)', () => {
       expect(scanActorDerefs(FOLD_ROOT).filter((site) => site.family === 'legacy-slot')).toEqual([]);
     });
 
-    it('the U12 continuation family already resolves typed captured-actor refs off the recorded continuation; the deref is presence-guarded — the optional-captured residual', () => {
+    it('the U12 continuation family migrated: the typed captured-actor refs now resolve through the shared captured-actor ops — zero raw derefs remain in continuation-resolvers.ts', () => {
+      // The former "presence-guarded map deref" residual (ownerId ? state.actors[ownerId])
+      // is gone. Continuation owner/target refs resolve STRICT (absent ref in
+      // the recorded continuation → undefined; a PRESENT id must resolve — the
+      // map is stable mid-combat, REMOVE_ACTOR is setup-only, so a
+      // present-but-removed id is a dangling reference, not a lifecycle
+      // state). The legitimate expiration cases (a fallen or off-battlefield
+      // owner) stay CALLER-side guards on the resolved actor — exactly the
+      // old `if (!owner || … owner.defeated || !owner.onBattlefield)` check.
       const continuation = scanActorDerefs(FOLD_ROOT).filter((site) => site.file === 'continuation-resolvers.ts');
-      expect(continuation.map((site) => `${site.line}:${site.shape}`)).toEqual(['53:ownerId', '54:targetId', '180:ownerId', '181:targetId']);
-      expect(continuation.every((site) => site.family === 'forwarded-identifier')).toBe(true);
-      // The refs themselves are ALREADY the typed U1 captured-actor kind:
-      // `continuation.refs[0]?.kind === 'captured-actor'` decides the id. Only
-      // the presence-guarded map deref (`ownerId ? state.actors[ownerId]`)
-      // remains direct — a removed owner silently expires the continuation,
-      // which is the valid-state behavior a strict captured resolution would
-      // break. The missing capability is OPTIONAL captured-actor resolution.
+      expect(continuation).toEqual([]);
+    });
+
+    it('the four remaining raw derefs are caller-owned algorithm/helper plumbing — proven by provenance, not shape', () => {
+      // C-category survivors (2026-09-02 lifecycle adjudication): the identity
+      // is produced by the currently-executing algorithm or dependency-injected
+      // into a pure helper, never a durable remembered reference. Verbatim
+      // shapes are pinned above; this test locks the semantic claim to source.
+      const sites = scanActorDerefs(FOLD_ROOT);
+      const byShape = new Map(sites.map((site) => [site.shape, site]));
+      // heroic 163 + talent 46: local pure helpers (closestFoesOf / adjacentFoes)
+      // take the ability-user id as a dependency-injected PARAM (U4/U2 caller).
+      for (const shape of ['actorId']) expect(byShape.has(shape)).toBe(true);
+      // talent 480: loop over `areaIds` — an algorithm-built Set (recorded
+      // targets \u222A area-damage victims); transient, consumed in the same fold.
+      expect(byShape.has('id')).toBe(true);
+      // trait 28: collidedId over F9-derived reactive collision ids
+      // (collidingShoveTargets / affectedFoeIds) — the trigger DECISION is
+      // F9's; the derest is transient algorithm output, never durable U1.
+      expect(byShape.has('collidedId')).toBe(true);
     });
   });
 

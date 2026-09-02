@@ -20,7 +20,11 @@
  * plural collection) and resolves it through `resolveReference`, the single
  * resolution authority. It is deliberately NOT a second reference system and
  * it deliberately does NOT expose a generic `getActor(id)` convenience — the
- * six accessors are the entire surface.
+ * eight accessors are the entire surface: LIVE slots, CAPTURED recorded
+ * selections (plural and single), the strict `resolveCapturedActor` and the
+ * lifecycle-sensitive `resolveCapturedActorWeak` for durable fact-carried
+ * identities, and bound names. There is exactly ONE captured-actor contract
+ * per accessor — never a flag that switches strict/weak behavior.
  *
  * Semantics each accessor makes explicit (and the parity/adversarial suite
  * proves):
@@ -53,6 +57,7 @@
 import { RuleProgramViolation } from '../../kernels/violations.js';
 import {
   capturedActor,
+  capturedActorWeak,
   liveActorSlot,
   liveTriggerTargets,
   liveActorBound,
@@ -60,7 +65,24 @@ import {
   resolveReference,
 } from '../../primitives/reference.js';
 import type { Reference } from '../../primitives/reference.js';
-import type { RuleActorView, RuleExecutionContext } from '../../primitives/types.js';
+import type { RuleActorView, RuleExecutionContext, RuleRuntimeState } from '../../primitives/types.js';
+import type { ReferenceResolution } from '../../primitives/reference.js';
+import type { EncounterActor, EncounterState } from '../../../types.js';
+
+/** The context shape captured-actor resolution needs: only `state` is read
+ * (never dice/input/windows), and it may be a fold/lifecycle EncounterState
+ * or a resolver RuleExecutionContext. */
+type CapturedResolutionContext = { state: RuleRuntimeState | EncounterState };
+
+/** Internal: thread the caller's state through the ONE authority. Captured
+ * resolution reads only `context.state.actors`; the down-cast is the single
+ * seam (the object is the full actor — a structural superset of the view). */
+function resolveCapturedVia(context: CapturedResolutionContext, id: string): ReferenceResolution<'actor'> {
+  return resolveReference(capturedActor(id), { state: context.state } as RuleExecutionContext);
+}
+function resolveCapturedWeakVia(context: CapturedResolutionContext, id: string): ReferenceResolution<'actor'> {
+  return resolveReference(capturedActorWeak(id), { state: context.state } as RuleExecutionContext);
+}
 
 const violation = (code: string, detail: string): RuleProgramViolation => new RuleProgramViolation(code, detail);
 
@@ -192,6 +214,57 @@ export function resolveTriggerTargets(context: RuleExecutionContext): RuleActorV
 export function resolveCapturedSelectedActors(context: RuleExecutionContext, key: string): RuleActorView[] {
   const ref = capturedSelectedActorsRef(context.input.actorIds?.[key] ?? []);
   return actorCollectionFromResolution(resolveReference(ref, context), `The captured command-selected actors (${key})`);
+}
+
+/** STRICT single captured actor — "the remembered identity, which must still
+ * resolve." An absent ID (`undefined` or the legacy `''` sentinel) is the
+ * CALLER-SIDE presence border → `undefined`, exactly like the live
+ * optional-singleton accessors; a PRESENT id whose actor is absent from
+ * state fails closed `reference.missing-actor`. Composes the strict
+ * `capturedActor` kind through the ONE resolution authority (captured
+ * resolution reads only `context.state`). Returns the full `EncounterActor`
+ * (the same object `resolveReference` resolves — a superset of the view, so
+ * fold/lifecycle guards can keep reading `defeated`, `onBattlefield`,
+ * `ruleState`, `activeEffects`, …). Used by durable identities whose
+ * carriers guarantee presence while the fact lives: engine combat never
+ * removes actors from the map (REMOVE_ACTOR is setup-only), defeat leaves
+ * them present-but-`defeated`, and defeat cleanup strips owner-stamped
+ * marks/effects/summons — so a present-id-missing-actor here is a dangling
+ * reference, not a lifecycle state. */
+export function resolveCapturedActor(context: CapturedResolutionContext, id: string | null | undefined): EncounterActor | undefined {
+  if (id === undefined || id === null || id === '') return undefined;
+  const resolution = resolveCapturedVia(context, id);
+  if (!resolution.ok) {
+    throw violation(
+      resolution.problem === 'missing-actor' ? 'reference.missing-actor' : 'reference.unresolved',
+      `The captured actor "${id}" could not be resolved.`,
+    );
+  }
+  if (resolution.value.kind !== 'actor') throw violation('reference.domain-mismatch', `The captured actor "${id}" resolved to a non-actor domain.`);
+  return resolution.value.actor as unknown as EncounterActor;
+}
+
+/** LIFECYCLE-SENSITIVE (weak) single captured actor — "the actor originally
+ * associated with this fact, if that actor still exists." Absent-ID border
+ * as above; a PRESENT id whose actor is gone resolves to `undefined` (the
+ * explicit `captured-actor-weak` `absent` resolution — a valid
+ * lifecycle-expiration outcome, never an error). Used by carriers whose
+ * authors DECLARE a tolerant lifetime: legacy/imported fact owners
+ * (encounter-hooks infer only "when the owner is still known") and
+ * `?? null`-shaped optional origin reads. Strict and weak are distinct U1
+ * contracts — never one accessor switched by caller flags. */
+export function resolveCapturedActorWeak(context: CapturedResolutionContext, id: string | null | undefined): EncounterActor | undefined {
+  if (id === undefined || id === null || id === '') return undefined;
+  const resolution = resolveCapturedWeakVia(context, id);
+  if (!resolution.ok) {
+    throw violation(
+      resolution.problem === 'missing-actor' ? 'reference.missing-actor' : 'reference.unresolved',
+      `The weak captured actor "${id}" could not be resolved.`,
+    );
+  }
+  if (resolution.value.kind === 'absent') return undefined;
+  if (resolution.value.kind !== 'actor') throw violation('reference.domain-mismatch', `The weak captured actor "${id}" resolved to a non-actor domain.`);
+  return resolution.value.actor as unknown as EncounterActor;
 }
 
 /** Resolve a BOUND actor referent named by an earlier operation

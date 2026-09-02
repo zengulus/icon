@@ -35,6 +35,8 @@ import {
   capturedSelectedActorsRef,
   resolveAttackTarget,
   resolveBoundActor,
+  resolveCapturedActor,
+  resolveCapturedActorWeak,
   resolveCapturedSelectedActors,
   resolveSourceActor,
   resolveTriggerSource,
@@ -777,5 +779,81 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     // Recorded [second, first]: second is now [0] — the swap directions flip.
     expect(placesBackward.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'second' && mutation.positions[0]!.x === 5)).toBe(true);
     expect(placesBackward.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'first' && mutation.positions[0]!.x === 6)).toBe(true);
+  });
+});
+
+describe('fold-surface captured-actor ops — STRICT vs LIFECYCLE-SENSITIVE (weak) are distinct U1 contracts', () => {
+  // The strict `resolveCapturedActor` and the weak `resolveCapturedActorWeak`
+  // are the two durable-reference contracts for the kernel-fold-driven
+  // recipe/lifecycle/continuation surfaces. They differ ONLY on the
+  // present-ID-but-actor-absent case: strict fails closed (dangling
+  // reference), weak resolves to `undefined` (lifecycle expiration — "the
+  // actor originally associated with this fact, if that actor still
+  // exists"). No flags select behavior; the contract is in the vocabulary.
+
+  const absentBorder = [undefined, null, ''] as const;
+
+  it('absent ID border (undefined / null / the legacy \'\' sentinel) is CALLER-side presence: both ops return undefined, never an error', () => {
+    for (const id of absentBorder) {
+      expect(resolveCapturedActor({ state: ctx().state }, id)).toBeUndefined();
+      expect(resolveCapturedActorWeak({ state: ctx().state }, id)).toBeUndefined();
+    }
+  });
+
+  it('present ID, actor still present: both ops resolve the SAME full actor object state.actors[id] is', () => {
+    const state = ctx().state;
+    const strict = resolveCapturedActor({ state }, 'hero');
+    const weak = resolveCapturedActorWeak({ state }, 'hero');
+    expect(strict).toBe(state.actors.hero);
+    expect(weak).toBe(state.actors.hero);
+    // Full EncounterActor, not a projected view — fold guards keep reading
+    // defeated / onBattlefield / ruleState off the resolved object.
+    expect(strict!.defeated).toBe(false);
+  });
+
+  it('present ID, actor DEFEATED but still present: identity still resolves (defeat \u2260 removal), both ops', () => {
+    const state = ctx().state;
+    state.actors.hero.defeated = true;
+    expect(resolveCapturedActor({ state }, 'hero')?.defeated).toBe(true);
+    expect(resolveCapturedActorWeak({ state }, 'hero')?.defeated).toBe(true);
+  });
+
+  it('present ID, actor REMOVED from state: STRICT fails closed reference.missing-actor; WEAK resolves undefined (legitimate lifecycle expiration)', () => {
+    // Engine combat never deletes actors (REMOVE_ACTOR is setup-only), so a
+    // strict present-id-missing-actor is a dangling reference; weak carriers
+    // (legacy/imported fact owners, `?? null` optional origins) declare a
+    // tolerant lifetime and expire instead. This is the adjudicated split.
+    const state = ctx().state;
+    const { hero, ...rest } = state.actors;
+    const withoutHero = { ...state, actors: rest };
+    expectViolationCode(() => resolveCapturedActor({ state: withoutHero }, 'hero'), 'reference.missing-actor');
+    expect(resolveCapturedActorWeak({ state: withoutHero }, 'hero')).toBeUndefined();
+  });
+
+  it('malformed/dangling identity distinct from legitimate absence: strict rejects a present garbage ID', () => {
+    const state = ctx().state;
+    expectViolationCode(() => resolveCapturedActor({ state }, 'ghost'), 'reference.missing-actor');
+  });
+
+  it('replay determinism: both ops are pure functions of (state, id) — two runs on identical state return identical identities', () => {
+    const a = ctx().state;
+    const b = ctx().state; // structurally identical, fresh objects
+    expect(resolveCapturedActor({ state: a }, 'hero')?.id).toBe('hero');
+    expect(resolveCapturedActor({ state: b }, 'hero')?.id).toBe('hero');
+    b.actors.hero.position = { x: 9, y: 9 };
+    // LIVE re-read semantics: resolution reads CURRENT state, never a stale
+    // snapshot — replay applies recorded identities against the replayed map.
+    expect(resolveCapturedActor({ state: b }, 'hero')?.position).toEqual({ x: 9, y: 9 });
+  });
+
+  it('insertion-order independence: the actors map\u2019s key order never changes which actor resolves for an id', () => {
+    const state = ctx().state;
+    // Rebuild the map with the keys inserted in reversed order.
+    const reversed: Record<string, typeof state.actors.hero> = {};
+    for (const key of Object.keys(state.actors).reverse()) reversed[key] = state.actors[key];
+    const strict = resolveCapturedActor({ state: { ...state, actors: reversed } }, 'hero');
+    const weak = resolveCapturedActorWeak({ state: { ...state, actors: reversed } }, 'hero');
+    expect(strict?.id).toBe('hero');
+    expect(weak?.id).toBe('hero');
   });
 });

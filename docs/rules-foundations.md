@@ -223,7 +223,7 @@ and U7 remain honestly PARTIAL. The tracked completion task is TODO.md
 algebra). Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
-### Reference / Binding (U1 underlay) — PARTIAL: generic consumers consolidated (2026-09-01)
+### Reference / Binding (U1 underlay) — AUTHORITATIVE within its declared scope (2026-09-02; content-adapter tranches 1–18)
 
 `primitives/reference.ts` owns the typed `Reference<D>` vocabulary —
 corrected (2026-08-30) for domain + collection type safety: LIVE refs
@@ -254,10 +254,24 @@ core/foe recipe, attack-provenance, and damage-recipient consumers now route
 through that surface. `u1-reference-routing` prevents a generic consumer from
 re-reading the legacy slots, the implicit source actor, or actor-input
 identities outside U1 (with `roles.ts` U2 projection and `choice.ts` U4
-validation retained as disjoint boundaries). U1 stays PARTIAL because named
-content resolvers still contain direct slot/input reads; they require a shared
-content-authoring adapter and behavior-preserving migration before the
-single-authority claim can be made. The U12
+validation retained as disjoint boundaries). U1 is AUTHORITATIVE within its
+declared scope (content reference interpretation) after the 2026-09-01–
+09-02 content-adapter tranches: named content resolvers (programs,
+classes) route every LIVE source/attack-target/trigger read and recorded-
+selection dereference through the shared content-authoring adapter
+(`content/glue/reference-authoring.ts`), and the kernel-fold-driven
+recipe/lifecycle/continuation surfaces migrate their 39 captured derefs
+through the strict `resolveCapturedActor` / lifecyle-sensitive
+`resolveCapturedActorWeak` ops (distinct typed kinds
+`captured-actor` / `captured-actor-weak` in `primitives/reference.ts`) —
+lifecycle adjudication established defeat ≠ removal (the actor map is
+stable mid-combat; REMOVE_ACTOR is setup-only) and that only two carriers
+author a tolerant lifetime, so strict fails closed on a dangling id while
+weak resolves explicit `absent` on expiry. The only remaining raw
+`state.actors[…]` in content are 8 machine-pinned NON-reference
+algorithm/helper sites (4 program + 4 fold), provably outside the declared
+scope; site identities are pinned by test so no count-preserving swap is
+possible. The U12
 `ArmedContinuation` carries its refs with explicit LIVE/CAPTURED semantics
 (T5b) and the U13 windows carry the continuation as their held payload
 (T5c). Tests:

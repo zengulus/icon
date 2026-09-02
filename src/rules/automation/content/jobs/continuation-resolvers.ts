@@ -17,6 +17,7 @@
 import type { ArmedContinuation, RuleMutation } from '../../../automation/primitives/types.js';
 import type { EncounterState, Position } from '../../../types.js';
 import { registerDecisionContinuation } from '../../../automation/kernels/continuation-runtime.js';
+import { resolveCapturedActor } from '../../../automation/content/glue/reference-authoring.js';
 import { collidingShoveTargets, registerMarkContinuationProgramId } from '../../../automation/kernels/encounter-adapter.js';
 
 const samePosition = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
@@ -50,8 +51,13 @@ function greatGiorgiosRushMutations(state: EncounterState, continuation: ArmedCo
   const mutations: RuleMutation[] = [];
   const ownerId = continuation.refs[0]?.kind === 'captured-actor' ? continuation.refs[0].actorId : undefined;
   const targetId = continuation.refs[1]?.kind === 'captured-actor' ? continuation.refs[1].actorId : undefined;
-  const owner = ownerId ? state.actors[ownerId] : undefined;
-  const target = targetId ? state.actors[targetId] : undefined;
+  // The recorded continuation refs ARE the typed U1 captured-actor
+  // identities; a present id must resolve (the defeated/onBattlefield
+  // lifecycle check below stays caller-side on the RESOLVED actor — a
+  // fallen or departed owner legitimately expires the continuation, a
+  // dangling id fails closed). Absent ref (no recorded actor) → undefined.
+  const owner = resolveCapturedActor({ state }, ownerId);
+  const target = resolveCapturedActor({ state }, targetId);
   if (!owner || !target || !owner.position || !target.position || owner.defeated || !owner.onBattlefield) return mutations;
   const blockedCell = (candidate: Position, moverId: string) => candidate.x < 0 || candidate.y < 0
     || candidate.x >= state.grid.width || candidate.y >= state.grid.height
@@ -177,8 +183,8 @@ registerDecisionContinuation({
   consume(state: EncounterState, continuation: ArmedContinuation): RuleMutation[] {
     const ownerId = continuation.refs[0]?.kind === 'captured-actor' ? continuation.refs[0].actorId : undefined;
     const targetId = continuation.refs[1]?.kind === 'captured-actor' ? continuation.refs[1].actorId : undefined;
-    const owner = ownerId ? state.actors[ownerId] : undefined;
-    const target = targetId ? state.actors[targetId] : undefined;
+    const owner = resolveCapturedActor({ state }, ownerId);
+    const target = resolveCapturedActor({ state }, targetId);
     if (!owner || !target) return [];
     // The mark is consumed at window-open either way (the historical
     // recipe's "consumed either way" preserved — now decoupled from the

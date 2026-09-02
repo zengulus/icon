@@ -29,6 +29,7 @@
 import type { EncounterActor, EncounterState } from '../../../types.js';
 import type { RuleSourceUnit } from '../../../source-units.js';
 import { axisDirection, sameCell, squareArea } from '../../../area-geometry.js';
+import { resolveCapturedActor } from '../glue/reference-authoring.js';
 import type { RuleMutation } from '../../primitives/types.js';
 import { affectedFoeIds, registerAreaModifierTalent, registerBonusDamageTalent, registerMarkModifierTalent, registerPassiveProjectionTalent, registerProgramLevelTalent, registerRangeModifierTalent, registerWiredTalentRecipe, type TalentRecipe, type TalentTriggerEffect } from '../../kernels/talent-recipes.js';
 import type { TalentEffect } from '../../kernels/talent-recipes.js';
@@ -174,10 +175,13 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
       trigger: 'always',
       build: (actorId, targetIds, _triggerTargetIds, context) => {
         if (!context) return [];
-        const actor = context.state.actors[actorId];
-        const foe = context.state.actors[targetIds[0] ?? ''];
+        // The ability user and the recorded command target are guaranteed
+        // present in this same-command fold (strict captured resolution;
+        // absent target = caller-side optional border → undefined).
+        const actor = resolveCapturedActor({ state: context.state }, actorId);
+        const foe = resolveCapturedActor({ state: context.state }, targetIds[0]);
         if (!actor?.position || !foe?.position) return [];
-        const charged = context.state.actors[actorId].ruleState['slow-turn'] === true;
+        const charged = actor.ruleState?.['slow-turn'] === true;
         const distance = charged ? 2 : 1;
         const away = axisDirection(actor.position, foe.position);
         return [
@@ -237,7 +241,7 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
       trigger: 'comeback',
       build: (actorId, targetIds, _triggerTargetIds, context) => {
         if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
+        const target = resolveCapturedActor({ state: context.state }, targetIds[0]);
         if (!target?.position) return [];
         const { x, y } = target.position;
         const adjacent: { x: number; y: number }[] = [
@@ -264,7 +268,7 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
       trigger: 'exceed',
       build: (actorId, targetIds, _triggerTargetIds, context) => {
         if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
+        const target = resolveCapturedActor({ state: context.state }, targetIds[0]);
         if (!target?.position) return [];
         const { x, y } = target.position;
         const adjacent: { x: number; y: number }[] = [
@@ -289,7 +293,7 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
       trigger: 'always',
       build: (actorId, targetIds, _triggerTargetIds, context) => {
         if (!context) return [];
-        const target = context.state.actors[targetIds[0] ?? ''];
+        const target = resolveCapturedActor({ state: context.state }, targetIds[0]);
         if (!target?.position) return [];
         const { x, y } = target.position;
         const adjacent: { x: number; y: number }[] = [
@@ -465,7 +469,7 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
       trigger: 'exceed',
       build: (actorId, targetIds, _triggerTargetIds, context): TalentEffect[] => {
         if (!context) return [];
-        const source = context.state.actors[actorId];
+        const source = resolveCapturedActor({ state: context.state }, actorId);
         if (!source?.position) return [];
         const areaIds = new Set<string>(targetIds);
         for (const mutation of context.mutations) {
@@ -564,7 +568,13 @@ const WIRED_TALENT_RECIPES: Readonly<Record<string, { mechanic: string; triggerE
     mechanic: 'If you haven\u2019t acted yet this round, gain evasion after swapping until the end of your next turn.',
     triggerEffect: {
       trigger: 'always',
-      condition: ({ state, actorId }) => !state.actors[actorId].turnTaken,
+      condition: ({ state, actorId }) => {
+        // The fold guarantees the acting user is resolvable; strict captured
+        // resolution fails closed on a dangling id (never silently "has not
+        // acted yet").
+        const user = resolveCapturedActor({ state }, actorId);
+        return user !== undefined && !user.turnTaken;
+      },
       build: (actorId) => [{
         kind: 'condition',
         sourceActorId: actorId,

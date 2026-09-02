@@ -636,6 +636,17 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     binding: legacy('U2 status re-certified at T8c by roles.ts + candidate/aura/choice/decision-window routing; no strict fidelity scope'),
   },
   {
+    id: 'claim:foundations:u1-authoritative',
+    file: 'docs/rules-foundations.md',
+    anchor: '### Reference / Binding (U1 underlay) — AUTHORITATIVE within its declared scope (2026-09-02; content-adapter tranches 1–18)',
+    anchors: [
+      { file: 'docs/rules-foundations.md', anchor: 'validation retained as disjoint boundaries). U1 is AUTHORITATIVE within its' },
+    ],
+    strength: 'authoritative',
+    subject: 'Reference / Binding (U1 underlay)',
+    binding: legacy('U1 HUMAN-CERTIFIED 2026-09-02 (eighteenth tranche): fresh end-to-end audit establishes one typed Reference/Binding vocabulary (primitives/reference.ts) and one resolution authority (resolveReference, composed by every adapter accessor and generic consumer) for the DECLARED SCOPE (content reference interpretation); LIVE vs CAPTURED vs strict captured-actor vs lifecycle-sensitive captured-actor-weak contracts are explicit; U4 select/cardinality, lifecycle expiry/cleanup, and algorithm-produced transient identities stay caller-owned (the 8 machine-pinned NON-reference content derefs are provably outside the declared scope, site identities pinned by test); 0 legacy-slot interpretation in content (guard + machine census); replay preserves recorded identities. NOT machine-verified: no strict fidelity scope.'),
+  },
+  {
     id: 'claim:foundations:u8-authoritative',
     file: 'docs/rules-foundations.md',
     anchor: '### Scope / Clock (U8 underlay) — AUTHORITATIVE (residual audit + combat-cleanup repair, 2026-09-01)',

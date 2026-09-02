@@ -313,9 +313,13 @@ plural targets, negative unbound/missing-slot/domain-mismatch, boundary
 empty-collection + defeated-actor-captured, replay identical-literal +
 Binder purity plus LIVE/CAPTURED/bound/query-negative selector adaptation).
 The serialized context slots remain the U1 authority's LIVE reference input,
-not consumer-owned interpreters. U1 remains PARTIAL because named content
-resolvers still read those slots/input buckets directly; they require a
-shared content-authoring adapter plus behavior-preserving migration.
+not consumer-owned interpreters. U1 is AUTHORITATIVE within its declared
+scope (content reference interpretation): named content resolvers now route
+every LIVE / CAPTURED / bound / strict-or-weak captured reference through
+the shared content-authoring adapter (migrated tranches 1–18), the census
+carries only machine-pinned NON-reference survivors, and the completion-
+gate items are recorded in the eighteenth-tranche status section of
+`docs/u8-u1-underlay-census.md`.
 
 **Whole-consumer audit (2026-09-01).** Every generic consumer —
 candidate/anchor, selector/value, query, flow, core resolvers, foe
@@ -347,12 +351,26 @@ fold-consumer adjudication then inventoried the second completion surface:
 **43 `state.actors[…]` derefs across the recipe/lifecycle/continuation
 surfaces = 25 fact-carried + 5 recorded-forwarded + 13 forwarded-
 identifier + 0 legacy-slot** — no fold-surface site interprets the legacy
-context bag. U1's PARTIAL status now rests on exactly one precise cause:
-faithful migration of those 43 guarded-optional captured derefs requires
-an OPTIONAL captured-actor resolution (id absent/`''` → undefined; present
-but removed → fail closed; present → resolved) that U1's strict
-captured-actor kind lacks, plus a fact-carried lifecycle-safety study for
-mark/mote/entity owners that may outlive their actor. See
+context bag. The eighteenth tranche (2026-09-02) resolved the remaining
+cause: the lifecycle adjudication established that defeat ≠ removal (the
+actor map is stable mid-combat; REMOVE_ACTOR is setup-only) and that only
+two carriers author a tolerant lifetime, so the missing capability split
+into two EXPLICIT reference kinds in `primitives/reference.ts` — STRICT
+`capturedActor` (absent id border → undefined; present-but-removed → fail
+closed `reference.missing-actor`) and LIFECYCLE-SENSITIVE
+`capturedActorWeak` (present-but-removed → explicit `absent`, never an
+error) — with `resolveCapturedActor` / `resolveCapturedActorWeak` on the
+shared adapter composing each through the ONE `resolveReference` authority
+(no flags, no arbitrary-id accessor). 39 of the 43 sites migrated through
+them (37 strict + 2 weak) across talent/lifecycle/continuation/
+mark-modifier/attack-modifier/bonus-damage/fool/encounter-hooks; the
+remaining 4 raw derefs are machine-pinned NON-reference algorithm/helper
+plumbing (closestFoesOf/adjacentFoes helper params, the areaIds
+algorithm-loop, F9-derived reactive collided id) — outside the declared
+scope. On that basis **U1 is AUTHORITATIVE within its declared scope**
+(content reference interpretation); the completion-gate items and the
+precise boundary (what U2/U4/lifecycle/algorithm output still own) are
+recorded in the eighteenth-tranche status section of
 `docs/u8-u1-underlay-census.md`.
 
 **Locations partially owning/duplicating.** Named content resolvers under
@@ -366,9 +384,13 @@ kernel-fold-driven content surfaces outside `programs/` (talent /
 mark-modifier / bonus-damage / attack-modifier / lifecycle / continuation
 / heroic-activation recipes, encounter hooks) consume identities
 transmitted by shared folds or embodied in recorded facts (`targetIds[0]`,
-`mark.ownerId`, `mote.ownerId`, U12 `captured-actor` refs) — 43 sites, 0
-legacy-slot interpretation (machine-inventoried and test-pinned); they
-remain direct because migrating them needs the OPTIONAL captured-actor
+`mark.ownerId`, `mote.ownerId`, U12 `captured-actor` refs) — the 39
+reference-shaped sites now resolve through `resolveCapturedActor` /
+`resolveCapturedActorWeak` (strict/weak typed contracts, eighteenth
+tranche), 0 legacy-slot interpretation, and the remaining 4 raw derefs are
+machine-pinned NON-reference algorithm/helper plumbing; the U12
+continuation family's ABSENT-ref → undefined and defeated/onBattlefield
+expiry stay caller-side. See `docs/u8-u1-underlay-census.md`.
 resolution capability (the exact residual). Explicit actor/entity ids
 passed as already-resolved domain-operation parameters are retained facts,
 not implicit-reference interpreters.

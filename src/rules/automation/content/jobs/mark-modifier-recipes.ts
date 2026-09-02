@@ -12,6 +12,7 @@
  * lives in lifecycle-recipes.ts with the other lifecycle recipes).
  */
 import { registerMarkConditionProjection } from '../../kernels/passive-projection.js';
+import { resolveCapturedActor } from '../glue/reference-authoring.js';
 import { registerStatusSavePolicySource } from '../../kernels/encounter-adapter.js';
 import { isBloodied } from '../../kernels/hp-threshold.js';
 
@@ -28,7 +29,7 @@ registerStatusSavePolicySource({
     const markedByTalentOne = actor.marks.some((mark) =>
       mark.markId === 'grand-seal'
       && mark.sourceId === 'sealer:grand-seal'
-      && state.actors[mark.ownerId]?.talents?.['sealer:grand-seal'] === 1);
+      && resolveCapturedActor({ state }, mark.ownerId)?.talents?.['sealer:grand-seal'] === 1);
     if (!markedByTalentOne) return;
     policy.saveCurse += 1;
   },
@@ -46,7 +47,7 @@ registerMarkConditionProjection({
   matches: (mark, carrier, state) => {
     if (!carrier || !state || carrier.defeated || !carrier.onBattlefield) return false;
     if (!isBloodied(carrier)) return false;
-    return state.actors[mark.ownerId]?.talents?.['sealer:grand-seal'] === 2;
+    return resolveCapturedActor({ state }, mark.ownerId)?.talents?.['sealer:grand-seal'] === 2;
   },
   grants: ['pacified'],
   grantPotencies: { pacified: 'plus' },

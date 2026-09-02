@@ -1,5 +1,6 @@
 import { registerAttackModifierRule } from '../../kernels/attack-modifiers.js';
 import { collidingShoveTargets } from '../../kernels/encounter-adapter.js';
+import { resolveCapturedActor } from '../glue/reference-authoring.js';
 import { applyBullStrengthCollide, bullStrengthCollideKey } from '../../kernels/use-ledger.js';
 import type { EncounterState } from '../../../types.js';
 import type { RuleMutation } from '../../primitives/types.js';
@@ -126,9 +127,12 @@ export function bullStrengthCollideMutations(state: EncounterState, mutations: r
   const planned = new Set<string>();
   for (const mutation of mutations) {
     if (mutation.kind !== 'move' || mutation.movement !== 'shove' || !collidedTargets.has(mutation.actorId)) continue;
-    const source = state.actors[mutation.sourceActorId];
+    // Mutation-carried identities are recorded evidence; the source/target
+    // are guaranteed present in the same command (strict captured resolution
+    // fails closed on a dangling id instead of silently skipping).
+    const source = resolveCapturedActor({ state }, mutation.sourceActorId);
     if (!source || !source.traitIds.includes(BULL_STRENGTH_TRAIT)) continue;
-    const shoved = state.actors[mutation.actorId];
+    const shoved = resolveCapturedActor({ state }, mutation.actorId);
     if (!shoved || shoved.defeated || !shoved.onBattlefield) continue;
     const key = bullStrengthCollideKey(shoved.id);
     if (planned.has(key)) continue;

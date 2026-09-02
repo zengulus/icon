@@ -27,7 +27,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 
 | Underlay | State after audit | Smallest known residual |
 | --- | --- | --- |
-| U1 Reference / Binding | PARTIAL | caller-owned U1×U4 captured-identity dereferences without a shared surface (scoping decision, not a competing authority) |
+| U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | PARTIAL | area/persistent-instance/rule-source domains and residual ordering |
 | U4 Choice / Decision | PARTIAL | ability/talent choice fold reads and remaining window-carried choice consumers |
@@ -45,10 +45,11 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U16 Usage / Entitlement | COMPLETE/AUTHORITATIVE | none after Monogatari lifecycle integration |
 | U17 Ordering / Arbitration | COMPLETE/AUTHORITATIVE | none |
 
-Five underlays meet the strict authority bar; twelve remain partial. U1 is
-the dependency root: it has no underlay dependency and is consumed by U3,
-U5, U6, U7, U9, U10, U12, U14, and U16. It is therefore the selected next
-tranche, ahead of leaf work.
+Six underlays meet the strict authority bar (U1 since the eighteenth
+tranche, 2026-09-02); eleven remain partial. U1 is the dependency root: it
+has no underlay dependency and is consumed by U3, U5, U6, U7, U9, U10,
+U12, U14, and U16 — which is why it stayed the selected next tranche until
+its declared-scope authority completed.
 
 ## U1 tranche executed
 
@@ -196,18 +197,22 @@ provenance string):
   mutations, `actorId: context.actorId` commands, and `context.attackTargetId
   ?` gate tests remain at their sites.
 - **Fold-surface actor derefs (43 sites outside the program census — U1
-  completion audit, 2026-09-02)**: `scanActorDerefs` enumerates every
-  `state.actors[…]` deref in `content/jobs` (recursive, AST-based):
-  **25 fact-carried** (`mark.ownerId` ×12, `mote.ownerId` ×3, `entity.ownerId`
-  ×3, `candidate.ownerId` ×2, `mutation.sourceActorId`/`actorId` ×2,
-  `origin.actorId`, `mine.ownerId`), **5 recorded-forwarded** (`targetIds[0]`
-  / `targetIds[0] ?? ''` in talent/bonus-damage callbacks), **13
-  forwarded-identifier** (fold-carried ability-user ids, U12
-  continuation-carried `ownerId`/`targetId`, the algorithm-combined area
-  set, reactive collided id, an adjacency-helper param), and **0
-  legacy-slot** — no fold-surface site interprets the legacy context bag.
-  See the seventeenth-tranche section below for the adjudication and the
-  optional-captured blocker.
+  completion audit, 2026-09-02, MIGRATED 2026-09-02, eighteenth tranche)**: `scanActorDerefs`
+  enumerated every `state.actors[…]` deref in `content/jobs` (recursive,
+  AST-based): **25 fact-carried** (`mark.ownerId` ×12, `mote.ownerId` ×3,
+  `entity.ownerId` ×3, `candidate.ownerId` ×2,
+  `mutation.sourceActorId`/`actorId` ×2, `origin.actorId`, `mine.ownerId`),
+  **5 recorded-forwarded** (`targetIds[0]` / `targetIds[0] ?? ''` in
+  talent/bonus-damage callbacks), **13 forwarded-identifier** (fold-carried
+  ability-user ids, U12 continuation-carried `ownerId`/`targetId`, the
+  algorithm-combined area set, reactive collided id, an adjacency-helper
+  param), and **0 legacy-slot**. 39 of the 43 migrated through the shared
+  captured-actor ops after the lifecycle adjudication (strict vs weak); the
+  remaining **4 raw derefs are machine-pinned, site-identity-pinned
+  NON-reference algorithm/helper plumbing** (`closestFoesOf`/`adjacentFoes`
+  helper params, the algorithm-combined `areaIds` loop, the F9-derived
+  reactive `collidedId`) — outside the declared U1 scope. See the
+  eighteenth-tranche section below.
 
 ## U1 tranche executed (fresh HEAD, 2026-09-01, third tranche — Sealer)
 
@@ -1157,38 +1162,144 @@ references and the residual deref (`ownerId ? state.actors[ownerId]`
 : undefined) is presence-guarded — a REMOVED owner silently expires the
 continuation, which is valid-state behavior.
 
-**Smallest missing capability (the exact residual).** Faithful migration of
-the recorded-forwarded, continuation, and fact-carried families through the
-shared surface requires OPTIONAL captured-actor resolution: id absent (or
-the `''` sentinel) → undefined; id present but the actor was REMOVED →
-fail closed `reference.missing-actor`; id present and resolvable → the
-resolved actor. U1's captured-actor kind is STRICT today (present id +
-removed actor = violation) — migrating without the optional form would turn
-valid-state no-ops (continuations expiring, targetless augmentations
-skipping) into failures. The 25 fact-carried sites additionally require a
-lifecycle-safety study (do marks/motes/entities legitimately outlive their
-owner actor in the map?) before routing through the same op.
+## U1 tranche executed (fresh HEAD, 2026-09-02, eighteenth tranche — lifecycle adjudication + strict/weak captured-actor vocabulary + 39-site fold migration)
 
-## U1 status after the seventeenth tranche (classifier repair + fold adjudication)
+### Lifecycle adjudication (resolves the strict-vs-expiration contradiction)
 
-U1 remains PARTIAL with exactly this residual. On the declared-scope
-authority — one typed Reference/Binding vocabulary, one resolution
-authority, no live/captured slot interpreted outside it — the program
-families and generic consumers are complete and guarded, and the census
-`4 = 0 + 0 + 0 + 4` is now LEXICALLY machine-supported (the four survivors
-are proven scope-contained algorithm plumbing; site identities pinned).
-The fold surfaces are fully inventoried and family-classified, with the
-load-bearing zero (0 legacy-slot interpretation) pinned by test.
+Engine facts, verified at the reducer/lifecycle authority:
 
-The single remaining cause of PARTIAL, stated precisely: the
-fold/lifecycle/continuation surfaces' guarded-optional captured derefs
-need the OPTIONAL captured-actor resolution capability (and the
-fact-carried lifecycle-safety answer) before their 43 sites can route
-through the shared surface — that is the next dependency-driven tranche
-(optional captured-actor resolution in primitives/adapters + replay tests,
-then the recorded-forwarded/continuation migration, then the fact-carried
-lifecycle study). No source unit was promoted; no ability semantics
-changed; zero arbitrary-ID accessor exists.
+- **Defeat ≠ removal.** `defeatActor` marks `defeated: true` and keeps the
+  actor in `state.actors`; `ACTOR_REMOVED`/`REMOVE_ACTOR` is setup-phase
+  ONLY — during combat no actor leaves the map. A present id whose actor is
+  missing mid-combat is therefore a DANGLING reference, never a lifecycle
+  state;
+- **Defeat cleanup strips owner-stamped ephemera.** `removeOwnedEphemera`
+  removes marks, active effects, and summoned companions owned by the
+  fallen (objects terrain-effects such as mines/motes survive as
+  terrain/entities, but their owner read is the weak-authored case below);
+- **Weak is authored, not inferred.** The only two carriers whose authors
+  DECLARE a tolerant lifetime are `encounter-hooks` legacy/imported mark
+  owners ("infer only when the owner is still known, never from a missing
+  owner") and `lifecycle-recipes`' aura-origin `?? null` read. Every other
+  fact-carried owner guarantees presence while the fact lives.
+
+Therefore the proposed "present-but-removed → fail closed" was CORRECT for
+the guaranteed-present carriers, and the contradiction with "continuations
+expire" is resolved by splitting the contract TYPED, not by flags:
+
+- **STRICT `capturedActor`** — "the remembered identity, which must still
+  resolve." Absent ID (undefined / null / `''`) → `undefined`
+  (caller-side presence border, exactly like the live optional
+  accessors); present id + missing actor → fail closed
+  `reference.missing-actor`;
+- **LIFECYCLE-SENSITIVE `capturedActorWeak`** — "the actor originally
+  associated with this fact, if that actor still exists." Same absent-ID
+  border; present id + missing actor → `undefined` (explicit `absent`
+  resolution), never an error.
+
+Strict and weak are distinct U1 reference kinds in `primitives/reference.ts`
+(`captured-actor` vs `captured-actor-weak`, whose resolution is
+`resolved | absent | unresolved`); the adapter exposes
+`resolveCapturedActor` / `resolveCapturedActorWeak` composing each through
+the ONE `resolveReference` authority. No flags switch one accessor's
+behavior; no arbitrary-ID resolver exists.
+
+### Migrated (39 sites across 8 content files)
+
+The previously-optional residual `state.actors[…]` derefs routethrough the shared ops. Strict (37): talent-recipes ×7 (fold ability-user + recorded
+`targetIds[0]`), lifecyle-recipes ×18 (mark.ownerId / mote.ownerId,
+entity-owner mark reads), continuation-resolvers ×4 (U12
+`captured-actor`-carried owner/target — ABSENT ref → undefined, present id
+must resolve; the defeated/onBattlefield expiry check stays caller-side on
+the RESOLVED actor), mark-modifier-recipes ×2, attack-modifier-recipes ×2
+(`mutation.sourceActorId`/`actorId`), bonus-damage-recipes ×1
+(`targetIds[0]`), fool-programs ×1 (`mine.ownerId`). Weak (2):
+encounter-hooks ×1 (legacy/imported mark owner), lifecycle-recipes ×1
+(aura-origin `?? null`). The recorded-forwarded `''` legacy
+ghost-tolerance (the old `targetIds[0] ?? ''` silent-`undefined`) became
+fail-closed only in the strict sense: an EMPTY/`''` selection is still the
+caller's presence border → `undefined` (no semantic change on valid-state
+no-target paths); a present-but-ghost id now violates. All 39 keep
+defeated/onBattlefield/position guards caller-side on the RESOLVED actor.
+
+### Survivors (4 machine-pinned NON-reference derefs — provably outside U1 scope)
+
+`scanActorDerefs(content/jobs)` now finds exactly: heroic-activation:163
+and talent-recipes:46 (dependency-injected `actorId` params of the pure
+local queries `closestFoesOf`/`adjacentFoes`), talent-recipes:480 (loop
+var over the algorithm-combined `areaIds` Set), trait-reactions:28 (loop
+var over F9-derived reactive collision ids — the trigger DECISION is F9's;
+the deref is transient algorithm output, never a durable reference). All
+four are pinned by SITE IDENTITY (file + line + shape), so a false positive
+cannot silently swap in while keeping the count 4 (also the program census
+keeps its 4 = 0 + 0 + 0 + 4, identity-pinned).
+
+### Adversarial evidence
+
+- `reference-authoring.test.ts` +7: absent-ID border for both ops (undefined
+  / null / `''` → undefined, never error); present+present resolves the
+  SAME full `EncounterActor` object (fold guards keep reading `defeated` /
+  `onBattlefield` / `ruleState` off it); present+defeated still resolves;
+  present+REMOVED → strict `reference.missing-actor` vs weak `undefined`
+  (the adjudicated split); a present garbage id violates strict; replay
+  determinism (pure function of (state, id), re-reads CURRENT state);
+  actors-map insertion order never changes resolution;
+- `architecture-audit.test.ts` fold-inventory pins rewritten to the migrated
+  state: total 4 (family 4 forwarded-identifier, 0 legacy-slot loads),
+  exact survivor identities, and the continuation family asserted
+  zero-raw-derefs;
+- the engine family suites (talents, trait-reactions, job-traits, U12
+  continuations, fool, attack-modifiers, heroic-activation, summons,
+  conditions, marks, bonus-damage, attack-modifiers) stay green through the
+  engine path — valid-state ability semantics, choices, geometry,
+  triggers, lifecycle, and damage unchanged; no source unit promoted.
+
+## U1 status after the eighteenth tranche (lifecycle adjudication + strict/weak split + fold migration)
+
+**U1 is AUTHORITATIVE within its declared scope** (content reference
+interpretation: naming a thing a later rule clause refers to — LIVE,
+CAPTURED, bound, strict/weak captured identities). The completion gate from
+the tranche instructions is met, item by item:
+
+1. one typed Reference/Binding vocabulary for the declared scope
+   (`primitives/reference.ts` — liveActorSlot/liveActorBound/capturedActor/
+   capturedActorWeak/position/bound/collection kinds);
+2. one resolution authority (`resolveReference`) — every adapter accessor
+   (live source/attack-target/trigger, captured selections, strict/weak
+   captured actor) and every generic consumer composes it; the
+   content-authoring adapter is the single content surface and is
+   guard-pinned to keep composing the vocabulary;
+3. LIVE vs CAPTURED semantics explicit (live re-reads current state;
+   captured/selection preserves the recorded identity);
+4. STRICT vs LIFECYCLE-SENSITIVE captured semantics explicit as distinct
+   reference kinds — never caller flags;
+5. U4 choice does not leak into U1: select/cardinality
+   (`?.[0]`/`?.[1]`/`??`) and U4 identity compares stay caller-owned on
+   every migrated chain (proven by the precedence and dropped-input
+   fixtures);
+6. algorithm-produced IDs are not references: the 4 program + 4 fold
+   machine-pinned survivors are NON_U1_OTHER / algorithm plumbing with
+   lexical/site-identity proof;
+7. no implicit legacy slots are independently interpreted: 0
+   `state.actors[context.…]` in content (guard + census), 0 legacy-slot on
+   the fold surface;
+8. no competing dereference authority within the declared scope: the only
+   remaining raw `state.actors[…]` in content are the 8 pins above, all
+   provably non-references;
+9. replay preserves captured identities/values: recorded ids resolve
+   against replayed state; absent/weak/defeated/removed cases are typed;
+   replay-equality fixtures green;
+10. architecture guards + census machinery detect realistic regressions:
+   lexical-scope classifier (shadowing/name-collision proof), site-identity
+   pins (no count-preserving substitution), adapter composition pin, and
+   the 0-legacy-slot machine pin.
+
+The declared-scope boundary is precise: what U1 does NOT own — U2 role
+projection, U4 choice/cardinality, lifecycle expiry/cleanup (which run
+caller-side on the RESOLVED actor), and algorithm-produced transient
+identities (the 8 pins). Within that scope there is one vocabulary, one
+authority, explicit contracts, and machine+test proof. No source unit was
+promoted; no ability semantics changed; no arbitrary-ID accessor exists.
 
 ## Whole-consumer U1 audit (2026-09-01)
 
@@ -1250,6 +1361,17 @@ a decision is made whether to give the captured-identity dereference a
 shared surface or keep it permanently caller-owned. That is a scoping
 decision, not a competing authority. Full suite 2146 green; census
 byte-stable at 427; zero source promotion.
+
+> SUPERSEDED by the U1×U4 captured-reference adjudication (sixteenth
+tranche, 2026-09-02) and the lifecycle/strict-weak fold migration
+(eighteenth tranche, 2026-09-02): the 51 recorded-selection dereferences
+migrated through `resolveCapturedSelectedActors`, the 4 helper-parameter /
+derived-loop sites were machine-reclassified NON_U1_OTHER, and the fold
+surface's 39 captured derefs migrated through `resolveCapturedActor` /
+`resolveCapturedActorWeak` after the lifecycle adjudication. U1 is now
+AUTHORITATIVE within its declared scope (see the eighteenth-tranche
+status section above); the only remaining raw `state.actors[…]` in content
+are 8 machine-pinned NON-reference algorithm/helper sites.
 
 ## Known blocking repairs (source-quoted, not future work)
 

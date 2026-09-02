@@ -1,5 +1,6 @@
 import { determineAndApplyEncounterDamage, registerDefeatGuard, registerOnDamageDealtHook, registerStatusSavePolicySource, registerVigorDenialSource } from '../../kernels/encounter-adapter.js';
 import { auraDefinitionFor, auraStateView, isInAura } from '../../kernels/aura.js';
+import { resolveCapturedActorWeak } from '../glue/reference-authoring.js';
 import { registerInterruptsPerTurnCapSource } from '../../kernels/use-ledger.js';
 import type { EncounterActor, EncounterState } from '../../../types.js';
 
@@ -32,8 +33,13 @@ function hasFoeRotMark(state: EncounterState, actor: EncounterActor): boolean {
     if (kind === 'foe') return true;
     if (kind === 'ally') return false;
     // Legacy/imported marks predate the explicit `kind`; infer only when the
-    // owner is still known, never from a missing owner.
-    return state.actors[mark.ownerId]?.side !== undefined && state.actors[mark.ownerId]!.side !== actor.side;
+    // owner is still known, never from a missing owner. The owner read is
+    // therefore LIFECYCLE-SENSITIVE (weak captured resolution): a present id
+    // whose actor is gone resolves to undefined (legitimate expiry — yet
+    // another legacy/import inference blocker), never an error.
+    const owner = resolveCapturedActorWeak({ state }, mark.ownerId);
+    const ownerSide = owner?.side;
+    return ownerSide !== undefined && ownerSide !== actor.side;
   });
 }
 

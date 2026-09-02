@@ -1,4 +1,5 @@
 import { applyRuleMutations, determineAndApplyEncounterDamage, encounterRuleState } from '../../kernels/encounter-adapter.js';
+import { resolveCapturedActor, resolveCapturedActorWeak } from '../glue/reference-authoring.js';
 import { gambleD6 } from '../../primitives/job-kit.js';
 import { auraDefinitionFor, auraOriginRefs, auraStateView, isAuraMember, isInAura } from '../../kernels/aura.js';
 import { hasMastery } from '../../kernels/mastery.js';
@@ -59,7 +60,7 @@ export function symphonyMoteDetonationMutations(
     effect.terrain === 'symphony-mote' && effect.positions.some((cell) => samePosition(cell, position)),
   );
   if (!mote) return [];
-  const owner = mote.ownerId ? state.actors[mote.ownerId] : undefined;
+  const owner = resolveCapturedActor({ state }, mote.ownerId);
   const ownerSide = owner?.side ?? actor.side;
   const center = { ...position };
   const blast = squareArea(center, 1);
@@ -125,7 +126,7 @@ export function detonateSymphonyMote(state: EncounterState, actor: EncounterActo
   if (mutations.length > 0) applyRuleMutations(state, mutations);
   // Pit creation is a side effect not representable as a pure mutation:
   // the mote owner is a foe of the triggering actor.
-  const owner = mote.ownerId ? state.actors[mote.ownerId] : undefined;
+  const owner = resolveCapturedActor({ state }, mote.ownerId);
   const ownerSide = owner?.side ?? actor.side;
   if (actor.side !== ownerSide) {
     state.terrainEffects.push({
@@ -153,7 +154,7 @@ registerMovementEntryTrigger({
     if (!mote) return [];
     // Compute detonation mutations while the mote is still in state.
     const detonation = symphonyMoteDetonationMutations(state, mover, cell);
-    const owner = mote.ownerId ? state.actors[mote.ownerId] : undefined;
+    const owner = resolveCapturedActor({ state }, mote.ownerId);
     const ownerSide = owner?.side ?? mover.side;
     const result: RuleMutation[] = [
       { kind: 'terrain', sourceId: 'chanter:symphony', sourceActorId: mover.id, operation: 'remove', terrain: 'symphony-mote', positions: [...mote.positions], height: null },
@@ -310,7 +311,7 @@ function coveringDarkKnight(state: EncounterState, foe: EncounterActor): Encount
   const view = auraStateView(state);
   for (const origin of auraOriginRefs(view, definition)) {
     if (origin.actorId === null) continue;
-    if (isAuraMember(view, definition, origin, foe.id)) return state.actors[origin.actorId] ?? null;
+    if (isAuraMember(view, definition, origin, foe.id)) return resolveCapturedActorWeak({ state }, origin.actorId) ?? null;
   }
   return null;
 }
@@ -411,7 +412,7 @@ registerLifecycleRecipe({
     // The marked foe ended their turn: tick the marks on this actor whose owner is in range.
     for (const mark of [...actor.marks]) {
       if (mark.markId !== 'exorcism') continue;
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.defeated || !owner.onBattlefield || !owner.position || distance(owner.position, actor.position) > 3) continue;
       tick(mark, actor, owner);
     }
@@ -438,7 +439,7 @@ registerLifecycleRecipe({
       || Object.values(state.actors).some((candidate) => candidate.id !== moverId && candidate.onBattlefield && !candidate.defeated && samePosition(candidate.position, position))
       || state.grid.terrain.some((cell) => samePosition(cell.position, position) && cell.type === 'impassable');
     for (const mark of marks) {
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.defeated || !owner.onBattlefield || !owner.position || !actor.position) continue;
       const d = distance(owner.position, actor.position);
       if (d <= 3) {
@@ -482,7 +483,7 @@ registerLifecycleRecipe({
     delete actor.ruleStateOwners['warding-bolts:owner'];
     if (!actor.position) return;
     const effect = state.terrainEffects.find((candidate) => candidate.terrain === 'warding-bolts' && candidate.ownerId === ownerId);
-    const owner = state.actors[ownerId];
+    const owner = resolveCapturedActor({ state }, ownerId);
     // The hover form exists while the terrain zone stands OR the mastered
     // owner still carries the phantom-bolts aura (an owned effect ends with
     // its incapacitated owner, p.94). No form → nothing to leave → no strike.
@@ -524,7 +525,7 @@ registerLifecycleRecipe({
       || Object.values(state.actors).some((candidate) => candidate.id !== moverId && candidate.onBattlefield && !candidate.defeated && samePosition(candidate.position, position))
       || state.grid.terrain.some((cell) => samePosition(cell.position, position) && cell.type === 'impassable');
     for (const mark of marks) {
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.defeated || !owner.onBattlefield || !owner.position || !actor.position) continue;
       if (distance(owner.position, actor.position) > 3) continue;
       const adjacent = orthogonalNeighbors(actor.position).find((cell) => !blocked(cell, owner.id));
@@ -568,7 +569,7 @@ registerLifecycleRecipe({
       // Once-per-round entitlement routed through the U16 round ledger
       // (actor-local on the mark owner): availability via useLedgerAvailable,
       // consume via recordUsageKey. The U16 round-start reset reopens it.
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.defeated || !useLedgerAvailable(owner, incubusOncePerRoundKey())) continue;
       const adjacent = actor.id === marked.id
         ? Object.values(state.actors).some((candidate) => candidate.side === 'foes' && candidate.id !== marked.id && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, marked.position) <= 1)
@@ -615,7 +616,7 @@ registerLifecycleRecipe({
     if (marks.length === 0) return;
     actor.marks = actor.marks.filter((mark) => mark.markId !== 'sidhe-toxin');
     for (const mark of marks) {
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.defeated || !owner.onBattlefield || !actor.position) continue;
       const adjacentAlly = Object.values(state.actors).some((candidate) =>
         candidate.side === actor.side && candidate.id !== actor.id && candidate.onBattlefield && !candidate.defeated && candidate.position && distance(candidate.position, actor.position) <= 1);
@@ -644,7 +645,7 @@ registerLifecycleRecipe({
       // Once-per-round entitlement routed through the U16 round ledger
       // (actor-local on the mark owner): availability via useLedgerAvailable,
       // consume via recordUsageKey. The U16 round-start reset reopens it.
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.defeated || !owner.onBattlefield || !useLedgerAvailable(owner, stampedeOncePerRoundKey())) continue;
       recordUsageKey(owner, stampedeOncePerRoundKey());
       applyRuleMutations(state, [{
@@ -810,7 +811,7 @@ registerLifecycleRecipe({
     if (marks.length === 0) return;
     actor.marks = actor.marks.filter((mark) => mark.markId !== 'chastise-retribution' && mark.markId !== 'chastise-charism');
     for (const mark of marks) {
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.defeated || !owner.onBattlefield) continue;
       if (mark.markId === 'chastise-retribution') {
         if (mark.state.triggered === true) {
@@ -1086,7 +1087,7 @@ registerLifecycleRecipe({
   phase: 'turn-start',
   applies: (actor, state) => Boolean(actor.position) && Object.values(state.entities).some((entity) =>
     entity.type === 'lightning-spike' && entity.ownerId !== null
-    && hasMastery(state.actors[entity.ownerId]!, 'spellblade:rampant-nail')),
+    && hasMastery(resolveCapturedActor({ state }, entity.ownerId)!, 'spellblade:rampant-nail')),
   // T6.3: the vulnerable grant belongs to the NAIL OWNER (the mastered
   // spellblade), not the starting actor — p.108 same-owner read. No
   // mastered nail adjacent → the recipe no-ops (null → excluded).
@@ -1094,7 +1095,7 @@ registerLifecycleRecipe({
     if (!actor.position) return null;
     for (const entity of Object.values(state.entities)) {
       if (entity.type !== 'lightning-spike') continue;
-      const owner = entity.ownerId ? state.actors[entity.ownerId] : undefined;
+      const owner = resolveCapturedActor({ state }, entity.ownerId);
       if (!owner || !hasMastery(owner, 'spellblade:rampant-nail')) continue;
       const spike = entityAnchorPosition(entity);
       if (spike && distance(actor.position, spike) <= 1) return owner.id;
@@ -1105,7 +1106,7 @@ registerLifecycleRecipe({
     if (!actor.position) return;
     for (const entity of Object.values(state.entities)) {
       if (entity.type !== 'lightning-spike') continue;
-      const owner = entity.ownerId ? state.actors[entity.ownerId] : undefined;
+      const owner = resolveCapturedActor({ state }, entity.ownerId);
       if (!owner || !hasMastery(owner, 'spellblade:rampant-nail')) continue;
       const spike = entityAnchorPosition(entity);
       if (!spike) continue;
@@ -1162,7 +1163,7 @@ registerLifecycleRecipe({
       if (marked.defeated || !marked.onBattlefield || !marked.position) continue;
       const mark = marked.marks.find((candidate) => candidate.markId === 'rot');
       if (!mark) continue;
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.talents?.['harvester:rot'] !== 2) continue;
       if (distance(actor.position, marked.position) <= 1) return mark.ownerId;
     }
@@ -1174,7 +1175,7 @@ registerLifecycleRecipe({
       if (marked.defeated || !marked.onBattlefield || !marked.position) continue;
       const mark = marked.marks.find((candidate) => candidate.markId === 'rot');
       if (!mark) continue;
-      const owner = state.actors[mark.ownerId];
+      const owner = resolveCapturedActor({ state }, mark.ownerId);
       if (!owner || owner.talents?.['harvester:rot'] !== 2) continue;
       if (distance(actor.position, marked.position) > 1) continue;
       applyRuleMutations(state, [{
@@ -1201,7 +1202,7 @@ registerLifecycleRecipe({
     const effect = state.terrainEffects.find((candidate) =>
       candidate.terrain === 'warding-bolts'
       && candidate.ownerId
-      && state.actors[candidate.ownerId]?.side !== actor.side
+      && resolveCapturedActor({ state }, candidate.ownerId)?.side !== actor.side
       && candidate.positions.some((cell) => samePosition(cell, actor.position)));
     if (effect) return effect.ownerId;
     const definition = auraDefinitionFor('freelancer:warding-bolts:mastery');
@@ -1218,7 +1219,7 @@ registerLifecycleRecipe({
     const effect = state.terrainEffects.find((candidate) =>
       candidate.terrain === 'warding-bolts'
       && candidate.ownerId
-      && state.actors[candidate.ownerId]?.side !== actor.side
+      && resolveCapturedActor({ state }, candidate.ownerId)?.side !== actor.side
       && candidate.positions.some((cell) => samePosition(cell, actor.position)));
     if (effect) {
       actor.ruleState['warding-bolts:owner'] = effect.ownerId;

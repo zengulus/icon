@@ -347,7 +347,56 @@ assumption here, document the evidence and update this list before proceeding.
   classification (and any enabling surface/guard) before AUTHORITATIVE.
   Next dependency-driven tranche: the U1 fold-consumer adjudication. See
   `docs/u8-u1-underlay-census.md`. *(That tranche landed as tranche 17
-  below; the NEXT tranche is the optional captured-actor resolution.)*
+  below, and its suggested tranche — optional captured-actor resolution —
+  landed as tranche 18.)*
+
+- **U1 tranche 18 — lifecycle adjudication + strict/weak captured-actor
+  vocabulary + 39-site fold migration (2026-09-02) — DONE.** Resolves the
+  "present-but-removed → fail closed vs continuation-expires" contradiction
+  with ENGINE facts: defeat ≠ removal (defeatActor marks `defeated` and
+  keeps the actor in the map; REMOVE_ACTOR is setup-only), defeat cleanup
+  strips owner-stamped ephemera, and only TWO carriers author a tolerant
+  lifetime (encounter-hooks legacy/imported mark owners; lifecycle-recipes'
+  aura-origin `?? null`) — so the missing capability is not one flag but
+  TWO explicit U1 reference kinds in `primitives/reference.ts`: STRICT
+  `capturedActor` (absent id/`''` → undefined caller-side; present-but-
+  removed → `reference.missing-actor`) and LIFECYCLE-SENSITIVE
+  `capturedActorWeak` (present-but-removed → explicit `absent`, never an
+  error), with `resolveCapturedActor` / `resolveCapturedActorWeak` on the
+  shared adapter composing each through the ONE `resolveReference`
+  authority — no flags toggle one accessor, no arbitrary-id resolver.
+  MIGRATED 39 of the 43 machine-inventoried fold derefs (37 strict + 2
+  weak) across talent-recipes ×7, lifecycle-recipes ×19 (18 strict incl.
+  mark.ownerId/mote.ownerId + 1 weak aura-origin), continuation-resolvers
+  ×4 (U12 captured-actor-carried owner/target; ABSENT ref → undefined,
+  defeated/onBattlefield expiry stays caller-side on the RESOLVED actor),
+  mark-modifier-recipes ×2, attack-modifier-recipes ×2, bonus-damage-
+  recipes ×1, fool-programs ×1, encounter-hooks ×1 (weak legacy owner).
+  SURVIVORS: the machine census now reads 4 = 0 + 0 + 4 + 0 (all
+  forwarded-identifier) — exactly the four NON-reference pins
+  (heroic-activation:163 `closestFoesOf` helper param, talent-recipes:46
+  `adjacentFoes` helper param, talent-recipes:480 algorithm-combined
+  `areaIds` loop, trait-reactions:28 F9-derived reactive `collidedId`),
+  site-identity-pinned so no count-preserving swap is possible; the program
+  census stays 4 = 0 + 0 + 0 + 4 (unchanged). EVIDENCE: +7 op-contract
+  adversarial tests in `reference-authoring.test.ts` (absent-ID border for
+  both ops; present+present resolves the SAME full EncounterActor; present+
+  defeated still resolves; present+REMOVED → strict violation vs weak
+  undefined; present garbage id → strict violation; replay determinism and
+  current-state re-read; actors-map insertion-order independence), fold-
+  inventory test pins rewritten to the migrated state (4 total, exact
+  survivor identities, continuation family zero-raw-derefs), and the
+  engine family suites (talents ×48, trait-reactions, job-traits, U12
+  continuations, fool, attack-modifiers, heroic-activation, summons,
+  conditions, marks, bonus-damage) green through the engine path. **U1 is
+  AUTHORITATIVE within its declared scope** (content reference
+  interpretation): one typed vocabulary, one resolution authority, explicit
+  LIVE/CAPTURED + strict/weak contracts, U4 select/cardinality and
+  lifecycle expiry caller-owned, 8 machine-pinned NON-reference survivors
+  provably outside scope, 0 legacy-slot interpretation, replay preserved,
+  lexical+site-identity guards. The 11 remaining underlays stay PARTIAL on
+  their own residuals (see the matrix). Zero source promotion; no ability
+  semantics changed. See `docs/u8-u1-underlay-census.md`.
 
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`

@@ -15,7 +15,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedActor, resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /** ICON p.150: a bomb can share a space with characters but NOT with other
  * bombs. The generic unoccupied placement policy (no obstructing character
@@ -272,7 +272,11 @@ registerMovementEntryTrigger({
     const mine = state.terrainEffects.find((effect) =>
       effect.terrain === 'party-favor' && effect.positions.some((position) => sameCell(position, cell)));
     if (!mine) return [];
-    const owner = mine.ownerId ? state.actors[mine.ownerId] : undefined;
+    // The party-favor mine is an OBJECT (terrain effect): it survives its
+    // owner's defeat, so the owner is present-or-defeated while the fact
+    // lives — strict captured resolution; an absent ownerId is the
+    // caller-side optional border.
+    const owner = resolveCapturedActor({ state }, mine.ownerId);
     const ownerSide = owner?.side ?? mover.side;
     const area = squareArea(cell, 2);
     const areaFoes = Object.values(state.actors).filter((actor) => {

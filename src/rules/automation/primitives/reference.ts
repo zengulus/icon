@@ -88,13 +88,29 @@ export type LiveReferenceName =
  * never a stringly property path. */
 export type Reference<D extends ReferenceDomain = ReferenceDomain> =
   | { kind: 'live'; domain: D; name: LiveReferenceName }
-  | (D extends 'actor' ? { kind: 'captured-actor'; actorId: string }
+  | (D extends 'actor' ? { kind: 'captured-actor'; actorId: string } | { kind: 'captured-actor-weak'; actorId: string }
     : D extends 'entity' ? { kind: 'captured-entity'; entityId: string }
     : D extends 'position' ? { kind: 'captured-position'; position: Position }
     : D extends 'value' ? { kind: 'captured-value'; value: string | number | boolean | null }
     : never)
   | { kind: 'collection'; refs: readonly Reference<D>[] }
   | { kind: 'plural-slot'; domain: 'actor'; slot: 'trigger-targets' };
+
+/** A CAPTURED actor whose remembered identity may have legitimately expired
+ * (the reference means "the actor originally associated with this fact, if
+ * that actor still exists"). Resolves to the actor when present, or to an
+ * explicit `{ kind: 'absent' }` result when the remembered actor no longer
+ * exists — a VALID lifecycle-expiration outcome, never an error. This is a
+ * genuinely distinct contract from the strict `captured-actor` (present id +
+ * missing actor = fail closed `missing-actor`): the caller (a lifecycle
+ * authority consuming a durable fact, mark, mote, continuation, or terrain
+ * effect) picks which contract the carrier declares. Absence of the ID
+ * itself (no reference ever recorded) is a caller-side presence decision at
+ * the adapter border, not part of this kind. */
+export interface CapturedActorWeakReference {
+  kind: 'captured-actor-weak';
+  actorId: string;
+}
 
 /** A resolved reference value. `id` is the identity-level resolution for
  * domains whose state reads belong to their consuming kernel (mark/stance/
@@ -107,7 +123,8 @@ export type ResolvedReference<D extends ReferenceDomain> =
     : D extends 'position' ? { kind: 'position'; position: Position }
     : D extends 'value' ? { kind: 'value'; value: string | number | boolean | null }
     : { kind: 'id'; domain: D; id: string })
-  | { kind: 'collection'; items: readonly ResolvedReference<D>[] };
+  | { kind: 'collection'; items: readonly ResolvedReference<D>[] }
+  | { kind: 'absent' };
 
 export type ReferenceResolution<D extends ReferenceDomain = ReferenceDomain> =
   | { ok: true; value: ResolvedReference<D> }
@@ -144,6 +161,8 @@ export function domainOf(ref: Reference): ReferenceDomain | 'collection' {
       return ref.domain;
     case 'captured-actor':
       return 'actor';
+    case 'captured-actor-weak':
+      return 'actor';
     case 'captured-entity':
       return 'entity';
     case 'captured-position':
@@ -168,6 +187,8 @@ export function referenceKey(ref: Reference): string {
       return `live:${ref.domain}:${liveNameKey(ref.name)}`;
     case 'captured-actor':
       return `captured-actor:${ref.actorId}`;
+    case 'captured-actor-weak':
+      return `captured-actor-weak:${ref.actorId}`;
     case 'captured-entity':
       return `captured-entity:${ref.entityId}`;
     case 'captured-position':
@@ -243,6 +264,14 @@ export function resolveReference<D extends ReferenceDomain>(ref: Reference<D>, c
     case 'captured-actor': {
       const actor = context.state.actors[anyRef.actorId];
       if (!actor) return fail('missing-actor');
+      return okActor(actor);
+    }
+    case 'captured-actor-weak': {
+      // Lifecycle-sensitive capture: "the actor originally associated with
+      // this fact, if it still exists." A missing actor is the EXPLICIT
+      // `absent` resolution (valid expiry), never `missing-actor`.
+      const actor = context.state.actors[anyRef.actorId];
+      if (!actor) return { ok: true, value: { kind: 'absent' } } as ReferenceResolution<D>;
       return okActor(actor);
     }
     case 'captured-entity': {
@@ -333,9 +362,21 @@ export function capturedPosition(position: Position): Reference<'position'> {
 /** A CAPTURED actor reference — the durable identity case (a defeated
  * character ref for "when the target is defeated" clauses stays resolvable
  * because the identity was captured, even though the actor leaves the
- * battlefield). Domain `actor`. */
+ * battlefield). Domain `actor`. STRICT: a present id whose actor is absent
+ * from state is fail-closed `missing-actor`. */
 export function capturedActor(actorId: string): Reference<'actor'> {
   return { kind: 'captured-actor', actorId };
+}
+
+/** A LIFECYCLE-SENSITIVE (weak) CAPTURED actor reference — "the actor
+ * originally associated with this fact, if that actor still exists." The
+ * remembered id may legitimately expire: resolution returns the actor when
+ * present or an explicit `{ kind: 'absent' }` result when it has been
+ * removed/expired. Used by durable facts (marks, motes, entities, terrain
+ * effects, continuations) whose authors declare a tolerant lifetime. Domain
+ * `actor`. */
+export function capturedActorWeak(actorId: string): Reference<'actor'> {
+  return { kind: 'captured-actor-weak', actorId };
 }
 
 /** A CAPTURED entity reference. Domain `entity`. */
