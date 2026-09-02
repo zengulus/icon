@@ -151,8 +151,8 @@ their sites.
 > consistent; `188 + 55 = 243 ≠ 242` was the misclassification surfacing
 > through two hand-maintained buckets.
 >
-A machine scan at this HEAD finds 55 `sourceActor(context, …)` call
-sites across 14 named program files (multi-line calls collapse to one site;
+A machine scan at this HEAD finds 4 `sourceActor(context, …)` call
+sites across 3 named program files (multi-line calls collapse to one site;
 `npm run audit:u1-residual` reproduces these figures — and now VERIFIES this
 prose against the machine inventory, so a stale total cannot silently
 survive here again). Classified by
@@ -168,14 +168,25 @@ provenance string):
   Colossus) plus the final Sealer/Shade/Warden residue. All named program
   families route their live slots through the shared content-authoring
   adapter; no PURE site remains.
-- **U1×U4 boundary — captured/derived-id dereferences (54 + 1, one semantic
-  decision each)**: `sourceActor(context, <var>)` where `<var>` came from an
-  earlier caller-owned SELECT (`input.actorIds?.[n]`, a `??`/`?.` chain, a
-  loop-index element like `allyIds[i]`, or a passed-in parameter); plus the 1
-  in-call captured-identity read (Harvester line 155) — the precedence
-  question is a per-call-site source-contract decision, inventoried, never
-  migrated. The caller's `?.[0]`/`?.[1]`/`slice` SELECT stays U4
-  cardinality (the adapter deliberately has no first-element collapse).
+- **U1×U4 captured-identity dereferences (0 — fully migrated by the
+  sixteenth-tranche adjudication)**: every recorded-selection dereference
+  (51 sites: pure recorded reads, `??`/`?.` precedence chains, and the
+  in-call Harvester center read) now resolves through the shared
+  `resolveCapturedSelectedActors` surface, with each live-slot chain side
+  through `resolveAttackTarget` / `resolveTriggerSource` /
+  `resolveTriggerTargets`. The caller's `?.[0]`/`?.[1]` SELECT and `??`
+  precedence (which recorded slot answers) stays caller-owned U4
+  cardinality — the adapter deliberately has no first-element collapse and
+  performs no choice.
+- **NON-U1 algorithm plumbing (4 — caller-owned, reclassified; NOT
+  references)**: the remaining `sourceActor(context, <var>)` sites deref
+  identities the caller algorithm itself produced — the shared
+  movement/planning helpers' parameters (plannedFly / plannedRush,
+  colossus / demon-slayer / knave) and one derived-loop variable over an
+  algorithm-built set (knave). No reference intent, no legacy slot, and no
+  arbitrary-id U1 accessor exists (or should) — the machine classifier
+  reclassifies them with file context (helper-parameter / loop-variable
+  provenance), inventoried but NOT a U1 gap.
 - **U9 provenance / plumbing (never migrate)**: `sourceActorId:` on emitted
   mutations, `actorId: context.actorId` commands, and `context.attackTargetId
   ?` gate tests remain at their sites.
@@ -974,16 +985,113 @@ dereferences alone do NOT trigger the pin.
 With this tranche, **every named program family routes its live slots
 through the shared adapter — the PURE bucket is machine-empty**.
 
-## U1 status after the Colossus tranche
+## U1 tranche executed (fresh HEAD, 2026-09-01, sixteenth tranche — U1×U4 captured-reference adjudication)
 
-U1 remains PARTIAL: the shared surface is proved and pinned across EIGHTEEN
-migrated files (Bastion, Spellblade, Shade, Warden, Sealer, Enochian,
-Chanter, Knave, Harvester, Demon Slayer, Seer, Fool, Freelancer,
-Geomancer, Stormbender, Colossus, Job-trait, Class resolvers), and the
-residual is a machine-derived classified inventory — 0 pure LIVE-slot reads
-+ 54 captured/derived dereferences + 1 in-call boundary read = 55 sites,
-0 direct dereferences. The single DERIVED_OR_PRECEDENCE_BOUNDARY remains
-inventoried and unresolved (BOUNDARY 1 → 1).
+### The adjudication question
+
+The remaining inventory after Colossus was 55 = 0 PURE + 54 CAPTURED + 1
+BOUNDARY. This tranche answered one design question from the actual
+U1/U4 contracts and implementation (not from the census count): does
+dereferencing an identity that U4 or another caller already
+selected/resolved belong to U1's Reference/Binding authority, or is
+caller-owned dereference the correct terminal architecture?
+
+The contracts draw the line at **who decides "which actor?" (U4) versus
+who represents/resolves "the actor chosen earlier" (U1)** — two distinct
+responsibilities, not one. Every residual site was classified by the
+provenance of its argument identifier: recorded player selection
+(`input.actorIds`), recorded trigger/window selection, `??`/`?.` precedence
+chains, helper parameters carrying already-resolved identities, and one
+derived-loop variable.
+
+### Verdict — outcome C, split by semantic ownership
+
+- **51 sites are genuinely U1** (20 pure recorded-input reads + 30
+  precedence chains + the 1 in-call Harvester center read): the dereferenced
+  identity is a durable recorded command selection — CAPTURED per U1's own
+  ontology — and the shared surface (`resolveCapturedSelectedActors`,
+  composing `capturedActor` through `resolveReference`) already existed and
+  was pinned at bastion/spellblade. This tranche completed that decided
+  surface: all 51 sites now resolve through it (live-slot chain sides
+  through `resolveAttackTarget` / `resolveTriggerSource` /
+  `resolveTriggerTargets`; the terminal `?? source` fallback stays an
+  already-resolved actor). Ghost recorded identities now fail closed with
+  `reference.missing-actor` (the U1 contract; legacy code silently
+  tolerated them by no-opping). Select/cardinality/precedence stays at the
+  caller (U4).
+- **4 sites are correct terminal caller-owned** (colossus plannedFly,
+  demon-slayer plannedRush, knave plannedRush + knave derived-loop): the
+  dereferenced identity was produced by the caller algorithm itself
+  (movement/planning parameters, an algorithm-built set). No reference
+  intent; an arbitrary-id U1 accessor is forbidden, so no surface should
+  exist. Reclassified NON_U1_OTHER by the machine classifier's new
+  file-context refinement (declared parameter / loop variable of this
+  file).
+
+### Machine movement
+
+**55 = 0 + 54 + 1 → 4 = 0 + 0 + 0 + 4 NON_U1_OTHER** (colossus 1,
+demon-slayer 1, knave 2). The CAPTURED and BOUNDARY buckets are
+machine-empty: every reference-shaped dereference in the named program
+families now resolves through the shared adapter surface, and the four
+survivors are proven non-references.
+
+### Guard + evidence
+
+- `u1-reference-routing` pins the newly-required adapter surface
+  (`resolveCapturedSelectedActors`, plus the trigger accessors where the
+  migrated chains use them) file-by-file; retained helper-parameter /
+  loop derefs do not trip the pin, and a revert is caught with exactly the
+  routing problem it should be (mutation-tested).
+- the residual classifier gains file-context refinement: an argument is
+  NON_U1_OTHER only when the identifier is a declared function parameter or
+  a loop variable introduced before the site in this file (mutation-tested
+  in the architecture-audit suite; the knave derived-loop over an
+  algorithm-built `Set` is caught only with the file-context step, not by
+  the argument shape alone).
+- `reference-authoring.test.ts`: every precedence/parity fixture updated to
+  the migrated shapes (assertions unchanged — behavior preserved: recorded
+  input still wins over a DIFFERENT recorded attack target, absent-optional
+  stays a legitimate absence), plus +2 adversarial cases — a ghost RECORDED
+  input id through a migrated resolver fails closed with
+  `reference.missing-actor` (legacy silently no-opped), and RECORDED order
+  is decisive: flipping the recorded targetIds flips the Shadow Play swap
+  (resolution never re-derives first/second from object order).
+- `shade.test.ts` +1: Shadow Play under reversed actor insertion order is
+  byte-identical with replay — the captured selections resolve by recorded
+  identity, never object-iteration order.
+- the full family suites (chanter, colossus, demon-slayer, enochian, fool,
+  freelancer, geomancer, harvester, knave, sealer, seer, shade,
+  stormbender, warden) stay green through the engine path — no ability
+  semantics, choices, geometry, triggers, lifecycle, or damage changed,
+  and no source unit was promoted.
+
+## U1 status after the U1×U4 captured-reference adjudication
+
+U1 remains PARTIAL — but with a precise, changed blocker. The adjudication
+closed the captured-dereference question for the named program families:
+51 recorded-selection dereferences now resolve through the shared
+`resolveCapturedSelectedActors` surface (the completed bastion/spellblade
+surface), the Harvester in-call read is migrated with its precedence
+intact, and the 4 surviving program sites are machine-reclassified
+NON_U1_OTHER (caller-owned algorithm plumbing, not references). The
+residual census is now 4 = 0 + 0 + 0 + 4; the CAPTURED and BOUNDARY
+buckets are machine-empty; 0 direct dereferences remain in the program
+families.
+
+The one remaining cause of PARTIAL is the completion audit's surface
+coverage: reference-shaped consumption also exists in the kernel-fold-driven
+content surfaces OUTSIDE `programs/` (talent / mark-modifier / bonus-damage
+/ attack-modifier / lifecycle / continuation / heroic-activation recipe
+callbacks and encounter hooks — e.g. `state.actors[targetIds[0]]` reads and
+fact-carried `mark.ownerId` / `mote.ownerId` dereferences). Those identities
+are transmitted by shared kernel folds or embedded in recorded facts rather
+than read from the legacy context bag, so today they are caller-owned by
+transmission — but a completion claim requires the same reference-vs-plumbing
+classification, and any enabling surface or guard, for that consumer surface
+before U1 can truthfully become AUTHORITATIVE. That is the next
+dependency-driven tranche (the U1 fold-consumer adjudication); it unblocks
+nothing in the program families, which are complete.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

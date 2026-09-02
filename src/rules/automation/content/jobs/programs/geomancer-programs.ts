@@ -16,7 +16,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveSourceActor, resolveAttackTarget } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { midasOncePerCombatKey } from '../../../kernels/use-ledger.js';
 import { consumeUsageMutation, ledgerAvailable } from '../../../primitives/usage.js';
 
@@ -112,8 +112,7 @@ const dragonDiveEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   if (target && target.position && distance(source.position, target.position) > 6) throw new RuleProgramViolation('choice.actor-range', 'Dragon Dive requires a character in range 6.');
   return [
@@ -239,8 +238,7 @@ const terraformingEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const center = target?.position ?? source.position;
   if (distance(source.position, center) > 6) throw new RuleProgramViolation('choice.actor-range', 'Terraforming requires its center in range 6.');
@@ -404,8 +402,7 @@ const realignmentEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Realignment requires an adjacent character with a status.');
   if (distance(source.position, target.position) > 1) throw new RuleProgramViolation('choice.actor-range', 'Realignment requires an adjacent character.');
   const purged = target.conditions.size + (context.triggers?.has('charge') ? target.marks.length : 0);
@@ -436,8 +433,7 @@ const midasEffects: RuleResolver = (context) => {
   // Recorded player choice (input target) falls back to the interrupt's
   // trigger targets — caller-owned U4 precedence; only the dereference is the
   // captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveTriggerTargets(context)[0];
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Midas requires a character in range 5.');
   if (distance(source.position, target.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'Midas requires a character in range 5.');
   // Twice-per-combat permanence (p.220): the count is the U16 combat-scope

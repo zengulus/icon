@@ -302,6 +302,52 @@ assumption here, document the evidence and update this list before proceeding.
 **Underlay-phase task ledger** (tranche-owned; contracts/DAG/gates in
 [`docs/underlay-completion-plan.md`](docs/underlay-completion-plan.md)):
 
+- **U1 tranche 16 — U1×U4 captured-reference adjudication (2026-09-01) —
+  DONE.** Answered the remaining U1 design question from the contracts and
+  implementation: after U4 (or another caller) selects an identity, does
+  dereferencing it belong to U1 or stay caller-owned? Verdict: **outcome C,
+  split by semantic ownership**. The 51 recorded-selection dereferences (20
+  pure recorded-input reads, 30 `??`/`?.` precedence chains, 1 in-call
+  Harvester center read) are genuinely U1 — the dereferenced identity is a
+  durable recorded command selection (CAPTURED per U1's ontology) — and
+  migrated through the ALREADY-DECIDED shared surface
+  `resolveCapturedSelectedActors` (composing `capturedActor` through
+  `resolveReference`, pinned at bastion/spellblade since earlier tranches),
+  with each live-slot chain side through `resolveAttackTarget` /
+  `resolveTriggerSource` / `resolveTriggerTargets` and the terminal
+  `?? source` fallback kept as an already-resolved actor. The SELECT
+  (`?.[0]`/`?.[1]`), cardinality, and `??` precedence stay caller-owned
+  (U4): the adapter performs no choice and has no first-element collapse.
+  The 4 helper-parameter / derived-loop sites (colossus plannedFly,
+  demon-slayer plannedRush, knave plannedRush + knave derived-loop) are
+  proven NON-references — the caller algorithm itself produced the
+  identity — and were machine-reclassified NON_U1_OTHER by the classifier's
+  new file-context refinement (declared parameter / loop variable), NOT
+  migrated; no arbitrary-id U1 accessor was (or should be) added. Machine
+  residual **55 = 0 + 54 + 1 → 4 = 0 + 0 + 0 + 4**; the CAPTURED and
+  BOUNDARY buckets are machine-empty. Guards: `u1-reference-routing` pins
+  the newly-required `resolveCapturedSelectedActors` surface file-by-file
+  (retained helper/loop derefs don't trip it; a revert is caught); the
+  classifier refinement is mutation-tested. Evidence: `reference-authoring
+  .test.ts` precedence/parity fixtures updated to the migrated shapes
+  (assertions unchanged — recorded input still wins over a DIFFERENT
+  recorded attack target; absent-optional stays a legitimate absence) plus
+  +2 adversarial (ghost RECORDED input id through a migrated resolver fails
+  closed `reference.missing-actor` where legacy silently no-opped;
+  RECORDED order is decisive — flipping the recorded targetIds flips the
+  Shadow Play swap); `shade.test.ts` +1 insertion-order/replay
+  (byte-identical under reversed actor insertion order). Family suites
+  (chanter…warden, 320+) green through the engine path; zero source
+  promotion; no ability semantics changed. **U1 stays PARTIAL for exactly
+  one precise cause**: the completion audit surfaced a second content
+  surface — kernel-fold-transmitted recipe/lifecycle/continuation callbacks
+  outside `programs/` consume recorded/fact-carried identities
+  (`targetIds[0]`, `mark.ownerId`, `mote.ownerId`) directly; caller-owned
+  by transmission today, they need the same reference-vs-plumbing
+  classification (and any enabling surface/guard) before AUTHORITATIVE.
+  Next dependency-driven tranche: the U1 fold-consumer adjudication. See
+  `docs/u8-u1-underlay-census.md`.
+
 - **U1 content-authoring tranche 15 — Colossus pure LIVE-slot reads
   (2026-09-01) — DONE.** `content/jobs/programs/colossus-programs.ts`
   routes every pure live-slot reference through the adapter: source reads →
@@ -336,7 +382,10 @@ assumption here, document the evidence and update this list before proceeding.
   (the caller-owned U1×U4 captured-identity dereferences, 54 + 1 boundary,
   without a shared surface — a scoping decision, not a competing authority);
   zero source promotion; census byte-stable at 427. See
-  `docs/u8-u1-underlay-census.md`.
+  `docs/u8-u1-underlay-census.md`. *(Superseded by tranche 16: the
+  caller-owned 54 + 1 captured sites were adjudicated — 51 migrated through
+  `resolveCapturedSelectedActors`, 4 reclassified NON_U1_OTHER — and the
+  machine residual is now 4 = 0 + 0 + 0 + 4.)*
 
 - **Whole-consumer U1 audit (2026-09-01) — DONE.** Executed the census's
   longstanding "whole-consumer audit not yet done" pointer at head. Every
@@ -364,7 +413,9 @@ assumption here, document the evidence and update this list before proceeding.
   program family (resolved by tranche 15 immediately after), and (b) the
   caller-owned U1×U4 captured-identity dereferences remain without a shared
   surface (by design caller-owned today). Full suite 2142 green; census
-  byte-stable at 427; zero source promotion.
+  byte-stable at 427; zero source promotion. *(Reason (b) superseded by
+  tranche 16: the captured dereferences now resolve through the shared
+  surface — 51 migrated, 4 reclassified NON_U1_OTHER.)*
 
 - **U1 content-authoring tranche 14 — Sealer/Shade/Warden residue pure
   LIVE-slot reads (2026-09-01) — DONE.** The last PURE sites outside

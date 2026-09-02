@@ -11,7 +11,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
@@ -90,8 +90,7 @@ const reapEffects: RuleResolver = (context) => {
  * repeats it and additionally pacifies foes. */
 const growingSeasonEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Growing Season requires a character in range 4.');
   if (distance(source.position, target.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Growing Season requires a character in range 4.');
   return [markMutation(context, target.id, 'growing-season', { bloodied: target.hp <= target.maxHp / 2 })];
@@ -153,7 +152,8 @@ const harvestEffects: RuleResolver = (context) => {
  * summon-trigger window. */
 const bloodGroveEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined;
+  const centerActor = resolveCapturedSelectedActors(context, 'target')[0];
+  const center = centerActor?.position;
   if (!source.position) return [];
   const centerCell = center ?? source.position;
   if (distance(source.position, centerCell) > 2) throw new RuleProgramViolation('choice.actor-range', 'Blood Grove requires its center in range 2.');
@@ -169,8 +169,7 @@ const bloodGroveEffects: RuleResolver = (context) => {
  * the closed source-ID projection in passive-projection.ts. */
 const rotEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Rot requires a character in range 4.');
   if (distance(source.position, target.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Rot requires a character in range 4.');
   const mutations: RuleMutation[] = [];
@@ -189,8 +188,7 @@ const rotEffects: RuleResolver = (context) => {
  * a documented damage-trigger / turn-end window. */
 const crimsonBloomEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Crimson Bloom requires a character in range 4.');
   if (distance(source.position, target.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Crimson Bloom requires a character in range 4.');
   return [markMutation(context, target.id, 'crimson-bloom', { die: 0 })];
@@ -215,8 +213,7 @@ const fairyRingEffects: RuleResolver = (context) => {
  * is not ended. */
 const spiritAwayEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const foeId = context.triggerTargetIds?.[0] ?? context.input.actorIds?.target?.[0];
-  const foe = foeId ? sourceActor(context, foeId) : undefined;
+  const foe = resolveTriggerTargets(context)[0] ?? resolveCapturedSelectedActors(context, 'target')[0];
   if (!source.position || !foe?.position) return [];
   const mutations: RuleMutation[] = [];
   const landing = chosenTeleportDestination(context, foe.id, 'teleport', foe.position, 2, 'Spirit Away');

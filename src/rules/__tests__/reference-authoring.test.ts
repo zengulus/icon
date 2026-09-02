@@ -260,10 +260,11 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expectViolationCode(() => SEALER_RULE_RESOLVERS['sealer:god-hand:effects'](context, defaultAction), 'reference.missing-actor');
   });
 
-  it('Sealer Open The Gates resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor — the U1×U4 chain sites keep caller-owned precedence; only PURE live-slot reads migrated', () => {
-    // Grand Seal's `input.actorIds?.target?.[0] ?? attackTargetId` precedence is
-    // caller-owned U4 (inventoried); the PURE God Hand/Open The Gates reads
-    // resolve the attack-target slot directly and fail closed on a ghost.
+  it('Sealer Open The Gates resolver: a ghost attackTargetId (gate bypassed) throws reference.missing-actor — chain precedence stays caller-owned, dereferences resolve through U1', () => {
+    // Open The Gates' `input.actorIds?.target?.[0] ?? attackTargetId` SELECT
+    // (which recorded slot answers) is caller-owned U4 precedence; the chosen
+    // identity's dereference now resolves through U1 (captured input side,
+    // live attack-target side) and fails closed on a ghost.
     const context = ctx({ attackTargetId: 'ghost' });
     expectViolationCode(() => SEALER_RULE_RESOLVERS['sealer:open-the-gates:effects'](context, defaultAction), 'reference.missing-actor');
     // And the chain site still honors its caller-owned precedence: a present
@@ -307,10 +308,11 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(() => CHANTER_RULE_RESOLVERS['chanter:holy:effects'](context, defaultAction)).not.toThrow();
   });
 
-  it('Chanter Felicity resolver: the captured-input identity stays caller-owned — only the LIVE source slot migrated', () => {
+  it('Chanter Felicity resolver: the recorded input selection resolves through U1 and stays the ally — only the SELECT stays caller-owned', () => {
     // Felicity's `input.actorIds?.target?.[0]` SELECT is the caller's U4
-    // choice; the source-actor read is the migrated PURE slot. A present
-    // input target resolves as the ally (captured identity), unchanged.
+    // choice/cardinality; the dereference of the chosen identity now resolves
+    // through U1's resolveCapturedSelectedActors. A present input target
+    // resolves as the ally (captured identity), unchanged.
     const hero = ctx().state.actors.hero;
     const ally = { ...hero, id: 'ally', side: 'heroes' as const, position: { x: 5, y: 4 } }; // in range 5 of hero
     const context = ctx({
@@ -351,11 +353,12 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expectViolationCode(() => KNAVE_RULE_RESOLVERS['knave:dark-knight:enter'](context, defaultAction), 'choice.direction-ambiguous');
   });
 
-  it('Knave Dire Parry resolver: the trigger-source ?? recorded-input precedence stays caller-owned', () => {
+  it('Knave Dire Parry resolver: the trigger-source ?? recorded-input precedence stays caller-owned; both dereferences resolve through U1', () => {
     // Dire Parry's `context.triggerSourceId ?? context.input.actorIds?.target?.[0]`
     // SELECT is meaningful caller-owned precedence (which slot answers depends
-    // on the window contract); only the dereference of the chosen id is the
-    // captured-identity shape, and only the SOURCE slot read was migrated.
+    // on the window contract); the dereference of the chosen id now resolves
+    // through U1 — resolveTriggerSource for the live trigger slot, resolveCapturedSelectedActors
+    // for the recorded input side.
     const foe = ctx().state.actors.foe;
     const context = ctx({ triggerSourceId: 'foe', input: { actorIds: { target: ['hero'] } } });
     const mutations = KNAVE_RULE_RESOLVERS['knave:riposte:dire-parry'](context, interruptAction);
@@ -366,10 +369,11 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     void foe;
   });
 
-  it('Knave Strongarm resolver: the recorded input.actorIds target stays caller-owned', () => {
+  it('Knave Strongarm resolver: the recorded input selection stays the spun target — SELECT caller-owned, dereference through U1', () => {
     // Strongarm's `input.actorIds?.target?.[0]` SELECT is the caller's U4
-    // choice; the source read is the migrated PURE slot. The chosen target
-    // (input) is what gets spun, unchanged.
+    // choice/cardinality; the dereference now resolves through U1's
+    // resolveCapturedSelectedActors. The chosen target (input) is what gets
+    // spun, unchanged.
     const hero = ctx().state.actors.hero;
     const foe = { ...ctx().state.actors.foe, id: 'foe', position: { x: 5, y: 4 } }; // adjacent to hero (4,4)
     const context = ctx({ state: { ...ctx().state, actors: { ...ctx().state.actors, foe } }, input: { actorIds: { target: ['foe'] } } });
@@ -398,14 +402,12 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(() => HARVESTER_RULE_RESOLVERS['harvester:sow:reap'](context, defaultAction)).not.toThrow();
   });
 
-  it('Harvester Blood Grove resolver: the protected DERIVED_OR_PRECEDENCE_BOUNDARY keeps its exact precedence — input center wins, source center is the fallback, and the dereference still reads current state', () => {
-    // The ONE repo-wide DERIVED_OR_PRECEDENCE_BOUNDARY is blood-grove's
-    // in-call `input.actorIds?.target?.[0] ? sourceActor(context,
-    // context.input.actorIds.target[0])?.position : undefined` center read —
-    // NOT migrated in this tranche. Its selection (recorded input target when
-    // present, else the source's position) and its dereference shape are
-    // unchanged: the higher-priority input identity wins when present, and
-    // the fallback (source position) is used only when absent.
+  it('Harvester Blood Grove resolver: the recorded-input center still wins over the source-center fallback — precedence preserved through U1', () => {
+    // Blood Grove's in-call center read was the last
+    // DERIVED_OR_PRECEDENCE_BOUNDARY; this tranche migrated its dereference
+    // through U1's resolveCapturedSelectedActors (the A3 in-call family). Its
+    // selection precedence is unchanged: the recorded input target wins when
+    // present, and the fallback (source position) is used only when absent.
     const hero = ctx().state.actors.hero; // (4,4)
     const foe = { ...ctx().state.actors.foe, id: 'foe', position: { x: 3, y: 4 } }; // distance 1 (in range 2)
     const withInput = ctx({ state: { ...ctx().state, actors: { ...ctx().state.actors, foe } }, input: { actorIds: { target: ['foe'] } } });
@@ -443,10 +445,11 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(() => DEMON_SLAYER_RULE_RESOLVERS['demon-slayer:comet'](context, defaultAction)).not.toThrow();
   });
 
-  it('Demon Slayer Righteous Disdain resolver: the recorded input.actorIds ally stays caller-owned', () => {
+  it('Demon Slayer Righteous Disdain resolver: the recorded input ally receives half the shared damage — SELECT caller-owned, dereference through U1', () => {
     // Righteous Disdain's `input.actorIds?.target?.[0]` SELECT is the caller's
-    // U4 choice; only the source-actor read is the migrated PURE slot. The
-    // chosen ally (input) receives half the shared damage, unchanged.
+    // U4 choice/cardinality; the dereference now resolves through U1's
+    // resolveCapturedSelectedActors. The chosen ally (input) receives half
+    // the shared damage, unchanged.
     const hero = ctx().state.actors.hero;
     const ally = { ...hero, id: 'ally', side: 'heroes' as const, position: { x: 5, y: 4 } }; // in range 2 of hero (4,4)
     const context = ctx({
@@ -489,10 +492,11 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(() => GEOMANCER_RULE_RESOLVERS['geomancer:quaking-palm:effects'](context, defaultAction)).not.toThrow();
   });
 
-  it('Geomancer Dragon Dive resolver: the recorded input.actorIds target stays caller-owned (U4) — it wins over a DIFFERENT recorded attack target', () => {
-    // Dragon Dive's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is
-    // the caller's U4 precedence (inventoried); only the source read is the
-    // migrated PURE slot. A present input target wins even when a DIFFERENT
+  it('Geomancer Dragon Dive resolver: the recorded input target wins over a DIFFERENT recorded attack target — precedence preserved through U1', () => {
+    // Dragon Dive's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT
+    // (which recorded slot answers) is caller-owned U4 precedence; each side's
+    // dereference now resolves through U1 (captured input side, live
+    // attack-target side). A present input target wins even when a DIFFERENT
     // attackTargetId is recorded — the dive is stored against the chosen
     // identity, exactly as before.
     const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 7, y: 4 } }; // in range 6 of hero (4,4)
@@ -509,11 +513,11 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(mutations.some((mutation) => mutation.kind === 'state' && mutation.value === 'other')).toBe(false);
   });
 
-  it('Geomancer Midas resolver: the recorded interrupt target stays caller-owned (U4) — input.actorIds wins over triggerTargetIds', () => {
+  it('Geomancer Midas resolver: the recorded interrupt target wins over triggerTargetIds — precedence preserved through U1', () => {
     // Midas's `input.actorIds?.target?.[0] ?? triggerTargetIds?.[0]` SELECT is
-    // the caller's U4 precedence (inventoried); only the source read is the
-    // migrated PURE slot. The chosen identity becomes the statue held,
-    // unchanged.
+    // caller-owned U4 precedence; each side's dereference now resolves through
+    // U1 (captured input side, recorded trigger-target collection). The chosen
+    // identity becomes the statue held, unchanged.
     const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 5, y: 4 } }; // in range 5 of hero (4,4)
     const context = ctx({
       state: { ...ctx().state, actors: { ...ctx().state.actors, chosen } },
@@ -541,12 +545,13 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(() => STORMBENDER_RULE_RESOLVERS['stormbender:cryo:effects'](context, defaultAction)).not.toThrow();
   });
 
-  it('Stormbender Deepwrath resolver: the recorded input.actorIds target stays caller-owned (U4) — it wins over a DIFFERENT recorded attack target', () => {
-    // Deepwrath's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is the
-    // caller's U4 precedence (inventoried); only the source read is the
-    // migrated PURE slot. A present input target wins even when a DIFFERENT
-    // attackTargetId is recorded — the mark lands on the chosen identity and
-    // the out-of-range recorded attack target never participates.
+  it('Stormbender Deepwrath resolver: the recorded input target wins over a DIFFERENT recorded attack target — precedence preserved through U1', () => {
+    // Deepwrath's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is
+    // caller-owned U4 precedence; each side's dereference now resolves through
+    // U1 (captured input side, live attack-target side). A present input
+    // target wins even when a DIFFERENT attackTargetId is recorded — the mark
+    // lands on the chosen identity and the out-of-range recorded attack target
+    // never participates.
     const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 8, y: 4 } }; // in range 6 of hero (4,4)
     const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 12, y: 4 } }; // out of range 6 — never selected
     const context = ctx({
@@ -583,11 +588,12 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expectViolationCode(() => COLOSSUS_RULE_RESOLVERS['colossus:massive-overhead'](context, defaultAction), 'reference.missing-actor');
   });
 
-  it('Colossus Dropkick resolver: the recorded input.actorIds target stays caller-owned (U4) — the adjacent chosen identity takes the hit', () => {
-    // Dropkick's `input.actorIds?.target?.[0]` SELECT is the caller's U4 choice
-    // (inventoried); only the source read is the migrated PURE slot. The
-    // recorded chosen identity is the one flown toward and damaged — a
-    // DIFFERENT recorded attack target never participates.
+  it('Colossus Dropkick resolver: the recorded input target takes the hit — SELECT caller-owned, dereference through U1', () => {
+    // Dropkick's `input.actorIds?.target?.[0]` SELECT is the caller's U4
+    // choice/cardinality; the dereference now resolves through U1's
+    // resolveCapturedSelectedActors. The recorded chosen identity is the one
+    // flown toward and damaged — a DIFFERENT recorded attack target never
+    // participates.
     const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 5, y: 4 } }; // adjacent to hero (4,4)
     const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 12, y: 4 } }; // out of adjacency — never selected
     const context = ctx({
@@ -610,10 +616,11 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expectViolationCode(() => SHADE_RULE_RESOLVERS['shade:shadow-play:effects'](context, defaultAction), 'reference.missing-actor');
   });
 
-  it('Shade Shadow Play resolver: the recorded input.actorIds selections stay caller-owned (U4) — the swap moves the RECORDED identities', () => {
+  it('Shade Shadow Play resolver: the swap moves the RECORDED identities — SELECTs caller-owned, dereferences through U1', () => {
     // Shadow Play's `input.actorIds?.target?.[0]` / `?.[1]` SELECTs are the
-    // caller's U4 choices (inventoried); only the source read is the migrated
-    // PURE slot. The two recorded identities are the ones swapped, unchanged.
+    // caller's U4 choice/cardinality; both dereferences now resolve through
+    // U1's resolveCapturedSelectedActors, in recorded order. The two recorded
+    // identities are the ones swapped, unchanged.
     const first = { ...ctx().state.actors.foe, id: 'first', position: { x: 6, y: 4 } }; // in range 2 of hero (4,4)
     const second = { ...ctx().state.actors.foe, id: 'second', position: { x: 8, y: 4 } }; // in range 3 of first
     const context = ctx({
@@ -627,12 +634,12 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(mutations.some((mutation) => mutation.kind === 'condition' && mutation.conditionId === 'stealth')).toBe(false);
   });
 
-  it('Sealer Grand Seal resolver: the recorded input.actorIds target stays caller-owned (U4) — it wins over a DIFFERENT recorded attack target', () => {
+  it('Sealer Grand Seal resolver: the recorded input target wins over a DIFFERENT recorded attack target — precedence preserved through U1', () => {
     // Grand Seal's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is
-    // the caller's U4 precedence (inventoried); only the source read is the
-    // migrated PURE slot. A present input target wins even when a DIFFERENT
-    // attackTargetId is recorded — the out-of-range recorded attack target
-    // never participates.
+    // caller-owned U4 precedence; each side's dereference now resolves through
+    // U1 (captured input side, live attack-target side). A present input
+    // target wins even when a DIFFERENT attackTargetId is recorded — the
+    // out-of-range recorded attack target never participates.
     const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 7, y: 4 } }; // in range 4 of hero (4,4)
     const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 20, y: 4 } }; // out of range 4 — never selected
     const context = ctx({
@@ -659,10 +666,11 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(salt.some((mutation) => mutation.kind === 'terrain' && mutation.positions.some((cell) => cell.x === 4 && cell.y === 4))).toBe(true);
   });
 
-  it('Warden Gwynt resolver: the recorded input selections are caller-owned — the foe and ally identities drive the dashes (U4)', () => {
+  it('Warden Gwynt resolver: the recorded foe and ally selections drive the dashes — SELECTs caller-owned, dereferences through U1', () => {
     // Gwynt's `input.actorIds?.target?.[0]` (foe) / `?.[1]` (ally) SELECTs are
-    // the caller's U4 choices (inventoried); only the source read is the
-    // migrated PURE slot. The recorded foe is the dash target and damage
+    // the caller's U4 choice/cardinality; both dereferences now resolve
+    // through U1's resolveCapturedSelectedActors. The recorded foe is the
+    // dash target and damage
     // recipient, unchanged: foe at (6,4) sits 2 cells east of hero (4,4) on
     // the dash axis — the hero's 2-rush stops on the free cell (5,4) before
     // the foe (the shared `walk` blocks on occupancy), distance 1, and deals
@@ -685,12 +693,13 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(mutations.some((mutation) => mutation.kind === 'damage' && mutation.actorId === 'ally')).toBe(false);
   });
 
-  it('Seer Chaos Tarot resolver: the recorded input.actorIds center choice still wins over the attack target (caller-owned U4)', () => {
+  it('Seer Chaos Tarot resolver: the recorded input center choice still wins over the attack target — precedence preserved through U1', () => {
     // Chaos Tarot's `input.actorIds?.target?.[0] ?? attackTargetId` SELECT is
-    // the caller's U4 precedence (inventoried); only the source read is the
-    // migrated PURE slot. A present input target wins even when a DIFFERENT
-    // attackTargetId is recorded — the wild card lands at the chosen center
-    // and the gamble frays the chosen identity, exactly as before.
+    // caller-owned U4 precedence; each side's dereference now resolves through
+    // U1 (captured input side, live attack-target side). A present input
+    // target wins even when a DIFFERENT attackTargetId is recorded — the wild
+    // card lands at the chosen center and the gamble frays the chosen
+    // identity, exactly as before.
     const chosen = { ...ctx().state.actors.foe, id: 'chosen', position: { x: 8, y: 4 } };
     const other = { ...ctx().state.actors.foe, id: 'other', position: { x: 12, y: 4 } };
     const context = ctx({
@@ -725,15 +734,48 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     expect(mutations.some((mutation) => mutation.kind === 'state' && mutation.key === 'monogatari:charge')).toBe(true);
   });
 
-  it('Enochian Pyroclast resolver: the captured-input identity stays caller-owned — the ?? chain survives, only the LIVE slots migrated', () => {
+  it('Enochian Pyroclast resolver: the ?? chain survives with each side resolving through U1 — the recorded input still wins over the attack target', () => {
     // Pyroclast's `input.actorIds?.target?.[0] ?? attackTargetId ?? source.id`
-    // SELECT is the caller's U4 precedence (inventoried); the migraiton touched
-    // only the PURE source-slot resolution. A present input target still wins
-    // over the attack-target fallback, and the resolver marks that chosen
-    // identity — U4 semantics unchanged.
+    // SELECT is caller-owned U4 precedence; each side's dereference now
+    // resolves through U1 (captured input side, live attack-target side, and
+    // the already-resolved source for the terminal fallback). A present input
+    // target still wins over the attack-target fallback, and the resolver
+    // marks that chosen identity — U4 semantics unchanged.
     const context = ctx({ attackTargetId: 'foe', input: { actorIds: { target: ['hero'] } } });
     const mutations = ENOCHIAN_RULE_RESOLVERS['enochian:pyroclast:effects'](context, defaultAction);
     expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'hero')).toBe(true);
     expect(mutations.some((mutation) => mutation.kind === 'mark' && mutation.actorId === 'foe')).toBe(false);
+  });
+
+  it('Warden Gwynt resolver: a ghost RECORDED input id (gate bypassed) fails closed with reference.missing-actor — never a silent no-op', () => {
+    // This tranche migrated Gwynt's captured-selection dereferences through
+    // U1's resolveCapturedSelectedActors. Legacy code silently tolerated a
+    // ghost recorded id (`state.actors['ghost']` → undefined → the resolver's
+    // `if (!foe || !foePosition) return []` no-op). Under the U1 contract the
+    // plural captured collection REJECTS a missing identity: fail-closed. The
+    // engine gate never lets a ghost recorded id through; the resolver is the
+    // final authority when one does.
+    const context = ctx({ input: { actorIds: { target: ['ghost'] } }, attackTargetId: undefined });
+    expectViolationCode(() => WARDEN_RULE_RESOLVERS['warden:gwynt:effects'](context, defaultAction), 'reference.missing-actor');
+  });
+
+  it('Shade Shadow Play resolver: RECORDED order is decisive — flipping the recorded targetIds flips which identity goes where', () => {
+    // The captured selections are positional by RECORDED index (`[0]`/`[1]` is
+    // caller-owned cardinality); U1 resolves whatever identity was recorded at
+    // each index. Reversing the recorded order reverses the swap — resolution
+    // never re-derives first/second from object order or state.
+    const first = { ...ctx().state.actors.foe, id: 'first', position: { x: 5, y: 4 } }; // range 1 of hero (4,4)
+    const second = { ...ctx().state.actors.foe, id: 'second', position: { x: 6, y: 4 } }; // range 1 of first
+    const base = { ...ctx().state, actors: { ...ctx().state.actors, first, second } };
+    const asRecorded = SHADE_RULE_RESOLVERS['shade:shadow-play:effects'](ctx({ state: base, input: { actorIds: { target: ['first', 'second'] } } }), defaultAction);
+    const placesForward = asRecorded.filter((mutation) => mutation.kind === 'move' && mutation.movement === 'place');
+    // Recorded [first, second]: first is [0] — first moves to second's cell and vice versa.
+    expect(placesForward.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'first' && mutation.positions[0]!.x === 6)).toBe(true);
+    expect(placesForward.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'second' && mutation.positions[0]!.x === 5)).toBe(true);
+    const flipped = SHADE_RULE_RESOLVERS['shade:shadow-play:effects'](ctx({ state: base, input: { actorIds: { target: ['second', 'first'] } } }), defaultAction);
+    const placesBackward = flipped.filter((mutation) => mutation.kind === 'move' && mutation.movement === 'place');
+    // Recorded [second, first]: second is now [0] — the swap directions flip.
+    expect(placesBackward.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'second' && mutation.positions[0]!.x === 5)).toBe(true);
+    expect(placesBackward.some((mutation) => mutation.kind === 'move' && mutation.actorId === 'first' && mutation.positions[0]!.x === 6)).toBe(true);
   });
 });

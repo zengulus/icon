@@ -14,7 +14,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Seer ability implementations (ICON p.197–203),
@@ -71,8 +71,7 @@ const sleightOfHandEffects: RuleResolver = (context) => {
  * is summoned in the area. */
 const chaosTarotEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const initialCenter = target?.position ?? source.position;
   if (distance(source.position, initialCenter) > 5) throw new RuleProgramViolation('choice.actor-range', 'Chaos Tarot requires its center in range 5.');
@@ -219,8 +218,7 @@ const fortunaEffects: RuleResolver = (context) => {
  * with the count) is a documented turn-boundary window. */
 const polarisEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) throw new RuleProgramViolation('choice.actor-count', 'Polaris requires a space in range 5.');
   const cell = target?.position ?? source.position;
   if (distance(source.position, cell) > 5) throw new RuleProgramViolation('choice.actor-range', 'Polaris requires a space in range 5.');
@@ -232,8 +230,7 @@ const polarisEffects: RuleResolver = (context) => {
  * foe's end-of-turn save are documented mark-trigger windows. */
 const sisyphusEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Sisyphus requires a character in range 5.');
   if (distance(source.position, target.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'Sisyphus requires a character in range 5.');
   return [markMutation(context, target.id, 'sisyphus', { x: target.position.x, y: target.position.y })];
@@ -261,8 +258,7 @@ const granReversaEffects: RuleResolver = (context) => {
  * double the result. */
 const reverseFateEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const allyId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0];
-  const ally = allyId ? sourceActor(context, allyId) : undefined;
+  const ally = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveTriggerTargets(context)[0];
   if (!ally) throw new RuleProgramViolation('choice.actor-count', 'Reverse Fate requires an ally in the aura.');
   const ticks = Math.max(0, Math.trunc(context.input.numbers?.ticks ?? 1));
   const mutations: RuleMutation[] = [];
@@ -280,8 +276,7 @@ const reverseFateEffects: RuleResolver = (context) => {
  * dangerous terrain under every foe) is a documented turn-boundary window. */
 const eclipseEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
   if (distance(source.position, cell) > 6) throw new RuleProgramViolation('choice.actor-range', 'Eclipse requires a space in range 6.');
@@ -298,8 +293,7 @@ const eclipseEffects: RuleResolver = (context) => {
  * window. */
 const wishEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const allyId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0];
-  const ally = allyId ? sourceActor(context, allyId) : undefined;
+  const ally = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveTriggerTargets(context)[0];
   if (!ally) throw new RuleProgramViolation('choice.actor-count', 'Wish requires an ally on the battlefield.');
   const mutations: RuleMutation[] = [
     damageMutation(context, source.id, Math.ceil(source.maxHp / 4), 'effect', 'sacrifice'),

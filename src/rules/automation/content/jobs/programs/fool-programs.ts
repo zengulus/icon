@@ -15,7 +15,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /** ICON p.150: a bomb can share a space with characters but NOT with other
  * bombs. The generic unoccupied placement policy (no obstructing character
@@ -295,8 +295,7 @@ registerMovementEntryTrigger({
 const masqueradeEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   const sourcePosition = source.position;
-  const allyId = context.input.actorIds?.target?.[0];
-  const ally = allyId ? sourceActor(context, allyId) : undefined;
+  const ally = resolveCapturedSelectedActors(context, 'target')[0];
   const allyPosition = ally?.position;
   if (!sourcePosition || !ally || !allyPosition) throw new RuleProgramViolation('choice.actor-count', 'Masquerade requires a willing ally.');
   if (ally.side !== source.side || ally.id === source.id) throw new RuleProgramViolation('choice.actor-range', 'Masquerade requires a different ally.');
@@ -342,8 +341,7 @@ const diabloEffects: RuleResolver = (context) => {
 const chronotemperEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   const sourcePosition = source.position;
-  const targetId = context.input.actorIds?.target?.[0] ?? source.id;
-  const target = sourceActor(context, targetId);
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? source;
   if (!sourcePosition || (target.side !== source.side && target.id !== source.id)) {
     throw new RuleProgramViolation('choice.actor-range', 'Chronotemper marks yourself or an ally in range 2.');
   }

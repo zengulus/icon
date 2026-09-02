@@ -13,7 +13,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Freelancer ability implementations (ICON p.153–158),
@@ -94,8 +94,7 @@ const strafeShot: RuleResolver = (context) => {
  * at turn end; a Finishing Blow sets the die immediately. */
 const exorcism: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Exorcism requires a foe in range 3.');
   if (target.side === source.side) throw new RuleProgramViolation('choice.actor-range', 'Exorcism requires a foe.');
   if (distance(source.position, target.position) > 3) throw new RuleProgramViolation('choice.actor-range', 'Exorcism requires a foe in range 3.');
@@ -138,8 +137,7 @@ const astralChain: RuleResolver = (context) => {
  * interrupt (teleport both closer together at the end of any turn). */
 const deusExMachina: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Deus Ex Machina requires a character in range 3.');
   if (distance(source.position, target.position) > 3) throw new RuleProgramViolation('choice.actor-range', 'Deus Ex Machina requires a character in range 3.');
   return [markMutation(context, target.id, 'deus-ex-machina', {})];
@@ -149,8 +147,7 @@ const deusExMachina: RuleResolver = (context) => {
  * user (deterministic; allies may decline at the table). */
 const divineIntervention: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Divine Intervention requires the marked character.');
   const toward = axisDirection(target.position, source.position);
   const next = { x: target.position.x + toward.x, y: target.position.y + toward.y };
@@ -186,8 +183,7 @@ const aceRefresh: RuleResolver = (context) => {
  * dash 2 to stay on them). A Finishing Blow deals 2 damage four times. */
 const showdown: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Showdown requires a foe in range 3.');
   if (target.side === source.side || distance(source.position, target.position) > 3) throw new RuleProgramViolation('choice.actor-range', 'Showdown requires a foe in range 3.');
   const mutations: RuleMutation[] = [

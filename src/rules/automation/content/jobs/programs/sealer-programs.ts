@@ -11,7 +11,7 @@ import {
   gambleD6,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
 import { entityAnchorPosition } from '../../../primitives/anchor.js';
@@ -106,8 +106,7 @@ const grandSealEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Grand Seal requires a foe in range 4.');
   if (target.side === source.side || distance(source.position, target.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Grand Seal requires a foe in range 4.');
   return [
@@ -179,8 +178,7 @@ const sanctifyEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const center = target?.position ?? source.position;
   if (distance(source.position, center) > 2) throw new RuleProgramViolation('choice.actor-range', 'Sanctify requires its center in range 2.');
@@ -201,8 +199,7 @@ const grandBanishmentEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   if (target && target.position && distance(source.position, target.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Grand Banishment requires a foe in range 4.');
   const mutations: RuleMutation[] = [];
@@ -221,8 +218,7 @@ const divineAegisEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input ally) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const allyId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const ally = allyId ? sourceActor(context, allyId) : undefined;
+  const ally = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Divine Aegis requires an ally in range 4.');
   if (ally.side !== source.side || distance(source.position, ally.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Divine Aegis requires an ally in range 4.');
   const mutations: RuleMutation[] = [markMutation(context, ally.id, 'divine-aegis', {})];

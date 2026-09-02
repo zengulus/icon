@@ -219,14 +219,14 @@ describe('U1 residual census (machine inventory)', () => {
     expect(fileNames.size).toBe(Object.keys(inventory.perFile).length);
   });
 
-  it('pins the exact repo figures (55 = 0 + 54 + 1) so docs cannot drift from the machine', () => {
+  it('pins the exact repo figures (4 = 0 + 0 + 0 + 4) so docs cannot drift from the machine', () => {
     const inventory = buildU1ResidualInventory(PROGRAMS_ROOT);
-    expect(inventory.total).toBe(55);
+    expect(inventory.total).toBe(4);
     expect(inventory.categoryCounts).toEqual({
       PURE_LIVE_REFERENCE: 0,
-      CAPTURED_ID_DEREFERENCE: 54,
-      DERIVED_OR_PRECEDENCE_BOUNDARY: 1,
-      NON_U1_OTHER: 0,
+      CAPTURED_ID_DEREFERENCE: 0,
+      DERIVED_OR_PRECEDENCE_BOUNDARY: 0,
+      NON_U1_OTHER: 4,
     });
   });
 
@@ -252,16 +252,25 @@ describe('U1 residual census (machine inventory)', () => {
     }
   });
 
-  it('classifier mutation: the harvester in-call captured read is the ONE boundary site, never double-counted', () => {
-    // The pre-repair hand scan classified this site as BOTH pure and captured
-    // (`188+55=243 ≠ 242`). The machine classifier must place it in exactly
-    // one bucket: the DERIVED_OR_PRECEDENCE_BOUNDARY (it names recorded input
-    // inside the call).
+  it('classifier mutation: pure slots stay PURE; the U1×U4 adjudication moved recorded-selection derefs out; helper/derived args reclassify with file context', () => {
     expect(categorizeSourceActorArgument('context.actorId')).toBe('PURE_LIVE_REFERENCE');
     expect(categorizeSourceActorArgument('context.attackTargetId')).toBe('PURE_LIVE_REFERENCE');
     expect(categorizeSourceActorArgument('context.input.actorIds.target[0]')).toBe('DERIVED_OR_PRECEDENCE_BOUNDARY');
     expect(categorizeSourceActorArgument('targetId')).toBe('CAPTURED_ID_DEREFERENCE');
     expect(categorizeSourceActorArgument('allyIds[i]')).toBe('CAPTURED_ID_DEREFERENCE');
+    // File-context refinement: a plannedRush/plannedFly parameter and a
+    // derived-loop variable are algorithm plumbing, not U1 references — the
+    // recorded-selection derefs migrated; these four stay caller-owned.
+    const helperFile = [
+      'function plannedRush(context, actorId: string, steps: number) { return null; }',
+      'const x = sourceActor(context, actorId);',
+      'for (const passedId of passed) { sourceActor(context, passedId); }',
+    ].join('\n');
+    const sites = scanFileSites('helper.ts', helperFile);
+    expect(sites[0].category).toBe('NON_U1_OTHER');
+    expect(sites[1].category).toBe('NON_U1_OTHER');
+    // A plain input-bound alias with no helper context stays CAPTURED.
+    expect(scanFileSites('plain.ts', ['const targetId = context.input.actorIds?.target?.[0];', 'sourceActor(context, targetId);'].join('\n'))[0].category).toBe('CAPTURED_ID_DEREFERENCE');
   });
 
   it('scanner survival: multi-line calls count as ONE site; harness, not hand grep', () => {
@@ -358,55 +367,28 @@ describe('U1 Reference/Binding routing guard', () => {
       + "\nexport function sourceActorRef() { return liveActorSlot('source'); }",
     'content/jobs/programs/bastion-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); resolveCapturedSelectedActors(context, \'target\');',
     'content/jobs/programs/spellblade-programs.ts': 'resolveSourceActor(context); resolveAttackTarget(context); resolveTriggerTargets(context); resolveCapturedSelectedActors(context, \'target\');',
-    // Non-migrated content: caller-owned U4 cardinality reads, incidental
-    // provenance/ownership fields, and the inventoried sourceActor residual
-    // are NOT reference interpretation.
-    'content/jobs/programs/chanter-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined; const foeId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;',
-    // Migrated Knave keeps its pinned adapter surface; the retained
-    // captured/precedence dereferences (plannedRush's actorId parameter,
-    // Dire Parry's triggerSource ?? input chain, Strongarm's input.actorIds
-    // target, passed-id loop derefs) stay inventoried at the caller.
-    'content/jobs/programs/knave-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); function plannedRush(context, actorId) { return sourceActor(context, actorId); } const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0]; const foe = foeId ? sourceActor(context, foeId) : undefined; const targetId = context.input.actorIds?.target?.[0]; const chosen = targetId ? sourceActor(context, targetId) : undefined; const passedId = "x"; const passedActor = passedId ? sourceActor(context, passedId) : undefined;',
-    // Migrated Shade/Warden keep their pinned adapter surface; the remaining
-    // captured-input dereferences (`input.actorIds?.[n]` → sourceActor) are
-    // the inventoried U1×U4 boundary and must NOT be flagged.
-    'content/jobs/programs/shade-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const triggerPosition = resolveTriggerSource(context)?.position; const selected = context.input.actorIds?.target?.[0]; const chosen = selected ? sourceActor(context, selected) : undefined;',
-    'content/jobs/programs/warden-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const foeId = context.input.actorIds?.target?.[0]; const foe = foeId ? sourceActor(context, foeId) : undefined;',
-    // Migrated Sealer keeps its pinned adapter surface; the U1×U4 chain reads
-    // (`input.actorIds?.[0] ?? attackTargetId` → sourceActor) stay inventoried.
-    'content/jobs/programs/sealer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined;',
-    // Migrated Enochian keeps its pinned adapter surface; the captured-input
-    // dereferences (blazing-bond allyId, heartfire partnerId, implode/pyroclast
-    // targetId from `??` chains) stay inventoried at the U1×U4 boundary.
-    'content/jobs/programs/enochian-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const allyId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const ally = allyId ? sourceActor(context, allyId) : undefined;',
-    // Migrated Harvester keeps its pinned adapter surface; the ONE
-    // DERIVED_OR_PRECEDENCE_BOUNDARY (blood-grove's in-call
-    // `input.actorIds.target[0]` center read) and the `??`-chain
-    // captured dereferences stay inventoried and must NOT be flagged.
-    'content/jobs/programs/harvester-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined; const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined; const foeId = context.triggerTargetIds?.[0] ?? context.input.actorIds?.target?.[0]; const foe = foeId ? sourceActor(context, foeId) : undefined;',
-    // Migrated Demon Slayer keeps its pinned adapter surface; the retained
-    // helper-parameter dereference (plannedRush's actorId) and the recorded
-    // ally choice (Righteous Disdain's input.actorIds) stay inventoried.
-    'content/jobs/programs/demon-slayer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); function plannedRush(context, actorId) { return sourceActor(context, actorId); } const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined;',
-    // Migrated Seer keeps its pinned adapter surface; the retained
-    // `input.actorIds?.target?.[0] ?? attackTargetId` / trigger chains
-    // (Chaos Tarot / Polaris / Sisyphus / Eclipse centers, Reverse Fate /
-    // Wish allies) stay inventoried at the U1×U4 boundary.
-    'content/jobs/programs/seer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined; const allyId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined;',
-    // Migrated Fool keeps its pinned adapter surface; the retained captured
-    // dereferences (Masquerade's input-selected ally, Chronotemper's
-    // input-target-or-self) stay inventoried at the caller.
-    'content/jobs/programs/fool-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const allyId = context.input.actorIds?.target?.[0]; const ally = allyId ? sourceActor(context, allyId) : undefined; const targetId = context.input.actorIds?.target?.[0] ?? source.id; const chosen = sourceActor(context, targetId);',
-    // Migrated Geomancer keeps its pinned adapter surface; the retained
-    // captured/precedence dereferences (Dragon Dive / Terraforming /
-    // Realignment `input.actorIds ?? attackTargetId`, Midas
-    // `input.actorIds ?? triggerTargetIds`) stay inventoried at the caller.
-    'content/jobs/programs/geomancer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined; const interruptId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0]; const interruptTarget = interruptId ? sourceActor(context, interruptId) : undefined;',
-    // Migrated Stormbender keeps its pinned adapter surface; the retained
-    // captured/precedence dereferences (Geyser / Deepwrath / Waterspout
-    // `input.actorIds ?? attackTargetId`, Eye Of The Storm's recorded
-    // center selection) stay inventoried at the caller.
-    'content/jobs/programs/stormbender-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const chosen = targetId ? sourceActor(context, targetId) : undefined; const centerId = context.input.actorIds?.target?.[0] ?? context.attackTargetId; const centerActor = centerId ? sourceActor(context, centerId) : undefined;',
+    // Fully migrated families route EVERY reference read through the adapter.
+    // The recorded-selection derefs moved to `resolveCapturedSelectedActors`
+    // (the shared U1×U4 captured surface); only incidental provenance /
+    // ownership reads and the four classified algorithm-internal derefs
+    // (helper parameters / derived-loop variables) remain raw — neither is
+    // reference interpretation and neither is flagged.
+    'content/jobs/programs/chanter-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const allies = resolveCapturedSelectedActors(context, \'target\'); const ally = allies[0]; const foe = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveAttackTarget(context); const protectedIds = allies.slice(1).map((a) => a.id);',
+    // Knave: adapter pins + the four classified caller-owned algorithm-internal
+    // derefs (plannedRush actorId param, passed-id derived loop) stay raw and
+    // accepted — no U1 surface exists for arbitrary ids.
+    'content/jobs/programs/knave-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const chosen = resolveCapturedSelectedActors(context, \'target\')[0]; const foe = resolveTriggerSource(context) ?? resolveCapturedSelectedActors(context, \'target\')[0]; function plannedRush(context, actorId) { return sourceActor(context, actorId); } const passedId = "x"; const passedActor = sourceActor(context, passedId);',
+    'content/jobs/programs/shade-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const triggerPosition = resolveTriggerSource(context)?.position; const selected = resolveCapturedSelectedActors(context, \'target\'); const first = selected[0]; const second = selected[1];',
+    'content/jobs/programs/warden-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const selected = resolveCapturedSelectedActors(context, \'target\'); const foe = selected[0]; const ally = selected[1];',
+    'content/jobs/programs/sealer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const chosen = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveAttackTarget(context);',
+    'content/jobs/programs/enochian-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const ally = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveAttackTarget(context); const partner = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveTriggerTargets(context)[0];',
+    'content/jobs/programs/harvester-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const centerActor = resolveCapturedSelectedActors(context, \'target\')[0]; const chosen = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveAttackTarget(context); const foe = resolveTriggerTargets(context)[0] ?? resolveCapturedSelectedActors(context, \'target\')[0];',
+    'content/jobs/programs/demon-slayer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const ally = resolveCapturedSelectedActors(context, \'target\')[0]; function plannedRush(context, actorId) { return sourceActor(context, actorId); }',
+    'content/jobs/programs/seer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const chosen = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveAttackTarget(context); const ally = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveTriggerTargets(context)[0];',
+    'content/jobs/programs/fool-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const ally = resolveCapturedSelectedActors(context, \'target\')[0]; const chosen = resolveCapturedSelectedActors(context, \'target\')[0] ?? source;',
+    'content/jobs/programs/geomancer-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const chosen = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveAttackTarget(context); const interruptTarget = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveTriggerTargets(context)[0];',
+    'content/jobs/programs/stormbender-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const chosen = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveAttackTarget(context); const centerActor = resolveCapturedSelectedActors(context, \'target\')[0] ?? resolveAttackTarget(context);',
+    'content/jobs/programs/colossus-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const chosen = resolveCapturedSelectedActors(context, \'target\')[0]; function plannedFly(context, actorId) { return sourceActor(context, actorId); }',
     'content/jobs/job-trait-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); mutations.push({ kind: \'condition\', sourceId: context.sourceId, sourceActorId: context.actorId, actorId: target.id });',
     'content/classes/class-resolvers.ts': 'resolveSourceActor(context); resolveAttackTarget(context); const inputTargets = context.input.actorIds?.target; if (inputTargets[0] !== context.attackTargetId) throw 0;',
   };
@@ -426,27 +408,25 @@ describe('U1 Reference/Binding routing guard', () => {
     }));
   });
 
-  it('T5c: retained CAPTURED dereferences in a migrated program stay accepted — NOT a blanket ban; only the direct dereference + pins bite', () => {
-    // With every named program family migrated (Colossus closed the last
-    // PURE family), the remaining `sourceActor(context, <var>)` calls are
-    // ONLY the classified U1×U4 captured-identity boundary: recorded input
-    // selections, recorded `??` fallbacks, loop elements, and helper
-    // parameters — caller-owned cardinality/choice whose dereference is the
-    // inventoried captured shape (docs/u8-u1-underlay-census.md). The guard
-    // must not force a blind mechanical rewrite of those (migrated-family
-    // pins + the retained-captured fixtures above prove they are accepted),
-    // nor silently accept a NEW direct `state.actors[context.…]` dereference.
+  it('T5c: retained caller-owned dereferences in a fully-migrated program stay accepted — NOT a blanket ban; only direct slot interpretation + the pins bite', () => {
+    // After the U1×U4 adjudication every reference-shaped read routes through
+    // the adapter; the only remaining raw `sourceActor(context, <var>)` calls
+    // are the FOUR classified algorithm-internal derefs: plannedRush /
+    // plannedFly helper PARAMETERS (the caller already resolved the identity
+    // — e.g. `source.id`) and the derived-loop variable over the dash
+    // occupant worklist. No U1 surface exists for arbitrary ids (the
+    // `resolveActorByArbitraryId()` accessor is deliberately absent) — these
+    // stay caller-owned and the guard must not flag them (the pins above
+    // prove the adapter surface is still consumed), nor silently accept a NEW
+    // direct `state.actors[context.…]` dereference.
     const problems = u1ReferenceRoutingProblems({
       ...valid,
       ...validContent,
-      // A fully-migrated family KEEPING its captured reads is clean: the
-      // helper-parameter plannedFly deref and the input-selected targets are
-      // caller-owned, not live-slot interpretation.
-      'content/jobs/programs/colossus-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const source2 = sourceActor(context, actorId); const targetId = context.input.actorIds?.target?.[0]; const chosen = targetId ? sourceActor(context, targetId) : undefined;',
+      'content/jobs/programs/colossus-programs.ts': 'resolveSourceActor(context); resolveAttackTarget(context); resolveCapturedSelectedActors(context, \'target\'); function plannedFly(context, actorId) { return sourceActor(context, actorId); }',
     });
     expect(problems).toEqual([]);
     // But a NEW direct dereference in the same file is still caught — the
-    // accepted-residual carve-out never legitimizes state.actors[context.…].
+    // caller-owned carve-out never legitimizes state.actors[context.…].
     expect(u1ReferenceRoutingProblems({
       ...valid,
       ...validContent,
@@ -455,6 +435,30 @@ describe('U1 Reference/Binding routing guard', () => {
       file: 'content/jobs/programs/colossus-programs.ts',
       detail: expect.stringContaining('dereferences a legacy reference slot'),
     }));
+  });
+
+  it('T5c: the former DERIVED_OR_PRECEDENCE_BOUNDARY (blood-grove in-call read) MIGRATED with the captured-selection surface — no protected residue remains', () => {
+    // The ONE repo-wide DERIVED_OR_PRECEDENCE_BOUNDARY (blood-grove's center
+    // `context.input.actorIds.target[0]` in-call read) was a recorded
+    // command selection written inline; the U1×U4 adjudication migrated it to
+    // `resolveCapturedSelectedActors(context, 'target')[0]?.position` with the
+    // caller-owned `?.[0]` presence guard. The guard must therefore treat the
+    // post-migration shape as clean and must NOT silently accept a regression
+    // back to the inline `sourceActor(context, context.input.actorIds.…)` read
+    // that drops the adapter pins.
+    const problems = u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/harvester-programs.ts': 'resolveSourceActor(context); resolveAttackTarget(context); resolveCapturedSelectedActors(context, \'target\'); resolveTriggerTargets(context); const centerActor = resolveCapturedSelectedActors(context, \'target\')[0]; const center = centerActor?.position;',
+    });
+    expect(problems).toEqual([]);
+    expect(u1ReferenceRoutingProblems({
+      ...valid,
+      ...validContent,
+      'content/jobs/programs/harvester-programs.ts': 'const source = sourceActor(context, context.actorId); const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined;',
+    })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: 'content/jobs/programs/harvester-programs.ts', detail: expect.stringContaining('no longer routes') }),
+    ]));
   });
 
   it('T5c: catches a MIGRATED Sealer program that reverts live-slot reads to legacy sourceActor(context, …)', () => {
@@ -545,19 +549,6 @@ describe('U1 Reference/Binding routing guard', () => {
       expect.objectContaining({ file: 'content/jobs/programs/harvester-programs.ts', detail: expect.stringContaining('no longer routes') }),
     ]));
     expect(problems.filter((problem) => problem.file === 'content/jobs/programs/harvester-programs.ts').length).toBe(1);
-  });
-
-  it('T5c: accepts the protected DERIVED_OR_PRECEDENCE_BOUNDARY in a MIGRATED Harvester — the guard does not force a lexical rewrite of the in-call precedence read', () => {
-    // The ONE repo-wide DERIVED_OR_PRECEDENCE_BOUNDARY (blood-grove center)
-    // is deliberately NOT migrated in this tranche; its in-call
-    // `input.actorIds.target[0]` precedence read must remain ALLOWED by the
-    // guard while the migrated PURE pins still hold.
-    const problems = u1ReferenceRoutingProblems({
-      ...valid,
-      ...validContent,
-      'content/jobs/programs/harvester-programs.ts': 'const source = resolveSourceActor(context); const target = resolveAttackTarget(context); const center = context.input.actorIds?.target?.[0] ? sourceActor(context, context.input.actorIds.target[0])?.position : undefined;',
-    });
-    expect(problems.filter((problem) => problem.file === 'content/jobs/programs/harvester-programs.ts')).toEqual([]);
   });
 
   it('T5c: catches a MIGRATED Demon Slayer program that reverts live-slot reads to legacy sourceActor(context, …)', () => {

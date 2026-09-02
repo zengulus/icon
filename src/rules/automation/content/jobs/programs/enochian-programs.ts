@@ -13,7 +13,7 @@ import {
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { entityAnchorPosition } from '../../../primitives/anchor.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Enochian ability implementations (ICON p.206–214),
@@ -230,8 +230,7 @@ const incandiusEffects: RuleResolver = (context) => {
  * and the partner sacrifice. */
 const blazingBondEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const allyId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const ally = allyId ? sourceActor(context, allyId) : undefined;
+  const ally = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Blazing Bond requires an ally in range 4.');
   if (ally.side !== source.side || distance(source.position, ally.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Blazing Bond requires an ally in range 4.');
   return [markMutation(context, ally.id, 'blazing-bond', { partner: source.id })];
@@ -242,8 +241,7 @@ const blazingBondEffects: RuleResolver = (context) => {
  * sacrifices 3 (1 on a Comeback). */
 const heartfireEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const partnerId = context.input.actorIds?.target?.[0] ?? context.triggerTargetIds?.[0];
-  const partner = partnerId ? sourceActor(context, partnerId) : undefined;
+  const partner = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveTriggerTargets(context)[0];
   if (!partner) throw new RuleProgramViolation('choice.actor-count', 'Heartfire requires the bonded partner.');
   const mutations: RuleMutation[] = [
     stateMutation(context, partner.id, 'heartfire:armor', true),
@@ -275,8 +273,7 @@ const aethershardEffects: RuleResolver = (context) => {
  * detonation is a documented delay window. */
 const implodeEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
   if (distance(source.position, cell) > 6) throw new RuleProgramViolation('choice.actor-range', 'Implode requires a space in range 6.');
@@ -293,8 +290,7 @@ const implodeEffects: RuleResolver = (context) => {
  * documented turn-end window. */
 const pyroclastEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId ?? source.id;
-  const target = sourceActor(context, targetId);
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context) ?? source;
   if (!source.position || !target.position) return [];
   if (distance(source.position, target.position) > 6) throw new RuleProgramViolation('choice.actor-range', 'Pyroclast requires a character in range 6.');
   return [markMutation(context, target.id, 'pyroclast', {})];

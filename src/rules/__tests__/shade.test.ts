@@ -372,4 +372,33 @@ describe('Shade ability automation (p.159–164)', () => {
     expect(result.state.actors[second.id].marks).toHaveLength(0); // untouched
     expect(applyEvents(setup, result.events)).toEqual(result.state); // replay byte-identical
   });
+
+  it('Shadow Play under reversed actor insertion order is byte-identical: the recorded selections resolve by recorded identity, never object order', () => {
+    // Rebuild the swap fixture with a decoy actor ADDED BEFORE the two targets,
+    // so the actors-map iteration order differs from every other fixture. Both
+    // captured dereferences now resolve through U1's resolveCapturedSelectedActors
+    // in RECORDED order (the SELECTs stay caller-owned) — the outcome and the
+    // replay reproduce the canonical result exactly, never object-iteration
+    // order.
+    let setup = createEncounter('Shade insertion-order fixture');
+    const hero = actorFromCharacter(validCharacter('Nightblade'), { x: 1, y: 1 });
+    hero.abilityIds = [...EXECUTABLE_JOB_ABILITY_IDS];
+    hero.chapter = 3;
+    hero.traitIds = hero.traitIds.filter((id) => id !== 'stalwart:trait:fortify');
+    const decoy = createFoe('Grim', { x: 6, y: 1 });
+    const foe = createFoe('Relict', { x: 3, y: 1 }); // in range 2 of hero (1,1)
+    const ally = actorFromCharacter(validCharacter('Mira'), { x: 4, y: 1 }); // in range 3 of foe
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: hero }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: decoy }).state; // added BEFORE the two targets
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: foe }).state;
+    setup = executeCommand(setup, { type: 'ADD_ACTOR', actor: ally }).state;
+    setup = startEncounterTo(setup, hero.id);
+    const result = executeCommand(setup, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'shade:shadow-play', targetIds: [foe.id, ally.id] }, scriptedDice());
+    expect(result.state.actors[foe.id].position).toEqual({ x: 4, y: 1 });
+    expect(result.state.actors[ally.id].position).toEqual({ x: 3, y: 1 });
+    expect(result.state.actors[decoy.id].position).toEqual({ x: 6, y: 1 }); // untouched
+    expect(result.state.actors[foe.id].statuses).toContain('dazed');
+    expect(result.state.actors[ally.id].conditions.some(({ id }) => id === 'stealth')).toBe(true);
+    expect(applyEvents(setup, result.events)).toEqual(result.state); // replay byte-identical
+  });
 });

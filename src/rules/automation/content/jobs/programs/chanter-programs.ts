@@ -16,7 +16,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Chanter ability implementations (ICON p.174–181), the
@@ -113,9 +113,8 @@ const holyComboEffects: RuleResolver = (context) => {
  * a Charge). The \"can fly 2\" and combo-spend flight are free-action windows. */
 const felicityEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const allyId = context.input.actorIds?.target?.[0];
-  if (!allyId) throw new RuleProgramViolation('choice.actor-count', 'Felicity requires an ally in range 5.');
-  const ally = sourceActor(context, allyId);
+  const ally = resolveCapturedSelectedActors(context, 'target')[0];
+  if (!ally) throw new RuleProgramViolation('choice.actor-count', 'Felicity requires an ally in range 5.');
   if (!source.position || !ally.position) throw new RuleProgramViolation('choice.actor-count', 'Felicity requires an ally in range 5.');
   if (ally.id === source.id || ally.side !== source.side || distance(source.position, ally.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'Felicity requires a different ally in range 5.');
   return [
@@ -129,9 +128,8 @@ const felicityEffects: RuleResolver = (context) => {
  * 2 vigor per character passed over. */
 const felicityComboEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const allyId = context.input.actorIds?.target?.[0];
-  if (!allyId) throw new RuleProgramViolation('choice.actor-count', 'FLEET requires an ally in range 5.');
-  const ally = sourceActor(context, allyId);
+  const ally = resolveCapturedSelectedActors(context, 'target')[0];
+  if (!ally) throw new RuleProgramViolation('choice.actor-count', 'FLEET requires an ally in range 5.');
   if (!source.position || !ally.position) throw new RuleProgramViolation('choice.actor-count', 'FLEET requires an ally in range 5.');
   if (ally.id === source.id || ally.side !== source.side || distance(source.position, ally.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'FLEET requires a different ally in range 5.');
   const mutations: RuleMutation[] = [resourceMutation(context, ally.id, 'blessing', 'gain', 1)];
@@ -249,10 +247,10 @@ const dervishEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   const flyDest = walk(context, sourcePosition, rushTowardFoes(context, sourcePosition), 1, true, source.id);
   if (!sameCell(flyDest, sourcePosition)) mutations.push(flyMutation(context, source.id, flyDest));
-  const allyIds = context.input.actorIds?.target ?? [];
+  const allies = resolveCapturedSelectedActors(context, 'target');
   const count = context.triggers?.has('charge') ? 2 : 1;
-  for (let i = 0; i < Math.min(count, allyIds.length); i += 1) {
-    const ally = sourceActor(context, allyIds[i]);
+  for (let i = 0; i < Math.min(count, allies.length); i += 1) {
+    const ally = allies[i];
     if (!ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Dervish requires an ally in range 4.');
     if (ally.side !== source.side || distance(sourcePosition, ally.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Dervish requires an ally in range 4.');
     mutations.push(removeMutation(context, ally.id));
@@ -417,8 +415,7 @@ const chastiseEffects: RuleResolver = (context) => {
  * to cure), and open a pit under it if two or more allies were in the area. */
 const chastiseComboEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const foeId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const foe = foeId ? sourceActor(context, foeId) : undefined;
+  const foe = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!foe?.position || !source.position) throw new RuleProgramViolation('choice.actor-count', 'CHARISM requires a foe in range 5.');
   if (foe.side === source.side || distance(source.position, foe.position) > 5) throw new RuleProgramViolation('choice.actor-range', 'CHARISM requires a foe in range 5.');
   const choice = context.input.options?.choice ?? 'cure';

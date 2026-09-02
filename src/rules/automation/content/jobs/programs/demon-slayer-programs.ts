@@ -16,7 +16,7 @@ import { footprintIntersectsCells, validateSpatialIntent } from '../../../primit
 import { rampartObstructs } from '../../../kernels/encounter-adapter.js';
 import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { vigilanceRushOncePerTurnKey } from '../../../kernels/use-ledger.js';
 import { consumeUsageMutation, ledgerAvailable } from '../../../primitives/usage.js';
 
@@ -439,9 +439,8 @@ const drakenCrossEffects: RuleResolver = (context) => {
 /** ICON p.128: interrupt that splits determined damage with resistance and grants sturdy. */
 const righteousDisdain: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const allyId = context.input.actorIds?.target?.[0];
-  if (!source || !source.position || !allyId) throw new RuleProgramViolation('choice.actor-count', 'Righteous Disdain requires an ally target.');
-  const ally = sourceActor(context, allyId);
+  const ally = resolveCapturedSelectedActors(context, 'target')[0];
+  if (!source || !source.position || !ally) throw new RuleProgramViolation('choice.actor-count', 'Righteous Disdain requires an ally target.');
   if (!ally || ally.side !== source.side || !ally.position) throw new RuleProgramViolation('choice.actor-range', 'Righteous Disdain requires an ally in range 2.');
   if (distance(source.position, ally.position) > 2) throw new RuleProgramViolation('choice.actor-range', 'Righteous Disdain requires an ally in range 2.');
   const incoming = Math.max(0, Math.floor(context.input.numbers?.damage ?? 0));

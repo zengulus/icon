@@ -132,6 +132,48 @@ export function categorizeSourceActorArgument(arg: string): U1ResidualCategory {
   return classifySite(arg.trim()).category;
 }
 
+/** Refine a plain-identifier CAPTURED site using FILE CONTEXT: a dereference
+ * of an ALGORITHM-INTERNAL identity is not a reference at all. The U1×U4
+ * adjudication (2026-09-02) classifies two shapes as caller-owned, machine-
+ * detected here from the file text:
+ *  - helper-parameter: the identifier is a declared parameter of a shared
+ *    movement/planning helper (`function plannedRush(context, actorId, …)`,
+ *    `function plannedFly(context, actorId, …)`) — the identity was ALREADY
+ *    resolved by the caller (e.g. `source.id` from the U1 source accessor)
+ *    and is re-dereferenced inside the algorithm; no U1 surface should exist
+ *    for arbitrary ids.
+ *  - derived-loop variable: `for (const passedId of passed)` over an
+ *    algorithm-built collection (the dash/knockback occupant worklist) — the
+ *    identities are computed by the algorithm, not recorded/live/bound.
+ * These are NOT CAPTURED references: they are algorithm plumbing. A plain
+ * identifier that is neither a helper parameter nor a loop variable stays
+ * CAPTURED (the caller-owned recorded-selection U1×U4 shape). */
+export function refineSiteWithContext(
+  site: U1ResidualSite,
+  arg: string,
+  fileText: string | undefined,
+): U1ResidualSite {
+  if (site.category !== 'CAPTURED_ID_DEREFERENCE' || fileText === undefined) return site;
+  const trimmed = arg.trim();
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(trimmed)) return site;
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Helper-parameter: appears as a declared parameter in a function header
+  // in the SAME file (`function <name>(context: …, actorId: string, …)` or
+  // `(context, actorId: string`). The identity was resolved by the caller
+  // and the helper re-dereferences it for geometry — algorithm plumbing.
+  if (new RegExp(`function\\s+\\w+\\s*\\([^)]*\\b${escaped}\\s*:\\s*(?:string|Parameters<RuleResolver>\\[0\\])`).test(fileText)) {
+    return { ...site, category: 'NON_U1_OTHER', provenance: 'helper-parameter deref of an already-resolved identity (function parameter of a shared movement/planning algorithm) — caller-owned algorithm plumbing, not a reference; no U1 surface for arbitrary ids' };
+  }
+  // Derived-loop variable: `for (const passedId of …)` over an
+  // algorithm-built collection (dash/knockback occupant worklist), with the
+  // loop header at or before the site line (the deref sits in the loop body).
+  const untilSite = fileText.split('\n').slice(0, site.line).join('\n');
+  if (new RegExp(`for\\s*\\(\\s*(?:const|let)\\s+${escaped}\\s+of\\b`).test(untilSite)) {
+    return { ...site, category: 'NON_U1_OTHER', provenance: 'derived-loop deref over an algorithm-built identity collection (loop variable) — caller-owned algorithm plumbing, not a reference; no U1 surface for arbitrary ids' };
+  }
+  return site;
+}
+
 /** Find the matching close-paren index given the index of the OPENING paren. */
 function matchingParen(text: string, openIndex: number): number {
   let depth = 0;
@@ -181,13 +223,14 @@ export function scanFileSites(file: string, text: string): U1ResidualSite[] {
     const arg = nthArgument(callText, 2);
     const line = text.slice(0, match.index).split('\n').length;
     const { category, provenance } = classifySite((arg || callText).trim());
-    sites.push({
+    const site: U1ResidualSite = {
       file,
       line,
       shape: `sourceActor(${callText})`,
       category,
       provenance,
-    });
+    };
+    sites.push(refineSiteWithContext(site, arg, text));
     CALL_RE.lastIndex = closeIndex + 1;
   }
   return sites;

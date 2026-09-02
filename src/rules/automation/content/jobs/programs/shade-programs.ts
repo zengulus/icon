@@ -10,7 +10,7 @@ import {
   placeMutation, teleportMutation, entityMutation, summonEntity, terrainMutation, swapMutations,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { resolveAttackTarget, resolveSourceActor, resolveTriggerSource } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor, resolveTriggerSource } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
@@ -118,8 +118,7 @@ const harrowEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   // Recorded player choice (input target) — caller-owned U4 selection;
   // only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!sourcePosition || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Harrow requires a character in range 3.');
   if (distance(sourcePosition, target.position) > 3) throw new RuleProgramViolation('choice.actor-range', 'Harrow requires a character in range 3.');
   const mutations: RuleMutation[] = [markMutation(context, target.id, 'harrow', {})];
@@ -202,10 +201,9 @@ const shadowPlayEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   // Recorded player choices (input targets) — caller-owned U4 selections;
   // only the dereferences are the captured identities.
-  const firstId = context.input.actorIds?.target?.[0];
-  const secondId = context.input.actorIds?.target?.[1];
-  const first = firstId ? sourceActor(context, firstId) : undefined;
-  const second = secondId ? sourceActor(context, secondId) : undefined;
+  const selected = resolveCapturedSelectedActors(context, 'target');
+  const first = selected[0];
+  const second = selected[1];
   if (!sourcePosition || !first?.position || !second?.position) throw new RuleProgramViolation('choice.actor-count', 'Shadow Play requires two other characters.');
   if (first.id === source.id || second.id === source.id || first.id === second.id) throw new RuleProgramViolation('choice.actor-range', 'Shadow Play requires two different characters other than yourself.');
   if (distance(sourcePosition, first.position) > 2) throw new RuleProgramViolation('choice.actor-range', 'The first character must be in range 2.');
@@ -240,8 +238,7 @@ const assassinateEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   // Recorded player choice (input target) — caller-owned U4 selection;
   // only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!sourcePosition || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Assassinate requires a foe in range 3.');
   if (target.side === source.side || distance(sourcePosition, target.position) > 3) throw new RuleProgramViolation('choice.actor-range', 'Assassinate requires a foe in range 3.');
   return [markMutation(context, target.id, 'assassinate', {})];

@@ -9,7 +9,7 @@ import {
   shoveMutation, rushMutation, entityMutation, summonEntity, terrainMutation,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { rollAbilityDamage } from '../../../kernels/bonus-damage.js';
@@ -111,10 +111,9 @@ const gwyntEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   // Recorded player choices (input foe + ally) — caller-owned U4 selections;
   // only the dereferences are the captured identities.
-  const foeId = context.input.actorIds?.target?.[0];
-  const allyId = context.input.actorIds?.target?.[1];
-  const foe = foeId ? sourceActor(context, foeId) : undefined;
-  const ally = allyId ? sourceActor(context, allyId) : undefined;
+  const selected = resolveCapturedSelectedActors(context, 'target');
+  const foe = selected[0];
+  const ally = selected[1];
   const foePosition = foe?.position;
   const mutations: RuleMutation[] = [];
   if (!sourcePosition || !foe || !foePosition) return mutations;
@@ -197,8 +196,7 @@ const stampedeEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   // Recorded player choice (input target) — caller-owned U4 selection;
   // only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!sourcePosition || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Stampede requires a foe in range 4.');
   if (target.side === source.side || distance(sourcePosition, target.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Stampede requires a foe in range 4.');
   return [markMutation(context, target.id, 'stampede', {})];

@@ -16,7 +16,7 @@ import {
   untilNextTurnEnd, action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluateActorQuery, evaluatePositions, nearestCandidates } from '../../../kernels/evaluate-query.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveTriggerSource, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Knave ability implementations (ICON p.139–144).
@@ -161,9 +161,8 @@ const riposteEnter: RuleResolver = (context) => {
 /** ICON p.140 Dire Parry: gamble, deal that much damage to the triggering foe; a 6 slashes and shoves 1. */
 const direParry: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const foeId = context.triggerSourceId ?? context.input.actorIds?.target?.[0];
-  if (!source || !foeId) throw new RuleProgramViolation('choice.actor-count', 'Dire Parry requires a triggering foe.');
-  const foe = sourceActor(context, foeId);
+  const foe = resolveTriggerSource(context) ?? resolveCapturedSelectedActors(context, 'target')[0];
+  if (!source || !foe) throw new RuleProgramViolation('choice.actor-count', 'Dire Parry requires a triggering foe.');
   if (!foe || foe.side === source.side) throw new RuleProgramViolation('choice.actor-range', 'Dire Parry requires a foe.');
   const extraDice = Math.max(0, Math.floor(context.input.numbers?.vigilance ?? 0));
   const spendVigilance = extraDice > 0;
@@ -213,8 +212,7 @@ const darkKnightEnter: RuleResolver = (context) => {
 /** ICON p.141: circular shove with pass-through damage and a final shove. */
 const strongarmEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   // ICON p.143 Strongarm talent 1: "Comeback: this ability gains range 2.
   // Remove your target and place them into adjacency before activating this
   // effect." Comeback is active only while the user is bloodied, so the
@@ -286,8 +284,7 @@ const strongarmEffects: RuleResolver = (context) => {
 /** ICON p.142: mark a distant foe and end the turn. */
 const intimidateEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!source || !source.position || !target || !target.position) {
     throw new RuleProgramViolation('choice.actor-count', 'Intimidate requires a foe.');
   }
@@ -308,8 +305,7 @@ const intimidateEffects: RuleResolver = (context) => {
  * is rolled with +1 curse. */
 const suckerPunchEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!source || !source.position || !target || !target.position || target.side === source.side) {
     throw new RuleProgramViolation('choice.actor-range', 'Sucker Punch requires an adjacent foe.');
   }

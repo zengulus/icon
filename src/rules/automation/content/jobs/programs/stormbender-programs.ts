@@ -12,7 +12,7 @@ import {
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
-import { resolveSourceActor, resolveAttackTarget } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Stormbender ability implementations (ICON p.230–236),
@@ -140,8 +140,7 @@ const geyserEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
   if (distance(source.position, cell) > 4) throw new RuleProgramViolation('choice.actor-range', 'Geyser requires a space in range 4.');
@@ -203,8 +202,7 @@ const deepwrathEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position || !target?.position) throw new RuleProgramViolation('choice.actor-count', 'Deepwrath requires a character in range 6.');
   if (distance(source.position, target.position) > 6) throw new RuleProgramViolation('choice.actor-range', 'Deepwrath requires a character in range 6.');
   return [markMutation(context, target.id, 'deepwrath', {})];
@@ -217,8 +215,7 @@ const waterspoutEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const cell = target?.position ?? source.position;
   const freeCell = evaluatePositions({ origin: source.position, radius: Math.max(1, distance(source.position, cell)), space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0] ?? cell;
@@ -245,8 +242,7 @@ const eyeOfTheStormEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) falls back to the attack target —
   // caller-owned U4 precedence; only the dereference is the captured identity.
-  const centerId = context.input.actorIds?.target?.[0] ?? context.attackTargetId;
-  const centerActor = centerId ? sourceActor(context, centerId) : undefined;
+  const centerActor = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
   const center = centerActor?.position ?? source.position;
   if (distance(source.position, center) > 8) throw new RuleProgramViolation('choice.actor-range', 'Eye Of The Storm requires its center in range 8.');

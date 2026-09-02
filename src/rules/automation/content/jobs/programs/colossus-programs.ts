@@ -11,7 +11,7 @@ import {
   terrainMutation, entityMutation,
   notHeroic, action, compilation,
 } from '../../../primitives/job-kit.js';
-import { resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
+import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
  * Independently reviewed Colossus ability implementations (ICON p.133–138).
@@ -100,8 +100,7 @@ const dropkickEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) — caller-owned U4 selection;
   // only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!source.position || !target?.position) {
     throw new RuleProgramViolation('choice.actor-count', 'Dropkick requires an adjacent foe.');
   }
@@ -166,8 +165,7 @@ const greatSuplexEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   // Recorded player choice (input target) — caller-owned U4 selection;
   // only the dereference is the captured identity.
-  const targetId = context.input.actorIds?.target?.[0];
-  const target = targetId ? sourceActor(context, targetId) : undefined;
+  const target = resolveCapturedSelectedActors(context, 'target')[0];
   if (!source.position || !target?.position) {
     throw new RuleProgramViolation('choice.actor-count', 'Great Suplex requires an adjacent foe.');
   }
