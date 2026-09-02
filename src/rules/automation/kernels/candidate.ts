@@ -10,12 +10,13 @@
  * (`primitives/anchor.ts`) for the frame a range is measured from.
  *
  * RANGE ORIGIN (U7): a query's `rangeOrigin` is a `SpatialAnchor` — either a
- * LIVE actor footprint (named by a reference-style RuleSelector; default the
- * acting actor) or a CAPTURED position (a chosen/bound space). The anchor is
+ * LIVE actor footprint (named by the typed U1 `Reference<'actor'>` identity;
+ * default the acting actor) or a CAPTURED position (a chosen/bound space).
+ * The anchor is
  * resolved here (`resolveSpatialAnchor`) and is INDEPENDENT of the relation
  * source: relation ("ally of the user") is always read from the acting
  * actor, while range is measured from the anchor. The inert precursor that
- * ignored its selector and always fell back to `context.actorId` is gone —
+ * ignored its anchor and always fell back to `context.actorId` is gone —
  * a query measured from an ally's position now actually measures from that
  * ally, and a malformed anchor fails closed.
  *
@@ -32,7 +33,6 @@
 import type {
   RuleActorView,
   RuleExecutionContext,
-  RuleSelector,
 } from '../primitives/types.js';
 import type { ActorCandidateQuery } from '../primitives/query.js';
 import {
@@ -41,12 +41,12 @@ import {
 import { relationPerspectiveIdFromContext, relationSourceFor, type RelationActor } from '../primitives/roles.js';
 import { footprintDistance } from '../primitives/spatial-intent.js';
 import {
-  anchorFromActorSelector,
+  defaultActorAnchor,
   entityAnchorPosition,
   type SpatialAnchor,
   type SpatialOrigin,
 } from '../primitives/anchor.js';
-import { resolveActorSelectorReference } from '../primitives/reference.js';
+import { resolveReference } from '../primitives/reference.js';
 import { RuleProgramViolation } from './violations.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,10 +76,14 @@ export type CandidateResult<T> =
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Resolve a SpatialAnchor to a concrete origin (position + footprint size)
- * against the current context. Fail-closed: a malformed anchor (a selector
- * kind that cannot name one origin, a selector resolving to zero or several
- * actors, or an actor without a battlefield position) rejects with a
- * `RuleProgramViolation` — it never silently degrades to the acting actor. */
+ * against the current context. Fail-closed: a malformed anchor (an
+ * unresolvable identity, a reference resolving to zero or several actors, or
+ * an actor without a battlefield position) rejects with a
+ * `RuleProgramViolation` — it never silently degrades to the acting actor.
+ * The LIVE actor anchor's identity is ALREADY a typed U1 `Reference<'actor'>`
+ * (LIVE slot, bound name, or recorded-selection collection) and resolves
+ * through the ONE `resolveReference` authority — the anchor plays no
+ * identity-interpretation role (U1 owns identity, U7 owns the frame). */
 export function resolveSpatialAnchor(
   anchor: SpatialAnchor,
   context: RuleExecutionContext,
@@ -101,7 +105,25 @@ export function resolveSpatialAnchor(
       return { position: anchorPosition, size: 1 };
     }
     case 'actor': {
-      const views = anchorSelectorActors(anchor.selector, context);
+      const resolution = resolveReference(anchor.ref, context);
+      if (!resolution.ok) {
+        if (resolution.problem === 'missing-actor') {
+          throw new RuleProgramViolation('selector.actor-missing', 'A SpatialAnchor actor reference does not exist.');
+        }
+        if (resolution.problem === 'missing-slot') {
+          throw new RuleProgramViolation('selector.origin-invalid', 'SpatialAnchor resolved to zero actors (the identity slot is absent).');
+        }
+        // selector-not-reference can no longer reach here (construction
+        // already rejected query shapes), but every other problem
+        // (unknown-bound-name, domain-mismatch, missing-entity, …) fails
+        // closed with the same origin-invalid code.
+        throw new RuleProgramViolation('selector.origin-invalid', `SpatialAnchor identity failed to resolve: ${resolution.problem}.`);
+      }
+      const views = resolution.value.kind === 'actor'
+        ? [resolution.value.actor]
+        : resolution.value.kind === 'collection'
+          ? resolution.value.items.flatMap((item) => item.kind === 'actor' ? [item.actor] : [])
+          : [];
       if (views.length !== 1) {
         throw new RuleProgramViolation('selector.origin-invalid', `SpatialAnchor resolved to ${views.length} actor(s); expected exactly one.`);
       }
@@ -112,30 +134,6 @@ export function resolveSpatialAnchor(
       return { position: view.position, size: view.size };
     }
   }
-}
-
-/** The actor ids a reference-style selector names. Query selectors (`all`,
- * `within`, `adjacent`, `condition`, `marked`, `summons`) cannot name a
- * single spatial origin and are rejected — the anchor vocabulary is
- * REFERENCE-shaped, not QUERY-shaped (U1 vs U3). */
-function anchorSelectorActors(
-  selector: RuleSelector | undefined,
-  context: RuleExecutionContext,
-): RuleActorView[] {
-  const resolution = resolveActorSelectorReference(selector, context);
-  if (!resolution.ok) {
-    if (resolution.problem === 'missing-slot') return [];
-    if (resolution.problem === 'missing-actor') {
-      throw new RuleProgramViolation('selector.actor-missing', 'A SpatialAnchor actor reference does not exist.');
-    }
-    const kind = selector?.kind ?? 'self';
-    throw new RuleProgramViolation('selector.origin-invalid', `Selector kind "${kind}" cannot resolve as a single spatial origin: ${resolution.problem}.`);
-  }
-  if (resolution.value.kind === 'actor') return [resolution.value.actor];
-  if (resolution.value.kind === 'collection') {
-    return resolution.value.items.flatMap((item) => item.kind === 'actor' ? [item.actor] : []);
-  }
-  throw new RuleProgramViolation('selector.origin-invalid', 'SpatialAnchor resolved to a non-actor reference.');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -197,7 +195,7 @@ export function evaluateActorCandidates(
   context: RuleExecutionContext,
 ): RuleActorView[] {
   const acting = actingActor(context);
-  const origin = resolveSpatialAnchor(query.rangeOrigin ?? anchorFromActorSelector(), context);
+  const origin = resolveSpatialAnchor(query.rangeOrigin ?? defaultActorAnchor(), context);
   const relation = query.relation ?? 'any';
   const includeDefeated = query.includeDefeated ?? false;
   const includeOffBattlefield = query.includeOffBattlefield ?? false;
@@ -246,7 +244,7 @@ export function validateActorCandidate(
   // The relation source (acting actor) and the range origin (anchor) resolve
   // before any eligibility check — a malformed anchor fails closed.
   const acting = actingActor(context);
-  const origin = resolveSpatialAnchor(query.rangeOrigin ?? anchorFromActorSelector(), context);
+  const origin = resolveSpatialAnchor(query.rangeOrigin ?? defaultActorAnchor(), context);
 
   // Defeated?
   if (!(query.includeDefeated ?? false) && actor.defeated) {

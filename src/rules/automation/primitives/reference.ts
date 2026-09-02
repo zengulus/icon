@@ -116,7 +116,12 @@ export interface CapturedActorWeakReference {
  * domains whose state reads belong to their consuming kernel (mark/stance/
  * terrain/area/resource/rule/roll); actor/entity/position/value resolve
  * against current state here. A collection/plural reference resolves to a
- * collection whose items carry the same element domain. */
+ * collection whose items carry the same element domain. The explicit
+ * `absent` resolution (a remembered identity that legitimately expired) is
+ * priced into the vocabulary ONLY where a lifecycle-sensitive reference kind
+ * can produce it — the weak captured-actor kind, whose domain is `actor`;
+ * since collections preserve their element domain, an actor collection can
+ * carry absent items but no non-actor domain can ever resolve to absent. */
 export type ResolvedReference<D extends ReferenceDomain> =
   | (D extends 'actor' ? { kind: 'actor'; actor: RuleActorView }
     : D extends 'entity' ? { kind: 'entity'; entity: RuleEntityView }
@@ -124,7 +129,7 @@ export type ResolvedReference<D extends ReferenceDomain> =
     : D extends 'value' ? { kind: 'value'; value: string | number | boolean | null }
     : { kind: 'id'; domain: D; id: string })
   | { kind: 'collection'; items: readonly ResolvedReference<D>[] }
-  | { kind: 'absent' };
+  | (D extends 'actor' ? { kind: 'absent' } : never);
 
 export type ReferenceResolution<D extends ReferenceDomain = ReferenceDomain> =
   | { ok: true; value: ResolvedReference<D> }

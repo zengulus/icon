@@ -25,6 +25,7 @@ import {
   validatePositionLegality,
 } from '../automation/kernels/evaluate-query.js';
 import { resolveSpatialAnchor } from '../automation/kernels/candidate.js';
+import { anchorFromActorSelector } from '../automation/primitives/anchor.js';
 import { RuleProgramViolation } from '../automation/kernels/violations.js';
 
 function actorView(
@@ -168,7 +169,7 @@ describe('U3 actor-domain operators — line of sight / effect composition', () 
       input: { actorIds: { anchor: ['ally'] } },
     });
     const fromAlly = evaluateActorQuery(
-      { relation: 'foe', lineOfSight: true, rangeOrigin: { kind: 'actor', selector: { kind: 'input', key: 'anchor' } } },
+      { relation: 'foe', lineOfSight: true, rangeOrigin: anchorFromActorSelector({ kind: 'input', key: 'anchor' }, context)! },
       context,
     ).map((a) => a.id).sort();
     expect(fromAlly).toContain('foeNear');

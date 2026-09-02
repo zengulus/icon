@@ -140,12 +140,18 @@ mark, summon) and is the engine behind `selectActors` (`kernels/runtime.ts`),
 now a thin adapter — one eligibility machinery, no second copy. Range
 values are resolved scalars evaluated through U5 `evaluateNumber` at the
 query point. The U7 anchor vocabulary lives in `primitives/anchor.ts`
-(LIVE actor selector | CAPTURED position) and rejects malformed anchors
+(LIVE actor REFERENCE — the typed U1 `Reference<'actor'>`, since the 2026-
+09-02 tranche — | CAPTURED position) and rejects malformed anchors
 (`selector.origin-invalid` for query-shaped selectors, zero/multi actors,
-position-less anchors); relation stays relative to the acting actor while
+position-less anchors); the LIVE actor anchor's identity is decided at
+construction (`anchorFromActorSelector` maps through U1's
+`actorReferenceForSelector`; input-without-context and query shapes fail
+closed with null) and resolution composes the ONE `resolveReference`
+authority. Relation stays relative to the acting actor while
 range moves to the anchor. Violations reuse the legacy codes
 (`choice.actor-missing/-defeated/-relation/-range`); no source IDs. Tests:
-`candidate.test.ts` (27 cases incl. QUERY⇄CHOOSE parity + anchor fixtures),
+`candidate.test.ts` (31 cases incl. QUERY⇄CHOOSE parity + anchor fixtures
++ the U7 construction-surface block),
 `evaluate-query.test.ts` (18 cases: 13 selector-migration + 5
 area-inclusion); the legacy `input` selector's count/range enforcement
 throws preserved verbatim.

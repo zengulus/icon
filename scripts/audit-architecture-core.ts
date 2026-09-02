@@ -341,7 +341,12 @@ export function u1ReferenceRoutingProblems(
   files: Readonly<Record<string, string>>,
 ): Array<{ file: string; detail: string }> {
   const requiredCalls: Readonly<Record<string, readonly string[]>> = {
-    'kernels/candidate.ts': ['resolveActorSelectorReference'],
+    // U7 (tranche 19): the LIVE actor anchor's identity is now a TYPED U1
+    // `Reference<'actor'>` decided at construction (`anchorFromActorSelector`
+    // maps the selector through `actorReferenceForSelector`); resolution
+    // composes the ONE `resolveReference` authority — anchor identity is never
+    // re-interpreted at resolution time.
+    'kernels/candidate.ts': ['resolveReference'],
     'kernels/evaluate-value.ts': ['resolveActorSelectorReference', 'liveActorSlot'],
     'kernels/execute-flow.ts': ['resolveReference', 'liveActorSlot', 'capturedActor'],
     'kernels/foe-recipes.ts': ['resolveActorSelectorReference'],

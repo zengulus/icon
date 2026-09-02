@@ -23,6 +23,7 @@ import type { RuleActorView, RuleExecutionContext } from '../automation/primitiv
 import { evaluateNumber, evaluatePredicate } from '../automation/kernels/runtime.js';
 import { registerAuraDefinition } from '../automation/kernels/aura.js';
 import { RuleProgramViolation } from '../automation/kernels/violations.js';
+import { defaultActorAnchor } from '../automation/primitives/anchor.js';
 
 function actorView(
   id: string,
@@ -160,7 +161,7 @@ describe('U5 — distance between arbitrary endpoints (U1 references / U7 anchor
     // hero(4,4) → beast entity (7,4) is footprint distance 3.
     const expression = {
       kind: 'distance' as const,
-      from: { anchor: { kind: 'actor' as const } },
+      from: { anchor: defaultActorAnchor() },
       to: { anchor: { kind: 'entity' as const, entityId: 'beast' } },
     };
     expect(evaluateNumber(expression, ctx())).toBe(3);

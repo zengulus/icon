@@ -16,10 +16,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { RuleChoice, RuleExecutionContext } from '../automation/primitives/types.js';
-import { evaluateActorCandidates, validateActorCandidate } from '../automation/kernels/candidate.js';
+import { evaluateActorCandidates, validateActorCandidate, resolveSpatialAnchor } from '../automation/kernels/candidate.js';
 import { resolveChoice } from '../automation/kernels/choice.js';
 import { RuleProgramViolation } from '../automation/kernels/runtime.js';
-import { anchorFromPosition } from '../automation/primitives/anchor.js';
+import { anchorFromPosition, anchorFromActorSelector, anchorFromActorRef, defaultActorAnchor } from '../automation/primitives/anchor.js';
+import { liveActorSlot } from '../automation/primitives/reference.js';
 
 /** Assert that `fn` throws a RuleProgramViolation carrying exactly `code`. */
 function expectViolationCode(fn: () => unknown, code: string): void {
@@ -207,40 +208,47 @@ describe('QUERY underlay — rangeOrigin anchors (U7)', () => {
     // attack-target anchor (ally, d0), range 4 reaches allyFar (d4) too.
     const fromSelf = evaluateActorCandidates({ relation: 'ally', range: 4 }, ctx()).map((a) => a.id);
     expect(fromSelf).toEqual(['ally']);
+    // LIVE attack-target slot → typed U1 reference identity, resolved through
+    // the anchor authority against the current context.
     const fromAlly = evaluateActorCandidates(
-      { relation: 'ally', range: 4, rangeOrigin: { kind: 'actor', selector: { kind: 'attack-target' } } },
+      { relation: 'ally', range: 4, rangeOrigin: anchorFromActorSelector({ kind: 'attack-target' })! },
       { ...ctx(), attackTargetId: 'ally' },
     ).map((a) => a.id).sort();
     expect(fromAlly).toEqual(['ally', 'allyFar']);
   });
 
   it('resolves a LIVE actor anchor via input', () => {
+    // The recorded input selection is CAPTURED at construction (U1
+    // captured-actor identities); resolution then composes the reference
+    // authority.
+    const context = { ...ctx(), input: { actorIds: { origin: ['ally'] } } };
     const ids = evaluateActorCandidates(
-      { relation: 'ally', range: 1, rangeOrigin: { kind: 'actor', selector: { kind: 'input', key: 'origin' } } },
-      { ...ctx(), input: { actorIds: { origin: ['ally'] } } },
+      { relation: 'ally', range: 1, rangeOrigin: anchorFromActorSelector({ kind: 'input', key: 'origin' }, context)! },
+      context,
     ).map((a) => a.id);
     expect(ids).toEqual(['ally']);
   });
 
-  it('rejects a query-shaped selector as an anchor (fail closed)', () => {
-    expectViolationCode(() => evaluateActorCandidates(
-      { relation: 'foe', range: 3, rangeOrigin: { kind: 'actor', selector: { kind: 'all', relation: 'any' } } },
-      ctx(),
-    ), 'selector.origin-invalid');
+  it('rejects a query-shaped selector as an anchor (fail closed at construction)', () => {
+    // A query-shaped selector (all/within/adjacent) cannot name a single
+    // origin; the construction seam returns null (fail closed) rather than
+    // letting a candidate query masquerade as an anchor.
+    expect(anchorFromActorSelector({ kind: 'all', relation: 'any' })).toBeNull();
   });
 
   it('rejects an anchor resolving to zero actors (fail closed)', () => {
     expectViolationCode(() => evaluateActorCandidates(
-      { relation: 'foe', range: 3, rangeOrigin: { kind: 'actor', selector: { kind: 'trigger-targets' } } },
+      { relation: 'foe', range: 3, rangeOrigin: anchorFromActorSelector({ kind: 'trigger-targets' })! },
       ctx(),
     ), 'selector.origin-invalid');
   });
 
   it('rejects an anchor actor without a position (fail closed)', () => {
     // ghost has position null.
+    const context = { ...ctx(), input: { actorIds: { origin: ['ghost'] } } };
     expectViolationCode(() => evaluateActorCandidates(
-      { relation: 'foe', range: 3, rangeOrigin: { kind: 'actor', selector: { kind: 'input', key: 'origin' } } },
-      { ...ctx(), input: { actorIds: { origin: ['ghost'] } } },
+      { relation: 'foe', range: 3, rangeOrigin: anchorFromActorSelector({ kind: 'input', key: 'origin' }, context)! },
+      context,
     ), 'selector.origin-invalid');
   });
 
@@ -255,5 +263,33 @@ describe('QUERY underlay — rangeOrigin anchors (U7)', () => {
   it('default origin stays the acting actor when no rangeOrigin is declared', () => {
     const ids = evaluateActorCandidates({ relation: 'ally', range: 2 }, ctx()).map((a) => a.id);
     expect(ids).toEqual(['ally']);
+  });
+});
+
+describe('U7 ANCHOR construction surface (typed U1 actor identity)', () => {
+  it('the default LIVE anchor names the acting-actor source slot as a typed reference', () => {
+    const anchor = defaultActorAnchor();
+    expect(anchor).toEqual({ kind: 'actor', ref: liveActorSlot('source') });
+    // Resolves through the U1 reference authority to the acting actor.
+    expect(resolveSpatialAnchor(anchor, ctx())).toEqual({ position: { x: 4, y: 4 }, size: 1 });
+  });
+
+  it('anchorFromActorRef preserves the typed reference identity verbatim', () => {
+    const ref = liveActorSlot('attack-target');
+    const anchor = anchorFromActorRef(ref);
+    expect(anchor.kind).toBe('actor');
+    expect(anchor.kind === 'actor' && anchor.ref).toBe(ref);
+  });
+
+  it('an input selector without a context fails closed at construction (no captured selection)', () => {
+    // Construction is the boundary where a recorded selection is CAPTURED;
+    // with no context there is no selection to capture, so the constructor
+    // returns null rather than freezing an empty identity.
+    expect(anchorFromActorSelector({ kind: 'input', key: 'origin' })).toBeNull();
+  });
+
+  it('query-shaped selectors never become anchors (all/within/adjacent are candidate queries)', () => {
+    expect(anchorFromActorSelector({ kind: 'all', relation: 'any' })).toBeNull();
+    expect(anchorFromActorSelector({ kind: 'within', origin: { kind: 'self' }, relation: 'any', range: { kind: 'constant', value: 1 } })).toBeNull();
   });
 });

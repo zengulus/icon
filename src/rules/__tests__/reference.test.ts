@@ -20,9 +20,10 @@
 import { describe, expect, it } from 'vitest';
 import type { RuleExecutionContext } from '../automation/primitives/types.js';
 import {
-  actorReferenceForSelector, bind, capturedActor, capturedEntity, capturedPosition, capturedValue, EMPTY_BINDER, liveActorBound, liveActorSlot,
+  actorReferenceForSelector, bind, capturedActor, capturedActorWeak, capturedEntity, capturedPosition, capturedValue, EMPTY_BINDER, liveActorBound, liveActorSlot,
   liveRef, liveTriggerTargets, referenceCollection, resolveActorSelectorReference, resolveReference,
 } from '../automation/primitives/reference.js';
+import type { ResolvedReference } from '../automation/primitives/reference.js';
 
 function ctx(overrides: Partial<RuleExecutionContext> = {}): RuleExecutionContext {
   return {
@@ -274,5 +275,43 @@ describe('U1 REFERENCE — the Binder is pure and replay-deterministic', () => {
     const context = ctx({ triggerTargetIds: ['hero', 'foe'] });
     expect(resolveReference(liveTriggerTargets(), context))
       .toEqual(resolveReference(liveTriggerTargets(), context));
+  });
+});
+
+describe('U1 REFERENCE — the absent resolution is priced into the vocabulary only where a lifecycle-sensitive kind can produce it', () => {
+  it('type-level: the actor domain exposes absent (weak captured-actor can legitimately expire); entity/position/value cannot', () => {
+    // `{ kind: 'absent' }` IS a member of ResolvedReference<'actor'> — the
+    // weak captured-actor kind resolves to it. This assignment only compiles
+    // because the union still exposes it.
+    const probe: Extract<ResolvedReference<'actor'>, { kind: 'absent' }> = { kind: 'absent' };
+    expect(probe.kind).toBe('absent');
+    // The SAME probe against the entity domain must NOT compile — absent is
+    // priced only where a lifecycle-sensitive kind can produce it. The
+    // `@ts-expect-error` directives are the assertion: they FAIL THE BUILD if
+    // a member-cast to `absent` ever compiles for a non-actor domain.
+    // @ts-expect-error — ResolvedReference<'entity'> exposes no absent member
+    const unreachable: Extract<ResolvedReference<'entity'>, { kind: 'absent' }> = { kind: 'absent' };
+    void unreachable;
+    // Likewise for position and value domains.
+    // @ts-expect-error — ResolvedReference<'position'> exposes no absent member
+    const positionAbsent: Extract<ResolvedReference<'position'>, { kind: 'absent' }> = { kind: 'absent' };
+    void positionAbsent;
+    // @ts-expect-error — ResolvedReference<'value'> exposes no absent member
+    const valueAbsent: Extract<ResolvedReference<'value'>, { kind: 'absent' }> = { kind: 'absent' };
+    void valueAbsent;
+  });
+
+  it('runtime: only the weak captured-actor kind produces absent — strict actor, entity, position, value never do', () => {
+    const context = ctx();
+    // Weak: a captured actor id whose actor is gone → explicit absent.
+    const weak = resolveReference(capturedActorWeak('ghost'), context);
+    expect(weak.ok).toBe(true);
+    if (weak.ok) expect(weak.value).toEqual({ kind: 'absent' });
+    // Strict captured-actor: same ghost id → fail closed missing-actor.
+    expect(resolveReference(capturedActor('ghost'), context)).toEqual({ ok: false, problem: 'missing-actor' });
+    // Entity/position/value domains: absent is not in their resolution.
+    expect(resolveReference(capturedEntity('ghost'), context)).toEqual({ ok: false, problem: 'missing-entity' });
+    expect(resolveReference(capturedPosition({ x: 1, y: 1 }), context)).toEqual({ ok: true, value: { kind: 'position', position: { x: 1, y: 1 } } });
+    expect(resolveReference(capturedValue(7), context)).toEqual({ ok: true, value: { kind: 'value', value: 7 } });
   });
 });

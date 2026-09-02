@@ -1090,13 +1090,20 @@ positions are resolved positions consumed by the shared
 movement gateway / aura kernel (U2 migration is T3+); rebound origin
 absent (U12 continuation records).
 
-**PARTIAL / scaffolding (corrective pass 2026-08-30).** U7 remains
-PARTIAL and must not be extended as if it were U1 REFERENCE: the LIVE
-actor anchor currently identifies its actor via a reference-style
-`RuleSelector` — this is COMPATIBILITY SCAFFOLDING, not the anchor
-vocabulary's final identity model. Once U1 exists, live anchor identity
-should use the typed `Reference<T>` vocabulary; this pass does NOT
-pre-design that seam. U2 ROLE / PERSPECTIVE remains responsible for
+**PARTIAL / scaffolding (corrective pass 2026-08-30) — seam CLOSED
+2026-09-02.** U7 remains PARTIAL and must not be extended as if it were
+U1 REFERENCE. The corrective pass's named seam is now executed: with U1
+AUTHORITATIVE (tranche 18), the LIVE actor anchor's identity is the typed
+U1 `Reference<'actor'>` (`primitives/anchor.ts` `SpatialAnchor` actor
+kind = `{ kind: 'actor'; ref: Reference<'actor'> }`, constructed via
+`anchorFromActorRef` / `defaultActorAnchor` / `anchorFromActorSelector` —
+the single selector→reference mapping through the U1
+`actorReferenceForSelector` adapter, fail-closed at construction for
+input-without-context and query-shaped selectors). Resolution composes
+the ONE `resolveReference` authority in `kernels/candidate.ts`; the
+former `{ kind: 'actor'; selector: RuleSelector }` scaffolding is removed
+and the `u1-reference-routing` guard pins candidate.ts to
+`resolveReference`. U2 ROLE / PERSPECTIVE remains responsible for
 "relative to whom" entirely independently of U7 — relation stays with the
 acting actor while the anchor carries only the spatial frame.
 

@@ -33,7 +33,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U4 Choice / Decision | PARTIAL | ability/talent choice fold reads and remaining window-carried choice consumers |
 | U5 Value / Expression | PARTIAL | inline resolver arithmetic and missing typed value families |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
-| U7 Anchor / Spatial Frame | PARTIAL | remaining aura/creation/rebound-origin consumers |
+| U7 Anchor / Spatial Frame | PARTIAL | LIVE actor anchor identity now typed (tranche 19); remaining aura/creation/rebound-origin consumers stay specialist-owned |
 | U8 Scope / Clock | AUTHORITATIVE | none |
 | U9 Provenance / Cause | PARTIAL | legacy trigger/damage/movement provenance reconstruction |
 | U10 Fact / Outcome | PARTIAL | movement/save distinction proof remains incomplete |
@@ -49,7 +49,10 @@ Six underlays meet the strict authority bar (U1 since the eighteenth
 tranche, 2026-09-02); eleven remain partial. U1 is the dependency root: it
 has no underlay dependency and is consumed by U3, U5, U6, U7, U9, U10,
 U12, U14, and U16 — which is why it stayed the selected next tranche until
-its declared-scope authority completed.
+its declared-scope authority completed. With U1 and U2 authoritative, the
+next dependency-complete underlay was U7 (Anchor/Spatial Frame depends only
+on U1+U2; U3 additionally waits on U5-core); the nineteenth tranche
+migrated U7's LIVE actor anchor identity onto the typed U1 vocabulary.
 
 ## U1 tranche executed
 
@@ -1300,6 +1303,75 @@ caller-side on the RESOLVED actor), and algorithm-produced transient
 identities (the 8 pins). Within that scope there is one vocabulary, one
 authority, explicit contracts, and machine+test proof. No source unit was
 promoted; no ability semantics changed; no arbitrary-ID accessor exists.
+
+## U1 tranche executed (fresh HEAD, 2026-09-02, nineteenth tranche — U7 anchor identity onto typed U1; ResolvedReference absent-domain tightening)
+
+U1 verification for 95a45f0 passed in full: strict vs weak captured-actor
+semantics, defeat ≠ removal (engine fact), exactly two weak carrier
+families, 39 migrated fold derefs, four fold-surface + four program-surface
+non-reference survivors, zero legacy-slot interpretation, U4/lifecycle
+ownership — all confirmed on HEAD before closing U1.
+
+**Small U1 type cleanup (included).** `ResolvedReference<D>` previously
+carried `{ kind: 'absent' }` on the OUTER union, so any reference domain
+could type-theoretically resolve as absent; runtime only ever produced
+absent for `captured-actor-weak`. The member is now conditional on the
+actor domain (`absent` only on actor-domain references), so strict
+actor/entity/position/value resolution can no longer type-theoretically
+return absent. No runtime change; a type-level test pins the narrow
+(actor-domain only) and a `// @ts-expect-error` probe pins that a
+non-actor domain cannot expose `absent`.
+
+**Dependency-DAG decision.** U3 was NOT selected: the plan's own DAG shows
+U3 depends on U1, U2, U5-core, AND U7, while U7 depends only on U1+U2
+(both authoritative). U7 (Anchor/Spatial Frame) is therefore the first
+remaining dependency-complete underlay; U9 (Provenance, U1+U2) is the
+parallel candidate, and the plan's phase order (T2: "U7, U3, U5, U6, U4")
+puts U7 first. The U7 row's own corrective note named the seam: "Once U1
+exists, live anchor identity should use the typed `Reference<T>`
+vocabulary" — exactly what this tranche executes.
+
+**What landed.** The LIVE actor anchor's identity is now the typed U1
+`Reference<'actor'>` instead of the reference-style `RuleSelector`
+scaffolding:
+
+- `primitives/anchor.ts`: `SpatialAnchor` actor kind = `{ kind: 'actor';
+  ref: Reference<'actor'> }`; constructors `anchorFromActorRef`,
+  `defaultActorAnchor` (the acting-actor source slot), and
+  `anchorFromActorSelector(selector, context?)` — the SINGLE
+  selector→reference mapping via the U1 `actorReferenceForSelector`
+  adapter. Fail-closed at construction: an input-keyed selector without a
+  context (no recorded selection to capture) and any query-shaped selector
+  (all/within/adjacent — a candidate query can never name one origin)
+  return null; the kernel raises `selector.origin-invalid`.
+- `kernels/candidate.ts` `resolveSpatialAnchor`: the actor case now
+  resolves `anchor.ref` through the ONE `resolveReference` authority
+  (zero/multi actors, missing slot, position-less actor fail closed as
+  before; `selector.actor-missing` / `selector.origin-invalid`).
+- Consumers (`choice.ts` `rangeOrigin`, `evaluate-query.ts` LoS/entity
+  anchors, `evaluate-value.ts` `distance` endpoints) unchanged in
+  behavior — only the identity carrier changed; the old selector
+  re-interpretation at resolution time is gone (identity decided ONCE at
+  construction, matching LIVE re-resolve vs CAPTURED-recorded semantics).
+- Guard: `u1-reference-routing` pins `kernels/candidate.ts` to
+  `resolveReference` (the typed-ref resolution authority) instead of the
+  removed selector adapter call; the pin change is itself regression-tested
+  (a restored raw `context.attackTargetId` slot is still caught).
+- Tests: candidate.test.ts gains a `U7 ANCHOR construction surface` block
+  (default = typed source slot; `anchorFromActorRef` preserves the
+  reference verbatim; input-without-context and query-shaped selectors fail
+  closed at construction), plus the prior verify-tranche type-level probe
+  in reference.test.ts.
+
+**Census.** Unchanged and consistent: U1 residual 4 = 0 PURE + 0 CAPTURED
++ 0 BOUNDARY + 4 NON_U1_OTHER (program surface); fold surface 4
+forwarded-identifier pins; zero legacy-slot. Architecture audit 125 files
+clean; automation audit clean; source-fidelity strict clean. Tests
+2169 (+6: 2 absent-domain probes + 4 anchor construction-surface tests),
+build clean. U7 remains PARTIAL:
+the aura-origin, entity `creationSpatial`, `RuleArea.origin`, teleport, and
+rebound-origin consumers stay specialist-owned per their documented
+boundaries — this tranche only closed the LIVE actor anchor identity seam.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

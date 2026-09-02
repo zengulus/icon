@@ -11,8 +11,7 @@
  * per specialist (`RuleArea.origin`, entity `creationSpatial`, teleport
  * origins). This module owns the typed vocabulary; resolution against live
  * state lives in the kernel layer (`kernels/candidate.ts`
- * `resolveSpatialAnchor`), because naming an actor anchor requires the
- * runtime selector machinery.
+ * `resolveSpatialAnchor`).
  *
  * LIVE vs CAPTURED: an `actor` anchor is LIVE — it re-resolves against
  * current state whenever it is used ("at the start of its next turn, damage
@@ -22,10 +21,31 @@
  * space", "return relative to your original location") and must never be
  * re-derived from later state.
  *
+ * IDENTITY MODEL (U1 INTEGRATION): the LIVE actor anchor's identity is the
+ * typed U1 `Reference<'actor'>` — `liveActorSlot('source'|'attack-target'|
+ * 'trigger-source')`, `liveActorBound(name)`, the recorded-selection
+ * collection, etc. — NOT a reference-style `RuleSelector`. The anchor plays
+ * no role/eligibility/selection role: it names ONE actor to measure from, and
+ * only the U1 authority interprets the identity. The former
+ * `{ kind: 'actor'; selector?: RuleSelector }` scaffolding (which delegated
+ * the identity to a resolution-time selector adapter) is removed: identity is
+ * decided at CONSTRUCTION through `actorReferenceForSelector` (the U1
+ * selector→reference mapping — LIVE slots, bound names, and recorded input
+ * selections), so a query-shaped selector (`all`, `within`, `adjacent`, …)
+ * CANNOT become an anchor (fail closed at construction: the constructor
+ * returns null — the null surface is the primitive's fail-closed contract,
+ * the kernel raises the violation). Because the identity is a reference, the
+ * anchor also preserves CAPTURED semantics naturally: recorded-input
+ * selections are captured at construction as `captured-actor` identities, and
+ * the reference resolves against recorded input exactly once.
+ *
  * This module holds no source IDs and imports no kernels.
  */
 import type { Position } from '../../types.js';
-import type { RuleEntityView, RuleSelector } from './types.js';
+import type { Reference } from './reference.js';
+import { actorReferenceForSelector } from './reference.js';
+import { liveActorSlot } from './reference.js';
+import type { RuleEntityView, RuleExecutionContext, RuleSelector } from './types.js';
 
 /** A resolved spatial origin: a battlefield position plus the footprint size
  * used by the canonical p.92 distance metric. */
@@ -35,12 +55,13 @@ export interface SpatialOrigin {
 }
 
 export type SpatialAnchor =
-  /** A LIVE actor footprint, named by a reference-style RuleSelector
-   * (`self` / `attack-target` / `trigger-source` / `trigger-targets` /
-   * `input`). Absent selector = the acting actor. Only single-referent
-   * selectors may anchor a measurement; query selectors (`all`, `within`,
-   * `adjacent`, …) cannot name one origin and are rejected at resolution. */
-  | { kind: 'actor'; selector?: RuleSelector }
+  /** A LIVE actor footprint, named by the typed U1 reference identity — an
+   * already-resolved identity the U1 authority interprets (source /
+   * attack-target / trigger-source LIVE slots, a bound name, or a recorded
+   * input selection captured as captured-actor identities). Only
+   * single-origin references may anchor a measurement; a query-shaped
+   * selector can never be constructed (see above). */
+  | { kind: 'actor'; ref: Reference<'actor'> }
   /** A LIVE entity/object/summon footprint, named by its entity id (p.92
    * "from the edge of the origin space (or character)" — an entity's
    * footprint is a valid origin for range/LoS/area measurements, e.g. a
@@ -50,15 +71,47 @@ export type SpatialAnchor =
    * earlier operation). Size defaults to 1 (a point cell). */
   | { kind: 'captured-position'; position: Position; size?: number };
 
+/** Pure constructor: a typed-reference LIVE actor anchor. The identity is a
+ * U1 `Reference<'actor'>` (LIVE slot, bound name, or recorded-selection
+ * collection); resolution composes the ONE `resolveReference` authority. */
+export function anchorFromActorRef(ref: Reference<'actor'>): SpatialAnchor {
+  return { kind: 'actor', ref };
+}
+
+/** The default LIVE actor anchor: the acting actor (source slot). */
+export function defaultActorAnchor(): SpatialAnchor {
+  return anchorFromActorRef(liveActorSlot('source'));
+}
+
+/** Map a reference-shaped `RuleSelector` onto the typed U1 reference
+ * identity. `undefined` (and `self`) = the acting actor. Returns null for
+ * query-shaped selectors OR an input-keyed selector without a context to
+ * capture the recorded selection from — the primitive's fail-closed surface
+ * (the kernel raises `selector.origin-invalid` when a caller ignores null).
+ * This is the SINGLE selector→reference mapping for anchors, composed through
+ * the U1 `actorReferenceForSelector` adapter — never a second identity
+ * interpretation. */
+export function anchorFromActorSelector(
+  selector: RuleSelector | undefined,
+  context?: RuleExecutionContext,
+): SpatialAnchor | null {
+  if (selector !== undefined && selector.kind === 'input' && context === undefined) {
+    // An input-keyed anchor MUST capture the recorded selection at
+    // construction; without a context there is no recorded identity to
+    // capture — fail closed instead of guessing.
+    return null;
+  }
+  // After the guard: input selectors always carry a context, and non-input
+  // selectors never consult it — so the context is safe here even when
+  // technically undefined.
+  const ref = actorReferenceForSelector(selector, context!);
+  return ref === null ? null : anchorFromActorRef(ref);
+}
+
 /** Pure constructor: a captured position anchor (e.g. a chosen teleport
  * destination, a bound landing space, an original location to return to). */
 export function anchorFromPosition(position: Position, size = 1): SpatialAnchor {
   return { kind: 'captured-position', position: { ...position }, size };
-}
-
-/** Pure constructor: a live actor anchor. Absent selector = acting actor. */
-export function anchorFromActorSelector(selector?: RuleSelector): SpatialAnchor {
-  return { kind: 'actor', selector };
 }
 
 /** Pure constructor: a live entity footprint anchor. */

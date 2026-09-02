@@ -18,6 +18,7 @@ import type { RuleChoice, RuleExecutionContext } from '../automation/primitives/
 import { choiceEntitledPlayer, choiceEntitledPlayerFromContext, resolveChoice } from '../automation/kernels/choice.js';
 import type { RoleFrame } from '../automation/primitives/roles.js';
 import { RuleProgramViolation } from '../automation/kernels/runtime.js';
+import { anchorFromActorSelector } from '../automation/primitives/anchor.js';
 
 function actor(
   id: string,
@@ -93,20 +94,22 @@ describe('U4 — position choices route through the shared U3 predicates with a 
     // Anchor = the ally at (6,4) via the input selector. (8,4) is distance 2
     // from the ally, so range 2 passes even though it is distance 4 from the
     // acting actor.
-    const anchored: RuleChoice = { ...row, rangeOrigin: { kind: 'actor', selector: { kind: 'input', key: 'anchor' } } };
     const context = ctx({ input: { actorIds: { anchor: ['ally'] }, positions: { center: [{ x: 8, y: 4 }] } } });
+    // The recorded input selection is CAPTURED at construction (U1
+    // captured-actor identities); resolution composes the reference authority.
+    const anchored: RuleChoice = { ...row, rangeOrigin: anchorFromActorSelector({ kind: 'input', key: 'anchor' }, context)! };
     expect(resolveChoice(anchored, context)).toEqual({ kind: 'positions', positions: [{ x: 8, y: 4 }] });
   });
 
   it('a malformed rangeOrigin anchor fails closed (zero actors cannot frame a range)', () => {
-    const anchored: RuleChoice = { ...row, rangeOrigin: { kind: 'actor', selector: { kind: 'input', key: 'anchor' } } };
-    expect(codeOf(() => resolveChoice(anchored, ctx({ input: { actorIds: { anchor: [] }, positions: { center: [{ x: 6, y: 4 }] } } }))))
-      .toBe('selector.origin-invalid');
+    const context = ctx({ input: { actorIds: { anchor: [] }, positions: { center: [{ x: 6, y: 4 }] } } });
+    const anchored: RuleChoice = { ...row, rangeOrigin: anchorFromActorSelector({ kind: 'input', key: 'anchor' }, context)! };
+    expect(codeOf(() => resolveChoice(anchored, context))).toBe('selector.origin-invalid');
   });
 
   it('a position-less anchor actor fails closed (no range can be measured)', () => {
     const context = ctx({ state: { ...ctx().state, actors: { ...ctx().state.actors, off: actor('off', 'heroes', null) } } });
-    const anchored: RuleChoice = { ...row, rangeOrigin: { kind: 'actor', selector: { kind: 'input', key: 'anchor' } } };
+    const anchored: RuleChoice = { ...row, rangeOrigin: anchorFromActorSelector({ kind: 'input', key: 'anchor' }, context)! };
     expect(codeOf(() => resolveChoice(anchored, { ...context, input: { actorIds: { anchor: ['off'] }, positions: { center: [{ x: 6, y: 4 }] } } })))
       .toBe('selector.origin-invalid');
   });

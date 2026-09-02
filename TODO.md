@@ -395,8 +395,44 @@ assumption here, document the evidence and update this list before proceeding.
   lifecycle expiry caller-owned, 8 machine-pinned NON-reference survivors
   provably outside scope, 0 legacy-slot interpretation, replay preserved,
   lexical+site-identity guards. The 11 remaining underlays stay PARTIAL on
-  their own residuals (see the matrix). Zero source promotion; no ability
+  their  own residuals (see the matrix). Zero source promotion; no ability
   semantics changed. See `docs/u8-u1-underlay-census.md`.
+
+- **U1 tranche 19 — absent-domain tightening + U7 anchor identity onto
+  typed U1 (2026-09-02) — DONE.** (a) SMALL TYPE CLEANUP: `ResolvedReference<D>`
+  previously priced `{ kind: 'absent' }` on the outer union, letting any
+  domain type-theoretically resolve as absent; runtime only ever produced
+  absent for `captured-actor-weak`. The member is now conditional on the
+  actor domain (`D extends 'actor'`) — strict actor/entity/position/value
+  resolution can no longer expose absent; no runtime change, pinned by a
+  type-level probe plus a `// @ts-expect-error` build-time negative probe
+  per non-actor domain. (b) DEPENDENCY-DAG DECISION: the next underlay is
+  **U7 Anchor/Spatial Frame, not U3** — the plan's DAG has U3 depending on
+  U1+U2+U5-core+U7 while U7 depends only on U1+U2 (both authoritative);
+  U9 (U1+U2) is the parallel candidate and the plan's phase order puts U7
+  first. (c) U7 SEAM EXECUTED: the LIVE actor anchor's identity is now the
+  typed U1 `Reference<'actor'>` (`SpatialAnchor` actor kind =
+  `{ kind: 'actor'; ref }`, constructors `anchorFromActorRef` /
+  `defaultActorAnchor` / `anchorFromActorSelector` — the single
+  selector→reference mapping via `actorReferenceForSelector`, fail-closed
+  at CONSTRUCTION for input-without-context and query-shaped selectors
+  (null → kernel `selector.origin-invalid`)); `resolveSpatialAnchor` now
+  composes the ONE `resolveReference` authority instead of re-interpreting
+  a selector at resolution time; `choice.ts` / `evaluate-query.ts` /
+  `evaluate-value.ts` consumers unchanged in behavior; the
+  `u1-reference-routing` guard pins candidate.ts to `resolveReference`
+  (regression-tested against a restored raw slot). EVIDENCE: +4 anchor
+  construction-surface tests (default = typed source slot; ref preserved
+  verbatim; input-without-context null; all/within query selectors null),
+  fixtures migrated in candidate/t2-choice-roles/t2-query-extension/
+  t2-expression-algebra, architecture suite 100 green. Census unchanged
+  and consistent (U1 4 = 0+0+0+4; fold 4; 0 legacy-slot); 2169 tests;
+  architecture/automation/source-fidelity audits clean; build clean. U7
+  stays PARTIAL on the specialist-origin consumers (aura, creationSpatial,
+  RuleArea.origin, teleport, rebound), each retained with its documented
+  boundary; zero source promotion, no ability semantics changed. See
+  `docs/u8-u1-underlay-census.md`.
+
 
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`

@@ -454,7 +454,10 @@ describe('U1 residual census (machine inventory)', () => {
 
 describe('U1 Reference/Binding routing guard', () => {
   const valid = {
-    'kernels/candidate.ts': 'resolveActorSelectorReference({ kind: \'self\' }, context);',
+    // U7 (tranche 19): candidate.ts resolves the typed U1 actor anchor
+    // through the ONE resolveReference authority (identity decided at
+    // construction via anchorFromActorSelector/actorReferenceForSelector).
+    'kernels/candidate.ts': 'const resolution = resolveReference(anchor.ref, context);',
     'kernels/evaluate-value.ts': 'resolveActorSelectorReference(selector, context); liveActorSlot(\'damage-recipient\');',
     'kernels/execute-flow.ts': 'resolveReference(liveActorSlot(\'attack-target\'), context); capturedActor(id);',
     'kernels/foe-recipes.ts': 'resolveActorSelectorReference(selector, context);',

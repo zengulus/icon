@@ -59,7 +59,7 @@ import {
 import { axisDirection, sameCell, squareArea } from '../../area-geometry.js';
 import { hasLineOfEffect, hasLineOfSight } from '../primitives/line-of-sight.js';
 import {
-  anchorFromActorSelector,
+  defaultActorAnchor,
   type SpatialAnchor,
   type SpatialOrigin,
 } from '../primitives/anchor.js';
@@ -152,7 +152,7 @@ export function evaluateActorQuery(query: ActorQuery, context: RuleExecutionCont
   // as `range`, default the acting actor) — the p.92 sight gate composed as
   // a query operator, sharing the one line-of-sight kernel.
   if (query.lineOfSight === true || query.lineOfEffect === true) {
-    const anchor = resolveSpatialAnchor(query.rangeOrigin ?? anchorFromActorSelector(), context);
+    const anchor = resolveSpatialAnchor(query.rangeOrigin ?? defaultActorAnchor(), context);
     const view = lineView(context);
     candidates = candidates.filter((candidate) => {
       if (candidate.position === null) return false;

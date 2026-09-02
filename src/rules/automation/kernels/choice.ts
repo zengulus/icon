@@ -35,7 +35,7 @@ import type {
   RuleChoice,
   RuleExecutionContext,
 } from '../primitives/types.js';
-import { anchorFromActorSelector } from '../primitives/anchor.js';
+import { defaultActorAnchor } from '../primitives/anchor.js';
 import { deriveRoles, resolveRoleSelector, roleFrameFromContext, type RoleFrame } from '../primitives/roles.js';
 import { resolveSpatialAnchor, validateActorCandidate } from './candidate.js';
 import { validatePositionCandidate } from './evaluate-query.js';
@@ -131,7 +131,7 @@ function resolvePositions(choice: RuleChoice, context: RuleExecutionContext): Ch
   // through the shared anchor authority — a malformed anchor (zero/multi
   // actors, a position-less actor) FAILS CLOSED rather than silently
   // skipping the range check.
-  const origin = resolveSpatialAnchor(choice.rangeOrigin ?? anchorFromActorSelector(), context);
+  const origin = resolveSpatialAnchor(choice.rangeOrigin ?? defaultActorAnchor(), context);
   const maximumRange = choice.range === undefined ? Number.POSITIVE_INFINITY : evaluateNumber(choice.range, context);
   const positions: Position[] = [];
   for (const cell of supplied) {
