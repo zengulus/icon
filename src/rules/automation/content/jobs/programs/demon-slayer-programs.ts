@@ -14,7 +14,8 @@ import { areaHasCellWithinRange, blastTemplateCells, validateLine } from '../../
 import { recipientBranchEligibility, resolveRecipientBranch } from '../../../primitives/area-resolution.js';
 import { footprintIntersectsCells, validateSpatialIntent } from '../../../primitives/spatial-intent.js';
 import { rampartObstructs } from '../../../kernels/encounter-adapter.js';
-import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { evaluateActorQuery, rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { anchorFromPosition } from '../../../primitives/anchor.js';
 import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
@@ -493,17 +494,32 @@ const demonClaw: RuleResolver = (context) => {
   for (let index = 0; index < rushPath.length; index += 1) {
     const position = rushPath[index]!;
     mutations.push(rushMutation(context, source.id, [position]));
-    const adjacentFoes = Object.values(context.state.actors)
-      .filter((candidate) => candidate.id !== source.id && candidate.side !== source.side && candidate.position && distance(candidate.position, position) <= 1 && !damaged.has(candidate.id))
+    // Adjacent LIVING foes of the step cell via the ONE U3 authority (the
+    // p.92 footprint metric; defeated actors are excluded by default — a
+    // raw scan would target a defeated on-field foe). The
+    // once-per-use damage exclusion composes after the eligible set.
+    const adjacentFoes = evaluateActorQuery({ relation: 'foe', range: 1, rangeOrigin: anchorFromPosition(position) }, context)
+      .filter((candidate) => !damaged.has(candidate.id))
       .sort((a, b) => a.id.localeCompare(b.id));
-    const targets = special ? adjacentFoes : adjacentFoes.slice(0, 1);
+    // p.129 normal path: "Each time, you may deal 2 damage to an adjacent
+    // foe" — the player chooses WHICH when several living foes are
+    // adjacent. That choice is not yet recordable mid-resolution, so the
+    // engine FAILS CLOSED instead of silently picking one by id; the
+    // Special path ("deals damage to all adjacent foes") and the
+    // single-candidate normal path carry no choice and stay executable.
+    if (!special && adjacentFoes.length > 1) {
+      throw new RuleProgramViolation('choice.target-unresolved', 'Demon Claw deals 2 damage to one adjacent foe of your choice; several living adjacent foes qualify.');
+    }
+    const targets = adjacentFoes;
     for (const foe of targets) {
       mutations.push(damageMutation(context, foe.id, 2 + ragingBonus, 'effect'));
       damaged.add(foe.id);
     }
     if (index === 0 && (context.triggers?.has('charge') || context.triggers?.has('heroic'))) {
-      for (const adjacent of Object.values(context.state.actors)) {
-        if (adjacent.id === source.id || !adjacent.position || distance(adjacent.position, position) > 1 || weakened.has(adjacent.id)) continue;
+      // "Weaken all adjacent characters" — the U3 query with no relation
+      // filter (any living on-board actor), the source's own cell excluded.
+      for (const adjacent of evaluateActorQuery({ range: 1, rangeOrigin: anchorFromPosition(position) }, context)) {
+        if (adjacent.id === source.id || weakened.has(adjacent.id)) continue;
         mutations.push(conditionMutation(context, adjacent.id, 'weakened'));
         weakened.add(adjacent.id);
       }
@@ -548,8 +564,9 @@ const gatesOfHellVigilanceRush: RuleResolver = (context) => {
 const soulBladeEnter: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   if (!source || !source.position) return [];
-  const adjacentFoes = Object.values(context.state.actors)
-    .filter((candidate) => candidate.id !== source.id && candidate.side !== source.side && candidate.position && distance(candidate.position!, source.position!) <= 1).length;
+  // Living adjacent foes via the ONE U3 authority (defeated excluded) —
+  // the die's heroic boost counts only foes who can still act.
+  const adjacentFoes = evaluateActorQuery({ relation: 'foe', range: 1, rangeOrigin: anchorFromPosition(source.position) }, context).length;
   const bonus = context.triggers?.has('heroic') ? adjacentFoes : 0;
   const die = Math.min(6, 2 + bonus);
   return [

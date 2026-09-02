@@ -16,6 +16,7 @@ import {
   untilNextTurnEnd, action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluateActorQuery, evaluatePositions, nearestCandidates } from '../../../kernels/evaluate-query.js';
+import { anchorFromPosition } from '../../../primitives/anchor.js';
 import { resolveCapturedSelectedActors, resolveTriggerSource, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
 /**
@@ -95,8 +96,11 @@ const provokeEffects: RuleResolver = (context) => {
   const rush = plannedRush(context, source.id, 1, direction);
   if (rush) mutations.push(rushMutation(context, source.id, rush));
   const position = rush ?? source.position;
-  const adjacentFoes = Object.values(context.state.actors)
-    .filter((foe) => foe.id !== source.id && foe.side !== source.side && foe.position && distance(foe.position, position) <= range)
+  // The eligible set comes from the ONE U3 candidate authority: living,
+  // on-battlefield foes within p.92 footprint `range` of the (post-rush)
+  // cell. The query excludes defeated actors by default — a raw scan would
+  // silently include them (defeat leaves actors on-field for rescue).
+  const adjacentFoes = evaluateActorQuery({ relation: 'foe', range, rangeOrigin: anchorFromPosition(position) }, context)
     .sort((a, b) => a.id.localeCompare(b.id));
   for (const foe of adjacentFoes) {
     mutations.push(damageMutation(context, source.id, 1, 'effect', 'piercing'));

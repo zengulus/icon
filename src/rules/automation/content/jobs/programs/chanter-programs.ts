@@ -14,7 +14,8 @@ import {
   flyMutation, removeMutation, placeMutation, terrainMutation, swapMutations,
   action, compilation,
 } from '../../../primitives/job-kit.js';
-import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { evaluateActorQuery, evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { anchorFromPosition } from '../../../primitives/anchor.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
@@ -73,8 +74,13 @@ const holyEffects: RuleResolver = (context) => {
   mutations.push(conditionMutation(context, target.id, 'pacified'));
   if (target.position) {
     const targetPosition = target.position;
-    const cureTarget = Object.values(context.state.actors)
-      .filter((character) => character.side === source.side && character.position && distance(character.position, targetPosition) <= 2)
+    // "Cure a character in range 2 of that foe" — the eligible set comes
+    // from the ONE U3 authority (living, on-battlefield, p.92 footprint
+    // range of the foe's cell), then the resolver keeps the source's own
+    // side (cure never targets a defeated on-field character). The
+    // nearest-first selection is the resolver's documented ordering.
+    const cureTarget = evaluateActorQuery({ range: 2, rangeOrigin: anchorFromPosition(targetPosition) }, context)
+      .filter((character) => character.side === source.side)
       .sort((a, b) => distance(a.position!, targetPosition) - distance(b.position!, targetPosition) || a.id.localeCompare(b.id))[0];
     if (cureTarget) mutations.push(...cureMutations(context, cureTarget.id));
   }

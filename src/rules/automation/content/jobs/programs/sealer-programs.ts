@@ -15,7 +15,8 @@ import {
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { chosenTeleportDestination } from '../../../kernels/teleport-choice.js';
-import { entityAnchorPosition } from '../../../primitives/anchor.js';
+import { validateActorCandidate } from '../../../kernels/candidate.js';
+import { anchorFromPosition, entityAnchorPosition } from '../../../primitives/anchor.js';
 
 /**
  * Independently reviewed Sealer ability implementations (ICON p.189–196),
@@ -47,9 +48,9 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
 });
 
 /** ICON p.192 God Hand: player-selected Teleport 1, attack [D]+fray (fray on
- * miss), seal the foe, then bless yourself or an ally in range 2 (deterministic:
- * the nearest eligible ally, self first). Exceed: you and allies in range 2
- * gain 3 vigor. */
+ * miss), seal the foe, then bless yourself or an ally in range 2 (the
+ * recorded `bless-target` selection — yourself when none is recorded).
+ * Exceed: you and allies in range 2 gain 3 vigor. */
 const godHandEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   const target = resolveAttackTarget(context);
@@ -63,11 +64,24 @@ const godHandEffects: RuleResolver = (context) => {
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'sealed'));
-  const sourcePosition = source.position;
-  const beneficiaries = Object.values(context.state.actors)
-    .filter((candidate) => candidate.side === source.side && candidate.position && sourcePosition && distance(candidate.position, sourcePosition) <= 2)
-    .sort((a, b) => (a.id === source.id ? -1 : b.id === source.id ? 1 : a.id.localeCompare(b.id)));
-  if (beneficiaries[0]) mutations.push(resourceMutation(context, beneficiaries[0].id, 'blessing', 'gain', 1));
+  // p.192: "bless yourself or ally in range 2" — a player choice between
+  // yourself and any LIVING ally within p.92 footprint range 2 of where
+  // you stand after the teleport (the landing cell, not the pre-teleport
+  // cell). The recorded selection rides `input.actorIds['bless-target']`;
+  // absent, it defaults to yourself. A recorded non-self ally is validated
+  // through the ONE U3 candidate authority (alive + on-battlefield + ally
+  // relation + range from the landing) and fails closed when invalid.
+  const blessingOrigin = landing ?? source.position;
+  const recorded = resolveCapturedSelectedActors(context, 'bless-target')[0];
+  let blessedId = source.id;
+  if (recorded && recorded.id !== source.id) {
+    const check = validateActorCandidate(recorded.id, { relation: 'ally', range: 2, rangeOrigin: anchorFromPosition(blessingOrigin) }, context);
+    if (!check.legal) {
+      throw new RuleProgramViolation('choice.actor-range', 'God Hand blesses yourself or a living ally in range 2 of your landing.');
+    }
+    blessedId = recorded.id;
+  }
+  mutations.push(resourceMutation(context, blessedId, 'blessing', 'gain', 1));
   return mutations;
 };
 

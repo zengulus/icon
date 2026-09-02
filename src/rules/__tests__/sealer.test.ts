@@ -70,9 +70,32 @@ describe('Sealer ability automation (p.189–196)', () => {
     }, scriptedDice(12, 4));
     expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + fray 4)
     expect(result.state.actors[foe.id].statuses).toContain('sealed');
-    expect(result.state.actors[hero.id].resources.blessing).toBe(1); // blessed (self preferred)
+    expect(result.state.actors[hero.id].resources.blessing).toBe(1); // blessed (self default)
     expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 }); // teleported to player choice
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('God Hand: a recorded ally within 2 of the landing is blessed instead of self; an out-of-range ally FAILS closed', () => {
+    // p.192 "bless yourself or ally in range 2" is the player's choice: the
+    // recorded `bless-target` selection rides the command input and defaults
+    // to yourself when absent. The range is measured from the post-teleport
+    // landing (where the character stands when the blessing resolves).
+    const { state, hero, foe, ally } = sealerEncounter({ second: null, ally: { x: 1, y: 3 } });
+    const result = executeCommand(state, {
+      type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [ally!.id] } }, attackTargetId: foe.id,
+    }, scriptedDice(12, 4));
+    expect(result.state.actors[ally!.id].resources.blessing).toBe(1);
+    expect(result.state.actors[hero.id].resources.blessing).toBe(0);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+
+    // A recorded ally outside footprint range 2 of the landing (or a
+    // defeated/off-board one) is invalid — the authority rejects it.
+    const far = sealerEncounter({ second: null, ally: { x: 6, y: 6 } });
+    expect(() => executeCommand(far.state, {
+      type: 'EXECUTE_RULE', actorId: far.hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [far.ally!.id] } }, attackTargetId: far.foe.id,
+    }, scriptedDice(12, 4))).toThrowError(expect.objectContaining({ code: 'choice.actor-range' }));
   });
 
   it('God Hand automatically applies its Exceed continuation without a caller trigger', () => {

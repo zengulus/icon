@@ -796,6 +796,44 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Demon Claw normal path (after attacking): one living adjacent foe is hit; the multi-foe pick is the player\'s and FAILS closed', () => {
+    // p.129: "Each time, you may deal 2 damage to an adjacent foe." After an
+    // attack this turn the Special (all adjacent) no longer applies. A
+    // single living adjacent foe is an unambiguous hit; several living
+    // adjacent foes require the player's per-step choice — the engine never
+    // picks one by id — so the command fails closed atomically.
+    const single = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 9, y: 9 }, ally: null });
+    single.state.actors[single.hero.id].attackedThisTurn = true;
+    const hit = executeCommand(single.state, { type: 'USE_ABILITY', actorId: single.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
+    const hitDamages = mutationsOf(hit.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
+    expect(hitDamages).toHaveLength(1);
+    expect(hitDamages[0]!.amount).toBe(2);
+    expect(hit.state.actors[single.foe.id].hp).toBe(30); // 32 - 2
+    expect(applyEvents(single.state, hit.events)).toEqual(hit.state);
+
+    const pair = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 }, ally: null });
+    pair.state.actors[pair.hero.id].attackedThisTurn = true;
+    expect(() => executeCommand(pair.state, { type: 'USE_ABILITY', actorId: pair.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.target-unresolved' }));
+  });
+
+  it('Demon Claw special path never targets a defeated adjacent foe (U3 eligibility)', () => {
+    // Defeat leaves an actor on-field (rescuable), so a raw side/distance
+    // scan would include it; the shared U3 candidate authority excludes
+    // defeated actors by default. Only the living adjacent foe takes the
+    // per-step damage.
+    const { state, hero, foe, second } = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 }, ally: null });
+    state.actors[foe.id].defeated = true;
+    state.actors[foe.id].hp = 0;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
+    const clawDamages = mutationsOf(result.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
+    expect(clawDamages).toHaveLength(1);
+    expect(clawDamages[0]!.actorId).toBe(second.id);
+    expect(result.state.actors[second.id].hp).toBe(30); // 32 - 2
+    expect(result.state.actors[foe.id].hp).toBe(0);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Gates of Hell: rush, vigilance, counter, and the once-per-turn vigilance rush', () => {
     const { state, hero, foe } = demonSlayerEncounter({ foe: { x: 6, y: 1 }, second: { x: 8, y: 1 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'demon-slayer:gates-of-hell', targetIds: [] }, scriptedDice());

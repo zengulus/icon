@@ -29,7 +29,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | --- | --- | --- |
 | U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
-| U3 Query / Candidate | PARTIAL | area/persistent-instance/rule-source domains and residual ordering |
+| U3 Query / Candidate | AUTHORITATIVE (tranche 25 decision) | none in scope — the six defeated-divergent VM effect scans now route through the shared query authority (tranche 25); AREA / PERSISTENT-INSTANCE / RULE-SOURCE query domains and ordering beyond the min-distance set + opt-in cell order are explicitly later-underlay (U10/U12/U16/U17) or source-gated; rushTowardFoes' direction fallback remains the flagged player-choice (U4) approximation, and the Demon Claw / God Hand self-or-ally picks are recorded-choice or fail-closed (U4/resolver), never U3-invented |
 | U4 Choice / Decision | PARTIAL | ability/talent choice fold reads and remaining window-carried choice consumers |
 | U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
@@ -1653,6 +1653,64 @@ remaining are heal/vigor caps, the `max-hp` stat, and rescue. U5-core
 gate STILL MET; **U3 remains the next dependency-complete underlay**
 (the plan's T2 order U7 → U5-core → U3); U9 stays the parallel T4
 candidate.
+
+**Tranche 25 — U3 Query/Candidate audit + content-routing repair
+(2026-09-02).** A fresh end-to-end U3 audit verified every substrate
+claim from code (CandidateSet, evaluateActorQuery, U7 rangeOrigin
+anchors, selectActors-as-thin-adapter, validateActorCandidate direct-
+target base eligibility, insideArea inclusion, evaluatePositions /
+validatePositionLegality / nearestCandidates, ENTITY + TERRAIN domains,
+occupancy policies, LoS/LoE operators, set composition, distance-order
+where requested, complete minimum-distance sets with no invented
+tie-break) and classified every production question-path. The substrate
+earned its declared scope with ONE residual family in content
+resolvers — now repaired. (1) F1 — DEFEATED-DIVERGENT VM SCANS: the
+VM view projection keeps defeated actors on-field with positions (defeat
+never clears position/onBattlefield, so rescue can find "an adjacent
+defeated ally"), while the reducer-side lifecycle scans filter
+defeated and the U3 candidate authority excludes defeated actors by
+default — but six VM-side resolver scans independently re-answered
+"which actors qualify?" with a raw side/distance read and NO defeated
+filter, so a defeated adjacent foe could be cured, blessed, shoved,
+counted into a heroic die, or picked as a damage target. All six now
+route through the ONE U3 authority (evaluateActorQuery with a U7
+anchorFromPosition origin — also upgrading the point-distance scans to
+the p.92 footprint metric): demon-slayer demonClaw adjacent-foe set +
+Soul Blade heroic count, chanter Holy cure, bastion Heracule second-
+shove set, knave Provoke adjacent foes, sealer God Hand beneficiaries.
+(2) F2 — DEMON CLAW INVENTED PICK REMOVED: p.129 "Each time, you may
+deal 2 damage to an adjacent foe" is the player's per-step WHICH
+choice; the resolver's id-first slice(0,1) silently resolved it (and
+tests only exercised the special path). With several living adjacent
+foes and no recordable choice the command now FAILS CLOSED
+(`choice.target-unresolved`, the Draken Cross precedent) atomically;
+the special (all-adjacent) path and the single-candidate normal path
+stay executable. (3) F3 — GOD HAND SELF-OR-ALLY: p.192 "bless yourself
+or ally in range 2" now reads the recorded `bless-target` selection
+(rides `input.actorIds`, defaults to yourself), measured from the post-
+teleport LANDING cell through validateActorCandidate (alive +
+on-battlefield + ally + footprint range), failing closed
+(`choice.actor-range`) when a recorded ally is invalid — the old
+self-first deterministic sort is gone. Demon Claw's charge/heroic
+"weaken all adjacent characters" clause also routes through the U3
+query. Adversarial tests (+4, 2193 total): defeated-exclusion per family
+(Provoke: the defeated adjacent foe neither damages back nor is struck;
+Demon Claw special: only the living foe takes the step damage),
+Demon Claw single-foe hit + multi-foe fail-closed, God Hand recorded-
+ally blessing + out-of-range recorded-ally rejection; every fixture
+re-checks `applyEvents(state, events) === result.state`. The remaining
+side-check sites are area-effect enumerations where the reducer makes
+effects on defeated actors inert — mutation-log noise with no state
+divergence, not selection. Sweeps confirm no VM-side selection scan
+remains outside the shared query. **U3 is AUTHORITATIVE within its
+declared scope** (decision): the residuals documented in §U3 —
+AREA/PERSISTENT-INSTANCE/RULE-SOURCE query domains (U10/U12-scoped,
+U16/U17 reads), ordering beyond the min-distance set + opt-in cell
+order (source-gated first/last/nth), and rushTowardFoes' direction
+fallback (U4 player choice) — are later-underlay or non-U3 by the
+plan's own boundaries, not U3-owned gaps. Next dependency-complete
+underlay: **U4 Choice** (DAG row U4 → U3, U2; both authoritative; U4
+is the last open node of the T2 phase order U7 → U5-core → U3 → U4).
 
 ## Whole-consumer U1 audit (2026-09-01)
 

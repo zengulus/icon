@@ -13,6 +13,8 @@ import {
 import {
   resolveAttackTarget, resolveCapturedSelectedActors, resolveSourceActor,
 } from '../../glue/reference-authoring.js';
+import { evaluateActorQuery } from '../../../kernels/evaluate-query.js';
+import { anchorFromPosition } from '../../../primitives/anchor.js';
 
 /**
  * Independently reviewed Bastion ability implementations (ICON p.122–124).
@@ -65,8 +67,13 @@ const heraculeEffects: RuleResolver = (context) => {
   for (let index = 0; index < repetitions; index += 1) {
     mutations.push({ kind: 'condition', sourceId: context.sourceId, sourceActorId: source.id, actorId: target.id, conditionId: 'weakened', operation: 'apply', potency: 'normal' });
     mutations.push(shove(context, target.id, 1, targetDirection));
-    const second = Object.values(context.state.actors)
-      .filter((candidate) => candidate.side !== source.side && candidate.id !== target.id && candidate.position && distance(candidate.position, target.position!) <= 3)
+    // "A different foe in range 3 from your target is shoved 1" — the
+    // eligible set comes from the ONE U3 authority (living, on-battlefield
+    // foes within p.92 footprint range of the target), with the main
+    // target excluded as the "different" requirement. Defeated on-field
+    // foes are never shove targets.
+    const second = evaluateActorQuery({ relation: 'foe', range: 3, rangeOrigin: anchorFromPosition(target.position) }, context)
+      .filter((candidate) => candidate.id !== target.id)
       .sort((first, second) => first.id.localeCompare(second.id))[0];
     if (second?.position) mutations.push(shove(context, second.id, 1, toward(target.position!, second.position!)));
   }

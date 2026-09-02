@@ -611,8 +611,9 @@ eligibility (p.94, p.107); burst areas include only spaces with LoS from
 the burst center (p.95); large foes count as inside an area when any
 footprint space is hit (p.290).
 
-**Current state.** `PARTIAL` — the actor-domain query landed (2026-08-30,
-see §0): base CandidateSet (`kernels/candidate.ts`) + extended
+**Current state.** `AUTHORITATIVE` (decision 2026-09-02, tranche 25). The
+actor-domain query landed (2026-08-30, see §0): base CandidateSet
+(`kernels/candidate.ts`) + extended
 `evaluateActorQuery` (`kernels/evaluate-query.ts`) with real U7
 `rangeOrigin` anchor resolution; `selectActors` migrated onto it as a thin
 adapter (the `input` selector's range legality routes through the same U3
@@ -651,13 +652,38 @@ Size>1 origin; size-1 collapses to the historical point metric). The U5
 `count-query` value and the U6 predicates consume these domains through
 `evaluateValueQuery`.
 
-Residual (honest): query domains for AREAS, PERSISTENT INSTANCES, and
-RULE SOURCES are not part of the T2 contract (persistent-instance reads
-are U10/U12-scoped; rule-source reads belong with the U16/U17 consumers),
-and ordering policies remain the min-distance set + the opt-in
-`distance-from-origin` cell order (first/last/nth land only where a
-SOURCE defines them). `rushTowardFoes`' direction fallback remains the
-flagged player-choice approximation named in §0.
+Residual (honest, all out of declared scope): query domains for AREAS,
+PERSISTENT INSTANCES, and RULE SOURCES are not part of the T2 contract
+(persistent-instance reads are U10/U12-scoped; rule-source reads belong
+with the U16/U17 consumers), and ordering policies remain the
+min-distance set + the opt-in `distance-from-origin` cell order
+(first/last/nth land only where a SOURCE defines them).
+`rushTowardFoes`' direction fallback remains the flagged player-choice
+approximation named in §0.
+
+**Tranche-25 closure (2026-09-02).** A fresh audit verified every claim
+above from code and classified every production question-path; the one
+residual family found was CONTENT bypass, not substrate: six VM-side
+effect scans independently re-answered "which actors qualify?" with raw
+side/distance reads and NO defeated filter, while the shared U3
+eligibility excludes defeated actors by default (defeat leaves actors
+on-field for rescue, so the scans could cure/bless/shove/count/target a
+defeated on-field foe). All six now route through `evaluateActorQuery`
+with a U7 `anchorFromPosition` origin (also upgrading point-distance
+scans to the p.92 footprint metric): demon-slayer demonClaw +
+Soul Blade, chanter Holy, bastion Heracule, knave Provoke, sealer God
+Hand. Two silent pick-resolutions in the same family were also closed:
+Demon Claw's normal path (p.129 "an adjacent foe" — the player's
+per-step WHICH choice) FAILS CLOSED (`choice.target-unresolved`) when
+several living foes qualify instead of taking an id-first slice, and
+God Hand's blessing (p.192 "yourself or ally in range 2") reads the
+recorded `bless-target` selection (default yourself) validated from the
+post-teleport landing through `validateActorCandidate`
+(`choice.actor-range` on invalid). These were U4/resolver-scope defects,
+not U3 gaps; U3 now has a single authority for every in-scope
+candidate/query semantic and the remaining query-like sites are
+demonstrably specialist consumption, later-underlay work, or non-query
+plumbing (see the census tranche-25 ledger entry).
 
 **Locations partially owning/duplicating.** Migrated (2026-08-30):
 `kernels/runtime.ts::selectActors` is a thin adapter over

@@ -646,6 +646,42 @@ assumption here, document the evidence and update this list before proceeding.
   source-unit promotion. Underlay phase remains UNDERLAY COMPLETION.
   See `docs/u8-u1-underlay-census.md`.
 
+- **U3 tranche 25 — audit + content-routing repair (2026-09-02) —
+  DONE.** Fresh U3 audit verified every substrate claim from code
+  (CandidateSet, evaluateActorQuery, U7 rangeOrigin anchors,
+  selectActors-as-thin-adapter, validateActorCandidate, insideArea,
+  evaluatePositions / validatePositionLegality / nearestCandidates,
+  ENTITY/TERRAIN domains, occupancy policies, LoS/LoE, set composition,
+  complete minimum-distance sets) and classified every production
+  question-path. The substrate earned its scope; the ONE residual family
+  was content bypass. (1) Six VM-side effect scans independently
+  re-answered "which actors qualify?" with raw side/distance reads and
+  NO defeated filter (the VM projection keeps defeated actors on-field
+  for rescue; the shared U3 eligibility excludes them), so a defeated
+  adjacent foe could be cured / blessed / shoved / counted / targeted.
+  All six now route through the ONE `evaluateActorQuery` + U7
+  `anchorFromPosition` authority — demon-slayer demonClaw + Soul Blade,
+  chanter Holy, bastion Heracule, knave Provoke, sealer God Hand — also
+  upgrading point-distance scans to the p.92 footprint metric. (2) Demon
+  Claw's p.129 "an adjacent foe" per-step WHICH choice: the id-first
+  slice is GONE; several living adjacent foes with no recordable choice
+  FAIL CLOSED (`choice.target-unresolved`, Draken Cross precedent),
+  special/all + single-candidate paths stay executable. (3) God Hand
+  p.192 "bless yourself or ally in range 2": recorded `bless-target`
+  selection (default yourself), validated from the post-teleport landing
+  through `validateActorCandidate` (`choice.actor-range` on invalid).
+  Adversarial tests +4 (2193): defeated-exclusion per family
+  (Provoke / Demon Claw special), Demon Claw single-hit + multi-foe
+  fail-closed, God Hand recorded-ally bless + out-of-range rejection;
+  all fixtures re-verify replay (`applyEvents(state, events)`). U3 is
+  AUTHORITATIVE within its declared scope; deferred domains
+  (AREA / PERSISTENT-INSTANCE / RULE-SOURCE, source-gated ordering,
+  rushTowardFoes direction) are U10/U12/U16/U17 or U4 by the plan's own
+  boundaries. **U4 Choice is the next dependency-complete underlay**
+  (DAG: U4 → U3, U2). EVIDENCE: 2193 tests; typecheck / architecture /
+  automation / source-fidelity strict / build / diff-check clean; no
+  source-unit promotion. See `docs/u8-u1-underlay-census.md`.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

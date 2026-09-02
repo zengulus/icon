@@ -184,6 +184,23 @@ describe('Knave ability automation (p.139–144)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Provoke: a defeated adjacent foe is excluded — it neither damages you back nor is struck (U3 eligibility)', () => {
+    // Defeat leaves an actor on-field (heroes await rescue), so a raw
+    // side/distance scan would include it; the shared U3 candidate
+    // authority excludes defeated actors by default. Only the living
+    // adjacent foe deals its piercing back and takes the 2-damage strike.
+    const { state, hero, foe, second } = knaveEncounter({ second: { x: 2, y: 2 } });
+    state.actors[foe.id].defeated = true;
+    state.actors[foe.id].hp = 0;
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:provoke', targetIds: [] }, scriptedDice());
+    const damages = mutationsOf(result.events, 'knave:provoke').filter((mutation) => mutation.kind === 'damage');
+    expect(damages.filter((mutation) => mutation.actorId === foe.id)).toHaveLength(0);
+    expect(result.state.actors[hero.id].hp).toBe(39); // 40 - 1 piercing from the living foe
+    expect(result.state.actors[second.id].hp).toBe(30); // 32 - 2
+    expect(result.state.actors[foe.id].hp).toBe(0);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Revenge: attack, then unstoppable and counter until the end of the next turn', () => {
     const { state, hero, foe } = knaveEncounter({ second: null });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:revenge', targetIds: [foe.id] }, scriptedDice(12, 4));
