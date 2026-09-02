@@ -62,24 +62,37 @@ describe('Sealer ability automation (p.189–196)', () => {
     expect(sealerIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
   });
 
-  it('God Hand: player-selected Teleport 1, attacks [D]+fray, seals, and blesses', () => {
+  it('God Hand: player-selected Teleport 1, attacks [D]+fray, seals, and blesses the recorded self', () => {
     const { state, hero, foe } = sealerEncounter({ second: null });
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
-      input: { positions: { 'teleport': [{ x: 1, y: 2 }] } }, attackTargetId: foe.id,
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [hero.id] } }, attackTargetId: foe.id,
     }, scriptedDice(12, 4));
     expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + fray 4)
     expect(result.state.actors[foe.id].statuses).toContain('sealed');
-    expect(result.state.actors[hero.id].resources.blessing).toBe(1); // blessed (self default)
+    expect(result.state.actors[hero.id].resources.blessing).toBe(1); // recorded self
     expect(result.state.actors[hero.id].position).toEqual({ x: 1, y: 2 }); // teleported to player choice
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('God Hand: a recorded ally within 2 of the landing is blessed instead of self; an out-of-range ally FAILS closed', () => {
-    // p.192 "bless yourself or ally in range 2" is the player's choice: the
-    // recorded `bless-target` selection rides the command input and defaults
-    // to yourself when absent. The range is measured from the post-teleport
-    // landing (where the character stands when the blessing resolves).
+  it('God Hand: the bless is a REQUIRED self-or-ally choice — missing or multi reject, a recorded ally within 2 of the landing is blessed, an out-of-range/defeated ally FAILS closed', () => {
+    // p.192 "Seal your foe, then bless yourself or ally in range 2" is a
+    // required either/or: no self-default, no "bless an ally unless you pick
+    // yourself". Missing `bless-target` rejects before any effect; the range
+    // is measured from the post-teleport landing (where the character stands
+    // when the blessing resolves).
+    const missing = sealerEncounter({ second: null });
+    expect(() => executeCommand(missing.state, {
+      type: 'EXECUTE_RULE', actorId: missing.hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }] } }, attackTargetId: missing.foe.id,
+    }, scriptedDice(12, 4))).toThrowError(expect.objectContaining({ code: 'choice.actor-required' }));
+
+    const many = sealerEncounter({ second: null, ally: { x: 1, y: 3 } });
+    expect(() => executeCommand(many.state, {
+      type: 'EXECUTE_RULE', actorId: many.hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [many.hero.id, many.ally!.id] } }, attackTargetId: many.foe.id,
+    }, scriptedDice(12, 4))).toThrowError(expect.objectContaining({ code: 'choice.actor-count' }));
+
     const { state, hero, foe, ally } = sealerEncounter({ second: null, ally: { x: 1, y: 3 } });
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
@@ -96,13 +109,21 @@ describe('Sealer ability automation (p.189–196)', () => {
       type: 'EXECUTE_RULE', actorId: far.hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
       input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [far.ally!.id] } }, attackTargetId: far.foe.id,
     }, scriptedDice(12, 4))).toThrowError(expect.objectContaining({ code: 'choice.actor-range' }));
+
+    const fallen = sealerEncounter({ second: null, ally: { x: 1, y: 3 } });
+    fallen.state.actors[fallen.ally!.id].defeated = true;
+    fallen.state.actors[fallen.ally!.id].hp = 0;
+    expect(() => executeCommand(fallen.state, {
+      type: 'EXECUTE_RULE', actorId: fallen.hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [fallen.ally!.id] } }, attackTargetId: fallen.foe.id,
+    }, scriptedDice(12, 4))).toThrowError(expect.objectContaining({ code: 'choice.actor-range' }));
   });
 
   it('God Hand automatically applies its Exceed continuation without a caller trigger', () => {
     const { state, hero, foe } = sealerEncounter({ second: null });
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
-      input: { positions: { 'teleport': [{ x: 1, y: 2 }] } }, attackTargetId: foe.id,
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [hero.id] } }, attackTargetId: foe.id,
     }, scriptedDice(20, 4));
     expect(result.state.actors[hero.id].vigor).toBe(3);
     const attackMutations = result.events.flatMap((event) => event.type === 'RULE_MUTATIONS_APPLIED' ? event.mutations : [])
@@ -116,7 +137,7 @@ describe('Sealer ability automation (p.189–196)', () => {
     const { state, hero, foe } = sealerEncounter({ second: null });
     const result = executeCommand(state, {
       type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'sealer:god-hand', actionId: 'default', timing: 'use',
-      input: { positions: { 'teleport': [{ x: 1, y: 2 }] } }, attackTargetId: foe.id,
+      input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [hero.id] } }, attackTargetId: foe.id,
     }, scriptedDice(10, 4));
     expect(result.state.actors[hero.id].vigor).toBe(0);
     expect(applyEvents(state, result.events)).toEqual(result.state);

@@ -175,7 +175,7 @@ describe('Blessing of War through USE_ABILITY (p.191)', () => {
       actorId: hero.id,
       abilityId: 'sealer:god-hand',
       targetIds: [fee.id],
-      input: { abilityUseChoices: [{ traitId: 'sealer:trait:blessing-of-war', spend: 3 }], positions: { 'teleport': [{ x: 1, y: 2 }] } },
+      input: { abilityUseChoices: [{ traitId: 'sealer:trait:blessing-of-war', spend: 3 }], positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [hero.id] } },
     }, scriptedDice(12, 4));
     // The user spent 3 blessings, then God Hand blessed the hero (self
     // preferred, +1): 5 - 3 + 1 = 3.
@@ -234,7 +234,7 @@ describe('Blessing of War through USE_ABILITY (p.191)', () => {
       actorId: hero.id,
       abilityId: 'sealer:god-hand',
       targetIds: [fee.id],
-      input: { abilityUseChoices: [{ traitId: 'sealer:trait:blessing-of-war', spend: 1 }], positions: { 'teleport': [{ x: 1, y: 2 }] } },
+      input: { abilityUseChoices: [{ traitId: 'sealer:trait:blessing-of-war', spend: 1 }], positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [hero.id] } },
     }, scriptedDice(12, 4));
     // 5 - 1 (spend) + 1 (God Hand blesses self) = 5.
     expect(result.state.actors[hero.id].resources.blessing).toBe(5);

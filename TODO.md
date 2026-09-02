@@ -682,6 +682,44 @@ assumption here, document the evidence and update this list before proceeding.
   automation / source-fidelity strict / build / diff-check clean; no
   source-unit promotion. See `docs/u8-u1-underlay-census.md`.
 
+- **U4 tranche 26 — Demon Claw + God Hand choice repair (2026-09-02) —
+  DONE.** U4's central test — candidate uniqueness ≠ absence of player
+  choice — exposed two silent defaults left by tranche 25. (1) DEMON
+  CLAW p.129 "Each time, you MAY deal 2 damage to an adjacent foe": the
+  normal path auto-hit a single adjacent foe (collapsing the WHETHER
+  decision) and the multi-foe fail-closed forced a recording instead of
+  honoring decline. Each rush step now reads the per-step recorded
+  selection (`demon-claw-damage-1`/`-2`): absent = DECLINED, recorded =
+  validated against THAT step's eligible set (U3 foe query from the
+  post-movement cell + once-per-use exclusion) failing closed
+  (`choice.actor-ineligible`); Special (all adjacent) stays mandatory
+  with no per-step choice. No vocabulary extension — the established
+  mid-resolution captured-selection pattern with two timing-point keys.
+  (2) GOD HAND p.192 "bless yourself or ally in range 2": the absent-
+  `bless-target` self-default is GONE — the clause is a REQUIRED
+  either/or (`choice.actor-required` missing, `choice.actor-count`
+  multi, `choice.actor-range` invalid ally via U3 from the post-
+  teleport landing); Fists of Heaven and Hell (p.192 mastery combo, NOT
+  yet executable) documented as REQUIRING the identical semantics when
+  it lands. (3) PLUMBING: USE_ABILITY overwrote `input.actorIds` with
+  only `{ target: targetIds }`, dropping every other recorded actor key;
+  now merged (behavior-preserving — the `target` key still overrides any
+  caller-supplied value). The tranche-25 U3 decision is unaffected
+  (candidate generation unchanged; only selection capture changed). U4 stays PARTIAL with EXACT residuals: placement
+  family still silently defaults the source's WHICH/WHERE choice —
+  Heracule "A different foe ... is shoved 1", Holy "Cure a character in
+  range 2 of that foe", Strongarm talent-1 "a free adjacent space",
+  Party Favor "a free space in range 3" (`chosen ?? nearest` fail-open
+  of an existing recorded choice), Grand Seal "a free adjacent space",
+  warden/seer/stormbender/chanter/harvester free-cell placements
+  (Comet is A-class: source-assigned "center space, or as close as
+  possible") — each a per-unit recorded-choice obligation — plus the
+  declared abilityUseChoices/talentChoices fold reads and window-
+  carried choices (U12/U13). EVIDENCE: 2194 tests (+1); typecheck /
+  architecture / automation / source-fidelity strict / build /
+  diff-check clean; no source-unit promotion. See
+  `docs/u8-u1-underlay-census.md`.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

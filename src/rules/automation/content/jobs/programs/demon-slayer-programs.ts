@@ -502,18 +502,38 @@ const demonClaw: RuleResolver = (context) => {
       .filter((candidate) => !damaged.has(candidate.id))
       .sort((a, b) => a.id.localeCompare(b.id));
     // p.129 normal path: "Each time, you may deal 2 damage to an adjacent
-    // foe" — the player chooses WHICH when several living foes are
-    // adjacent. That choice is not yet recordable mid-resolution, so the
-    // engine FAILS CLOSED instead of silently picking one by id; the
-    // Special path ("deals damage to all adjacent foes") and the
-    // single-candidate normal path carry no choice and stay executable.
-    if (!special && adjacentFoes.length > 1) {
-      throw new RuleProgramViolation('choice.target-unresolved', 'Demon Claw deals 2 damage to one adjacent foe of your choice; several living adjacent foes qualify.');
-    }
-    const targets = adjacentFoes;
-    for (const foe of targets) {
-      mutations.push(damageMutation(context, foe.id, 2 + ragingBonus, 'effect'));
-      damaged.add(foe.id);
+    // foe" — "may" is the player's WHETHER decision at EACH rush step, and
+    // "an adjacent foe" is the player's WHICH decision among the step's
+    // eligible foes. A single eligible foe still carries the WHETHER
+    // decision (candidate uniqueness is not absence of player choice). Both
+    // ride the per-step recorded selection
+    // (`input.actorIds['demon-claw-damage-1' | 'demon-claw-damage-2']`):
+    // absent = DECLINED this step (never auto-damage, never a default foe);
+    // a recorded target must be a member of THIS step's eligible set — the
+    // one U3 authority from the post-movement cell plus the once-per-use
+    // exclusion — and fails closed when it is not. The Special path ("it
+    // deals damage to all adjacent foes") is mandatory and takes no
+    // per-step choice.
+    if (special) {
+      for (const foe of adjacentFoes) {
+        mutations.push(damageMutation(context, foe.id, 2 + ragingBonus, 'effect'));
+        damaged.add(foe.id);
+      }
+    } else {
+      const stepKey = `demon-claw-damage-${index + 1}`;
+      const recorded = resolveCapturedSelectedActors(context, stepKey);
+      if (recorded.length > 0) {
+        if (recorded.length > 1) {
+          throw new RuleProgramViolation('choice.actor-count', `Demon Claw deals 2 damage to one adjacent foe per rush (step ${index + 1}); ${recorded.length} were recorded.`);
+        }
+        const [chosen] = recorded;
+        if (!adjacentFoes.some((foe) => foe.id === chosen.id)) {
+          throw new RuleProgramViolation('choice.actor-ineligible', `Demon Claw step ${index + 1}: the recorded foe is not a living adjacent foe you may damage this step.`);
+        }
+        mutations.push(damageMutation(context, chosen.id, 2 + ragingBonus, 'effect'));
+        damaged.add(chosen.id);
+      }
+      // else: the player declined this step ("may") — no damage.
     }
     if (index === 0 && (context.triggers?.has('charge') || context.triggers?.has('heroic'))) {
       // "Weaken all adjacent characters" — the U3 query with no relation

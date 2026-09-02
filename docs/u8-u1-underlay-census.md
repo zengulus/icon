@@ -30,7 +30,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | AUTHORITATIVE (tranche 25 decision) | none in scope — the six defeated-divergent VM effect scans now route through the shared query authority (tranche 25); AREA / PERSISTENT-INSTANCE / RULE-SOURCE query domains and ordering beyond the min-distance set + opt-in cell order are explicitly later-underlay (U10/U12/U16/U17) or source-gated; rushTowardFoes' direction fallback remains the flagged player-choice (U4) approximation, and the Demon Claw / God Hand self-or-ally picks are recorded-choice or fail-closed (U4/resolver), never U3-invented |
-| U4 Choice / Decision | PARTIAL | ability/talent choice fold reads and remaining window-carried choice consumers |
+| U4 Choice / Decision | PARTIAL | (tranche 26) Demon Claw per-step may-damage + God Hand self-or-ally choice repaired; the placement family still silently defaults the source's WHICH/WHERE choice (Heracule "a different foe", Holy "cure a character", Strongarm/Party Favor/Grand Seal/Flash Step/warden/seer/stormbender/chanter/harvester "a free space" picks — each a per-unit recorded-choice obligation), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
 | U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
 | U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
@@ -1711,6 +1711,56 @@ fallback (U4 player choice) — are later-underlay or non-U3 by the
 plan's own boundaries, not U3-owned gaps. Next dependency-complete
 underlay: **U4 Choice** (DAG row U4 → U3, U2; both authoritative; U4
 is the last open node of the T2 phase order U7 → U5-core → U3 → U4).
+
+**Tranche 26 — U4 completion begins: Demon Claw + God Hand choice
+repair (2026-09-02).** The U4 audit's central test — candidate
+uniqueness ≠ absence of player choice — found both tranche-25
+"repairs" still silently defaulted a decision the source grants. (1)
+DEMON CLAW (p.129 "Each time, you MAY deal 2 damage to an adjacent
+foe"): the normal path auto-hit a single adjacent foe, collapsing the
+WHETHER (may) decision; the multi-foe fail-closed forced a recording
+instead of honoring decline. Now each rush step reads the per-step
+recorded selection (`demon-claw-damage-1`/`-2`): absent = DECLINED
+(never auto-hit, never a default foe), a recorded target must be a
+member of THAT step's eligible set — the one U3 foe query from the
+post-movement cell plus the once-per-use exclusion — and fails closed
+(`choice.actor-ineligible`) otherwise; the Special path ("deals damage
+to all adjacent foes") stays mandatory with no per-step choice.
+Temporally distinct per-step decisions needed NO vocabulary extension:
+two captured keys validated at their own timing point, the established
+God Hand / Gwynt / Draken Cross pattern. (2) GOD HAND (p.192 "bless
+yourself or ally in range 2"): the absent-`bless-target` self-default
+was removed — the clause is a REQUIRED either/or; missing now rejects
+(`choice.actor-required`), multi rejects (`choice.actor-count`), a
+recorded ally validates through U3 from the post-teleport landing
+(`choice.actor-range` on invalid), recorded self is honored. Fists of
+Heaven and Hell (p.192 mastery combo, NOT yet executable) repeats the
+same clause and is documented as REQUIRING the identical semantics when
+it lands. (3) PLUMBING GAP: the USE_ABILITY command pipeline
+overwrote `input.actorIds` with only `{ target: targetIds }`, silently
+dropping every other recorded actor key — per-step and bless selections
+could never arrive through the normal action path; now merged
+(behavior-preserving: `target` stays authoritative from targetIds, other
+keys ride). Replay: every recording is validated at its timing point and
+replayed from the captured input; fixtures re-verify `applyEvents`.
+U3 REMAINS AUTHORITATIVE (candidate generation still comes from the
+shared query/validateActorCandidate; only the selection/decline capture
+changed). **U4 stays PARTIAL** with exact residuals: the placement
+family still silently defaults the source's WHICH/WHERE choice —
+Heracule "A different foe ... is shoved 1" (bastion), Holy "Cure a
+character in range 2 of that foe" (chanter), Strongarm talent-1 "a
+free adjacent space" shove destination (knave), Party Favor "a free
+space in range 3" (`chosen ?? nearest` fail-open of an existing
+recorded choice, fool), Grand Seal "Create a shrine in a free adjacent
+space" (sealer summonEntity free-cell pick), warden/seer/stormbender/
+chanter/harvester free-cell placements, plus the declared
+abilityUseChoices/talentChoices fold reads and window-carried choice
+consumers (U12/U13); Comet's weapon placement is A-class (source-
+assigned "center space, or as close as possible", demon-slayer). Each
+D-class site is a per-unit recorded-choice obligation for a follow-up
+U4 placement tranche. Next: the placement/recorded-choice tranche
+remains inside U4; the DAG's next dependency-complete underlay AFTER U4
+completes is unchanged (U6-core is landed; U9 parallel T4).
 
 ## Whole-consumer U1 audit (2026-09-01)
 

@@ -532,14 +532,14 @@ describe('F7 comeback trigger — Intimidate talent 1', () => {
 describe('F7 exceed trigger — God-Hand talent 1', () => {
   it('Exceed: gain evasion until the end of your next turn', () => {
     const { state, hero, foe } = talentEncounter('sealer:god-hand', 1, { heroAt: { x: 1, y: 1 }, foeAt: { x: 2, y: 1 } });
-    const exceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 1, y: 2 }] } } }, scriptedDice(20, 4));
+    const exceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [hero.id] } } }, scriptedDice(20, 4));
     const evasion = exceed.state.actors[hero.id].conditions.find(({ id }) => id === 'evasion');
     expect(evasion).toBeDefined();
     expect(evasion?.sourceId).toBe('sealer:god-hand:talent:1');
     expect(evasion?.duration?.kind).toBe('turn-end');
     expect(applyEvents(state, exceed.events)).toEqual(exceed.state); // replay
 
-    const noExceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 1, y: 2 }] } } }, scriptedDice(8, 4));
+    const noExceed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:god-hand', targetIds: [foe.id], input: { positions: { 'teleport': [{ x: 1, y: 2 }] }, actorIds: { 'bless-target': [hero.id] } } }, scriptedDice(8, 4));
     expect(noExceed.state.actors[hero.id].conditions.some(({ id }) => id === 'evasion')).toBe(false);
   });
 });

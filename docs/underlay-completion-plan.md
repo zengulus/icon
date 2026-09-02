@@ -828,6 +828,27 @@ candidate domain); the opaque `abilityUseChoices`/`talentChoices` folds
 not yet folded onto the same spec; window-carried choices (U12/U13)
 constructing the same `ChoiceSpec`.
 
+**Tranche-26 closure (2026-09-02)** — the per-step / self-or-ally captured
+choice pattern. U4's central test — candidate uniqueness ≠ absence of
+player choice — exposed two silent defaults in tranche-25 content:
+Demon Claw's normal path auto-hit a single adjacent foe (collapsing the
+p.129 "may" WHETHER decision at each rush step), and God Hand defaulted
+`bless-target` to self (collapsing the p.192 mandatory self-or-ally
+either/or). Both now use the established MID-RESOLUTION CAPTURED-SELECTION
+pattern (no vocabulary extension needed): Demon Claw reads per-step keys
+`demon-claw-damage-1`/`-2` — absent = declined, recorded = validated
+against THAT step's eligible set (U3 foe query from the post-movement
+cell + once-per-use exclusion, `choice.actor-ineligible` on mismatch) —
+and God Hand reads `bless-target` as REQUIRED (`choice.actor-required` /
+`choice.actor-count`), a recorded ally validated through U3 from the
+post-teleport landing, with Fists of Heaven and Hell (p.192, not yet
+executable) documented as carrying the identical requirement. The
+USE_ABILITY command pipeline now MERGES caller `input.actorIds` instead
+of overwriting it with `{ target: targetIds }` (behavior-preserving —
+`target` stays authoritative), so recorded actor keys reach resolvers
+through the normal action path. Replay contract: every recording is
+validated at its timing point and replayed from the captured input.
+
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
 `RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold

@@ -48,9 +48,10 @@ const autohitAttack = (context: RuleExecutionContext): RuleMutation => ({
 });
 
 /** ICON p.192 God Hand: player-selected Teleport 1, attack [D]+fray (fray on
- * miss), seal the foe, then bless yourself or an ally in range 2 (the
- * recorded `bless-target` selection — yourself when none is recorded).
- * Exceed: you and allies in range 2 gain 3 vigor. */
+ * miss), seal the foe, then bless yourself or an ally in range 2 (a REQUIRED
+ * choice — the recorded `bless-target` selection, yourself or a living ally;
+ * missing rejects, never a self-default). Exceed: you and allies in range 2
+ * gain 3 vigor. */
 const godHandEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   const target = resolveAttackTarget(context);
@@ -64,22 +65,35 @@ const godHandEffects: RuleResolver = (context) => {
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(conditionMutation(context, target.id, 'sealed'));
-  // p.192: "bless yourself or ally in range 2" — a player choice between
-  // yourself and any LIVING ally within p.92 footprint range 2 of where
-  // you stand after the teleport (the landing cell, not the pre-teleport
-  // cell). The recorded selection rides `input.actorIds['bless-target']`;
-  // absent, it defaults to yourself. A recorded non-self ally is validated
-  // through the ONE U3 candidate authority (alive + on-battlefield + ally
-  // relation + range from the landing) and fails closed when invalid.
+  // p.192: "Seal your foe, then bless yourself or ally in range 2" — a
+  // REQUIRED either/or choice between yourself and any LIVING ally within
+  // p.92 footprint range 2 of where you stand after the teleport (the
+  // landing cell, not the pre-teleport cell). The recorded selection rides
+  // `input.actorIds['bless-target']`; MISSING rejects (`choice.actor-
+  // required`) — the source grants no self-default and no "bless an ally
+  // unless you pick yourself" reading. A recorded non-self ally is
+  // validated through the ONE U3 candidate authority (alive +
+  // on-battlefield + ally relation + range from the landing) and fails
+  // closed when invalid. Fists of Heaven and Hell (p.192 mastery combo,
+  // not yet executable) repeats the same "bless yourself or an ally in
+  // range 2" clause and MUST carry the identical required-choice semantics
+  // when it lands.
   const blessingOrigin = landing ?? source.position;
-  const recorded = resolveCapturedSelectedActors(context, 'bless-target')[0];
+  const recorded = resolveCapturedSelectedActors(context, 'bless-target');
+  if (recorded.length === 0) {
+    throw new RuleProgramViolation('choice.actor-required', 'God Hand blesses yourself or a living ally in range 2 of your landing — record the beneficiary.');
+  }
+  if (recorded.length > 1) {
+    throw new RuleProgramViolation('choice.actor-count', 'God Hand blesses exactly one character: yourself or an ally in range 2 of your landing.');
+  }
+  const [chosen] = recorded;
   let blessedId = source.id;
-  if (recorded && recorded.id !== source.id) {
-    const check = validateActorCandidate(recorded.id, { relation: 'ally', range: 2, rangeOrigin: anchorFromPosition(blessingOrigin) }, context);
+  if (chosen.id !== source.id) {
+    const check = validateActorCandidate(chosen.id, { relation: 'ally', range: 2, rangeOrigin: anchorFromPosition(blessingOrigin) }, context);
     if (!check.legal) {
       throw new RuleProgramViolation('choice.actor-range', 'God Hand blesses yourself or a living ally in range 2 of your landing.');
     }
-    blessedId = recorded.id;
+    blessedId = chosen.id;
   }
   mutations.push(resourceMutation(context, blessedId, 'blessing', 'gain', 1));
   return mutations;

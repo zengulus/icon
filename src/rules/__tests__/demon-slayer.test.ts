@@ -796,25 +796,66 @@ describe('Demon Slayer ability automation (p.128–130)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Demon Claw normal path (after attacking): one living adjacent foe is hit; the multi-foe pick is the player\'s and FAILS closed', () => {
-    // p.129: "Each time, you may deal 2 damage to an adjacent foe." After an
-    // attack this turn the Special (all adjacent) no longer applies. A
-    // single living adjacent foe is an unambiguous hit; several living
-    // adjacent foes require the player's per-step choice — the engine never
-    // picks one by id — so the command fails closed atomically.
-    const single = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 9, y: 9 }, ally: null });
-    single.state.actors[single.hero.id].attackedThisTurn = true;
-    const hit = executeCommand(single.state, { type: 'USE_ABILITY', actorId: single.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
-    const hitDamages = mutationsOf(hit.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
-    expect(hitDamages).toHaveLength(1);
-    expect(hitDamages[0]!.amount).toBe(2);
-    expect(hit.state.actors[single.foe.id].hp).toBe(30); // 32 - 2
-    expect(applyEvents(single.state, hit.events)).toEqual(hit.state);
+  it('Demon Claw normal path (after attacking): each rush step\'s "may deal 2 damage to an adjacent foe" is the player\'s WHETHER + WHICH choice — recorded or declined, never auto-hit, never id-first', () => {
+    // p.129: "Each time, you may deal 2 damage to an adjacent foe." The
+    // per-step selection rides `demon-claw-damage-1`/`demon-claw-damage-2`;
+    // absent = declined that step (even with exactly one eligible foe),
+    // recorded = validated against the step's eligible set (living adjacent
+    // foe, once per use), anything else fails closed. Hero rushes (2,1) then
+    // (3,1); adjacency is the p.92 Chebyshev footprint metric.
+    const declined = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 9, y: 9 }, ally: null });
+    declined.state.actors[declined.hero.id].attackedThisTurn = true;
+    const none = executeCommand(declined.state, { type: 'USE_ABILITY', actorId: declined.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice());
+    const noDamages = mutationsOf(none.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
+    expect(noDamages).toHaveLength(0); // a single eligible foe still requires the "may" decision
+    expect(none.state.actors[declined.foe.id].hp).toBe(32);
+    expect(applyEvents(declined.state, none.events)).toEqual(none.state);
 
+    const step2 = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 9, y: 9 }, ally: null });
+    step2.state.actors[step2.hero.id].attackedThisTurn = true;
+    const hit2 = executeCommand(step2.state, { type: 'USE_ABILITY', actorId: step2.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } }, actorIds: { 'demon-claw-damage-2': [step2.foe.id] } } }, scriptedDice());
+    const twoDamages = mutationsOf(hit2.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
+    expect(twoDamages).toHaveLength(1); // step 1 declined, step 2 hit
+    expect(twoDamages[0]!.amount).toBe(2);
+    expect(hit2.state.actors[step2.foe.id].hp).toBe(30); // 32 - 2
+    expect(applyEvents(step2.state, hit2.events)).toEqual(hit2.state);
+
+    const step1 = demonSlayerEncounter({ foe: { x: 2, y: 2 }, second: { x: 9, y: 9 }, ally: null });
+    step1.state.actors[step1.hero.id].attackedThisTurn = true;
+    const hit1 = executeCommand(step1.state, { type: 'USE_ABILITY', actorId: step1.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } }, actorIds: { 'demon-claw-damage-1': [step1.foe.id] } } }, scriptedDice());
+    const oneDamages = mutationsOf(hit1.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
+    expect(oneDamages).toHaveLength(1);
+    expect(hit1.state.actors[step1.foe.id].hp).toBe(30); // step 1 hit, step 2 declined
+    expect(applyEvents(step1.state, hit1.events)).toEqual(hit1.state);
+  });
+
+  it('Demon Claw normal path: with several eligible adjacent foes only the RECORDED one is hit; an ineligible recording FAILS closed; the once-per-use exclusion rejects a re-record', () => {
+    // Both foes adjacent to the step-2 cell (3,1) — the player's WHICH
+    // choice decides; the unrecorded foe is never touched.
     const pair = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 4, y: 2 }, ally: null });
     pair.state.actors[pair.hero.id].attackedThisTurn = true;
-    expect(() => executeCommand(pair.state, { type: 'USE_ABILITY', actorId: pair.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } } } }, scriptedDice()))
-      .toThrowError(expect.objectContaining({ code: 'choice.target-unresolved' }));
+    const chosen = executeCommand(pair.state, { type: 'USE_ABILITY', actorId: pair.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } }, actorIds: { 'demon-claw-damage-2': [pair.foe.id] } } }, scriptedDice());
+    const chosenDamages = mutationsOf(chosen.events, 'demon-slayer:demon-claw').filter((mutation) => mutation.kind === 'damage');
+    expect(chosenDamages).toHaveLength(1);
+    expect(chosenDamages[0]!.actorId).toBe(pair.foe.id);
+    expect(chosen.state.actors[pair.foe.id].hp).toBe(30);
+    expect(chosen.state.actors[pair.second.id].hp).toBe(32); // untouched
+    expect(applyEvents(pair.state, chosen.events)).toEqual(chosen.state);
+
+    // A recorded foe that is not a living adjacent eligible foe at that step
+    // (off-board here) is a malformed choice — fail closed, never ignored.
+    const invalid = demonSlayerEncounter({ foe: { x: 4, y: 1 }, second: { x: 9, y: 9 }, ally: null });
+    invalid.state.actors[invalid.hero.id].attackedThisTurn = true;
+    expect(() => executeCommand(invalid.state, { type: 'USE_ABILITY', actorId: invalid.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } }, actorIds: { 'demon-claw-damage-2': [invalid.second.id] } } }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
+
+    // "Foes can only be damaged once per use": a foe hit at step 1 is
+    // excluded from the step-2 eligible set, so recording it again is a
+    // malformed choice (2,2 is adjacent to BOTH step cells).
+    const once = demonSlayerEncounter({ foe: { x: 2, y: 2 }, second: { x: 9, y: 9 }, ally: null });
+    once.state.actors[once.hero.id].attackedThisTurn = true;
+    expect(() => executeCommand(once.state, { type: 'USE_ABILITY', actorId: once.hero.id, abilityId: 'demon-slayer:demon-claw', targetIds: [], input: { directions: { rush1: { x: 1, y: 0 } }, actorIds: { 'demon-claw-damage-1': [once.foe.id], 'demon-claw-damage-2': [once.foe.id] } } }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
   });
 
   it('Demon Claw special path never targets a defeated adjacent foe (U3 eligibility)', () => {
