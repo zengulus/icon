@@ -720,6 +720,41 @@ assumption here, document the evidence and update this list before proceeding.
   diff-check clean; no source-unit promotion. See
   `docs/u8-u1-underlay-census.md`.
 
+- **U4 tranche 27 — actor-choice family: Heracule + Holy (2026-09-02) —
+  DONE.** The full placement/adjudication audit classified every
+  remaining executable default; the smallest coherent tranche was the
+  actor-WHICH family. (1) HERACULE p.122 "A different foe in range 3
+  from your target is shoved 1": sorted-id first is GONE — the WHICH
+  foe is recorded per repetition (`her-shove-1`/`-2`) and validated as a
+  member of the U3 eligible set (living on-battlefield foe in p.92
+  footprint range 3 of the target, main target excluded); absent with
+  eligible → `choice.actor-required`, absent with none → vacuous
+  proceed, non-member → `choice.actor-ineligible`. (2) HOLY p.177 "Cure
+  a character in range 2 of that foe": nearest-first is GONE — the WHICH
+  character is recorded (`holy-cure`) and validated against the U3
+  eligible set (living ally in range 2 of the foe's cell); same
+  required/vacuous/ineligible semantics. GLOBAL PLACEMENT ADJUDICATION:
+  p.95 "Unless specified, summons can only be placed in free space in
+  line of sight and range" is a LEGALITY constraint, not a chooser; the
+  Harvester "any free space in range 2" summon convention + the board-
+  game idiom assign placement to the ACTING PLAYER — every "a/any free
+  space" placement is a B-class recorded-position obligation (Comet's
+  "center space, or as close as possible" is A-class; Holy Charge "all
+  other characters of your choice" is underspecified, reported not
+  fixed). Adversarial tests +2 (2196): Heracule missing-with-eligible /
+  main-target recording / out-of-range recording / no-foe-vacuous;
+  Holy missing-with-eligible / out-of-range ally / no-character-
+  vacuous; all fixtures re-verify `applyEvents`. The tranche-25 U3
+  decision is unaffected (candidate generation unchanged; only
+  selection capture changed). U4 stays PARTIAL with the exact residual
+  list in the census matrix row (placement family incl. Party Favor
+  `chosen ?? nearest` fail-open, Dervish, Chaos Tarot, Dark Sliver,
+  Strongarm; actor multi-selects; Demon Claw Talent I/II documented-
+  unresolved; the folds + U12/U13 windows). EVIDENCE: 2196 tests (+2);
+  typecheck / architecture / automation / source-fidelity strict /
+  build / diff-check clean; no source-unit promotion. See
+  `docs/u8-u1-underlay-census.md`.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

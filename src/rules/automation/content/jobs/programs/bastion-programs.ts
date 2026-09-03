@@ -71,11 +71,30 @@ const heraculeEffects: RuleResolver = (context) => {
     // eligible set comes from the ONE U3 authority (living, on-battlefield
     // foes within p.92 footprint range of the target), with the main
     // target excluded as the "different" requirement. Defeated on-field
-    // foes are never shove targets.
+    // foes are never shove targets. The WHICH foe is the player's choice
+    // (a mandatory effect naming ONE foe): recorded per repetition under
+    // `her-shove-1`/`her-shove-2` and validated as a member of the eligible
+    // set. Absent with eligible candidates → fail closed
+    // (`choice.actor-required`); absent with NO candidates → the effect is
+    // vacuous and the command proceeds; a recorded non-member → fail closed
+    // (`choice.actor-ineligible`).
     const second = evaluateActorQuery({ relation: 'foe', range: 3, rangeOrigin: anchorFromPosition(target.position) }, context)
       .filter((candidate) => candidate.id !== target.id)
-      .sort((first, second) => first.id.localeCompare(second.id))[0];
-    if (second?.position) mutations.push(shove(context, second.id, 1, toward(target.position!, second.position!)));
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const recorded = resolveCapturedSelectedActors(context, `her-shove-${index + 1}`);
+    if (recorded.length > 0) {
+      if (recorded.length > 1) {
+        throw new RuleProgramViolation('choice.actor-count', `Heracule shoves ONE different foe in range 3 of your target (repetition ${index + 1}); ${recorded.length} were recorded.`);
+      }
+      const [chosen] = recorded;
+      if (!second.some((candidate) => candidate.id === chosen.id)) {
+        throw new RuleProgramViolation('choice.actor-ineligible', `Heracule repetition ${index + 1}: the recorded foe is not a different living foe in range 3 of your target.`);
+      }
+      const chosenFoe = second.find((candidate) => candidate.id === chosen.id)!;
+      if (chosenFoe.position) mutations.push(shove(context, chosenFoe.id, 1, toward(target.position!, chosenFoe.position)));
+    } else if (second.length > 0) {
+      throw new RuleProgramViolation('choice.actor-required', `Heracule shoves a different foe in range 3 of your target — record the foe for repetition ${index + 1}.`);
+    }
   }
   return mutations;
 };

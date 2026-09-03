@@ -849,6 +849,24 @@ of overwriting it with `{ target: targetIds }` (behavior-preserving —
 through the normal action path. Replay contract: every recording is
 validated at its timing point and replayed from the captured input.
 
+**Tranche-27 closure (2026-09-02)** — the actor-WHICH family. The
+mandatory choose-one effects in executable units no longer silently pick:
+Heracule's second-foe shove (p.122 "A different foe in range 3 from your
+target is shoved 1") and Holy's cure (p.177 "Cure a character in range 2
+of that foe") now read required recorded actor selections
+(`her-shove-N` / `holy-cure`) validated as members of the U3 eligible
+set — absent-with-eligible rejects (`choice.actor-required`), absent-
+with-no-candidates is the vacuous source effect and proceeds, a
+non-member rejects (`choice.actor-ineligible`). The global placement
+adjudication: p.95 "Unless specified, summons can only be placed in free
+space in line of sight and range" is a LEGALITY rule (not a chooser),
+and the Harvester "any free space" summon convention + the game's
+board-game idiom assign placement to the ACTING PLAYER — so every
+"a/any free space" placement site is a B-class recorded-position
+obligation (residual list in the census row), Comet's "center space, or
+as close as possible" is A-class, and Holy Charge "all other characters
+of your choice" is reported underspecified rather than fixed.
+
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
 `RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold

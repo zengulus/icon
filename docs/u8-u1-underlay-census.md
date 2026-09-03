@@ -30,7 +30,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | AUTHORITATIVE (tranche 25 decision) | none in scope — the six defeated-divergent VM effect scans now route through the shared query authority (tranche 25); AREA / PERSISTENT-INSTANCE / RULE-SOURCE query domains and ordering beyond the min-distance set + opt-in cell order are explicitly later-underlay (U10/U12/U16/U17) or source-gated; rushTowardFoes' direction fallback remains the flagged player-choice (U4) approximation, and the Demon Claw / God Hand self-or-ally picks are recorded-choice or fail-closed (U4/resolver), never U3-invented |
-| U4 Choice / Decision | PARTIAL | (tranche 26) Demon Claw per-step may-damage + God Hand self-or-ally choice repaired; the placement family still silently defaults the source's WHICH/WHERE choice (Heracule "a different foe", Holy "cure a character", Strongarm/Party Favor/Grand Seal/Flash Step/warden/seer/stormbender/chanter/harvester "a free space" picks — each a per-unit recorded-choice obligation), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
+| U4 Choice / Decision | PARTIAL | (tranches 26-27) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, and Holy cure all repaired as required recorded choices; remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal, Grand Seal shrine, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency", Chaos Tarot effect-3 terrain — per the p.95 "free space" + Harvester "any free space" placement conventions, each a per-unit recorded-position obligation), the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to two"), Demon Claw Talent I/II (documented-unresolved), Holy Charge "of your choice" (underspecified), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
 | U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
 | U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
@@ -1761,6 +1761,46 @@ D-class site is a per-unit recorded-choice obligation for a follow-up
 U4 placement tranche. Next: the placement/recorded-choice tranche
 remains inside U4; the DAG's next dependency-complete underlay AFTER U4
 completes is unchanged (U6-core is landed; U9 parallel T4).
+
+**Tranche 27 — U4 actor-choice family: Heracule + Holy (2026-09-02).**
+The full placement/adjudication audit (below) classified every
+remaining executable default; the smallest coherent tranche was the
+ACTOR-WHICH family, both mandatory choose-one effects in executable
+units. (1) HERACULE (p.122 "A different foe in range 3 from your target
+is shoved 1"): the sorted-id first pick is gone — the WHICH foe is
+recorded per repetition under `her-shove-1`/`her-shove-2` and validated
+as a member of the U3 eligible set (living on-battlefield foe in p.92
+footprint range 3 of the target, main target excluded); absent with
+eligible candidates → `choice.actor-required`, absent with none → the
+effect is vacuous and the command proceeds, a recorded non-member →
+`choice.actor-ineligible`. (2) HOLY (p.177 "Cure a character in range 2
+of that foe"): the nearest-first pick is gone — the WHICH character is
+recorded under `holy-cure` and validated against the U3 eligible set
+(living ally in footprint range 2 of the foe's cell, the engine's
+pre-existing ally restriction kept); same required/vacuous/ineligible
+semantics. GLOBAL PLACEMENT ADJUDICATION (the audit's §5-6): p.95
+"Unless specified, summons can only be placed in free space in line of
+sight and range" is a LEGALITY constraint, not a chooser; the Harvester
+summon rule ("it can be summoned in any free space in range 2 unless a
+different range is listed") plus the game's board-game convention
+establish that the ACTING PLAYER chooses among legal spaces — so every
+"a free space"/"any free space"/"choosing a free space" placement is a
+B-class recorded-position obligation (the exact residual list below).
+Adversarial tests +2 (2196): Heracule missing-with-eligible → required,
+main-target recording → ineligible, out-of-range recording → ineligible,
+no-foe → vacuous; Holy missing-with-eligible → required, out-of-range
+ally → ineligible, no-character → vacuous; every fixture re-verifies
+`applyEvents`. U3 REMAINS AUTHORITATIVE (candidate generation unchanged;
+only selection capture changed). U4 stays PARTIAL with the exact
+residual list recorded in the matrix row: the placement family
+(Party Favor `chosen ?? nearest` fail-open, Mist Strider base `??
+sourcePosition` fail-open + charge cloud, Underway, Grand Seal, Geyser,
+Waterspout, Dervish ally + placement, Dark Sliver soul-space
+("choosing") + slay plant, Strongarm talent-1, Chaos Tarot effect 3),
+the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to
+two"), Demon Claw Talent I/II (documented-unresolved), Holy Charge "of
+your choice" (underspecified, reported not fixed), and the declared
+folds + U12/U13 window choices.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

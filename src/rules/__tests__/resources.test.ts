@@ -71,14 +71,14 @@ describe('shared resources (p.99–105, p.204)', () => {
 
   it('Combo: using the base version of a combo ability grants one token', () => {
     const { state, hero, foe } = resourceEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id], input: { actorIds: { 'holy-cure': [hero.id] } } }, scriptedDice());
     expect(result.state.actors[hero.id].resources.combo).toBe(1);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
   it('Combo: the cap holds at one token across repeated base uses', () => {
     const { state, hero, foe, ally } = resourceEncounter({ second: null, ally: { x: 3, y: 1 } });
-    const first = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id] }, scriptedDice()).state;
+    const first = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id], input: { actorIds: { 'holy-cure': [hero.id] } } }, scriptedDice()).state;
     expect(first.actors[hero.id].resources.combo).toBe(1);
     const second = executeCommand(first, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:felicity', targetIds: [ally!.id] }, scriptedDice()).state;
     expect(second.actors[hero.id].resources.combo).toBe(1); // already holds a token; cannot hold two
@@ -92,7 +92,7 @@ describe('shared resources (p.99–105, p.204)', () => {
 
   it('Combo: the combo version spends the token and never re-grants on that use', () => {
     const { state, hero, foe, ally } = resourceEncounter({ foe: { x: 3, y: 1 }, second: null, ally: { x: 4, y: 1 } });
-    const based = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id] }, scriptedDice()).state;
+    const based = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id], input: { actorIds: { 'holy-cure': [hero.id] } } }, scriptedDice()).state;
     expect(based.actors[hero.id].resources.combo).toBe(1);
     // FLEET is a non-attack combo action, so it may follow the base attack this turn.
     const comboUse = executeCommand(based, {
@@ -110,7 +110,7 @@ describe('shared resources (p.99–105, p.204)', () => {
 
   it('Combo: tokens are discarded at the end of combat', () => {
     const { state, hero, foe } = resourceEncounter({ second: null });
-    const gained = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id] }, scriptedDice()).state;
+    const gained = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id], input: { actorIds: { 'holy-cure': [hero.id] } } }, scriptedDice()).state;
     expect(gained.actors[hero.id].resources.combo).toBe(1);
     const ended = executeCommand(gained, { type: 'END_ENCOUNTER' }).state;
     expect(ended.actors[hero.id].resources.combo).toBe(0);

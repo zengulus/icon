@@ -77,12 +77,28 @@ const holyEffects: RuleResolver = (context) => {
     // "Cure a character in range 2 of that foe" — the eligible set comes
     // from the ONE U3 authority (living, on-battlefield, p.92 footprint
     // range of the foe's cell), then the resolver keeps the source's own
-    // side (cure never targets a defeated on-field character). The
-    // nearest-first selection is the resolver's documented ordering.
-    const cureTarget = evaluateActorQuery({ range: 2, rangeOrigin: anchorFromPosition(targetPosition) }, context)
-      .filter((character) => character.side === source.side)
-      .sort((a, b) => distance(a.position!, targetPosition) - distance(b.position!, targetPosition) || a.id.localeCompare(b.id))[0];
-    if (cureTarget) mutations.push(...cureMutations(context, cureTarget.id));
+    // side (cure never targets a defeated on-field character). The WHICH
+    // character is the player's choice (a mandatory effect naming ONE
+    // character): recorded under `holy-cure` and validated as a member of
+    // the eligible set. Absent with eligible candidates → fail closed
+    // (`choice.actor-required`); absent with NO candidates → the effect is
+    // vacuous and the command proceeds; a recorded non-member → fail closed
+    // (`choice.actor-ineligible`).
+    const cureEligible = evaluateActorQuery({ range: 2, rangeOrigin: anchorFromPosition(targetPosition) }, context)
+      .filter((character) => character.side === source.side);
+    const recordedCure = resolveCapturedSelectedActors(context, 'holy-cure');
+    if (recordedCure.length > 0) {
+      if (recordedCure.length > 1) {
+        throw new RuleProgramViolation('choice.actor-count', `Holy cures ONE character in range 2 of the foe; ${recordedCure.length} were recorded.`);
+      }
+      const [chosen] = recordedCure;
+      if (!cureEligible.some((character) => character.id === chosen.id)) {
+        throw new RuleProgramViolation('choice.actor-ineligible', 'Holy: the recorded character is not a living ally in range 2 of the foe.');
+      }
+      mutations.push(...cureMutations(context, chosen.id));
+    } else if (cureEligible.length > 0) {
+      throw new RuleProgramViolation('choice.actor-required', 'Holy cures a character in range 2 of the foe — record the character.');
+    }
   }
   if (context.triggers?.has('charge')) {
     const targetPosition = target.position;

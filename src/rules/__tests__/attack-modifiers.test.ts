@@ -468,10 +468,11 @@ describe('Bull\'s Strength (p.149)', () => {
   }
 
   it('a colliding shove deals 2 damage to the shoved character and records the per-target any-turn guard on the owner', () => {
-    const { state, hero, foeA } = bullStrengthEncounter();
+    const { state, hero, foeA, foeB } = bullStrengthEncounter();
     const hpBefore = state.actors[foeA.id].hp;
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foeA.id],
+      input: { actorIds: { 'her-shove-1': [foeB.id] } },
     }, scriptedDice());
     const bullDamage = bullDamageOf(result);
     expect(bullDamage).toHaveLength(1);
@@ -522,9 +523,10 @@ describe('Bull\'s Strength (p.149)', () => {
   });
 
   it('the battlefield any-turn window reopens at the next actor\'s turn start — no owner-turn dependency', () => {
-    const { state, hero, foeA } = bullStrengthEncounter();
+    const { state, hero, foeA, foeB } = bullStrengthEncounter();
     const collided = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foeA.id],
+      input: { actorIds: { 'her-shove-1': [foeB.id] } },
     }, scriptedDice()).state;
     const key = bullStrengthCollideKey(foeA.id);
     expect(useLedgerAvailable(collided.actors[hero.id], key)).toBe(false);

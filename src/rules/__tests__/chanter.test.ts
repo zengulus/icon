@@ -70,7 +70,7 @@ describe('Chanter ability automation (p.174–181)', () => {
 
   it('Holy: pacifies the foe and cures a character in range 2 of them', () => {
     const { state, hero, foe } = chanterEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id], input: { actorIds: { 'holy-cure': [hero.id] } } }, scriptedDice());
     expect(mutationsOf(result.events, 'chanter:holy')).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'condition', actorId: foe.id, conditionId: 'pacified' },
@@ -79,6 +79,29 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(result.state.actors[foe.id].statuses).toContain('pacified');
     expect(result.state.actors[hero.id].vigor).toBe(4); // cured (not bloodied)
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Holy: the cure recipient is the player\'s WHICH choice — missing with eligible characters rejects, an ineligible recording rejects, no character in range proceeds vacuous', () => {
+    // p.177 "Cure a character in range 2 of that foe" is a mandatory effect
+    // naming ONE character: the player records `holy-cure` and it must be a
+    // member of the U3 eligible set (living ally in footprint range 2 of the
+    // foe's cell).
+    const missing = chanterEncounter({ second: null }); // the hero at range 1 is eligible
+    expect(() => executeCommand(missing.state, { type: 'USE_ABILITY', actorId: missing.hero.id, abilityId: 'chanter:holy', targetIds: [missing.foe.id] }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-required' }));
+
+    const foe = chanterEncounter({ second: null, ally: { x: 6, y: 1 } }); // ally outside range 2 of the foe's cell
+    expect(() => executeCommand(foe.state, { type: 'USE_ABILITY', actorId: foe.hero.id, abilityId: 'chanter:holy', targetIds: [foe.foe.id], input: { actorIds: { 'holy-cure': [foe.ally!.id] } } }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
+
+    // No character in range 2 of the foe: the cure is vacuous and the command
+    // proceeds without a cure mutation.
+    const none = chanterEncounter({ second: null, foe: { x: 6, y: 1 } }); // hero at distance 5 from the foe's cell
+    const result = executeCommand(none.state, { type: 'USE_ABILITY', actorId: none.hero.id, abilityId: 'chanter:holy', targetIds: [none.foe.id] }, scriptedDice());
+    const cures = mutationsOf(result.events, 'chanter:holy').filter((mutation) => mutation.kind === 'cure');
+    expect(cures).toHaveLength(0);
+    expect(result.state.actors[none.foe.id].statuses).toContain('pacified');
+    expect(applyEvents(none.state, result.events)).toEqual(result.state);
   });
 
   it('Holy: a Charge grants 3 vigor to other characters in range 2 of the foe', () => {
@@ -93,7 +116,7 @@ describe('Chanter ability automation (p.174–181)', () => {
       sourceId: 'chanter:holy',
       actionId: 'default',
       timing: 'use',
-      input: {},
+      input: { actorIds: { 'holy-cure': [hero.id] } },
       attackTargetId: foe.id,
     }, scriptedDice());
     expect(result.state.actors[ally!.id].vigor).toBe(3);

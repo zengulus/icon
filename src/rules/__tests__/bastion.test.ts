@@ -71,7 +71,7 @@ describe('Bastion ability automation (p.122–124)', () => {
 
   it('Heracule: true-strike attack, weakened, and a second-foe shove', () => {
     const { state, hero, foe, second } = bastionEncounter({ second: { x: 6, y: 1 }, ally: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id] }, scriptedDice(12, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id], input: { actorIds: { 'her-shove-1': [second.id] } } }, scriptedDice(12, 4));
     expect(mutationsOf(result.events, 'bastion:heracule')).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'condition', actorId: foe.id, conditionId: 'weakened' },
@@ -91,7 +91,7 @@ describe('Bastion ability automation (p.122–124)', () => {
 
   it('Heracule: a miss still resolves its effects with only fray damage', () => {
     const { state, hero, foe, second } = bastionEncounter();
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id] }, scriptedDice(5));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id], input: { actorIds: { 'her-shove-1': [second.id] } } }, scriptedDice(5));
     expect(mutationsOf(result.events, 'bastion:heracule')).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'condition', actorId: foe.id, conditionId: 'weakened' },
@@ -103,9 +103,35 @@ describe('Bastion ability automation (p.122–124)', () => {
     expect(result.state.actors[foe.id].hp).toBe(28);
   });
 
+  it('Heracule: the second-foe shove is the player\'s WHICH choice — missing with eligible foes rejects, the main target / an out-of-range foe rejects, no foe in range proceeds vacuous', () => {
+    // p.122 "A different foe in range 3 from your target is shoved 1" is a
+    // mandatory effect naming ONE foe: the player records `her-shove-1` and it
+    // must be a member of the U3 eligible set (living foe in footprint range 3
+    // of the target, main target excluded).
+    const missing = bastionEncounter({ second: { x: 5, y: 1 }, ally: null }); // second at range 2 of the foe → eligible
+    expect(() => executeCommand(missing.state, { type: 'USE_ABILITY', actorId: missing.hero.id, abilityId: 'bastion:heracule', targetIds: [missing.foe.id] }, scriptedDice(12, 4)))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-required' }));
+
+    const mainTarget = bastionEncounter({ second: { x: 5, y: 1 }, ally: null });
+    expect(() => executeCommand(mainTarget.state, { type: 'USE_ABILITY', actorId: mainTarget.hero.id, abilityId: 'bastion:heracule', targetIds: [mainTarget.foe.id], input: { actorIds: { 'her-shove-1': [mainTarget.foe.id] } } }, scriptedDice(12, 4)))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
+
+    const far = bastionEncounter({ second: { x: 9, y: 9 }, ally: null });
+    expect(() => executeCommand(far.state, { type: 'USE_ABILITY', actorId: far.hero.id, abilityId: 'bastion:heracule', targetIds: [far.foe.id], input: { actorIds: { 'her-shove-1': [far.second.id] } } }, scriptedDice(12, 4)))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
+
+    // No foe in range 3 of the target: the effect is vacuous and the command
+    // proceeds without a second shove.
+    const none = bastionEncounter({ second: { x: 9, y: 9 }, ally: null });
+    const result = executeCommand(none.state, { type: 'USE_ABILITY', actorId: none.hero.id, abilityId: 'bastion:heracule', targetIds: [none.foe.id] }, scriptedDice(12, 4));
+    const shoves = mutationsOf(result.events, 'bastion:heracule').filter((mutation) => mutation.kind === 'move' && mutation.movement === 'shove');
+    expect(shoves).toHaveLength(1); // only the main target's shove
+    expect(applyEvents(none.state, result.events)).toEqual(result.state);
+  });
+
   it('Heracule: a critical adds a damage die', () => {
     const { state, hero, foe, second } = bastionEncounter();
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id] }, scriptedDice(20, 4, 6));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'bastion:heracule', targetIds: [foe.id], input: { actorIds: { 'her-shove-1': [second.id] } } }, scriptedDice(20, 4, 6));
     expect(mutationsOf(result.events, 'bastion:heracule')).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'condition', actorId: foe.id, conditionId: 'weakened' },
