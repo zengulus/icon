@@ -84,8 +84,9 @@ describe('Chanter ability automation (p.174–181)', () => {
   it('Holy: the cure recipient is the player\'s WHICH choice — missing with eligible characters rejects and an ineligible recording rejects; the attacked foe is always eligible so a missing choice never passes vacuous', () => {
     // p.177 "Cure a character in range 2 of that foe" is a mandatory effect
     // naming ONE character: the player records `holy-cure` and it must be a
-    // member of the U3 eligible set over the FORMAL p.92 "Characters" domain
-    // ("All of the above": Self, Ally, Foe, Summon — no side filter) in
+    // member of the U3 eligible set over the ACTOR slice of the p.92
+    // "Characters" umbrella (self/ally/foe — no side filter; the Summon
+    // member is an engine-wide unreachable, see the resolver comment) in
     // footprint range 2 of the foe's cell.
     const missing = chanterEncounter({ second: null }); // the hero at range 1 is eligible
     expect(() => executeCommand(missing.state, { type: 'USE_ABILITY', actorId: missing.hero.id, abilityId: 'chanter:holy', targetIds: [missing.foe.id] }, scriptedDice()))
@@ -156,9 +157,9 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(none.state.actors[fixture.ally!.id].vigor).toBe(0);
     expect(applyEvents(fixture.state, none.events)).toEqual(none.state);
 
-    // The recorded subset spans the full CHARACTER domain: the ally at range
-    // 2 AND the second (a foe at range 1 of the attacked foe) both gain 3
-    // vigor.
+    // The recorded subset spans the CHARACTER-domain actor slice: the ally
+    // at range 2 AND the second (a foe at range 1 of the attacked foe) both
+    // gain 3 vigor.
     const both = run({ 'holy-charge': [fixture.ally!.id, fixture.second!.id] });
     expect(both.state.actors[fixture.ally!.id].vigor).toBe(3);
     expect(both.state.actors[fixture.second!.id].vigor).toBe(3);

@@ -864,6 +864,37 @@ assumption here, document the evidence and update this list before proceeding.
   selects + Demon Claw Talent I/II as the exact residuals. See
   `docs/u8-u1-underlay-census.md`.
 
+- **U4 tranche 31 — claim-surface correction for tranche 30
+  (2026-09-02) — DONE.** Adversarial re-review confirmed the foe-cure
+  semantics (adding p.95: "abilities that specify summons or characters
+  can target or count them normally" reconciles p.92's "can target all
+  characters"; p.107 intangible blocks only damage/statuses from foes)
+  but corrected the commit's claims: (1) "full p.92 CHARACTER domain (…
+  Summon)" overstated the substrate — `evaluateActorQuery` spans
+  `state.actors` only; every executable summon is an entity
+  (`summonEntity`; no production content uses the U3 entity→actor
+  summon bridge), so the Summon member of the umbrella is an engine-
+  wide unreachable even though p.92+p.95 make summons legal recipients
+  of character-specifying abilities; fail-closed holds (recording an
+  entity id rejects `reference.missing-actor`), so no behavior changes;
+  (2) self-inclusion for "cure a character" rests on the p.92 Self
+  bullet's "unless specified" — structurally parallel to the Summon
+  bullet that narrows the umbrella, and the book always spells self
+  (Recover "Cure yourself"; Chastise "Choose either yourself or an
+  ally"; God Hand "bless yourself or ally"; Gran Redempta "Cure
+  yourself and every ally") — recorded as an OPEN derived-
+  interpretation, not flipped (the Characters-keyword-as-specification
+  reading keeps the encoded-inclusion tests defensible); (3) Holy
+  Charge's "other" has a live second referent — the just-cured
+  recipient is the immediate grammatical antecedent of "all other
+  characters", alongside the Sprigg/Slow Turn acting-character
+  convention the code follows; recorded, not resolved. Changes:
+  comment + census row + ledger + plan closure only — production
+  behavior, tests, and counts untouched (2,198). The claim wording now
+  names the ACTOR slice with the entity-summon gap and both open
+  questions tracked for the next character-domain promotion. See
+  `docs/u8-u1-underlay-census.md`.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

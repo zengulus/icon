@@ -76,9 +76,15 @@ const holyEffects: RuleResolver = (context) => {
     const targetPosition = target.position;
     // p.177 "Cure a character in range 2 of that foe" — the eligible set is
     // the ONE U3 authority (living, on-battlefield, p.92 footprint range of
-    // the foe's cell) over the FORMAL p.92 "Characters" domain ("All of the
-    // above": Self, Ally, Foe, Summon) with NO side filter. The formal
-    // keyword is the semantic authority: Diaga (p.172 "Cure a character in
+    // the foe's cell) over the p.92 "Characters" umbrella — the ACTOR slice
+    // (evaluateActorQuery spans state.actors: self/ally/foe) with NO side
+    // filter. The Summon member is an engine-wide unreachable: ICON summons
+    // are characters (p.146) that p.95 makes targetable by character-
+    // specifying abilities, but no executable summon IS an actor — content
+    // creates entity-only summons and nothing uses the U3 entity→actor
+    // summon bridge (census). Self-inclusion rests on the p.92 Self bullet's
+    // "unless specified" (open derived-interpretation; the tests encode
+    // inclusion). The formal keyword is the semantic authority: Diaga (p.172 "Cure a character in
     // range 4"), Holy, and Esper I (p.249 "Cure a character in range 2 of
     // your attack target") all invoke it unqualified, and no passage
     // anywhere states a friendly-only restriction on cures — the Cure rules
@@ -124,17 +130,20 @@ const holyEffects: RuleResolver = (context) => {
     if (context.triggers?.has('charge')) {
       // p.177 Charge: "Grant 3 vigor to all other characters of your choice
       // in range 2 of your foe." — a player SUBSET decision over the same
-      // FORMAL character domain (its own words, and it is not a Cure, so no
-      // Cure rule constrains it at all), excluding the ACTING character:
-      // "other" follows the book's convention (Sprigg Mischief "two other
-      // characters in range 2 of the Sprigg" = other than the acting
-      // Sprigg; Slow Turn "Go after all other characters"; when an extra
-      // exclusion is meant the book names it, Battle Demon "all other
-      // characters other than natals"). Recorded under `holy-charge` as the
-      // player's chosen subset (0..N): absent or empty = the player chose
-      // nobody, a recorded non-member (the acting character, an out-of-range
-      // or defeated character) fails closed (`choice.actor-ineligible`),
-      // duplicates collapse (the Set). The engine never auto-grants.
+      // ACTOR slice of the p.92 CHARACTER umbrella (its own words; it is a
+      // vigor grant, not a Cure, so no Cure rule constrains it), excluding
+      // the ACTING character: "other" follows the book's convention
+      // (Sprigg Mischief "two other characters in range 2 of the Sprigg" =
+      // other than the acting Sprigg; Slow Turn "Go after all other
+      // characters"; God Hand p.192 writes "You and allies..." when the
+      // self is included). The just-cured-recipient reading of "other"
+      // (the cure sentence immediately precedes) remains grammatically
+      // possible — recorded as an open question, not resolved by a flip.
+      // Recorded under `holy-charge` as the player's chosen subset (0..N):
+      // absent or empty = the player chose nobody, a recorded non-member
+      // (the acting character, an out-of-range or defeated character) fails
+      // closed (`choice.actor-ineligible`), duplicates collapse (the Set).
+      // The engine never auto-grants.
       const chargeEligible = evaluateActorQuery({ range: 2, rangeOrigin: anchorFromPosition(targetPosition) }, context)
         .filter((character) => character.id !== source.id);
       const recordedCharge = resolveCapturedSelectedActors(context, 'holy-charge');

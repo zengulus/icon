@@ -930,6 +930,31 @@ passes vacuous (the attacked foe always qualifies), and Holy Charge's
 subset spans the full domain. The Diaga/Bless 'any'-relation gate is
 source-correct; the tranche-29 residual is retracted.
 
+**Tranche-31 closure (2026-09-02)** — claim-surface correction, no
+behavior change. The adversarial re-review of tranche 30 confirmed the
+foe-cure semantics with additional source support (p.95's summon gloss
+"abilities that specify summons or characters can target or count them
+normally" reconciles p.92's "can target all characters" as category
+coverage; p.107 intangible blocks only damage/statuses from foes) but
+corrected two overclaims and one silent erasure: (1) "full p.92
+CHARACTER domain (… Summon)" overstated the substrate —
+`evaluateActorQuery` spans `state.actors` only, every executable summon
+is an entity (`summonEntity`; no production user of the U3 entity→actor
+bridge), so the Summon member is an engine-wide unreachable, and the
+claim wording now names the ACTOR slice with the p.92/p.95 source
+finding recorded (fail-closed holds; recording an entity id rejects);
+(2) self-inclusion for "cure a character" rests on the p.92 Self bullet's
+"unless specified" — structurally parallel to the Summon bullet that
+narrows the umbrella, and the book always spells self (Recover/Chastise/
+God Hand/Gran Redempta) — recorded as an open derived-interpretation,
+NOT flipped, keeping the encoded-inclusion tests; (3) the tranche-29
+ledger's entity-summon acknowledgment is carried forward into
+current-state text, and Holy Charge's "other" (acting character per
+Sprigg/Slow Turn vs. just-cured recipient as local antecedent) is
+recorded as a live second referent. U4 remains PARTIAL with the
+placement family + actor multi-selects + Demon Claw Talent I/II as the
+exact residuals.
+
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
 `RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold

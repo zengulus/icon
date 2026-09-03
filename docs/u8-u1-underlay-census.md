@@ -30,7 +30,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | AUTHORITATIVE (tranche 25 decision) | none in scope — the six defeated-divergent VM effect scans now route through the shared query authority (tranche 25); AREA / PERSISTENT-INSTANCE / RULE-SOURCE query domains and ordering beyond the min-distance set + opt-in cell order are explicitly later-underlay (U10/U12/U16/U17) or source-gated; rushTowardFoes' direction fallback remains the flagged player-choice (U4) approximation, and the Demon Claw / God Hand self-or-ally picks are recorded-choice or fail-closed (U4/resolver), never U3-invented |
-| U4 Choice / Decision | PARTIAL | (tranches 26-28, 30) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, and Holy cure + Charge all repaired as required recorded choices over the FORMAL p.92 CHARACTER domain ("All of the above": self/ally/foe — no side filter; tranche 30 restores tranche 28's full-domain semantics after tranche 29's friendly-only reversal failed the formal-keyword test: p.92 defines Foe inside Characters, no passage restricts cures to friendly characters, Esper III p.249 is the foe-MODE definition (fray instead of the normal cure) on an already-legal category while Mercy I's defeated grant is outside all keywords, and the "beneficial-effects-are-friendly" principle has no written home — so the attacked foe is always eligible and a missing cure recording never passes vacuous); remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal, Grand Seal shrine, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency", Chaos Tarot effect-3 terrain — per the p.95 "free space" + Harvester "any free space" placement conventions, each a per-unit recorded-position obligation), the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to two"), Demon Claw Talent I/II (documented-unresolved), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
+| U4 Choice / Decision | PARTIAL | (tranches 26-28, 30) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, and Holy cure + Charge all repaired as required recorded choices over the p.92 CHARACTER umbrella's ACTOR slice (self/ally/foe — no side filter; tranche 30 restored tranche 28's foe-inclusive semantics after tranche 29's friendly-only reversal failed the formal-keyword test: p.92 defines Foe inside Characters, no passage restricts cures to friendly characters, Esper III p.249 is the foe-MODE definition (fray instead of the normal cure) on an already-legal category while Mercy I's defeated grant is outside all keywords, and the "beneficial-effects-are-friendly" principle has no written home — so the attacked foe is always eligible and a missing cure recording never passes vacuous; tranche 31 corrected the claim surface: the Summon member of the umbrella is an engine-wide unreachable — ICON summons are characters (p.146) that p.95's "abilities that specify summons or characters can target or count them normally" makes targetable by character-specifying effects, but no executable summon is an actor (content creates entity-only summons; the U3 entity→actor summon bridge has no production user) — and self-inclusion rests on the p.92 Self bullet's "unless specified" (open reading; tests encode inclusion)); remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal-1 [portal-2 is an end-of-turn window], Spirit Shrine — mislabeled "Grand Seal shrine" in earlier rows, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency" + its clockwise default, Chaos Tarot effect-3 terrain + effects 4/5 up-to-two + effect-6 "choose two" auto-applied 1+3, seer:astra terrain/meteor cells, chanter:symphony mote cells — per the p.95 "free space" + Harvester "any free space" placement conventions, each a per-unit recorded-position obligation, split across the resolver-level seam and the intent-declaration summon seam), the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to two"), Demon Claw Talent I/II (documented-unresolved), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
 | U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
 | U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
@@ -1934,6 +1934,55 @@ with foe-cure legality, vacuous removal restored, Charge foe-grant
 restored; every fixture re-verifies `applyEvents`. U3 query authority
 unchanged. U4 stays PARTIAL with the placement family + actor multi-
 selects + Demon Claw Talent I/II as the exact residuals.
+
+**Tranche 31 — claim-surface correction for tranche 30 (2026-09-02).** An
+adversarial re-review of the tranche-30 commit confirmed the foe-cure
+semantics (and strengthened them: p.95's tactical Summon gloss —
+"abilities that specify summons or characters can target or count them
+normally" — reconciles p.92's "can only be targeted if an ability can
+target all characters" as category coverage, and p.107 intangible only
+blocks damage/statuses FROM FOES, so a friendly cure/vigor grant to a
+summon is not blocked) but found the commit's CLAIM SURFACE overstated
+the implementation in one concrete respect and erased a prior
+acknowledgment in another:
+
+1. **"Full p.92 CHARACTER domain (All of the above: Self, Ally, Foe,
+   Summon)" is not what the resolver spans.** `evaluateActorQuery` iterates
+   `state.actors` only; every executable summon (Harvester thrall/plant,
+   Warden beast, Seer wild card, Fool bomb, Shade shadow, salt-sprite,
+   Grand Seal shrine...) is an entity created via `summonEntity` with no
+   actor. The U3 `summon` operator expects the entity→actor bridge
+   (`entity.state.actorId` → actor) that only test fixtures use; no
+   production content creates the pair. So the Summon member of the p.92
+   umbrella is unreachable — and because p.92+p.95 make summons legal
+   recipients of character-specifying abilities (cure/vigor included), the
+   gap is source-meaningful, not pedantic. Fail-closed holds (recording an
+   entity id rejects `reference.missing-actor`; no summon-actor exists to
+   be wrongly excluded), so NO behavior changes. Corrected in the code
+   comment ("the ACTOR slice ... the Summon member is an engine-wide
+   unreachable") and the census row; the only prior acknowledgment of the
+   gap (tranche-29 ledger) is now carried forward in current-state text.
+2. **Self-inclusion is an open derived-interpretation, not settled.** The
+   p.92 Self bullet ("Abilities can't target yourself unless specified")
+   sits beside the Summon bullet that demonstrably narrows the umbrella
+   despite "All of the above" — structural symmetry suggests "a character"
+   does not specify the self, and the book always spells self-inclusion
+   (Recover "Cure yourself"; Chastise "Choose either yourself or an ally";
+   God Hand "bless yourself or ally"; Gran Redempta "Cure yourself and
+   every ally"; Holy Charge's sibling "You and allies..."). The competing
+   reading (the Characters keyword itself is the specification) keeps the
+   current tests (holy-cure: [hero.id] succeeds) defensible. NOT flipped —
+   recorded as the open question it is, given three reversals on the
+   adjacent keyword question.
+3. **Holy Charge's "other" has a live second referent.** Sprigg/Slow Turn
+   support "other = other than the acting character" (current code); the
+   just-cured-recipient is the immediate grammatical antecedent of "all
+   other characters" (the cure sentence precedes). Recorded, not resolved;
+   the tactical delta (charging the character you just cured) is small and
+   no sibling construction settles it.
+
+No production behavior, tests, or counts changed (2,198); comment + docs
+only. See `docs/underlay-completion-plan.md` (tranche-31 closure).
 
 ## Whole-consumer U1 audit (2026-09-01)
 
