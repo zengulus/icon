@@ -755,6 +755,42 @@ assumption here, document the evidence and update this list before proceeding.
   build / diff-check clean; no source-unit promotion. See
   `docs/u8-u1-underlay-census.md`.
 
+- **U4 tranche 28 — Holy source-fidelity repair: cure domain + Charge
+  subset (2026-09-02) — DONE.** Recording a choice is not source fidelity
+  when the candidate set was narrowed without authority: tranche 27 kept
+  an ally-only filter on p.177 "Cure a character in range 2 of that foe",
+  contradicting p.92's target vocabulary ("Characters: All of the above"
+  — Self, Ally, Foe, Summon) and the book's deliberate cure wording (PC
+  cures say "cure a character" — Mendicant Diaga, Esper I, Holy;
+  ally-only cures say "an ally"/"allies" — foe Leader Diaga "An ally in
+  range 4 is cured", Scion Great Holy "Allies in the area gain 3
+  vigor"). Esper III ("Cures can target foes and deal fray damage to
+  them instead of any of its other effects") confirms the domain and
+  defines the foe mode (fray damage instead of the normal cure) — it
+  does not forbid foe targets; Mercy I ("Your cures can target defeated
+  characters") is the explicit defeated extension, so defeated/off-board
+  characters stay excluded by U3 base eligibility. REPAIRS: (1) `holy-
+  cure` now validates against the full CHARACTER set in footprint range 2
+  of the foe — self, allies, the attacked foe itself (always eligible at
+  distance 0), and other foes; the mandatory choose-one never passes
+  vacuous in a valid use, so a missing recording always fails closed
+  `choice.actor-required`. (2) Holy Charge ("Grant 3 vigor to all other
+  characters of your choice in range 2 of your foe") is the player's
+  recorded SUBSET over the CHARACTER domain excluding the acting
+  character ("other" per Sprigg Mischief / Slow Turn / the Battle
+  Demon's explicit-additional-exclusion pattern): absent/empty = the
+  player chose nobody, non-members reject `choice.actor-ineligible`,
+  duplicates collapse, and the old auto-grant to same-side characters in
+  range is gone. Derived reading, not a registry adjudication (no two
+  passages conflict). Tests +2 (2198): foe-cure of the attacked foe and
+  of a second foe, defeated-recipient rejection, Charge absent/empty no-
+  grant, recorded ally+foe subset both granted, acting-character and
+  out-of-range recordings reject; every fixture re-verifies
+  `applyEvents`. U3 query authority unchanged; no source-unit promotion.
+  U4 stays PARTIAL with the placement family + actor multi-selects +
+  Demon Claw Talent I/II as the exact residuals. See
+  `docs/u8-u1-underlay-census.md`.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

@@ -74,38 +74,68 @@ const holyEffects: RuleResolver = (context) => {
   mutations.push(conditionMutation(context, target.id, 'pacified'));
   if (target.position) {
     const targetPosition = target.position;
-    // "Cure a character in range 2 of that foe" — the eligible set comes
-    // from the ONE U3 authority (living, on-battlefield, p.92 footprint
-    // range of the foe's cell), then the resolver keeps the source's own
-    // side (cure never targets a defeated on-field character). The WHICH
-    // character is the player's choice (a mandatory effect naming ONE
-    // character): recorded under `holy-cure` and validated as a member of
-    // the eligible set. Absent with eligible candidates → fail closed
-    // (`choice.actor-required`); absent with NO candidates → the effect is
-    // vacuous and the command proceeds; a recorded non-member → fail closed
-    // (`choice.actor-ineligible`).
-    const cureEligible = evaluateActorQuery({ range: 2, rangeOrigin: anchorFromPosition(targetPosition) }, context)
-      .filter((character) => character.side === source.side);
+    // p.177 "Cure a character in range 2 of that foe" — the eligible set is
+    // the ONE U3 authority (living, on-battlefield, p.92 footprint range of
+    // the foe's cell) with NO side restriction. p.92's target vocabulary
+    // defines "Characters: All of the above" (Self, Ally, Foe, Summon), and
+    // the book's cure wording is deliberately precise: PC cures say "cure a
+    // character" (Mendicant Diaga "Cure a character in range 4", Esper I
+    // "Cure a character in range 2 of your attack target") while ally-only
+    // cures say so (foe Leader Diaga "An ally in range 4 is cured"). Esper
+    // III ("Cures can target foes and deal fray damage to them instead of
+    // any of its other effects") confirms that domain and defines the FOE
+    // mode (fray damage instead of the normal cure) — it does not forbid
+    // foe targets; Mercy I ("Your cures can target defeated characters")
+    // is the explicit defeated-character extension, so defeated/off-board
+    // characters stay excluded here by the U3 base eligibility. The WHICH
+    // character is a mandatory choose-one: recorded under `holy-cure` and
+    // validated as a member of the eligible set. The attacked foe itself is
+    // always an eligible living character at distance 0, so the eligible
+    // set is never empty in a valid use — a missing recording is a missing
+    // REQUIRED decision (fail closed `choice.actor-required`), never a
+    // vacuous pass; a recorded non-member fails closed
+    // (`choice.actor-ineligible`); several recordings fail
+    // (`choice.actor-count`).
+    const cureEligible = evaluateActorQuery({ range: 2, rangeOrigin: anchorFromPosition(targetPosition) }, context);
     const recordedCure = resolveCapturedSelectedActors(context, 'holy-cure');
-    if (recordedCure.length > 0) {
-      if (recordedCure.length > 1) {
-        throw new RuleProgramViolation('choice.actor-count', `Holy cures ONE character in range 2 of the foe; ${recordedCure.length} were recorded.`);
-      }
+    if (recordedCure.length > 1) {
+      throw new RuleProgramViolation('choice.actor-count', `Holy cures ONE character in range 2 of the foe; ${recordedCure.length} were recorded.`);
+    }
+    if (recordedCure.length === 1) {
       const [chosen] = recordedCure;
       if (!cureEligible.some((character) => character.id === chosen.id)) {
-        throw new RuleProgramViolation('choice.actor-ineligible', 'Holy: the recorded character is not a living ally in range 2 of the foe.');
+        throw new RuleProgramViolation('choice.actor-ineligible', 'Holy: the recorded character is not a living character in range 2 of the foe.');
       }
       mutations.push(...cureMutations(context, chosen.id));
-    } else if (cureEligible.length > 0) {
+    } else {
       throw new RuleProgramViolation('choice.actor-required', 'Holy cures a character in range 2 of the foe — record the character.');
     }
-  }
-  if (context.triggers?.has('charge')) {
-    const targetPosition = target.position;
-    for (const character of Object.values(context.state.actors)) {
-      const position = character.position;
-      if (character.side !== source.side || character.id === source.id || !position) continue;
-      if (targetPosition && distance(position, targetPosition) <= 2) mutations.push(vigorMutation(context, character.id, 3));
+    if (context.triggers?.has('charge')) {
+      // p.177 Charge: "Grant 3 vigor to all other characters of your choice
+      // in range 2 of your foe." — a player SUBSET decision over the full
+      // CHARACTER domain (p.92; the Scion's mirror Great Holy "Allies in the
+      // area gain 3 vigor" is the deliberate ally-only contrast), excluding
+      // the ACTING character: "other" follows the book's convention (Sprigg
+      // Mischief "two other characters in range 2 of the Sprigg" = other
+      // than the acting Sprigg; Slow Turn "Go after all other characters";
+      // when an extra exclusion is meant the book names it, Battle Demon
+      // "all other characters other than natals"). Recorded under
+      // `holy-charge` as the player's chosen subset (0..N): absent or empty
+      // = the player chose nobody, a recorded non-member fails closed
+      // (`choice.actor-ineligible`), duplicates collapse (the Set). The
+      // engine never auto-grants to a side.
+      const chargeEligible = evaluateActorQuery({ range: 2, rangeOrigin: anchorFromPosition(targetPosition) }, context)
+        .filter((character) => character.id !== source.id);
+      const recordedCharge = resolveCapturedSelectedActors(context, 'holy-charge');
+      const granted = new Set<string>();
+      for (const chosen of recordedCharge) {
+        if (granted.has(chosen.id)) continue;
+        if (!chargeEligible.some((character) => character.id === chosen.id)) {
+          throw new RuleProgramViolation('choice.actor-ineligible', 'Holy Charge: the recorded character is not an other character in range 2 of the foe.');
+        }
+        granted.add(chosen.id);
+        mutations.push(vigorMutation(context, chosen.id, 3));
+      }
     }
   }
   return mutations;

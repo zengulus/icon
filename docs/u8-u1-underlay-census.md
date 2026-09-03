@@ -30,7 +30,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | AUTHORITATIVE (tranche 25 decision) | none in scope — the six defeated-divergent VM effect scans now route through the shared query authority (tranche 25); AREA / PERSISTENT-INSTANCE / RULE-SOURCE query domains and ordering beyond the min-distance set + opt-in cell order are explicitly later-underlay (U10/U12/U16/U17) or source-gated; rushTowardFoes' direction fallback remains the flagged player-choice (U4) approximation, and the Demon Claw / God Hand self-or-ally picks are recorded-choice or fail-closed (U4/resolver), never U3-invented |
-| U4 Choice / Decision | PARTIAL | (tranches 26-27) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, and Holy cure all repaired as required recorded choices; remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal, Grand Seal shrine, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency", Chaos Tarot effect-3 terrain — per the p.95 "free space" + Harvester "any free space" placement conventions, each a per-unit recorded-position obligation), the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to two"), Demon Claw Talent I/II (documented-unresolved), Holy Charge "of your choice" (underspecified), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
+| U4 Choice / Decision | PARTIAL | (tranches 26-28) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, and Holy cure + Charge all repaired as required recorded choices; Holy's cure domain is the full p.92 CHARACTER set (self/ally/foe — no side filter; the attacked foe is always eligible, so a missing cure recording never passes vacuous) and the Charge is the player's recorded subset over "all other characters" (acting character excluded, absent = chose nobody, recorded non-members reject); remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal, Grand Seal shrine, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency", Chaos Tarot effect-3 terrain — per the p.95 "free space" + Harvester "any free space" placement conventions, each a per-unit recorded-position obligation), the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to two"), Demon Claw Talent I/II (documented-unresolved), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
 | U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
 | U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
@@ -1801,6 +1801,49 @@ the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to
 two"), Demon Claw Talent I/II (documented-unresolved), Holy Charge "of
 your choice" (underspecified, reported not fixed), and the declared
 folds + U12/U13 window choices.
+
+**Tranche 28 — Holy source-fidelity repair: cure domain + Charge subset
+(2026-09-02).** Adversarial re-review of tranche 27's Holy found a
+candidate-domain defect that recording a choice did not fix: "Cure a
+character in range 2 of that foe" (p.177) was implemented ally-only,
+narrowing the p.92 target word CHARACTER ("All of the above" — Self,
+Ally, Foe, Summon) without source authority. Adjudicated from: p.92's
+explicit targeting vocabulary; the book's deliberate cure wording (PC
+cures say "cure a character" — Mendicant Diaga "Cure a character in
+range 4", Esper I "Cure a character in range 2 of your attack target",
+Holy — while ally-only cures say so: foe Leader Diaga "An ally in range
+4 is cured", Scion Great Holy "Allies in the area gain 3 vigor"); Esper
+III ("Cures can target foes and deal fray damage to them instead of any
+of its other effects") confirming the domain and defining the FOE mode
+(fray damage instead of the normal cure) rather than forbidding foe
+targets; Mercy I ("Your cures can target defeated characters") as the
+explicit defeated-character extension, so defeated/off-board characters
+stay excluded by U3 base eligibility. The engine's Mendicant Diaga
+(no side filter) already implemented the same reading; Wish (p.203
+"your ally") and the knave self-cures remain correctly scoped.
+REPAIRS: (1) `holy-cure` is now validated against the full CHARACTER
+set in footprint range 2 of the foe — self, allies, the attacked foe
+itself (always eligible at distance 0), and other foes; the mandatory
+choose-one never passes vacuous in a valid use (the attacked foe
+guarantees a candidate), so a missing recording always fails closed
+`choice.actor-required`. (2) Holy Charge ("Grant 3 vigor to all other
+characters of your choice in range 2 of your foe") is the player's
+recorded SUBSET over the CHARACTER domain excluding the acting character
+("other": Sprigg Mischief "two other characters in range 2 of the
+Sprigg" = other than the acting Sprigg; Slow Turn "Go after all other
+characters"; Battle Demon's explicit additional-exclusion pattern "all
+other characters other than natals"); absent/empty = the player chose
+nobody, a recorded non-member → `choice.actor-ineligible`, duplicates
+collapse; the old auto-grant to every same-side character in range is
+gone. Not a registry adjudication — no two passages conflict (p.92
+defines the vocabulary and no passage restricts cures); the reading is
+recorded here as derived, the same home as the tranche-27 placement
+convention. Tests +2 (2198): foe-cure of the attacked foe and of a
+second foe, defeated-recipient rejection, Charge absent/empty no-grant,
+recorded ally+foe subset both granted, acting-character and out-of-range
+recordings reject; every fixture re-verifies `applyEvents`. U3 query
+authority unchanged. U4 stays PARTIAL with the placement family + actor
+multi-selects + Demon Claw Talent I/II as the exact residuals.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

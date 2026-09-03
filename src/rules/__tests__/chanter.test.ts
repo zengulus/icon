@@ -81,11 +81,11 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Holy: the cure recipient is the player\'s WHICH choice — missing with eligible characters rejects, an ineligible recording rejects, no character in range proceeds vacuous', () => {
+  it('Holy: the cure recipient is the player\'s WHICH choice — missing with eligible characters rejects and an ineligible recording rejects; the attacked foe is always eligible so a missing choice never passes vacuous', () => {
     // p.177 "Cure a character in range 2 of that foe" is a mandatory effect
     // naming ONE character: the player records `holy-cure` and it must be a
-    // member of the U3 eligible set (living ally in footprint range 2 of the
-    // foe's cell).
+    // member of the U3 eligible set (living character in footprint range 2 of
+    // the foe's cell; p.92 "Characters: All of the above" — no side filter).
     const missing = chanterEncounter({ second: null }); // the hero at range 1 is eligible
     expect(() => executeCommand(missing.state, { type: 'USE_ABILITY', actorId: missing.hero.id, abilityId: 'chanter:holy', targetIds: [missing.foe.id] }, scriptedDice()))
       .toThrowError(expect.objectContaining({ code: 'choice.actor-required' }));
@@ -94,32 +94,79 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(() => executeCommand(foe.state, { type: 'USE_ABILITY', actorId: foe.hero.id, abilityId: 'chanter:holy', targetIds: [foe.foe.id], input: { actorIds: { 'holy-cure': [foe.ally!.id] } } }, scriptedDice()))
       .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
 
-    // No character in range 2 of the foe: the cure is vacuous and the command
-    // proceeds without a cure mutation.
-    const none = chanterEncounter({ second: null, foe: { x: 6, y: 1 } }); // hero at distance 5 from the foe's cell
-    const result = executeCommand(none.state, { type: 'USE_ABILITY', actorId: none.hero.id, abilityId: 'chanter:holy', targetIds: [none.foe.id] }, scriptedDice());
-    const cures = mutationsOf(result.events, 'chanter:holy').filter((mutation) => mutation.kind === 'cure');
-    expect(cures).toHaveLength(0);
-    expect(result.state.actors[none.foe.id].statuses).toContain('pacified');
-    expect(applyEvents(none.state, result.events)).toEqual(result.state);
+    // The attacked foe itself is always an eligible living character at
+    // distance 0 from its own cell (p.92 "Characters"), so with ONLY the foe
+    // in range a missing recording still rejects — the mandatory effect is
+    // never vacuous in a valid use.
+    const onlyFoe = chanterEncounter({ second: null, foe: { x: 6, y: 1 } }); // hero at distance 5 from the foe's cell
+    expect(() => executeCommand(onlyFoe.state, { type: 'USE_ABILITY', actorId: onlyFoe.hero.id, abilityId: 'chanter:holy', targetIds: [onlyFoe.foe.id] }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-required' }));
   });
 
-  it('Holy: a Charge grants 3 vigor to other characters in range 2 of the foe', () => {
-    const { state, hero, foe, ally } = chanterEncounter({ second: null, ally: { x: 4, y: 1 } }); // ally at range 2; the hero at range 1 takes the cure
+  it('Holy: the attacked foe itself and another foe in range are legal cure recipients (p.92 Characters)', () => {
+    // The attacked foe sits at distance 0 from its own cell — "Cure a
+    // character in range 2 of that foe" makes it a legal recipient (curing
+    // an enemy is unusual tactics, but the source domain is characters).
+    const foeFixture = chanterEncounter({ second: { x: 3, y: 1 } });
+    const foeCured = executeCommand(foeFixture.state, { type: 'USE_ABILITY', actorId: foeFixture.hero.id, abilityId: 'chanter:holy', targetIds: [foeFixture.foe.id], input: { actorIds: { 'holy-cure': [foeFixture.foe.id] } } }, scriptedDice());
+    expect(foeCured.state.actors[foeFixture.foe.id].vigor).toBe(4); // cured (not bloodied): +4 vigor
+    expect(foeCured.state.actors[foeFixture.foe.id].statuses).toContain('pacified');
+    expect(applyEvents(foeFixture.state, foeCured.events)).toEqual(foeCured.state);
+
+    // A second foe at range 1 of the attacked foe is also a legal recipient.
+    const secondFixture = chanterEncounter({ second: { x: 3, y: 1 } });
+    const secondCured = executeCommand(secondFixture.state, { type: 'USE_ABILITY', actorId: secondFixture.hero.id, abilityId: 'chanter:holy', targetIds: [secondFixture.foe.id], input: { actorIds: { 'holy-cure': [secondFixture.second!.id] } } }, scriptedDice());
+    expect(secondCured.state.actors[secondFixture.second!.id].vigor).toBe(4);
+    expect(applyEvents(secondFixture.state, secondCured.events)).toEqual(secondCured.state);
+  });
+
+  it('Holy: defeated characters are not legal recipients (Mercy I is the explicit defeated extension)', () => {
+    const { state, hero, foe, ally } = chanterEncounter({ second: null, ally: { x: 3, y: 1 } });
+    state.actors[ally!.id].defeated = true;
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:holy', targetIds: [foe.id], input: { actorIds: { 'holy-cure': [ally!.id] } } }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
+  });
+
+  it('Holy: a Charge grants 3 vigor to the recorded subset — absent grants nobody; allies and foes in range both qualify; the acting character and out-of-range members reject', () => {
+    const fixture = chanterEncounter({ second: { x: 3, y: 1 }, ally: { x: 4, y: 1 }, ally2: { x: 6, y: 1 } });
     // Charge is the authoritative slow-turn fact (ICON p.95); the command
     // asserts it with the actor on a slow turn, never by raw triggers.
-    state.actors[hero.id].ruleState['slow-turn'] = true;
-    state.actors[hero.id].ruleStateOwners['slow-turn'] = hero.id;
-    const result = executeCommand(state, {
+    fixture.state.actors[fixture.hero.id].ruleState['slow-turn'] = true;
+    fixture.state.actors[fixture.hero.id].ruleStateOwners['slow-turn'] = fixture.hero.id;
+    const run = (actorIds: Record<string, string[]>) => executeCommand(fixture.state, {
       type: 'EXECUTE_RULE',
-      actorId: hero.id,
+      actorId: fixture.hero.id,
       sourceId: 'chanter:holy',
       actionId: 'default',
       timing: 'use',
-      input: { actorIds: { 'holy-cure': [hero.id] } },
-      attackTargetId: foe.id,
+      input: { actorIds: { 'holy-cure': [fixture.hero.id], ...actorIds } },
+      attackTargetId: fixture.foe.id,
     }, scriptedDice());
-    expect(result.state.actors[ally!.id].vigor).toBe(3);
+
+    // p.177 "Grant 3 vigor to all other characters of your choice in range 2
+    // of your foe" — the subset is the player's choice; absent/empty = the
+    // player chose nobody, so no one is granted.
+    const none = run({});
+    expect(none.state.actors[fixture.ally!.id].vigor).toBe(0);
+    expect(none.state.actors[fixture.second!.id].vigor).toBe(0);
+    expect(applyEvents(fixture.state, none.events)).toEqual(none.state);
+
+    // The recorded subset spans the full CHARACTER domain (p.92): the ally at
+    // range 2 AND the second (a foe at range 1) both gain 3 vigor.
+    const both = run({ 'holy-charge': [fixture.ally!.id, fixture.second!.id] });
+    expect(both.state.actors[fixture.ally!.id].vigor).toBe(3);
+    expect(both.state.actors[fixture.second!.id].vigor).toBe(3);
+    expect(applyEvents(fixture.state, both.events)).toEqual(both.state);
+
+    // "other characters" excludes the acting character (Sprigg Mischief:
+    // "two other characters in range 2 of the Sprigg" = other than the
+    // acting Sprigg) — recording the hero rejects.
+    expect(() => run({ 'holy-charge': [fixture.hero.id] }))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
+
+    // An out-of-range character is not a member of the eligible set.
+    expect(() => run({ 'holy-charge': [fixture.ally2!.id] }))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
   });
 
   it('Holy combo (HADES): autohits fray, splashes fray in the medium blast, and opens a pit', () => {

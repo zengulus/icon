@@ -867,6 +867,31 @@ obligation (residual list in the census row), Comet's "center space, or
 as close as possible" is A-class, and Holy Charge "all other characters
 of your choice" is reported underspecified rather than fixed.
 
+**Tranche-28 closure (2026-09-02)** — Holy's candidate-domain repair +
+Charge subset. Recording a choice is not source fidelity if the candidate
+set was narrowed without authority: tranche 27 kept an ally-only filter on
+"Cure a character in range 2 of that foe", contradicting p.92's target
+vocabulary ("Characters: All of the above" — Self, Ally, Foe, Summon)
+and the book's deliberate cure wording (PC cures say "cure a character"
+— Mendicant Diaga, Esper I, Holy; ally-only cures say "an ally"/"allies"
+— foe Leader Diaga, Scion Great Holy). Esper III's "Cures can target
+foes and deal fray damage to them instead of any of its other effects"
+confirms the domain and defines the foe mode (damage instead of the
+normal cure) — it does not forbid foe targets; Mercy I's "Your cures can
+target defeated characters" is the explicit defeated extension, so
+base eligibility excludes defeated/off-board. `holy-cure` now validates
+against the full CHARACTER set (self, allies, the attacked foe itself at
+distance 0, other foes); because the attacked foe always qualifies, the
+mandatory choose-one never passes vacuous — a missing recording always
+fails closed. Holy Charge ("Grant 3 vigor to all other characters of
+your choice in range 2 of your foe") is the player's recorded SUBSET
+over the CHARACTER domain excluding the acting character ("other" per
+Sprigg Mischief / Slow Turn / the Battle Demon's explicit-additional-
+exclusion pattern): absent/empty = chose nobody, non-members reject,
+duplicates collapse, and the old auto-grant to same-side characters is
+gone. This is a derived reading (no two passages conflict), recorded in
+the census ledger rather than the adjudication registry.
+
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
 `RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold
