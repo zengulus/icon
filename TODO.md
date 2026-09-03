@@ -825,6 +825,45 @@ assumption here, document the evidence and update this list before proceeding.
   the mendicant-trait gate as the exact residuals. See
   `docs/u8-u1-underlay-census.md`.
 
+- **U4 tranche 30 — Holy source-fidelity REVERSAL (final): the p.92
+  CHARACTER keyword is the formal domain; tranche 29's friendly-only
+  reading is RETRACTED (2026-09-02) — DONE.** A fresh adversarial review
+  under the formal-keyword standard (a defined game term governs unless
+  a genuine rule establishes an exception) found tranche 29 failed on
+  its own terms. Formal chain: p.92 defines "Characters: All of the
+  above" over a list that INCLUDES "Foe: A hostile character" — foe is
+  INSIDE the keyword by explicit definition — and Diaga (p.172), Holy
+  (p.177), and Esper I (p.249) invoke that keyword unqualified while the
+  Cure rules define only the effect and never restrict side. Tranche
+  29's pillars collapse: (a) the Esper/Mercy "parallel" conflates axes
+  — Mercy I grants a category in NO p.92 keyword (defeated), while
+  Esper III concerns a category INSIDE "Characters"; its operative
+  clause is the FOE MODE ("deal fray damage to them instead of any of
+  its other effects"), and "can target X" appears both for outside-
+  keyword grants and to declare category legality; (b) Erenbrass
+  Aspected extends an "ally"-WORDED effect (lexically foe-exclusive)
+  and says nothing about "character"-worded effects; (c) corpus
+  frequency and the invented "beneficial-effects-never-reach-foes"
+  principle are conventions, not rules, and are demoted below the
+  defined term. REPAIRS: `holy-cure` validates against the FULL p.92
+  CHARACTER domain in footprint range 2 of the foe (no side filter) —
+  attacked foe (distance 0) and other foes are legal recipients and
+  receive the standard cure effect today (Esper III's foe MODE is a
+  documented-unresolved relic when relics land); the mandatory choose-
+  one never passes vacuous in a valid use, so a missing recording
+  always fails closed; Holy Charge's subset is over the full character
+  domain (foes legal — its own words; a vigor grant, not a Cure). The
+  Diaga/Bless gate relation 'any' is CONFIRMED source-correct ("a
+  character in range 4") — the tranche-29 residual is retracted.
+  Derived-formal reading (no two passages conflict); residual
+  uncertainty noted in the ledger. Tests net 0 (2198): foe-rejection /
+  vacuous tests replaced with foe-cure legality, vacuous removal
+  restored, Charge foe-grant restored; every fixture re-verifies
+  `applyEvents`. U3 query authority unchanged; no source-unit
+  promotion. U4 stays PARTIAL with the placement family + actor multi-
+  selects + Demon Claw Talent I/II as the exact residuals. See
+  `docs/u8-u1-underlay-census.md`.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

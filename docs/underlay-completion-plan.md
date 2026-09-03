@@ -913,6 +913,23 @@ reported: the EXECUTE_RULE non-attack direct-target gate uses relation
 'any' for class traits (Diaga/Bless can currently target foes) — a
 mendicant-traits domain pass.
 
+**Tranche-30 closure (2026-09-02)** — RESTORES the formal p.92 CHARACTER
+domain; tranche 29 retracted. Under the formal-keyword standard (a
+defined game term governs unless a genuine rule establishes an
+exception), tranche 29's friendly-only reading fails: p.92 defines
+"Characters: All of the above" over a list that includes "Foe: A hostile
+character", and Diaga/Holy/Esper I invoke that keyword unqualified while
+no passage restricts cures to friendly characters. Tranche 29's Esper/
+Mercy "parallel" conflated axes (foe ∈ Characters; defeated ∉ any
+keyword), its Erenbrass evidence only speaks to "ally"-worded effects,
+and its "beneficial effects never reach foes" principle has no written
+home. `holy-cure` now validates against the full character domain
+(foes legal — the standard cure applies; Esper III's fray-damage foe
+MODE is the documented-unresolved relic), the mandatory choose-one never
+passes vacuous (the attacked foe always qualifies), and Holy Charge's
+subset spans the full domain. The Diaga/Bless 'any'-relation gate is
+source-correct; the tranche-29 residual is retracted.
+
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
 `RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold

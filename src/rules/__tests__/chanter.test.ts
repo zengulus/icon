@@ -81,14 +81,12 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Holy: the cure recipient is the player\'s WHICH choice — missing with eligible characters rejects and an ineligible recording rejects; no friendly character in range is genuinely vacuous', () => {
+  it('Holy: the cure recipient is the player\'s WHICH choice — missing with eligible characters rejects and an ineligible recording rejects; the attacked foe is always eligible so a missing choice never passes vacuous', () => {
     // p.177 "Cure a character in range 2 of that foe" is a mandatory effect
     // naming ONE character: the player records `holy-cure` and it must be a
-    // member of the U3 eligible set — the FRIENDLY character domain (self +
-    // allies; the Cure mechanic is friendly-side — the Esper III "Cures can
-    // target foes" relic GRANT and Mercy I's defeated GRANT use the same
-    // "cures can target X" construction for domains outside that baseline;
-    // census tranche 29) in footprint range 2 of the foe's cell.
+    // member of the U3 eligible set over the FORMAL p.92 "Characters" domain
+    // ("All of the above": Self, Ally, Foe, Summon — no side filter) in
+    // footprint range 2 of the foe's cell.
     const missing = chanterEncounter({ second: null }); // the hero at range 1 is eligible
     expect(() => executeCommand(missing.state, { type: 'USE_ABILITY', actorId: missing.hero.id, abilityId: 'chanter:holy', targetIds: [missing.foe.id] }, scriptedDice()))
       .toThrowError(expect.objectContaining({ code: 'choice.actor-required' }));
@@ -97,34 +95,33 @@ describe('Chanter ability automation (p.174–181)', () => {
     expect(() => executeCommand(foe.state, { type: 'USE_ABILITY', actorId: foe.hero.id, abilityId: 'chanter:holy', targetIds: [foe.foe.id], input: { actorIds: { 'holy-cure': [foe.ally!.id] } } }, scriptedDice()))
       .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
 
-    // The attacked foe at distance 0 from its own cell is NOT a legal
-    // recipient (baseline cures are friendly) — recording it rejects even
-    // though it is in range.
-    const foeOnly = chanterEncounter({ second: null });
-    expect(() => executeCommand(foeOnly.state, { type: 'USE_ABILITY', actorId: foeOnly.hero.id, abilityId: 'chanter:holy', targetIds: [foeOnly.foe.id], input: { actorIds: { 'holy-cure': [foeOnly.foe.id] } } }, scriptedDice()))
-      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
-
-    // No FRIENDLY character in range 2 of the foe: the mandatory cure has no
-    // legal target and the command proceeds with the pacify alone.
-    const none = chanterEncounter({ second: null, foe: { x: 6, y: 1 } }); // hero at distance 5 from the foe's cell
-    const result = executeCommand(none.state, { type: 'USE_ABILITY', actorId: none.hero.id, abilityId: 'chanter:holy', targetIds: [none.foe.id] }, scriptedDice());
-    const cures = mutationsOf(result.events, 'chanter:holy').filter((mutation) => mutation.kind === 'cure');
-    expect(cures).toHaveLength(0);
-    expect(result.state.actors[none.foe.id].statuses).toContain('pacified');
-    expect(applyEvents(none.state, result.events)).toEqual(result.state);
+    // The attacked foe itself is always an eligible living character at
+    // distance 0 from its own cell (p.92 "Characters"), so with ONLY the foe
+    // in range a missing recording still rejects — the mandatory effect is
+    // never vacuous in a valid use.
+    const onlyFoe = chanterEncounter({ second: null, foe: { x: 6, y: 1 } }); // hero at distance 5 from the foe's cell
+    expect(() => executeCommand(onlyFoe.state, { type: 'USE_ABILITY', actorId: onlyFoe.hero.id, abilityId: 'chanter:holy', targetIds: [onlyFoe.foe.id] }, scriptedDice()))
+      .toThrowError(expect.objectContaining({ code: 'choice.actor-required' }));
   });
 
-  it('Holy: foes are not legal cure recipients — the Cure domain is friendly (Esper III grants foes)', () => {
-    // The attacked foe sits at distance 0 from its own cell and another foe
-    // at range 1 — both "in range 2 of that foe" but neither is a friendly
-    // character. Baseline cures are friendly-side: the relic grants that
-    // reach foes (Esper III "Cures can target foes...") and the defeated
-    // (Mercy I) use the identical "cures can target X" grant construction.
-    const fixture = chanterEncounter({ second: { x: 3, y: 1 } });
-    expect(() => executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'chanter:holy', targetIds: [fixture.foe.id], input: { actorIds: { 'holy-cure': [fixture.foe.id] } } }, scriptedDice()))
-      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
-    expect(() => executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'chanter:holy', targetIds: [fixture.foe.id], input: { actorIds: { 'holy-cure': [fixture.second!.id] } } }, scriptedDice()))
-      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
+  it('Holy: the attacked foe itself and another foe in range are legal cure recipients (p.92 Characters)', () => {
+    // The attacked foe sits at distance 0 from its own cell — "Cure a
+    // character in range 2 of that foe" names the p.92 CHARACTER domain, so
+    // the foe is a legal recipient (curing an enemy is unusual tactics, but
+    // the formal keyword is the authority; Esper III p.249 defines the FOE
+    // MODE — fray damage instead of the normal cure — for this lawful
+    // category, which the engine will wire when relics land).
+    const foeFixture = chanterEncounter({ second: { x: 3, y: 1 } });
+    const foeCured = executeCommand(foeFixture.state, { type: 'USE_ABILITY', actorId: foeFixture.hero.id, abilityId: 'chanter:holy', targetIds: [foeFixture.foe.id], input: { actorIds: { 'holy-cure': [foeFixture.foe.id] } } }, scriptedDice());
+    expect(foeCured.state.actors[foeFixture.foe.id].vigor).toBe(4); // cured (not bloodied): +4 vigor
+    expect(foeCured.state.actors[foeFixture.foe.id].statuses).toContain('pacified');
+    expect(applyEvents(foeFixture.state, foeCured.events)).toEqual(foeCured.state);
+
+    // A second foe at range 1 of the attacked foe is also a legal recipient.
+    const secondFixture = chanterEncounter({ second: { x: 3, y: 1 } });
+    const secondCured = executeCommand(secondFixture.state, { type: 'USE_ABILITY', actorId: secondFixture.hero.id, abilityId: 'chanter:holy', targetIds: [secondFixture.foe.id], input: { actorIds: { 'holy-cure': [secondFixture.second!.id] } } }, scriptedDice());
+    expect(secondCured.state.actors[secondFixture.second!.id].vigor).toBe(4);
+    expect(applyEvents(secondFixture.state, secondCured.events)).toEqual(secondCured.state);
   });
 
   it('Holy: defeated characters are not legal recipients (Mercy I is the explicit defeated extension)', () => {
@@ -134,7 +131,7 @@ describe('Chanter ability automation (p.174–181)', () => {
       .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
   });
 
-  it('Holy: a Charge grants 3 vigor to the recorded friendly subset — absent grants nobody; the acting character, foes, and out-of-range members reject', () => {
+  it('Holy: a Charge grants 3 vigor to the recorded subset — absent grants nobody; allies and foes in range both qualify; the acting character and out-of-range members reject', () => {
     const fixture = chanterEncounter({ second: { x: 3, y: 1 }, ally: { x: 4, y: 1 }, ally2: { x: 6, y: 1 } });
     // Charge is the authoritative slow-turn fact (ICON p.95); the command
     // asserts it with the actor on a slow turn, never by raw triggers.
@@ -151,27 +148,26 @@ describe('Chanter ability automation (p.174–181)', () => {
     }, scriptedDice());
 
     // p.177 "Grant 3 vigor to all other characters of your choice in range 2
-    // of your foe" — the subset is the player's choice over the FRIENDLY
-    // grant domain (beneficial grants never reach foes without an explicit
-    // clause); absent/empty = the player chose nobody, so no one is granted.
+    // of your foe" — the subset is the player's choice over the p.92
+    // CHARACTER domain (the Charge's own words; it is a vigor grant, not a
+    // Cure, so no Cure rule constrains it); absent/empty = the player chose
+    // nobody, so no one is granted.
     const none = run({});
     expect(none.state.actors[fixture.ally!.id].vigor).toBe(0);
     expect(applyEvents(fixture.state, none.events)).toEqual(none.state);
 
-    // Recorded friendly characters each gain 3 vigor.
-    const allyGrant = run({ 'holy-charge': [fixture.ally!.id] });
-    expect(allyGrant.state.actors[fixture.ally!.id].vigor).toBe(3);
-    expect(applyEvents(fixture.state, allyGrant.events)).toEqual(allyGrant.state);
+    // The recorded subset spans the full CHARACTER domain: the ally at range
+    // 2 AND the second (a foe at range 1 of the attacked foe) both gain 3
+    // vigor.
+    const both = run({ 'holy-charge': [fixture.ally!.id, fixture.second!.id] });
+    expect(both.state.actors[fixture.ally!.id].vigor).toBe(3);
+    expect(both.state.actors[fixture.second!.id].vigor).toBe(3);
+    expect(applyEvents(fixture.state, both.events)).toEqual(both.state);
 
     // "other characters" excludes the acting character (Sprigg Mischief:
     // "two other characters in range 2 of the Sprigg" = other than the
     // acting Sprigg) — recording the hero rejects.
     expect(() => run({ 'holy-charge': [fixture.hero.id] }))
-      .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
-
-    // The grant domain is friendly: a foe in range (the second at range 1 of
-    // the attacked foe) is not a legal recipient without an explicit grant.
-    expect(() => run({ 'holy-charge': [fixture.second!.id] }))
       .toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
 
     // An out-of-range character is not a member of the eligible set.
