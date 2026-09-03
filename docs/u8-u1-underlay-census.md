@@ -30,7 +30,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | AUTHORITATIVE (tranche 25 decision) | none in scope — the six defeated-divergent VM effect scans now route through the shared query authority (tranche 25); AREA / PERSISTENT-INSTANCE / RULE-SOURCE query domains and ordering beyond the min-distance set + opt-in cell order are explicitly later-underlay (U10/U12/U16/U17) or source-gated; rushTowardFoes' direction fallback remains the flagged player-choice (U4) approximation, and the Demon Claw / God Hand self-or-ally picks are recorded-choice or fail-closed (U4/resolver), never U3-invented |
-| U4 Choice / Decision | PARTIAL | (tranches 26-28) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, and Holy cure + Charge all repaired as required recorded choices; Holy's cure domain is the full p.92 CHARACTER set (self/ally/foe — no side filter; the attacked foe is always eligible, so a missing cure recording never passes vacuous) and the Charge is the player's recorded subset over "all other characters" (acting character excluded, absent = chose nobody, recorded non-members reject); remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal, Grand Seal shrine, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency", Chaos Tarot effect-3 terrain — per the p.95 "free space" + Harvester "any free space" placement conventions, each a per-unit recorded-position obligation), the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to two"), Demon Claw Talent I/II (documented-unresolved), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
+| U4 Choice / Decision | PARTIAL | (tranches 26-29) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, and Holy cure + Charge all repaired as required recorded choices over the FRIENDLY character domain (self/ally; tranche 29 corrects tranche 28's foe-inclusion — baseline Cure is friendly-side: Esper III "Cures can target foes" and Mercy I's "cures can target defeated characters" are relic GRANTS of the same construction, and no friendly character in range is the genuinely vacuous case that proceeds without a cure); remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal, Grand Seal shrine, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency", Chaos Tarot effect-3 terrain — per the p.95 "free space" + Harvester "any free space" placement conventions, each a per-unit recorded-position obligation), the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to two"), Demon Claw Talent I/II (documented-unresolved), the mendicant-trait Diaga/Bless gate (EXECUTE_RULE non-attack relation 'any' — same friendly-domain family, listed as a traits-domain residual), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
 | U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
 | U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
@@ -1844,6 +1844,54 @@ recorded ally+foe subset both granted, acting-character and out-of-range
 recordings reject; every fixture re-verifies `applyEvents`. U3 query
 authority unchanged. U4 stays PARTIAL with the placement family + actor
 multi-selects + Demon Claw Talent I/II as the exact residuals.
+
+**Tranche 29 — Holy source-fidelity REVERSAL: the Cure domain is FRIENDLY
+(2026-09-02).** Adversarial re-review of tranche 28 found its own
+foe-inclusion argument did not survive the full-book relic census. The
+decisive symmetry: Mercy I ("Your cures can target defeated
+characters. If you do, they are rescued before being cured") is
+NECESSARILY a domain GRANT — defeated characters are untargetable by
+everything — and Esper III ("Cures can target foes and deal fray damage
+to them instead of any of its other effects") uses the IDENTICAL
+"cures can target X" construction; there is no textual basis to read
+them asymmetrically. Corroboration: (a) Erenbrass Aspected ("Erenbrass
+can affected foes") shows the book's relic-tier convention — friendly
+effects reach foes only through an explicit "can target/affect foes"
+grant; (b) the full-book Cure census (~25 distinct cure-granting
+effects: PC Diaga, Holy, Gran Redempta, Wish, Tarot, Aria; foe Leader
+Diaga, Scion, Saint, Blood Broker, Cantrix, Greenkeeper, Healing Brew)
+contains ZERO baseline foe-cures — every one is friendly-side, and the
+Esper relic arc (I heal → III weaponize with fray/true strike/pierce)
+only coheres as granting the offensive option; (c) tranche 28's
+"character vs ally word contrast" dissolves on re-read: p.92 defines
+"Ally: an allied character other than you" and summons "don't count as
+foes or allies", so "cure a character" vs "cure an ally" covers SELF and
+SUMMON inclusion — not foe inclusion. REPAIRS: `holy-cure` is validated
+against the FRIENDLY character set (side === source.side: self +
+allies; friendly entity-summons remain an engine actor-domain gap) in
+footprint range 2 of the foe — recording the attacked foe or another foe
+fails closed `choice.actor-ineligible`; the no-friendly-target case is
+RESTORED as genuinely vacuous (the mandatory cure cannot apply and the
+command proceeds with the pacify alone — the tranche-28 claim that the
+attacked foe always qualifies, so a missing choice never passes vacuous,
+is exactly the foe-inclusion error); absent-with-eligible →
+`choice.actor-required`. Holy Charge is the recorded subset over the
+same FRIENDLY grant domain (beneficial grants never reach foes without
+an explicit clause; the Scion mirror writes "Allies in the area gain 3
+vigor") excluding the acting character — recording a foe now rejects.
+SAME-FAMILY RESIDUAL (reported, not fixed — out of this unit's scope):
+the EXECUTE_RULE direct-target gate validates non-attack class traits
+(Diaga, Bless) with relation 'any' (`relation: tags.includes('attack') ?
+'foe' : 'any'`, encounter.ts), so engine Diaga/Bless can currently target
+foes; the Sweet Torment denial fixture encodes that path. A mendicant-
+traits domain pass should decide whether the friendly-Cure/Bless domain
+becomes a shared authority or per-trait gate relation. Derived reading,
+not a registry adjudication (no two passages conflict). Tests net 0
+(2198): foe-cure tests replaced with foe-rejection, vacuous case
+restored, Charge foe-grant → rejection; every fixture re-verifies
+`applyEvents`. U3 query authority unchanged. U4 stays PARTIAL with the
+placement family + actor multi-selects + Demon Claw Talent I/II + the
+mendicant-trait gate as the exact residuals.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

@@ -791,6 +791,40 @@ assumption here, document the evidence and update this list before proceeding.
   Demon Claw Talent I/II as the exact residuals. See
   `docs/u8-u1-underlay-census.md`.
 
+- **U4 tranche 29 — Holy source-fidelity REVERSAL: the Cure domain is
+  FRIENDLY (2026-09-02) — DONE.** Adversarial re-review of tranche 28
+  found its foe-inclusion did not survive the full-book relic census.
+  The decisive symmetry: Mercy I ("Your cures can target defeated
+  characters") is NECESSARILY a domain GRANT — defeated characters are
+  untargetable by everything — and Esper III ("Cures can target foes and
+  deal fray damage to them instead of any of its other effects") uses
+  the IDENTICAL "cures can target X" construction; there is no textual
+  basis to read them asymmetrically. Corroboration: Erenbrass Aspected
+  ("Erenbrass can affected foes") shows the relic-tier convention that
+  friendly effects reach foes only via explicit "can target/affect foes"
+  grants; the full-book Cure census (~25 effects, PC and foe) contains
+  ZERO baseline foe-cures; and tranche 28's "character vs ally" word
+  contrast dissolves because p.92 "Ally: an allied character other than
+  you" and "summons don't count as allies" make the difference SELF and
+  SUMMON inclusion, not foe inclusion. REPAIRS: `holy-cure` validates
+  against FRIENDLY characters (side === source.side: self + allies) in
+  footprint range 2 of the foe — recording the attacked foe or another
+  foe fails closed `choice.actor-ineligible`; the no-friendly-target case
+  is RESTORED as genuinely vacuous (command proceeds with the pacify
+  alone); absent-with-eligible → `choice.actor-required`. Holy Charge's
+  recorded subset is likewise friendly (foe recordings reject). Same-
+  family residual reported: the EXECUTE_RULE direct-target gate uses
+  relation 'any' for non-attack class traits (Diaga/Bless can currently
+  target foes; the Sweet Torment denial fixture encodes that path) — a
+  mendicant-traits domain pass. Derived reading, not a registry
+  adjudication (no two passages conflict). Tests net 0 (2198): foe-cure
+  tests replaced with foe-rejection, vacuous case restored, Charge foe-
+  grant → rejection; every fixture re-verifies `applyEvents`. U3 query
+  authority unchanged; no source-unit promotion. U4 stays PARTIAL with
+  the placement family + actor multi-selects + Demon Claw Talent I/II +
+  the mendicant-trait gate as the exact residuals. See
+  `docs/u8-u1-underlay-census.md`.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

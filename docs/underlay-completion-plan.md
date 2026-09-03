@@ -892,6 +892,27 @@ duplicates collapse, and the old auto-grant to same-side characters is
 gone. This is a derived reading (no two passages conflict), recorded in
 the census ledger rather than the adjudication registry.
 
+**Tranche-29 closure (2026-09-02)** — REVERSAL to the friendly Cure
+domain. Tranche 28's foe-inclusion did not survive the full-book relic
+census: Mercy I ("Your cures can target defeated characters") is
+necessarily a domain GRANT (defeated characters are untargetable by
+everything), and Esper III ("Cures can target foes and deal fray damage
+to them instead of any of its other effects") uses the identical "cures
+can target X" grant construction — the asymmetry the reviewer demanded
+cannot be defended. Erenbrass Aspected ("Erenbrass can affected foes")
+confirms the relic-tier convention that friendly effects reach foes only
+through explicit "can target/affect foes" grants; the full-book Cure
+census (~25 effects) contains zero baseline foe-cures; and the
+"character" vs "ally" word contrast is explained by SELF and SUMMON
+inclusion (p.92), not foe inclusion. `holy-cure` now validates against
+friendly characters (self + allies) in range of the foe — foe recordings
+reject — and the no-friendly-target case is genuinely vacuous (the
+command proceeds with the pacify alone); Holy Charge's recorded subset
+is likewise friendly (foe recordings reject). Same-family residual
+reported: the EXECUTE_RULE non-attack direct-target gate uses relation
+'any' for class traits (Diaga/Bless can currently target foes) — a
+mendicant-traits domain pass.
+
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
 `RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold
