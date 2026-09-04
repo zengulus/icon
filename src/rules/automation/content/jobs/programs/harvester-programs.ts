@@ -11,6 +11,7 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { readCapturedPositionChoice, validateCapturedPositionChoice } from '../../../kernels/choice.js';
 import { percentOfMaximum, baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -266,6 +267,30 @@ const darkSliverEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   const target = resolveAttackTarget(context);
   if (!source.position || !target?.position) return [];
+  const slay = context.triggers?.has('slay') ?? false;
+  const placementRange = darkSliverPlacementRange(context, slay ? 'slay-placement' : 'terrain-placement');
+  const placement = {
+    origin: target.position,
+    originSize: target.size,
+    range: placementRange,
+    ...(slay ? { lineOfSightFrom: source.position } : {}),
+  };
+  const candidates = evaluatePositions({
+    origin: target.position,
+    originSize: target.size,
+    radius: placementRange,
+    space: { kind: 'unoccupied' },
+    ...(slay ? { lineOfSightFrom: source.position } : {}),
+  }, context);
+  const choiceKey = slay ? 'plant-position' : 'soul-position';
+  const choiceLabel = slay ? 'Dark Sliver Slay plant' : 'Dark Sliver soul-space';
+  const recordedPosition = readCapturedPositionChoice(context, choiceKey, choiceLabel);
+  if (candidates.length > 0 && !recordedPosition) {
+    throw new RuleProgramViolation('choice.position-required', `${choiceLabel} requires a recorded position.`);
+  }
+  const chosenPosition = recordedPosition
+    ? validateCapturedPositionChoice(context, recordedPosition, placement, choiceLabel)
+    : null;
   const mutations: RuleMutation[] = [];
   const roll = resolveAuthoritativeAttack(context, source, target);
   mutations.push(roll.attackMutation);
@@ -278,15 +303,11 @@ const darkSliverEffects: RuleResolver = (context) => {
   mutations.push(roll.hit
     ? damageMutation(context, target.id, rollAbilityDamage(context.dice, roll.damageDie, 1, target.id, context) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
-  if (context.triggers?.has('slay')) {
-    const plantCell = evaluatePositions({ origin: target.position, radius: darkSliverPlacementRange(context, 'slay-placement'), space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-    if (plantCell) mutations.push(entityMutation(context, source.id, plantCell, 'plant', {}));
-  } else {
-    const soulCell = evaluatePositions({ origin: target.position, radius: darkSliverPlacementRange(context, 'terrain-placement'), space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-    if (soulCell) {
-      mutations.push(markMutation(context, target.id, 'dark-sliver', { x: soulCell.x, y: soulCell.y }));
-      mutations.push(entityMutation(context, source.id, soulCell, 'soul-space', {}));
-    }
+  if (slay) {
+    if (chosenPosition) mutations.push(entityMutation(context, source.id, chosenPosition, 'plant', {}));
+  } else if (chosenPosition) {
+    mutations.push(markMutation(context, target.id, 'dark-sliver', { x: chosenPosition.x, y: chosenPosition.y }));
+    mutations.push(entityMutation(context, source.id, chosenPosition, 'soul-space', {}));
   }
   return mutations;
 };

@@ -14,6 +14,7 @@ import {
   untilNextTurnStart, action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
+import { readCapturedPositionChoice, validateCapturedPositionChoice } from '../../../kernels/choice.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedActor, resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
@@ -185,10 +186,21 @@ const gallowsHumorEnter: RuleResolver = (context) => {
 const partyFavorEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   if (!source?.position) return [];
-  const chosen = context.input.positions?.['mine-position']?.[0];
-  const cell = chosen ?? evaluatePositions({ origin: source.position, radius: 3, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-  if (!cell) throw new RuleProgramViolation('choice.position-count', 'Party Favor requires a free space in range 3.');
-  if (distance(cell, source.position) > 3) throw new RuleProgramViolation('choice.position-range', 'Party Favor mines are placed in range 3.');
+  const placement = { origin: source.position, originSize: source.size, range: 3 };
+  const candidates = evaluatePositions({
+    origin: source.position,
+    originSize: source.size,
+    radius: 3,
+    space: { kind: 'unoccupied' },
+  }, context);
+  const chosen = readCapturedPositionChoice(context, 'mine-position', 'Party Favor mine');
+  if (candidates.length === 0) {
+    throw new RuleProgramViolation('choice.position-unavailable', 'Party Favor has no free space in range 3 for its mine.');
+  }
+  if (!chosen) {
+    throw new RuleProgramViolation('choice.position-required', 'Party Favor requires a recorded mine position.');
+  }
+  const cell = validateCapturedPositionChoice(context, chosen, placement, 'Party Favor mine');
   return [terrainMutation(context, 'create', 'party-favor', [cell])];
 };
 

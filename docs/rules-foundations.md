@@ -168,9 +168,11 @@ The position slice landed with the eligibility-duplicate routing
 `kernels/evaluate-query.ts` owns `evaluatePositions` (generic in-grid
 query with an EXPLICIT space policy — `any` per p.92 "Space: Any space in
 range, and any characters or objects occupying it", or `unoccupied` — and
-an opt-in `distance-from-origin` ordering policy),
-`validatePositionLegality` (teleport specialist: in-grid/range/unoccupied
-— consumed by the teleport kernel's violation mapping; the teleport
+an opt-in `distance-from-origin` ordering policy; tranche 32B added explicit
+`originSize` CandidateSet generation from the canonical p.92 footprint),
+`validatePositionLegality` (shared free-placement specialist:
+in-grid/footprint-range/unoccupied/optional-LoS — consumed by the teleport
+kernel and the source-ID-free U4 captured-position seam; the teleport
 kernel threads the MOVER's p.92 footprint as `originSize` from the
 resolved mover record, so a Size-2 mover measures range from its footprint
 edge — a MISSING mover fails closed with `selector.actor-missing` (never

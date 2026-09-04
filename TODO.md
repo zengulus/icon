@@ -914,6 +914,29 @@ assumption here, document the evidence and update this list before proceeding.
   entity-only summons still cannot participate in actor-domain "character"
   subsets and remain the already-recorded representation gap.
 
+- **U4 tranche 32B — single recorded-position choices (2026-09-04) —
+  DONE.** Added a thin source-ID-free captured-position seam: U4 reads
+  absent/empty/exactly-one input and owns cardinality, then U3 validates the
+  supplied cell's bounds, full-footprint range, free-space occupancy, and
+  caller-declared LoS. U3 `PositionQuery.originSize` now generates candidates
+  from the canonical p.92 footprint; no helper selects first/nearest/sorted.
+  Party Favor requires `mine-position` whenever candidates exist (singleton
+  included), applies no LoS policy, and rejects a zero-candidate use. Dark
+  Sliver requires `soul-position` / `plant-position` for nonempty foe-
+  footprint CandidateSets; the terrain rider has no LoS, while the Slay plant
+  applies p.108 summon LoS from the acting character. At zero candidates the
+  soul rider preserves the existing attack-only outcome and the Slay branch
+  preserves the kill without a plant. **OPEN derived interpretation:** p.187
+  does not say whether a zero-candidate soul-space board makes the whole
+  attack illegal or merely prevents the rider, so the preserved behavior is
+  pinned but not adjudicated. Source-specific adversarial/replay fixtures
+  cover many/one/zero candidates, every legality failure, Size>1 origins,
+  LoS/no-LoS, and absence of fallback. No source-unit promotion or executable-
+  membership delta. U4 remains PARTIAL: Mist Strider/Underway/Spirit Shrine/
+  Geyser/Waterspout/Dervish/Strongarm/Chaos Tarot effect 3/Astra/Symphony
+  recorded-position residuals, Dervish actor multi-select, Demon Claw Talent
+  I/II, opaque fold reads, and U12/U13 choice consumers remain.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

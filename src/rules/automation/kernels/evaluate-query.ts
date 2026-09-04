@@ -48,6 +48,7 @@
 import type { RuleActorView, RuleExecutionContext } from '../primitives/types.js';
 import type { Position } from '../../types.js';
 import {
+  footprintCells,
   footprintDistance,
   footprintIntersectsCells,
 } from '../primitives/spatial-intent.js';
@@ -273,8 +274,8 @@ export function composeActorQueries(
 // Position domain (U3 position slice)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Evaluate a position CandidateSet: every in-grid cell within Chebyshev
- * `radius` of `origin` that passes the query's explicit SPACE POLICY (and
+/** Evaluate a position CandidateSet: every in-grid cell within canonical
+ * footprint `radius` of `origin` that passes the query's explicit SPACE POLICY (and
  * the optional p.108 line-of-sight policy), ordered only when the caller
  * requests an ORDERING policy. The bounds / obstruction predicates are the
  * shared primitives (`primitives/job-kit.ts` `withinGrid`/`occupied`); this
@@ -284,15 +285,30 @@ export function composeActorQueries(
 export function evaluatePositions(query: PositionQuery, context: RuleExecutionContext): Position[] {
   const cells: Position[] = [];
   const view = query.lineOfSightFrom ? lineView(context) : null;
-  for (const cell of squareArea(query.origin, query.radius)) {
-    if (!validatePositionCandidate({ origin: query.origin, range: query.radius }, cell, context).legal) continue;
-    if (!query.includeOrigin && sameCell(cell, query.origin)) continue;
+  const originSize = Math.max(1, Math.floor(query.originSize ?? 1));
+  const originCells = footprintCells(query.origin, originSize);
+  const originCellKeys = new Set(originCells.map((cell) => `${cell.x},${cell.y}`));
+  const seen = new Set<string>();
+  const scanned = originCells
+    .flatMap((originCell) => squareArea(originCell, query.radius))
+    .filter((cell) => {
+      const key = `${cell.x},${cell.y}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  for (const cell of scanned) {
+    if (!validatePositionCandidate({ origin: query.origin, originSize, range: query.radius }, cell, context).legal) continue;
+    if (!query.includeOrigin && originCellKeys.has(`${cell.x},${cell.y}`)) continue;
     if (query.space.kind === 'unoccupied' && finalSpaceOccupied(cell, context, query.space.excludeActorId ?? '')) continue;
     if (view && !hasLineOfSight(view, query.lineOfSightFrom!, cell)) continue;
     cells.push(cell);
   }
   if (query.ordering?.kind === 'distance-from-origin') {
-    cells.sort((a, b) => distance(query.origin, a) - distance(query.origin, b) || a.x - b.x || a.y - b.y);
+    cells.sort((a, b) =>
+      footprintDistance({ position: query.origin, size: originSize }, { position: a, size: 1 })
+      - footprintDistance({ position: query.origin, size: originSize }, { position: b, size: 1 })
+      || a.x - b.x || a.y - b.y);
   }
   return cells;
 }

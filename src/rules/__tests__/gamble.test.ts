@@ -243,6 +243,7 @@ describe('existing gamble consumers', () => {
       actorId: hero.id,
       abilityId: 'fool:party-favor',
       targetIds: [],
+      input: { positions: { 'mine-position': [{ x: 2, y: 2 }] } },
     }, scriptedDice()).state;
     expect(placed.terrainEffects.some((effect) => effect.terrain === 'party-favor')).toBe(true);
     // Detonate with gamble 3

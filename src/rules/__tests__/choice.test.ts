@@ -16,7 +16,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { RuleChoice, RuleExecutionContext } from '../automation/primitives/types.js';
-import { resolveCapturedActorChoice, resolveCapturedOptionListChoice, resolveChoice, resolveChoices } from '../automation/kernels/choice.js';
+import {
+  readCapturedPositionChoice,
+  resolveCapturedActorChoice,
+  resolveCapturedOptionListChoice,
+  resolveChoice,
+  resolveChoices,
+  validateCapturedPositionChoice,
+} from '../automation/kernels/choice.js';
 import { validatePositionCandidate } from '../automation/kernels/evaluate-query.js';
 import { RuleProgramViolation } from '../automation/kernels/runtime.js';
 
@@ -192,6 +199,21 @@ describe('CHOOSE underlay — option / number / boolean / direction', () => {
 });
 
 describe('CHOOSE underlay — composition', () => {
+  it('reads one captured position without selecting a default and delegates legality to U3', () => {
+    expect(readCapturedPositionChoice(ctx(), 'landing', 'Landing')).toBeNull();
+    expect(readCapturedPositionChoice(ctx({ input: { positions: { landing: [] } } }), 'landing', 'Landing')).toBeNull();
+    const chosen = { x: 6, y: 6 };
+    const context = ctx({ input: { positions: { landing: [chosen] } } });
+    expect(readCapturedPositionChoice(context, 'landing', 'Landing')).toEqual(chosen);
+    expect(codeOf(() => readCapturedPositionChoice(ctx({ input: { positions: { landing: [chosen, { x: 7, y: 7 }] } } }), 'landing', 'Landing')))
+      .toBe('choice.position-count');
+    expect(validateCapturedPositionChoice(context, chosen, { origin: { x: 4, y: 4 }, range: 2 }, 'Landing')).toEqual(chosen);
+    expect(codeOf(() => validateCapturedPositionChoice(context, { x: 9, y: 9 }, { origin: { x: 4, y: 4 }, range: 2 }, 'Landing')))
+      .toBe('move.range');
+    expect(codeOf(() => validateCapturedPositionChoice(context, { x: 6, y: 4 }, { origin: { x: 4, y: 4 }, range: 2 }, 'Landing')))
+      .toBe('choice.position-unavailable');
+  });
+
   it('validates a recorded actor subset against an externally produced CandidateSet without selecting for the player', () => {
     const choice = { key: 'area-subset', label: 'Area subset', required: false, minimum: 0, maximum: 2 };
     const candidates = [{ id: 'hero' }, { id: 'ally' }];

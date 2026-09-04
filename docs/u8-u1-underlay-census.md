@@ -30,7 +30,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | AUTHORITATIVE (tranche 25 decision) | none in scope — the six defeated-divergent VM effect scans now route through the shared query authority (tranche 25); AREA / PERSISTENT-INSTANCE / RULE-SOURCE query domains and ordering beyond the min-distance set + opt-in cell order are explicitly later-underlay (U10/U12/U16/U17) or source-gated; rushTowardFoes' direction fallback remains the flagged player-choice (U4) approximation, and the Demon Claw / God Hand self-or-ally picks are recorded-choice or fail-closed (U4/resolver), never U3-invented |
-| U4 Choice / Decision | PARTIAL | (tranches 26-28, 30, 32A) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, Holy cure + Charge, and Chaos Tarot effects 4–6 now use recorded choices over U3 CandidateSets. Chaos Tarot 4/5 are optional 0..2 actor subsets with no invented side filter; effect 6 requires exactly two distinct effects from 1–5 and resolves them in p.108 listed order, so the automatic 1+3 default is gone. The p.92 CHARACTER umbrella's ACTOR slice remains self/ally/foe with no side filter; its Summon member remains an engine-wide unreachable because executable summons are entity-only and the U3 entity→actor bridge has no production user. Remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal-1 [portal-2 is an end-of-turn window], Spirit Shrine, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency" + its clockwise default, Chaos Tarot effect-3 terrain, seer:astra terrain/meteor cells, chanter:symphony mote cells — each a per-unit recorded-position obligation split across the resolver-level seam and intent-declaration summon seam), Dervish's actor multi-select, Demon Claw Talent I/II (documented-unresolved), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
+| U4 Choice / Decision | PARTIAL | (tranches 26-28, 30, 32A–B) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, Holy cure + Charge, Chaos Tarot effects 4–6, Party Favor's mine, and both Dark Sliver placements now use recorded choices over U3 CandidateSets. The source-ID-free captured-position seam reads exactly zero/one recorded position and delegates bounds, full-footprint range, free-space/occupancy, and optional LoS to U3; it never selects a candidate. Party Favor rejects zero candidates; Dark Sliver keeps its pre-existing attack-only/no-rider behavior at zero soul-space candidates and its kill-without-plant behavior at zero Slay candidates. The p.92 CHARACTER umbrella's ACTOR slice remains self/ally/foe with no side filter; its Summon member remains an engine-wide unreachable because executable summons are entity-only and the U3 entity→actor bridge has no production user. Remaining: the placement family silently defaults the source's WHERE choice (Mist Strider + charge cloud, Underway portal-1 [portal-2 is an end-of-turn window], Spirit Shrine, Geyser, Waterspout, Dervish placement, Strongarm talent-1 "into adjacency" + its clockwise default, Chaos Tarot effect-3 terrain, seer:astra terrain/meteor cells, chanter:symphony mote cells — each a per-unit recorded-position obligation split across the resolver-level seam and intent-declaration summon seam), Dervish's actor multi-select, Demon Claw Talent I/II (documented-unresolved), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
 | U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
 | U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
@@ -2013,6 +2013,38 @@ promotion or executable-membership change. U4 stays PARTIAL with the
 recorded-position family (Chaos Tarot effect 3 included), Dervish's remaining
 actor multi-select, Demon Claw Talent I/II, opaque fold inputs, and U12/U13
 choice consumers.
+
+**Tranche 32B — single recorded-position choices (2026-09-04).** A
+source-ID-free U4 seam now reads one captured position without any
+first/nearest fallback, rejects multi-position recordings, and validates the
+recorded cell through U3's shared free-placement authority. `PositionQuery`
+now carries `originSize`, and U3 generates and validates candidates from the
+canonical p.92 footprint rather than silently reducing actor origins to a
+point. Bounds, range, occupancy/free-space, and caller-declared LoS therefore
+remain U3 responsibilities; each source resolver alone decides requiredness
+and its zero-candidate result.
+
+Party Favor (p.151) requires `mine-position` whenever a legal free space in
+range 3 exists, including when the CandidateSet has exactly one member. It
+rejects a zero-candidate use, measures from the acting actor's full footprint,
+and deliberately declares no LoS policy because a mine is a terrain effect,
+not a p.108 summon/object/teleport placement. Dark Sliver (p.187) requires
+`soul-position` when the foe-footprint range-3 CandidateSet is nonempty and
+requires no LoS; its Slay branch likewise requires `plant-position` when a
+legal plant location exists, measures from the foe's full footprint, and adds
+the p.108 summoning LoS gate from the acting character. No branch chooses,
+sorts, or pads a missing answer. Replay applies only the recorded mutations.
+
+Zero candidates remain source-local, not a U4 vacuity convention: Party Favor
+rejects; Dark Sliver's Slay branch creates no plant and leaves the resolved
+kill intact; and the soul-space rider preserves its pre-tranche behavior by
+resolving the attack without a mark/entity. The last case is an **OPEN derived
+interpretation**: “choosing a free space” makes the choice mandatory when a
+candidate exists, but the source says neither that the whole attack becomes
+illegal nor that the rider disappears when the battlefield offers none. With
+no conflicting passage, this belongs in this census ledger rather than
+`source-adjudications`. No source unit was promoted and executable membership
+is unchanged. U4 remains PARTIAL with the residuals in the matrix row.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

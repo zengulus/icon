@@ -31,14 +31,12 @@
  * boundary.
  */
 import type { Position } from '../../types.js';
-import type {
-  RuleChoice,
-  RuleExecutionContext,
-} from '../primitives/types.js';
+import type { RuleChoice, RuleExecutionContext } from '../primitives/types.js';
+import type { PositionLegalityQuery } from '../primitives/query.js';
 import { defaultActorAnchor } from '../primitives/anchor.js';
 import { deriveRoles, resolveRoleSelector, roleFrameFromContext, type RoleFrame } from '../primitives/roles.js';
 import { resolveSpatialAnchor, validateActorCandidate } from './candidate.js';
-import { validatePositionCandidate } from './evaluate-query.js';
+import { validatePositionCandidate, validatePositionLegality } from './evaluate-query.js';
 import { RuleProgramViolation, evaluateNumber } from './runtime.js';
 
 /** The validated value for one `RuleChoice`: what the player supplied,
@@ -140,6 +138,47 @@ export function resolveCapturedOptionListChoice(
     }
   }
   return values;
+}
+
+/** Read one durable position decision without supplying any default. Source
+ * resolvers own whether absence is required, optional, or valid only when the
+ * U3 CandidateSet is empty; this seam owns the single-position cardinality. */
+export function readCapturedPositionChoice(
+  context: RuleExecutionContext,
+  key: string,
+  label = key,
+): Position | null {
+  const supplied = context.input.positions?.[key];
+  if (!supplied || supplied.length === 0) return null;
+  if (supplied.length !== 1) {
+    throw new RuleProgramViolation('choice.position-count', `${label}: requires exactly one recorded position (got ${supplied.length}).`);
+  }
+  return supplied[0];
+}
+
+/** Validate one recorded free-placement decision through U3's shared bounds,
+ * footprint range, occupancy, and optional LoS authority. The caller supplies
+ * the source-declared policy; this U4 adapter only maps structured legality
+ * problems to the established choice-boundary violations. */
+export function validateCapturedPositionChoice(
+  context: RuleExecutionContext,
+  position: Position,
+  legality: PositionLegalityQuery,
+  label: string,
+): Position {
+  const result = validatePositionLegality(legality, position, context);
+  if (result.legal) return position;
+  switch (result.problem) {
+    case 'out-of-bounds':
+      throw new RuleProgramViolation('move.out-of-bounds', `${label}: position is outside the battlefield.`);
+    case 'range':
+      throw new RuleProgramViolation('move.range', `${label}: position is outside range ${legality.range}.`);
+    case 'occupied':
+      throw new RuleProgramViolation('choice.position-unavailable', `${label}: position is not free.`);
+    case 'line-of-sight':
+      throw new RuleProgramViolation('move.line-of-sight', `${label}: position is outside line of sight.`);
+  }
+  throw new RuleProgramViolation('choice.position-unavailable', `${label}: position is not legal.`);
 }
 
 /** Validate one choice row against the command's typed input buckets.

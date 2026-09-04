@@ -647,8 +647,10 @@ identity, no invented ordering). New domains: ENTITY
 `state.entities`) and TERRAIN (`evaluateTerrainCells` — the
 terrain-predicate cell read). The position slice gained the p.108
 `lineOfSightFrom` policy (generic query + legality specialist) and
-`originSize` (the legality specialist measures the p.92 footprint of a
-Size>1 origin; size-1 collapses to the historical point metric). The U5
+`originSize` (initially on the legality specialist; tranche 32B extended the
+same field to CandidateSet generation so every touched actor-relative query
+measures the p.92 footprint of a Size>1 origin; size-1 collapses to the
+historical point metric). The U5
 `count-query` value and the U6 predicates consume these domains through
 `evaluateValueQuery`.
 
@@ -808,7 +810,8 @@ durable choice window (U12/U13), not legality — the evidence the ontology's
 "post-result decision is not a second choice system" point rests on.
 
 **Current state.** `PARTIAL`. `kernels/choice.ts` is authoritative for the
-six bucket kinds (23 tests, tranche 1): required/optional/cardinality/
+six bucket kinds and the source-ID-free captured-list/captured-position
+composition seams (27 focused tests through tranche 32B): required/optional/cardinality/
 distinctness/option membership/bounds; actor legality delegates to U3.
 T2 (2026-08-30): position choices now route their in-grid + p.92
 footprint-range reads through the SHARED position predicates
@@ -975,6 +978,30 @@ engine-wide entity→actor representation gap and is outside this tranche.
 U4 remains PARTIAL with the recorded-position placement family (including
 Chaos Tarot effect 3), Dervish's actor multi-select, Demon Claw Talent I/II,
 the opaque fold reads, and U12/U13-carried consumers.
+
+**Tranche-32B closure (2026-09-04)** — the first single recorded-position
+slice: Party Favor mine plus Dark Sliver soul-space and Slay plant only. The
+new thin U4 functions read an absent/empty/single position and enforce
+single-position cardinality, then validate a supplied position through U3's
+generic free-placement legality. They never generate, order, or select a
+position. U3 `PositionQuery` now accepts `originSize` and builds its
+CandidateSet from the canonical actor footprint; the existing shared legality
+operator owns bounds, footprint range, occupancy/free space, and an explicit
+LoS policy without importing teleport choice behavior.
+
+The source resolvers retain the policy that cannot be globalized: Party Favor
+requires recording even for a singleton CandidateSet and rejects when none
+exists; Dark Sliver requires recording for a nonempty set, preserves its
+existing attack-only result when the soul-space set is empty, and preserves
+the resolved kill while omitting the Slay plant when no legal summon space
+exists. Only the plant declares p.108 LoS; Party Favor and the terrain rider
+do not. The Dark Sliver soul-space zero-candidate outcome remains an open
+derived interpretation in the census/tranche ledger because the source does
+not state whether that board state invalidates the attack. Focused fixtures
+cover absent with many/one candidates, every legality problem, large origins,
+LoS/no-LoS, zero candidates, no fallback, and replay. No source unit was
+promoted; U4 remains PARTIAL with the matrix's remaining placement,
+multi-select, fold-input, and window-carried consumers.
 
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);

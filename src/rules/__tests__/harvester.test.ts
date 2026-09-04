@@ -82,6 +82,53 @@ function blockCellsNear(state: EncounterState, center: Position, radius: number)
   }]);
 }
 
+/** Fixture-only obstruction setup for exact-one and zero-candidate placement
+ * cases. Object entities obstruct every non-allowed free space. */
+function blockEveryGridCellExcept(state: EncounterState, allowed: readonly Position[]): void {
+  const allowedKeys = new Set(allowed.map((cell) => `${cell.x},${cell.y}`));
+  for (let y = 0; y < state.grid.height; y += 1) {
+    for (let x = 0; x < state.grid.width; x += 1) {
+      if (allowedKeys.has(`${x},${y}`)) continue;
+      state.entities[`fixture:blocker:${x},${y}`] = {
+        id: `fixture:blocker:${x},${y}`,
+        type: 'boulder',
+        ownerId: null,
+        positions: [{ x, y }],
+        state: {},
+        duration: null,
+        kind: 'object',
+      };
+    }
+  }
+}
+
+/** Direct-context Slay clause fixture. Production delivery of the derived
+ * Slay fact remains a separately documented runtime blocker; this proves the
+ * resolver-local recorded plant decision without allowing a forged command. */
+function executeDarkSliverSlay(
+  state: EncounterState,
+  heroId: string,
+  foeId: string,
+  input: RuleExecutionContext['input'] = {},
+) {
+  const unit = findRuleSourceUnit('harvester:dark-sliver')!;
+  const compilation = compileRuleSourceUnit(unit);
+  const context: RuleExecutionContext = {
+    state: encounterRuleState(state),
+    encounterState: state,
+    actorId: heroId,
+    sourceId: unit.id,
+    actionId: 'default',
+    timing: 'use',
+    input,
+    attackTargetId: foeId,
+    dice: scriptedDice(12, 4),
+    triggers: new Set(['slay']),
+    resolutionFacts: { triggers: ['slay'], attackTargets: [foeId], collidedActorIds: [], slainActorIds: [foeId] },
+  };
+  return executeRuleProgram(compilation.program, context, HARVESTER_RULE_RESOLVERS);
+}
+
 describe('Harvester ability automation (p.182–188)', () => {
   it('marks all nine abilities executable in the catalog and audit', () => {
     for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
@@ -504,11 +551,149 @@ describe('Harvester ability automation (p.182–188)', () => {
 
   it('Dark Sliver: [D]+fray on hit, cuts away the soul space, and marks it', () => {
     const { state, hero, foe } = harvesterEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id] }, scriptedDice(12, 4));
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id],
+      input: { positions: { 'soul-position': [{ x: 3, y: 1 }] } },
+    }, scriptedDice(12, 4));
     expect(result.state.actors[foe.id].hp).toBe(24); // 32 - (4 + fray 4)
     expect(Object.values(result.state.entities).some((entity) => entity.type === 'soul-space')).toBe(true);
     expect(result.state.actors[foe.id].marks.some(({ markId }) => markId === 'dark-sliver')).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Dark Sliver soul-space: multiple legal spaces never authorize an absent choice or fallback', () => {
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id], input: {},
+    }, scriptedDice(12, 4))).toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+    expect(state.actors[hero.id].actionsRemaining).toBe(2);
+    expect(Object.values(state.entities).some(({ type }) => type === 'soul-space')).toBe(false);
+  });
+
+  it('Dark Sliver soul-space: exactly one legal space still requires it to be recorded', () => {
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    blockEveryGridCellExcept(state, [{ x: 3, y: 1 }]);
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id], input: {},
+    }, scriptedDice(12, 4))).toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+  });
+
+  it('Dark Sliver soul-space: rejects multiple, out-of-bounds, out-of-range, and occupied recordings', () => {
+    const fixture = harvesterEncounter({ second: null });
+    const command = (positions: Position[]) => () => executeCommand(fixture.state, {
+      type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [fixture.foe.id],
+      input: { positions: { 'soul-position': positions } },
+    }, scriptedDice(12, 4));
+    expect(command([{ x: 3, y: 1 }, { x: 3, y: 2 }]))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-count' }));
+    expect(command([{ x: -1, y: 1 }]))
+      .toThrowError(expect.objectContaining({ code: 'move.out-of-bounds' }));
+    expect(command([{ x: 6, y: 1 }]))
+      .toThrowError(expect.objectContaining({ code: 'move.range' }));
+    expect(command([fixture.foe.position]))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-unavailable' }));
+  });
+
+  it('Dark Sliver soul-space: range uses the foe full footprint and does not require LoS', () => {
+    const { state, hero, foe } = harvesterEncounter({ foe: { x: 3, y: 3 }, second: null });
+    state.actors[foe.id].size = 2; // footprint spans (3,3)–(4,4)
+    state.grid.terrain.push({ position: { x: 3, y: 5 }, type: 'impassable', elevation: 0 });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id],
+      // Anchor distance 4, footprint-edge distance 3; wall blocks source LoS.
+      input: { positions: { 'soul-position': [{ x: 3, y: 7 }] } },
+    }, scriptedDice(12, 4));
+    expect(Object.values(result.state.entities)).toContainEqual(expect.objectContaining({
+      type: 'soul-space', positions: [{ x: 3, y: 7 }],
+    }));
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Dark Sliver soul-space: zero legal spaces preserves the existing attack-only behavior', () => {
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    blockEveryGridCellExcept(state, []);
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id], input: {},
+    }, scriptedDice(12, 4));
+    expect(result.state.actors[foe.id].hp).toBe(24);
+    expect(Object.values(result.state.entities).some(({ type }) => type === 'soul-space')).toBe(false);
+    expect(result.state.actors[foe.id].marks.some(({ markId }) => markId === 'dark-sliver')).toBe(false);
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Dark Sliver Slay plant: multiple legal spaces and exactly one legal space both require recording', () => {
+    const multiple = harvesterEncounter({ second: null });
+    expect(() => executeDarkSliverSlay(multiple.state, multiple.hero.id, multiple.foe.id))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+
+    const single = harvesterEncounter({ second: null });
+    blockEveryGridCellExcept(single.state, [{ x: 3, y: 1 }]);
+    expect(() => executeDarkSliverSlay(single.state, single.hero.id, single.foe.id))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+  });
+
+  it('Dark Sliver Slay plant: applies exactly the legal recorded position and replays it', () => {
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    const result = executeDarkSliverSlay(state, hero.id, foe.id, {
+      positions: { 'plant-position': [{ x: 3, y: 1 }] },
+    });
+    const plant = result.mutations.find((mutation) => mutation.kind === 'entity' && mutation.entityType === 'plant');
+    expect(plant).toMatchObject({ positions: [{ x: 3, y: 1 }] });
+    const replayed = applyEvents(state, [{
+      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'harvester:dark-sliver', actionId: 'default', timing: 'use', tags: [],
+      mutations: result.mutations,
+    }]);
+    expect(Object.values(replayed.entities)).toContainEqual(expect.objectContaining({
+      type: 'plant', positions: [{ x: 3, y: 1 }],
+    }));
+  });
+
+  it('Dark Sliver Slay plant: rejects multiple, out-of-bounds, out-of-range, and occupied recordings', () => {
+    const fixture = harvesterEncounter({ second: null });
+    const run = (positions: Position[]) => () => executeDarkSliverSlay(fixture.state, fixture.hero.id, fixture.foe.id, {
+      positions: { 'plant-position': positions },
+    });
+    expect(run([{ x: 3, y: 1 }, { x: 3, y: 2 }]))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-count' }));
+    expect(run([{ x: -1, y: 1 }]))
+      .toThrowError(expect.objectContaining({ code: 'move.out-of-bounds' }));
+    expect(run([{ x: 6, y: 1 }]))
+      .toThrowError(expect.objectContaining({ code: 'move.range' }));
+    expect(run([fixture.foe.position]))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-unavailable' }));
+  });
+
+  it('Dark Sliver Slay plant: range uses the foe full footprint', () => {
+    const { state, hero, foe } = harvesterEncounter({ foe: { x: 3, y: 3 }, second: null });
+    state.actors[foe.id].size = 2;
+    const result = executeDarkSliverSlay(state, hero.id, foe.id, {
+      positions: { 'plant-position': [{ x: 3, y: 7 }] },
+    });
+    expect(result.mutations).toContainEqual(expect.objectContaining({
+      kind: 'entity', entityType: 'plant', positions: [{ x: 3, y: 7 }],
+    }));
+  });
+
+  it('Dark Sliver Slay plant: summon placement requires LoS to the recorded space', () => {
+    const { state, hero, foe } = harvesterEncounter({ foe: { x: 3, y: 1 }, second: null });
+    state.grid.terrain.push({ position: { x: 4, y: 1 }, type: 'impassable', elevation: 0 });
+    expect(() => executeDarkSliverSlay(state, hero.id, foe.id, {
+      positions: { 'plant-position': [{ x: 5, y: 1 }] },
+    })).toThrowError(expect.objectContaining({ code: 'move.line-of-sight' }));
+  });
+
+  it('Dark Sliver Slay plant: zero legal spaces creates no plant while the resolved kill remains', () => {
+    const { state, hero, foe } = harvesterEncounter({ second: null });
+    state.actors[foe.id].hp = 4;
+    blockEveryGridCellExcept(state, []);
+    const result = executeDarkSliverSlay(state, hero.id, foe.id);
+    expect(result.mutations.some((mutation) => mutation.kind === 'entity' && mutation.entityType === 'plant')).toBe(false);
+    const replayed = applyEvents(state, [{
+      type: 'RULE_MUTATIONS_APPLIED', actorId: hero.id, sourceId: 'harvester:dark-sliver', actionId: 'default', timing: 'use', tags: [],
+      mutations: result.mutations,
+    }]);
+    expect(replayed.actors[foe.id].defeated).toBe(true);
+    expect(Object.values(replayed.entities).some(({ type }) => type === 'plant')).toBe(false);
   });
 
   it('Dark Sliver talent 1: "Comeback: Deal bonus damage, and increase all ranges by +1" (p.185)', () => {
@@ -519,7 +704,10 @@ describe('Harvester ability automation (p.182–188)', () => {
     state.actors[hero.id].talents = { 'harvester:dark-sliver': 1 };
     state.actors[hero.id].hp = 1; // bloodied → the comeback clause holds
     state.actors[foe.id].position = { x: 4, y: 1 }; // range 3
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id] }, scriptedDice(12, 2, 6));
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'harvester:dark-sliver', targetIds: [foe.id],
+      input: { positions: { 'soul-position': [{ x: 5, y: 1 }] } },
+    }, scriptedDice(12, 2, 6));
     // d20 12 hits; damage dice roll 2 then 6 → keep the highest (6) + fray 4.
     expect(result.state.actors[foe.id].hp).toBe(22); // 32 - 10
     expect(applyEvents(state, result.events)).toEqual(result.state);
@@ -536,7 +724,10 @@ describe('Harvester ability automation (p.182–188)', () => {
     const comeback = harvesterEncounter({ second: null });
     comeback.state.actors[comeback.hero.id].talents = { 'harvester:dark-sliver': 1 };
     comeback.state.actors[comeback.hero.id].hp = 1;
-    const at2 = executeCommand(comeback.state, { type: 'USE_ABILITY', actorId: comeback.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [comeback.foe.id] }, scriptedDice(12, 2, 6));
+    const at2 = executeCommand(comeback.state, {
+      type: 'USE_ABILITY', actorId: comeback.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [comeback.foe.id],
+      input: { positions: { 'soul-position': [{ x: 3, y: 1 }] } },
+    }, scriptedDice(12, 2, 6));
     expect(at2.state.actors[comeback.foe.id].hp).toBe(22); // 32 - (6 + 4)
     expect(applyEvents(comeback.state, at2.events)).toEqual(at2.state);
   });
@@ -553,7 +744,10 @@ describe('Harvester ability automation (p.182–188)', () => {
     fixture.state.actors[fixture.foe.id].position = { x: 0, y: 0 };
     fixture.state.actors[fixture.hero.id].position = { x: 2, y: 0 }; // distance 2: legal at base Range 2
     const blocked = blockCellsNear(fixture.state, { x: 0, y: 0 }, 2);
-    const result = executeCommand(blocked, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [fixture.foe.id] }, scriptedDice(12, 4));
+    const result = executeCommand(blocked, {
+      type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [fixture.foe.id],
+      input: { positions: { 'soul-position': [{ x: 0, y: 3 }] } },
+    }, scriptedDice(12, 4));
     const soul = Object.values(result.state.entities).find((entity) => entity.type === 'soul-space');
     expect(soul).toBeDefined();
     expect(soul!.positions[0]).toEqual({ x: 0, y: 3 }); // the first free cell at exactly distance 3
@@ -573,7 +767,10 @@ describe('Harvester ability automation (p.182–188)', () => {
     fixture.state.actors[fixture.foe.id].position = { x: 0, y: 0 };
     fixture.state.actors[fixture.hero.id].position = { x: 2, y: 0 }; // distance 2: legal under Comeback Range 3
     const range4 = blockCellsNear(fixture.state, { x: 0, y: 0 }, 3);
-    const at4 = executeCommand(range4, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [fixture.foe.id] }, scriptedDice(12, 4));
+    const at4 = executeCommand(range4, {
+      type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver', targetIds: [fixture.foe.id],
+      input: { positions: { 'soul-position': [{ x: 0, y: 4 }] } },
+    }, scriptedDice(12, 4));
     const soul = Object.values(at4.state.entities).find((entity) => entity.type === 'soul-space');
     expect(soul).toBeDefined();
     expect(soul!.positions[0]).toEqual({ x: 0, y: 4 }); // the first free cell at exactly distance 4
@@ -601,7 +798,7 @@ describe('Harvester ability automation (p.182–188)', () => {
     fixture.state.actors[fixture.hero.id].hp = 1; // bloodied
     fixture.state.actors[fixture.foe.id].position = { x: 0, y: 0 };
     fixture.state.actors[fixture.hero.id].position = { x: 2, y: 0 };
-    const run = (state: EncounterState) => {
+    const run = (state: EncounterState, plantPosition?: Position) => {
       const unit = findRuleSourceUnit('harvester:dark-sliver')!;
       const compilation = compileRuleSourceUnit(unit);
       const context: RuleExecutionContext = {
@@ -611,7 +808,7 @@ describe('Harvester ability automation (p.182–188)', () => {
         sourceId: unit.id,
         actionId: 'default',
         timing: 'use',
-        input: {},
+        input: plantPosition ? { positions: { 'plant-position': [plantPosition] } } : {},
         attackTargetId: fixture.foe.id,
         dice: scriptedDice(12, 4),
         triggers: new Set(['slay']),
@@ -620,7 +817,7 @@ describe('Harvester ability automation (p.182–188)', () => {
       return executeRuleProgram(compilation.program, context, HARVESTER_RULE_RESOLVERS);
     };
     const range4 = blockCellsNear(fixture.state, { x: 0, y: 0 }, 3);
-    const slay4 = run(range4);
+    const slay4 = run(range4, { x: 0, y: 4 });
     const plant = slay4.mutations.find((mutation) => mutation.kind === 'entity');
     expect(plant).toBeDefined();
     expect(plant!.positions[0]).toEqual({ x: 0, y: 4 }); // the first free cell at exactly distance 4
@@ -642,7 +839,10 @@ describe('Harvester ability automation (p.182–188)', () => {
     const result = executeCommand(fixture.state, {
       type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver',
       targetIds: [fixture.foe.id],
-      input: { talentChoices: ['harvester:dark-sliver:talent:2'] },
+      input: {
+        talentChoices: ['harvester:dark-sliver:talent:2'],
+        positions: { 'soul-position': [{ x: 7, y: 1 }] },
+      },
     }, scriptedDice(12, 4));
     // Sacrifice 2 HP: 12 → 10 (sacrifice applies before ability effects).
     expect(result.state.actors[fixture.hero.id].hp).toBe(10);
@@ -678,7 +878,10 @@ describe('Harvester ability automation (p.182–188)', () => {
     const result = executeCommand(fixture.state, {
       type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver',
       targetIds: [fixture.foe.id],
-      input: { talentChoices: ['harvester:dark-sliver:talent:2'] },
+      input: {
+        talentChoices: ['harvester:dark-sliver:talent:2'],
+        positions: { 'soul-position': [{ x: 7, y: 1 }] },
+      },
     }, scriptedDice(12, 4));
     // Floor 1 HP: sacrifice reduces from 1 to 1.
     expect(result.state.actors[fixture.hero.id].hp).toBe(1);
@@ -698,7 +901,10 @@ describe('Harvester ability automation (p.182–188)', () => {
     const result = executeCommand(fixture.state, {
       type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'harvester:dark-sliver',
       targetIds: [fixture.foe.id],
-      input: { talentChoices: ['harvester:dark-sliver:talent:2'] },
+      input: {
+        talentChoices: ['harvester:dark-sliver:talent:2'],
+        positions: { 'soul-position': [{ x: 3, y: 1 }] },
+      },
     }, scriptedDice(12, 4));
     // Legal at base range 2, and NO sacrifice was paid.
     expect(result.state.actors[fixture.hero.id].hp).toBe(12);
@@ -754,7 +960,10 @@ describe('Harvester ability automation (p.182–188)', () => {
     const result = executeCommand(fixture.state, {
       type: 'EXECUTE_RULE', actorId: fixture.hero.id, sourceId: 'harvester:dark-sliver',
       actionId: 'default', timing: 'use', attackTargetId: fixture.foe.id,
-      input: { talentChoices: ['harvester:dark-sliver:talent:2'] },
+      input: {
+        talentChoices: ['harvester:dark-sliver:talent:2'],
+        positions: { 'soul-position': [{ x: 7, y: 1 }] },
+      },
     }, scriptedDice(12, 4));
     // Sacrifice 2 HP: 12 → 10, exactly like USE_ABILITY.
     expect(result.state.actors[fixture.hero.id].hp).toBe(10);

@@ -137,12 +137,14 @@ export type PositionCandidateProblem = 'out-of-bounds' | 'range';
 
 /** A position-domain candidate query. */
 export interface PositionQuery {
-  /** The center the radius is measured from. */
+  /** The origin whose footprint the radius is measured from. */
   origin: Position;
+  /** The p.92 origin footprint size. Default 1 for a point-space query. */
+  originSize?: number;
   /** Chebyshev radius. */
   radius: number;
-  /** Whether the origin cell itself is a candidate. Default false — the
-   * placement helpers exclude the center (a free cell adjacent to it). */
+  /** Whether cells in the origin footprint are candidates. Default false —
+   * placement helpers exclude the origin itself. */
   includeOrigin?: boolean;
   /** The space policy (see `PositionSpacePolicy`). */
   space: PositionSpacePolicy;
@@ -154,15 +156,16 @@ export interface PositionQuery {
   lineOfSightFrom?: Position;
 }
 
-/** The TELEPORT/placement legality specialist: in-grid, within footprint
+/** The free-placement legality specialist: in-grid, within footprint
  * `range` of the origin footprint, unoccupied, and — when `lineOfSightFrom`
  * is declared — with line of sight from that position (ICON p.108: \"For a
  * space to be valid for summoning, teleporting, or creating objects, unless
  * specified it must be free and unobstructed, and you also need line of
  * sight\"). Structured so the teleport kernel maps each problem onto its
  * existing violation codes instead of re-implementing the same checks. This
- * is a DOMAIN rule, not the generic position query: the in-grid → range →
- * unoccupied → LoS order is placement's own contract. */
+ * is the shared DOMAIN rule for free placement, not a teleport choice policy:
+ * the in-grid → range → unoccupied → LoS order is placement's own
+ * contract, while each source resolver declares whether LoS applies. */
 export interface PositionLegalityQuery {
   origin: Position;
   /** The origin footprint size for the canonical p.92 metric (default 1 = a

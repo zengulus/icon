@@ -333,6 +333,17 @@ describe('position domain — generic space query, teleport legality, and the ne
     expect(own).toContainEqual({ x: 4, y: 4 });
   });
 
+  it('evaluatePositions measures candidates from the full declared origin footprint', () => {
+    const context = ctx();
+    const point = evaluatePositions({ origin: { x: 4, y: 4 }, radius: 1, space: { kind: 'any' } }, context);
+    const footprint = evaluatePositions({ origin: { x: 4, y: 4 }, originSize: 2, radius: 1, space: { kind: 'any' } }, context);
+    // (4,6) is distance 2 from the anchor but distance 1 from the Size-2
+    // footprint edge. U3, not a source resolver, owns that candidate fact.
+    expect(point).not.toContainEqual({ x: 4, y: 6 });
+    expect(footprint).toContainEqual({ x: 4, y: 6 });
+    expect(footprint).not.toContainEqual({ x: 5, y: 5 }); // origin footprint excluded by default
+  });
+
   it('validatePositionLegality (teleport specialist): in-grid, range, and unoccupied problems in order', () => {
     const context = ctx();
     const query = { origin: { x: 4, y: 4 }, range: 2, excludeActorId: 'hero' };

@@ -48,6 +48,26 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
   return event && event.type === 'RULE_MUTATIONS_APPLIED' ? event.mutations : [];
 };
 
+/** Fixture-only obstruction setup for source-specific zero/one-candidate
+ * placement cases. Object entities obstruct free spaces; actors already do. */
+function blockEveryGridCellExcept(state: EncounterState, allowed: readonly Position[]): void {
+  const allowedKeys = new Set(allowed.map((cell) => `${cell.x},${cell.y}`));
+  for (let y = 0; y < state.grid.height; y += 1) {
+    for (let x = 0; x < state.grid.width; x += 1) {
+      if (allowedKeys.has(`${x},${y}`)) continue;
+      state.entities[`fixture:blocker:${x},${y}`] = {
+        id: `fixture:blocker:${x},${y}`,
+        type: 'boulder',
+        ownerId: null,
+        positions: [{ x, y }],
+        state: {},
+        duration: null,
+        kind: 'object',
+      };
+    }
+  }
+}
+
 describe('Fool ability automation (p.150–152)', () => {
   it('marks all nine abilities executable in the catalog and audit', () => {
     for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
@@ -256,7 +276,10 @@ describe('Fool ability automation (p.150–152)', () => {
     const empowered = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: empower(hero.id) }, scriptedDice(12, 4, 4)).state;
     expect(empowered.actors[hero.id].ruleState['gallows-humor:die']).toBe(1);
     expect(empowered.actors[hero.id].ruleState['gallows-humor:slay-armed']).toBeUndefined();
-    const later = executeCommand(empowered, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [], input: {} }, scriptedDice(3));
+    const later = executeCommand(empowered, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [],
+      input: { positions: { 'mine-position': [{ x: 5, y: 2 }] } },
+    }, scriptedDice(3));
     const event = gallowsRuleEvent(later, 'fool:party-favor');
     expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
       ? (event.triggerActivations ?? []).some(({ trigger }) => trigger === 'slay')
@@ -363,7 +386,10 @@ describe('Fool ability automation (p.150–152)', () => {
 
   it('Party Favor: places a mine, and detonating it deals 2 damage (ally flight direction unresolved)', () => {
     const { state, hero, foe } = foolEncounter({ foe: { x: 1, y: 2 }, second: null });
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [] }, scriptedDice()).state;
+    const placed = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [],
+      input: { positions: { 'mine-position': [{ x: 2, y: 2 }] } },
+    }, scriptedDice()).state;
     expect(placed.terrainEffects.some((effect) => effect.terrain === 'party-favor')).toBe(true);
 
     const detonated = executeCommand(placed, { type: 'EXECUTE_RULE', actorId: hero.id, sourceId: 'fool:party-favor', actionId: 'detonate', timing: 'movement-end', input: {} }, scriptedDice(3));
@@ -375,7 +401,10 @@ describe('Fool ability automation (p.150–152)', () => {
 
   it('Party Favor: a Finishing Blow doubles foe damage and a 4+ gamble blinds them', () => {
     const { state, hero, foe } = foolEncounter({ foe: { x: 1, y: 2 }, second: null });
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [] }, scriptedDice()).state;
+    const placed = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [],
+      input: { positions: { 'mine-position': [{ x: 2, y: 2 }] } },
+    }, scriptedDice()).state;
     // Finishing Blow is derived from the bloodied attack-target slot (ICON
     // p.95); the foe in the mine blast is bloodied, and naming it as the
     // attack target lets the boundary derive the trigger — never asserted.
@@ -392,6 +421,64 @@ describe('Fool ability automation (p.150–152)', () => {
     expect(detonated.state.actors[foe.id].hp).toBe(10); // 16 - 2*3 (2 base + 2 + 2 finishing-blow)
     expect(detonated.state.actors[foe.id].statuses).toContain('blind');
     expect(applyEvents(placed, detonated.events)).toEqual(detonated.state);
+  });
+
+  it('Party Favor: multiple legal spaces never authorize an absent choice or a first/nearest fallback', () => {
+    const { state, hero } = foolEncounter({ foe: { x: 9, y: 9 }, second: null });
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [], input: {},
+    }, scriptedDice())).toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+    expect(state.actors[hero.id].actionsRemaining).toBe(2);
+    expect(state.terrainEffects).toHaveLength(0);
+  });
+
+  it('Party Favor: even exactly one legal space requires that position to be recorded', () => {
+    const { state, hero } = foolEncounter({ foe: { x: 9, y: 9 }, second: null });
+    blockEveryGridCellExcept(state, [{ x: 4, y: 1 }]);
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [], input: {},
+    }, scriptedDice())).toThrowError(expect.objectContaining({ code: 'choice.position-required' }));
+  });
+
+  it('Party Favor: rejects multiple, out-of-bounds, out-of-range, and occupied recorded positions', () => {
+    const command = (state: EncounterState, actorId: string, positions: Position[]) => () => executeCommand(state, {
+      type: 'USE_ABILITY', actorId, abilityId: 'fool:party-favor', targetIds: [],
+      input: { positions: { 'mine-position': positions } },
+    }, scriptedDice());
+    const fixture = foolEncounter({ foe: { x: 2, y: 1 }, second: null });
+    expect(command(fixture.state, fixture.hero.id, [{ x: 0, y: 0 }, { x: 0, y: 1 }]))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-count' }));
+    expect(command(fixture.state, fixture.hero.id, [{ x: -1, y: 1 }]))
+      .toThrowError(expect.objectContaining({ code: 'move.out-of-bounds' }));
+    expect(command(fixture.state, fixture.hero.id, [{ x: 5, y: 5 }]))
+      .toThrowError(expect.objectContaining({ code: 'move.range' }));
+    expect(command(fixture.state, fixture.hero.id, [fixture.foe.position]))
+      .toThrowError(expect.objectContaining({ code: 'choice.position-unavailable' }));
+  });
+
+  it('Party Favor: range uses the acting actor full footprint and does not import placement LoS', () => {
+    const { state, hero } = foolEncounter({ foe: { x: 9, y: 9 }, second: null });
+    state.actors[hero.id].size = 2; // footprint spans (1,1)–(2,2)
+    state.grid.terrain.push({ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [],
+      // Anchor distance 4, but footprint-edge distance 3. The wall blocks LoS.
+      input: { positions: { 'mine-position': [{ x: 5, y: 1 }] } },
+    }, scriptedDice());
+    expect(result.state.terrainEffects).toContainEqual(expect.objectContaining({
+      terrain: 'party-favor', positions: [{ x: 5, y: 1 }],
+    }));
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
+  it('Party Favor: zero legal mine spaces rejects the use instead of consuming it for no effect', () => {
+    const { state, hero } = foolEncounter({ foe: { x: 9, y: 9 }, second: null });
+    blockEveryGridCellExcept(state, []);
+    expect(() => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:party-favor', targetIds: [], input: {},
+    }, scriptedDice())).toThrowError(expect.objectContaining({ code: 'choice.position-unavailable' }));
+    expect(state.actors[hero.id].actionsRemaining).toBe(2);
+    expect(state.terrainEffects).toHaveLength(0);
   });
 
   it('Masquerade: swaps places with a willing ally in range 3', () => {
