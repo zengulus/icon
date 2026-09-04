@@ -8,7 +8,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterEvent, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Sealer
@@ -277,7 +277,7 @@ describe('Sealer ability automation (p.189–196)', () => {
 
   it('Spirit Shrine: creates a height 1 shrine, then raises it to height 2', () => {
     const { state, hero } = sealerEncounter({ second: null });
-    const first = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:spirit-shrine', targetIds: [] }, scriptedDice());
+    const first = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:spirit-shrine', input: { positions: { 'shrine-position': [{ x: 0, y: 1 }] } }, targetIds: [] }, scriptedDice());
     const shrines = Object.values(first.state.entities).filter((entity) => entity.type === 'shrine');
     expect(shrines).toHaveLength(1);
     expect(shrines[0]?.state.height).toBe(1);
@@ -285,7 +285,7 @@ describe('Sealer ability automation (p.189–196)', () => {
     // The shrine-raise is the same ability used again while adjacent, so the
     // fixture clears the same-turn repeat gate.
     delete first.state.actors[hero.id].ruleState[noRepeatKey('sealer:spirit-shrine')];
-    const second = executeCommand(first.state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:spirit-shrine', targetIds: [] }, scriptedDice());
+    const second = executeCommand(first.state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'sealer:spirit-shrine', input: { positions: { 'shrine-position': [{ x: 0, y: 1 }] } }, targetIds: [] }, scriptedDice());
     const raised = Object.values(second.state.entities).filter((entity) => entity.type === 'shrine');
     expect(raised[0]?.state.height).toBe(2);
     const replayed = applyEvents(state, first.events);

@@ -1,3 +1,6 @@
+import { resolveChoice } from '../../../kernels/choice.js';
+import { resolveCapturedPositionListChoice } from '../../../kernels/choice.js';
+import { contextAfterMutations } from '../../../kernels/execute-flow.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { auraDefinitionFor, auraRuntimeView, isInAura } from '../../../kernels/aura.js';
@@ -226,7 +229,7 @@ const strongarmEffects: RuleResolver = (context) => {
   // on talent ownership alone. The shared range kernel widens target
   // legality to range 2 while the user is bloodied; the program mirrors that
   // gate so the hold starts from adjacency, and only under active Comeback
-  // does it emit the remove/place reposition — into the canonical first free
+  // does it emit the remove/place reposition — into the recorded legal
   // adjacent cell — BEFORE the spin mutations, so the spin starts from the
   // placed cell. With the talent equipped but the user NOT bloodied, the
   // ability behaves exactly like base Strongarm (adjacent hold, no
@@ -241,13 +244,17 @@ const strongarmEffects: RuleResolver = (context) => {
   const mutations: RuleMutation[] = [];
   let targetPosition = target.position;
   if (comeback) {
-    const adjacency = evaluatePositions({ origin: sourcePosition, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-    if (!adjacency) throw new RuleProgramViolation('choice.position-range', 'Strongarm talent 1 requires a free adjacent space.');
     mutations.push(removeMutation(context, target.id));
+    const placement = contextAfterMutations(context, mutations);
+    const [adjacency] = resolveCapturedPositionListChoice({ key: 'strongarm-adjacency', label: 'Strongarm adjacency',
+      required: true, minimum: 1, maximum: 1,
+    }, evaluatePositions({ origin: sourcePosition, originSize: source.size, radius: 1, includeOrigin: true,
+      space: { kind: 'unoccupied', excludeActorId: target.id }, placementActorId: target.id }, placement), placement);
     mutations.push(placeMutation(context, target.id, adjacency));
     targetPosition = adjacency;
   }
-  const clockwise = (context.input.options?.direction ?? 'clockwise') !== 'counter-clockwise';
+  const direction = resolveChoice({ key: 'direction', label: 'Strongarm rotation', kind: 'option', required: true, options: ['clockwise', 'counter-clockwise'] }, context);
+  const clockwise = direction.kind === 'option' && direction.value === 'clockwise';
   const ring = ringAround(sourcePosition);
   const startIndex = ring.findIndex((cell) => sameCell(cell, targetPosition));
   if (startIndex < 0) throw new RuleProgramViolation('choice.actor-range', 'Strongarm requires an adjacent foe.');

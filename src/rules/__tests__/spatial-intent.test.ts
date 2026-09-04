@@ -4,7 +4,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { computeSpatialArea } from '../automation/primitives/spatial-intent.js';
 import { lineCells, squareArea } from '../area-geometry.js';
 import type { EncounterActor, EncounterEvent, EncounterState, Position, TerrainCell } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { validCharacter, startEncounterTo } from './fixtures.js';
 
 /**
  * F1 spatial-gateway matrix (ICON pp.87–92, 94, 107).

@@ -684,7 +684,6 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     file: 'docs/rules-foundations.md',
     anchor: '### Anchor / Spatial Frame (U7 underlay) — AUTHORITATIVE (completion audit + teleport fail-closed repair, 2026-09-02)',
     anchors: [
-      { file: 'docs/rules-foundations.md', anchor: 'remains honestly PARTIAL; U7 (Anchor / Spatial Frame) is AUTHORITATIVE as' },
       { file: 'TODO.md', anchor: 'completion audit; U7 becomes AUTHORITATIVE; next = U5-core (2026-09-02)' },
       { file: 'TODO.md', anchor: 'DEPENDENCY-DRIVEN TRANCHE: **U5-core** — with U7 authoritative' },
     ],
@@ -731,14 +730,6 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
   },
 
   // --- lowercase strong claims surfaced by the case-insensitive scan --------
-  {
-    id: 'claim:infra:schema-v3-migration',
-    file: 'docs/roadmap.md',
-    anchor: 'schema v3 migration — complete.',
-    strength: 'complete',
-    subject: 'Schema v3 checkpoint migration',
-    binding: legacy('verified by transport/persistence tests; no fidelity scope'),
-  },
   {
     id: 'claim:deliverables:settlement-slice-closed',
     file: 'docs/deliverables.md',

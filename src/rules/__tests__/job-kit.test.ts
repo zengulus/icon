@@ -23,7 +23,7 @@ import {
 } from '../automation/primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../automation/kernels/attack-resolution.js';
 import { findRuleSourceUnit } from '../source-units.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 /**
  * Direct unit coverage for the shared job-program building blocks in

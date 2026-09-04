@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { rollBoonOrCurse, rollDamage, rollNarrativeAction } from '../dice.js';
-import {scriptedDice, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice } from './fixtures.js';
 
 describe('ICON dice', () => {
   it('rolls 2d6 and keeps the lowest at zero narrative dice', () => {

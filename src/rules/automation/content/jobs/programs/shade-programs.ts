@@ -3,12 +3,11 @@ import { resolveSaveWindow } from '../../../primitives/save-window.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
-  axisDirection, orthogonalNeighbors, sameCell, squareArea,
+  axisDirection, sameCell, squareArea,
   constant, comboCost,
-  distance, sourceActor, walk,
-  damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation, rollDamageDice,
-  placeMutation, teleportMutation, entityMutation, summonEntity, terrainMutation, swapMutations,
-  action, compilation,
+  distance, walk,
+  damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation, teleportMutation, summonEntity, terrainMutation, swapMutations,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor, resolveTriggerSource } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';

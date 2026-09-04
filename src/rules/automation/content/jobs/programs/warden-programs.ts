@@ -1,13 +1,16 @@
+import { blastTemplateCells } from '../../../../area-geometry.js';
+import { resolveCapturedPositionListChoice } from '../../../kernels/choice.js';
+import { chooseEntityCreation } from '../../../kernels/creation-choice.js';
+import { contextAfterMutations } from '../../../kernels/execute-flow.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
-  axisDirection, ringAround, sameCell, squareArea,
-  constant,
-  distance, sourceActor, walk,
+  axisDirection, ringAround, sameCell, constant,
+  distance, walk,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
-  shoveMutation, rushMutation, entityMutation, summonEntity, terrainMutation,
-  action, compilation,
+  shoveMutation, rushMutation, summonEntity, terrainMutation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
@@ -173,7 +176,8 @@ const mistStriderEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   const sourcePosition = source.position;
   if (!sourcePosition) return [];
-  const center = context.input.positions?.['area-center']?.[0] ?? sourcePosition;
+  const cloudCandidates = evaluatePositions({ origin: sourcePosition, originSize: source.size, radius: 3, space: { kind: 'unoccupied' } }, context);
+  const [center] = resolveCapturedPositionListChoice({ key: 'area-center', label: 'Mist Strider cloud', required: true, minimum: 1, maximum: 1 }, cloudCandidates, context);
   if (distance(sourcePosition, center) > 3) throw new RuleProgramViolation('choice.position-range', 'Mist Strider places a cloud in range 3.');
   const mutations: RuleMutation[] = [];
   for (const effect of context.state.terrainEffects) {
@@ -181,10 +185,10 @@ const mistStriderEffects: RuleResolver = (context) => {
       mutations.push(terrainMutation(context, 'remove', 'mist-cloud', [...effect.positions]));
     }
   }
-  mutations.push(terrainMutation(context, 'create', 'mist-cloud', squareArea(center, 1)));
+  mutations.push(terrainMutation(context, 'create', 'mist-cloud', blastTemplateCells('small', center)));
   if (context.triggers?.has('charge')) {
-    const second = evaluatePositions({ origin: center, radius: 3, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-    if (second) mutations.push(terrainMutation(context, 'create', 'mist-cloud', squareArea(second, 1)));
+    const [second] = resolveCapturedPositionListChoice({ key: 'charge-cloud', label: 'Mist Strider Charge cloud', required: true, minimum: 1, maximum: 1 }, cloudCandidates, context);
+    mutations.push(terrainMutation(context, 'create', 'mist-cloud', blastTemplateCells('small', second)));
   }
   return mutations;
 };
@@ -234,9 +238,11 @@ const underwayEffects: RuleResolver = (context) => {
       break;
     }
   }
-  const portalCell = evaluatePositions({ origin: sourcePosition, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-  if (!portalCell) throw new RuleProgramViolation('choice.position-range', 'Underway requires a free adjacent space.');
-  mutations.push(entityMutation(context, source.id, portalCell, 'underway', {}));
+  const placement = contextAfterMutations(context, mutations);
+  mutations.push(chooseEntityCreation(placement, 'portal-position', 'Underway portal', {
+    origin: sourcePosition, originSize: source.size, radius: 1, space: { kind: 'unoccupied' },
+  }, { ownerId: source.id, entityType: 'underway', count: 1, state: {},
+    spatial: { origin: sourcePosition, originSize: source.size, maxRange: 1 } }));
   if (context.triggers?.has('charge')) {
     const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1, losOrigin: sourcePosition, originSize: source.size })[0];
     if (beast) mutations.push(beast);

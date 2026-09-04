@@ -128,7 +128,7 @@ WINDOW/CONTINUATION underlays; never supply it speculatively. Tests:
 + protocol fixtures. Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
-### Candidate sets (QUERY underlay) — PARTIAL: actor/position/entity/terrain query with the eligibility duplicates routed (T2, 2026-08-30)
+### Candidate sets (QUERY underlay) — declared-scope decision recorded in tranche 25
 
 One deterministic ACTOR-domain eligibility authority beneath both automatic
 targeting and player choices. `kernels/candidate.ts`
@@ -227,18 +227,19 @@ it (`move.line-of-sight`, spellblade behind-the-wall + control
 fixtures). The U5 `count-query` value and U6 predicates consume the new
 domains through `evaluateValueQuery`.
 
-NOT yet the full U3 QUERY underlay (see `docs/underlay-completion-plan.md`
-§1 U3): the AREA, PERSISTENT-INSTANCE, and RULE-SOURCE query domains are
-U10/U12-scoped (not part of the T2 contract); ordering policies remain
-the min-distance set + the opt-in distance-from-origin cell order
-(first/last/nth land only where a SOURCE defines them); and the
-`rushTowardFoes` direction fallback remains a flagged player-choice
-approximation (a movement-direction read, not an eligibility query). U3
-remains honestly PARTIAL; U7 (Anchor / Spatial Frame) is AUTHORITATIVE as
-of 2026-09-02 (see its section below). The tracked completion task is
-TODO.md §"Underlay-phase task ledger" (U3 audit correction + T2 expression
-algebra). Sequencing owner:
-[`generic-underlays.md`](generic-underlays.md).
+The current U3 scope and human authority decision are recorded in the
+[fresh underlay matrix](u8-u1-underlay-census.md#fresh-underlay-matrix), updated
+through tranche 25. AREA, PERSISTENT-INSTANCE, and RULE-SOURCE domains belong
+to later underlay/source-gated work; the `rushTowardFoes` direction default is
+a U4 choice residual. These boundaries do not reinstate the superseded T2
+partial-status claim.
+
+Tranche 33 adds recorded position-list composition, explicit region/terrain/
+spacing constraints, and character placement queries that delegate full
+footprint legality to F1. Ordinary recorded creations use the existing
+creation authority and cap allowance; queries after earlier effects consume
+U11's existing simulation. See [the placement contract](tranche-33-placement.md)
+for the migrated consumers and remaining U4 boundaries. U4 remains PARTIAL.
 
 ### Reference / Binding (U1 underlay) — AUTHORITATIVE within its declared scope (2026-09-02; content-adapter tranches 1–18)
 
@@ -572,6 +573,11 @@ fold view onto the representable U5 subset (constant, round, pure scalar
 compositions) — a context-dependent expression REJECTS at resolution
 (unrepresentable, never a guessed value); enumerated replacements stay
 typed separately.
+The 2026-09-05 cleanup also routes scaled and trait bonus-damage applicability
+through `modifierGateHolds`, removing their duplicate bloodied/status switch.
+`bonus-damage-gates.test.ts` characterizes parity at HP boundaries, with wounds,
+allied/absent targets, and status filters. Elevation remains a spatial metric
+specialist; the broader U14 gate vocabulary migration to U6 remains open.
 Retained specialists with written boundaries:
 cost-modifier function rows (cost-list rewriting), the attack-modifiers
 armed one-shot fold, scaled/recipient bonus-damage function rows, aura /

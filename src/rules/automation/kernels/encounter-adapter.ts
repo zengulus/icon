@@ -8,7 +8,7 @@ import { projectedHpThresholdConditions } from './hp-threshold.js';
 import type { RangeStateView } from './range.js';
 import type { AreaStateView } from './area.js';
 import { effectiveInterruptRank, hasUnlimitedRange, type MasteryFoldActorView, type MasteryFoldStateView } from './mastery-fold.js';
-import { dangerousOncePerTurnKey, interruptUseKey, oneInterruptPerTurnWindowKey, recordUsageKey, slashedOncePerTurnKey, usageCount, interruptAvailable as sharedInterruptAvailable } from './use-ledger.js';
+import { recordUsageKey, slashedOncePerTurnKey, usageCount, interruptAvailable as sharedInterruptAvailable } from './use-ledger.js';
 import { applySpatialIntent, footprintCells, footprintDistance, footprintsOverlap, type SpatialIntent } from '../primitives/spatial-intent.js';
 import { decideDamageWindow, nextWindowId, openDecisionWindow } from './decision-window.js';
 import { entityKind, entityKindOf, validateEntityCreation } from './entity-creation.js';

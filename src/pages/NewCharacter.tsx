@@ -125,7 +125,7 @@ export function NewCharacter() {
   function commitNarrativeOnly() {
     try {
       const character = createLevelZeroNarrative({ name, pronouns, portraitUrl }, sealedSelection());
-      void save(character).then((saved) => {
+      void save(character).then(() => {
         setDurable(true);
         navigate('/');
       });

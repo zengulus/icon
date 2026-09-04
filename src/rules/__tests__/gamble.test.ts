@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { gambleD6 } from '../automation/primitives/job-kit.js';
 import type { RuleExecutionContext } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 
 /** Build a minimal RuleExecutionContext for the gambleD6 unit tests. */
@@ -203,7 +203,7 @@ describe('existing gamble consumers', () => {
       actorId: hero.id,
       abilityId: 'seer:chaos-tarot',
       targetIds: [],
-      input: {},
+      input: { positions: { 'chaos-tarot-terrain': [{ x: 1, y: 1 }, { x: 1, y: 2 }] } },
     }, scriptedDice(3));
     const replayed = applyEvents(s0, executed.events);
     expect(replayed.actors[hero.id]!.hp).toEqual(executed.state.actors[hero.id]!.hp);

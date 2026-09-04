@@ -1,4 +1,4 @@
-import { applyRuleMutations, determineAndApplyEncounterDamage, encounterRuleState } from '../../kernels/encounter-adapter.js';
+import { applyRuleMutations, encounterRuleState } from '../../kernels/encounter-adapter.js';
 import { resolveCapturedActor, resolveCapturedActorWeak } from '../glue/reference-authoring.js';
 import { gambleD6 } from '../../primitives/job-kit.js';
 import { auraDefinitionFor, auraOriginRefs, auraStateView, isAuraMember, isInAura } from '../../kernels/aura.js';
@@ -7,7 +7,6 @@ import { resolveSaveWindow } from '../../primitives/save-window.js';
 import { isAtHpThreshold } from '../../kernels/hp-threshold.js';
 import { applyLifecycleAbilityMove, freeCellNear, registerLifecycleRecipe, registerTurnDiceWindowPlanner, type LifecyclePhase } from '../../kernels/lifecycle.js';
 import { tickPowerDie } from '../../kernels/power-die.js';
-import { resolveGamble } from '../../primitives/gamble-window.js';
 import { registerMovementEntryTrigger } from '../../kernels/movement-triggers.js';
 import { nearestCandidates } from '../../kernels/evaluate-query.js';
 import { axisDirection, orthogonalNeighbors, squareArea } from '../../../area-geometry.js';

@@ -378,7 +378,7 @@ describe('content-authoring adapter — production Shade/Warden resolvers fail c
     // spun, unchanged.
     const hero = ctx().state.actors.hero;
     const foe = { ...ctx().state.actors.foe, id: 'foe', position: { x: 5, y: 4 } }; // adjacent to hero (4,4)
-    const context = ctx({ state: { ...ctx().state, actors: { ...ctx().state.actors, foe } }, input: { actorIds: { target: ['foe'] } } });
+    const context = ctx({ state: { ...ctx().state, actors: { ...ctx().state.actors, foe } }, input: { actorIds: { target: ['foe'] }, options: { direction: 'clockwise' } } });
     const mutations = KNAVE_RULE_RESOLVERS['knave:strongarm'](context, defaultAction);
     // The spin ends with a place (a `move` mutation with movement 'place') and
     // a shove of the chosen foe — the recorded input identity drives the spin.

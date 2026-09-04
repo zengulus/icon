@@ -8,7 +8,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo, interruptUses, interruptUsedThisTurn } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Colossus

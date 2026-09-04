@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { auditRuleCompilations, compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { collectRuleSourceUnits, findRuleSourceUnit } from '../source-units.js';
-import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { validCharacter, startEncounterTo } from './fixtures.js';
 
 describe('rules automation coverage gate', () => {
   it('does not count reducer-only or placeholder manual rules as generic VM programs', () => {

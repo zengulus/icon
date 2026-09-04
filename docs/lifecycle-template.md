@@ -51,7 +51,8 @@ Rules of thumb:
 
 - **The body must be deterministic.** Replay never rolls dice; a hook that
   needs a die receives it as a `diceWindows` value pre-rolled at the command
-  boundary (see `carnevaleGambleForTurnEnd`).
+  boundary (see `carnevaleGambleForTurnEnd` in
+  `content/jobs/lifecycle-recipes.ts`).
 - **`applies` and the body must agree.** `applies` decides the recorded
   `participants` list at the command boundary; the body re-checks as defense
   because the state may have drifted by the time replay runs.

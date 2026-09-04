@@ -146,7 +146,7 @@ describe('Vagabond Finesse class trait (p.116)', () => {
     state = startEncounterTo(state, hero.id);
     // d20 12 hits; dice 3 then 4 — the Gambit bonus keeps the highest. The
     // fixture hero carries Bastion class stats (fray 4), so [D]+fray = 4 + 4.
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id] }, scriptedDice(12, 3, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', input: { positions: { 'bomb-position': [{ x: 4, y: 3 }] } }, targetIds: [foe.id] }, scriptedDice(12, 3, 4));
     expect(result.state.actors[foe.id].hp).toBe(10 - (4 + 4));
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });

@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
-  type RefObject,
 } from 'react';
 import { JOBS, findAbility, findJob } from '../rules/catalog.js';
 import { createCharacter } from '../rules/character.js';
@@ -234,7 +233,6 @@ export function Lab() {
   const active = encounter.activeActorId ? encounter.actors[encounter.activeActorId] : null;
   const eligibleActorIds = turnEligibleActorIds(encounter);
   const slowElectableIds = slowElectableActorIds(encounter);
-  const selectedActor = selectedActorId ? encounter.actors[selectedActorId] ?? null : null;
   const selectedAbility = selectedAbilityId ? findAbility(selectedAbilityId) : undefined;
   const recentEvents = useMemo(() => [...encounter.eventLog].reverse().slice(0, 30), [encounter.eventLog]);
 

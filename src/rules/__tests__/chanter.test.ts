@@ -7,7 +7,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Chanter
@@ -288,9 +288,9 @@ describe('Chanter ability automation (p.174–181)', () => {
 
   it('Dervish: flies 1 and whisks an ally into a space adjacent to where you land', () => {
     const { state, hero, foe, ally } = chanterEncounter({ foe: { x: 5, y: 1 }, second: null, ally: { x: 3, y: 1 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:dervish', targetIds: [ally!.id] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:dervish', input: { positions: { [`dervish-landing:${ally!.id}`]: [{ x: 2, y: 2 }] } }, targetIds: [ally!.id] }, scriptedDice());
     expect(result.state.actors[hero.id].position).toEqual({ x: 2, y: 1 }); // flew 1 toward the foe
-    expect(result.state.actors[ally!.id].position).toEqual({ x: 1, y: 0 }); // whisked adjacent to the landing space
+    expect(result.state.actors[ally!.id].position).toEqual({ x: 2, y: 2 }); // whisked adjacent to the landing space
     expect(result.state.actors[ally!.id].onBattlefield).toBe(true);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
@@ -313,7 +313,7 @@ describe('Chanter ability automation (p.174–181)', () => {
   it('Symphony: consumes four blessings to create non-adjacent pulsing motes', () => {
     const { state, hero } = chanterEncounter({ second: null });
     state.actors[hero.id].resources.blessing = 4;
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', targetIds: [] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { positions: { 'mote-positions': [{ x: 3, y: 3 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [] }, scriptedDice());
     expect(result.state.actors[hero.id].resources.blessing).toBe(0);
     expect(motesOf(result.state)).toHaveLength(4);
     const cells = motesOf(result.state).flatMap((effect) => effect.positions);
@@ -329,7 +329,7 @@ describe('Chanter ability automation (p.174–181)', () => {
   it('Symphony: a foe that starts a turn on a mote detonates it', () => {
     const { state, hero, foe } = chanterEncounter({ foe: { x: 2, y: 1 }, second: null });
     state.actors[hero.id].resources.blessing = 4;
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', targetIds: [] }, scriptedDice()).state;
+    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { positions: { 'mote-positions': [{ x: 2, y: 0 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [] }, scriptedDice()).state;
     placed.actors[foe.id].position = { x: 2, y: 0 }; // a mote cell
     const resolved = endTurnTo(placed, foe.id, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(28); // 32 - fray 4 (the foe is in its own blast)
@@ -504,7 +504,7 @@ describe('Chanter ability automation (p.174–181)', () => {
       });
       base.actors[hero.id].resources.blessing = 4;
       const placed = executeCommand(base, {
-        type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', targetIds: [],
+        type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { positions: { 'mote-positions': [{ x: 3, y: 3 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [],
       }, scriptedDice()).state;
       const motes = motesOf(placed);
       expect(motes.length).toBeGreaterThanOrEqual(1);

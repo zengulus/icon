@@ -6,7 +6,7 @@ import { findAbility, JOBS } from '../catalog.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Demon Slayer

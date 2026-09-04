@@ -8,10 +8,9 @@ import {
   axisDirection, arcCells, sameCell, squareArea, withinGrid,
   constant,
   distance, occupied,
-  damageMutation, conditionMutation, stateMutation, rollDamageDice,
-  resourceMutation, stanceMutation, markMutation,
-  teleportMutation, shoveMutation, terrainMutation,
-  action, compilation,
+  damageMutation, conditionMutation, stateMutation, stanceMutation, markMutation,
+  teleportMutation, terrainMutation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import {
   resolveAttackTarget, resolveCapturedSelectedActors, resolveSourceActor, resolveTriggerTargets,

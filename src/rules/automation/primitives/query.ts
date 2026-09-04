@@ -130,6 +130,7 @@ export type PositionOrderingPolicy = { kind: 'none' } | { kind: 'distance-from-o
 export interface PositionCandidateQuery {
   origin: Position;
   originSize?: number;
+  candidateSize?: number;
   range: number;
 }
 
@@ -137,6 +138,12 @@ export type PositionCandidateProblem = 'out-of-bounds' | 'range';
 
 /** A position-domain candidate query. */
 export interface PositionQuery {
+  /** Optional region/predicate constraints; each composes with range. */
+  insideCells?: readonly Position[];
+  terrain?: string;
+  separatedFrom?: { positions: readonly Position[]; minimumDistance: number };
+  /** Character placement delegates full-footprint legality to F1. */
+  placementActorId?: string;
   /** The origin whose footprint the radius is measured from. */
   origin: Position;
   /** The p.92 origin footprint size. Default 1 for a point-space query. */

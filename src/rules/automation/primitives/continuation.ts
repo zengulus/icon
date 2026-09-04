@@ -38,7 +38,6 @@
 import type { Position } from '../../types.js';
 import { type Fact } from './facts.js';
 import type { Binder, Reference } from './reference.js';
-import { referenceKey } from './reference.js';
 import type { ClockObservation, Scope } from './scope.js';
 import { boundaryEquals, boundaryReached, scopeSatisfied, type BoundaryRef } from './scope.js';
 import { orderingKey, type OrderingPolicy } from './ordering.js';

@@ -76,7 +76,7 @@ function capturedListViolation(code: string, choice: CapturedListChoice, detail:
 function validateCapturedList(
   choice: CapturedListChoice,
   supplied: readonly string[] | undefined,
-  kind: 'actor' | 'option',
+  kind: 'actor' | 'option' | 'position',
 ): string[] {
   if (!supplied || supplied.length === 0) {
     if (!choice.required) return [];
@@ -154,6 +154,31 @@ export function readCapturedPositionChoice(
     throw new RuleProgramViolation('choice.position-count', `${label}: requires exactly one recorded position (got ${supplied.length}).`);
   }
   return supplied[0];
+}
+
+/** Capture an exact/subset position decision over a U3 CandidateSet. No
+ * candidate order, padding, or singleton default can decide for the player. */
+export function resolveCapturedPositionListChoice(
+  choice: CapturedListChoice,
+  candidates: readonly Position[],
+  context: RuleExecutionContext,
+): Position[] {
+  const supplied = context.input.positions?.[choice.key];
+  const keys = supplied?.map((cell) => {
+    if (!Number.isSafeInteger(cell.x) || !Number.isSafeInteger(cell.y)) {
+      throw capturedListViolation('choice.position-invalid', choice, 'requires integer grid positions.');
+    }
+    return `${cell.x},${cell.y}`;
+  });
+  const values = validateCapturedList(choice, keys, 'position');
+  const eligible = new Set(candidates.map((cell) => `${cell.x},${cell.y}`));
+  for (const value of values) {
+    if (!eligible.has(value)) throw capturedListViolation('choice.position-unavailable', choice, 'position is not an eligible candidate.');
+  }
+  return values.map((value) => {
+    const [x, y] = value.split(',').map(Number);
+    return { x, y };
+  });
 }
 
 /** Validate one recorded free-placement decision through U3's shared bounds,

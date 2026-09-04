@@ -30,6 +30,7 @@ import {
   constantModifierValue,
   foldNumberModifiers,
   modifierRulesForSource,
+  modifierGateHolds,
   registerModifierRule,
   type ModifierFoldView,
 } from '../primitives/modifiers.js';
@@ -208,7 +209,7 @@ export function bonusDamageDiceForUse(
     if (rule.abilityId !== abilityId) continue;
     if (rule.talent !== undefined && actor.talents?.[abilityId] !== rule.talent) continue;
     const gate = rule.gate;
-    if (gate && !bonusDamageFoldGateHolds(gate, state, actor.id, targetIds)) continue;
+    if (gate && !bonusDamageFoldGateHolds(gate, foldView, state, actor, targetIds)) continue;
     // Numeric rows land here when their gate is not expressible on the shared
     // U14 registry (the elevation metric); function rows are the scaled
     // specialist. Both fold identically against the same gate authority.
@@ -224,40 +225,28 @@ export function bonusDamageDiceForUse(
   for (const rule of traitBonusDamageRules) {
     if (!actor.traitIds.includes(rule.traitId)) continue;
     const gate = rule.gate;
-    if (gate && !bonusDamageFoldGateHolds(gate, state, actor.id, targetIds)) continue;
+    if (gate && !bonusDamageFoldGateHolds(gate, foldView, state, actor, targetIds)) continue;
     scaled += Math.max(0, Math.floor(rule.dice));
   }
   return shared + scaled;
 }
 
-/** The scaled-row gate evaluator (the shared evaluator already covers the
- * numeric rows; function rows re-read the same gates against the raw state). */
-function bonusDamageFoldGateHolds(gate: BonusDamageGate, state: EncounterState, actorId: string, targetIds: readonly string[]): boolean {
-  if (gate.kind === 'always') return true;
-  const actor = state.actors[actorId];
-  if (!actor) return false;
-  switch (gate.kind) {
-    case 'self-bloodied': return isBloodied(actor);
-    case 'target-bloodied': {
-      const target = targetActor(state, targetIds);
-      return Boolean(target && target.side !== actor.side && isBloodied(target));
-    }
-    case 'target-has-condition': {
-      const target = targetActor(state, targetIds);
-      if (!target || target.side === actor.side) return false;
-      return gate.conditionId === undefined
-        ? target.conditions.length > 0
-        : target.conditions.some((condition) => condition.id === gate.conditionId);
-    }
-    case 'elevation-above-target': {
-      const target = targetActor(state, targetIds);
-      if (!target || !actor.position || !target.position) return false;
-      // The canonical p.89 elevation metric (a pit counts one lower) — the
-      // same authority the attack kernel uses for the elevation modifier.
-      const view = encounterRuleState(state);
-      return view.elevationAt(actor.position) - view.elevationAt(target.position) >= gate.minimumLevels;
-    }
-  }
+/** Numeric, scaled, and trait rows share U14 applicability. Elevation remains
+ * a specialist until the shared fold view can express its spatial metric. */
+function bonusDamageFoldGateHolds(
+  gate: BonusDamageGate,
+  foldView: ModifierFoldView,
+  state: EncounterState,
+  actor: EncounterActor,
+  targetIds: readonly string[],
+): boolean {
+  if (isSharedGate(gate)) return modifierGateHolds(gate, foldView);
+  const target = targetActor(state, targetIds);
+  if (!target || !actor.position || !target.position) return false;
+  // The canonical p.89 elevation metric (a pit counts one lower) — the
+  // same authority the attack kernel uses for the elevation modifier.
+  const view = encounterRuleState(state);
+  return view.elevationAt(actor.position) - view.elevationAt(target.position) >= gate.minimumLevels;
 }
 
 // ---------------------------------------------------------------------------

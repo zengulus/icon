@@ -80,7 +80,7 @@ import {
   type Binder,
   type Reference,
 } from '../primitives/reference.js';
-import { resolveSaveWindow, type SaveWindowKind, type SaveWindowModifiers } from '../primitives/save-window.js';
+import { resolveSaveWindow } from '../primitives/save-window.js';
 import { resolveCureMutations } from '../primitives/status-saves.js';
 import { RuleProgramViolation } from './violations.js';
 import type {
@@ -225,6 +225,14 @@ export class FlowPlanner {
    * live-state reads until U12/U13 migrate them). */
   private opContext(extra?: Partial<RuleExecutionContext>): RuleExecutionContext {
     return { ...this.base, state: this.simView, boundNames: this.binder, ...extra };
+  }
+
+  /** Explicit migration seam for resolver reads after already-emitted work.
+   * Both views describe the same reducer-projected intermediate state. */
+  snapshotContext(): RuleExecutionContext {
+    if (!this.simEncounter) throw new RuleProgramViolation('flow.state-required', 'Intermediate placement requires encounter state.');
+    const encounterState = structuredClone(this.simEncounter);
+    return { ...this.base, state: encounterRuleState(encounterState), encounterState, boundNames: this.binder };
   }
 
   /** Recompute the simulation from the pre-flow snapshot over the emitted
@@ -643,6 +651,14 @@ export function executeFlow(
     facts: planner.facts,
     ...(planner.window !== null ? { window: planner.window } : {}),
   };
+}
+
+/** Consume the existing U11 simulation; never duplicate mutation application
+ * in content to answer a later placement query. */
+export function contextAfterMutations(context: RuleExecutionContext, mutations: readonly RuleMutation[]): RuleExecutionContext {
+  const planner = new FlowPlanner(context);
+  planner.absorb(mutations);
+  return planner.snapshotContext();
 }
 
 /** Resume a suspended flow: re-run the REMAINING nodes through the SAME

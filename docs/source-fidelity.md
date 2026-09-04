@@ -97,7 +97,6 @@ These strong project claims exist outside migrated fidelity scopes. They are rep
 | Modifier / Policy (U14 underlay) — LANDED slice (T3 seam), not an underlay-completeness claim (`claim:foundations:u14-landed`) | docs/rules-foundations.md | LANDED | U14 landed-status heading (T3 seam): a landed slice is NOT underlay completeness — the fresh underlay census keeps U14 PARTIAL; not bound to a strict fidelity scope, human-audited only |
 | P1 combat-settlement repair slice (DONE) (`claim:roadmap:p1-settlement-done`) | docs/roadmap.md | COMPLETE | roadmap slice-progress marker; tracked by the deliverables census, no fidelity scope |
 | P2 foe-role entitlements slice (DONE) (`claim:roadmap:p2-foe-done`) | docs/roadmap.md | COMPLETE | roadmap slice-progress marker; tracked by the deliverables census, no fidelity scope |
-| Schema v3 checkpoint migration (`claim:infra:schema-v3-migration`) | docs/roadmap.md | COMPLETE | verified by transport/persistence tests; no fidelity scope |
 | Combat settlement slice (P1) (`claim:deliverables:settlement-slice-closed`) | docs/deliverables.md | CLOSED | mirrors claim:deliverables:combat-settlement |
 | P2 Slice A (foe-complexity repair slice) (`claim:roadmap:p2-slice-a-closed`) | docs/roadmap.md | CLOSED | roadmap progress note; tracked by the deliverables census, no fidelity scope |
 

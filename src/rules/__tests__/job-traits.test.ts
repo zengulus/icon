@@ -4,7 +4,7 @@ import { encounterConditionSet } from '../automation/kernels/encounter-adapter.j
 import { JOB_TRAIT_CONDITION_RECIPES_VIEW } from '../automation/content/jobs/trait-condition-recipes.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo } from './fixtures.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**

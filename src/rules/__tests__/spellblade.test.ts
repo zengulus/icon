@@ -7,7 +7,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position, StatusSaveCommandInput } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 /** The two player-selected Teleport destinations Nothung's program reads from
  * the generic durable position input (the same cast pattern Party Favor's

@@ -6,10 +6,8 @@ import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-pr
 import { applyOrdering, policyYieldsChoice } from '../automation/primitives/ordering.js';
 import type { RuleChoice } from '../automation/primitives/types.js';
 import { resolveGamble } from '../automation/primitives/gamble-window.js';
-import { heldDamageContinuation, heldSaveContinuation } from '../automation/primitives/continuation.js';
-import { capturedActor } from '../automation/primitives/reference.js';
 import { orderDecisionWindows, windowHeldDamage, windowHeldSave } from '../automation/kernels/decision-window.js';
-import { endTurnOnly, endTurnTo, scriptedDice, validCharacter, startEncounterTo, interruptUses, interruptUsedThisTurn } from './fixtures.js';
+import { endTurnTo, scriptedDice, validCharacter, startEncounterTo, interruptUses, interruptUsedThisTurn } from './fixtures.js';
 
 /**
  * T5c U13 acceptance (docs/underlay-completion-plan.md U13): ONE typed

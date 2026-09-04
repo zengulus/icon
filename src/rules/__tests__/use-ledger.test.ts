@@ -10,7 +10,7 @@ import {
 } from '../automation/kernels/use-ledger.js';
 import { usageKey } from '../automation/primitives/usage.js';
 import type { EncounterState } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /**
  * Use-ledger kernel tests (docs/rules-foundations.md non-glossary foundation

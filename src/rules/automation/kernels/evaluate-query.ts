@@ -51,6 +51,7 @@ import {
   footprintCells,
   footprintDistance,
   footprintIntersectsCells,
+  validateSpatialIntent,
 } from '../primitives/spatial-intent.js';
 import {
   distance,
@@ -59,11 +60,7 @@ import {
 } from '../primitives/battlefield.js';
 import { axisDirection, sameCell, squareArea } from '../../area-geometry.js';
 import { hasLineOfEffect, hasLineOfSightBetween } from '../primitives/line-of-sight.js';
-import {
-  defaultActorAnchor,
-  type SpatialAnchor,
-  type SpatialOrigin,
-} from '../primitives/anchor.js';
+import { defaultActorAnchor } from '../primitives/anchor.js';
 import type {
   ActorQuery,
   ComposedActorQuery,
@@ -290,11 +287,13 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
   const cells: Position[] = [];
   const view = query.lineOfSightFrom ? lineView(context) : null;
   const originSize = Math.max(1, Math.floor(query.originSize ?? 1));
+  const candidateSize = query.placementActorId ? context.state.actors[query.placementActorId]?.size : 1;
+  if (candidateSize === undefined) throw new RuleProgramViolation('choice.actor-missing', 'Position placement query requires a known actor.');
   const originCells = footprintCells(query.origin, originSize);
   const originCellKeys = new Set(originCells.map((cell) => `${cell.x},${cell.y}`));
   const seen = new Set<string>();
   const scanned = originCells
-    .flatMap((originCell) => squareArea(originCell, query.radius))
+    .flatMap((originCell) => squareArea(originCell, query.radius + candidateSize - 1))
     .filter((cell) => {
       const key = `${cell.x},${cell.y}`;
       if (seen.has(key)) return false;
@@ -302,8 +301,18 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
       return true;
     });
   for (const cell of scanned) {
-    if (!validatePositionCandidate({ origin: query.origin, originSize, range: query.radius }, cell, context).legal) continue;
+    if (!validatePositionCandidate({ origin: query.origin, originSize, candidateSize, range: query.radius }, cell, context).legal) continue;
     if (!query.includeOrigin && originCellKeys.has(`${cell.x},${cell.y}`)) continue;
+    if (query.insideCells && !query.insideCells.some((member) => sameCell(member, cell))) continue;
+    if (query.terrain && !context.state.terrainAt(cell).has(query.terrain)) continue;
+    if (query.separatedFrom && query.separatedFrom.positions.some((other) => distance(cell, other) < query.separatedFrom!.minimumDistance)) continue;
+    if (query.placementActorId) {
+      if (!context.encounterState) throw new RuleProgramViolation('choice.state-required', 'Position placement query requires encounter state.');
+      if (!validateSpatialIntent(context.encounterState, {
+        kind: 'place', actorId: query.placementActorId, sourceActorId: context.actorId,
+        sourceRuleId: context.sourceId, from: null, to: cell, rampartObstructed: false,
+      }).legal) continue;
+    }
     if (query.space.kind === 'unoccupied' && finalSpaceOccupied(cell, context, query.space.excludeActorId ?? '')) continue;
     if (view && !hasLineOfSightBetween(view, query.lineOfSightFrom!, { position: cell, size: 1 })) continue;
     cells.push(cell);
@@ -317,6 +326,11 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
   return cells;
 }
 
+/** U3 set-level spacing constraint (e.g. nonadjacent terrain spaces). */
+export function positionSetSeparated(positions: readonly Position[], minimumDistance: number): boolean {
+  return positions.every((cell, index) => positions.slice(0, index).every((other) => distance(cell, other) >= minimumDistance));
+}
+
 /** Shared U3 validation beneath automatic position queries and U4 choices. */
 export function validatePositionCandidate(
   query: PositionCandidateQuery,
@@ -326,7 +340,7 @@ export function validatePositionCandidate(
   if (!withinGrid(position, context)) return { legal: false, problem: 'out-of-bounds' };
   if (footprintDistance(
     { position: query.origin, size: Math.max(1, Math.floor(query.originSize ?? 1)) },
-    { position, size: 1 },
+    { position, size: query.candidateSize ?? 1 },
   ) > query.range) return { legal: false, problem: 'range' };
   return { legal: true, problem: null };
 }

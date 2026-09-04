@@ -6,7 +6,7 @@ import '../automation/content/registry.js';
 import { distanceBetween, effectiveAbilityRange, isExactlyRange, isWithinRange } from '../automation/kernels/range.js';
 import { determineEncounterDamage, rangeStateView } from '../automation/kernels/encounter-adapter.js';
 import { traitAttackModifier } from '../automation/kernels/attack-modifiers.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**

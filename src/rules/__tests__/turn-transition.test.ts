@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState, TurnEndCause } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /**
  * F3 turn-transition fixtures (docs/rules-foundations.md §4).
@@ -86,7 +86,7 @@ describe('F3 turn-transition intent', () => {
 
   it('pre-rolls the Carnevale detonation gamble at the command boundary and records it on the intent', () => {
     const { state, hero, foe } = transitionEncounter({ second: false });
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:carnevale', targetIds: [] }, scriptedDice());
+    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:carnevale', input: { positions: { 'bomb-positions': [{ x: 0, y: 1 }, { x: 0, y: 2 }] } }, targetIds: [] }, scriptedDice());
     const bombs = Object.values(placed.state.entities).filter((entity) => entity.type === 'bomb' && entity.ownerId === hero.id);
     expect(bombs).toHaveLength(2);
 
@@ -104,7 +104,7 @@ describe('F3 turn-transition intent', () => {
 
   it('replay executes exactly the recorded participants, never re-decides them', () => {
     const { state, hero } = transitionEncounter({ second: false });
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:carnevale', targetIds: [] }, scriptedDice());
+    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:carnevale', input: { positions: { 'bomb-positions': [{ x: 0, y: 1 }, { x: 0, y: 2 }] } }, targetIds: [] }, scriptedDice());
     const detonated = executeCommand(placed.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice(5));
     const event = turnEndedOf(detonated);
 
@@ -137,7 +137,7 @@ describe('F3 turn-transition intent', () => {
 
   it('legacy events without an intent fall back to the applies gates and top-level dice fields', () => {
     const { state, hero } = transitionEncounter({ second: false });
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:carnevale', targetIds: [] }, scriptedDice());
+    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:carnevale', input: { positions: { 'bomb-positions': [{ x: 0, y: 1 }, { x: 0, y: 2 }] } }, targetIds: [] }, scriptedDice());
     const detonated = executeCommand(placed.state, { type: 'END_TURN', actorId: hero.id }, scriptedDice(5));
     const event = turnEndedOf(detonated);
 

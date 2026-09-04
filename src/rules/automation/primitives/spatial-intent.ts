@@ -1,6 +1,6 @@
 import type { EncounterState, Position } from '../../types.js';
 import { blastTemplateCells, lineCells, sameCell, squareArea, type BlastSize } from '../../area-geometry.js';
-import { hasLineOfSight, type SpatialLineView } from './line-of-sight.js';
+import { hasLineOfSight } from './line-of-sight.js';
 
 // ── Footprint (Size) ─────────────────────────────────────────────────────────
 

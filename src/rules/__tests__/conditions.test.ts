@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { executeRuleProgram, evaluatePredicate } from '../automation/kernels/runtime.js';
 import { planMovementPath } from '../movement.js';
 import type { EncounterActor, EncounterCondition, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo, slashedTriggeredThisTurn} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo, slashedTriggeredThisTurn } from './fixtures.js';
 
 /**
  * Source-derived fixtures for the combat conditions wired into the shared

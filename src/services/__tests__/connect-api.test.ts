@@ -1,6 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createConnectApi, ConnectApi, ConnectApiError, iconConnectArtifactFor } from '../connect-api.js';
-import { buildIconConnectArtifact } from '../../connect/icon-connect.js';
 
 let PUBLIC_JWK: JsonWebKey;
 

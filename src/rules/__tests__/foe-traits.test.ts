@@ -20,7 +20,7 @@ import { FOE_PROFILES } from '../foes.js';
 import { planMovementPath } from '../movement.js';
 import { collectRuleSourceUnits, findRuleSourceUnit } from '../source-units.js';
 import type { EncounterState, Position, TerrainCell } from '../types.js';
-import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /**
  * Foe special-traits keyword projections (ICON p.298 glossary + p.104

@@ -10,7 +10,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { attackOncePerTurnKey, noRepeatKey } from '../automation/kernels/use-ledger.js';
 import type { DiceSource } from '../dice.js';
 import type { EncounterActor, EncounterCommand, EncounterEvent, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 /**
  * F8 mastery attachment fixtures (docs/rules-foundations.md §Mastery).

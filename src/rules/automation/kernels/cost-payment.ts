@@ -34,7 +34,6 @@ import {
   assertSacrificePayable,
   resourceSpendMutation,
   sacrificeMutation,
-  type CostPaymentViolation,
 } from '../primitives/cost-payment.js';
 
 export { CostPaymentViolation } from '../primitives/cost-payment.js';

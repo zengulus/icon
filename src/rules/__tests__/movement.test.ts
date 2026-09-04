@@ -3,7 +3,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { planMovement, planMovementPath } from '../movement.js';
 import { noRepeatKey, standardMoveOncePerTurnKey } from '../automation/kernels/use-ledger.js';
 import type { EncounterState, Position, TerrainCell } from '../types.js';
-import {validCharacter, endTurnTo, startEncounterTo, dangerousTerrainTriggeredThisTurn} from './fixtures.js';
+import { validCharacter, endTurnTo, startEncounterTo, dangerousTerrainTriggeredThisTurn } from './fixtures.js';
 
 function activeEncounter(options: {
   heroPosition?: Position;

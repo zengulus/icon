@@ -1,4 +1,4 @@
-import type { ArmedContinuation, RuleChoice, RuleContinuationState, RuleDuration, RuleEffect, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
+import type { ArmedContinuation, RuleChoice, RuleContinuationState, RuleDuration, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
 import type { TriggerProvenance } from './automation/primitives/trigger-provenance.js';
 import type { Fact } from './automation/primitives/facts.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';

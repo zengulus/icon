@@ -241,8 +241,6 @@ export function VttRoomBoard({ room, role, onEncounter, onTable, onPing }: VttRo
   const viewport = useMemo<ViewportRect>(() => ({ x: 0, y: 0, width: Math.max(1, viewportSize.width), height: Math.max(1, viewportSize.height) }), [viewportSize]);
   const geometry = useMemo<TacticalViewportGeometry>(() => ({ camera, viewport, grid: { cellSize: room.table.map.cellSize }, map: { scale: room.table.map.scale, offset: room.table.map.offset } }), [camera, room.table.map, viewport]);
   const active = room.encounter.activeActorId ? room.encounter.actors[room.encounter.activeActorId] : null;
-  const eligibleActorIds = turnEligibleActorIds(room.encounter);
-  const slowElectableIds = slowElectableActorIds(room.encounter);
   const fitCamera = useCallback(() => {
     if (viewport.width > 1 && viewport.height > 1) setCamera(fitWorldBounds(gridBoundsToWorld(room.encounter.grid, { cellSize: room.table.map.cellSize }), viewport, { padding: 34, minZoom: .2, maxZoom: 3 }));
   }, [room.encounter.grid, room.table.map.cellSize, viewport]);

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ENCOUNTER_SCHEMA_VERSION } from '../types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand, hasCoverFrom, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter, replayEncounter, RuleViolation } from '../encounter.js';
-import { ABILITIES, JOBS } from '../catalog.js';
+import { ABILITIES } from '../catalog.js';
 import { DOCUMENTED_NON_EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, slashedTriggeredThisTurn} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo, slashedTriggeredThisTurn } from './fixtures.js';
 import { attackOncePerTurnKey, dangerousOncePerTurnKey, interruptUseKey, noRepeatKey, oneInterruptPerTurnWindowKey, slashedOncePerTurnKey, standardMoveOncePerTurnKey } from '../automation/kernels/use-ledger.js';
 
 function activeEncounter() {

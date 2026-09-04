@@ -1,3 +1,5 @@
+import { blastTemplateCells } from '../../../../area-geometry.js';
+import { resolveCapturedPositionListChoice } from '../../../kernels/choice.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
@@ -5,11 +7,9 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk,
-  damageMutation, conditionMutation, stateMutation,
-  resourceMutation, stanceMutation, markMutation,
-  shoveMutation, entityMutation, summonEntity, terrainMutation,
-  action, compilation,
+  distance, damageMutation, conditionMutation, stateMutation, stanceMutation, markMutation,
+  shoveMutation, summonEntity, terrainMutation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { entityAnchorPosition } from '../../../primitives/anchor.js';
@@ -327,7 +327,7 @@ const blackstarEffects: RuleResolver = (context) => {
   if (context.triggers?.has('comeback') || (roll.attackMutation as Extract<RuleMutation, { kind: 'attack' }>).exceed === true) {
     mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie), 'effect'));
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
-    const difficultCells = evaluatePositions({ origin: target.position, radius: 3, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).slice(0, 3);
+    const difficultCells = resolveCapturedPositionListChoice({ key: 'blackstar-terrain', label: 'Blackstar terrain', required: false, minimum: 0, maximum: 3 }, evaluatePositions({ origin: target.position, radius: 3, includeOrigin: true, insideCells: blastTemplateCells('large', target.position), space: { kind: 'any' } }, context), context);
     if (difficultCells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', difficultCells));
   }
   return mutations;

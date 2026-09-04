@@ -1,16 +1,15 @@
+import { chooseEntityCreation } from '../../../kernels/creation-choice.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk,
-  damageMutation, conditionMutation, stateMutation, vigorMutation,
-  resourceMutation, markMutation,
-  shoveMutation, teleportMutation, entityMutation, summonEntity, terrainMutation,
-  action, compilation,
+  distance, damageMutation, conditionMutation, stateMutation, resourceMutation, markMutation,
+  shoveMutation, summonEntity, terrainMutation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
-import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
@@ -138,17 +137,11 @@ const cryoEffects: RuleResolver = (context) => {
  * salt sprite that replaces it, are documented object windows. */
 const geyserEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  // Recorded player choice (input target) falls back to the attack target —
-  // caller-owned U4 precedence; only the dereference is the captured identity.
-  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
-  const cell = target?.position ?? source.position;
-  if (distance(source.position, cell) > 4) throw new RuleProgramViolation('choice.actor-range', 'Geyser requires a space in range 4.');
-  const freeCell = evaluatePositions({ origin: source.position, radius: 4, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).find((candidate) => !Object.values(context.state.entities).some((entity) => entity.positions.some((position) => sameCell(position, candidate)))) ?? cell;
-  return [{
-    kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'geyser', ownerId: source.id,
-    positions: [freeCell], count: 1, state: { height: 1 },
-  }];
+  return [chooseEntityCreation(context, 'geyser-position', 'Geyser', {
+    origin: source.position, originSize: source.size, radius: 4, space: { kind: 'any' }, includeOrigin: true,
+  }, { ownerId: source.id, entityType: 'geyser', count: 1, state: { height: 1 },
+    spatial: { origin: source.position, originSize: source.size, maxRange: 4 } })];
 };
 
 /** ICON p.234 Gust: create a line 3 terrain effect. Characters that enter an
@@ -213,17 +206,14 @@ const deepwrathEffects: RuleResolver = (context) => {
  * the end-of-turn spit-out are documented terrain windows. */
 const waterspoutEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
-  // Recorded player choice (input target) falls back to the attack target —
-  // caller-owned U4 precedence; only the dereference is the captured identity.
-  const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
   if (!source.position) return [];
-  const cell = target?.position ?? source.position;
-  const freeCell = evaluatePositions({ origin: source.position, radius: Math.max(1, distance(source.position, cell)), space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0] ?? cell;
-  const mutations: RuleMutation[] = [
-    { kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'waterspout', ownerId: source.id, positions: [freeCell], count: 1, state: {} },
-    terrainMutation(context, 'create', 'difficult', [freeCell]),
-  ];
-  return mutations;
+  // P.92: an ability with no listed range affects adjacent spaces. P.235
+  // requires EXISTING difficult terrain; it does not create that terrain.
+  return [chooseEntityCreation(context, 'waterspout-position', 'Waterspout', {
+    origin: source.position, originSize: source.size, radius: 1, includeOrigin: true,
+    space: { kind: 'any' }, terrain: 'difficult',
+  }, { ownerId: source.id, entityType: 'waterspout', count: 1, state: {},
+    spatial: { origin: source.position, originSize: source.size, maxRange: 1 } })];
 };
 
 /** ICON p.236 Eye Of The Storm: the attack space is clear and exempt from the

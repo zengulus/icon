@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { DiceSource } from '../dice.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import type { EncounterActor, EncounterCommand, EncounterEvent, EncounterState, Position } from '../types.js';
+import type { EncounterActor, EncounterState, Position } from '../types.js';
 import '../automation/content/registry.js';
-import { arcCells, cellKey, lineCells, squareArea } from '../area-geometry.js';
+import { arcCells } from '../area-geometry.js';
 import { effectiveAreaFor, type AreaStateView } from '../automation/kernels/area.js';
 import type { RuleMutation } from '../automation/primitives/types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /** The shove mutations inside an ability's recorded mutation stream. */

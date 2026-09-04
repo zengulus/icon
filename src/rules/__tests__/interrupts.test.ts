@@ -4,7 +4,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterEvent, EncounterPendingInterrupt, EncounterState, Position } from '../types.js';
 import { windowHeldDamage } from '../automation/kernels/decision-window.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for ICON p.107 Interrupt Order and the

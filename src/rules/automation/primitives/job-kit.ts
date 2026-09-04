@@ -413,16 +413,11 @@ export function creationCandidateCells(context: RuleExecutionContext, region: Po
  * 'exact' fails the whole creation unless it can land exactly `count`. The
  * per-owner summon cap always bounds the result.
  *
- * MIGRATION NOTE: pre-existing ability resolvers that still hand-roll
- * free-cell scans (an `evaluatePositions(...)` candidate set indexed by
- * position) + `entityMutation(...)` for ordinary summons are tracked for
- * migration onto this seam. A few are deliberate
- * exceptions that are NOT ordinary intent-declaration summons — e.g. a
- * resolver that needs the exact resolved cell back to compute a follow-on
- * effect (the Seer meteor's proximity damage) or a mandatory in-place
- * object placement (the Warden's required portal) — because the
- * intent-declaration contract does not expose the chosen cell to the
- * resolver. */
+ * MIGRATION NOTE: this remains a legacy candidate-list intent. Use-time
+ * placements migrated in tranche 33 use `chooseEntityCreation` instead:
+ * that kernel validates recorded U4 cells through this same creation
+ * authority and emits only those cells. Remaining automatic summon
+ * consumers require their own source/choice migration. */
 export function summonEntity(
   context: RuleExecutionContext,
   ownerId: string,

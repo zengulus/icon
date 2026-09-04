@@ -10,7 +10,6 @@ import { lifecycleScopedUsageKey, usageCount } from '../automation/primitives/us
 import {
   applyLifecycleScopedUsage, currentLifecycleInstanceFor, lifecycleObservationForGroup,
 } from '../automation/kernels/use-ledger.js';
-import type { LifecycleIdentity } from '../automation/primitives/scope.js';
 import type { EncounterActor, EncounterState } from '../types.js';
 import { endTurnOnly, endTurnTo, scriptedDice, startEncounterTo, validCharacter } from './fixtures.js';
 

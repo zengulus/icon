@@ -5,7 +5,7 @@ import { resolveStatusSaveMutations } from '../automation/primitives/status-save
 import type { RuleExecutionContext, RuleExecutionInput } from '../automation/primitives/types.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /** Source-derived command fixtures for Cure / Diaga (ICON pp.94, 102, 144, 172, 186). */
 function diagaEncounter(targetPosition: Position = { x: 5, y: 1 }) {

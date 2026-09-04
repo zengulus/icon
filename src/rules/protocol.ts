@@ -1,4 +1,3 @@
-import type { EncounterCommand } from './types.js';
 import type { RoomCommand, RoomEvent, VttRoomState } from './vtt-room.js';
 import { isDurableAssetUrl } from './durable-assets.js';
 import { z } from 'zod';

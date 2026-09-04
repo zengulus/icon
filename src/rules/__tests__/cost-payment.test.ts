@@ -22,8 +22,8 @@ import {
   sacrificeMutation,
   type ResourcePayer,
 } from '../automation/primitives/cost-payment.js';
-import type { RuleActorView, RuleExecutionContext, RuleMutation, RuleProgram, RuleRuntimeState } from '../automation/primitives/types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import type { RuleActorView, RuleExecutionContext, RuleProgram, RuleRuntimeState } from '../automation/primitives/types.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 import type { EncounterState } from '../types.js';
 
 /**

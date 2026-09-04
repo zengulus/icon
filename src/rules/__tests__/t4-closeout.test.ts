@@ -36,7 +36,7 @@ import {
   migrateEncounter,
   replayEncounter,
 } from '../encounter.js';
-import type { EncounterState, Position } from '../types.js';
+import type { EncounterState } from '../types.js';
 import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 function startedEncounter(): { state: EncounterState; heroId: string; foeId: string } {

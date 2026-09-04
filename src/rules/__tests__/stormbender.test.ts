@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Stormbender
@@ -94,7 +94,7 @@ describe('Stormbender ability automation (p.230–236)', () => {
 
   it('Geyser: summons a height 1 geyser object in range 4', () => {
     const { state, hero } = stormbenderEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:geyser', targetIds: [] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:geyser', input: { positions: { 'geyser-position': [{ x: 0, y: 1 }] } }, targetIds: [] }, scriptedDice());
     const geysers = Object.values(result.state.entities).filter((entity) => entity.type === 'geyser');
     expect(geysers).toHaveLength(1);
     expect(geysers[0]?.state.height).toBe(1);
@@ -130,11 +130,13 @@ describe('Stormbender ability automation (p.230–236)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
-  it('Waterspout: summons a waterspout that is difficult terrain', () => {
+  it('Waterspout: summons in existing adjacent difficult terrain', () => {
     const { state, hero } = stormbenderEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:waterspout', targetIds: [] }, scriptedDice());
+    state.grid.terrain.push({ position: { x: 0, y: 1 }, type: 'difficult', elevation: 0 });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:waterspout', input: { positions: { 'waterspout-position': [{ x: 0, y: 1 }] } }, targetIds: [] }, scriptedDice());
     expect(Object.values(result.state.entities).some((entity) => entity.type === 'waterspout')).toBe(true);
-    expect(result.state.terrainEffects.some((effect) => effect.terrain === 'difficult')).toBe(true);
+    expect(result.state.grid.terrain.some((cell) => cell.type === 'difficult')).toBe(true);
+    expect(result.state.terrainEffects.some((effect) => effect.terrain === 'difficult')).toBe(false);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 

@@ -3,7 +3,7 @@ import { orthogonalNeighbors, squareArea } from '../../area-geometry.js';
 import type { DiceSource } from '../../dice.js';
 import type { EncounterActor, EncounterState, Position, TurnEndCause } from '../../types.js';
 import type { RuleMutation } from '../primitives/types.js';
-import { turnBoundaryOrdering, type TurnBoundaryCandidate } from '../primitives/ordering.js';
+import { turnBoundaryOrdering } from '../primitives/ordering.js';
 import { nextWindowId, openTurnBoundaryOrderingWindow } from './decision-window.js';
 
 /**

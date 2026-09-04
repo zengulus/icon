@@ -1,37 +1,24 @@
+import { chooseEntityCreation } from '../../../kernels/creation-choice.js';
+import { contextAfterMutations } from '../../../kernels/execute-flow.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { registerMovementEntryTrigger } from '../../../kernels/movement-triggers.js';
 import { isBloodied } from '../../../kernels/encounter-adapter.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { Position } from '../../../../types.js';
-import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
+import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
   axisDirection, orthogonalNeighbors, sameCell, squareArea,
   constant, attackStep,
-  distance, sourceActor, occupied, impassable, walk,
-  damageMutation, conditionMutation, stateMutation, resourceMutation, stanceMutation, markMutation,
-  rushMutation, flyMutation, placeMutation, entityMutation, terrainMutation, swapMutations,
+  distance, occupied, impassable, walk,
+  damageMutation, conditionMutation, stateMutation, stanceMutation, markMutation,
+  rushMutation, flyMutation, terrainMutation, swapMutations,
   gambleD6,
-  untilNextTurnStart, action, compilation,
+  untilNextTurnStart, action, compilation
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { readCapturedPositionChoice, validateCapturedPositionChoice } from '../../../kernels/choice.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedActor, resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
-
-/** ICON p.150: a bomb can share a space with characters but NOT with other
- * bombs. The generic unoccupied placement policy (no obstructing character
- * or object — ICON p.95 summons are intangible) does not exclude an existing
- * bomb, so the bomb placement scans apply this specialist constraint on top
- * of the shared query. */
-function bombFreeCells(context: RuleExecutionContext, origin: Position, radius: number): Position[] {
-  return evaluatePositions({ origin, radius, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)
-    .filter((cell) => !Object.values(context.state.entities).some((entity) =>
-      entity.type === 'bomb' && entity.positions.some((position) => sameCell(position, cell))));
-}
-
-function bombFreeCell(context: RuleExecutionContext, origin: Position, radius: number): Position | undefined {
-  return bombFreeCells(context, origin, radius)[0];
-}
 
 /**
  * Independently reviewed Fool ability implementations (ICON p.150–152), the
@@ -83,8 +70,13 @@ const cavaliereEffects: RuleResolver = (context) => {
   if (target) {
     mutations.push(conditionMutation(context, target.id, 'dazed'));
     if (context.triggers?.has('finishing-blow') || context.triggers?.has('slay')) {
-      const bombCell = bombFreeCell(context, final, 2);
-      if (bombCell) mutations.push(entityMutation(context, source.id, bombCell, 'bomb', {}));
+      const placement = contextAfterMutations(context, mutations);
+      const origin = placement.state.actors[source.id].position;
+      if (!origin) throw new RuleProgramViolation('choice.position-unavailable', 'Cavaliere has no placement origin.');
+      mutations.push(chooseEntityCreation(placement, 'bomb-position', 'Cavaliere bomb', {
+        origin, originSize: source.size, radius: 2, space: { kind: 'unoccupied' },
+      }, { ownerId: source.id, entityType: 'bomb', count: 1, state: {},
+        spatial: { origin, originSize: source.size, maxRange: 2 } }));
     }
   }
   return mutations;
@@ -95,13 +87,10 @@ const carnevaleEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   if (!source?.position) return [];
   const mutations: RuleMutation[] = [];
-  const chosen = context.input.positions?.['bomb-positions'] ?? [];
-  const cells = [...chosen, ...bombFreeCells(context, source.position, 2)].slice(0, 2);
-  for (const cell of cells) {
-    if (distance(cell, source.position) > 2) throw new RuleProgramViolation('choice.position-range', 'Carnevale summons its bombs in range 2.');
-  }
-  if (cells.length < 2) throw new RuleProgramViolation('choice.position-count', 'Carnevale requires two free spaces in range 2 for its bombs.');
-  for (const cell of cells) mutations.push(entityMutation(context, source.id, cell, 'bomb', {}));
+  mutations.push(chooseEntityCreation(context, 'bomb-positions', 'Carnevale bombs', {
+    origin: source.position, originSize: source.size, radius: 2, space: { kind: 'unoccupied' },
+  }, { ownerId: source.id, entityType: 'bomb', count: 2, state: {},
+    spatial: { origin: source.position, originSize: source.size, maxRange: 2 } }));
   mutations.push(stateMutation(context, source.id, 'carnevale:armed', true));
   return mutations;
 };

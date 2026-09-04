@@ -4,7 +4,7 @@ import { isAtHpThreshold, isAtOrUnderQuarterHp, isBloodied, projectedHpThreshold
 import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo } from './fixtures.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**

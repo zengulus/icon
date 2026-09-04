@@ -1,8 +1,9 @@
 # ICON Remaining Work
 
-This is the **current actionable backlog**, rebuilt from the full-repository
-audit of 2026-08-25 (commit `55c7b6f` and later). It contains no completed
-work except where a dependency must be explained.
+This is the **current actionable backlog**, followed by historical tranche
+evidence retained for dependency and fidelity traceability. The Current
+execution plan owns the next action; dated completion records describe the
+state at that time, not the current coverage baseline.
 
 Canonical document ownership:
 
@@ -950,16 +951,21 @@ assumption here, document the evidence and update this list before proceeding.
   exact/de-duplicated footprint candidate geometry, teleport, creation, Dark
   Sliver, and Jotunn Set Trap. No U4 decision or executable membership changed.
 
-- **U4 tranche 33 — use-time recorded-position placement family — NEXT, NOT
-  STARTED.** Exact scope: Hunter Set Trap; Fool Cavaliere/Carnevale bombs;
-  Warden Mist Strider primary + Charge cloud and Underway portal 1; Chanter
-  Dervish landing and Symphony motes; Knave Strongarm talent-I adjacency;
-  Stormbender Geyser and Waterspout; Sealer Spirit Shrine; Seer Chaos Tarot
-  effect 3 and Astra terrain/meteor cells; Enochian Blackstar difficult
-  terrain. Replace source-owned automatic cell selection/padding with recorded
-  positions over U3 CandidateSets and route ordinary summon/object LoS through
-  the shared creation authority. Do not absorb Underway portal 2 or other
-  window-carried U12/U13 choices.
+- **U4 tranche 33 — use-time recorded-position placement (2026-09-05).**
+  The listed Hunter, Fool, Warden, Chanter, Knave, Stormbender, Sealer, Seer,
+  and Enochian placement consumers now record positions through U4/U3 and
+  the shared creation/placement authorities. See
+  [`docs/tranche-33-placement.md`](docs/tranche-33-placement.md) for exact
+  source clauses, input keys, corrections, tests, and retained boundaries.
+  Executable membership is unchanged; U4 remains PARTIAL.
+
+- **Next — fresh U4 residual audit and bounded decision migration.**
+  Reconcile Dervish actor selection/initial flight, Symphony blessing
+  payer/quantity choice, remaining automatic summons, Demon Claw Talent I/II,
+  and opaque fold inputs. Keep Underway portal 2 and other window-carried
+  U12/U13 choices in their owning continuation tranche. Select the next
+  implementation slice from those actual dependencies; source promotion
+  remains gated.
 
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`

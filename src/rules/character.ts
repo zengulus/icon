@@ -1,5 +1,5 @@
 import { ACTION_IDS, CHARACTER_SCHEMA_VERSION, RULES_VERSION, type ActionId, type ActionRatings, type BondPowerId, type CultureId, type IconCharacter, type KinId, type ValidationIssue } from './types.js';
-import { BOND_POWERS, BONDS, CULTURES, KINS, findAbility, findBond, findClass, findJob, findRelic } from './catalog.js';
+import { BOND_POWERS, CULTURES, KINS, findAbility, findBond, findClass, findJob, findRelic } from './catalog.js';
 
 const emptyActions = (): ActionRatings => Object.fromEntries(ACTION_IDS.map((id) => [id, 0])) as ActionRatings;
 
@@ -437,7 +437,6 @@ const CHARACTER_FIELDS = [
   'notes', 'portraitUrl', 'createdAt', 'updatedAt',
 ] as const;
 
-const CURRENT_CHARACTER_FIELDS = new Set<string>(CHARACTER_FIELDS);
 /** Schema ≤4 persisted Kin/Culture and Bond-power display names and used the
  * field spellings `kin`/`culture`/`bondAction`/`bondPowers`. Those legacy keys
  * are allowed on historical records and converted to permanent IDs in

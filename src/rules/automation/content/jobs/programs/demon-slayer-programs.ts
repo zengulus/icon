@@ -7,8 +7,7 @@ import {
   axisDirection, lineCells, orthogonalNeighbors, sameCell, squareArea, walk,
   self, attackTarget, constant, damageDie, fray, normalDamage,
   distance, withinGrid, sourceActor,
-  damageMutation, conditionMutation, rushMutation, shoveMutation, stateMutation,
-  notHeroic, action, compilation,
+  damageMutation, conditionMutation, rushMutation, shoveMutation, stateMutation, action, compilation
 } from '../../../primitives/job-kit.js';
 import { areaHasCellWithinRange, blastTemplateCells, validateLine } from '../../../../area-geometry.js';
 import { recipientBranchEligibility, resolveRecipientBranch } from '../../../primitives/area-resolution.js';

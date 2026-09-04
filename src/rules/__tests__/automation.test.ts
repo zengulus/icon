@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { executeRuleProgram, RuleProgramViolation } from '../automation/kernels/runtime.js';
 import { occupied, walk } from '../automation/primitives/job-kit.js';
 import type { RuleActorView, RuleExecutionContext, RuleProgram, RuleRuntimeState } from '../automation/primitives/types.js';
-import {scriptedDice, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice } from './fixtures.js';
 
 const actor = (id: string, side: RuleActorView['side'], x: number, overrides: Partial<RuleActorView> = {}): RuleActorView => ({
   id,

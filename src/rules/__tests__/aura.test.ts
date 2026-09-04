@@ -4,7 +4,7 @@ import { auraDefinitionFor, auraStateView, isInAura, membersOfAura, projectedAur
 import { encounterConditionSet } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo } from './fixtures.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /**
@@ -403,7 +403,7 @@ describe('Aura harvest rows', () => {
     state = executeCommand(state, { type: 'ADD_ACTOR', actor: foe }).state;
     state = startEncounterTo(state, hero.id);
     const heroId = hero.id;
-    const used = executeCommand(state, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'chanter:dervish', targetIds: [ally.id] }, scriptedDice());
+    const used = executeCommand(state, { type: 'USE_ABILITY', actorId: heroId, abilityId: 'chanter:dervish', input: { positions: { [`dervish-landing:${ally.id}`]: [{ x: 3, y: 2 }] } }, targetIds: [ally.id] }, scriptedDice());
     // The hero flew 1 toward the foe and the ally was placed adjacent: both
     // are inside the swirling winds aura 1 and have counter.
     expect(used.state.actors[heroId].activeEffects.some(({ effectId }) => effectId === 'aura')).toBe(true);

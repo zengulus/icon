@@ -4,7 +4,7 @@ import { initialCharacterResources, perEncounterCharacterResourceIds, resourceMa
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the shared resource registry (ICON p.99
@@ -171,7 +171,7 @@ describe('shared resources (p.99–105, p.204)', () => {
   it('Blessing: Symphony spends tokens, and any remainder is discarded at the end of combat', () => {
     const { state, hero, ally } = resourceEncounter({ second: null, ally: { x: 3, y: 1 } });
     state.actors[ally!.id].resources.blessing = 1;
-    const symph = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', targetIds: [] }, scriptedDice()).state;
+    const symph = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { positions: { 'mote-positions': [{ x: 3, y: 3 }] } }, targetIds: [] }, scriptedDice()).state;
     expect(symph.actors[ally!.id].resources.blessing).toBe(0);
     const ended = executeCommand(symph, { type: 'END_ENCOUNTER' }).state;
     expect(ended.actors[hero.id].resources.blessing).toBe(0);

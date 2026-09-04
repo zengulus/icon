@@ -11,7 +11,7 @@ import type { RuleExecutionContext } from '../automation/primitives/types.js';
 import { ABILITIES, JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn, slashedTriggeredThisTurn} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn, slashedTriggeredThisTurn } from './fixtures.js';
 import { oneInterruptPerTurnWindowKey } from '../automation/kernels/use-ledger.js';
 
 /**

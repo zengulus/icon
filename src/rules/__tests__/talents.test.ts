@@ -562,7 +562,7 @@ describe('F7 terrain-create audited triggers', () => {
   // creating three deterministic cells was source-inexact).
   it('Underway talent 2: retracted — creates NO difficult terrain (documented, 0-3 player choice unresolved)', () => {
     const { state, hero } = talentEncounter('warden:underway', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:underway', targetIds: [] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:underway', input: { positions: { 'portal-position': [{ x: 0, y: 1 }] } }, targetIds: [] }, scriptedDice());
     expect(result.state.terrainEffects.some((e) => e.terrain === 'difficult')).toBe(false);
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
@@ -639,12 +639,13 @@ describe('F7 terrain-create audited triggers', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
-  it('Waterspout talent 2: retracted — no additional difficult terrain beyond the base waterspout (predicate + movement unresolved)', () => {
+  it('Waterspout talent 2: retracted — creates no additional difficult terrain (predicate + movement unresolved)', () => {
     const { state, hero, foe } = talentEncounter('stormbender:waterspout', 2, { heroAt: { x: 1, y: 1 }, foeAt: { x: 8, y: 1 } });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:waterspout', targetIds: [] }, scriptedDice());
-    // The base ability itself summons a waterspout that is difficult terrain;
-    // the trait-2 fold no longer adds a second, separate difficult effect.
-    expect(result.state.terrainEffects.filter((e) => e.terrain === 'difficult')).toHaveLength(1);
+    state.grid.terrain.push({ position: { x: 0, y: 1 }, type: 'difficult', elevation: 0 });
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'stormbender:waterspout', input: { positions: { 'waterspout-position': [{ x: 0, y: 1 }] } }, targetIds: [] }, scriptedDice());
+    // The base ability uses existing difficult terrain; neither it nor the
+    // retracted talent creates an additional terrain effect.
+    expect(result.state.terrainEffects.filter((e) => e.terrain === 'difficult')).toHaveLength(0);
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
   });
 
@@ -910,7 +911,7 @@ describe('Charge-variant talent gating', () => {
     // and any displacement would throw. The area must stay at the target.
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
-      input: {},
+      input: { positions: { 'chaos-tarot-terrain': [{ x: 3, y: 1 }, { x: 3, y: 2 }] } },
     } as any, scriptedDice(3));
     // The area stays at the original target (3,1).
     expect(result.state.entities).toBeDefined();
@@ -922,7 +923,7 @@ describe('Charge-variant talent gating', () => {
     state.actors[hero.id].ruleState['slow-turn'] = true; // charged
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
-      input: { positions: { 'area-center': [{ x: 5, y: 1 }] } },
+      input: { positions: { 'area-center': [{ x: 5, y: 1 }], 'chaos-tarot-terrain': [{ x: 5, y: 1 }, { x: 5, y: 2 }] } },
     } as any, scriptedDice(3));
     // The area moved from (3,1) to (5,1) = 2 spaces (within the 4-space charged allowance).
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay
@@ -933,7 +934,7 @@ describe('Charge-variant talent gating', () => {
     // Not charged — normal turn
     const result = executeCommand(state, {
       type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
-      input: { positions: { 'area-center': [{ x: 5, y: 1 }] } },
+      input: { positions: { 'area-center': [{ x: 5, y: 1 }], 'chaos-tarot-terrain': [{ x: 5, y: 1 }, { x: 5, y: 2 }] } },
     } as any, scriptedDice(3));
     // 2 spaces from (3,1) to (5,1) is within the 2-space uncharged allowance.
     expect(applyEvents(state, result.events)).toEqual(result.state); // replay

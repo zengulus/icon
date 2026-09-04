@@ -7,7 +7,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnOnly, endTurnTo, startEncounterTo, interruptUses, interruptUsedThisTurn } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Knave
@@ -259,7 +259,7 @@ describe('Knave ability automation (p.139–144)', () => {
 
   it('Strongarm: shoves an adjacent foe around the user, then shoves 1 more', () => {
     const { state, hero, foe } = knaveEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', targetIds: [foe.id] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', input: { positions: { 'strongarm-adjacency': [{ x: 0, y: 1 }] }, options: { direction: 'clockwise' } }, targetIds: [foe.id] }, scriptedDice());
     expect(result.state.actors[foe.id].position).toEqual({ x: 3, y: 1 });
     expect(result.state.actors[hero.id].actionsRemaining).toBe(1);
     expect(applyEvents(state, result.events)).toEqual(result.state);
@@ -273,14 +273,13 @@ describe('Knave ability automation (p.139–144)', () => {
     // then emits the F1 remove/place reposition BEFORE the spin: the target
     // is removed and placed into the canonical first free adjacent cell
     // (0,1), from which the circular spin starts.
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', targetIds: [foe.id] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', input: { positions: { 'strongarm-adjacency': [{ x: 0, y: 1 }] }, options: { direction: 'clockwise' } }, targetIds: [foe.id] }, scriptedDice());
     // The event's mutation stream is [actions spend, remove, place, shove…]:
     // the F1 remove/place reposition precedes the spin.
     const moves = mutationsOf(result.events, 'knave:strongarm').filter((mutation) => mutation.kind === 'move');
     expect(moves[0]).toMatchObject({ actorId: foe.id, movement: 'remove' });
-    // The canonical first free adjacent cell (diagonals included, sorted by
-    // distance then coordinates) around the user at (1,1) is (0,0).
-    expect(moves[1]).toMatchObject({ actorId: foe.id, movement: 'place', positions: [{ x: 0, y: 0 }] });
+    // The recorded adjacent cell is used before the spin.
+    expect(moves[1]).toMatchObject({ actorId: foe.id, movement: 'place', positions: [{ x: 0, y: 1 }] });
     // The spin (a place around the ring) then the final shove follow.
     expect(moves.some((mutation) => mutation.movement === 'shove' && mutation.actorId === foe.id)).toBe(true);
     expect(result.state.actors[foe.id].position).not.toEqual({ x: 1, y: 1 });
@@ -295,7 +294,7 @@ describe('Knave ability automation (p.139–144)', () => {
     // remove/place reposition mutation stream at all.
     const { state, hero, foe } = knaveEncounter({ second: null });
     state.actors[hero.id].talents = { 'knave:strongarm': 1 };
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', targetIds: [foe.id] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', input: { positions: { 'strongarm-adjacency': [{ x: 0, y: 1 }] }, options: { direction: 'clockwise' } }, targetIds: [foe.id] }, scriptedDice());
     // Same final position as the no-talent base fixture (the spin around
     // (1,1) then the final shove): the talent changed nothing.
     expect(result.state.actors[foe.id].position).toEqual({ x: 3, y: 1 });
@@ -315,11 +314,11 @@ describe('Knave ability automation (p.139–144)', () => {
     // the hold is denied.
     const { state, hero, foe } = knaveEncounter({ foe: { x: 3, y: 1 }, second: null });
     state.actors[hero.id].talents = { 'knave:strongarm': 1 };
-    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', targetIds: [foe.id] }, scriptedDice()))
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'knave:strongarm', input: { positions: { 'strongarm-adjacency': [{ x: 0, y: 1 }] }, options: { direction: 'clockwise' } }, targetIds: [foe.id] }, scriptedDice()))
       .toThrowError(expect.objectContaining({ code: 'choice.actor-range' }));
     // No talent at all: the base ability stays a range-1 melee hold.
     const plain = knaveEncounter({ foe: { x: 3, y: 1 }, second: null });
-    expect(() => executeCommand(plain.state, { type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'knave:strongarm', targetIds: [plain.foe.id] }, scriptedDice()))
+    expect(() => executeCommand(plain.state, { type: 'USE_ABILITY', actorId: plain.hero.id, abilityId: 'knave:strongarm', input: { positions: { 'strongarm-adjacency': [{ x: 0, y: 1 }] }, options: { direction: 'clockwise' } }, targetIds: [plain.foe.id] }, scriptedDice()))
       .toThrowError(expect.objectContaining({ code: 'choice.actor-range' }));
   });
 

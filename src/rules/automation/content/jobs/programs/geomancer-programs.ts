@@ -6,14 +6,11 @@ import { entityAnchorPosition } from '../../../primitives/anchor.js';
 import { footprintCells } from '../../../primitives/spatial-intent.js';
 import { validateLine } from '../../../../area-geometry.js';
 import {
-  axisDirection, sameCell, squareArea, withinGrid, occupied,
+  sameCell, squareArea, withinGrid, occupied,
   constant,
-  distance, sourceActor, walk,
-  damageMutation, conditionMutation, stateMutation, vigorMutation,
-  stanceMutation, markMutation,
-  shoveMutation, flyMutation, placeMutation, removeMutation, entityMutation, terrainMutation,
+  distance, damageMutation, conditionMutation, stateMutation, stanceMutation, markMutation, removeMutation, entityMutation, terrainMutation,
   summonEntity,
-  action, compilation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';

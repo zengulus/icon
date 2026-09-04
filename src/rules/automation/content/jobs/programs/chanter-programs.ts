@@ -1,3 +1,6 @@
+import { resolveCapturedPositionListChoice } from '../../../kernels/choice.js';
+import { contextAfterMutations } from '../../../kernels/execute-flow.js';
+import { positionSetSeparated } from '../../../kernels/evaluate-query.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { auraRelationPerspectiveId } from '../../../primitives/roles.js';
 import { resolveSaveWindow } from '../../../primitives/save-window.js';
@@ -6,13 +9,12 @@ import { hasMastery } from '../../../kernels/mastery.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
-  axisDirection, lineCells, sameCell, squareArea, withinGrid, occupied,
-  constant, untilNextTurnEnd,
-  distance, sourceActor, walk,
+  lineCells, sameCell, squareArea, withinGrid, constant, untilNextTurnEnd,
+  distance, walk,
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
   flyMutation, removeMutation, placeMutation, terrainMutation, swapMutations,
-  action, compilation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import { evaluateActorQuery, evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
 import { anchorFromPosition } from '../../../primitives/anchor.js';
@@ -326,8 +328,14 @@ const dervishEffects: RuleResolver = (context) => {
     if (!ally?.position) throw new RuleProgramViolation('choice.actor-count', 'Dervish requires an ally in range 4.');
     if (ally.side !== source.side || distance(sourcePosition, ally.position) > 4) throw new RuleProgramViolation('choice.actor-range', 'Dervish requires an ally in range 4.');
     mutations.push(removeMutation(context, ally.id));
-    const adjacentCell = evaluatePositions({ origin: flyDest, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-    if (adjacentCell) mutations.push(placeMutation(context, ally.id, adjacentCell));
+    const placement = contextAfterMutations(context, mutations);
+    const origin = placement.state.actors[source.id].position;
+    if (!origin) throw new RuleProgramViolation('choice.position-unavailable', 'Dervish has no landing origin.');
+    const [adjacentCell] = resolveCapturedPositionListChoice({
+      key: `dervish-landing:${ally.id}`, label: 'Dervish ally landing', required: true, minimum: 1, maximum: 1,
+    }, evaluatePositions({ origin, originSize: source.size, radius: 1, includeOrigin: true,
+      space: { kind: 'unoccupied', excludeActorId: ally.id }, placementActorId: ally.id }, placement), placement);
+    mutations.push(placeMutation(context, ally.id, adjacentCell));
   }
   if (source.talents['chanter:dervish'] === 1) {
     mutations.push({
@@ -345,22 +353,6 @@ const dervishEffects: RuleResolver = (context) => {
 const dervishComboEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   return [conditionMutation(context, source.id, 'dervish:dawn-aura', 'normal', untilNextTurnEnd)];
-};
-
-/** The first free space for a Symphony mote: scans outward from `start`,
- * skipping occupied cells and cells adjacent to or overlapping placed motes. */
-const firstMoteCell = (context: Parameters<RuleResolver>[0], start: { x: number; y: number }, placed: { x: number; y: number }[]): { x: number; y: number } | null => {
-  for (let radius = 0; radius <= Math.max(context.state.grid.width, context.state.grid.height); radius += 1) {
-    const candidates = squareArea(start, radius)
-      .filter((cell) => withinGrid(cell, context))
-      .sort((a, b) => distance(start, a) - distance(start, b) || a.x - b.x || a.y - b.y);
-    for (const cell of candidates) {
-      if (occupied(cell, context)) continue;
-      if (placed.some((candidate) => sameCell(candidate, cell) || distance(candidate, cell) <= 1)) continue;
-      return cell;
-    }
-  }
-  return null;
 };
 
 /** ICON p.178 Symphony: remove up to four blessings from characters anywhere
@@ -381,14 +373,15 @@ const symphonyEffects: RuleResolver = (context) => {
     mutations.push(resourceMutation(context, holder.id, 'blessing', 'spend', take));
     remaining -= take;
   }
-  const count = 4 + (context.triggers?.has('charge') ? 2 : 0);
-  const placed: { x: number; y: number }[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const cell = firstMoteCell(context, source.position, placed);
-    if (!cell) break;
-    placed.push(cell);
-    mutations.push(terrainMutation(context, 'create', 'symphony-mote', [cell]));
-  }
+  const count = (4 - remaining) + (context.triggers?.has('charge') ? 2 : 0);
+  const existingMotes = context.state.terrainEffects.filter((effect) => effect.terrain === 'symphony-mote').flatMap((effect) => [...effect.positions]);
+  const placed = resolveCapturedPositionListChoice({ key: 'mote-positions', label: 'Symphony motes',
+    required: count > 0, minimum: count, maximum: count,
+  }, evaluatePositions({ origin: source.position, radius: Math.max(context.state.grid.width, context.state.grid.height),
+    space: { kind: 'unoccupied' }, separatedFrom: { positions: existingMotes, minimumDistance: 2 },
+  }, context), context);
+  if (!positionSetSeparated(placed, 2)) throw new RuleProgramViolation('choice.position-separation', 'Symphony motes cannot overlap or be adjacent.');
+  for (const cell of placed) mutations.push(terrainMutation(context, 'create', 'symphony-mote', [cell]));
   return mutations;
 };
 

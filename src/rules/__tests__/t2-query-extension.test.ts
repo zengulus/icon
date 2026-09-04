@@ -26,7 +26,6 @@ import {
 } from '../automation/kernels/evaluate-query.js';
 import { resolveSpatialAnchor } from '../automation/kernels/candidate.js';
 import { anchorFromActorSelector } from '../automation/primitives/anchor.js';
-import { RuleProgramViolation } from '../automation/kernels/violations.js';
 
 function actorView(
   id: string,

@@ -2,7 +2,7 @@ import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 import { resolveAbilityUseChoices } from '../automation/kernels/ability-use-choices.js';
 import type { AbilityUseChoiceSource } from '../automation/primitives/ability-use-choices.js';
 

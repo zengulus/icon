@@ -7,7 +7,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, expectRejectedCommandPurity, interruptUses, interruptUsedThisTurn} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo, expectRejectedCommandPurity, interruptUses, interruptUsedThisTurn } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Fool ability
@@ -83,7 +83,7 @@ describe('Fool ability automation (p.150–152)', () => {
 
   it('Cavaliere: dashes 3 with phasing, steps to the side, dazes the target, and attacks', () => {
     const { state, hero, foe } = foolEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id] }, scriptedDice(12, 4, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', input: { positions: { 'bomb-position': [{ x: 4, y: 3 }] } }, targetIds: [foe.id] }, scriptedDice(12, 4, 4));
     expect(mutationsOf(result.events, 'fool:cavaliere')).toMatchObject([
       { kind: 'actions', operation: 'spend', amount: 1 },
       { kind: 'move', actorId: hero.id, movement: 'rush' },
@@ -100,14 +100,14 @@ describe('Fool ability automation (p.150–152)', () => {
   it('Cavaliere: a Finishing Blow against a bloodied foe summons a bomb', () => {
     const fixture = foolEncounter({ second: null });
     fixture.state.actors[fixture.foe.id].hp = 10;
-    const result = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [fixture.foe.id] }, scriptedDice(12, 4, 4));
+    const result = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'fool:cavaliere', input: { positions: { 'bomb-position': [{ x: 4, y: 3 }] } }, targetIds: [fixture.foe.id] }, scriptedDice(12, 4, 4));
     const bombs = Object.values(result.state.entities).filter((entity) => entity.type === 'bomb' && entity.ownerId === fixture.hero.id);
     expect(bombs).toHaveLength(1);
   });
 
   it('Carnevale: summons two bombs in range 2, then detonates them on a non-attacking turn end', () => {
     const { state, hero, foe } = foolEncounter({ foe: { x: 1, y: 2 }, second: null });
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:carnevale', targetIds: [] }, scriptedDice());
+    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:carnevale', input: { positions: { 'bomb-positions': [{ x: 0, y: 1 }, { x: 0, y: 2 }] } }, targetIds: [] }, scriptedDice());
     const bombs = Object.values(placed.state.entities).filter((entity) => entity.type === 'bomb' && entity.ownerId === hero.id);
     expect(bombs).toHaveLength(2);
     expect(placed.state.actors[hero.id].ruleState['carnevale:armed']).toBe(true);
@@ -184,7 +184,7 @@ describe('Fool ability automation (p.150–152)', () => {
     prepareGallows(state, hero.id);
     // Empowered hit: d20 12 + boon 4 hits; damage pool [6, 2] keeps the bonus
     // die 6, so the non-kill (32 - (4 fray + 6) = 22) still fires Slay.
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: empower(hero.id) }, scriptedDice(12, 4, 6, 2));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { ...empower(hero.id), positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 6, 2));
     const event = gallowsRuleEvent(result, 'fool:cavaliere');
     // The die reset rides the chosen ability's OWN recorded event.
     expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
@@ -205,20 +205,20 @@ describe('Fool ability automation (p.150–152)', () => {
     const plainFixture = foolEncounter({ second: null });
     prepareGallows(plainFixture.state, plainFixture.hero.id);
     // Declined (no choice): the [D] die rolls 2, so the hit deals fray + 2.
-    const plain = executeCommand(plainFixture.state, { type: 'USE_ABILITY', actorId: plainFixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [plainFixture.foe.id], input: {} }, scriptedDice(12, 4, 2));
+    const plain = executeCommand(plainFixture.state, { type: 'USE_ABILITY', actorId: plainFixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [plainFixture.foe.id], input: { positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 2));
     expect(plain.state.actors[plainFixture.foe.id].hp).toBe(26); // 32 - (4 + 2)
     expect(plain.state.actors[plainFixture.hero.id].ruleState['gallows-humor:die']).toBe(6);
     // Empowered: the extra die 6 joins the pool and is kept over the 2.
     const empoweredFixture = foolEncounter({ second: null });
     prepareGallows(empoweredFixture.state, empoweredFixture.hero.id);
-    const empowered = executeCommand(empoweredFixture.state, { type: 'USE_ABILITY', actorId: empoweredFixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [empoweredFixture.foe.id], input: empower(empoweredFixture.hero.id) }, scriptedDice(12, 4, 6, 2));
+    const empowered = executeCommand(empoweredFixture.state, { type: 'USE_ABILITY', actorId: empoweredFixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [empoweredFixture.foe.id], input: { ...empower(empoweredFixture.hero.id), positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 6, 2));
     expect(empowered.state.actors[empoweredFixture.foe.id].hp).toBe(22); // 32 - (4 + 6)
   });
 
   it('Gallows Humor: declining the choice leaves the die at maximum and produces no forced Slay', () => {
     const { state, hero, foe } = foolEncounter({ second: null });
     prepareGallows(state, hero.id);
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: {} }, scriptedDice(12, 4, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 4));
     const event = gallowsRuleEvent(result, 'fool:cavaliere');
     expect(result.state.actors[hero.id].ruleState['gallows-humor:die']).toBe(6);
     expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
@@ -235,7 +235,7 @@ describe('Fool ability automation (p.150–152)', () => {
     // The ally's turn comes after the foe's (the scheduler alternates sides).
     const afterHero = endTurnTo(state, foe.id, scriptedDice());
     const allyTurn = endTurnTo(afterHero, ally!.id, scriptedDice());
-    const result = executeCommand(allyTurn, { type: 'USE_ABILITY', actorId: ally!.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: empower(hero.id) }, scriptedDice(12, 4, 4));
+    const result = executeCommand(allyTurn, { type: 'USE_ABILITY', actorId: ally!.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { ...empower(hero.id), positions: { 'bomb-position': [{ x: 0, y: 2 }] } } }, scriptedDice(12, 4, 4));
     const event = gallowsRuleEvent(result, 'fool:cavaliere');
     // The durable roll belongs to the Fool; the empowered resolution belongs to the ally.
     expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
@@ -257,7 +257,7 @@ describe('Fool ability automation (p.150–152)', () => {
     const { state, hero, foe } = foolEncounter({ second: null });
     prepareGallows(state, hero.id);
     state.actors[hero.id].ruleState['gallows-humor:die'] = 5;
-    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: empower(hero.id) }, scriptedDice(12, 4, 4)))
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { ...empower(hero.id), positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 4)))
       .toThrowError(expect.objectContaining({ code: 'gallows-humor.die-not-max' }));
     expect(state.actors[hero.id].ruleState['gallows-humor:die']).toBe(5);
   });
@@ -265,7 +265,7 @@ describe('Fool ability automation (p.150–152)', () => {
   it('Gallows Humor: naming an ineligible owner (a foe) fails closed — nothing is empowered', () => {
     const { state, hero, foe } = foolEncounter({ second: null });
     prepareGallows(state, hero.id);
-    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { options: { 'gallows-humor:empower': foe.id } } }, scriptedDice(12, 4, 4)))
+    expect(() => executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { ...{ options: { 'gallows-humor:empower': foe.id } }, positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 4)))
       .toThrowError(expect.objectContaining({ code: 'gallows-humor.empower-unavailable' }));
     expect(state.actors[hero.id].ruleState['gallows-humor:die']).toBe(6);
   });
@@ -273,7 +273,7 @@ describe('Fool ability automation (p.150–152)', () => {
   it('Gallows Humor: the bind is per-resolution — a LATER ability use (no choice) carries no forced Slay and nothing leaked', () => {
     const { state, hero, foe } = foolEncounter({ second: null });
     prepareGallows(state, hero.id);
-    const empowered = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: empower(hero.id) }, scriptedDice(12, 4, 4)).state;
+    const empowered = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { ...empower(hero.id), positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 4)).state;
     expect(empowered.actors[hero.id].ruleState['gallows-humor:die']).toBe(1);
     expect(empowered.actors[hero.id].ruleState['gallows-humor:slay-armed']).toBeUndefined();
     const later = executeCommand(empowered, {
@@ -292,7 +292,7 @@ describe('Fool ability automation (p.150–152)', () => {
 
   it('Gallows Humor: an ORDINARY non-kill produces no natural Slay — no activation, no bomb', () => {
     const { state, hero, foe } = foolEncounter({ second: null });
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id] }, scriptedDice(12, 4, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', input: { positions: { 'bomb-position': [{ x: 4, y: 3 }] } }, targetIds: [foe.id] }, scriptedDice(12, 4, 4));
     const event = gallowsRuleEvent(result, 'fool:cavaliere');
     expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
       ? event.triggerActivations?.some(({ trigger }) => trigger === 'slay')
@@ -309,7 +309,7 @@ describe('Fool ability automation (p.150–152)', () => {
     // fact); the durable activation + slain fact are the authority record.
     const fixture = foolEncounter({ second: null });
     fixture.state.actors[fixture.foe.id].hp = 6;
-    const result = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [fixture.foe.id] }, scriptedDice(12, 4, 4));
+    const result = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'fool:cavaliere', input: { positions: { 'bomb-position': [{ x: 4, y: 3 }] } }, targetIds: [fixture.foe.id] }, scriptedDice(12, 4, 4));
     expect(result.state.actors[fixture.foe.id].defeated).toBe(true);
     const event = gallowsRuleEvent(result, 'fool:cavaliere');
     expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
@@ -322,7 +322,7 @@ describe('Fool ability automation (p.150–152)', () => {
   it('Gallows Humor: an EMPOWERED non-kill triggers Slay without a kill — the bomb resolves once', () => {
     const { state, hero, foe } = foolEncounter({ second: null });
     prepareGallows(state, hero.id);
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: empower(hero.id) }, scriptedDice(12, 4, 4));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { ...empower(hero.id), positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 4));
     const event = gallowsRuleEvent(result, 'fool:cavaliere');
     expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
       ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'slay' && provenance === 'source-forced')
@@ -337,7 +337,7 @@ describe('Fool ability automation (p.150–152)', () => {
   it('Gallows Humor: an EMPOWERED MISS triggers Slay too — the source says hit or miss (p.151)', () => {
     const { state, hero, foe } = foolEncounter({ second: null });
     prepareGallows(state, hero.id);
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: empower(hero.id) }, scriptedDice(1, 2));
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'fool:cavaliere', targetIds: [foe.id], input: { ...empower(hero.id), positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(1, 2));
     const event = gallowsRuleEvent(result, 'fool:cavaliere');
     expect(event && event.type === 'RULE_MUTATIONS_APPLIED'
       ? event.triggerActivations?.some(({ trigger, provenance }) => trigger === 'slay' && provenance === 'source-forced')
@@ -358,7 +358,7 @@ describe('Fool ability automation (p.150–152)', () => {
     const fixture = foolEncounter({ second: null });
     fixture.state.actors[fixture.foe.id].hp = 6;
     prepareGallows(fixture.state, fixture.hero.id);
-    const result = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [fixture.foe.id], input: empower(fixture.hero.id) }, scriptedDice(12, 4, 4));
+    const result = executeCommand(fixture.state, { type: 'USE_ABILITY', actorId: fixture.hero.id, abilityId: 'fool:cavaliere', targetIds: [fixture.foe.id], input: { ...empower(fixture.hero.id), positions: { 'bomb-position': [{ x: 4, y: 3 }] } } }, scriptedDice(12, 4, 4));
     expect(result.state.actors[fixture.foe.id].defeated).toBe(true);
     const event = gallowsRuleEvent(result, 'fool:cavaliere');
     const slayActivations = event && event.type === 'RULE_MUTATIONS_APPLIED'
@@ -378,7 +378,7 @@ describe('Fool ability automation (p.150–152)', () => {
       sourceId: 'fool:cavaliere',
       actionId: 'default',
       timing: 'use',
-      input: {},
+      input: { positions: { 'bomb-position': [{ x: 4, y: 3 }] } },
       attackTargetId: foe.id,
       triggers: ['slay'],
     }, scriptedDice(12, 4, 4))).toThrowError(expect.objectContaining({ code: 'rule.trigger-forged' }));

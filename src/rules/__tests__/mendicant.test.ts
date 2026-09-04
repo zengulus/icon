@@ -4,7 +4,7 @@ import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 /** Source-derived Mendicant class-trait fixtures (ICON p.172). */
 function mendicantEncounter(

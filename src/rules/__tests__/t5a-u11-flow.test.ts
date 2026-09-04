@@ -48,7 +48,7 @@ import {
   executeRuleProgramWithReactiveTriggers,
   replayEncounter,
 } from '../encounter.js';
-import type { EncounterEvent, EncounterState, Position } from '../types.js';
+import type { EncounterEvent, EncounterState } from '../types.js';
 import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 type RMA = Extract<EncounterEvent, { type: 'RULE_MUTATIONS_APPLIED' }>;

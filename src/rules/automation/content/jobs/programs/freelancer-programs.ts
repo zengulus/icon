@@ -6,11 +6,11 @@ import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
   axisDirection, lineCells, sameCell, squareArea,
-  constant, damageDie, fray, self,
+  constant, self,
   distance, sourceActor, walk,
   damageMutation, conditionMutation, stateMutation, markMutation, stanceMutation,
   rushMutation, flyMutation, placeMutation, terrainMutation,
-  action, compilation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';

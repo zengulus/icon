@@ -1019,16 +1019,16 @@ placement residuals: Hunter Set Trap now supplies the foe's size (including a
 Jotunn Size-2 fixture). No recorded choice, Tarot behavior, source-unit
 membership, or executable coverage changed.
 
-The next U4 tranche is **tranche 33 — use-time recorded-position placement
-family (NOT STARTED)**: Hunter Set Trap; Fool Cavaliere/Carnevale bombs;
-Warden Mist Strider primary + Charge cloud and Underway portal 1; Chanter
-Dervish landing and Symphony motes; Knave Strongarm talent-I adjacency;
-Stormbender Geyser and Waterspout; Sealer Spirit Shrine; Seer Chaos Tarot
-effect 3 and Astra terrain/meteor cells; and Enochian Blackstar difficult
-terrain. It must replace source-owned first/nearest/padded cells with recorded
-positions over U3 CandidateSets, migrate ordinary summon/object placement to
-the creation-intent LoS authority where applicable, and preserve the separate
-portal-2/window and other U12/U13 consumers for their owning tranche.
+**Tranche 33 (2026-09-05)** — use-time recorded placement is implemented
+for the exact family in [`tranche-33-placement.md`](tranche-33-placement.md).
+The shared U4 list seam captures distinct positions over U3 candidates;
+ordinary creations validate through the creation authority with creator LoS,
+full-footprint range, and the shared cap allowance. U11 exposes its existing
+simulation for placement after movement/removal and earlier landings. No
+source unit is promoted. U4 remains PARTIAL: the next step is a fresh residual
+audit covering Dervish's actor/flight choices, Symphony's blessing payer and
+quantity, other automatic summons, Demon Claw Talent I/II, and opaque fold
+inputs. Underway portal 2 and other held/window choices remain U12/U13 work.
 
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);

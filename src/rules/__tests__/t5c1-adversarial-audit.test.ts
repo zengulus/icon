@@ -4,7 +4,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import type { CommandResult, DecisionWindowRecord, EncounterActor, EncounterEvent, EncounterState, Position } from '../types.js';
 import { ENCOUNTER_SCHEMA_VERSION } from '../types.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { armContinuation, clockObservationForBoundary, continuationDue, heldDamageContinuation, heldSaveContinuation, resumeContinuation, type ArmedContinuation } from '../automation/primitives/continuation.js';
+import { armContinuation, clockObservationForBoundary, continuationDue, heldDamageContinuation, resumeContinuation, type ArmedContinuation } from '../automation/primitives/continuation.js';
 import { EMPTY_BINDER, capturedActor, capturedPosition, liveRef, resolveReference } from '../automation/primitives/reference.js';
 import { nextWindowId, openDecisionWindow, orderDecisionWindows, popDecisionWindowStack, windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { registerContinuationResolver, resumeDueContinuations } from '../automation/kernels/continuation-runtime.js';

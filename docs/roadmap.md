@@ -25,38 +25,29 @@ A rules-first ICON 1.5 implementation in which:
 
 The engine never automates table judgment without source justification.
 
-# Current baseline (verified 2026-08-25)
+# Current baseline (reconciled 2026-09-05)
 
-- Source pipeline: all 501 pages extracted, digested, credited; byte-for-byte
-  regeneration evidence via `npm run verify:extraction`.
-- Character engine: creation, advancement, validation, import/export,
-  schema v3 migration — complete.
-- Encounter engine: command/event purity enforced; movement, terrain,
-  attacks, damage pipeline (armor/resistance/defiance/vigor/held damage),
-  saves, statuses, conditions, marks, stances, resources, interrupt windows,
-  turn scheduler (explicit actor selection, Slow rounds, pending Delay) —
-  authoritative with replay fixtures.
-- Content: all 144 Job abilities executable with replay fixtures; Mendicant
-  class traits; 56 talents; 27 Job traits; 22 foe ability recipes; 115 foe
-  trait keyword rows; foe role baselines; resource registry. The current
-  Step-6 mastery/talent tranche includes F1 teleport consumers, F5 mark rows,
-  F6a bonus-damage rows, and the K-P5 mastery fold; the remaining Class/Job
-  blocker set is regenerated in `docs/blocker-census.md`.
-- Verification: unit 993 tests green; e2e green; architecture +
-  automation audits green; automation audit reports 3,103 explicitly
-  unsupported clauses across 16 content kinds (the honest gap).
-- Settlement: `ENCOUNTER_ENDED` grants each PC +1 personal resolve; the
-  `  characterFromActor` projection carries HP attrition, wounds, and personal
-  resolve back onto the persistent sheet (schema v5); camp/interlude sheet
-  transitions exist — implemented 2026-08-25 (P1).
-- Foe role entitlements: Elite two-turn and Legend per-player-character turn
-  rows registered as production content (`role:elite-template`,
-  `role:legend-turns`), replay-tested through the existing scheduler path —
-  implemented 2026-08-26 (P2).
-- NOT built: playable camp/interlude scene flow; Mob model; foe phase engine;
-  Relic runtime; broad mastery/talent folds; Limit Break effects. The mastery
-  surface and four mastery rows are executable; the remaining rows stay
-  conservative and source-visible.
+- Source pipeline: 501 pages in the checked-in compendium; extraction and
+  source-artifact verification commands own reproducibility evidence.
+- Character engine: schema v5, creation/advancement validation, canonical
+  narrative identities, import/export, settlement and attrition projection.
+  Camp/interlude sheet transitions exist; a playable scene flow remains open.
+- Encounter engine: deterministic command/event execution and replay fixtures
+  cover wired movement, attacks, damage, conditions, resources, and lifecycle.
+  Generic underlay completion remains the active phase; partial foundations
+  and unresolved content are not certified by those fixtures.
+- Player content: 143/144 Job abilities, 29/65 Job traits, 50/288 talents,
+  and 15/144 masteries have programs without unsupported clauses. Limit Break
+  effect bodies and Relic runtime remain unresolved. The generated Class/Job
+  census contains 425 unresolved units (6 class traits, 36 Job traits,
+  238 talents, 129 masteries, 16 Limit Breaks).
+- Automation audit: 469/3,275 programs and 1,606/4,701 clauses have no
+  unsupported text; 3,095 clauses remain explicitly unsupported. These are
+  execution-coverage counts, not source-fidelity certification. See
+  [coverage](rules-coverage.md) and the generated [fidelity report](source-fidelity.md).
+- Elite and Legend turn entitlements use the shared scheduler. Mobs, foe
+  phases, broad player-content coverage, and the authoritative shared-VTT
+  release gate remain open. The browser-local `#/lab` remains phase-exempt.
 
 ---
 
@@ -78,6 +69,12 @@ promoting any further source units, with its UNDERLAY PHASE COMPLETE gate
 (that document §4) as this phase's gate. The greedy blocker-census
 sequencing in this section is **superseded** until that gate closes; the
 priorities below resume afterwards.
+
+Current placement work (2026-09-05): [tranche 33](tranche-33-placement.md)
+migrates the listed use-time placements to recorded choices. U4 remains
+partial; TODO.md now sequences a fresh residual audit of actor/resource,
+remaining summon, and continuation decisions. Source promotion and the
+shared-VTT release remain gated.
 
 A corrective pass (2026-08-30) repaired the first U3/U7 tranche work: the
 `nearest` operator no longer invents actor-id tie-breaks (it returns the

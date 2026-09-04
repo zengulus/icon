@@ -114,6 +114,16 @@ function objectStackTooHigh(state: EncounterState, kind: EntityKind, position: P
   return existingTotal + newHeight > 3;
 }
 
+/** Source-defined per-owner ceiling, shared by candidate/choice planning and
+ * application. A full cap suppresses creation, not the containing ability. */
+export function entityCreationAllowance(state: EncounterState, request: Pick<EntityCreationRequest, 'count' | 'entityType' | 'ownerId'>): number {
+  const count = Math.max(0, Math.floor(request.count));
+  const cap = summonCap(request.entityType);
+  const existing = Object.values(state.entities).filter((entity) => entity.type === request.entityType
+    && entity.ownerId === request.ownerId && entity.state.companion !== true).length;
+  return cap === null ? count : Math.max(0, Math.min(count, cap - existing));
+}
+
 export function validateEntityCreation(state: EncounterState, request: EntityCreationRequest): EntityCreationResult | null {
   const kind = request.kind ?? entityKind(request.entityType);
   const mode = request.countMode ?? 'up-to';
@@ -131,11 +141,8 @@ export function validateEntityCreation(state: EncounterState, request: EntityCre
     if (origin === undefined) return null;
     if (origin.x < 0 || origin.y < 0 || origin.x >= state.grid.width || origin.y >= state.grid.height) return null;
   }
-  const cap = summonCap(request.entityType);
-  const existing = Object.values(state.entities).filter((entity) => entity.type === request.entityType
-    && entity.ownerId === request.ownerId && entity.state.companion !== true).length;
-  if (cap !== null && existing >= cap) return null;
-  const allowed = cap === null ? count : Math.min(count, cap - existing);
+  const allowed = entityCreationAllowance(state, request);
+  if (allowed === 0) return null;
   const newHeight = heightOf({ state: request.state });
   const selected: Position[] = [];
   for (const position of request.positions) {

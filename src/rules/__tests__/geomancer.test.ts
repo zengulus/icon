@@ -7,7 +7,7 @@ import { RuleProgramViolation } from '../automation/kernels/runtime.js';
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Geomancer

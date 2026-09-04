@@ -6,7 +6,7 @@ import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the recipe-driven foe ability slices
@@ -70,14 +70,14 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 /** EXECUTE_RULE through the same command surface the VTT/transport use. */
-function foeAbility(state: EncounterState, fixture: FoeFixture, abilityId: string, options: { targetId?: string; dice?: number[] } = {}) {
+function foeAbility(state: EncounterState, fixture: FoeFixture, abilityId: string, options: { targetId?: string; dice?: number[]; positions?: Record<string, Position[]> } = {}) {
   return executeCommand(state, {
     type: 'EXECUTE_RULE',
     actorId: fixture.foe.id,
     sourceId: abilityId,
     actionId: 'default',
     timing: 'use',
-    input: options.targetId ? { actorIds: { target: [options.targetId] } } : {},
+    input: { ...(options.targetId ? { actorIds: { target: [options.targetId] } } : {}), positions: options.positions },
     ...(options.targetId && abilityIsAttack(abilityId) ? { attackTargetId: options.targetId } : {}),
   }, scriptedDice(...(options.dice ?? [])));
 }
@@ -402,7 +402,7 @@ describe('foe ability automation (p.300–306 recipes)', () => {
 
   it('Hunter Set Trap: creates a dangerous terrain space in free space in range 2', () => {
     const fixture = foeFixture('basic:hunter:302', { foe: { x: 1, y: 1 }, hero: { x: 5, y: 5 } });
-    const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:set-trap');
+    const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:set-trap', { positions: { 'terrain-position': [{ x: 0, y: 1 }] } });
     const traps = result.state.terrainEffects.filter((effect) => effect.terrain === 'dangerous');
     expect(traps).toHaveLength(1);
     expect(traps[0].ownerId).toBe(fixture.foe.id);
@@ -423,11 +423,19 @@ describe('foe ability automation (p.300–306 recipes)', () => {
         };
       }
     }
-    const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:set-trap');
+    const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:set-trap', { positions: { 'terrain-position': [allowed] } });
     expect(result.state.terrainEffects).toContainEqual(expect.objectContaining({
       terrain: 'dangerous', positions: [allowed],
     }));
     expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
+  it('Hunter Set Trap rejects missing and non-free recorded cells without spending its action', () => {
+    const fixture = foeFixture('basic:hunter:302', { foe: { x: 1, y: 1 }, hero: { x: 5, y: 5 } });
+    const before = structuredClone(fixture.state);
+    expect(() => foeAbility(fixture.state, fixture, 'basic:hunter:302:set-trap')).toThrow(/recorded choice/);
+    expect(() => foeAbility(fixture.state, fixture, 'basic:hunter:302:set-trap', { positions: { 'terrain-position': [{ x: 1, y: 1 }] } })).toThrow(/eligible candidate/);
+    expect(fixture.state).toEqual(before);
   });
 
   it('Hunter Prowl: dashes 1, gains stealth, and records the end-turn request', () => {

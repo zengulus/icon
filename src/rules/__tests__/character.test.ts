@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { abilityPointAllowance, aspectRelicFromSharedQuest, awardXp, chapterForLevel, completeRelicAspectQuest, createCharacter, infuseRelicDust, jobSlotsForLevel, masteryPointAllowance, migrateCharacter, narrativeBudgets, REFOCUS_DUST_COST, REFOCUS_KEEP_JOBS_DUST_COST, refocusCharacter, refocusDustCost, relicMinimumInfusedDust, relicRankForDust, relicSlotsForLevel, resolveRelicAspect, spendLevelUp, validateCharacter } from '../character.js';
 import { CHARACTER_SCHEMA_VERSION, type IconCharacter } from '../types.js';
 import { JOBS, RELICS, BONDS, findBondPower, findCulture, findKin } from '../catalog.js';
-import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { validCharacter } from './fixtures.js';
 
 /** A level 1 character that can legally spend its level-0 abilities and AP. */
 function refocusableCharacter(): ReturnType<typeof validCharacter> {

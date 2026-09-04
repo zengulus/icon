@@ -12,8 +12,6 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { findAbility } from '../catalog.js';
 import type { EncounterActor, EncounterState } from '../types.js';
 import { expectCommandPurity, scriptedDice, startEncounterTo, validCharacter } from './fixtures.js';
 

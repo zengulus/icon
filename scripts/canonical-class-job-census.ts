@@ -1627,7 +1627,6 @@ const FLY_LEXICAL_PATTERN = /\b(?:fly|flies|flying|flight|flights|flew)\b/i;
 // classifyBlockers is removed; this pattern is kept only for the fail-closed
 // audit that requires every terrain-creating census unit to be reviewed.
 const TERRAIN_CREATE_PATTERN = /create.*terrain|creates.*terrain|pit|difficult terrain|dangerous terrain|boulder|pillar|afterimage|terrain effect|creating a pit|create a height|create.*spaces of/i;
-const TERRAIN_FAMILIES = new Set(['terrain-transform', 'delayed-terrain', 'triggered-terrain-creation', 'selectable-terrain-placement', 'under-character-terrain', 'moving-area-terrain', 'terrain-conditional-rider', 'terrain-object-substitution']);
 
 /** Classify a source unit's rules text into a blocker set.
  *  The classification is purely syntactic (regex on the source text) and

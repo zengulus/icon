@@ -1,17 +1,20 @@
+import { contextAfterMutations } from '../../../kernels/execute-flow.js';
+import { blastTemplateCells } from '../../../../area-geometry.js';
+import { chooseEntityCreation } from '../../../kernels/creation-choice.js';
+import { resolveCapturedPositionListChoice } from '../../../kernels/choice.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
-  axisDirection, sameCell, squareArea, withinGrid,
-  constant,
-  distance, sourceActor, walk,
+  axisDirection, sameCell, squareArea, constant,
+  distance, walk,
   damageMutation, conditionMutation, stateMutation, vigorMutation, cureMutations,
   resourceMutation, stanceMutation, markMutation,
-  teleportMutation, entityMutation, terrainMutation,
+  teleportMutation, terrainMutation,
   summonEntity,
   gambleD6,
-  action, compilation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { evaluateActorQuery } from '../../../kernels/evaluate-query.js';
@@ -115,7 +118,7 @@ const chaosTarotEffects: RuleResolver = (context) => {
         if (!sameCell(landing, position)) mutations.push(teleportMutation(context, character.id, landing));
       }
     } else if (effect === 3) {
-      const cells = evaluatePositions({ origin: center, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).slice(0, 2);
+      const cells = resolveCapturedPositionListChoice({ key: 'chaos-tarot-terrain', label: 'Chaos Tarot effect 3', required: true, minimum: 2, maximum: 2 }, evaluatePositions({ origin: center, radius: 1, includeOrigin: true, insideCells: blastTemplateCells('small', center), space: { kind: 'any' } }, context), context);
       if (cells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', cells));
     } else if (effect === 4) {
       const chosen = resolveCapturedActorChoice({
@@ -189,13 +192,18 @@ const astraEffects: RuleResolver = (context) => {
     mutations.push(damageMutation(context, character.id, gamble, 'effect'));
   }
   if (gamble >= 4) {
-    const cells = evaluatePositions({ origin: target.position, radius: 2, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).slice(0, 2);
+    const cells = resolveCapturedPositionListChoice({ key: 'astra-terrain', label: 'Astra terrain', required: true, minimum: 2, maximum: 2 }, evaluatePositions({ origin: target.position, radius: 2, includeOrigin: true, insideCells: blastTemplateCells('medium', target.position), space: { kind: 'any' } }, context), context);
     if (cells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', cells));
   }
   if (gamble === 6) {
-    const meteorCell = evaluatePositions({ origin: target.position, radius: 2, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-    if (meteorCell) {
-      mutations.push({ kind: 'entity', sourceId: context.sourceId, operation: 'create', entityType: 'meteor', ownerId: source.id, positions: [meteorCell], count: 1, state: { height: 1 } });
+    const placement = contextAfterMutations(context, mutations);
+    const meteor = chooseEntityCreation(placement, 'meteor-position', 'Astra meteor', {
+      origin: target.position, radius: 2, includeOrigin: true, insideCells: blastTemplateCells('medium', target.position), space: { kind: 'any' },
+    }, { ownerId: source.id, entityType: 'meteor', count: 1, state: { height: 1 },
+      spatial: { origin: source.position, originSize: source.size } });
+    const meteorCell = meteor.positions[0];
+    {
+      mutations.push(meteor);
       for (const character of Object.values(context.state.actors)) {
         const position = character.position;
         if (!position || distance(position, meteorCell) > 1 || sameCell(position, meteorCell)) continue;

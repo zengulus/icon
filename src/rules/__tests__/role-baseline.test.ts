@@ -4,7 +4,7 @@ import { FOE_ROLE_BASELINE_RECIPES } from '../automation/content/foes/role-basel
 import { projectedRoleConditions } from '../automation/kernels/passive-projection.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoeFromProfile, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterEvent, EncounterState } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
 /**
  * F5 role-baseline fixtures (docs/rules-foundations.md §6, ICON p.298).

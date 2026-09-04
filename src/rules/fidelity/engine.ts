@@ -32,14 +32,12 @@ import type {
   FidelityWorld,
   ObligationFinding,
   ObligationStatus,
-  ProofRecord,
-  ScopeDefinition,
-  ScopeFrontierInput,
+  ProofRecord, ScopeFrontierInput,
   ScopeResult,
   ScopeStatus,
   SemanticContract,
   SourceObligation,
-  UnitDecompositionPiece,
+  UnitDecompositionPiece
 } from './types.js';
 import { REQUIRED_PROOF_KINDS } from './types.js';
 import { canonicalFixtureKey } from './types.js';
@@ -78,8 +76,6 @@ export interface AuditInputs {
    * a test-name substring in a file is traceability, never execution. */
   auditResults?: Readonly<Record<string, 'passed' | 'failed'>>;
 }
-
-const ROW_CLASS_PROOF_KINDS: readonly string[] = ['positive', 'boundary', 'negative', 'invariant', 'exhaustive'];
 
 /** Whitespace-stripped containment — matches the subdivision/correspondence policy. */
 function containsStripped(haystack: string, needle: string): boolean {

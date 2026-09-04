@@ -7,7 +7,8 @@ import '../automation/content/registry.js';
 import { JOB_TRAIT_RECIPES } from '../automation/content/jobs/job-trait-recipes.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import type { EncounterActor, EncounterState, Position, TerrainCell } from '../types.js';
-import type { RuleMutation, RuleProgram } from '../automation/primitives/types.js';import { scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import type { RuleMutation, RuleProgram } from '../automation/primitives/types.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 import { bullStrengthCollideKey, useLedgerAvailable } from '../automation/kernels/use-ledger.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 

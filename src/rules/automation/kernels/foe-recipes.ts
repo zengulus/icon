@@ -1,3 +1,4 @@
+import { resolveCapturedPositionListChoice } from './choice.js';
 import { RuleProgramViolation } from './runtime.js';
 import { baseMaximumHp } from './evaluate-value.js';
 import type { RuleSourceUnit } from '../../source-units.js';
@@ -15,10 +16,9 @@ import type {
   RuleTiming,
 } from '../primitives/types.js';
 import {
-  axisDirection, sameCell, squareArea,
-  constant, distance, walk,
+  axisDirection, sameCell, constant, distance, walk,
   conditionMutation, markMutation, rushMutation, shoveMutation, terrainMutation, vigorMutation, swapMutations,
-  action, compilation,
+  action, compilation
 } from '../primitives/foe-kit.js';
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { footprintCells, footprintDistance, footprintsOverlap } from '../primitives/spatial-intent.js';
@@ -527,8 +527,7 @@ function terrainResolver(recipe: FoeTerrainRecipe): RuleResolver {
   return (context) => {
     const source = referencedSource(context);
     if (!source?.position) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires a position.`);
-    const cell = evaluatePositions({ origin: source.position, originSize: source.size, radius: recipe.range, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
-    if (!cell) throw new RuleProgramViolation('choice.no-space', `${context.sourceId} needs a free space in range.`);
+    const [cell] = resolveCapturedPositionListChoice({ key: 'terrain-position', label: 'Terrain placement', required: true, minimum: 1, maximum: 1 }, evaluatePositions({ origin: source.position, originSize: source.size, radius: recipe.range, space: { kind: 'unoccupied' } }, context), context);
     return [terrainMutation(context, 'create', recipe.terrain, [cell])];
   };
 }

@@ -3,7 +3,7 @@ import { LIMIT_BREAK_UNLOCK_LEVEL, abilityPointAllowance, awardXp, spendLevelUp 
 import { SOURCE_ADJUDICATIONS, findAdjudication } from '../source-adjudications.js';
 import { dangerousOncePerTurnKey } from '../automation/kernels/use-ledger.js';
 import { isAtOrUnderQuarterHp, isBloodied } from '../automation/kernels/hp-threshold.js';
-import {validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { validCharacter } from './fixtures.js';
 
 describe('source adjudication registry invariants', () => {
   it('every record carries a unique stable ID', () => {

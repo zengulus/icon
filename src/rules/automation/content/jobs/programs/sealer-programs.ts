@@ -1,3 +1,7 @@
+import { footprintDistance } from '../../../primitives/spatial-intent.js';
+import { readCapturedPositionChoice } from '../../../kernels/choice.js';
+import { contextAfterMutations } from '../../../kernels/execute-flow.js';
+import { chooseEntityCreation } from '../../../kernels/creation-choice.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
@@ -5,12 +9,12 @@ import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleRe
 import {
   axisDirection, sameCell, squareArea, withinGrid,
   constant,
-  distance, sourceActor, walk,
+  distance, walk,
   damageMutation, conditionMutation, stateMutation, vigorMutation,
   resourceMutation, markMutation,
-  teleportMutation, entityMutation, summonEntity, terrainMutation, shoveMutation,
+  teleportMutation, terrainMutation, shoveMutation,
   gambleD6,
-  action, compilation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
 import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
@@ -181,12 +185,12 @@ const matsuriEffects: RuleResolver = (context) => {
 const spiritShrineEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   if (!source.position) return [];
-  const existing = Object.values(context.state.entities)
-    .filter((entity) => entity.type === 'shrine' && entity.ownerId === source.id)
-    .sort((a, b) => (Number(b.state.height ?? 1)) - (Number(a.state.height ?? 1)))[0];
+  const chosen = readCapturedPositionChoice(context, 'shrine-position', 'Spirit Shrine');
+  if (!chosen) throw new RuleProgramViolation('choice.position-required', 'Spirit Shrine requires a recorded position, including when raising an existing shrine.');
+  const existing = Object.values(context.state.entities).find((entity) => entity.type === 'shrine' && entity.ownerId === source.id && entity.positions.some((cell) => sameCell(cell, chosen)));
   const sourcePosition = source.position;
   const existingAnchor = existing ? entityAnchorPosition(existing) : null;
-  if (existing && existingAnchor && sourcePosition && distance(sourcePosition, existingAnchor) <= 1) {
+  if (existing && existingAnchor && sourcePosition && footprintDistance({ position: sourcePosition, size: source.size }, { position: existingAnchor, size: 1 }) <= 1) {
     const height = Math.min(3, Number(existing.state.height ?? 1) + 1);
     // The raised shrine replaces the previous one rather than stacking.
     const mutations: RuleMutation[] = [
@@ -195,9 +199,12 @@ const spiritShrineEffects: RuleResolver = (context) => {
     ];
     return mutations;
   }
-  return summonEntity(context, source.id, 'shrine', source.position, {
-    radius: 1, count: 1, losOrigin: source.position, originSize: source.size, state: { height: 1 },
-  });
+  const removals: RuleMutation[] = [{ kind: 'entity', operation: 'remove', sourceId: context.sourceId, entityType: 'shrine', ownerId: source.id, positions: [], count: 0, state: {} }];
+  const placement = contextAfterMutations(context, removals);
+  return [...removals, chooseEntityCreation(placement, 'shrine-position', 'Spirit Shrine', {
+    origin: source.position, originSize: source.size, radius: 1, includeOrigin: true, space: { kind: 'any' },
+  }, { ownerId: source.id, entityType: 'shrine', count: 1, state: { height: 1 },
+    spatial: { origin: source.position, originSize: source.size, maxRange: 1 } })];
 };
 
 /** ICON p.193 Sanctify: scatter salt in a medium blast in range 2, dealing 1

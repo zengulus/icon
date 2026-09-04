@@ -2,15 +2,12 @@ import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
-  sameCell, squareArea, withinGrid, occupied,
-  constant,
-  distance, sourceActor,
-  damageMutation, conditionMutation, stateMutation, vigorMutation, rollDamageDice,
-  resourceMutation, stanceMutation, markMutation,
+  sameCell, squareArea, withinGrid, constant,
+  distance, damageMutation, conditionMutation, stateMutation, resourceMutation, stanceMutation, markMutation,
   teleportMutation, entityMutation, summonEntity, terrainMutation,
-  action, compilation,
+  action, compilation
 } from '../../../primitives/job-kit.js';
-import { evaluatePositions, rushTowardFoes } from '../../../kernels/evaluate-query.js';
+import { evaluatePositions } from '../../../kernels/evaluate-query.js';
 import { readCapturedPositionChoice, validateCapturedPositionChoice } from '../../../kernels/choice.js';
 import { percentOfMaximum, baseMaximumHp } from '../../../kernels/evaluate-value.js';
 import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';

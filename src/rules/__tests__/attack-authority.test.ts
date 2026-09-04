@@ -8,7 +8,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { damageMutation } from '../automation/primitives/job-kit.js';
 import type { RuleActorView, RuleExecutionContext, RuleMutation, RuleProgram, RuleRuntimeState } from '../automation/primitives/types.js';
 import type { DiceSource } from '../dice.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
 /** Narrowed mutation shapes so fixtures can assert on attack/damage fields. */
 type AttackMutation = RuleMutation & { d20: number | null; boon: number; total: number | null; hit: boolean; critical: boolean; trueStrike: boolean; autoHit: boolean };

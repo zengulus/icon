@@ -5,7 +5,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { planMovement } from '../movement.js';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
 import type { EncounterActor, EncounterEvent, EncounterState, Position, TerrainCell } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, startEncounterTo, slashedTriggeredThisTurn} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, startEncounterTo, slashedTriggeredThisTurn } from './fixtures.js';
 
 /**
  * F0 damage-ledger matrix (ICON pp.89, 93–107).

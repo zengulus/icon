@@ -6,7 +6,7 @@ import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCom
 import { JOBS, findAbility } from '../catalog.js';
 import { findRuleSourceUnit } from '../source-units.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
-import {scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo} from './fixtures.js';
+import { scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo } from './fixtures.js';
 
 /**
  * Source-derived golden fixtures for the independently executable Warden
@@ -122,7 +122,7 @@ describe('Warden ability automation (p.165–171)', () => {
     expect(result.state.actors[fixture.foe.id].position).toEqual({ x: 4, y: 1 }); // shoved 2 along +x
   });
 
-  it('Mist Strider: creates a small-blast mist cloud at the user, replacing any prior cloud', () => {
+  it('Mist Strider: creates a small-blast mist cloud at the recorded free space, replacing any prior cloud', () => {
     const { state, hero } = wardenEncounter({ second: null });
     const placed = executeCommand(state, {
       type: 'EXECUTE_RULE',
@@ -130,18 +130,18 @@ describe('Warden ability automation (p.165–171)', () => {
       sourceId: 'warden:mist-strider',
       actionId: 'default',
       timing: 'use',
-      input: { positions: { 'area-center': [{ x: 1, y: 1 }] } },
+      input: { positions: { 'area-center': [{ x: 1, y: 2 }] } },
     }, scriptedDice()).state;
     const clouds = placed.terrainEffects.filter((effect) => effect.terrain === 'mist-cloud');
     expect(clouds).toHaveLength(1);
-    expect(clouds[0].positions).toHaveLength(9); // small blast
+    expect(clouds[0].positions).toHaveLength(5); // small blast
     expect(applyEvents(state, executeCommand(state, {
       type: 'EXECUTE_RULE',
       actorId: hero.id,
       sourceId: 'warden:mist-strider',
       actionId: 'default',
       timing: 'use',
-      input: { positions: { 'area-center': [{ x: 1, y: 1 }] } },
+      input: { positions: { 'area-center': [{ x: 1, y: 2 }] } },
     }, scriptedDice()).events)).toEqual(placed);
   });
 
@@ -192,7 +192,7 @@ describe('Warden ability automation (p.165–171)', () => {
 
   it('Underway: creates a portal, and a second portal grows at the end of your turn', () => {
     const { state, hero } = wardenEncounter({ second: null });
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:underway', targetIds: [] }, scriptedDice()).state;
+    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'warden:underway', input: { positions: { 'portal-position': [{ x: 0, y: 1 }] } }, targetIds: [] }, scriptedDice()).state;
     const portals = Object.values(placed.entities).filter((entity) => entity.type === 'underway');
     expect(portals).toHaveLength(1);
 

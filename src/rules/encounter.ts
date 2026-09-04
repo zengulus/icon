@@ -1,18 +1,18 @@
-import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type DecisionWindowRecord, type EncounterActiveEffect, type EncounterActor, type EncounterCommand, type EncounterCondition, type EncounterEvent, type EncounterHeldDamage, type EncounterMark, type EncounterState, type IconCharacter, type Position, type StatusId, type StatusSaveCommandInput, type TurnEndCause, type WindowDecisionValue } from './types.js';
+import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type DecisionWindowRecord, type EncounterActiveEffect, type EncounterActor, type EncounterCommand, type EncounterCondition, type EncounterEvent, type EncounterHeldDamage, type EncounterState, type IconCharacter, type Position, type StatusId, type StatusSaveCommandInput, type TurnEndCause, type WindowDecisionValue } from './types.js';
 import { findAbility, findClass, findJob } from './catalog.js';
 import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
-import { randomDice, rollBoonOrCurse, rollDamage, type DiceSource } from './dice.js';
+import { randomDice, rollBoonOrCurse, type DiceSource } from './dice.js';
 import { compileRuleSourceUnit } from './automation/content/glue/compiler.js';
-import type { ArmedContinuation, RuleAction, RuleChoice, RuleDuration, RuleExecutionContext, RuleExecutionResult, RuleEffect, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
+import type { ArmedContinuation, RuleAction, RuleChoice, RuleDuration, RuleExecutionContext, RuleEffect, RuleMutation, RuleProgram, RuleResolverRegistry, RuleTiming } from './automation/primitives/types.js';
 import { SAVE_REROLL_INTERRUPT_IDS, compileManualRuleProgram, isIndependentlyExecutableAbility, isIndependentlyExecutableManualProgram } from './automation/content/glue/manual-programs.js';
 import { initialCharacterResources, perEncounterCharacterResourceIds } from './core.js';
-import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveRuleTriggers, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
+import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, collidingShoveTargets, defeatActor, deferrableEffectWindow, defyDeathActive, deniedAtomicSpatialLegIndices, determineAndApplyEncounterDamage, determineEncounterDamage, encounterConditionSet, encounterQueryContext, encounterRuleState, gainVigor, isBloodied, reactiveSlayTargets, saveRerollWindow } from './automation/kernels/encounter-adapter.js';
 import { REPEATABLE_TAG, attackOncePerTurnKey, chainReactionOncePerRoundKey, dangerousOncePerTurnKey, interruptLegality, interruptUseKey, noRepeatKey, noRepeatsApplies, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, refreshUsageLedgerForBoundary, resetBoundaryFor, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount, useLedgerAvailable } from './automation/kernels/use-ledger.js';
 import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
 import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
-import { applyOrdering, turnBoundaryOrdering, type TurnBoundaryCandidate } from './automation/primitives/ordering.js';
+import { turnBoundaryOrdering, type TurnBoundaryCandidate } from './automation/primitives/ordering.js';
 import { validateTransaction } from './automation/primitives/transaction.js';
 import { closeDecisionWindow, decideDamageWindow, isInterruptWindowKind, nextWindowId, openDecisionWindow, openOrderingDecisionForSameOwnerTies, openTurnBoundaryOrderingWindow, orderDecisionWindows, popDecisionWindowStack, recordOrderingDecision, validateOrderingValue, windowHeldDamage, windowHeldSave, type TurnBoundaryHeldEffect } from './automation/kernels/decision-window.js';
 import { heldDamageContinuation, heldSaveContinuation } from './automation/primitives/continuation.js';
@@ -53,17 +53,15 @@ import { resolvePreUseTalentAugmentations, talentReactiveTrigger, talentTriggerM
 import { traitReactionMutations, traitReactionNeededTriggers } from './automation/kernels/trait-reactions.js';
 import { applyDeterminedDamageToVitals } from './automation/primitives/damage-resolution.js';
 import { projectedFoeTraitStats } from './automation/kernels/foe-trait-recipes.js';
-import { resolveAuthoritativeAttack } from './automation/kernels/attack-resolution.js';
 import { deriveResolutionTriggers } from './automation/kernels/resolution-triggers.js';
-import { factInstanceId, hasResolvedAsFact, resolveIdentityForTrigger, triggerResolvedFact, type Fact } from './automation/primitives/facts.js';
+import { hasResolvedAsFact, resolveIdentityForTrigger, triggerResolvedFact, type Fact } from './automation/primitives/facts.js';
 import { resolveOrdinaryAttackMutations } from './automation/kernels/ordinary-attack.js';
-import { consumeTraitAttackModifiers, effectiveDamageDie, traitAttackModifier } from './automation/kernels/attack-modifiers.js';
+import { consumeTraitAttackModifiers } from './automation/kernels/attack-modifiers.js';
 import { areaStateView, masteryFoldStateView, rangeStateView } from './automation/kernels/encounter-adapter.js';
 import { effectiveInterruptRank, masteryActionRepeatable } from './automation/kernels/mastery-fold.js';
 import { effectiveAbilityRange } from './automation/kernels/range.js';
 import { effectiveAreaFor } from './automation/kernels/area.js';
 import { footprintCells, footprintDistance, footprintsOverlap } from './automation/primitives/spatial-intent.js';
-import { auraStateView, projectedAuraAttackModifiers } from './automation/kernels/aura.js';
 import { projectedHpThresholdActionBonus } from './automation/kernels/hp-threshold.js';
 import { bullStrengthCollideMutations, DEMON_EDGE_TRAIT, demonEdgeSlowTurnMutations } from './automation/content/jobs/attack-modifier-recipes.js';
 import { type DirectTargetProblem, type DirectTargetQuery } from './automation/primitives/targeting.js';
@@ -78,8 +76,8 @@ import { RULE_RESOLVERS } from './automation/content/glue/resolvers.js';
 import { findRuleSourceUnit } from './source-units.js';
 import { planMovementPath } from './movement.js';
 import { durableAssetUrlProblem } from './durable-assets.js';
-import { axisDirection, orthogonalNeighbors, squareArea } from './area-geometry.js';
-import { canActorGoSlow, canElectSlow, computeSlowPassTransition, computeTurnEndTransition, isActorSlowCommitted, isActorTurnSelectable, turnEntitlements } from './turn-scheduler.js';
+import { orthogonalNeighbors, squareArea } from './area-geometry.js';
+import { canActorGoSlow, computeSlowPassTransition, computeTurnEndTransition, isActorSlowCommitted, isActorTurnSelectable, turnEntitlements } from './turn-scheduler.js';
 
 export class RuleViolation extends Error {
   constructor(public readonly code: string, message: string) {
@@ -2685,99 +2683,6 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
   return { state: applyEvents(state, events), events };
 }
 
-/**
- * Apply a deterministic, lifecycle-owned ability move through the same
- * mutation boundary as a command-time ability. This is what lets p.104
- * Slashed observe delayed self/ally ability movement without reviving the
- * incorrect standard-Move trigger.
- *
- * TODO(ICON-rules, pp.87–94, 104, 107): replace the precomputed destination
- * with a durable SpatialIntent/MoveIntent that records legality, movement
- * path, and trigger windows. Until then, every lifecycle ability that moves a
- * source/self or an ally must call this helper rather than assign `.position`
- * directly, and must provide an exact source ID plus a source/replay fixture.
- */
-function applyLifecycleAbilityMove(
-  state: EncounterState,
-  actor: EncounterActor,
-  sourceId: string,
-  movement: Extract<RuleMutation, { kind: 'move' }>['movement'],
-  destination: Position,
-) {
-  applyRuleMutations(state, [{
-    kind: 'move',
-    sourceId,
-    sourceActorId: actor.id,
-    actorId: actor.id,
-    movement,
-    distance: null,
-    positions: [{ ...destination }],
-    direction: null,
-    phasing: false,
-  }]);
-}
-
-/**
- * ICON p.124 Great Giorgios: when the marked foe's turn ends, its user may
- * rush up to 4 spaces (each space strictly closer to the foe), then the foe
- * is shoved that many spaces and takes that many + 2 damage. Deterministic:
- * the rush follows the dominant axis and stops at occupancy, the grid edge,
- * or when the next space would not be closer. The mark is consumed either
- * way, so a defeated or absent owner cannot leave stale marks behind.
- */
-function resolveDelayedMarkEffects(state: EncounterState, actor: EncounterActor) {
-  const pending = actor.marks.filter((mark) => mark.markId === 'great-giorgios');
-  if (pending.length === 0) return;
-  actor.marks = actor.marks.filter((mark) => mark.markId !== 'great-giorgios');
-  const distanceTo = (position: Position) => Math.max(Math.abs(position.x - actor.position.x), Math.abs(position.y - actor.position.y));
-  const blockedCell = (position: Position, moverId: string) => position.x < 0 || position.y < 0
-    || position.x >= state.grid.width || position.y >= state.grid.height
-    || Object.values(state.actors).some((candidate) => candidate.id !== moverId && candidate.onBattlefield && !candidate.defeated && samePosition(candidate.position, position))
-    || state.grid.terrain.some((cell) => samePosition(cell.position, position) && cell.type === 'impassable');
-  for (const mark of pending) {
-    const owner = mark.ownerId ? state.actors[mark.ownerId] : undefined;
-    if (!owner || owner.defeated || !owner.onBattlefield) continue;
-    const startPosition = { ...owner.position };
-    let position = { ...owner.position };
-    let steps = 0;
-    while (steps < 4) {
-      const dx = actor.position.x - position.x;
-      const dy = actor.position.y - position.y;
-      const next = Math.abs(dx) >= Math.abs(dy)
-        ? { x: position.x + Math.sign(dx), y: position.y }
-        : { x: position.x, y: position.y + Math.sign(dy) };
-      if (distanceTo(next) >= distanceTo(position)) break;
-      if (blockedCell(next, owner.id)) break;
-      position = next;
-      steps += 1;
-    }
-    applyLifecycleAbilityMove(state, owner, 'stalwart:great-giorgios', 'rush', position);
-    const rushed = distance(startPosition, owner.position);
-    if (owner.defeated || distanceTo(owner.position) > 1 || actor.defeated) continue;
-    const dx = actor.position.x - owner.position.x;
-    const dy = actor.position.y - owner.position.y;
-    const direction = Math.abs(dx) >= Math.abs(dy) ? { x: Math.sign(dx) || 0, y: 0 } : { x: 0, y: Math.sign(dy) || 0 };
-    let shoved = 0;
-    while (shoved < rushed) {
-      const next = { x: actor.position.x + direction.x, y: actor.position.y + direction.y };
-      if (blockedCell(next, actor.id)) break;
-      actor.position = next;
-      shoved += 1;
-    }
-    const damage = rushed + 2;
-    determineAndApplyEncounterDamage(state, {
-      targetId: actor.id,
-      sourceActorId: owner.id,
-      sourceRuleId: 'stalwart:great-giorgios',
-      amount: damage,
-      damageType: 'normal',
-      instance: 1,
-      delivery: 'effect',
-      ignoreCover: true,
-    });
-  }
-}
-
 type DurationBoundary = 'turn-start' | 'turn-end' | 'round-start' | 'round-end';
 
 /** U8-composed boundary meaning for an active-effect expiry. The reducer keeps
@@ -3199,32 +3104,6 @@ function expireBoundaryEffects(state: EncounterState, turnActorId: string, bound
 }
 
 /**
- * ICON p.129 Six Hells Trigram: at the start of the user's next turn the
- * pending burst-2 area activates — foes inside are weakened, and with Heroic
- * the area gains rampart and foes inside take the user's fray damage. The
- * terrain effect itself is created by the ability; the stage lives on the
- * owner's rule state so no schema change is needed.
- */
-function resolvePendingTrigram(state: EncounterState, owner: EncounterActor) {
-  if (owner.ruleState['six-hells:stage'] !== 'pending') return;
-  const effect = state.terrainEffects.find((candidate) => candidate.terrain === 'six-hells-trigram' && candidate.ownerId === owner.id);
-  if (!effect) return;
-  owner.ruleState['six-hells:stage'] = 'active';
-  owner.ruleStateOwners['six-hells:stage'] = owner.id;
-  const inside = (position: Position) => effect.positions.some((cell) => samePosition(cell, position));
-  for (const foe of Object.values(state.actors)) {
-    if (foe.side === 'heroes' || !foe.position || !inside(foe.position)) continue;
-    applyRuleMutations(state, [
-      { kind: 'condition', sourceId: 'demon-slayer:six-hells-trigram', sourceActorId: owner.id, actorId: foe.id, conditionId: 'weakened', operation: 'apply', potency: 'normal' },
-      ...(owner.ruleState['six-hells:heroic'] === true ? [{ kind: 'damage', sourceId: 'demon-slayer:six-hells-trigram', sourceActorId: owner.id, actorId: foe.id, amount: owner.fray, damageType: 'normal', instance: 1, delivery: 'area', ignoreCover: false } as const] : []),
-    ]);
-  }
-  if (owner.ruleState['six-hells:heroic'] === true) {
-    state.terrainEffects.push({ id: `six-hells-rampart:${owner.id}:${state.revision}`, sourceId: 'demon-slayer:six-hells-trigram', ownerId: owner.id, terrain: 'rampart', positions: [...effect.positions], height: null, duration: null });
-  }
-}
-
-/**
  * ICON p.128 Comet: the thrown weapon is picked up when its owner enters,
  * exits, or starts a turn adjacent to it, ending the effect and removing the
  * object. "Cannot attack while deployed" is enforced at the attack boundary.
@@ -3345,14 +3224,6 @@ function resolveTurnEnd(state: EncounterState, actor: EncounterActor, intent: Tu
   actor.ruleState['slow-turn'] = false;
   actor.ruleStateOwners['slow-turn'] ??= null;
   runLifecyclePhase(state, actor, 'turn-end', intent);
-}
-
-/** Roll the Carnevale detonation gamble when the actor armed it, did not
- * attack this turn, and still owns bombs. Rolled here (not in the reducer) so
- * the TURN_ENDED event carries a deterministic value for replay. */
-function carnevaleGambleForTurnEnd(state: EncounterState, actor: EncounterActor, dice: DiceSource): number | undefined {
-  if (actor.ruleState['carnevale:armed'] !== true || actor.attackedThisTurn) return undefined;
-  return Object.values(state.entities).some((entity) => entity.type === 'bomb' && entity.ownerId === actor.id) ? dice.die(6) : undefined;
 }
 
 /** The action pool an actor starts a turn with: 2 base actions plus any
