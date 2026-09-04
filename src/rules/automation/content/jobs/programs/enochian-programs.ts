@@ -262,7 +262,7 @@ const aethershardEffects: RuleResolver = (context) => {
     damageMutation(context, source.id, context.triggers?.has('comeback') ? 1 : 3, 'effect', 'sacrifice'),
   ];
   mutations.push(...summonEntity(context, source.id, 'aethershard', source.position, {
-    radius: 6, count: 1, losOrigin: source.position, state: { height: 1 },
+    radius: 6, count: 1, losOrigin: source.position, originSize: source.size, state: { height: 1 },
   }));
   return mutations;
 };

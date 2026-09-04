@@ -1,4 +1,5 @@
 import type { Position } from '../../types.js';
+import { spatialOriginCells, type SpatialOrigin } from './anchor.js';
 
 /**
  * F1 — shared line-of-sight / line-of-effect kernel (ICON p.92, p.95, p.96,
@@ -111,6 +112,22 @@ function traceClear(view: SpatialLineView, from: Position, to: Position, blocker
  * not intersect impassable terrain or an explicitly LoS-blocking effect. */
 export function hasLineOfSight(view: SpatialLineView, from: Position, to: Position): boolean {
   return traceClear(view, from, to, blocksLineOfSight);
+}
+
+/** ICON p.92 character-to-character/space line of sight. The source permits
+ * the trace from ANY edge of the acting character's occupied space to the
+ * target space, so a Size-N frame has line of sight when any pair of cells in
+ * the two footprints has a clear trace through the shared point sampler.
+ * Point-defined origins (burst centers, selected spaces) remain explicit
+ * Size-1 frames and therefore preserve the historical point behavior. */
+export function hasLineOfSightBetween(
+  view: SpatialLineView,
+  from: SpatialOrigin,
+  to: SpatialOrigin,
+): boolean {
+  const targets = spatialOriginCells(to);
+  return spatialOriginCells(from).some((source) =>
+    targets.some((target) => hasLineOfSight(view, source, target)));
 }
 
 /** ICON p.109 line of effect: the ability can trace a clear path to the

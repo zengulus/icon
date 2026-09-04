@@ -1003,6 +1003,33 @@ LoS/no-LoS, zero candidates, no fallback, and replay. No source unit was
 promoted; U4 remains PARTIAL with the matrix's remaining placement,
 multi-select, fold-input, and window-carried consumers.
 
+**Tranche-32B corrective audit (2026-09-04)** — Outcome 2, narrow substrate
+repair only. P.92's "any edge of your character's space" makes Size>1 LoS a
+U7-frame/U3-legality question, not a canonical-anchor point query. The new
+source-ID-free `hasLineOfSightBetween` expands the resolved U7 source/target
+frames and reuses the existing U3 point trace. `PositionQuery` /
+`PositionLegalityQuery.lineOfSightFrom`, actor-query LoS, teleport legality,
+entity creation, and the encounter direct-target gate now retain footprint
+size; point-defined AoE/Burst centers remain point queries. The ordinary
+summon seam requires `originSize`, preventing future actor-created summons
+from silently degrading to Size 1. Dark Sliver's Slay plant now passes the
+Harvester frame generically. The production `evaluatePositions` census also
+found one clear current actor-range omission outside the already-scheduled
+placement residuals: Hunter Set Trap now supplies the foe's size (including a
+Jotunn Size-2 fixture). No recorded choice, Tarot behavior, source-unit
+membership, or executable coverage changed.
+
+The next U4 tranche is **tranche 33 — use-time recorded-position placement
+family (NOT STARTED)**: Hunter Set Trap; Fool Cavaliere/Carnevale bombs;
+Warden Mist Strider primary + Charge cloud and Underway portal 1; Chanter
+Dervish landing and Symphony motes; Knave Strongarm talent-I adjacency;
+Stormbender Geyser and Waterspout; Sealer Spirit Shrine; Seer Chaos Tarot
+effect 3 and Astra terrain/meteor cells; and Enochian Blackstar difficult
+terrain. It must replace source-owned first/nearest/padded cells with recorded
+positions over U3 CandidateSets, migrate ordinary summon/object placement to
+the creation-intent LoS authority where applicable, and preserve the separate
+portal-2/window and other U12/U13 consumers for their owning tranche.
+
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
 `RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold
@@ -1342,15 +1369,17 @@ Tranche 20 (2026-09-02) repaired the one genuine measurement gap —
 `chosenTeleportDestination` measured p.92 range from a degenerate size-1
 point regardless of the mover's footprint; the legality call now threads
 the MOVER's footprint as `originSize` from the resolved mover record
-(guard: `u7-teleport-footprint-origin`). Tranche 21 (this decision)
-closed the remaining fail-open in that seam (a MISSING mover now fails
-closed with `selector.actor-missing` instead of being masked as Size 1 —
+(guard: `u7-teleport-footprint-origin`). Tranche 21 closed the remaining
+fail-open in that seam (a MISSING mover now fails closed with
+`selector.actor-missing` instead of being masked as Size 1 —
 `mover?.size ?? 1` is rejected by the guard) and completed the U7
-completion audit: every generic range/distance/LoS/legality consumer
-resolves through the anchor vocabulary or receives an already-resolved
-frame, no subsystem independently reinterprets LIVE vs CAPTURED semantics,
-and no point-frame approximation remains for a multi-space actor. The
-specialist carriers below are RETAINED with written non-competing
+vocabulary/resolution audit. Its broader claim that every LoS consumer
+already retained the whole frame was retracted by the 2026-09-04 tranche-32B
+corrective audit: position, creation, actor-query, direct-target, and teleport
+LoS still collapsed resolved frames to anchor points. That later audit repaired
+the shared consumers through `hasLineOfSightBetween`; no actor-relative
+point-frame approximation remains now. The specialist carriers below are
+RETAINED with written non-competing
 boundaries — none is a competing U7 vocabulary (see the completion
 decision).
 

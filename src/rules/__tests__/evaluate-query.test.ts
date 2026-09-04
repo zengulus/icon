@@ -344,6 +344,44 @@ describe('position domain — generic space query, teleport legality, and the ne
     expect(footprint).not.toContainEqual({ x: 5, y: 5 }); // origin footprint excluded by default
   });
 
+  it('evaluatePositions returns exactly the footprint-distance ring with stable de-duplication and whole-footprint includeOrigin', () => {
+    const context = ctx();
+    const query = { origin: { x: 2, y: 2 }, originSize: 2, radius: 1, space: { kind: 'any' } } as const;
+    const ring = evaluatePositions(query, context);
+    const keys = ring.map(({ x, y }) => `${x},${y}`).sort();
+    expect(keys).toEqual([
+      '1,1', '1,2', '1,3', '1,4',
+      '2,1', '2,4',
+      '3,1', '3,4',
+      '4,1', '4,2', '4,3', '4,4',
+    ]);
+    expect(new Set(keys).size).toBe(ring.length);
+    expect(ring).not.toContainEqual({ x: 0, y: 0 }); // diagonal distance 2
+
+    const included = evaluatePositions({ ...query, includeOrigin: true }, context);
+    expect(included).toHaveLength(16);
+    for (const originCell of [{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 2, y: 3 }, { x: 3, y: 3 }]) {
+      expect(included).toContainEqual(originCell);
+    }
+    expect(new Set(included.map(({ x, y }) => `${x},${y}`)).size).toBe(included.length);
+  });
+
+  it('evaluatePositions preserves Size-1 behavior and orders Size>1 cells by minimum footprint distance', () => {
+    const context = ctx();
+    const base = { origin: { x: 2, y: 2 }, radius: 1, space: { kind: 'any' }, ordering: { kind: 'distance-from-origin' } } as const;
+    expect(evaluatePositions({ ...base, originSize: 1 }, context)).toEqual(evaluatePositions(base, context));
+
+    const ordered = evaluatePositions({ ...base, originSize: 2, includeOrigin: true }, context);
+    expect(ordered.slice(0, 4)).toEqual([
+      { x: 2, y: 2 }, { x: 2, y: 3 }, { x: 3, y: 2 }, { x: 3, y: 3 },
+    ]);
+    expect(ordered.slice(4)).toEqual([
+      { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 1, y: 3 }, { x: 1, y: 4 },
+      { x: 2, y: 1 }, { x: 2, y: 4 }, { x: 3, y: 1 }, { x: 3, y: 4 },
+      { x: 4, y: 1 }, { x: 4, y: 2 }, { x: 4, y: 3 }, { x: 4, y: 4 },
+    ]);
+  });
+
   it('validatePositionLegality (teleport specialist): in-grid, range, and unoccupied problems in order', () => {
     const context = ctx();
     const query = { origin: { x: 4, y: 4 }, range: 2, excludeActorId: 'hero' };

@@ -70,7 +70,7 @@ import { type DirectTargetProblem, type DirectTargetQuery } from './automation/p
 import { executeRuleProgram, integer, orderedSelectedSteps, rerollSaveMutations, type RuleExecutionResultWithWindow } from './automation/kernels/runtime.js';
 import { assertRuleCostsPayable, costContextFromEncounter, effectiveRuleCosts, evaluateCosts, CostPaymentViolation } from './automation/kernels/cost-payment.js';
 import { resolveCureMutations, resolveStatusSaveMutations, StatusSaveViolation } from './automation/primitives/status-saves.js';
-import { hasLineOfSight as lineOfSightKernel } from './automation/primitives/line-of-sight.js';
+import { hasLineOfSight as lineOfSightKernel, hasLineOfSightBetween } from './automation/primitives/line-of-sight.js';
 import { movementEntryTriggerMutations } from './automation/kernels/movement-triggers.js';
 import { resolveAbilityUseChoices } from './automation/kernels/ability-use-choices.js';
 import { AbilityUseChoiceViolation } from './automation/primitives/ability-use-choices.js';
@@ -1630,7 +1630,11 @@ function directTargetProblem(
     const ranged = validateActorCandidate(target.id, { relation: query.relation, range: maximumRange }, queryContext);
     if (!ranged.legal && ranged.violation.code === 'choice.actor-range') return 'range';
   }
-  if (query.requireLineOfSight && !hasLineOfSight(state, source.position, target.position)) return 'line-of-sight';
+  if (query.requireLineOfSight && !hasLineOfSightBetween(
+    { grid: state.grid, terrainAt: (position) => terrainTypesAt(state, position) },
+    { position: source.position, size: source.size },
+    { position: target.position, size: target.size },
+  )) return 'line-of-sight';
   return null;
 }
 

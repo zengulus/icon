@@ -77,7 +77,7 @@ const rimeEffects: RuleResolver = (context) => {
   }
   mutations.push(shoveMutation(context, target.id, 1, axisDirection(target.position, source.position)));
   mutations.push(...summonEntity(context, source.id, 'salt-sprite', target.position, {
-    radius: 2, count: 1, losOrigin: source.position,
+    radius: 2, count: 1, losOrigin: source.position, originSize: source.size,
   }));
   if (context.actionTags?.has('infuse') && context.triggers?.has('collide')) {
     mutations.push(terrainMutation(context, 'create', 'pit', [target.position]));
@@ -190,7 +190,7 @@ const heaveHoEffects: RuleResolver = (context) => {
     if (character.side !== source.side) mutations.push(conditionMutation(context, character.id, 'vulnerable'));
   }
   mutations.push(...summonEntity(context, source.id, 'salt-sprite', origin, {
-    radius: 2, count: 1, losOrigin: source.position,
+    radius: 2, count: 1, losOrigin: source.position, originSize: source.size,
   }));
   return mutations;
 };

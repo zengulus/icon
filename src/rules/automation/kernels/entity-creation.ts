@@ -1,6 +1,6 @@
 import type { EncounterEntity, EncounterState, Position } from '../../types.js';
 import { footprintCells, footprintDistance } from '../primitives/spatial-intent.js';
-import { hasLineOfSight } from '../primitives/line-of-sight.js';
+import { hasLineOfSightBetween } from '../primitives/line-of-sight.js';
 import { entityKind, entityKindOf } from '../primitives/entity-kind.js';
 import type { EntityKind } from '../primitives/entity-kind.js';
 import { summonCap } from './summon-recipes.js';
@@ -152,7 +152,11 @@ export function validateEntityCreation(state: EncounterState, request: EntityCre
     // ICON general rule: line of sight from the CREATOR (spatial origin) to
     // the creation cell — not from the placement region center — using the same
     // combined terrain view as the obstruction check above.
-    if (spatial && footprint.some((cell) => !hasLineOfSight({ grid: state.grid, terrainAt: (pos) => terrainTypesAt(state, pos) }, spatial.origin!, cell))) continue;
+    if (spatial && footprint.some((cell) => !hasLineOfSightBetween(
+      { grid: state.grid, terrainAt: (pos) => terrainTypesAt(state, pos) },
+      { position: spatial.origin!, size: spatial.originSize ?? 1 },
+      { position: cell, size: 1 },
+    ))) continue;
     // ICON p.92: range validation using the canonical footprint metric (L∞
     // between occupied footprints) — the same distance authority targeting,
     // auras, and the attack modifiers use. For a Size-1 creator this

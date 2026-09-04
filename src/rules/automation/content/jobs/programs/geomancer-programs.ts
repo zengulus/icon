@@ -142,7 +142,7 @@ const geoEffects: RuleResolver = (context) => {
     mutations.push(damageMutation(context, character.id, source.fray, 'area'));
   }
   const boulder = source.position
-    ? summonEntity(context, source.id, 'boulder', target.position, { radius: 1, count: 1, state: { height: 1 }, losOrigin: source.position })[0]
+    ? summonEntity(context, source.id, 'boulder', target.position, { radius: 1, count: 1, state: { height: 1 }, losOrigin: source.position, originSize: source.size })[0]
     : undefined;
   if (boulder) mutations.push(boulder);
   if (context.triggers?.has('charge')) {

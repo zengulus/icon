@@ -63,7 +63,7 @@ describe('job-kit building blocks', () => {
     // Hero (creator) at (1,1), foe at (3,1). Place two beasts around the FOE
     // (region = target) whose line of sight comes from the HERO (losOrigin),
     // not from the region center — the intent split PART 2 requires.
-    const mutations = summonEntity(ctx, hero.id, 'beast', { x: 3, y: 1 }, { radius: 1, count: 2, losOrigin: { x: 1, y: 1 } });
+    const mutations = summonEntity(ctx, hero.id, 'beast', { x: 3, y: 1 }, { radius: 1, count: 2, losOrigin: { x: 1, y: 1 }, originSize: hero.size });
     expect(mutations).toHaveLength(1);
     const mutation = mutations[0]!;
     expect(mutation).toMatchObject({

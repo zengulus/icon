@@ -75,11 +75,11 @@ const reapEffects: RuleResolver = (context) => {
     ? damageMutation(context, target.id, context.dice.die(roll.damageDie) + source.fray, 'hit')
     : damageMutation(context, target.id, source.fray, 'miss'));
   mutations.push(...summonEntity(context, source.id, 'thrall', target.position, {
-    radius: 1, count: 1, losOrigin: source.position,
+    radius: 1, count: 1, losOrigin: source.position, originSize: source.size,
   }));
   if (context.triggers?.has('slay')) {
     mutations.push(...summonEntity(context, source.id, 'thrall', target.position, {
-      radius: 1, count: 1, losOrigin: source.position,
+      radius: 1, count: 1, losOrigin: source.position, originSize: source.size,
     }));
     mutations.push(damageMutation(context, target.id, context.dice.die(source.damageDie) + source.fray, 'effect'));
   }
@@ -108,7 +108,7 @@ const gravebirthEffects: RuleResolver = (context) => {
   if (!source.position) return [];
   const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'gravebirth')];
   mutations.push(...summonEntity(context, source.id, 'thrall', source.position, {
-    radius: 2, count: 1, losOrigin: source.position,
+    radius: 2, count: 1, losOrigin: source.position, originSize: source.size,
   }));
   return mutations;
 };
@@ -142,7 +142,7 @@ const harvestEffects: RuleResolver = (context) => {
     for (const foe of [...foesInArea, target]) {
       if (!foe.position) continue;
       mutations.push(...summonEntity(context, source.id, 'thrall', foe.position, {
-        radius: 1, count: 1, losOrigin: source.position,
+        radius: 1, count: 1, losOrigin: source.position, originSize: source.size,
       }));
       mutations.push(damageMutation(context, foe.id, 2, 'area', 'piercing'));
     }
@@ -273,14 +273,14 @@ const darkSliverEffects: RuleResolver = (context) => {
     origin: target.position,
     originSize: target.size,
     range: placementRange,
-    ...(slay ? { lineOfSightFrom: source.position } : {}),
+    ...(slay ? { lineOfSightFrom: { position: source.position, size: source.size } } : {}),
   };
   const candidates = evaluatePositions({
     origin: target.position,
     originSize: target.size,
     radius: placementRange,
     space: { kind: 'unoccupied' },
-    ...(slay ? { lineOfSightFrom: source.position } : {}),
+    ...(slay ? { lineOfSightFrom: { position: source.position, size: source.size } } : {}),
   }, context);
   const choiceKey = slay ? 'plant-position' : 'soul-position';
   const choiceLabel = slay ? 'Dark Sliver Slay plant' : 'Dark Sliver soul-space';

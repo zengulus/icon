@@ -58,7 +58,7 @@ import {
   withinGrid,
 } from '../primitives/battlefield.js';
 import { axisDirection, sameCell, squareArea } from '../../area-geometry.js';
-import { hasLineOfEffect, hasLineOfSight } from '../primitives/line-of-sight.js';
+import { hasLineOfEffect, hasLineOfSightBetween } from '../primitives/line-of-sight.js';
 import {
   defaultActorAnchor,
   type SpatialAnchor,
@@ -157,7 +157,11 @@ export function evaluateActorQuery(query: ActorQuery, context: RuleExecutionCont
     const view = lineView(context);
     candidates = candidates.filter((candidate) => {
       if (candidate.position === null) return false;
-      if (query.lineOfSight === true && !hasLineOfSight(view, anchor.position, candidate.position)) return false;
+      if (query.lineOfSight === true && !hasLineOfSightBetween(
+        view,
+        anchor,
+        { position: candidate.position, size: candidate.size },
+      )) return false;
       if (query.lineOfEffect === true && !hasLineOfEffect(view, anchor.position, candidate.position)) return false;
       return true;
     });
@@ -301,7 +305,7 @@ export function evaluatePositions(query: PositionQuery, context: RuleExecutionCo
     if (!validatePositionCandidate({ origin: query.origin, originSize, range: query.radius }, cell, context).legal) continue;
     if (!query.includeOrigin && originCellKeys.has(`${cell.x},${cell.y}`)) continue;
     if (query.space.kind === 'unoccupied' && finalSpaceOccupied(cell, context, query.space.excludeActorId ?? '')) continue;
-    if (view && !hasLineOfSight(view, query.lineOfSightFrom!, cell)) continue;
+    if (view && !hasLineOfSightBetween(view, query.lineOfSightFrom!, { position: cell, size: 1 })) continue;
     cells.push(cell);
   }
   if (query.ordering?.kind === 'distance-from-origin') {
@@ -346,7 +350,11 @@ export function validatePositionLegality(
   const originFootprint = { position: query.origin, size: Math.max(1, Math.floor(query.originSize ?? 1)) };
   if (footprintDistance(originFootprint, { position, size: 1 }) > query.range) return { legal: false, problem: 'range' };
   if (finalSpaceOccupied(position, context, query.excludeActorId ?? '')) return { legal: false, problem: 'occupied' };
-  if (query.lineOfSightFrom && !hasLineOfSight(lineView(context), query.lineOfSightFrom, position)) {
+  if (query.lineOfSightFrom && !hasLineOfSightBetween(
+    lineView(context),
+    query.lineOfSightFrom,
+    { position, size: 1 },
+  )) {
     return { legal: false, problem: 'line-of-sight' };
   }
   return { legal: true, problem: null };

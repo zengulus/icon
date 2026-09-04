@@ -69,7 +69,7 @@ const umbraEffects: RuleResolver = (context) => {
   }
   if (context.triggers?.has('finishing-blow') && target?.position && source.position) {
     mutations.push(...summonEntity(context, source.id, 'shadow', target.position, {
-      radius: 1, count: 1, losOrigin: source.position,
+      radius: 1, count: 1, losOrigin: source.position, originSize: source.size,
     }));
   }
   return mutations;
@@ -186,7 +186,7 @@ const nightmareEffects: RuleResolver = (context) => {
     stateMutation(context, source.id, 'nightmare:aura', true),
   ];
   mutations.push(...summonEntity(context, source.id, 'shadow', sourcePosition, {
-    radius: 2, count: 2, losOrigin: sourcePosition,
+    radius: 2, count: 2, losOrigin: sourcePosition, originSize: source.size,
   }));
   return mutations;
 };

@@ -435,7 +435,9 @@ export function summonEntity(
     /** The creator/source actor's LoS origin. REQUIRED — the placement region's
      * center is NOT the LoS authority unless the creator is there. */
     losOrigin: Position;
-    originSize?: number;
+    /** The creator/source actor's resolved U7 footprint size. Required so an
+     * actor-originated creation cannot silently degrade to point LoS. */
+    originSize: number;
     maxRange?: number;
     category?: 'summon' | 'object';
     state?: Record<string, StateValue>;
@@ -454,7 +456,7 @@ export function summonEntity(
   // a creator range — the two are independent (PART 2).
   const creationSpatial = {
     origin: options.losOrigin,
-    originSize: options.originSize ?? 1,
+    originSize: options.originSize,
     ...(options.maxRange !== undefined ? { maxRange: options.maxRange } : {}),
   };
   return [{

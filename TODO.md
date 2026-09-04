@@ -937,6 +937,30 @@ assumption here, document the evidence and update this list before proceeding.
   recorded-position residuals, Dervish actor multi-select, Demon Claw Talent
   I/II, opaque fold reads, and U12/U13 choice consumers remain.
 
+- **Tranche 32B corrective audit — Size>1 LoS/U3 frame repair
+  (2026-09-04) — DONE.** Source re-read: p.92 defines LoS from any edge of a
+  character's space; pp.95/108 apply LoS to summon/object/teleport placement.
+  Outcome 2 was required. A source-ID-free footprint LoS query now consumes
+  resolved U7 frames through position queries/legality, actor queries,
+  teleport, entity creation, and direct targeting while point-defined AoE and
+  Burst origins stay point-based. The summon-intent seam requires creator
+  `originSize`; Dark Sliver supplies the full Harvester frame; Hunter Set Trap
+  supplies the acting foe size. Adversarial fixtures pin anchor-blocked but
+  non-anchor-clear acceptance, every-trace-blocked rejection, Size-1 parity,
+  exact/de-duplicated footprint candidate geometry, teleport, creation, Dark
+  Sliver, and Jotunn Set Trap. No U4 decision or executable membership changed.
+
+- **U4 tranche 33 — use-time recorded-position placement family — NEXT, NOT
+  STARTED.** Exact scope: Hunter Set Trap; Fool Cavaliere/Carnevale bombs;
+  Warden Mist Strider primary + Charge cloud and Underway portal 1; Chanter
+  Dervish landing and Symphony motes; Knave Strongarm talent-I adjacency;
+  Stormbender Geyser and Waterspout; Sealer Spirit Shrine; Seer Chaos Tarot
+  effect 3 and Astra terrain/meteor cells; Enochian Blackstar difficult
+  terrain. Replace source-owned automatic cell selection/padding with recorded
+  positions over U3 CandidateSets and route ordinary summon/object LoS through
+  the shared creation authority. Do not absorb Underway portal 2 or other
+  window-carried U12/U13 choices.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any
@@ -2552,9 +2576,10 @@ boundary reads; 0 direct dereferences; U1 remains
    `RuleMutation.creationSpatial`), fail-closed at the runtime (zero/multi/
    off-board origin actors and range-without-origin rejected) and the
    reducer (out-of-grid or maxRange-only carried origin rejected). Size>1
-   LoS is documented as a remaining source-fidelity limitation (p.92 LoS
-   from "any edge of your space" needs a footprint-aware query through the
-   shared LoS authority; only the range half is footprint-correct today).
+   LoS was documented at that point as a remaining source-fidelity limitation
+   (p.92 LoS from "any edge of your space" needed a footprint-aware query
+   through the shared LoS authority); the tranche-32B corrective audit above
+   later closed that limitation.
    Sacrifice glossary citations corrected from the wrong "p.190" to the
    canonical Combat Glossary p.102; Enochian/Sealer ability references
    corrected to their extracted pages (p.208/p.210/p.191/p.184). 11 new

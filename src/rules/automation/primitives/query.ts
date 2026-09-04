@@ -25,7 +25,7 @@
  */
 import type { Position } from '../../types.js';
 import type { RuleActorView } from './types.js';
-import type { SpatialAnchor } from './anchor.js';
+import type { SpatialAnchor, SpatialOrigin } from './anchor.js';
 import type { TargetRelation } from './targeting.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -150,10 +150,10 @@ export interface PositionQuery {
   space: PositionSpacePolicy;
   /** Optional deterministic ordering policy. Default `none`. */
   ordering?: PositionOrderingPolicy;
-  /** Present → only cells with line of sight from this position to the cell
+  /** Present → only cells with line of sight from this resolved U7 frame to the cell
    * (the p.108 "you also need line of sight" policy for summoning,
    * teleporting, and creating objects, made an explicit query policy). */
-  lineOfSightFrom?: Position;
+  lineOfSightFrom?: SpatialOrigin;
 }
 
 /** The free-placement legality specialist: in-grid, within footprint
@@ -175,9 +175,10 @@ export interface PositionLegalityQuery {
   range: number;
   /** The mover whose own footprint is not an obstruction. */
   excludeActorId?: string;
-  /** Present → the destination must have line of sight from this position
-   * (p.108). For a teleport this is the teleporter's current position. */
-  lineOfSightFrom?: Position;
+  /** Present → the destination must have line of sight from this resolved
+   * U7 frame (p.108). For a teleport this is the teleporter's current
+   * footprint, not only its canonical position cell. */
+  lineOfSightFrom?: SpatialOrigin;
 }
 
 export type PositionLegalityProblem = 'out-of-bounds' | 'range' | 'occupied' | 'line-of-sight';

@@ -146,6 +146,21 @@ describe('U7 — teleport origin frame measures from the mover p.92 footprint ed
     )).toThrow(/limited to 1 space/);
   });
 
+  it('chosenTeleportDestination measures LoS from the mover footprint, not its anchor cell', () => {
+    const { state, foe } = fixture();
+    // Size-2 mover at (4,2)-(5,3); wall (6,1) blocks the anchor trace to
+    // (7,1), while another footprint cell retains a clear trace. The destination is
+    // exactly range 2 from the mover's footprint edge.
+    state.grid.terrain.push({ position: { x: 6, y: 1 }, type: 'impassable', elevation: 0 });
+    const view = {
+      ...context(state, foe.id),
+      input: { positions: { teleport: [{ x: 7, y: 1 }] } },
+    };
+    expect(chosenTeleportDestination(
+      view, foe.id, 'teleport', { x: 4, y: 2 }, 2, 'fixture',
+    )).toEqual({ x: 7, y: 1 });
+  });
+
   it('a MISSING mover fails closed — absence is never inferred as a Size-1 point frame', () => {
     const { state } = fixture();
     // The mover record is absent from state. The supplied destination (8,9)

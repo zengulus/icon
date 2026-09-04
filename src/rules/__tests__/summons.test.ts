@@ -767,6 +767,24 @@ describe('F3 creation-intent split: placement region vs creator LoS origin', () 
     expect(r).toEqual({ positions: [{ x: 3, y: 1 }], count: 1 });
   });
 
+  it('a Size-2 creator may create when a non-anchor footprint cell has LoS', () => {
+    const state = createEncounter('los-frame');
+    state.grid.terrain.push({ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 });
+    const request = {
+      ownerId: 'o', entityType: 'beast', kind: 'summon' as const,
+      positions: [{ x: 5, y: 1 }], count: 1, state: {}, duration: null,
+    };
+    // The point-only predecessor rejects: its trace runs through (3,1).
+    expect(validateEntityCreation(state, {
+      ...request, spatial: { origin: { x: 1, y: 1 }, originSize: 1, maxRange: 4 },
+    })).toBeNull();
+    // Size 2 occupies (1,1)-(2,2); (2,2) retains the source-authorized
+    // alternate trace, so the exact same creation cell is legal.
+    expect(validateEntityCreation(state, {
+      ...request, spatial: { origin: { x: 1, y: 1 }, originSize: 2, maxRange: 4 },
+    })).toEqual({ positions: [{ x: 5, y: 1 }], count: 1 });
+  });
+
   it('a source-centered summon still behaves normally', () => {
     const state = createEncounter('los');
     // Region and LoS origin both at the source (1,1).

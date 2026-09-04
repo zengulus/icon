@@ -196,7 +196,7 @@ const spiritShrineEffects: RuleResolver = (context) => {
     return mutations;
   }
   return summonEntity(context, source.id, 'shrine', source.position, {
-    radius: 1, count: 1, losOrigin: source.position, state: { height: 1 },
+    radius: 1, count: 1, losOrigin: source.position, originSize: source.size, state: { height: 1 },
   });
 };
 

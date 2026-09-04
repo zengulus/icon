@@ -1,7 +1,7 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { createEncounter, createFoe, executeCommand, hasLineOfSight } from '../encounter.js';
-import { hasLineOfEffect, hasLineOfSight as kernelLineOfSight, lineOfSightCells, type SpatialLineView } from '../automation/primitives/line-of-sight.js';
+import { hasLineOfEffect, hasLineOfSight as kernelLineOfSight, hasLineOfSightBetween, lineOfSightCells, type SpatialLineView } from '../automation/primitives/line-of-sight.js';
 import { computeSpatialArea, footprintCells, footprintsAdjacent, footprintDistance, footprintIntersectsCells } from '../automation/primitives/spatial-intent.js';
 import { applyRuleMutations, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
 import { queryDirectTarget } from '../automation/primitives/targeting.js';
@@ -57,6 +57,42 @@ describe('shared line of sight (ICON p.92)', () => {
       { position: { x: 2, y: 0 }, type: 'impassable' },
     ]);
     expect(kernelLineOfSight(view, { x: 0, y: 0 }, { x: 4, y: 0 })).toBe(false);
+  });
+
+  it('Size>1 LoS is existential over the occupied footprint, not anchor-only (p.92)', () => {
+    // Size 2 at (1,1) occupies (1,1)-(2,2). The wall blocks the canonical
+    // anchor's horizontal trace to (5,1), but the non-anchor cell (2,2) has a
+    // clear trace. P.92 permits a trace from any edge of the character's
+    // space, so the footprint frame has LoS.
+    const partlyBlocked = terrainView([{ position: { x: 3, y: 1 }, type: 'impassable' }]);
+    expect(kernelLineOfSight(partlyBlocked, { x: 1, y: 1 }, { x: 5, y: 1 })).toBe(false);
+    expect(hasLineOfSightBetween(
+      partlyBlocked,
+      { position: { x: 1, y: 1 }, size: 2 },
+      { position: { x: 5, y: 1 }, size: 1 },
+    )).toBe(true);
+
+    // Closing both rows proves the existential frame still fails when every
+    // footprint trace is blocked.
+    const fullyBlocked = terrainView([
+      { position: { x: 3, y: 1 }, type: 'impassable' },
+      { position: { x: 3, y: 2 }, type: 'impassable' },
+    ]);
+    expect(hasLineOfSightBetween(
+      fullyBlocked,
+      { position: { x: 1, y: 1 }, size: 2 },
+      { position: { x: 5, y: 1 }, size: 1 },
+    )).toBe(false);
+
+    // The same existential rule applies to the other character's footprint:
+    // its anchor can be hidden while a different occupied cell remains clear.
+    const targetEdgeClear = terrainView([{ position: { x: 2, y: 1 }, type: 'impassable' }]);
+    expect(kernelLineOfSight(targetEdgeClear, { x: 1, y: 1 }, { x: 3, y: 2 })).toBe(false);
+    expect(hasLineOfSightBetween(
+      targetEdgeClear,
+      { position: { x: 1, y: 1 }, size: 1 },
+      { position: { x: 3, y: 2 }, size: 2 },
+    )).toBe(true);
   });
 
   it('runtime-created impassable terrain blocks line of sight without explicit-blocker registration', () => {

@@ -47,9 +47,9 @@ import { footprintDistance } from '../../../primitives/spatial-intent.js';
  * is the line-of-sight authority (ICON p.108) — the placement region and the
  * creator LoS origin are deliberately separate points. */
 const summonBeastNear = (
-  context: Parameters<RuleResolver>[0], ownerId: string, region: { x: number; y: number }, losOrigin: { x: number; y: number },
+  context: Parameters<RuleResolver>[0], ownerId: string, region: { x: number; y: number }, losOrigin: { x: number; y: number }, originSize: number,
 ): RuleMutation | null =>
-  summonEntity(context, ownerId, 'beast', region, { radius: 1, count: 1, losOrigin })[0] ?? null;
+  summonEntity(context, ownerId, 'beast', region, { radius: 1, count: 1, losOrigin, originSize })[0] ?? null;
 
 /** ICON p.169: range-3 +1-boon attack, daze, summon a beast adjacent to the
  * target; Finishing Blow/Charge summons one more beast and grants stealth. */
@@ -86,7 +86,7 @@ const apexEffects: RuleResolver = (context) => {
   if (exactRangeUnerring && source.position) {
     mutations.push(shoveMutation(context, target.id, 1, axisDirection(source.position, targetPosition)));
   }
-  const beast = source.position ? summonBeastNear(context, source.id, targetPosition, source.position) : null;
+  const beast = source.position ? summonBeastNear(context, source.id, targetPosition, source.position, source.size) : null;
   if (beast) mutations.push(beast);
   if (context.triggers?.has('finishing-blow') || context.triggers?.has('charge')) {
     // PART 4: the triggered extra beast rides the SAME authoritative creation
@@ -96,7 +96,7 @@ const apexEffects: RuleResolver = (context) => {
     // now-occupied first cell, so you get two beasts total (one base + one
     // triggered), never three.
     const extra = source.position
-      ? summonEntity(context, source.id, 'beast', targetPosition, { radius: 1, count: 1, losOrigin: source.position })[0]
+      ? summonEntity(context, source.id, 'beast', targetPosition, { radius: 1, count: 1, losOrigin: source.position, originSize: source.size })[0]
       : undefined;
     if (extra) mutations.push(extra);
     mutations.push(conditionMutation(context, source.id, 'stealth'));
@@ -209,7 +209,7 @@ const strengthOfThePackEffects: RuleResolver = (context) => {
   const sourcePosition = source.position;
   const mutations: RuleMutation[] = [stanceMutation(context, source.id, 'enter', 'strength-of-the-pack')];
   if (sourcePosition) {
-    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1, losOrigin: sourcePosition })[0];
+    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1, losOrigin: sourcePosition, originSize: source.size })[0];
     if (beast) mutations.push(beast);
     for (const character of Object.values(context.state.actors)) {
       const characterPosition = character.position;
@@ -238,7 +238,7 @@ const underwayEffects: RuleResolver = (context) => {
   if (!portalCell) throw new RuleProgramViolation('choice.position-range', 'Underway requires a free adjacent space.');
   mutations.push(entityMutation(context, source.id, portalCell, 'underway', {}));
   if (context.triggers?.has('charge')) {
-    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1, losOrigin: sourcePosition })[0];
+    const beast = summonEntity(context, source.id, 'beast', sourcePosition, { radius: 2, count: 1, losOrigin: sourcePosition, originSize: source.size })[0];
     if (beast) mutations.push(beast);
   }
   return mutations;

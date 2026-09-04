@@ -527,7 +527,7 @@ function terrainResolver(recipe: FoeTerrainRecipe): RuleResolver {
   return (context) => {
     const source = referencedSource(context);
     if (!source?.position) throw new RuleProgramViolation('choice.actor-count', `${context.sourceId} requires a position.`);
-    const cell = evaluatePositions({ origin: source.position, radius: recipe.range, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
+    const cell = evaluatePositions({ origin: source.position, originSize: source.size, radius: recipe.range, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context)[0];
     if (!cell) throw new RuleProgramViolation('choice.no-space', `${context.sourceId} needs a free space in range.`);
     return [terrainMutation(context, 'create', recipe.terrain, [cell])];
   };

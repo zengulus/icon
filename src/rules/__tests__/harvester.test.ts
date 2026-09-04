@@ -682,6 +682,18 @@ describe('Harvester ability automation (p.182–188)', () => {
     })).toThrowError(expect.objectContaining({ code: 'move.line-of-sight' }));
   });
 
+  it('Dark Sliver Slay plant: a Size-2 Harvester may use a clear non-anchor footprint trace', () => {
+    const { state, hero, foe } = harvesterEncounter({ foe: { x: 4, y: 1 }, second: null });
+    state.actors[hero.id].size = 2; // footprint (1,1)-(2,2)
+    state.grid.terrain.push({ position: { x: 3, y: 1 }, type: 'impassable', elevation: 0 });
+    const result = executeDarkSliverSlay(state, hero.id, foe.id, {
+      positions: { 'plant-position': [{ x: 6, y: 1 }] },
+    });
+    expect(result.mutations).toContainEqual(expect.objectContaining({
+      kind: 'entity', entityType: 'plant', positions: [{ x: 6, y: 1 }],
+    }));
+  });
+
   it('Dark Sliver Slay plant: zero legal spaces creates no plant while the resolved kill remains', () => {
     const { state, hero, foe } = harvesterEncounter({ second: null });
     state.actors[foe.id].hp = 4;

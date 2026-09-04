@@ -178,6 +178,23 @@ describe('U3 actor-domain operators — line of sight / effect composition', () 
     const fromSelf = evaluateActorQuery({ relation: 'foe', lineOfSight: true }, context).map((a) => a.id).sort();
     expect(fromSelf).toContain('foeFar');
   });
+
+  it('actor-query LoS retains both Size>1 source and target frames', () => {
+    const base = ctx();
+    const context = terrainCtx([{ position: { x: 6, y: 4 }, types: ['impassable'] }], {
+      state: {
+        ...base.state,
+        actors: {
+          hero: actorView('hero', 'heroes', { x: 4, y: 4 }, { size: 2 }),
+          foe: actorView('foe', 'foes', { x: 8, y: 4 }, { size: 2 }),
+        },
+      },
+    });
+    // Anchor-to-anchor is blocked, but alternate occupied cells retain a
+    // clear p.92 trace. The actor query must not collapse either frame.
+    expect(evaluateActorQuery({ relation: 'foe', lineOfSight: true }, context).map(({ id }) => id))
+      .toEqual(['foe']);
+  });
 });
 
 describe('U3 actor-domain operators — occupying, terrain predicate, owned-by', () => {
@@ -406,14 +423,14 @@ describe('U3 position domain — the p.108 line-of-sight policy and the footprin
     // excluded; (6,6) keeps a clear diagonal.
     const context = terrainCtx([{ position: { x: 5, y: 4 }, types: ['impassable'] }]);
     const visible = evaluatePositions(
-      { origin: { x: 4, y: 4 }, radius: 2, space: { kind: 'any' }, lineOfSightFrom: { x: 4, y: 4 } },
+      { origin: { x: 4, y: 4 }, radius: 2, space: { kind: 'any' }, lineOfSightFrom: { position: { x: 4, y: 4 }, size: 1 } },
       context,
     ).map((cell) => `${cell.x},${cell.y}`);
     expect(visible).not.toContain('6,4');
     expect(visible).toContain('6,6');
     // Determinism.
     const again = evaluatePositions(
-      { origin: { x: 4, y: 4 }, radius: 2, space: { kind: 'any' }, lineOfSightFrom: { x: 4, y: 4 } },
+      { origin: { x: 4, y: 4 }, radius: 2, space: { kind: 'any' }, lineOfSightFrom: { position: { x: 4, y: 4 }, size: 1 } },
       context,
     ).map((cell) => `${cell.x},${cell.y}`);
     expect(again).toEqual(visible);
@@ -429,9 +446,30 @@ describe('U3 position domain — the p.108 line-of-sight policy and the footprin
         actors: { hero: ctx().state.actors.hero },
       },
     });
-    const query = { origin: { x: 4, y: 4 }, range: 2, lineOfSightFrom: { x: 4, y: 4 } };
+    const query = { origin: { x: 4, y: 4 }, range: 2, lineOfSightFrom: { position: { x: 4, y: 4 }, size: 1 } };
     expect(validatePositionLegality(query, { x: 6, y: 4 }, context)).toEqual({ legal: false, problem: 'line-of-sight' });
     expect(validatePositionLegality(query, { x: 6, y: 6 }, context)).toEqual({ legal: true, problem: null });
+  });
+
+  it('position queries and legality accept LoS from any cell of a Size-2 U7 frame', () => {
+    const base = ctx();
+    const context = terrainCtx([{ position: { x: 6, y: 4 }, types: ['impassable'] }], {
+      state: {
+        ...base.state,
+        actors: { hero: actorView('hero', 'heroes', { x: 4, y: 4 }, { size: 2 }) },
+      },
+    });
+    const pointFrame = { position: { x: 4, y: 4 }, size: 1 };
+    const actorFrame = { position: { x: 4, y: 4 }, size: 2 };
+    const destination = { x: 8, y: 4 };
+    expect(evaluatePositions({ origin: { x: 4, y: 4 }, originSize: 2, radius: 3, space: { kind: 'any' }, lineOfSightFrom: pointFrame }, context))
+      .not.toContainEqual(destination);
+    expect(evaluatePositions({ origin: { x: 4, y: 4 }, originSize: 2, radius: 3, space: { kind: 'any' }, lineOfSightFrom: actorFrame }, context))
+      .toContainEqual(destination);
+    expect(validatePositionLegality({ origin: { x: 4, y: 4 }, originSize: 2, range: 3, excludeActorId: 'hero', lineOfSightFrom: pointFrame }, destination, context))
+      .toEqual({ legal: false, problem: 'line-of-sight' });
+    expect(validatePositionLegality({ origin: { x: 4, y: 4 }, originSize: 2, range: 3, excludeActorId: 'hero', lineOfSightFrom: actorFrame }, destination, context))
+      .toEqual({ legal: true, problem: null });
   });
 
   it('validatePositionLegality: originSize measures the p.92 footprint (a Size>1 origin edge)', () => {

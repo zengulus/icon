@@ -222,9 +222,10 @@ export function choiceCandidateRoutingProblems(choiceCode: string): string[] {
 
 // U7 (anchor/spatial frame) — the TELEPORT legality boundary measures range
 // from the mover's own p.92 footprint edge, never from a degenerate size-1
-// point. The kernel must thread the resolved founder (`context.state.actors[
-// actorId].size`) into the shared position-legality operator as `originSize`;
-// dropping it would silently re-introduce the point-frame measurement.
+// point. The kernel must thread the resolved mover (`context.state.actors[
+// actorId].size`) into the shared position-legality operator as `originSize`
+// AND into the U7 frame carried by `lineOfSightFrom`; dropping either would
+// silently re-introduce point-frame range or sight measurement.
 export function teleportFootprintOriginProblems(code: string): string[] {
   const problems: string[] = [];
   if (!/validatePositionLegality\s*\(/.test(code)) {
@@ -249,6 +250,10 @@ export function teleportFootprintOriginProblems(code: string): string[] {
   const footprintsMover = /\bactors\s*\[\s*actorId\s*\]/.test(code) && sizeRead && !optionalSizeRead;
   if (!/originSize\s*:/.test(query) || !footprintsMover) {
     problems.push('teleport legality does not measure from the mover\'s p.92 footprint (originSize must come from the mover record read via state.actors[actorId].size — a size-1 point frame is a dropped-frame regression, and an optional-chained size read (`mover?.size`) masks a missing mover as Size 1)');
+  }
+  const frameBinding = /const\s+([A-Za-z_$][\w$]*)\s*=\s*\{\s*position\s*:\s*origin\s*,\s*size\s*:\s*(?:mover|actor|source)\.\s*size\s*\}/.exec(code)?.[1];
+  if (!frameBinding || !new RegExp(`lineOfSightFrom\\s*:\\s*${frameBinding}\\b`).test(query)) {
+    problems.push('teleport legality does not measure line of sight from the mover\'s resolved U7 footprint frame');
   }
   return problems;
 }

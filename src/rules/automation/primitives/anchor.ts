@@ -48,10 +48,24 @@ import { liveActorSlot } from './reference.js';
 import type { RuleEntityView, RuleExecutionContext, RuleSelector } from './types.js';
 
 /** A resolved spatial origin: a battlefield position plus the footprint size
- * used by the canonical p.92 distance metric. */
+ * used by canonical p.92 spatial metrics (range, adjacency, and LoS). */
 export interface SpatialOrigin {
   position: Position;
   size: number;
+}
+
+/** Expand a resolved U7 frame into its deterministic row-major occupied
+ * cells. Keeping frame expansion here prevents consumers such as LoS from
+ * reinterpreting a Size-N anchor as an unrelated point convention. */
+export function spatialOriginCells({ position, size }: SpatialOrigin): Position[] {
+  const normalizedSize = Math.max(1, Math.floor(size));
+  const cells: Position[] = [];
+  for (let dy = 0; dy < normalizedSize; dy += 1) {
+    for (let dx = 0; dx < normalizedSize; dx += 1) {
+      cells.push({ x: position.x + dx, y: position.y + dy });
+    }
+  }
+  return cells;
 }
 
 export type SpatialAnchor =

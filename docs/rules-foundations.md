@@ -171,12 +171,14 @@ range, and any characters or objects occupying it", or `unoccupied` — and
 an opt-in `distance-from-origin` ordering policy; tranche 32B added explicit
 `originSize` CandidateSet generation from the canonical p.92 footprint),
 `validatePositionLegality` (shared free-placement specialist:
-in-grid/footprint-range/unoccupied/optional-LoS — consumed by the teleport
+in-grid/footprint-range/unoccupied/optional-LoS from a resolved U7 spatial
+frame — consumed by the teleport
 kernel and the source-ID-free U4 captured-position seam; the teleport
-kernel threads the MOVER's p.92 footprint as `originSize` from the
-resolved mover record, so a Size-2 mover measures range from its footprint
-edge — a MISSING mover fails closed with `selector.actor-missing` (never
-masked as a Size-1 point frame); guarded by
+kernel threads the MOVER's p.92 footprint into both `originSize` and the LoS
+frame from the resolved mover record, so a Size-2 mover measures range and
+sight from its footprint rather than its canonical anchor cell — a MISSING
+mover fails closed with `selector.actor-missing` (never masked as a Size-1
+point frame); guarded by
 `u7-teleport-footprint-origin`, which rejects a restored point-frame OR
 optional-chained mover-size call), and
 `nearestCandidates` (the full minimum-distance set over an evaluated
@@ -363,6 +365,8 @@ rejects, replay determinism).
 
 ### Anchor / Spatial Frame (U7 underlay) — AUTHORITATIVE (completion audit + teleport fail-closed repair, 2026-09-02)
 
+Size>1 LoS corrective re-audited 2026-09-04; scope correction recorded below.
+
 `primitives/anchor.ts` owns the typed frame vocabulary every spatial
 relationship is measured from ("range is measured from the edge of the
 origin space (or character)", p.92): `SpatialAnchor` = LIVE actor
@@ -387,12 +391,15 @@ carrier-scan over durable state, U2-branded perspective, canonical
 metric), `RuleArea.origin` (inert declarative, no runtime consumer — areas
 compute through `computeSpatialArea` intents), rebound (unwired
 provenance flag), and `runtime.ts` `context.actorId` (U1 source identity
-for cost, not a spatial frame). The 2026-09-02 completion audit
-classified every remaining origin/frame consumer (A resolves through the
-vocabulary / B carries an already-resolved frame / C inert or non-
-spatial); no subsystem independently reinterprets LIVE vs CAPTURED frame
-semantics, maps a selector to a frame, or defines a second distance
-metric, and no point-frame approximation remains for a multi-space actor.
+for cost, not a spatial frame). The 2026-09-02 completion audit classified
+every remaining origin/frame consumer (A resolves through the vocabulary / B
+carries an already-resolved frame / C inert or non-spatial), but its claim
+that no multi-space point collapse remained missed LoS consumers. The
+2026-09-04 tranche-32B corrective audit found and repaired that gap
+generically. No subsystem now independently reinterprets LIVE vs CAPTURED
+frame semantics, maps a selector to a frame, or defines a second distance
+metric, and actor-relative LoS no longer collapses a multi-space frame to its
+anchor cell.
 Carrier schemas are STORAGE for already-resolved frames, not second U7
 vocabularies — they are not migrated for structural uniformity. Tests:
 `candidate.test.ts` anchor surface + `battlefield.test.ts` Size-2
@@ -1061,14 +1068,17 @@ p.92 footprint distance (L\u221e between occupied footprints), not raw
 anchor-cell Chebyshev, and carries the origin actor's Size through the
 contract. Mandatory vs optional creation remains a content-layer concern.
 
-**Remaining source-fidelity limitation (Size>1 LoS):** creation LoS is
-evaluated through the shared primitives LoS kernel (`line-of-sight.ts`),
-which samples a straight segment from a single source space center. ICON
-p.92 defines LoS from "any edge of your character's space", so a Size>1
-origin's full footprint is not yet represented in LoS sampling; a generic
-footprint-aware LoS query through the shared authority is future work.
-Entity creation is therefore NOT described as fully Size>1 LoS-correct —
-only the range half is footprint-correct today.
+**Size>1 LoS corrective audit (2026-09-04):** ICON p.92 permits a clear trace
+from any edge of the character's occupied space, so actor/entity LoS is
+existential over the resolved U7 footprint rather than anchored to the
+canonical position cell. `hasLineOfSightBetween` now expands resolved U7
+frames and composes the existing U3 point sampler; entity creation, teleport
+legality, position queries, actor queries, and the encounter direct-target
+gate consume it. Point-defined AoE/Burst origins keep the existing point
+sampler. The ordinary `summonEntity` seam requires the creator's resolved
+`originSize`, and the reducer uses the carried creation frame for LoS as well
+as range. Focused tests cover an anchor-blocked/non-anchor-clear Size-2 frame
+and the all-traces-blocked negative case.
 
 **Companion placement is single-authority (2026-08-28):** combat-start
 companion summons (`applyCombatStartTraitEffects`, `kernels/lifecycle.ts`)

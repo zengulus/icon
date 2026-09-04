@@ -409,6 +409,27 @@ describe('foe ability automation (p.300–306 recipes)', () => {
     expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
   });
 
+  it('Hunter Set Trap measures range from a Size-2 Jotunn footprint edge', () => {
+    const fixture = foeFixture('basic:hunter:302', { foe: { x: 1, y: 1 }, hero: { x: 5, y: 5 } });
+    fixture.state.actors[fixture.foe.id].size = 2; // Jotunn Titanblood (p.448)
+    const allowed = { x: 4, y: 1 }; // anchor distance 3; footprint distance 2
+    for (let y = 0; y < fixture.state.grid.height; y += 1) {
+      for (let x = 0; x < fixture.state.grid.width; x += 1) {
+        const inSourceFootprint = x >= 1 && x <= 2 && y >= 1 && y <= 2;
+        if (inSourceFootprint || (x === allowed.x && y === allowed.y)) continue;
+        fixture.state.entities[`blocker:${x},${y}`] = {
+          id: `blocker:${x},${y}`, type: 'boulder', kind: 'object', ownerId: null,
+          positions: [{ x, y }], state: { height: 1 }, duration: null,
+        };
+      }
+    }
+    const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:set-trap');
+    expect(result.state.terrainEffects).toContainEqual(expect.objectContaining({
+      terrain: 'dangerous', positions: [allowed],
+    }));
+    expect(applyEvents(fixture.state, result.events)).toEqual(result.state);
+  });
+
   it('Hunter Prowl: dashes 1, gains stealth, and records the end-turn request', () => {
     const fixture = foeFixture('basic:hunter:302', { foe: { x: 1, y: 1 }, hero: { x: 3, y: 1 } });
     const result = foeAbility(fixture.state, fixture, 'basic:hunter:302:prowl');

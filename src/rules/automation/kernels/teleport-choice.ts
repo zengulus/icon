@@ -94,12 +94,13 @@ export function chosenTeleportDestination(
   if (!mover) {
     throw new RuleProgramViolation('selector.actor-missing', `Teleport mover ${actorId} does not exist; p.92 range cannot be measured from a missing footprint.`);
   }
+  const originFrame = { position: origin, size: mover.size };
   const legality = validatePositionLegality({
     origin,
     originSize: mover.size,
     range,
     excludeActorId: actorId,
-    lineOfSightFrom: origin,
+    lineOfSightFrom: originFrame,
   }, destination, context);
   if (!legality.legal) {
     switch (legality.problem) {
