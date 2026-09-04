@@ -53,8 +53,93 @@ export type ChosenValue =
   | { kind: 'boolean'; value: boolean | null }
   | { kind: 'ordering'; ids: string[] };
 
+/** A captured list choice whose candidate domain has already been produced by
+ * its owning U3 query. U4 owns only presence/cardinality/distinctness and
+ * membership in that supplied CandidateSet. */
+export interface CapturedListChoice {
+  key: string;
+  label: string;
+  required: boolean;
+  minimum?: number;
+  maximum?: number;
+  /** Whether repeated recorded values are malformed or collapse to the
+   * mathematical subset they denote. Defaults to reject. */
+  repetition?: 'reject' | 'collapse';
+}
+
 function choiceViolation(code: string, choice: RuleChoice, detail: string): RuleProgramViolation {
   return new RuleProgramViolation(code, `${choice.label}: ${detail}`);
+}
+
+function capturedListViolation(code: string, choice: CapturedListChoice, detail: string): RuleProgramViolation {
+  return new RuleProgramViolation(code, `${choice.label}: ${detail}`);
+}
+
+function validateCapturedList(
+  choice: CapturedListChoice,
+  supplied: readonly string[] | undefined,
+  kind: 'actor' | 'option',
+): string[] {
+  if (!supplied || supplied.length === 0) {
+    if (!choice.required) return [];
+    throw capturedListViolation(`choice.${kind}-required`, choice, 'requires a recorded choice.');
+  }
+  const values = choice.repetition === 'collapse' ? [...new Set(supplied)] : [...supplied];
+  const minimum = choice.minimum ?? (choice.required ? 1 : 0);
+  const maximum = choice.maximum ?? Number.POSITIVE_INFINITY;
+  if (values.length < minimum || values.length > maximum) {
+    throw capturedListViolation(
+      `choice.${kind}-count`,
+      choice,
+      `requires ${minimum}–${maximum === Number.POSITIVE_INFINITY ? 'any' : maximum} choices (got ${values.length}).`,
+    );
+  }
+  if (choice.repetition !== 'collapse' && new Set(values).size !== values.length) {
+    throw capturedListViolation(`choice.${kind}-distinct`, choice, 'choices must be distinct.');
+  }
+  return values;
+}
+
+/** Resolve an actor selection against a U3-produced CandidateSet. This is the
+ * thin composition seam for area/other domain queries that cannot be
+ * reconstructed from `RuleChoice`'s basic relation/range fields. It never
+ * generates, sorts, or selects candidates. */
+export function resolveCapturedActorChoice(
+  choice: CapturedListChoice,
+  candidates: readonly { id: string }[],
+  context: RuleExecutionContext,
+): string[] {
+  const ids = validateCapturedList(choice, context.input.actorIds?.[choice.key], 'actor');
+  const candidateIds = new Set(candidates.map(({ id }) => id));
+  for (const id of ids) {
+    if (!candidateIds.has(id)) {
+      throw capturedListViolation('choice.actor-ineligible', choice, `actor "${id}" is not an eligible candidate.`);
+    }
+  }
+  return ids;
+}
+
+/** Resolve a comma-delimited recorded option list from the existing durable
+ * option bucket. Candidate vocabulary is content-declared; U4 validates only
+ * presence, cardinality, distinctness, and membership. The returned order is
+ * exactly the recorded order and must only be interpreted where source rules
+ * define whether ordering is meaningful. */
+export function resolveCapturedOptionListChoice(
+  choice: CapturedListChoice & { options: readonly string[] },
+  context: RuleExecutionContext,
+): string[] {
+  const raw = context.input.options?.[choice.key];
+  const supplied = raw === undefined || raw.trim() === ''
+    ? undefined
+    : raw.split(',').map((value) => value.trim());
+  const values = validateCapturedList(choice, supplied, 'option');
+  const candidates = new Set(choice.options);
+  for (const value of values) {
+    if (!candidates.has(value)) {
+      throw capturedListViolation('choice.option-invalid', choice, `"${value}" is not one of: ${choice.options.join(', ')}.`);
+    }
+  }
+  return values;
 }
 
 /** Validate one choice row against the command's typed input buckets.

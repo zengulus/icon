@@ -14,6 +14,8 @@ import {
   action, compilation,
 } from '../../../primitives/job-kit.js';
 import { evaluatePositions } from '../../../kernels/evaluate-query.js';
+import { evaluateActorQuery } from '../../../kernels/evaluate-query.js';
+import { resolveCapturedActorChoice, resolveCapturedOptionListChoice } from '../../../kernels/choice.js';
 import { resolveAuthoritativeAttack } from '../../../kernels/attack-resolution.js';
 import { resolveCapturedSelectedActors, resolveTriggerTargets, resolveAttackTarget, resolveSourceActor } from '../../glue/reference-authoring.js';
 
@@ -68,8 +70,9 @@ const sleightOfHandEffects: RuleResolver = (context) => {
 /** ICON p.201 Chaos Tarot: gamble, then apply the listed effect in the small
  * blast — 1: fray damage; 2: teleport all characters in the area 2; 3: two
  * spaces of difficult terrain; 4: bless up to two characters; 5: seal up to
- * two; 6: choose two (deterministic: damage + difficult terrain). A wild card
- * is summoned in the area. */
+ * two; 6: choose two. Effects 4/5 read optional recorded actor subsets; effect
+ * 6 reads exactly two recorded effect numbers and resolves them in the listed
+ * numeric order required by p.108. A wild card is summoned in the area. */
 const chaosTarotEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   const target = resolveCapturedSelectedActors(context, 'target')[0] ?? resolveAttackTarget(context);
@@ -96,6 +99,11 @@ const chaosTarotEffects: RuleResolver = (context) => {
     const position = character.position;
     return position && area.some((cell) => sameCell(cell, position));
   });
+  // U3 owns the p.92 character CandidateSet for effects 4/5, including
+  // defeated/off-board exclusion and full-footprint area intersection. U4
+  // below only validates the player's recorded subsets against this set.
+  // Effects 1/2 deliberately retain their pre-repair `inArea` behavior.
+  const eligibleCharacters = evaluateActorQuery({ relation: 'any', insideArea: { cells: area } }, context);
   const apply = (effect: number) => {
     if (effect === 1) {
       for (const character of inArea) mutations.push(damageMutation(context, character.id, source.fray, 'area'));
@@ -110,16 +118,30 @@ const chaosTarotEffects: RuleResolver = (context) => {
       const cells = evaluatePositions({ origin: center, radius: 1, space: { kind: 'unoccupied' }, ordering: { kind: 'distance-from-origin' } }, context).slice(0, 2);
       if (cells.length > 0) mutations.push(terrainMutation(context, 'create', 'difficult', cells));
     } else if (effect === 4) {
-      const allies = inArea.filter((character) => character.side === source.side).slice(0, 2);
-      for (const ally of allies) mutations.push(resourceMutation(context, ally.id, 'blessing', 'gain', 1));
+      const chosen = resolveCapturedActorChoice({
+        key: 'chaos-tarot-bless', label: 'Chaos Tarot effect 4', required: false, minimum: 0, maximum: 2, repetition: 'collapse',
+      }, eligibleCharacters, context);
+      for (const actorId of chosen) mutations.push(resourceMutation(context, actorId, 'blessing', 'gain', 1));
     } else if (effect === 5) {
-      const foes = inArea.filter((character) => character.side !== source.side).slice(0, 2);
-      for (const foe of foes) mutations.push(conditionMutation(context, foe.id, 'sealed'));
+      const chosen = resolveCapturedActorChoice({
+        key: 'chaos-tarot-seal', label: 'Chaos Tarot effect 5', required: false, minimum: 0, maximum: 2, repetition: 'collapse',
+      }, eligibleCharacters, context);
+      for (const actorId of chosen) mutations.push(conditionMutation(context, actorId, 'sealed'));
     }
   };
   if (roll === 6) {
-    apply(1);
-    apply(3);
+    const selected = resolveCapturedOptionListChoice({
+      key: 'chaos-tarot-effects',
+      label: 'Chaos Tarot effect 6',
+      required: true,
+      minimum: 2,
+      maximum: 2,
+      options: ['1', '2', '3', '4', '5'],
+    }, context).map(Number).sort((a, b) => a - b);
+    // ICON p.108 supplies the otherwise-ambiguous ordering: ability effects
+    // resolve in the order listed. The recorded set is therefore applied in
+    // the numbered list order, never input order or an engine-selected pair.
+    for (const effect of selected) apply(effect);
   } else {
     apply(roll);
   }

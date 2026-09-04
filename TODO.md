@@ -895,6 +895,25 @@ assumption here, document the evidence and update this list before proceeding.
   questions tracked for the next character-domain promotion. See
   `docs/u8-u1-underlay-census.md`.
 
+- **U4 tranche 32A — Chaos Tarot effects 4–6 emergency repair
+  (2026-09-04) — DONE.** Effects 4/5 now consume optional recorded actor
+  subsets (`chaos-tarot-bless` / `chaos-tarot-seal`) over the U3 actor
+  CandidateSet intersecting the small blast: absent/empty = zero, repeated
+  ids collapse, >2 distinct = `choice.actor-count`, and non-members reject
+  `choice.actor-ineligible`; no side filter is invented for "characters".
+  Effect 6 requires `options['chaos-tarot-effects']` to record exactly two
+  distinct effects from 1–5; missing/wrong-count/duplicate/invalid answers
+  reject, and the old automatic 1+3 path is gone. The chosen pair resolves
+  in the source-defined listed order (p.108), not input or implementation
+  order. Effect 3 is untouched. The source-ID-free U4 captured-list seam
+  owns only recording/cardinality/distinctness/membership and composes the
+  U3 candidates; replay uses the recorded command. No source unit promotion
+  or executable-membership delta. U4 remains PARTIAL: the recorded-position
+  family (including Chaos Tarot effect 3), Dervish actor multi-select, Demon
+  Claw Talent I/II, opaque fold reads, and U12/U13 choice consumers remain;
+  entity-only summons still cannot participate in actor-domain "character"
+  subsets and remain the already-recorded representation gap.
+
 - **U1 tranche 17 — scope-aware classifier repair + fold-consumer
   adjudication (2026-09-02) — DONE.** (1) REPAIR: `refineSiteWithContext`
   reclassified plain-identifier sites by whole-file name coincidence (any

@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { RuleChoice, RuleExecutionContext } from '../automation/primitives/types.js';
-import { resolveChoice, resolveChoices } from '../automation/kernels/choice.js';
+import { resolveCapturedActorChoice, resolveCapturedOptionListChoice, resolveChoice, resolveChoices } from '../automation/kernels/choice.js';
 import { validatePositionCandidate } from '../automation/kernels/evaluate-query.js';
 import { RuleProgramViolation } from '../automation/kernels/runtime.js';
 
@@ -192,6 +192,29 @@ describe('CHOOSE underlay — option / number / boolean / direction', () => {
 });
 
 describe('CHOOSE underlay — composition', () => {
+  it('validates a recorded actor subset against an externally produced CandidateSet without selecting for the player', () => {
+    const choice = { key: 'area-subset', label: 'Area subset', required: false, minimum: 0, maximum: 2 };
+    const candidates = [{ id: 'hero' }, { id: 'ally' }];
+    expect(resolveCapturedActorChoice(choice, candidates, ctx())).toEqual([]);
+    expect(resolveCapturedActorChoice(choice, candidates, ctx({ input: { actorIds: { 'area-subset': [] } } }))).toEqual([]);
+    expect(resolveCapturedActorChoice(choice, candidates, ctx({ input: { actorIds: { 'area-subset': ['ally', 'hero'] } } }))).toEqual(['ally', 'hero']);
+    expect(codeOf(() => resolveCapturedActorChoice(choice, candidates, ctx({ input: { actorIds: { 'area-subset': ['hero', 'ally', 'foe'] } } })))).toBe('choice.actor-count');
+    expect(codeOf(() => resolveCapturedActorChoice(choice, candidates, ctx({ input: { actorIds: { 'area-subset': ['hero', 'hero'] } } })))).toBe('choice.actor-distinct');
+    expect(codeOf(() => resolveCapturedActorChoice(choice, candidates, ctx({ input: { actorIds: { 'area-subset': ['foe'] } } })))).toBe('choice.actor-ineligible');
+    const subset = { ...choice, repetition: 'collapse' as const };
+    expect(resolveCapturedActorChoice(subset, candidates, ctx({ input: { actorIds: { 'area-subset': ['ally', 'ally'] } } }))).toEqual(['ally']);
+  });
+
+  it('validates an exact recorded option pair without padding, de-duplicating, or choosing defaults', () => {
+    const choice = { key: 'effects', label: 'Choose two effects', required: true, minimum: 2, maximum: 2, options: ['1', '2', '3'] };
+    expect(resolveCapturedOptionListChoice(choice, ctx({ input: { options: { effects: '3,1' } } }))).toEqual(['3', '1']);
+    expect(codeOf(() => resolveCapturedOptionListChoice(choice, ctx()))).toBe('choice.option-required');
+    expect(codeOf(() => resolveCapturedOptionListChoice(choice, ctx({ input: { options: { effects: '1' } } })))).toBe('choice.option-count');
+    expect(codeOf(() => resolveCapturedOptionListChoice(choice, ctx({ input: { options: { effects: '1,2,3' } } })))).toBe('choice.option-count');
+    expect(codeOf(() => resolveCapturedOptionListChoice(choice, ctx({ input: { options: { effects: '1,1' } } })))).toBe('choice.option-distinct');
+    expect(codeOf(() => resolveCapturedOptionListChoice(choice, ctx({ input: { options: { effects: '1,9' } } })))).toBe('choice.option-invalid');
+  });
+
   it('required choices reject before optional ones decline', () => {
     const rows: RuleChoice[] = [
       { key: 'bonus', label: 'Optional bonus', kind: 'boolean', required: false },

@@ -91,6 +91,95 @@ describe('Seer ability automation (p.197–203)', () => {
     expect(applyEvents(state, result.events)).toEqual(result.state);
   });
 
+  it('Chaos Tarot effects 4/5: absent and explicit-empty subsets choose zero, never automatic targets', () => {
+    const blessFixture = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 }, ally: { x: 4, y: 1 } });
+    const blessed = executeCommand(blessFixture.state, {
+      type: 'USE_ABILITY', actorId: blessFixture.hero.id, abilityId: 'seer:chaos-tarot', targetIds: [blessFixture.foe.id],
+    }, scriptedDice(4));
+    expect(Object.values(blessed.state.actors).every((actor) => (actor.resources.blessing ?? 0) === 0)).toBe(true);
+    expect(applyEvents(blessFixture.state, blessed.events)).toEqual(blessed.state);
+
+    const sealFixture = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 }, ally: { x: 4, y: 1 } });
+    const sealed = executeCommand(sealFixture.state, {
+      type: 'USE_ABILITY', actorId: sealFixture.hero.id, abilityId: 'seer:chaos-tarot', targetIds: [sealFixture.foe.id],
+      input: { actorIds: { 'chaos-tarot-seal': [] } },
+    }, scriptedDice(5));
+    expect(Object.values(sealed.state.actors).every((actor) => !actor.statuses.includes('sealed'))).toBe(true);
+    expect(applyEvents(sealFixture.state, sealed.events)).toEqual(sealed.state);
+  });
+
+  it('Chaos Tarot effects 4/5: applies exactly one or two legal recorded characters regardless of side', () => {
+    const blessFixture = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 }, ally: { x: 4, y: 1 } });
+    const blessed = executeCommand(blessFixture.state, {
+      type: 'USE_ABILITY', actorId: blessFixture.hero.id, abilityId: 'seer:chaos-tarot', targetIds: [blessFixture.foe.id],
+      input: { actorIds: { 'chaos-tarot-bless': [blessFixture.foe.id, blessFixture.ally!.id] } },
+    }, scriptedDice(4));
+    expect(blessed.state.actors[blessFixture.foe.id].resources.blessing).toBe(1);
+    expect(blessed.state.actors[blessFixture.ally!.id].resources.blessing).toBe(1);
+    expect(blessed.state.actors[blessFixture.second!.id].resources.blessing ?? 0).toBe(0);
+    expect(applyEvents(blessFixture.state, blessed.events)).toEqual(blessed.state);
+
+    const sealFixture = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 }, ally: { x: 4, y: 1 } });
+    const sealed = executeCommand(sealFixture.state, {
+      type: 'USE_ABILITY', actorId: sealFixture.hero.id, abilityId: 'seer:chaos-tarot', targetIds: [sealFixture.foe.id],
+      input: { actorIds: { 'chaos-tarot-seal': [sealFixture.ally!.id] } },
+    }, scriptedDice(5));
+    expect(sealed.state.actors[sealFixture.ally!.id].statuses).toContain('sealed');
+    expect(sealed.state.actors[sealFixture.foe.id].statuses).not.toContain('sealed');
+    expect(applyEvents(sealFixture.state, sealed.events)).toEqual(sealed.state);
+  });
+
+  it('Chaos Tarot effects 4/5: rejects over-cardinality and ineligible actors; repeated ids remain one subset member', () => {
+    const { state, hero, foe, second, ally } = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 }, ally: { x: 4, y: 1 } });
+    const run = (roll: 4 | 5, key: string, ids: string[]) => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
+      input: { actorIds: { [key]: ids } },
+    }, scriptedDice(roll));
+    expect(() => run(4, 'chaos-tarot-bless', [foe.id, second!.id, ally!.id])).toThrowError(expect.objectContaining({ code: 'choice.actor-count' }));
+    expect(() => run(5, 'chaos-tarot-seal', [hero.id])).toThrowError(expect.objectContaining({ code: 'choice.actor-ineligible' }));
+    const repeated = run(4, 'chaos-tarot-bless', [foe.id, foe.id]);
+    expect(repeated.state.actors[foe.id].resources.blessing).toBe(1);
+    expect(applyEvents(state, repeated.events)).toEqual(repeated.state);
+  });
+
+  it('Chaos Tarot effect 6: missing, wrong-cardinality, duplicate, and invalid effect recordings reject', () => {
+    const { state, hero, foe } = seerEncounter({ second: null });
+    const run = (effects?: string) => executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
+      input: effects === undefined ? {} : { options: { 'chaos-tarot-effects': effects } },
+    }, scriptedDice(6));
+    expect(() => run()).toThrowError(expect.objectContaining({ code: 'choice.option-required' }));
+    expect(() => run('1')).toThrowError(expect.objectContaining({ code: 'choice.option-count' }));
+    expect(() => run('1,2,3')).toThrowError(expect.objectContaining({ code: 'choice.option-count' }));
+    expect(() => run('1,1')).toThrowError(expect.objectContaining({ code: 'choice.option-distinct' }));
+    expect(() => run('1,6')).toThrowError(expect.objectContaining({ code: 'choice.option-invalid' }));
+  });
+
+  it('Chaos Tarot effect 6 executes exactly the captured pair; the old automatic 1+3 result is impossible', () => {
+    const { state, hero, foe, second, ally } = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 }, ally: { x: 4, y: 1 } });
+    const result = executeCommand(state, {
+      type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:chaos-tarot', targetIds: [foe.id],
+      input: {
+        options: { 'chaos-tarot-effects': '5,4' },
+        actorIds: {
+          'chaos-tarot-bless': [foe.id, ally!.id],
+          'chaos-tarot-seal': [second!.id],
+        },
+      },
+    }, scriptedDice(6));
+    expect(result.state.actors[foe.id].hp).toBe(32);
+    expect(result.state.actors[foe.id].resources.blessing).toBe(1);
+    expect(result.state.actors[ally!.id].resources.blessing).toBe(1);
+    expect(result.state.actors[second!.id].statuses).toContain('sealed');
+    expect(result.state.terrainEffects.some((effect) => effect.terrain === 'difficult')).toBe(false);
+    expect(Object.values(result.state.entities).some((entity) => entity.type === 'wild-card')).toBe(true);
+    const mutations = mutationsOf(result.events, 'seer:chaos-tarot');
+    expect(mutations.findIndex((mutation) => mutation.kind === 'resource')).toBeLessThan(
+      mutations.findIndex((mutation) => mutation.kind === 'condition' && mutation.conditionId === 'sealed'),
+    ); // p.108 listed order: effect 4 before effect 5 despite recorded "5,4"
+    expect(applyEvents(state, result.events)).toEqual(result.state);
+  });
+
   it('Astra: attacks [D]+fray and gambles the meteor damage across the medium blast', () => {
     const { state, hero, foe, second } = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 2 } });
     const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'seer:astra', targetIds: [foe.id] }, scriptedDice(12, 4, 3));

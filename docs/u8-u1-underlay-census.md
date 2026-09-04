@@ -30,7 +30,7 @@ Verdict: U8 meets its declared single-authority and replay contract.
 | U1 Reference / Binding | AUTHORITATIVE (declared scope: content reference interpretation) | 8 machine-pinned NON-reference algorithm/helper derefs (4 program + 4 fold) stay caller-owned by design — never references, so not inside the declared scope |
 | U2 Role / Perspective | AUTHORITATIVE | none |
 | U3 Query / Candidate | AUTHORITATIVE (tranche 25 decision) | none in scope — the six defeated-divergent VM effect scans now route through the shared query authority (tranche 25); AREA / PERSISTENT-INSTANCE / RULE-SOURCE query domains and ordering beyond the min-distance set + opt-in cell order are explicitly later-underlay (U10/U12/U16/U17) or source-gated; rushTowardFoes' direction fallback remains the flagged player-choice (U4) approximation, and the Demon Claw / God Hand self-or-ally picks are recorded-choice or fail-closed (U4/resolver), never U3-invented |
-| U4 Choice / Decision | PARTIAL | (tranches 26-28, 30) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, and Holy cure + Charge all repaired as required recorded choices over the p.92 CHARACTER umbrella's ACTOR slice (self/ally/foe — no side filter; tranche 30 restored tranche 28's foe-inclusive semantics after tranche 29's friendly-only reversal failed the formal-keyword test: p.92 defines Foe inside Characters, no passage restricts cures to friendly characters, Esper III p.249 is the foe-MODE definition (fray instead of the normal cure) on an already-legal category while Mercy I's defeated grant is outside all keywords, and the "beneficial-effects-are-friendly" principle has no written home — so the attacked foe is always eligible and a missing cure recording never passes vacuous; tranche 31 corrected the claim surface: the Summon member of the umbrella is an engine-wide unreachable — ICON summons are characters (p.146) that p.95's "abilities that specify summons or characters can target or count them normally" makes targetable by character-specifying effects, but no executable summon is an actor (content creates entity-only summons; the U3 entity→actor summon bridge has no production user) — and self-inclusion rests on the p.92 Self bullet's "unless specified" (open reading; tests encode inclusion)); remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal-1 [portal-2 is an end-of-turn window], Spirit Shrine — mislabeled "Grand Seal shrine" in earlier rows, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency" + its clockwise default, Chaos Tarot effect-3 terrain + effects 4/5 up-to-two + effect-6 "choose two" auto-applied 1+3, seer:astra terrain/meteor cells, chanter:symphony mote cells — per the p.95 "free space" + Harvester "any free space" placement conventions, each a per-unit recorded-position obligation, split across the resolver-level seam and the intent-declaration summon seam), the actor multi-selects (Dervish ally, Chaos Tarot effects 4/5 "up to two"), Demon Claw Talent I/II (documented-unresolved), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
+| U4 Choice / Decision | PARTIAL | (tranches 26-28, 30, 32A) Demon Claw per-step may-damage, God Hand self-or-ally, Heracule second-foe, Holy cure + Charge, and Chaos Tarot effects 4–6 now use recorded choices over U3 CandidateSets. Chaos Tarot 4/5 are optional 0..2 actor subsets with no invented side filter; effect 6 requires exactly two distinct effects from 1–5 and resolves them in p.108 listed order, so the automatic 1+3 default is gone. The p.92 CHARACTER umbrella's ACTOR slice remains self/ally/foe with no side filter; its Summon member remains an engine-wide unreachable because executable summons are entity-only and the U3 entity→actor bridge has no production user. Remaining: the placement family silently defaults the source's WHERE choice (Party Favor, Mist Strider + charge cloud, Underway portal-1 [portal-2 is an end-of-turn window], Spirit Shrine, Geyser, Waterspout, Dervish placement, Dark Sliver soul-space + slay plant, Strongarm talent-1 "into adjacency" + its clockwise default, Chaos Tarot effect-3 terrain, seer:astra terrain/meteor cells, chanter:symphony mote cells — each a per-unit recorded-position obligation split across the resolver-level seam and intent-declaration summon seam), Dervish's actor multi-select, Demon Claw Talent I/II (documented-unresolved), plus the declared abilityUseChoices/talentChoices fold reads and window-carried choice consumers (U12/U13) |
 | U5 Value / Expression | PARTIAL | U5-core dependency gate for U3 MET (tranches 22-23: the SINGLE percentOfMaximum scalar now feeds percent-base-max, the U6 bloodied/quarter predicates, and the Rot 25% read — all against the BASE maximum per adjudication icon-1.5:combat:bloodied-base-max; the tranche-22 wounds-adjusted percent-max-hp kind was RETRACTED as source-unsupported; no duplicate VM-side scalar formula remains); full authority still needs traversed/elevation/area-size/usage/non-numeric typed families + the residual content inline-arithmetic sites |
 | U6 Predicate / Condition | PARTIAL | range/area gate-body consumer folding |
 | U7 Anchor / Spatial Frame | AUTHORITATIVE (tranche 21 decision) | none in scope — specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance) store already-resolved frames with written non-competing boundaries; only the teleport mover footprint seam had a real gap, repaired fail-closed in tranches 20-21 |
@@ -1983,6 +1983,36 @@ acknowledgment in another:
 
 No production behavior, tests, or counts changed (2,198); comment + docs
 only. See `docs/underlay-completion-plan.md` (tranche-31 closure).
+
+**Tranche 32A — Chaos Tarot effects 4–6 emergency repair
+(2026-09-04).** The exact p.201 clauses are now recorded rather than
+defaulted. Effects 4 and 5 read `chaos-tarot-bless` /
+`chaos-tarot-seal` as optional actor subsets: absent and explicit empty are
+zero; one or two legal recorded actors receive exactly the chosen effect;
+repeated ids collapse to one subset member; more than two distinct ids
+rejects `choice.actor-count`; and a recorded id outside the U3 living,
+on-battlefield actor CandidateSet intersecting the small-blast cells rejects
+`choice.actor-ineligible`. "Characters" carries no ally/foe restriction.
+The ACTOR-only query retains the previously documented summon/entity
+representation gap; this tranche does not pretend to repair it.
+
+Effect 6 now requires `options['chaos-tarot-effects']`, a comma-delimited
+record of exactly two distinct values from 1–5. Missing, one, three or more,
+duplicate, and invalid recordings reject through the U4 captured-list seam;
+there is no automatic pair. Exactly the captured pair executes. Ordering is
+source-defined rather than adjudicated: p.108 says the effects of abilities
+resolve in listed order, so the selected effects execute by their numbered
+list order. Effect 3's existing placement behavior is byte-untouched.
+
+`kernels/choice.ts` gains only source-ID-free captured-list validation:
+presence, cardinality, repetition policy, and membership in a caller-supplied
+CandidateSet. The Chaos Tarot resolver obtains actor eligibility from U3 and
+never sorts/selects actors. Successful fixtures replay through `applyEvents`;
+adversarial fixtures prove the old 1+3 default cannot occur. No source-unit
+promotion or executable-membership change. U4 stays PARTIAL with the
+recorded-position family (Chaos Tarot effect 3 included), Dervish's remaining
+actor multi-select, Demon Claw Talent I/II, opaque fold inputs, and U12/U13
+choice consumers.
 
 ## Whole-consumer U1 audit (2026-09-01)
 

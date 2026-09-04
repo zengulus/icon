@@ -955,6 +955,27 @@ recorded as a live second referent. U4 remains PARTIAL with the
 placement family + actor multi-selects + Demon Claw Talent I/II as the
 exact residuals.
 
+**Tranche-32A closure (2026-09-04)** — Chaos Tarot emergency repair,
+effects 4–6 only. The p.201 effects 4 and 5 "up to two characters in the
+area" now read optional recorded actor subsets (`chaos-tarot-bless` /
+`chaos-tarot-seal`): absent or explicit empty means zero, repeated ids
+collapse as a subset, more than two distinct ids rejects, and every id must
+belong to the U3 living/on-battlefield actor CandidateSet intersecting the
+small-blast cells. No side filter is invented for the source word
+"characters". Effect 6 no longer auto-applies 1+3: the required recorded
+`chaos-tarot-effects` option list must contain exactly two distinct members
+of 1–5, and exactly those effects execute. Their resolution order is not an
+open choice: p.108 says ability effects resolve in listed order, so the
+selected pair resolves in numeric list order. Effect 3 is unchanged. The
+new source-ID-free captured-list seam in `kernels/choice.ts` owns only
+presence/cardinality/distinctness/CandidateSet membership; U3 still owns
+actor eligibility. Replay consumes the recorded input. No source unit was
+promoted; the p.92/p.95 Summon member of "characters" remains the existing
+engine-wide entity→actor representation gap and is outside this tranche.
+U4 remains PARTIAL with the recorded-position placement family (including
+Chaos Tarot effect 3), Dervish's actor multi-select, Demon Claw Talent I/II,
+the opaque fold reads, and U12/U13-carried consumers.
+
 **Locations partially owning/duplicating.** `kernels/choice.ts` (the
 validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
 `RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold
