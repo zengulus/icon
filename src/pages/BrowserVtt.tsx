@@ -24,7 +24,7 @@ import {
   type VttRoomState,
 } from '../rules/vtt-room.js';
 import type { EncounterCommand, EncounterEvent, EncounterState, Position, TerrainType } from '../rules/types.js';
-import { assetBackground } from '../vtt/presentation.js';
+import { assetBackground, makeTableId } from '../vtt/presentation.js';
 import {
   fitWorldBounds,
   gridBoundsToWorld,
@@ -35,7 +35,7 @@ import {
   type ViewportRect,
 } from '../vtt/geometry.js';
 import { restorePersistedVttRoom } from '../vtt/persistence.js';
-import { TacticalViewport, type InteractionMode, type TableTool } from '../vtt/tactical-viewport.js';
+import { TacticalViewport, useViewportSize, type InteractionMode, type TableTool } from '../vtt/tactical-viewport.js';
 
 /**
  * Browser-local Lab (`#/lab`).
@@ -85,10 +85,6 @@ function loadPreferences(): Preferences {
   } catch {
     return defaultPreferences;
   }
-}
-
-function makeTableId(prefix: string): string {
-  return `${prefix}:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
 
 function samePosition(first: Position, second: Position): boolean {
@@ -186,20 +182,6 @@ function eventSummary(event: EncounterEvent, state: EncounterState) {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-function useViewportSize(ref: React.RefObject<HTMLElement | null>) {
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return undefined;
-    const update = () => setSize({ width: element.clientWidth, height: element.clientHeight });
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [ref]);
-  return size;
 }
 
 export function Lab() {

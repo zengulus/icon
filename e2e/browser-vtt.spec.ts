@@ -113,3 +113,26 @@ test('Lab preserves a malformed cached room before offering a new fixture', asyn
     .map(([, value]) => value), localRoomKey);
   expect(backups).toContain(corrupt);
 });
+
+test('legacy Sandbox redirects to Lab and viewport resize preserves the saved room', async ({ page }) => {
+  await page.goto('/#/sandbox');
+  await expect(page).toHaveURL(/#\/lab$/);
+  await expect(page.locator('.vtt-token')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Mark', exact: true }).click();
+  await page.getByRole('button', { name: 'Grid 1, 1', exact: true }).click();
+  await expect(page.locator('.vtt-annotation')).toHaveCount(1);
+
+  const savedRoom = await page.evaluate((key) => localStorage.getItem(key), localRoomKey);
+  const viewport = page.locator('.vtt-viewport');
+  const initialWidth = await viewport.evaluate((element) => element.clientWidth);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await expect.poll(() => viewport.evaluate((element) => element.clientWidth)).not.toBe(initialWidth);
+  // Annotation geometry must follow the observed CSS viewport, without
+  // writing a camera-only change into durable encounter/table authority.
+  await expect.poll(() => viewport.evaluate((element) => {
+    const layer = element.querySelector('.vtt-drawing-layer')!;
+    return Number(layer.getAttribute('width')) === element.clientWidth
+      && Number(layer.getAttribute('height')) === element.clientHeight;
+  })).toBe(true);
+  expect(await page.evaluate((key) => localStorage.getItem(key), localRoomKey)).toBe(savedRoom);
+});

@@ -20,7 +20,7 @@ What must exist for the product to be genuinely complete, translated from
 | Resource registry | COMPLETE | `core.ts` RESOURCE_RULES | All nine shared resources with source pages, caps, reset scopes; reducer-enforced |
 | Turn-order content wiring | PARTIAL | entitlement/slow-eligibility registries | Elite/Legend production entitlement rows DONE (`role:elite-template`, `role:legend-turns`; B1 2026-08-26); no slow-eligibility content rows yet |
 | Combat settlement | COMPLETE | `encounter.ts` settlement + `characterFromActor` projection | Personal Resolve +1 at END_ENCOUNTER; durable attrition handoff; combat1→settlement→combat2 regression (`settlement.test.ts`) |
-| Player content runtime | PARTIAL | job/trait/talent/mastery/relic programs & recipes | 143/144 abilities; 29/65 Job traits; 50/288 talents; 15/144 masteries; 0/16 Limit Break effects; Relic runtime NOT STARTED. Step-6 folds remain conservative and are tracked by the regenerated Class/Job census. |
+| Player content runtime | PARTIAL | job/trait/talent/mastery/relic programs & recipes | Legal builds execute every deterministic trait, talent, mastery, Limit Break, and Relic clause through shared rules authority. Current counts and gaps: [coverage](rules-coverage.md), [generated census](blocker-census.md). |
 | Foe runtime | PARTIAL | `foes.ts`, foe recipes, trait projections | Profiles/roles/scaling construction + role turn entitlements done; 22 abilities executable; Mob BLOCKED; phases inert (B3) |
 | Local VTT (Lab) | COMPLETE (harness) | `BrowserVtt.tsx`, `vtt/*`, `vtt-room.ts` | Setup→selection→actions→persistence→replay in-browser; phase-exempt by design |
 | Realtime room authority | PARTIAL (preview) | `server/rooms.ts`, `index.ts` | Authz, redaction, revisions/CAS, checkpoints, reconnect basics, transport acceptance green; gated behind PHASE_THREE_READY |
@@ -43,16 +43,15 @@ defeat/wounds, END_TURN boundaries, settlement exit.
 PC with a Job trait (e.g., Demon Edge), wired talents, an equipped mastery, a
 Relic invoke, and an interrupt (Righteous Disdain or Riposte).
 **Blocking:** broad mastery/talent promotion beyond the landed K-P5 modifier-fold
-tranche (P3 / Step 6), Relic runtime (P5), Vigilance windows (B4). Current
-player coverage is 50/288 talents and 15/144 masteries; unresolved rows remain
-source-visible in the census.
+tranche (P3 / Step 6), Relic runtime (P5), Vigilance windows (B4). Exact unresolved rows and
+current counts remain source-visible in the census and coverage summary.
 
 ### Slice C — Foe complexity — *blocked*
 Elite (double HP, two turns) or Legend (per-player turns, Juggernaut) with
 keyword traits and reactive behavior.
 Elite/Legend role turn entitlements are DONE (B1, 2026-08-26:
 `foe-turn-entitlements.test.ts`); the slice itself stays blocked on foe
-traits beyond keywords (590 rows) and phases/chapter rules (B3) — a phased
+traits beyond keyword projections and phases/chapter rules (B3) — a phased
 legend cannot execute its transitions yet.
 
 ### Slice D — Attrition chain — *mechanics CLOSED; scene flow open*

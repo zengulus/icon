@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { EncounterActor, Position } from '../rules/types.js';
 import type { VttRoomState } from '../rules/vtt-room.js';
 import { assetBackground } from './presentation.js';
@@ -10,6 +10,21 @@ import {
   worldToScreen,
   type TacticalViewportGeometry,
 } from './geometry.js';
+
+/** Observe CSS dimensions for local and shared boards; camera state stays with the caller. */
+export function useViewportSize(ref: RefObject<HTMLElement | null>) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const update = () => setSize({ width: element.clientWidth, height: element.clientHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return size;
+}
 
 export type InteractionMode = 'standard' | 'dash' | 'light' | 'heavy' | 'interact' | 'rescue' | 'ability';
 export type TableTool = 'select' | 'pan' | 'fog' | 'marker' | 'line' | 'arrow' | 'template' | 'terrain';

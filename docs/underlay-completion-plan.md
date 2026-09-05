@@ -1,272 +1,34 @@
 # Underlay Completion Plan (U1–U17)
 
-Authoritative ontology: [`generic-underlays.md`](generic-underlays.md). This
-document turns Part A of that ontology into an executable engineering plan.
-It does **not** invent a competing abstraction hierarchy: the underlay
-definitions, the design test, the domain-authority table (Part B), and the
-structural-subsystem list (Part C) of `generic-underlays.md` are the
-contracts this plan operationalizes.
+This document owns underlay acceptance obligations, dependency order, candidate
+decisions, and the phase gate. It does not maintain a second implementation
+history or maturity ledger.
 
-Authority hierarchy (unchanged):
+- [Generic underlays](generic-underlays.md) owns responsibilities, vocabulary,
+  the design test, and domain/structural boundaries.
+- [Rules foundations](rules-foundations.md) owns current maturity and execution
+  authorities; the [consumer census](u8-u1-underlay-census.md) records remaining
+  migrations and retained specialist boundaries.
+- [TODO](../TODO.md#current-execution-plan-ordered) owns the next task.
+- [AGENTS.md](../AGENTS.md) owns authority, replay, and architecture rules.
 
-- ICON 1.5.pdf — semantic authority.
-- Implementation — execution authority.
-- Generated audits (`audit:automation`, `audit:class-job-census`,
-  `audit:source-fidelity`) — coverage authority.
-- This document and `generic-underlays.md` — planning authority only. Never
-  change implementation merely to make a planning document correct.
-
-Phase mandate for the entire plan:
-
-- **No source-unit wiring.** No currently unresolved talent, mastery,
-  ability, foe ability, relic, class trait, or job trait becomes executable
-  during this phase. Promotion is a post-gate activity (§Gate).
-- **No source-ID branches** in kernels or primitives. Source IDs ride
-  content rows and opaque provenance only.
-- **No bespoke mechanics** created because one source rule needs them. When a
-  rule needs a capability the substrate does not express, the capability is
-  decomposed onto an underlay + domain authority, or the rule stays
-  unresolved (§20 of AGENTS.md).
-- **No approximation** to improve census counts.
-- The "next greedy family" sequencing in TODO.md/roadmap.md is **superseded**
-  for this phase. The order below is dependency-driven; blocker-family notes
-  per underlay are information only, never ordering input.
-- Existing source-specific wiring must continue to work. New work is generic
-  substrate and **behavior-preserving migration** only.
-- Preserve `content → kernels → primitives`.
-- Preserve command/event purity and deterministic replay: randomness and
-  decisions happen once at the command/window boundary and ride recorded
-  events; `applyEvents` never re-decides.
-- `primitives/types.ts` and `kernels/runtime.ts` remain compatibility
-  barrels during incremental extraction. No flag-day file-layout refactor
-  (the split plan in `generic-underlays.md` §"Incremental file split plan" is
-  executed only as a tranche needs it, and always via `export *` barrels).
-- A new top-level underlay beyond U17 (including U18/U19) requires passing
-  the design test in `generic-underlays.md`; U18/U19 are evaluated in
-  §Candidates, not assumed.
-
----
-
-## 0. Audit correction: landed slice vs complete contract
-
-The audit in this document is **code-based**. Do not infer an underlay's
-state from the tranche documents (`tranche-1-choice.md`,
-`tranche-2-query.md`) or from prose in TODO.md. Every U-number below states
-its own `Current state` from the code at HEAD.
-
-## 0. Audit correction: landed slice vs complete contract
-
-The audit in this document is **code-based**. Do not infer an underlay's
-state from the tranche documents (`tranche-1-choice.md`,
-`tranche-2-query.md`) or from prose in TODO.md. Every U-number below states
-its own `Current state` from the code at HEAD. This section separates the
-HISTORICAL audit finding from the CURRENT implementation — earlier versions
-of this document mixed both under "current HEAD", which this revision fixes.
-
-### Historical audit finding (at the earlier HEAD, commit 7a000d…)
-
-`docs/tranche-2-query.md` claimed U3 landed, but the code at that HEAD did
-not support the claim:
-
-- `kernels/candidate.ts` implemented an **actor-only** slice
-  (`evaluateActorCandidates` / `validateActorCandidate`). There was no
-  `Query<T>` over positions, terrain cells, entities, areas, persistent
-  instances, marks/stances, or rule sources.
-- `ActorCandidateQuery.rangeOrigin` was declared but **never resolved from
-  its selector** — it always fell back to `context.actorId`; the selector
-  argument was dead weight (the U7 ANCHOR seam, left inert).
-- `kernels/runtime.ts::selectActors` **independently implemented
-  automatic-target eligibility** for every selector branch via
-  `primitives/targeting.ts` `eligibleTargets` plus inline range checks with
-  its own `distance` helper — a second eligibility authority.
-- `primitives/targeting.ts::queryDirectTarget` was a third, parallel
-  direct-target authority (relation/range/Blind/Stealth/LoS), and
-  `computeSpatialArea`'s `includedActorIds` a fourth area-inclusion
-  authority.
-
-### Current implementation at HEAD (corrective pass 2026-08-30)
-
-All four historical findings are routed through the one authority:
-
-- `primitives/anchor.ts` (U7 vocabulary) + real `rangeOrigin` resolution in
-  `kernels/candidate.ts::resolveSpatialAnchor` (fail-closed on malformed
-  anchors; relation stays with the acting actor, range moves to the anchor).
-- `selectActors` is a thin adapter over `kernels/evaluate-query.ts`
-  `evaluateActorQuery` — including the `input` selector's range legality,
-  which now routes through the same U3 candidate authority (the legacy
-  `choice.actor-range` enforce-throw contract is preserved verbatim; no
-  second p.92 range algorithm remains in the adapter).
-- The direct-target gate's base eligibility routes through
-  `validateActorCandidate`; the direct-target specialist reads (Blind,
-  Stealth, True Strike, LoS) stay at the gate.
-- Area actor-inclusion reads through the `insideArea` query operator; the
-  spatial gateway keeps the cell geometry.
-- Resolver sugar (free-cell scans, teleport destinations, nearest reads)
-  routes through the position-domain operators
-  (`evaluatePositions` with explicit space/ordering policies,
-  `validatePositionLegality`, `nearestCandidates`).
-
-**Corrective-pass corrections (2026-08-30) beyond the historical list:**
-
-- **Nearest semantics.** `nearestCandidates` returns the COMPLETE
-  minimum-distance set with NO invented tie-break (the old
-  `nearestCandidate` sorted ties by actor id — not a valid ICON rule; e.g.
-  ICON p.143 Dark Knight grants the player the choice among equidistant
-  foes). `rushTowardFoes` answers through the same min-distance selection
-  and fails closed on equidistant ties. Two abilities were RETRACTED from
-  executable because their nearest reads resolved a player choice
-  deterministically: `knave:dark-knight` (p.143 "If multiple foes are
-  equidistant, you may choose") and `stormbender:eye-of-the-storm` (p.236
-  "If an ally is in the center space, they may fly 4" — a free
-  player-chosen flight; the old "away from the nearest foe" direction was
-  invented). Their resolvers now fail closed on the unrepresentable clause;
-  the eye-of-the-storm talent 2 (whose only execution path was the
-  retracted resolver) is retracted with them. The `includeDefeated: true`
-  flags those two call sites carried were unjustified ("closest foe to you"
-  cannot include defeated characters) and were dropped.
-- **Position domain honesty.** The position slice is a FREE/UNOCCUPIED
-  specialist, not the complete U3 position domain: `evaluatePositions`
-  takes an explicit SPACE policy (`any` — every in-grid space, per p.92
-  "Space: Any space in range, and any characters or objects occupying it` —
-  or `unoccupied`) and an explicit ORDERING policy (default `none`).
-  Occupancy is a query policy, never built into the definition of a
-  position candidate; teleport/placement legality remains a specialist
-  (`validatePositionLegality`).
-- **Occupancy audit.** `primitives/job-kit.ts::occupied` is an OBSTRUCTION
-  test: characters + OBJECT entities block (p.95 "Objects … provide
-  obstruction"), intangible summons do NOT (p.95 summons "don't cause
-  obstruction or engagement"). The old predicate treated every entity as a
-  blocker. Distinct concepts — a space containing something; unavailable
-  for a particular placement; an obstruction; teleport unoccupied;
-  object/summon placement rules — are NOT collapsed into one boolean
-  (bomb-can't-share-with-bombs is a specialist constraint in the bomb
-  placement resolver).
-
-### T1 landed (2026-08-30): U1/U2/U8 vocabulary foundation
-
-Phase T1 delivered the typed vocabulary for U1 REFERENCE, U2 ROLE, and U8
-SCOPE/CLOCK (`primitives/reference.ts` / `roles.ts` / `scope.ts`, all
-re-exported through the `primitives/types.ts` barrel), behavior-preserving:
-zero existing test deltas, no consumer migration, no source-unit wiring,
-census unchanged at 427. The pre-flight audit also corrected the U3
-residual classification (see the next section): the ACTOR domain itself
-still lacks contract operators (LoS/LoE composition, occupying-position,
-terrain predicate, owned/controlled, union/intersection/difference, count,
-distinct-by-identity), and the p.108 line-of-sight predicate is missing
-from teleport/placement legality (classified as a deliberate T2 boundary,
-not silently enforced). U1/U2 moved ABSENT → PARTIAL; U8 stays PARTIAL
-(vocabulary + boundary-read surface landed; the RuleDuration/use-ledger/
-lifecycle reader migration is the remaining completion work).
-
-Pre-flight audit (2026-08-30, T1 pass): the docs at HEAD already claimed
-U3 PARTIAL with a residual list — that claim is TRUE, but the residual
-list understated two boundaries, now classified explicitly:
-
-- **The ACTOR domain itself lacks contract operators.** The U3 contract's
-  composable-operator list (LoS, LoE, occupying-position, terrain
-  predicate, flying/intangible, owned/controlled-by,
-  union/intersection/difference, exclude-prior-recipients, count,
-  distinct-by-identity) is only partly implemented in `evaluateActorQuery`
-  (relation/range/adjacency/within-origin/condition/mark/summon/
-  insideArea). LoS is still a specialist read at the direct-target gate
-  and the burst-center filter (`line-of-sight.ts`); it is NOT a query
-  operator. LoE defaults to true and is not query-composed at all. The
-  residual is therefore not merely "other domains" — the actor domain
-  itself remains partial.
-- **Teleport/placement legality omits the p.108 LoS predicate.** ICON
-  p.108: "For a space to be valid for summoning, teleporting, or creating
-  objects, unless specified it must be free and unobstructed, and you also
-  need line of sight." At the T1 pass `validatePositionLegality` expressed
-  only in-grid → range → occupied, and neither the teleport-choice kernel
-  nor the spatial gateway added LoS for teleport destinations
-  (entity-creation checked creator LoS; the teleport path did not). This
-  was CLASSIFIED as a deliberate T2 boundary, not silently changed in that
-  pass. **T2 (2026-08-30) RESOLVED the boundary through the generic
-  authority:** `PositionLegalityQuery`/`PositionQuery` gained the
-  `lineOfSightFrom` policy, `validatePositionLegality` reports a
-  `line-of-sight` problem after occupancy, and the teleport kernel's
-  player-chosen destinations now route through it (`move.line-of-sight`,
-  with a behind-the-wall rejection fixture + a clear-line control fixture
-  in `spellblade.test.ts`). Entity/object creation already checked creator
-  LoS through the shared kernel. The reducer movement gateway remains the
-  movement authority (documented boundary): forced/derived teleports
-  (save-driven or swap legs) have no source-defined LoS origin.
-
-Other residual U3 work:
-
-- Query domains beyond actors/positions: terrain cells, entities, areas,
-  persistent instances, marks/stances, rule sources.
-- Ordering policies beyond the min-distance set (`nearestCandidates`) —
-  first/last/nth only where the SOURCE defines them.
-- The position slice covers the in-grid space + unoccupied/any policies;
-  the movement/placement LEGALITY gateway (spatial gateway) stays the
-  movement authority; `rushTowardFoes`' direction fallback (a player
-  choice) remains an approximation flagged in the U3 row.
-
-### Landed-slice ≠ complete-underlay
-
-The same **landed-slice ≠ complete-underlay** distinction is applied to every
-U-number: e.g. U4 CHOOSE is not built yet and `ability-use-choices.ts`
-remains an opaque fold, but the U13 WINDOW underlay itself is now
-AUTHORITATIVE — `kernels/decision-window.ts` is the single
-`DecisionWindowRecord` and the old `trigger-window.ts`/`pendingInterrupts`
-quasi-window schemas are gone (T5c).
-
-State vocabulary used below:
-
-- `ABSENT` — no dedicated vocabulary/authority; semantics are implicit,
-  scattered, or represented ad hoc per consumer.
-- `SKELETON` — one or more partial implementations exist for specific wired
-  cases, but no generic underlay contract, no typed vocabulary of its own,
-  and/or no single owning authority.
-- `PARTIAL` — a typed vocabulary and/or a single authority exists for a
-  subset of the contract; the full contract (all domains, all required
-  semantics) is missing and duplicate authorities remain.
-- `AUTHORITATIVE` — one typed vocabulary + one owning authority + required
-  tests for the complete contract; no known duplicate competing authority
-  within its declared scope.
-
----
+**Active restriction:** no unresolved source unit may be wired or promoted
+until §4 passes. Work during this phase extends generic substrate and migrates
+existing consumers. Preserve source semantics and existing compatibility
+barrels; any semantic correction requires source review and regression proof.
+Regenerate the blocker census to verify changes, but do not use its greedy
+ranking as a promotion order before the gate.
 
 ## 1. Per-underlay contracts
 
-For each of U1–U17: semantic responsibility + non-responsibilities; source
-evidence; current state; locations that partially own/duplicate the
-authority; intended single authority + dependencies; typed vocabulary;
-replay semantics; acceptance tests; consumers to migrate; blocker families
-enabled (information only).
-
-Page references follow the canonical extracted manifest
-(`scripts/extract-icon.ts`) and the verified citations already present in
-`generic-underlays.md` and code comments. **Before a tranche that consumes a
-passage lands, re-verify the exact page and reading against ICON 1.5.pdf** —
-the PDF is semantic authority, this document is not.
-
----
+Read each acceptance obligation together with its linked ontology definition
+and the current foundation/census evidence. These are requirements to verify,
+not declarations that the whole underlay is implemented. Historical test counts
+and tranche progress belong in existing evidence reports and Git history.
 
 ### U1 Reference / Binding
 
-**Semantic responsibility.** The one typed way to name a thing/value a later
-rule clause refers to: actor, entity/object/summon, battlefield position,
-area, terrain effect, persistent effect, mark/stance, resource pool,
-rule/action/source, roll/result, number/value, and collections of
-references. Includes **binding** names from earlier operations
-(`CHOOSE a position AS landing`, `QUERY adjacent foes AS nearby`,
-`BIND slain actors AS slain`). Explicitly distinguishes:
-
-- **LIVE reference** — resolve against current state at use time
-  ("at the start of its next turn, damage adjacent characters": retain the
-  actor ref; query its then-current position).
-- **CAPTURED value/reference** — preserve the source-required value/state
-  from the earlier point ("at end of turn, explode at the chosen space":
-  capture the position; "return relative to your original location": capture
-  the position).
-
-**Non-responsibilities.** Not a query language (U3 owns eligibility); not
-role semantics (U2 owns "relative to whom"); not spatial measurement (U7
-owns anchors); not the serialized context bag (`context.actorId`,
-`attackTargetId`, `triggerSourceId`, `damageRecipientId` are legacy
-implicit refs to be replaced, not extended).
+[Responsibility and vocabulary](generic-underlays.md#u1-reference--binding).
 
 **Source evidence.** The distinction is pervasive: "Teleport X: move
 instantly to an unoccupied space within range X" (p.88) consumes a
@@ -279,133 +41,6 @@ Play; p.300 Redondo) captures a position; marks/stances/terrain effects
 (p.94, p.95, p.104) are referenced by later rules (mark detonations,
 terrain entry effects p.151/p.353). The proliferation of bespoke context
 fields is the warning this underlay removes.
-
-**Current state.** `PARTIAL` (T1 landed 2026-08-30; generic-consumer
-consolidation landed 2026-09-01):
-`primitives/reference.ts` defines the typed `Reference<D>` vocabulary —
-LIVE refs named by legacy slot / direct id / bound name; CAPTURED refs are
-SELF-DESCRIBING discriminated kinds (`captured-actor` carries only an
-actorId, `captured-position` only a Position, etc.) narrowed by the
-generic D, so a captured actor structurally cannot hold a position literal
-and a captured position cannot hold an actor id; `collection` refs preserve
-their element domain (`Reference<D>[]`); the plural `trigger-targets` slot
-(`liveTriggerTargets`) resolves to an ORDERED COLLECTION of every recorded
-target (never one member; an absent slot is a legitimate empty collection,
-distinct from a missing singular slot). `Binder`/`bind`/
-`lookupBound`/`EMPTY_BINDER`, the deterministic `resolveReference` surface
-(captured literals never re-read later state; bound names resolve the
-bound reference but are DOMAIN-CHECKED via `domainOf` — a bound actor ref
-resolving to a bound position is `domain-mismatch`, reject; missing actor/
-entity/slot/position reject fail-closed), plus `domainOf`/`referenceKey`.
-`RuleExecutionContext.boundNames` carries the Binder. U12
-`ArmedContinuation` records typed refs and the Binder across suspension.
-The 2026-09-01 tranche added `actorReferenceForSelector` /
-`resolveActorSelectorReference`: reference-shaped selectors map once onto
-U1, while query-shaped selectors reject and remain U3. The generic
-candidate/anchor, selector/value, query, flow, core/foe-recipe,
-attack-provenance, and damage-recipient consumers now call that authority.
-`u1-reference-routing` prevents those generic consumers from restoring
-direct legacy-slot/input/source-actor reads; `roles.ts` U2 role-frame
-projection and `choice.ts` U4 decision validation are disjoint retained
-boundaries. Tests: `reference.test.ts` (positive
-captured-exactness + live re-resolution + binder/collection + ordered
-plural targets, negative unbound/missing-slot/domain-mismatch, boundary
-empty-collection + defeated-actor-captured, replay identical-literal +
-Binder purity plus LIVE/CAPTURED/bound/query-negative selector adaptation).
-The serialized context slots remain the U1 authority's LIVE reference input,
-not consumer-owned interpreters. U1 is AUTHORITATIVE within its declared
-scope (content reference interpretation): named content resolvers now route
-every LIVE / CAPTURED / bound / strict-or-weak captured reference through
-the shared content-authoring adapter (migrated tranches 1–18), the census
-carries only machine-pinned NON-reference survivors, and the completion-
-gate items are recorded in the eighteenth-tranche status section of
-`docs/u8-u1-underlay-census.md`.
-
-**Whole-consumer audit (2026-09-01).** Every generic consumer —
-candidate/anchor, selector/value, query, flow, core resolvers, foe
-recipes, attack provenance, damage recipient, and the U8/U12/U14 key
-construction — was verified to route through the ONE U1 resolution
-authority. The audit found one legacy bypass (the flow `attack` case read
-its source through the raw `actor(context, context.actorId)` helper) and
-repaired it: the read now resolves `liveActorSlot('source')` through
-`resolveReference` with the flow layer's fail-closed problem code
-(`flow.attack-source`), and the `u1-reference-routing` guard pins all three
-legacy spellings of the source-slot dereference. The 54 caller-owned
-U1×U4 captured-identity dereferences and the 1 in-call boundary were
-re-verified site-by-site as recorded-choice / recorded-fallback / loop /
-helper-parameter identities — none re-derives a legacy slot at use time.
-Audit outcome: the generic-consumer review found the one bypass above and
-repaired/pinned it, and the Colossus tranche that followed closed the last
-PURE program family. The U1×U4 adjudication (2026-09-01, sixteenth
-tranche) split the 54 + 1 captured-identity sites by semantic ownership:
-the 51 recorded-selection dereferences migrated through the shared
-`resolveCapturedSelectedActors` surface, and the 4 helper-parameter /
-derived-loop sites were machine-reclassified NON_U1_OTHER (no arbitrary-id
-accessor exists by design). The classifier repair (2026-09-02,
-seventeenth tranche) made that reclassification LEXICAL: the identifier
-must be a parameter of the lexically enclosing function or an unshadowed
-loop variable of a lexically containing `for-of` over a NON-recorded
-iterable — whole-file name coincidence no longer reclassifies a site, and
-the four surviving site identities (file + exact shape) are pinned. The
-fold-consumer adjudication then inventoried the second completion surface:
-**43 `state.actors[…]` derefs across the recipe/lifecycle/continuation
-surfaces = 25 fact-carried + 5 recorded-forwarded + 13 forwarded-
-identifier + 0 legacy-slot** — no fold-surface site interprets the legacy
-context bag. The eighteenth tranche (2026-09-02) resolved the remaining
-cause: the lifecycle adjudication established that defeat ≠ removal (the
-actor map is stable mid-combat; REMOVE_ACTOR is setup-only) and that only
-two carriers author a tolerant lifetime, so the missing capability split
-into two EXPLICIT reference kinds in `primitives/reference.ts` — STRICT
-`capturedActor` (absent id border → undefined; present-but-removed → fail
-closed `reference.missing-actor`) and LIFECYCLE-SENSITIVE
-`capturedActorWeak` (present-but-removed → explicit `absent`, never an
-error) — with `resolveCapturedActor` / `resolveCapturedActorWeak` on the
-shared adapter composing each through the ONE `resolveReference` authority
-(no flags, no arbitrary-id accessor). 39 of the 43 sites migrated through
-them (37 strict + 2 weak) across talent/lifecycle/continuation/
-mark-modifier/attack-modifier/bonus-damage/fool/encounter-hooks; the
-remaining 4 raw derefs are machine-pinned NON-reference algorithm/helper
-plumbing (closestFoesOf/adjacentFoes helper params, the areaIds
-algorithm-loop, F9-derived reactive collided id) — outside the declared
-scope. On that basis **U1 is AUTHORITATIVE within its declared scope**
-(content reference interpretation); the completion-gate items and the
-precise boundary (what U2/U4/lifecycle/algorithm output still own) are
-recorded in the eighteenth-tranche status section of
-`docs/u8-u1-underlay-census.md`.
-
-**Locations partially owning/duplicating.** Named content resolvers under
-`automation/content/classes/` and `automation/content/jobs/programs/` no
-longer interpret LIVE slots or captured identities directly: live
-source/direct-target/trigger reads and recorded-selection dereferences all
-route through the shared content-authoring adapter (the four surviving
-program sites are lexically machine-classified NON_U1_OTHER algorithm
-plumbing). Generic kernels/primitives are migrated and guarded. The
-kernel-fold-driven content surfaces outside `programs/` (talent /
-mark-modifier / bonus-damage / attack-modifier / lifecycle / continuation
-/ heroic-activation recipes, encounter hooks) consume identities
-transmitted by shared folds or embodied in recorded facts (`targetIds[0]`,
-`mark.ownerId`, `mote.ownerId`, U12 `captured-actor` refs) — the 39
-reference-shaped sites now resolve through `resolveCapturedActor` /
-`resolveCapturedActorWeak` (strict/weak typed contracts, eighteenth
-tranche), 0 legacy-slot interpretation, and the remaining 4 raw derefs are
-machine-pinned NON-reference algorithm/helper plumbing; the U12
-continuation family's ABSENT-ref → undefined and defeated/onBattlefield
-expiry stay caller-side. See `docs/u8-u1-underlay-census.md`.
-resolution capability (the exact residual). Explicit actor/entity ids
-passed as already-resolved domain-operation parameters are retained facts,
-not implicit-reference interpreters.
-
-**Intended authority.** `primitives/reference.ts` (barrel re-exported from
-`primitives/types.ts`): `Reference<T>` with `{ kind, live | captured }`,
-`Bind`/`Binder` maps, and `resolveReference(ref, context)`. Dependencies:
-none (foundation). Consumed by U3 (query targets), U5 (value operands), U6
-(predicate operands), U7 (anchors are refs), U9 (provenance refs), U10
-(fact refs), U12 (continuation refs), U14 (owner/reference on the recipe).
-
-**Typed vocabulary.** `Reference` union over the domain kinds above; explicit
-`live` vs `captured` discriminator; `BoundName` map carried on the execution
-context and, later, on continuation records; collection refs (`refs[]`).
-References are structural (typed), never stringly property paths.
 
 **Replay semantics.** A captured value is a durable literal once captured;
 a live ref re-resolves against replay state. Replay must never re-derive a
@@ -425,36 +60,9 @@ captured value from later state. No hidden resolution paths.
   continuation explodes at the captured cell — replay produces the identical
   mutation sequence.
 
-**Consumers to migrate (de-dup, not wiring).** Generic consumers — migrated
-2026-09-01 and guarded. Remaining: introduce one shared content-authoring
-adapter over U1, migrate named class/job resolver slot and actor-input reads,
-then run a fresh content residual scan. `choice.ts` retains direct input
-access solely to validate the U4 decision record; U2 retains slot facts solely
-to derive its role frame.
-
-**Blocker families enabled (information only).** mark-gated-modifier,
-mark-transfer, mark-stacking, mark-detonation-window, mark-activation-gate,
-rebound, delayed effects, return-from-removed-state, persistent-effect
-referencing, spatial-state (original-location capture), active-effect
-range modifiers.
-
----
-
 ### U2 Role / Perspective
 
-**Semantic responsibility.** The typed distinction of *relative to whom a
-clause is interpreted*: source/ability user, owner of an effect, controller,
-chooser/decision-maker, payer, target, recipient, carrier, creator/summoner,
-trigger source, trigger recipient, attacker, defender, original user,
-current origin. The engine must **derive** which connected player is
-entitled to answer a `ChoiceSpec` from semantic controller/chooser roles
-(multiplayer/VTT authority).
-
-**Non-responsibilities.** Not identity (U1 owns refs); not spatial origin
-(U7 owns anchors: ROLE ≠ ANCHOR — "effects on the original user still apply
-to the original user" even when the rebound character's space is the spatial
-origin); not relation filtering alone (U3 composes relation over roles, but
-role is the vocabulary relation reads).
+[Responsibility and vocabulary](generic-underlays.md#u2-role--perspective).
 
 **Source evidence.** "Ally" is defined relative to the source ("another
 living ally", p.92); marks are owned by a marker and carried by a target
@@ -466,91 +74,6 @@ answers and against whom (p.105, p.107); interrupt legality is judged from
 the source/controller's position (Masquerade, p.151); the aura kernel's
 bearer-vs-member boundary (`kernels/aura.ts`) is a role the engine must
 derive, never string-match.
-
-**Current state (historic snapshot, T1 — superseded by the T7 update below).**
-`PARTIAL` as of T1/2026-08-30: `primitives/roles.ts` defines the `Role` union (source/owner/controller/
-chooser/payer/target/recipient/carrier/creator/trigger-source/
-trigger-recipient/attacker/defender/original-user/current-origin),
-`RoleFrame` + deterministic `deriveRoles` producing a SUBJECT-RELATIVE
-`RoleMap` (`{ roles, controllers }`), typed `RoleSelector`
-(`role` | `controller-of`) + `resolveRoleSelector`, and the
-`roleFrameFromContext` seam over the legacy slots.
-`RoleFrame.controllers` records who controls each subject ROLE (recorded
-durable state, never ambient session ownership); `controller-of(source)` and
-`controller-of(target)` resolve to DIFFERENT players in the same resolution
-when the source and target are controlled by different connected players;
-a missing recorded controller for an otherwise valid subject returns null
-(never silently falls back to the source); the command boundary rejects
-rather than guessing. `RuleChoice` gains typed optional `chooser`/
-`controller` role carriage (behavior-neutral until U4 consumes it);
-`RuleExecutionContext` role reads stay on the legacy slots pending
-consumer migration. Tests: `roles.test.ts` (positive owner≠carrier,
-TARGET_CONTROLLER, source−target and owner−carrier differing controllers;
-negative underivable-chooser/unknown-role, missing-controller-for-valid-
-subject, missing-subject; boundary self-collapse + ROLE≠ANCHOR rebound;
-replay same-frame-same-map). The aura kernel's bearer-vs-member and
-`targeting.ts`'s relation reads were the T2+/T7 de-dup migration targets —
-resolved in the T7 current-state update below.
-
-**Current state (T7 update, 2026-08-31):** the downstream consumers are now
-CONSOLIDATED onto this authority (candidate + aura migrated; the rest proved
-retained specialists), so no executing duplicate perspective path remains:
-- `kernels/candidate.ts` derives the relation PERSPECTIVE through
-  `relationPerspectiveIdFromContext` (U2; fail closed on underivable) and
-  only then feeds U3 `matchesTargetRelation` — `targeting.ts` stays a
-  parameterized eligibility specialist (takes the perspective actor as
-  `source`; neither owns nor guesses whose side establishes the relation).
-- `kernels/aura.ts` separates the SEMANTIC `perspectiveActorId` (U2) from the
-  SPATIAL anchor `actorId`/`entityId` (U7): actor origin → bearer is the
-  perspective; entity-origin aura → the entity's canonical OWNER/SUMMONER is
-  the perspective (a SINGLE identity — T8c: current engine scope does NOT
-  claim creator ≠ owner is representable); an ownerless/neutral origin has NO
-  derivable ally/foe — only `characters` relations apply (ROLE ≠ ANCHOR,
-  owner-identity ≠ spatial origin ≠ member represented without collapse).
-- Choice/decision-window responders already resolve through
-  `resolveRoleSelector` / `choiceEntitledPlayer` over the durable frame
-  (subject-relative, fail closed, replay-exact); the save-rolled window
-  responder is the U16 interrupt entitlement (retained specialist). `roles.ts`
-  adds `relationPerspectiveId` + the `windowResponderId` responder projection
-  (thin facade over `resolveRoleSelector`, pinned by tests).
-
-The architecture `u2-perspective-authority` guard (audit-architecture-core.ts)
-forbids a migrated consumer dropping its U2 symbol; T8c (2026-08-31) upgrades
-it to RESULT-OWNERSHIP proof — every runtime producer of
-`perspectiveActorId`'s value must be the U2 call (alias-tolerant), membership
-must consume `state.actors[origin.perspectiveActorId]`, candidate must not
-read the perspective off `context.actorId`, and the BRANDED
-`RelationPerspective` type (a `unique symbol` brand) makes `perspectiveActorId:
-actor.id` (or an alias) a compile error — AUTHORITY RESULT USED, not merely
-AUTHORITY CALLED. See `docs/t8c-authority-proof-report.md`. Still NOT a global
-ban on `.side`/`ownerId`/`actorId`.
-**U2 is AUTHORITATIVE** (completion criteria §8 met; all eight adversarial
-U2-M1..M4 / U16-M1..M4 mutations CAUGHT; suite green; no source promotion;
-census unchanged). After the 2026-09-01 fresh census, the UNDERLAY PHASE gate
-stays OPEN on U1/U3/U4/U5/U6/U9/U10/U11/U12/U14/U15; U8 and U16 have
-since joined U2/U13/U17 at the strict authority bar, and U1 (tranche 18)
-and U7 (tranche 21, 2026-09-02) completed after the census was written.
-
-**Locations partially owning/duplicating.** (post-T7 residual audit)
-`RuleExecutionContext.actorId` legacy-slot abuse across `kernels/runtime.ts`
-— the `roleFrameFromContext` seam maps it onto the source role, but the
-legacy slots carry no per-subject controller facts (every `controller-of`
-resolution fails closed there); `ownerId` fields on mark/stance/entity/
-persistent mutations (`primitives/types.ts`) remain factual ownership record;
-`abilityUseChoices`/`talentChoices` opaque folds are a U4 concern, not U2;
-`save-window.ts` actor-is-saved policy reads are the U3 saved-recipient
-specialist, disjoint from U2 responder authority.
-
-**Intended authority.** `primitives/roles.ts` (barrel re-exported):
-`Role` vocabulary + `deriveRoles(context)` producing the semantic role map
-for a resolution; `chooserRole`/`controllerRole` on `RuleChoice`; role-aware
-relation reads. Dependencies: none (foundation); consumed by U3, U4, U7, U9,
-U13, U14, U16.
-
-**Typed vocabulary.** Discriminated `Role` union; per-resolution role map
-keyed by reference; `RuleChoice.chooser` (who decides) and
-`controller` (who answers at the network boundary) as typed roles; role on
-provenance facts (U9).
 
 **Replay semantics.** Roles are derived deterministically from recorded
 state + the durable choice rows; the entitled player is a pure function of
@@ -569,38 +92,9 @@ the record, never of ambient connection state. No second decision path.
 - Replay: a window whose entitled responder is derived from the recorded
   choice row replays to the same responder.
 
-**Consumers to migrate.** `kernels/choice.ts` (add role carriage),
-`kernels/aura.ts` (derive bearer/member through roles), `targeting.ts`
-(relation reads over roles), command layer choice routing, `save-window.ts`
-owner derivation.
-
-**Blocker families enabled (information only).** player-choice (authority
-half), aura-user-gate, aura-trigger-grant, stance-gate, mark transfer
-(owner half), rebound (role half), interrupt-rider/grant windows (who
-answers), enemy-ability-trigger.
-
----
-
 ### U3 Query / Candidate
 
-**Semantic responsibility.** The one deterministic eligibility authority
-underneath both automatic targeting and player choices:
-`Query<T> -> CandidateSet<T>` over actors/characters, summons,
-objects/entities, positions, terrain effects/cells, areas, persistent
-instances, marks/stances, rule sources/actions, and rolls/results where
-relevant. Composable operators: all; relation to role/reference; range;
-adjacency; LoS; LoE; inside/outside area; occupying position; free/occupied
-space; terrain predicate; condition/status/mark/stance predicate;
-alive/defeated/incapacitated; flying/intangible; owned/controlled by;
-nearest/farthest; nth/first/last (only where the SOURCE defines a
-deterministic ordering); union/intersection/difference; exclude prior
-recipients; count; distinct-by-identity.
-
-**Non-responsibilities.** Not choice semantics (U4 validates membership and
-cardinality; it must NOT re-implement legality); not domain spatial models
-(area geometry stays with the spatial gateway; LoS stays with
-`line-of-sight.ts`); not movement-destination legality (spatial gateway);
-not source-ID switches.
+[Responsibility and vocabulary](generic-underlays.md#u3-query--candidate).
 
 **Source evidence.** The PDF's targeting categories (Self, Ally, Foe,
 Summon, Characters, Others, Space, Object — p.92) are ONE target vocabulary,
@@ -610,121 +104,6 @@ metric measured from the edge of the origin space; defeated/off-battlefield
 eligibility (p.94, p.107); burst areas include only spaces with LoS from
 the burst center (p.95); large foes count as inside an area when any
 footprint space is hit (p.290).
-
-**Current state.** `AUTHORITATIVE` (decision 2026-09-02, tranche 25). The
-actor-domain query landed (2026-08-30, see §0): base CandidateSet
-(`kernels/candidate.ts`) + extended
-`evaluateActorQuery` (`kernels/evaluate-query.ts`) with real U7
-`rangeOrigin` anchor resolution; `selectActors` migrated onto it as a thin
-adapter (the `input` selector's range legality routes through the same U3
-candidate authority — no second p.92 range algorithm); the direct-target
-gate's base eligibility routed through `validateActorCandidate`; area
-actor-inclusion reads through the `insideArea` query operator (the spatial
-gateway keeps the cells); and a POSITION-DOMAIN SLICE
-(`evaluatePositions` with explicit space/ordering policies,
-`validatePositionLegality`, `nearestCandidates`) carrying the free-cell
-scans, teleport-destination legality, and the min-distance nearest set
-that the `freeCellsInRange`/`nearestFoe` resolver sugar used to own.
-`nearestCandidates` returns the COMPLETE minimum-distance set with NO
-invented tie-break; `rushTowardFoes` (moved into this kernel) answers
-through the same selection and fails closed on equidistant ties. The
-position slice is a FREE/UNOCCUPIED specialist, NOT the complete U3
-position domain: occupancy is an explicit query policy (`any` vs
-`unoccupied`), ordering is opt-in, and movement/placement legality stays
-with the spatial gateway.
-
-**T2 extensions landed (2026-08-30)** — the query TYPES moved to their
-split-plan home `primitives/query.ts` (barrel re-exported; kernel
-`evaluate-query.ts` owns the evaluation), and the missing actor-domain
-operators + domains landed: line of sight / line of effect composition
-from the query's anchor (`lineOfSight`/`lineOfEffect`, sharing the one
-line-of-sight kernel), occupying-position (`occupying`), the terrain
-predicate (`onTerrain`), owned-by (the `summon.owner` filter now accepts an
-explicit owning actor id), and set composition
-(`composeActorQueries` union/intersection/difference, distinct-by-
-identity, no invented ordering). New domains: ENTITY
-(`evaluateEntityQuery` — owner/type/range-from-anchor/at-position over
-`state.entities`) and TERRAIN (`evaluateTerrainCells` — the
-terrain-predicate cell read). The position slice gained the p.108
-`lineOfSightFrom` policy (generic query + legality specialist) and
-`originSize` (initially on the legality specialist; tranche 32B extended the
-same field to CandidateSet generation so every touched actor-relative query
-measures the p.92 footprint of a Size>1 origin; size-1 collapses to the
-historical point metric). The U5
-`count-query` value and the U6 predicates consume these domains through
-`evaluateValueQuery`.
-
-Residual (honest, all out of declared scope): query domains for AREAS,
-PERSISTENT INSTANCES, and RULE SOURCES are not part of the T2 contract
-(persistent-instance reads are U10/U12-scoped; rule-source reads belong
-with the U16/U17 consumers), and ordering policies remain the
-min-distance set + the opt-in `distance-from-origin` cell order
-(first/last/nth land only where a SOURCE defines them).
-`rushTowardFoes`' direction fallback remains the flagged player-choice
-approximation named in §0.
-
-**Tranche-25 closure (2026-09-02).** A fresh audit verified every claim
-above from code and classified every production question-path; the one
-residual family found was CONTENT bypass, not substrate: six VM-side
-effect scans independently re-answered "which actors qualify?" with raw
-side/distance reads and NO defeated filter, while the shared U3
-eligibility excludes defeated actors by default (defeat leaves actors
-on-field for rescue, so the scans could cure/bless/shove/count/target a
-defeated on-field foe). All six now route through `evaluateActorQuery`
-with a U7 `anchorFromPosition` origin (also upgrading point-distance
-scans to the p.92 footprint metric): demon-slayer demonClaw +
-Soul Blade, chanter Holy, bastion Heracule, knave Provoke, sealer God
-Hand. Two silent pick-resolutions in the same family were also closed:
-Demon Claw's normal path (p.129 "an adjacent foe" — the player's
-per-step WHICH choice) FAILS CLOSED (`choice.target-unresolved`) when
-several living foes qualify instead of taking an id-first slice, and
-God Hand's blessing (p.192 "yourself or ally in range 2") reads the
-recorded `bless-target` selection (default yourself) validated from the
-post-teleport landing through `validateActorCandidate`
-(`choice.actor-range` on invalid). These were U4/resolver-scope defects,
-not U3 gaps; U3 now has a single authority for every in-scope
-candidate/query semantic and the remaining query-like sites are
-demonstrably specialist consumption, later-underlay work, or non-query
-plumbing (see the census tranche-25 ledger entry).
-
-**Locations partially owning/duplicating.** Migrated (2026-08-30):
-`kernels/runtime.ts::selectActors` is a thin adapter over
-`evaluateActorQuery`; `kernels/choice.ts::resolveActors` delegates (good);
-`encounter.ts::assertDirectTarget` routes base eligibility through
-`validateActorCandidate` (the direct-target specialist reads stay at the
-gate); `foe-recipes.ts` blast + the dash-on-the-rocks trait reaction read
-area actor inclusion through the `insideArea` operator; every
-`freeCellsInRange`/`nearestFoe` resolver call site routes through
-`evaluatePositions` (explicit unoccupied + distance-from-origin
-policies)/`nearestCandidates` (job-kit sugar removed), and
-`teleport-choice` position legality routes through
-`validatePositionLegality`. `primitives/targeting.ts::queryDirectTarget`
-now pins the direct-target problem vocabulary for fixtures, and
-`computeSpatialArea`'s `includedActorIds` remains a convenience
-projection (not the live routing). Corrective pass (2026-08-30):
-`primitives/job-kit.ts::occupied` is now an OBSTRUCTION test (characters +
-objects; intangible summons do not obstruct, p.95); the Dark Knight /
-Eye of the Storm nearest reads were RETRACTED (player-choice clauses, see
-§0) and `rushTowardFoes` moved into this kernel. Remaining within scope:
-`rushTowardFoes`' direction fallback is a player-choice approximation
-(flagged in §0) and `kernels/lifecycle.ts::freeCellNear` remains a
-lifecycle summon-placement specialist with its own conservative occupancy
-read (documented in that file).
-
-**Intended authority.** `kernels/evaluate-query.ts` (extracted from
-`runtime.ts`, re-exported by the barrel): `evaluateQuery(query, context)`
-over all domains, composed from `primitives/query.ts` operators; the
-specialists keep their spatial models but answer through the Query
-contract. `rangeOrigin` resolves through U7 `SpatialAnchor`.
-`selectActors` becomes a thin adapter over `evaluateQuery`.
-Dependencies: U1 (refs), U2 (roles/relation), U5 (dynamic range values),
-U7 (anchors). Consumed by U4 (candidate legality), U6 (predicates),
-U13 (eligible responders), all targeting domain authority.
-
-**Typed vocabulary.** `Query<T>` with domain-typed target kinds and the
-operator list above; `CandidateSet<T>` (deterministic, de-duplicated by
-identity); deterministic ordering spec only where source-defined; typed
-`rangeOrigin: SpatialAnchor`.
 
 **Replay semantics.** Candidate evaluation reads only current state and
 declared query; never RNG, never ambient order. Source-defined
@@ -746,60 +125,9 @@ iteration order.
   fixture suite replays byte-identical; `rangeOrigin` as a non-self anchor
   resolves identically on replay.
 
-**Consumers to migrate.** DONE (2026-08-30): `selectActors` branches
-(`runtime.ts`) route through `evaluateActorQuery` (including the `input`
-selector's range legality — one p.92 range authority); the direct-target
-gate (`encounter.ts::assertDirectTarget`) routes base eligibility through
-`validateActorCandidate`; the blast/area-inclusion consumers read actor
-inclusion through the `insideArea` operator; every `freeCellsInRange` /
-`nearestFoe` resolver call site routes through the position-domain
-operators (`evaluatePositions` with explicit unoccupied +
-distance-from-origin policies) / `nearestCandidates` (job-kit sugar
-removed), and `teleport-choice` maps `validatePositionLegality` onto its
-violation codes (Rampart stays the spatial gateway's application-time
-check). Corrective pass (2026-08-30): the Dark Knight and Eye of the
-Storm nearest reads were retracted (player-choice clauses, §0), the
-`includeDefeated` flags they carried dropped, `rushTowardFoes` moved into
-this kernel, and the later semantic-atomicity correction narrowed
-`finalSpaceOccupied` to final-space availability (live footprints plus full
-OBJECT regions; defeated/off-battlefield actors and summons excluded).
-T2 (2026-08-30): the actor-domain operators and the entity + terrain
-domains landed (see the Current state row), the p.108 placement-LoS
-boundary is resolved through the shared legality operator + position
-query policy (spellblade behind-the-wall + control fixtures), and the
-query types moved to `primitives/query.ts`. Remaining after T2 (honestly
-NOT "nothing"): the AREA/PERSISTENT-INSTANCE/RULE-SOURCE domains
-(persistent-instance reads are U10/U12-scoped; not part of the T2
-contract), ordering policies beyond the min-distance set + the opt-in
-cell order, and `rushTowardFoes`' direction fallback remains a flagged
-player-choice approximation (a movement-direction read, not an
-eligibility query).
-
-**Blocker families enabled (information only).** choice-input,
-entity-distance-selection, object-distance, lifecycle-target-selection,
-target-selector-variant, summon-recipient-targeting, direction-override,
-selectable-terrain-placement (choice face), member-count-scaling (query
-face), flying-targeting.
-
----
-
 ### U4 Choice / Decision
 
-**Semantic responsibility.** One semantic CHOOSE validator: validates that
-the supplied selection is a member of the CandidateSet and satisfies
-cardinality; it does **not** own candidate legality beyond that. Core
-dimensions: chooser role/controller (U2); candidate domain (U3);
-cardinality; required vs optional; distinct/repetition policy; ordering if
-meaningful; closed options; bounded number; direction; yes/no. Optionality
-MUST correspond to source language ("may"/"can") — never inferred because
-declining would be convenient. Missing required choice ⇒ reject before any
-cost/RNG/mutation; optional missing ⇒ decline (`null`), never a default.
-One semantic `ChoiceSpec` across all timings (command-time, post-roll,
-after-damage, interrupt window, delayed continuation, simultaneous-order).
-
-**Non-responsibilities.** Not candidate legality (U3); not window mechanics
-(U13 opens the decision point; CHOICE is the decision inside it); not
-teleport/domain constraints (spatial specialists stay).
+[Responsibility and vocabulary](generic-underlays.md#u4-choice--decision).
 
 **Source evidence.** "Choose one foe in range 3" / "choose a space"
 (p.88 Teleport X destination; p.92; p.95); optionality only from "may"
@@ -809,284 +137,19 @@ choice) are the same decision semantics at a different time; the 8
 durable choice window (U12/U13), not legality — the evidence the ontology's
 "post-result decision is not a second choice system" point rests on.
 
-**Current state.** `PARTIAL`. `kernels/choice.ts` is authoritative for the
-six bucket kinds and the source-ID-free captured-list/captured-position
-composition seams (27 focused tests through tranche 32B): required/optional/cardinality/
-distinctness/option membership/bounds; actor legality delegates to U3.
-T2 (2026-08-30): position choices now route their in-grid + p.92
-footprint-range reads through the SHARED position predicates
-(`withinGrid` + footprintDistance from a resolved U7 anchor — the range
-frame is `RuleChoice.rangeOrigin`, a `SpatialAnchor` defaulting to the
-acting actor; a malformed anchor FAILS CLOSED instead of silently
-skipping the range check, `t2-choice-roles.test.ts`); and the U2
-chooser/controller substrate is consumable:
-`choiceEntitledPlayer(choice, RoleFrame)` / `choiceEntitledPlayerFromContext`
-derive the entitled chooser from the durable role frame (declared
-`chooser`, else `controller`, else the source) — a DECLARED role that
-cannot be derived returns null (the command/network boundary rejects
-rather than guesses), no content row sets the roles yet (the U13 window
-layer consumes the seam). Missing after T2: candidate legality for
-DIRECTIONS through a U3 domain (directions are axis-unit vectors, not a
-candidate domain); the opaque `abilityUseChoices`/`talentChoices` folds
-not yet folded onto the same spec; window-carried choices (U12/U13)
-constructing the same `ChoiceSpec`.
-
-**Tranche-26 closure (2026-09-02)** — the per-step / self-or-ally captured
-choice pattern. U4's central test — candidate uniqueness ≠ absence of
-player choice — exposed two silent defaults in tranche-25 content:
-Demon Claw's normal path auto-hit a single adjacent foe (collapsing the
-p.129 "may" WHETHER decision at each rush step), and God Hand defaulted
-`bless-target` to self (collapsing the p.192 mandatory self-or-ally
-either/or). Both now use the established MID-RESOLUTION CAPTURED-SELECTION
-pattern (no vocabulary extension needed): Demon Claw reads per-step keys
-`demon-claw-damage-1`/`-2` — absent = declined, recorded = validated
-against THAT step's eligible set (U3 foe query from the post-movement
-cell + once-per-use exclusion, `choice.actor-ineligible` on mismatch) —
-and God Hand reads `bless-target` as REQUIRED (`choice.actor-required` /
-`choice.actor-count`), a recorded ally validated through U3 from the
-post-teleport landing, with Fists of Heaven and Hell (p.192, not yet
-executable) documented as carrying the identical requirement. The
-USE_ABILITY command pipeline now MERGES caller `input.actorIds` instead
-of overwriting it with `{ target: targetIds }` (behavior-preserving —
-`target` stays authoritative), so recorded actor keys reach resolvers
-through the normal action path. Replay contract: every recording is
-validated at its timing point and replayed from the captured input.
-
-**Tranche-27 closure (2026-09-02)** — the actor-WHICH family. The
-mandatory choose-one effects in executable units no longer silently pick:
-Heracule's second-foe shove (p.122 "A different foe in range 3 from your
-target is shoved 1") and Holy's cure (p.177 "Cure a character in range 2
-of that foe") now read required recorded actor selections
-(`her-shove-N` / `holy-cure`) validated as members of the U3 eligible
-set — absent-with-eligible rejects (`choice.actor-required`), absent-
-with-no-candidates is the vacuous source effect and proceeds, a
-non-member rejects (`choice.actor-ineligible`). The global placement
-adjudication: p.95 "Unless specified, summons can only be placed in free
-space in line of sight and range" is a LEGALITY rule (not a chooser),
-and the Harvester "any free space" summon convention + the game's
-board-game idiom assign placement to the ACTING PLAYER — so every
-"a/any free space" placement site is a B-class recorded-position
-obligation (residual list in the census row), Comet's "center space, or
-as close as possible" is A-class, and Holy Charge "all other characters
-of your choice" is reported underspecified rather than fixed.
-
-**Tranche-28 closure (2026-09-02)** — Holy's candidate-domain repair +
-Charge subset. Recording a choice is not source fidelity if the candidate
-set was narrowed without authority: tranche 27 kept an ally-only filter on
-"Cure a character in range 2 of that foe", contradicting p.92's target
-vocabulary ("Characters: All of the above" — Self, Ally, Foe, Summon)
-and the book's deliberate cure wording (PC cures say "cure a character"
-— Mendicant Diaga, Esper I, Holy; ally-only cures say "an ally"/"allies"
-— foe Leader Diaga, Scion Great Holy). Esper III's "Cures can target
-foes and deal fray damage to them instead of any of its other effects"
-confirms the domain and defines the foe mode (damage instead of the
-normal cure) — it does not forbid foe targets; Mercy I's "Your cures can
-target defeated characters" is the explicit defeated extension, so
-base eligibility excludes defeated/off-board. `holy-cure` now validates
-against the full CHARACTER set (self, allies, the attacked foe itself at
-distance 0, other foes); because the attacked foe always qualifies, the
-mandatory choose-one never passes vacuous — a missing recording always
-fails closed. Holy Charge ("Grant 3 vigor to all other characters of
-your choice in range 2 of your foe") is the player's recorded SUBSET
-over the CHARACTER domain excluding the acting character ("other" per
-Sprigg Mischief / Slow Turn / the Battle Demon's explicit-additional-
-exclusion pattern): absent/empty = chose nobody, non-members reject,
-duplicates collapse, and the old auto-grant to same-side characters is
-gone. This is a derived reading (no two passages conflict), recorded in
-the census ledger rather than the adjudication registry.
-
-**Tranche-29 closure (2026-09-02)** — REVERSAL to the friendly Cure
-domain. Tranche 28's foe-inclusion did not survive the full-book relic
-census: Mercy I ("Your cures can target defeated characters") is
-necessarily a domain GRANT (defeated characters are untargetable by
-everything), and Esper III ("Cures can target foes and deal fray damage
-to them instead of any of its other effects") uses the identical "cures
-can target X" grant construction — the asymmetry the reviewer demanded
-cannot be defended. Erenbrass Aspected ("Erenbrass can affected foes")
-confirms the relic-tier convention that friendly effects reach foes only
-through explicit "can target/affect foes" grants; the full-book Cure
-census (~25 effects) contains zero baseline foe-cures; and the
-"character" vs "ally" word contrast is explained by SELF and SUMMON
-inclusion (p.92), not foe inclusion. `holy-cure` now validates against
-friendly characters (self + allies) in range of the foe — foe recordings
-reject — and the no-friendly-target case is genuinely vacuous (the
-command proceeds with the pacify alone); Holy Charge's recorded subset
-is likewise friendly (foe recordings reject). Same-family residual
-reported: the EXECUTE_RULE non-attack direct-target gate uses relation
-'any' for class traits (Diaga/Bless can currently target foes) — a
-mendicant-traits domain pass.
-
-**Tranche-30 closure (2026-09-02)** — RESTORES the formal p.92 CHARACTER
-domain; tranche 29 retracted. Under the formal-keyword standard (a
-defined game term governs unless a genuine rule establishes an
-exception), tranche 29's friendly-only reading fails: p.92 defines
-"Characters: All of the above" over a list that includes "Foe: A hostile
-character", and Diaga/Holy/Esper I invoke that keyword unqualified while
-no passage restricts cures to friendly characters. Tranche 29's Esper/
-Mercy "parallel" conflated axes (foe ∈ Characters; defeated ∉ any
-keyword), its Erenbrass evidence only speaks to "ally"-worded effects,
-and its "beneficial effects never reach foes" principle has no written
-home. `holy-cure` now validates against the full character domain
-(foes legal — the standard cure applies; Esper III's fray-damage foe
-MODE is the documented-unresolved relic), the mandatory choose-one never
-passes vacuous (the attacked foe always qualifies), and Holy Charge's
-subset spans the full domain. The Diaga/Bless 'any'-relation gate is
-source-correct; the tranche-29 residual is retracted.
-
-**Tranche-31 closure (2026-09-02)** — claim-surface correction, no
-behavior change. The adversarial re-review of tranche 30 confirmed the
-foe-cure semantics with additional source support (p.95's summon gloss
-"abilities that specify summons or characters can target or count them
-normally" reconciles p.92's "can target all characters" as category
-coverage; p.107 intangible blocks only damage/statuses from foes) but
-corrected two overclaims and one silent erasure: (1) "full p.92
-CHARACTER domain (… Summon)" overstated the substrate —
-`evaluateActorQuery` spans `state.actors` only, every executable summon
-is an entity (`summonEntity`; no production user of the U3 entity→actor
-bridge), so the Summon member is an engine-wide unreachable, and the
-claim wording now names the ACTOR slice with the p.92/p.95 source
-finding recorded (fail-closed holds; recording an entity id rejects);
-(2) self-inclusion for "cure a character" rests on the p.92 Self bullet's
-"unless specified" — structurally parallel to the Summon bullet that
-narrows the umbrella, and the book always spells self (Recover/Chastise/
-God Hand/Gran Redempta) — recorded as an open derived-interpretation,
-NOT flipped, keeping the encoded-inclusion tests; (3) the tranche-29
-ledger's entity-summon acknowledgment is carried forward into
-current-state text, and Holy Charge's "other" (acting character per
-Sprigg/Slow Turn vs. just-cured recipient as local antecedent) is
-recorded as a live second referent. U4 remains PARTIAL with the
-placement family + actor multi-selects + Demon Claw Talent I/II as the
-exact residuals.
-
-**Tranche-32A closure (2026-09-04)** — Chaos Tarot emergency repair,
-effects 4–6 only. The p.201 effects 4 and 5 "up to two characters in the
-area" now read optional recorded actor subsets (`chaos-tarot-bless` /
-`chaos-tarot-seal`): absent or explicit empty means zero, repeated ids
-collapse as a subset, more than two distinct ids rejects, and every id must
-belong to the U3 living/on-battlefield actor CandidateSet intersecting the
-small-blast cells. No side filter is invented for the source word
-"characters". Effect 6 no longer auto-applies 1+3: the required recorded
-`chaos-tarot-effects` option list must contain exactly two distinct members
-of 1–5, and exactly those effects execute. Their resolution order is not an
-open choice: p.108 says ability effects resolve in listed order, so the
-selected pair resolves in numeric list order. Effect 3 is unchanged. The
-new source-ID-free captured-list seam in `kernels/choice.ts` owns only
-presence/cardinality/distinctness/CandidateSet membership; U3 still owns
-actor eligibility. Replay consumes the recorded input. No source unit was
-promoted; the p.92/p.95 Summon member of "characters" remains the existing
-engine-wide entity→actor representation gap and is outside this tranche.
-U4 remains PARTIAL with the recorded-position placement family (including
-Chaos Tarot effect 3), Dervish's actor multi-select, Demon Claw Talent I/II,
-the opaque fold reads, and U12/U13-carried consumers.
-
-**Tranche-32B closure (2026-09-04)** — the first single recorded-position
-slice: Party Favor mine plus Dark Sliver soul-space and Slay plant only. The
-new thin U4 functions read an absent/empty/single position and enforce
-single-position cardinality, then validate a supplied position through U3's
-generic free-placement legality. They never generate, order, or select a
-position. U3 `PositionQuery` now accepts `originSize` and builds its
-CandidateSet from the canonical actor footprint; the existing shared legality
-operator owns bounds, footprint range, occupancy/free space, and an explicit
-LoS policy without importing teleport choice behavior.
-
-The source resolvers retain the policy that cannot be globalized: Party Favor
-requires recording even for a singleton CandidateSet and rejects when none
-exists; Dark Sliver requires recording for a nonempty set, preserves its
-existing attack-only result when the soul-space set is empty, and preserves
-the resolved kill while omitting the Slay plant when no legal summon space
-exists. Only the plant declares p.108 LoS; Party Favor and the terrain rider
-do not. The Dark Sliver soul-space zero-candidate outcome remains an open
-derived interpretation in the census/tranche ledger because the source does
-not state whether that board state invalidates the attack. Focused fixtures
-cover absent with many/one candidates, every legality problem, large origins,
-LoS/no-LoS, zero candidates, no fallback, and replay. No source unit was
-promoted; U4 remains PARTIAL with the matrix's remaining placement,
-multi-select, fold-input, and window-carried consumers.
-
-**Tranche-32B corrective audit (2026-09-04)** — Outcome 2, narrow substrate
-repair only. P.92's "any edge of your character's space" makes Size>1 LoS a
-U7-frame/U3-legality question, not a canonical-anchor point query. The new
-source-ID-free `hasLineOfSightBetween` expands the resolved U7 source/target
-frames and reuses the existing U3 point trace. `PositionQuery` /
-`PositionLegalityQuery.lineOfSightFrom`, actor-query LoS, teleport legality,
-entity creation, and the encounter direct-target gate now retain footprint
-size; point-defined AoE/Burst centers remain point queries. The ordinary
-summon seam requires `originSize`, preventing future actor-created summons
-from silently degrading to Size 1. Dark Sliver's Slay plant now passes the
-Harvester frame generically. The production `evaluatePositions` census also
-found one clear current actor-range omission outside the already-scheduled
-placement residuals: Hunter Set Trap now supplies the foe's size (including a
-Jotunn Size-2 fixture). No recorded choice, Tarot behavior, source-unit
-membership, or executable coverage changed.
-
-**Tranche 33 (2026-09-05)** — use-time recorded placement is implemented
-for the exact family in [`tranche-33-placement.md`](tranche-33-placement.md).
-The shared U4 list seam captures distinct positions over U3 candidates;
-ordinary creations validate through the creation authority with creator LoS,
-full-footprint range, and the shared cap allowance. U11 exposes its existing
-simulation for placement after movement/removal and earlier landings. No
-source unit is promoted. U4 remains PARTIAL: the next step is a fresh residual
-audit covering Dervish's actor/flight choices, Symphony's blessing payer and
-quantity, other automatic summons, Demon Claw Talent I/II, and opaque fold
-inputs. Underway portal 2 and other held/window choices remain U12/U13 work.
-
-**Locations partially owning/duplicating.** `kernels/choice.ts` (the
-validator); `RuleExecutionInput` buckets (`primitives/types.ts`);
-`RuleExecutionInput.abilityUseChoices` / `talentChoices` (opaque fold
-payloads); `kernels/teleport-choice.ts` (position-domain choice, same
-violation codes); `selectActors`' `input` branch (still independently
-eligible); `primitives/ability-use-choices.ts`.
-
-**Intended authority.** `kernels/choice.ts` extended: `RuleChoice` gains
-`chooser`/`controller` roles; all domains validate through U3
-`evaluateQuery`; `resolveChoices` stays the single entry; window-carried
-choices (U12/U13) construct the same `ChoiceSpec`. Dependencies: U3, U2.
-Consumed by U11 (choose flow op), U13 (window decisions), domain
-authorities (targeting/placement/teleport).
-
-**Typed vocabulary.** Extended `RuleChoice` (roles, domain-kind, per-domain
-constraints); `ChosenValue` stays; `ChoiceSpec` shared record for
-command-time and window-carried decisions.
-
 **Replay semantics.** Choices ride the initiating command (pre choices) or
 the window's durable record (post choices); replay never re-asks. The
 supplied values are what execute — legality only.
 
-**Acceptance tests.** Existing 23 cases stay; add: chooser-role derivation;
+**Acceptance tests.** Preserve the existing choice cases and verify: chooser-role derivation;
 position choice legality through U3 (parity with `teleport-choice` where
 expressible); `abilityUseChoices`/`talentChoices` fold-through cases;
 window-carried `ChoiceSpec` resolution; optional-decline never defaults
 (already covered, extended to window timing).
 
-**Consumers to migrate.** `teleport-choice.ts` (consume U3 position
-candidates where generic; keep in-grid/unoccupied/Rampart) — DONE
-(2026-08-30, the teleport legality already routed through
-`validatePositionLegality`, now with the p.108 LoS leg); selectActors'
-`input` branch, `ability-use-choices.ts` opaque fold, `talentChoices`
-allowlist (unify behind U4 optional-decline) — REMAIN after T2.
-
-**Blocker families enabled (information only).** choice-input,
-player-choice, post-roll-reactive-choice, gamble-result-selection,
-selectable-terrain-placement (choice face), direction-override, card-deck
-(choose item), ability-use choices.
-
----
-
 ### U5 Value / Expression
 
-**Semantic responsibility.** Typed scalar/value expressions evaluated
-against current state: constant, stat, resource, count(query), distance,
-round, turn index, usage count, status count, entity/member count, damage
-result, roll result, elevation, area size, movement traversed, percent of
-BASE max HP, arithmetic, min/max/clamp, conditional. Non-numeric values
-(positions, refs, colors, IMMUNITY kinds) stay typed — never collapsed
-through number/string. Percent-health uses maximum BASE HP, not
-wounds-adjusted max HP.
-
-**Non-responsibilities.** Not predicates (U6 composes VALUE + QUERY +
-REFERENCE into booleans); not roll authority (ROLL domain authority owns
-dice); not bespoke per-mechanic kernels (`statusCountDamageKernel` etc. are
-forbidden — express them).
+[Responsibility and vocabulary](generic-underlays.md#u5-value--expression).
 
 **Source evidence.** Bloodied/quarter thresholds are HP-percent reads
 (p.94, p.104); distance predicates need distance-between-arbitrary-refs
@@ -1095,95 +158,6 @@ trigger clauses) needs count(query); percent-of-BASE-max ("Sacrifice X
 percent of your maximum HP", p.103; p.219 Terraforming) needs BASE HP
 semantics; traversed-distance ("for every space you moved", rush/fly
 abilities) needs movement-traveled reads.
-
-**Current state.** `PARTIAL`. T2 (2026-08-30) extracted the VALUE algebra
-from the runtime barrel to its semantic home `kernels/evaluate-value.ts`
-(`evaluateNumber` + `integer`, plus the selector read surface
-`selectActors` it resolves intrinsically; `kernels/runtime.ts` remains
-the compatibility barrel and re-exports it) and EXTENDED the operator
-list: `count-query` over the general U3 domains (actors/entities/
-positions/terrain cells via `evaluateValueQuery`),
-`distance` between arbitrary ENDPOINTS (RuleSelector | U1 reference |
-U7 anchor — always the canonical p.92 footprint metric, an unresolvable
-ref FAILS CLOSED), `percent-base-max` (ICON p.107 "% HEALTH":
-percentage costs/damage use the BASE maximum, never the wounds-adjusted
-bar; the durable base max is now projected onto `RuleActorView`
-`baseMaxHp` by the encounter adapter, and a view without it fails
-closed). Tranche 22 (2026-09-02) briefly landed a second kind,
-`percent-max-hp` (percent of the WOUNDS-ADJUSTED state bar) — RETRACTED
-by tranche 23 (2026-09-02) under the recorded adjudication
-`icon-1.5:combat:bloodied-base-max`: the primary HP/Wound rule (p.81)
-defines bloodied as "at or below 50% your **base maximum hp**" and
-immediately defines wounds as "temporarily reducing your maximum HP", so
-percent-of-maximum-HP thresholds (bloodied/quarter, Rot p.186 "at 25%
-hp or lower") measure the BASE bar exactly like p.107 "% HEALTH"
-costs/damage — the wounds-adjusted `percent-max-hp` kind had no
-source-backed consumer and was removed. The ONE pure scalar is now
-`percentOfMaximum(baseMaximum, percent, rounding)` in
-`kernels/evaluate-value.ts` behind `percent-base-max`, the U6
-`bloodied`/`quarter` predicate thresholds (`rounding: 'down'` reproduces
-the exact `hp · 100 <= baseMaxHp · percent` comparisons), and the Rot
-p.186 mark read. The Rot site's former `Math.ceil(maxHp / 4)` was
-repaired TWICE over the two tranches — the ceil over-inclusiveness (8 of
-30 = 26.7% is one point over "25% or lower") AND the bar itself
-(wounds-adjusted max instead of base). The existing core
-(constant/stat/resource/round/input/count(selector)/
-distance(actor-to-actor)/die/damage-die/damage-roll/if/
-percent/add/multiply/minimum/maximum/clamp) is unchanged. Missing after
-T2: usage reads (U16, T3), status/member counts (domain reads the
-`count-query` value now expresses), traversed-distance, elevation,
-area-size, and typed non-numeric values (positions/refs/colors stay
-typed in the surrounding vocabulary — no number collapse).
-
-**U5-core dependency gate (tranches 22-23, 2026-09-02) — MET for U3.** The
-numeric forms U3 actually requires — constants, stat/resource reads,
-the `input` bucket, `count`/`count-query`, `distance`, min/max/clamp,
-add/multiply/if, and the percent pair — are all represented on the one
-`RuleNumber` vocabulary, U3 consumes `evaluateNumber` and never runs its
-own scalar evaluation, dynamic ranges/counts/thresholds are supplied
-through U5, evaluation is pure and side-effect free (dice rides recorded
-rolls; no RNG/choice/query inside the scalars), LIVE-vs-CAPTURED timing
-is explicit (stat/round/percent families re-read live state; `input`
-reads recorded command buckets; `damage-roll` consumes recorded dice),
-and the duplicate percentage-threshold formula sites (previously
-re-inlined in the U6 predicates and once more — divergently — in the
-Rot resolver) now fold through the single `percentOfMaximum` BASE-bar
-scalar under the adopted bloodied adjudication
-(`icon-1.5:combat:bloodied-base-max`); the wounds-adjusted bar remains
-exclusively the live `maxHp` projection (heal/vigor caps, the `max-hp`
-stat read) and no percent read uses it. This makes U5-core
-DEPENDENCY-COMPLETE for U3 (the DAG edge U3 → U5-core clears); U5 as a
-whole stays PARTIAL — full authority still needs the extended typed
-families (traversed, elevation, area-size, U16 usage reads, typed
-non-numeric values) and the residual content inline-arithmetic sites
-(each composable on the current vocabulary, none an independent
-evaluation authority).
-
-**Locations partially owning/duplicating.** `evaluateNumber`
-(`kernels/runtime.ts`) — MOVED to `kernels/evaluate-value.ts` (2026-08-30),
-runtime re-exports; `hp-threshold.ts` (bloodied/quarter state-threshold
-reads — the BASE bar per p.81/adjudication `icon-1.5:combat:bloodied-
-base-max`, the same bar `percent-base-max` reads); `kernels/bonus-damage.ts`
-(roll/recipient reads stay at the ROLL query point but through the value
-vocabulary); inline per-resolver arithmetic (e.g. `integer()` callers,
-gamble sums in `content/jobs/programs/*`); `RuleNumber` type
-(`primitives/types.ts`).
-
-**Intended authority.** `kernels/evaluate-value.ts` (extracted from
-`runtime.ts`, barrel re-exported): `evaluateValue(expr, context)` over the
-full expression algebra. Dependencies: U1 (refs), U3 (count(query)),
-U7 (distance anchors), U8 (round/turn), U16 (usage reads). Consumed by U6,
-U14 (value on the recipe), domain authorities (damage, cost, movement).
-
-**Typed vocabulary.** Extended `RuleNumber`: `count(query)`,
-`distance(ref, ref)`, `percent-base-max`,
-`usage(key, scope)`,
-`status-count`/`member-count`, `traversed`, `elevation`, `area-size`,
-`value` for typed non-numeric reads. Every percent-of-maximum-HP read
-uses the BASE maximum (p.81 thresholds + p.107 costs/damage — the
-wounds-adjusted `percent-max-hp` kind was retracted by tranche 23 under
-adjudication `icon-1.5:combat:bloodied-base-max`); the wounds-adjusted
-bar exists only as the live `maxHp` projection.
 
 **Replay semantics.** Expression evaluation is a pure function of state +
 recorded input + recorded dice results; no second RNG path; percent-base
@@ -1196,49 +170,9 @@ rejects. Boundary: quarter mark exactly; 0-count; traversal of 0.
 Replay: a damage-roll expression with recipient-scoped bonus dice replays
 byte-identical (existing Finesse fixture extended).
 
-**Consumers to migrate.** `bloodied`/`quarter` predicate thresholds —
-DONE (consume the single `percentOfMaximum(baseMaxHp, 50|25, 'down')`
-scalar against the BASE maximum — the p.81 bar, adjudication
-`icon-1.5:combat:bloodied-base-max`; a view without `baseMaxHp` fails
-closed with `value.base-max-missing`); Rot p.186 mark threshold — DONE +
-REPAIRED twice (`Math.ceil(maxHp/4)` was one point over the exact
-quarter for non-divisible maxima, AND the bar was the wounds-adjusted
-max rather than the base; both pinned by the 30-max boundary fixture +
-a wound-divergence fixture: base 30 + one wound → hp 7 still drops
-defiance); the BASE-max % cost/damage read stays `percent-base-max` (the
-SAME base bar the thresholds now use — the p.81/p.107 agreement is
-TESTED in `t2-expression-algebra.test.ts`); the fold bloodied gates
-(comeback/self-bloodied/target-bloodied in `modifiers.ts`, the
-range/area/mastery/bonus-damage fold views' `maximumHp` projections)
-all read the BASE bar; resolver inline arithmetic → typed expressions
-(REMAINS — each site is composable on the represented algebra, none an
-independent authority); `hp-threshold.ts` state-threshold reads stay the
-REDUCER-side threshold authority (raw `{hp, baseMaxHp}` surface;
-documented twin of the projected predicate bar); bonus-damage recipient
-reads stay at the ROLL query point but through the value vocabulary.
-
-**Blocker families enabled (information only).** effect-count,
-status-count-scaling, member-count-scaling, damage-count-scaling,
-traversal-count, elevation-scaling, aura-count-condition,
-distance-predicate, conditional-distance-stun, path-count-predicate,
-sacrifice-percent, variable-cost.
-
----
-
 ### U6 Predicate / Condition
 
-**Semantic responsibility.** "Is this rule clause applicable now?" — boolean
-expressions composed from QUERY + VALUE + REFERENCE:
-`bloodied(source)`, `count(foesInArea) == 1`,
-`distance(source,target) >= 3`, `hasStatus(target, weakened)`,
-`markExists(owner,target)`, `isSlowTurn(source)`, `round >= 4`,
-`usageCount(source,key,round) == 0`, `terrainAt(target) contains pit`,
-`original entity still exists`, `target has not acted this round`.
-
-**Non-responsibilities.** Not bespoke gate kernels (forbidden when the
-expression algebra suffices); not trigger/fact evaluation (U10 owns
-historical outcomes — predicates evaluate CURRENT state); not lifecycle
-hooks.
+[Responsibility and vocabulary](generic-underlays.md#u6-predicate--condition).
 
 **Source evidence.** Bloodied/quarter gates (p.94, p.104); distance gates
 (Trigrammaton "at exactly range 3", p.225-style exact-range clauses);
@@ -1246,63 +180,6 @@ condition/status gates (p.94); round gates ("at round 4 or later");
 usage gates ("once per round", p.99/p.105); terrain-at gates (p.104
 Rampart-adjacent clauses, p.129 movement gates); "has not acted this round"
 (p.129 Special).
-
-**Current state.** `PARTIAL`. T2 (2026-08-30) extracted the PREDICATE
-algebra from the runtime barrel to its semantic home
-`kernels/evaluate-predicate.ts` (runtime re-exports it) and EXTENDED the
-CORE contract using only U1/U3/U5/U8: `mark-exists` (default mark key =
-source id, mirroring the `marked` query filter), `in-stance`,
-`inside-aura` (membership derived through the shared aura kernel's
-`isInAura` over the runtime view — never a parallel geometry read; an
-unregistered provenance FAILS CLOSED), and `acted-this-round` (the VM
-view's durable attack-made-this-turn read, p.129 Special). Compound gates
-compose through the existing `compare` operator over the new
-`count-query`/`distance` values (tests prove `count(foes) == 4` and
-`distance(source,target) >= 3`). The core (always/not/all/any/compare/
-has-condition/bloodied/quarter/defeated/in-terrain/trigger/state/
-target-state) is unchanged. T3 (2026-08-30) added `used-scope` against the landed U16 CORE ledger: the
-predicate reads the target's durable `ledger:<scope>:<sourceId>` key via
-`primitives/usage.ts` (`usageKey`/`usageCount`), so once-per-turn/round/
-combat gates and N-per-scope counts are the same authority the command
-boundary consumes and the lifecycle recipes reset. T4 (2026-08-30)
-completed U6 with `effect-still-exists`, reading through the U10
-fact/instance seam (`effectExistsLive` over `primitives/facts.ts`) against
-the target's LIVE effect surfaces (conditions/statuses/stance/marks/
-active-effects) — the general active-effect state authority stays in its
-domain; U6 only reads through the generic reference/fact seam. After the T4
-corrective pass, the live `RuleActorView` carries the authoritative DURABLE
-instance id + ownership, so a specific-instance read is EXACT (`instanceId`)
-and a mark from owner A never satisfies owner B's identical markId
-(`ownerSensitive`); a genuinely ambiguous coexisting read without an exact
-id still FAILS CLOSED via `RuleProgramViolation` rather than guessing.
-
-**Staged completion (DAG-consistent).** U6's core predicate algebra depends
-on U1/U3/U5/U8 only and lands in T2 (LANDED 2026-08-30); the
-`effect-still-exists` predicate reads U10 facts/instances and LANDED in T4
-(2026-08-30). U6's declared dependencies (U10 for effect-still-exists) are
-now satisfied; the remaining predicate vocabulary enumerated in the
-vocabulary below is landed, with no documented U6 dependency left.
-
-**Locations partially owning/duplicating.** `evaluatePredicate`
-(`kernels/runtime.ts`) — MOVED to `kernels/evaluate-predicate.ts`
-(2026-08-30), runtime re-exports; `kernels/hp-threshold.ts` (bloodied/
-quarter state reads); inline predicate logic in resolvers
-(`content/jobs/programs/*` condition checks); `kernels/range.ts` gates
-(stealth/comeback/mastery/choice — these are U6-predicate-shaped but
-live in the range fold); `kernels/area.ts` gates (same). The range/area
-gate folding is a behavior-preserving consumer migration that remains
-post-T2 (no source semantics change is implied by the plan).
-
-**Intended authority.** `kernels/evaluate-predicate.ts` (extracted from
-`runtime.ts`, barrel re-exported). Dependencies: U1, U3, U5, U8, U10
-(effect-still-exists reads U10 facts/instances). Consumed by U11 (if/while),
-U13 (window eligibility gates), U14 (recipe predicates), U17 (ordering
-policies with predicates).
-
-**Typed vocabulary.** Extended `RulePredicate`: `count-query`, `distance`,
-`mark-exists`, `in-stance`, `inside-aura`, `used-scope`,
-`effect-still-exists` (T4), `acted-this-round`, `terrain-at` (exists),
-compound `all/any/not`.
 
 **Replay semantics.** Predicates evaluate replay state deterministically;
 the used-this-scope read consumes the durable U16 ledger + U10 facts,
@@ -1313,33 +190,9 @@ branches; boundary: exact-threshold comparisons (`<=` vs `<`), 0-count;
 replay: a trigger step gated by a predicate that consumes a ledger entry
 replays identically.
 
-**Consumers to migrate.** Range/area gate logic folds onto the predicate
-algebra (gates stay registered per recipe, but the gate bodies become
-predicates) — REMAINS post-T2; resolver inline condition checks —
-REMAINS; `hp-threshold` predicate reads — the bloodied/quarter predicates
-already evaluate through the shared `stat max-hp` read (the wounds-
-adjusted bar), kept as the threshold authority.
-
-**Blocker families enabled (information only).** distance-predicate,
-conditional-distance-stun, path-count-predicate, aura-count-condition,
-mark-activation-gate, stance-gate, first-use-gate, entry-save-gate.
-
----
-
 ### U7 Anchor / Spatial Frame
 
-**Semantic responsibility.** Name every spatial relationship's frame
-explicitly: `range from <anchor>`, `LoS from <anchor>`, `area centered on
-<anchor>`, `aura follows <anchor>`, `return relative to <captured-anchor>`,
-`move away from <anchor>`, `shove away from <anchor>`, `nearest to
-<anchor>`. Anchor can refer to actor footprint, entity/object, chosen
-position, bound position, target, area center, source, mark carrier,
-persistent carrier, captured/snapshot position, current/live position.
-ROLE (U2) ≠ ANCHOR (U7).
-
-**Non-responsibilities.** Not distance metric (p.92 footprint distance is a
-shared primitive, consumed by anchors); not movement legality (spatial
-gateway); not LoS computation.
+[Responsibility and vocabulary](generic-underlays.md#u7-anchor--spatial-frame).
 
 **Source evidence.** "Range is measured from the edge of the origin space
 (or character)" (p.92); burst centers on a character or chosen space
@@ -1351,103 +204,6 @@ separates placement REGION from CREATOR LoS/range ORIGIN (p.95/p.107/p.108,
 `creationSpatial` contract); Rebound: the rebound character's space becomes
 the ORIGIN for cover/LoS while effects on the original user still apply to
 the original user.
-
-**Current state.** `AUTHORITATIVE` (decision 2026-09-02, tranche 21). The
-unified anchor VOCABULARY landed (2026-08-30): `primitives/anchor.ts`
-(`SpatialAnchor` — LIVE actor footprint named by the typed U1
-`Reference<'actor'>` | LIVE entity footprint | CAPTURED position — +
-`SpatialOrigin`) with the ONE kernel-side resolution path
-(`kernels/candidate.ts` `resolveSpatialAnchor`, consumed by U3
-`rangeOrigin` and the position/choice/LoS/distance consumers; fail-closed
-on query-shaped selectors / zero-multi actors / position-less anchors
-(`selector.origin-invalid` / `selector.actor-missing` /
-`selector.entity-missing`); relation stays with the acting actor while
-range moves to the anchor). T2 (2026-08-30) added the LIVE ENTITY
-footprint anchor (resolved to the entity's size-1 cell) — consumed by the
-U3 entity-domain range origin and the U5 `distance` anchor endpoints.
-Tranche 20 (2026-09-02) repaired the one genuine measurement gap —
-`chosenTeleportDestination` measured p.92 range from a degenerate size-1
-point regardless of the mover's footprint; the legality call now threads
-the MOVER's footprint as `originSize` from the resolved mover record
-(guard: `u7-teleport-footprint-origin`). Tranche 21 closed the remaining
-fail-open in that seam (a MISSING mover now fails closed with
-`selector.actor-missing` instead of being masked as Size 1 —
-`mover?.size ?? 1` is rejected by the guard) and completed the U7
-vocabulary/resolution audit. Its broader claim that every LoS consumer
-already retained the whole frame was retracted by the 2026-09-04 tranche-32B
-corrective audit: position, creation, actor-query, direct-target, and teleport
-LoS still collapsed resolved frames to anchor points. That later audit repaired
-the shared consumers through `hasLineOfSightBetween`; no actor-relative
-point-frame approximation remains now. The specialist carriers below are
-RETAINED with written non-competing
-boundaries — none is a competing U7 vocabulary (see the completion
-decision).
-
-**Completion decision (2026-09-02) — specialist carriers are STORAGE for
-already-resolved frames, not competing U7 vocabularies.** U7 owns the
-generic notions: the LIVE actor/entity frame, the CAPTURED position frame,
-footprint size, and spatial-origin resolution. A subsystem may
-legitimately STORE an aura bearer + perspective (`AuraOriginRef`
-carrier-scan over durable state — live re-derivation only, membership
-measured with the canonical footprint metric), a creation-time resolved
-frame for replay (`creationSpatial` record carried on the mutation —
-computed ONCE at command time, never re-derived from later state),
-area-shape origin metadata (`RuleArea.origin` — inert declarative, no
-runtime consumer), or continuation/rebound provenance (U12 records +
-provenance flag, unwired) WITHOUT those storage formats becoming second
-anchor authorities, because none of them maps a selector to a frame,
-re-decides LIVE vs CAPTURED, or defines an alternative distance metric.
-Migrating those schemas onto `SpatialAnchor` (the structural reading of
-"every declared origin kind on the typed vocabulary") would be uniform-
-anchor churn for zero semantic gain — the ontology's ownership test is:
-WHICH authority interprets an anchor (U7, one) vs WHICH subsystem stores
-an already-interpreted frame for its own domain (many, disjoint). The
-`context.actorId` reads in `kernels/runtime.ts` are U1 source identity
-for cost/targeting, classified non-spatial; the movement gateway's
-`SpatialIntent.from` is movement legality (explicit U7
-non-responsibility). Aura origin derivation performs a bearer ELIGIBILITY
-scan (aura-domain), never selector→frame resolution; teleport origins are
-resolved positions consumed by the shared `validatePositionLegality`
-operator with the mover's factual footprint size (fail-closed on a
-missing mover); `summonEntity`'s content-sugar `originSize ?? 1` default
-is a CAPTURED-position point baseline (matching `anchorFromPosition`'s
-documented size-1 default) — all current creators are Size 1, and the
-flow path (`execute-flow.ts`) resolves the origin actor's factual size for
-declared creation contracts.
-
-**Locations with written specialist boundaries (non-competing).**
-`primitives/spatial-intent.ts` (footprint primitives + the movement/area
-gateway authority); `RuleArea.origin` (inert declarative, no runtime
-consumer); `RuleEffect` entity `spatial` + mutation `creationSpatial`
-(record-carried CAPTURED contract for replay); `kernels/teleport-choice.ts`
-origin handling (resolved origin + factual mover footprint through the
-shared legality operator); `kernels/aura.ts` `auraOriginRefs` (LIVE
-carrier-scan with U2-branded perspective); `kernels/encounter-adapter.ts`
-and foe/attack measurement sites (canonical metric over factual live
-records); `context.actorId` in `kernels/runtime.ts` (U1 source identity
-for cost, not a spatial frame). (`kernels/candidate.ts::rangeOrigin`
-migrated onto the anchor vocabulary, 2026-08-30.)
-
-**Intended authority.** `primitives/anchor.ts` (barrel re-exported):
-`SpatialAnchor` union (LIVE actor footprint named by typed U1 ref, LIVE
-entity footprint, CAPTURED position) with explicit LIVE/CAPTURED;
-kernel-side `resolveSpatialAnchor(anchor, context)` — the ONE
-resolution path; consumers read anchors via the shared footprint-distance
-primitive. Dependencies: U1 (refs), U2 (role ≠ anchor). Consumed by U3
-(`rangeOrigin` — landed), U5 (`distance(ref,ref)` — landed), U4 (position
-legality over a resolved anchor — landed), and the domain authorities
-(targeting, area, movement, aura, entity creation, rebound) which either
-resolve through the vocabulary or carry already-resolved frames with
-written boundaries.
-
-**Typed vocabulary.** `SpatialAnchor` (the three kinds) + its
-LIVE/CAPTURED contract; `rangeOrigin` typed as an anchor on queries and
-choices; captured-anchor records ride U12 continuation state. The
-specialist CARRIER schemas (`RuleArea.origin`, entity `creationSpatial`,
-aura origin records, rebound provenance) remain specialist-owned storage
-of already-resolved frames per the completion decision — they are not
-second anchor vocabularies and are not migrated for structural
-uniformity.
 
 **Replay semantics.** Anchors resolve from durable state (live) or from
 captured records (captured); never from serialized convenience fields that
@@ -1471,37 +227,9 @@ teleport planned-path + rebound-origin fixture replays byte-identical.
 Guard: `u7-teleport-footprint-origin` rejects a restored point-frame or
 optional-chained (`mover?.size`) mover read, mutation-tested both ways.
 
-**Consumers.** All migrated or retained with written boundaries:
-`candidate.ts` resolve `rangeOrigin` — DONE; `choice.ts` position legality
-over a resolved anchor — DONE; `evaluate-value.ts`/`evaluate-query.ts`
-distance/LoS/entity anchors — DONE; `teleport-choice` origin reads —
-consumed through the shared `validatePositionLegality` with the mover's
-factual footprint (fail-closed on a missing mover) — DONE; `RuleArea.origin`
-— no runtime consumer (inert declarative, retained); `creationSpatial` —
-record-carried CAPTURED contract (retained); aura origin derivation — LIVE
-carrier-scan, U2-branded perspective (retained); `runtime.ts`
-`context.actorId` — U1 source identity for cost (non-spatial, retained).
-
-**Blocker families enabled (information only).** rebound, entity-distance-
-selection, object-distance, range-gated-teleport, multi-actor-teleport,
-moving-area-terrain, zone-regeneration, under-character-terrain,
-area-define, aura-range-override, spatial-state (captured anchor).
-
----
-
 ### U8 Scope / Clock
 
-**Semantic responsibility.** ONE shared vocabulary for temporal/usage
-boundaries: action, ability resolution, turn, between-own-turns, slow turn,
-round, combat, expedition, camp, interlude, permanent, N occurrences of a
-boundary, next matching boundary, source-defined lifecycle event. Reused by
-durations, usage counters, refreshes, once-per-X, costs, interrupts, trigger
-de-duplication, delayed effects, resources, persistent instances. An
-explicit shared **Clock** concept every reader consults — never a separate
-"round" per subsystem.
-
-**Non-responsibilities.** Not the scheduler's turn-order authority (that is
-the turn scheduler + U17 ordering); not the RNG; not fact recording (U10).
+[Responsibility and vocabulary](generic-underlays.md#u8-scope--clock).
 
 **Source evidence.** Durations ride turns/rounds/combat (p.94 statuses,
 p.95 terrain/entity effects, p.107 end-of-combat cleanup); once-per-round /
@@ -1509,90 +237,6 @@ once-per-turn / once-per-combat gates (p.99, p.105 Vigilance, p.129
 Special); Delay resolves at the start of the slow turn before ordinary
 activity (p.87 slow rounds; scheduler `delayed` phase); "at the end of your
 next turn" N-boundary forms; camp/expedition reset boundaries (p.56, p.113).
-
-**Current state.** `AUTHORITATIVE` (residual audit + combat-cleanup repair,
-2026-09-01): `primitives/scope.ts` defines the ONE `Clock`/`Scope` vocabulary with FULL
-temporal fidelity: `BoundarySpan` + `BoundaryEdge` (`start`/`end` —
-turn-start ≠ turn-end, round-/combat-start ≠ end, slow-turn start ≠
-ordinary turn start) carrying an optional U1 `Reference` `subject` for
-actor-relative boundaries (end-of-YOUR-turn ≠ end-of-TARGET's-turn);
-counted (`n-boundary`/`for-n`) and `next`/`until-next` forms RELATIVE to a
-recorded epoch (`ClockObservation` + `boundaryKey` occurrence counters —
-an effect created on round 5 "for 3 rounds" completes only after three
-matching round boundaries from its origin, never because `round >= 3`);
-permanent / until-event extents. The boundary-read surface is
-`clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`/
-`scopeSatisfied`. `clockForTiming` maps step timings ('use', attack-*) to
-null and boundary timings to a BoundaryRef carrying its edge;
-`currentClock(context)` returns null for non-boundary timings (a `use`
-command is never "at the round boundary"); `scopeForDuration` maps the
-legacy `RuleDuration` onto Scopes PRESERVING edge + actor subject
-(turn-start/end durations keep their Reference; behavior-neutral);
-`boundaryReached`/`scopeSatisfied` require an observed boundary record and
-FAIL CLOSED (return false) on relative reads with no recorded epoch — they
-never invent absolute-round answers. Tests: `scope.test.ts` (18 tests: the
-11 required temporal-fidelity cases — turn-start≠end, round-start≠end,
-source≠target turn, relative-3-rounds-from-round-5-origin, next-target-not-
-on-source-turn, slow≠ordinary, non-boundary-null, permanent-never, named-
-event, replay, plus edge/subject preservation in `scopeForDuration`).
-T6.1 (2026-08-31) migrated the **use-ledger reset authority** onto U8:
-`primitives/usage.ts` owns the U8-backed reset mapping (`resetBoundaryFor`
-— which period a given boundary refreshes), and the lifecycle reset
-recipes call `resetUsageForBoundary`/`usagePeriodForResetBoundary` instead
-of hard-coding `ledger:turn:*`/`ledger:round:*` prefix interpretation. The
-generic temporal question ("what period does this boundary refresh, and
-whose boundary matters?") now routes through the Clock; `scope.test.ts`
-and `t6-u8-scope-consolidation.test.ts` prove the consumers actually
-route through it. **2026-09-01 U8 tranche (substrate only):** the generic
-**SOURCE-DEFINED LIFECYCLE IDENTITY** landed (`LifecycleIdentity` + the
-`until-lifecycle-replaced` Scope + `lifecycleGroupKey` /
-`lifecycleIdentityKey` / `sameLifecycleInstance` /
-`lifecycleInstanceCurrent` / `lifecycleReplaced` / `currentLifecycleInstanceId` + a
-`lifecycles` observation map on `ClockObservation`) — the Monogatari
-once-per-song proof case composed of U1 `owner` + `source` references plus a
-durable `instance` discriminator, WITHOUT a hard-coded period-enum member,
-never aliasing two owners, advancing only the replaced owner. The reducer's
-active-effect expiry (`expireBoundaryEffects` / `expireOneBoundaryRecord`)
-now interprets its boundary through `clockForTiming`/`boundaryEquals`
-instead of re-keyed boundary-name literals (durable remaining-count storage
-was unchanged). Per the U16 boundary, U8 supplied the generic scope
-Monogatari's `monogatari:granted` consumer needed; Monogatari now consumes
-that lifecycle identity and U16 is recertified by its own residual census.
-Tests: `u8-lifecycle-identity.test.ts`
-(+8 adversarial: two-owner no-alias, replace-A-not-B, active-song-
-not-satisfied, malformed-identity-no-fallback, no-lifecycle-observation-fails-
-closed, determinism/replay, stable keys). A fresh residual audit classified
-lifecycle execution, continuations, U16 resets, duration remaining-count
-storage, and scheduler cadence by semantic question. The scheduler owns turn
-election/cadence and the reducer owns recorded remaining counts; neither
-decides Scope meaning. The one genuine duplicate was combat cleanup's local
-`duration.kind === 'expedition'` interpreter. It now calls
-`durationSurvivesCombatEnd` (U8 `scopeForDuration` + combat-end boundary).
-`settlement.test.ts` proves combat-scoped state expires, expedition-scoped
-state survives, and replay is exact; `u8-scope-clock-routing` prevents either
-the boundary-expiry or combat-cleanup path from bypassing U8. No competing
-temporal interpreter remains.
-
-**Retained specialists (not duplicate authority).** `turn-scheduler.ts` owns
-turn/round election and slow-turn cadence; reducer duration records own only
-the durable remaining occurrence count; lifecycle phases execute work already
-classified against a U8 boundary. `RuleDuration`/`RuleTiming` remain wire
-vocabulary projected through `scopeForDuration`/`clockForTiming`. The use
-ledger calls the U8-backed reset mapping.
-
-**Intended authority.** `primitives/scope.ts` (barrel re-exported):
-`Scope`/`Clock` types (`action|resolution|turn|between-turns|slow|round|
-combat|expedition|camp|interlude|permanent|n-boundary|next-boundary|event`),
-`currentClock(context)`, `boundaryReached(clock, state)`.
-Dependencies: none (foundation). Consumed by U5 (round/turn reads),
-U12 (triggering Clock), U13 (window timing), U14 (duration query point),
-U16 (reset Clock), durations/persistent-instance lifecycle.
-
-**Typed vocabulary.** `Clock` union; `RuleDuration` rewritten over
-Scopes (+ `n`, `next-match`, named-event); use-ledger periods typed as
-Scopes (T6.1: `resetBoundaryFor` in `primitives/usage.ts` + the kernel
-reset helpers provide the U8-backed mapping); `RuleTiming` kept for step
-timing but its boundary semantics read the Clock.
 
 **Replay semantics.** The Clock is derived from durable state
 (round/turn/boundary counters + recorded events); boundary advancement is a
@@ -1613,32 +257,9 @@ turn-boundary transition replays to an identical ledger (never
 re-deciding). Combat cleanup parity/replay is proved by
 `settlement.test.ts`.
 
-**Consumers to migrate.** None for the declared U8 contract. The scheduler
-and recorded duration counters are retained specialists; all rule-level
-boundary/scope interpretations route through U8 and are guarded.
-
-**Blocker families enabled (information only).** duration-modifier,
-duration-fly-state, once-per-round-fly-grant, use-count-override (scope
-half), first-use-gate, auto-refresh, shared-turn-ledger, passive,
-infuse-permanence, delay-* (timing half).
-
----
-
 ### U9 Provenance / Cause
 
-**Semantic responsibility.** "What caused this outcome?" — richer than
-`sourceId`. Dimensions: source rule/action/effect; source actor; owner;
-controller; attack/effect/terrain/save; movement mode;
-voluntary/forced/granted; original action; parent event/effect; trigger
-chain; recipient; damage delivery; attack-target vs collateral recipient;
-rebounded/redirected; teleport/place/rush/fly/shove; terrain/entity
-source-created; current ability-resolution identity. Events/mutations must
-carry enough provenance to answer source questions.
-
-**Non-responsibilities.** Not the historical record itself (U10 owns facts);
-not role semantics wholesale (U2 owns role derivation; U9 records role-
-shaped cause on events); not source-ID interpretation (kernels never branch
-on it).
+[Responsibility and vocabulary](generic-underlays.md#u9-provenance--cause).
 
 **Source evidence.** ICON semantics are causal: Pacified breaks on damage
 from a FOE'S ability/action (not self/terrain, p.94); Slay means THIS
@@ -1648,43 +269,6 @@ dangerous terrain has its own delivery (p.95/p.108); triggered effects fire
 once per ability (p.105); unerring/cover/dodge provenance on attacks
 (p.104/p.105); delivery modes distinguish hit/miss/area/effect/save-success/
 terrain damage.
-
-**Current state.** `PARTIAL (T4 vocabulary landed; corrected 2026-08-31 by the T6 audit)`. `primitives/provenance.ts`
-(barrel re-exported) owns the typed PROVENANCE vocabulary:
-`DeliverySourceKind` ('actor' | 'terrain' | 'entity' | 'environment'),
-`RuleDelivery` (incl. reflected/triggered), `RuleMovementMode`, and the
-`Provenance` dimension record (sourceId / ownerId / sourceActorId /
-actionId / delivery / deliverySource / movementMode / volition / role /
-recipientId / rebound / redirect / derivedFromFact / parent) — SOURCE
-identity is kept distinct from DELIVERY kind, and `sameCausalOrigin`
-preserves the TRUE initiating actor through reflected/secondary delivery
-(so a reflection can never white-out the original owner/source).
-`provenanceOfMutation` derives a provenance at each resolve point from the
-mutation's own fields, ALWAYS preserving the causal `sourceActorId` (even
-when it equals the owner). Existing domain-specific provenance stays where
-it is (the VM's `attackDamageProvenance`, `delivery` on damage mutations,
-`cause: TurnEndCause`, the movement-entry `voluntary` flag) — documented
-retained specialists; U9 provides the shared generic vocabulary facts and
-de-dup read through.
-
-**Locations partially owning/duplicating.** `primitives/attack-resolution.ts`
-(provenance); `kernels/runtime.ts` (delivery threading); `kernels/damage-ledger.ts`
-+ `encounter-adapter.ts` (damage/held provenance); `resolution-triggers.ts`
-(derived facts); `kernels/movement-triggers.ts` (voluntary flag);
-`RuleResolutionFacts` (`primitives/types.ts`); `TurnTransitionIntent.cause`.
-
-**Intended authority.** `primitives/provenance.ts` (barrel re-exported):
-`Provenance` record shape with the dimension list; every mutation/event
-carries the applicable dimensions; `deriveProvenance` at each authority's
-resolve point. Dependencies: U1 (refs), U2 (roles). Consumed by U10 (facts
-record provenance), U13 (triggering fact with cause), U16 (de-dup keyed on
-cause + usage identity), damage/attack/save domain authorities.
-
-**Typed vocabulary.** `Provenance` (source refs, roles, delivery, movement
-mode, voluntary/forced/granted, parent chain, attack-vs-collateral,
-rebound/redirect flags); `DeliverySourceKind` (actor/terrain/entity/
-environment) as the ontology's missing piece; cause rides facts and
-ledgers.
 
 **Replay semantics.** Provenance is recorded at the command/window
 boundary and replays verbatim; never reconstructed from current state or
@@ -1699,33 +283,9 @@ vs collateral recipient provenance differs per damage instance. Replay:
 provenance fields byte-identical across a replayed split event
 (`openDamageWindowFromLedger` path).
 
-**Consumers to migrate.** `resolution-triggers.ts` (read provenance instead
-of re-deriving), `damage-ledger` entry construction, movement-entry folds
-(forced-entry flag), reroll-save regeneration.
-
-**Blocker families enabled (information only).** slay/collide/damage-dealt/
-defeat/attack-miss/attack-exceed/enemy-ability triggers (cause half),
-movement-trigger (forced entry), delivery-immunity, rebound (provenance
-half), effect-redirect.
-
----
-
 ### U10 Fact / Outcome
 
-**Semantic responsibility.** "What authoritative thing has already
-happened?" — historical facts recorded by this resolution, distinct from
-predicates (current state). Examples: attack hit/missed/critical/exceeded;
-damage determined/applied; actor damaged/defeated; source slew targets;
-collide occurred; movement entered/exited/passed-through cells; actual
-distance moved; moved closer/farther; status applied/removed; save
-rolled/succeeded/failed; entity/terrain created/removed; effect expired;
-ability resolved. Triggered-effect de-duplication ("a given triggered
-effect only triggers once per ability") belongs here WITH U16. Never
-rediscover a historical outcome from current state.
-
-**Non-responsibilities.** Not predicates (U6); not the RNG; not provenance
-itself (U9 shapes the cause recorded on a fact); not the usage ledger's
-counting (U16 counts; U10 records what happened).
+[Responsibility and vocabulary](generic-underlays.md#u10-fact--outcome).
 
 **Source evidence.** Reactive triggers (Collide, Slay) are only knowable
 after mutations resolve — the two-pass fold (`executeRuleProgramWithReactiveTriggers`,
@@ -1734,81 +294,6 @@ order, p.102/103 glossary, p.105 once-per-ability); damage windows open from
 a determined-but-not-applied fact (p.107, p.128, p.138); movement-entry
 triggers read entered cells (p.151, p.178, p.353); "once per ability even
 when multiple routes would trigger it" (p.105).
-
-**Current state.** `LANDED (T4, 2026-08-30)`, then corrected by the T4
-corrective pass (2026-08-30). `primitives/facts.ts` (barrel re-exported)
-owns the CLOSED DISCRIMINATED `Fact` union (ability-used /
-attack-resolved / damage-applied / actor-defeated / collide / movement /
-effect / entity / terrain / save-resolved / trigger-resolved) with the
-smallest common envelope (deterministic `instanceId` scoped under a durable
-RESOLUTION identity, `sourceId`, `ownerId`, U9 provenance). The T4
-corrective pass made the facts genuinely durable and authoritative:
-
-- **Durable resolution identity.** Every ability/action resolution gets a
-  deterministic, replay-stable `resolutionId` owned by the command/event
-  boundary. The serial comes from a DURABLE, UNBOUNDED `resolutionSerial`
-  field on `EncounterState` (advanced by applyEvents per recorded
-  RULE_MUTATIONS_APPLIED event) — NEVER from the bounded eventLog's array
-  length, so resolution ids stay unique for the LIFETIME of an encounter
-  even after 500-event log truncation, and the field survives save/load/
-  checkpoint migration (legacy checkpoints derive it deterministically from
-  their recorded history). Every fact `instanceId` is scoped under the
-  resolution id, so two separate uses of the same ability NEVER collide and
-  a replayed event reproduces the identical fact history. The typed `facts`
-  + `resolutionId` RIDE the durable `RULE_MUTATIONS_APPLIED` event — replay
-  consumes the recorded outcomes, never re-derives them.
-- **Resolved outcomes, not raw proposals.** Damage is determined EXACTLY
-  ONCE at the command/window boundary: `resolveMutationOutcomes` runs a
-  reducer-faithful sequential dry run over the event's mutation list,
-  stamps each damage mutation with its recorded post-mitigation amount
-  (`mutation.determined`), and the reducer CONSUMES that stamp instead of
-  invoking the damage authority again. `damage-applied` facts record the
-  SAME recorded amount — never the raw proposed `mutation.amount` — and a
-  mutation that no-ops because an earlier mutation defeated/immunized its
-  target records NO false fact. Replay applies the recorded result without
-  re-calculating armor/resistance/dodge.
-- **Durable effect instance identity.** Effect facts carry the canonical
-  LIVE instance id the reducer creates/removes (`effectInstanceId` — the
-  mutation's command-boundary stamp, decided once and consumed by the
-  reducer, never invented after the fact). Creation ids are minted
-  deterministically at the boundary; a removal resolves the SPECIFIC
-  instance it addresses (owner-scoped; ambiguous matches stay unstamped and
-  keep the honest legacy broad removal). The live `RuleActorView` carries
-  the authoritative durable instance id + ownership
-  (marks/stance/active-effects), so `effectExistsLive` answers
-  specific-instance reads EXACTLY and owner-A's mark never satisfies owner
-  B's identical markId — and removing instance A leaves coexisting
-  instance B intact.
-- `kernels/resolution-triggers.ts` RECORDS facts, merges the domain
-  collide/slay facts (spatial + defeat authority), and PROJECTS the
-  byte-compatible `ResolutionTriggerFacts` surface encounter.ts consumes
-  from the typed facts — behavior-preserving migration. `ability-used` is
-  emitted at the ability/action boundary under the resolution identity.
-
-Damage/held/window ledgers (`damage-ledger.ts`, `encounter-adapter.ts`) and
-save records remain the domain-specific ledger authorities (documented
-retained specialists) whose fact composition is a future U12 concern; the
-shared de-dup identity with U16 is now fact-backed and resolution-scoped
-(see U16 row).
-
-**Locations partially owning/duplicating.** `RuleResolutionFacts`
-(`primitives/types.ts`); `kernels/resolution-triggers.ts`;
-`kernels/encounter-adapter.ts` (damage/held/window ledger, slay/collide
-projections); `kernels/damage-ledger.ts`; `kernels/trait-reactions.ts`
-(ledger keys); `src/rules/encounter.ts:1106-1154` (continuation ledger);
-`kernels/movement-triggers.ts` (entered/exited cells, consumed — not yet a
-durable fact).
-
-**Intended authority.** `primitives/facts.ts` (barrel re-exported): `Fact`
-union with the vocabulary above; `recordFact` at each authority's resolve
-point; the duplication gate reads a U16 usage identity + a U10 fact, never
-re-derives from current state. Dependencies: U1 (refs), U9 (provenance).
-Consumed by U6 (effect-still-exists), U12 (triggering Fact), U13 (window
-opens on a Fact), U16 (de-dup identity), lifecycle/movement authorities.
-
-**Typed vocabulary.** `Fact` union (attack/save/damage/movement/status/
-entity/terrain/expiry/resolution kinds), each with provenance (U9) + refs
-(U1) + durable ids.
 
 **Replay semantics.** Facts are recorded once and consumed; replay must
 consume, never rediscover. The two-pass trigger fold and the damage-window
@@ -1823,33 +308,9 @@ overlapping trigger routes fire once (de-dup identity). Replay: split-event
 damage window + reactive-trigger fold replay byte-identical (existing
 fixtures extended to the new vocabulary).
 
-**Consumers to migrate.** `resolution-triggers.ts` → fact records;
-`trait-reactions.ts` de-dup keys → U16 identity + U10 fact;
-`executedStepIds`/`derivedTriggers` → typed continuation facts (U12);
-movement-entry folds consume recorded movement facts.
-
-**Blocker families enabled (information only).** *-trigger families
-(attack/damage/defeat/movement/area-exit/distance-change/effect-expiry),
-triggered-terrain-creation, cure-on-trigger, mark-defeat-trigger,
-enemy-ability-trigger, damage-dealt-trigger, attack-miss/exceed-trigger.
-
----
-
 ### U11 Flow / Sequence
 
-**Semantic responsibility.** The core little language: sequence; let/bind
-(U1); choose (U4); if (U6); apply effect; repeat/for-each; invoke;
-emit fact (U10); open decision window (U13); suspend/continue later (U12).
-CRITICAL: every operation in a normal ordered ability sequence sees the
-ACTUAL INTERMEDIATE STATE produced by preceding operations ("rush, then
-damage adjacent foe"; "remove object, then place user in its space";
-"teleport, then test adjacency"; "shove, then collide"; "rush 1, then rush
-1, each time optionally damage"; "remove two actors, then place them
-adjacent in free spaces" — p.85, p.107 §4 listed order).
-
-**Non-responsibilities.** Not repeat/invoke/retarget as top-level underlays
-(they are FLOW OPERATIONS — retire them as peers); not a universal
-game-engine DSL; not the command/event transport.
+[Responsibility and vocabulary](generic-underlays.md#u11-flow--sequence).
 
 **Source evidence.** p.85 "Effects resolve in the order they are listed" and
 p.107 §4; ordered-intermediate-state examples throughout ability text
@@ -1858,110 +319,13 @@ shove-then-collide); repeat clauses ("rush 1, then rush 1, each time
 optionally damage"); the two-pass reactive fold exists because Collide/Slay
 are only knowable after resolution.
 
-**Current state.** `PARTIAL` — the CORE landed (T5a, 2026-08-30);
-`open-window`/`suspend` landed through U13 in T5c. **No distinct
-`choose` node is required**: mid-flow player decisions are carried
-exclusively by `open-window → U13 choice window → U4 resolveChoice →
-recorded answer → suspend/resume`, so there is no second decision path to
-build. A future distinct `choose` FlowNode may only be introduced if
-source evidence demonstrates semantics that cannot be represented as
-U11 → U13 → U4.
-`kernels/execute-flow.ts` is the single flow authority: the typed `FlowNode`
-vacabulary (`sequence|bind|if|apply|repeat|for-each|invoke|emit-fact|
-open-window|suspend` — **no separate `choose` node is required**;
-`open-window` → U13 choice window → U4 `resolveChoice` → recorded
-answer → `suspend`/resume is the sole mid-flow decision carriage),
-`executeFlow`, the
-`FlowPlanner`, and the reducer-facing `effectsToMutations` projection.
-`executeRuleProgram` plans the whole action through the planner: costs and
-the named resolver are absorbed first (paid at the start of the ability,
-p.99/p.102 — later flow steps observe the paid/resolved state), then each
-ordered step's effects run against a PURE SIMULATED intermediate encounter
-state. The simulation is the reducer's own sequential projection of the
-emitted-so-far mutation list (`applyRuleMutation`), recomputed from a
-pre-flow snapshot per emit so U15 atomic groups are judged exactly as the
-reducer judges them (every leg or none, group-scoped co-moved exemption,
-denial fixpoint included) — a simultaneous swap can never become a
-sequential swap in the simulation. `RuleEffect` `if`/`repeat`/attack
-branches/save branches evaluate against the same simulation, so a later
-`repeat` iteration observes a prior iteration's result and an `if` gate
-reads post-mutation state. U1 binding glue: a `bound` `RuleSelector` kind
-resolves names bound by earlier operations (domain-checked), and the
-`bind`/`for-each` nodes propagate them. U10 integration: the `emit-fact`
-node records typed facts on the flow result (final `instanceId` renumbering
-is U12/U13 boundary work; content does not emit facts yet).
-
-Documented boundaries (specialists OUTSIDE the flow authority): named
-per-ability RESOLVERS still receive the original context and are absorbed
-(they do not read the simulated view — migrating them onto flow nodes is
-consumer work); kernel reads through `context.encounterState`
-(recipient-scoped bonus damage dice, teleport-choice) stay live-state
-reads; the reactive continuation fold re-invokes `executeRuleProgram` per
-pass with a FRESH simulation seeded from the original encounter state
-(cross-pass simulation rides the recorded resolution facts — U12
-territory); `rerollSaveMutations` runs through the same planner with no
-`encounterState` on its context (the original-view path, behavior
-preserved). T5c wired the remaining U11 nodes: `open-window` and `suspend`
-ARE implemented (U13 integration) — a suspended flow captures the ENTIRE
-remaining execution (walk-stack remainder + binder) as a `resume` record on
-a U13 `choice` window, `ANSWER_DECISION_WINDOW` resumes it through
-`executeFlowResume` against THEN-CURRENT state, and the resumed mutations
-are the new durable event payload (FLOW → U13 → U12 → answer → resume).
-No content consumes the nodes yet (no source rule needs a mid-flow player
-decision — the Great Giorgios may-rush rides the deferred-rule decision
-seam instead); the composition is proven by the planner's
-`FlowWindowRequest` and the reducer's `event.window` handling.
-A T5a corrective surfaced a stale range re-check on the bastion
-Battering Ram/Catapult Collide-or-Heroic trigger steps: the reaction names
-the SHOVED character ("Foe is slashed" p.122; "That ally gains 2 vigor"
-p.123), and the old engine only passed the range-1 check because it
-re-validated against the PRE-shove state; the trigger steps now select the
-command-supplied referent without a range re-query (base eligibility
-only).
-
-**Locations partially owning/duplicating.** Migrated (2026-08-30):
-`kernels/runtime.ts` (`effectsToMutations` moved to `execute-flow.ts`,
-`executeRuleProgram` plans through the `FlowPlanner`, `execute-flow`
-barrel re-exported); `src/rules/encounter.ts`'s two-pass reactive fold
-remains the documented continuation specialist (consumes the recorded
-facts, never re-plans through the flow authority); `rerollSaveMutations`
-runs through the planner's original-view path. Remaining: per-resolver
-ordered sequencing (`content/jobs/programs/*` hand-sequenced resolvers)
-and `primitives/spatial-intent.ts`'s spatial-batch prior art stay the
-spatial specialists they are (the flow authority mirrors their reducer
-application).
-
-**Intended authority.** `kernels/execute-flow.ts` (barrel re-exported
-through `kernels/runtime.ts`): `executeFlow(nodes, context)` with a
-SIMULATED intermediate state during command planning (pure), preserving the
-pure command/event architecture; `effectsToMutations` is the reducer-facing
-projection of the same plan. Dependencies: U1 (bind — landed), U4 (choice
-— validated through `resolveChoice`; `open-window`/`suspend` landed and
-carry the U4 choice spec through the U13 window, T5c — no separate
-`choose` node needed), U6 (if — landed),
-U10 (emit fact — landed), U12 (suspend/continue — landed through the U13
-window `resume` seam, T5c), U15 (atomic groups — landed through the shared
-reducer application), U17 (ordering — consumed by the step selection the
-flow plans). Consumed by every domain authority that sequences effects.
-
-**Typed vocabulary.** Flow nodes (`sequence|bind|if|apply|repeat|
-for-each|invoke|emit-fact|open-window|suspend`; **`choose` is not part
-of the vocabulary** — `open-window`/`suspend` landed with U13, T5c and are
-the sole mid-flow decision carriage through U4); an
-intermediate-state simulation view (clone-based, pure); the `bound`
-`RuleSelector` kind (U1 binding glue); the `FlowWindowRequest` (choice spec
-+ remaining nodes + binder) a suspended flow returns; `RuleEffect` union
-extended only as the next semantics need it (split last, per the
-file-split plan).
-
 **Replay semantics.** The command plans against a simulated intermediate
 state; the emitted mutation sequence is what replays — replay never
 re-simulates decision logic. Repeat counts, choices, and dice are recorded
 at the command boundary; the recorded event carries the boundary stamps
 (determined damage, resolution facts) exactly as before.
 
-**Acceptance tests.** LANDED (2026-08-30, `t5a-u11-flow.test.ts`, 12
-cases, all adversarial against original-state evaluation): rush-then-
+**Acceptance tests.** `t5a-u11-flow.test.ts`: rush-then-
 damage observes the moved position; remove-then-place observes the vacated
 space (occupying-count gate); teleport-then-adjacency; repeat iteration
 N+1 sees N's state; for-each over an already-derived CandidateSet
@@ -1976,33 +340,9 @@ an ordered multi-step ability (with a `spatialBatchId` swap and a
 dice-consuming damage roll) replays byte-identical with no new
 decisions/RNG. Negative/boundary/replay all covered in that file.
 
-**Consumers to migrate.** Hand-sequenced resolvers → flow nodes where the
-sequence is generic (repeat/intermediate state); `executeRuleProgram`'s
-mutation collection → the flow plan; the two-pass fold consumes recorded
-facts (U10) rather than re-deriving (stays in `encounter.ts`, reads the
-shared machinery).
-
-**Blocker families enabled (information only).** repeat-mechanic,
-conditional-fly-repeat, fly-or-teleport-repeat, rebound (flow face),
-effect-redirect, recipient-expansion, cross-ability-invoke,
-pre-ability-movement, pre-ability-action, save-or-stun,
-ordered-intermediate-state, effect-count (magnitude face).
-
----
-
 ### U12 Continuation / Suspension
 
-**Semantic responsibility.** The durable armed-continuation record: source
-program/action; continuation point/step; owner/controller (U2); triggering
-Clock/Fact spec (U8/U10); references (U1, LIVE/CAPTURED); explicitly
-captured values; source-required state; expiry/cancellation; ordering
-identity (U17). Distinguishes **DEFERRED RULE** (resolve later against
-THEN-CURRENT state) from **HELD RESULT** (an already-determined result waits
-for a window to close — never replace A with B).
-
-**Non-responsibilities.** Not the decision window itself (U13 opens/closes
-the decision point; U12 carries what resumes); not the scheduler; not the
-RNG.
+[Responsibility and vocabulary](generic-underlays.md#u12-continuation--suspension).
 
 **Source evidence.** ICON Delay resolves at the start of the slow turn
 before ordinary activity (p.87, scheduler `delayed` phase — represent via
@@ -2014,79 +354,6 @@ the chosen space" (captured position); Sucker Punch holds a determined save
 for the reroll window (p.143 — HELD RESULT prior art in
 `rerollSaveMutations`).
 
-**Current state.** `PARTIAL` — the CORE landed (T5b, 2026-08-30).
-`primitives/continuation.ts` (barrel re-exported) owns the typed
-`ArmedContinuation` record and the pure, replay-safe operations:
-`armContinuation`, `continuationDue`/`resumeContinuation` (the resume gate),
-`clockObservationForBoundary`, `continuationExpired`/`continuationOrderKey`,
-and the `heldSaveContinuation`/`heldDamageContinuation` factories. The
-record carries the explicit **deferred-rule vs held-result** payload
-discriminant, U1 refs with LIVE/CAPTURED semantics (captured kinds are
-self-describing literals), a captured-value map, the U2 owner role, a
-U8 Clock / U10 Fact trigger spec (with the epoch recorded at arm time for
-relative clocks), a U8 expiry scope, and the U17 ordering identity.
-`EncounterState.continuations` (schema 8, migrated to `[]`) is the durable
-collection; the reducer is the SINGLE arming point (a mark application arms
-its registered continuation; a mark removal by any path cancels it).
-`kernels/continuation-runtime.ts` owns the deferred-rule EXECUTION seam:
-content rows register resolvers against a program id and
-`resumeDueContinuations` fires due continuations at the boundary through the
-shared mutation authority. Wired migration: Great Giorgios (p.124) moved
-from a `delayed`-phase lifecycle recipe to an armed continuation — the mark
-arms it and the trigger fires at the marked foe's turn-end. The save-rolled
-window (Sucker Punch, p.143) carries the held save as a U12 `held-result`
-continuation.
-
-T5c (U13) then migrated the window layer: the hold/decision semantics now
-compose through U13 rather than U12 alone. A decision continuation
-(`DecisionContinuationRow`) opens a U13 `choice` window at its trigger
-instead of auto-resolving — the Great Giorgios "may rush" is now a
-RECORDED U4 choice (the mark is consumed at window-open either way; accept
-runs the pure THEN-CURRENT rush at the command boundary; decline resolves
-nothing). The held-result continuations are carried by U13 windows as
-`heldPayload` (determined damage / held save), and windows drain/resolve
-through U13, not the U12 collection.
-
-Documented boundaries: `RuleContinuationState` (executedStepIds/
-derivedTriggers) remains the reactive same-ability fold's ledger — the two
-records are distinct authorities; `rerollSaveMutations` remains the
-command-layer reroll path (a reroll is a SEPARATELY recorded result caused
-by the interrupt, never a recomputation of the held result); the U12
-fact-trigger correlation seam records the specific fact `instanceId` on the
-window `openedBy` provenance so an unrelated same-kind fact can never
-satisfy the wrong window (T5c). T5c.1 (corrective 2026-08-31) made the
-HELD-result trigger explicit: a held result is gated by `{ kind: 'window',
-windowId }` — the exact owning U13 window's durable identity — NOT by a
-coarse same-kind fact. `continuationDue` never returns due for a `window`
-trigger at a Clock/Fact boundary, so a held result can never auto-fire from
-a coarse `save-resolved`/`damage-applied` fact; the U13 machinery drains it
-when the owning window resolves. Migrated held payloads are re-gated onto
-their owning window id.
-
-**Locations partially owning/duplicating.** `RuleContinuationState`
-(`primitives/types.ts`, `src/rules/encounter.ts`) — reactive fold ledger,
-NOT the armed record; lifecycle `delayed` phase (`kernels/lifecycle.ts`)
-still runs (no `delayed` recipes remain — the phase now feeds
-`resumeDueContinuations`); save branch (`primitives/save-window.ts`) — the
-branch AST stays, the held-result continuation rides the U13 window;
-held damage (`encounter-adapter.ts`) — applied/held through the U13 window
-payload; per-source delayed logic in resolvers (Polaris meteor, Carnevale,
-end-of-turn effects) — REMAINS.
-
-**Intended authority.** `primitives/continuation.ts` (barrel re-exported)
-+ `kernels/continuation-runtime.ts`: `ArmedContinuation` record
-(program/action/step refs, roles, trigger Clock/Fact spec, refs with
-LIVE/CAPTURED, captured values, expiry/cancellation, ordering identity);
-`armContinuation` / `resumeContinuation` (replay-exact). Dependencies: U1,
-U2, U8, U10, U17. Consumed by U11 (suspend/continue), U13 (windows
-hold/resume continuations and gate deferred decisions), delayed/terrain/
-entity lifecycle.
-
-**Typed vocabulary.** `ArmedContinuation`; deferred-rule vs held-result
-discriminant; captured-value map; expiry/cancellation spec; LIVE/CAPTURED
-refs (U1) inside the record; `EncounterState.continuations` (schema 8).
-`RuleContinuationState` on events stays the reactive fold's ledger.
-
 **Replay semantics.** Replay resumes the record exactly; captured values
 are literals; live refs re-resolve against then-current state; never
 re-place A with B (held-result fixture from the terrain retraction lesson).
@@ -2094,8 +361,7 @@ The resume gate is pure — no RNG, no decisions, no mutable-availability
 re-checks; a due deferred rule resolves through the same `applyRuleMutations`
 reducer path the event itself used.
 
-**Acceptance tests.** LANDED (2026-08-30, `t5b-u12-continuation.test.ts`,
-10 adversarial cases): deferred rule resolves against THEN-CURRENT state
+**Acceptance tests.** `t5b-u12-continuation.test.ts`: deferred rule resolves against THEN-CURRENT state
 (the Great Giorgios rush reads the owner's post-move position — the arming-
 position outcome differs observably); captured value stays captured (a
 captured landing survives the actor moving elsewhere); live reference stays
@@ -2109,35 +375,9 @@ multiple continuations use their U17 ordering identity (the adversarial
 array order differs from the ordering identity); full Great Giorgios flow
 replays byte-identical with zero new decisions/RNG.
 
-**Consumers to migrate (REMAINS).** Lifecycle `delayed` recipes → armed
-continuations (DONE for Great Giorgios, the only one); save-window branch
-AST → continuation records (the held-result record now rides the window;
-full branch migration is U13); held damage → held-result continuations
-(factory landed, windows not yet carrying it — U13); resolver end-of-turn
-effects (Polaris/Carnevale) → armed continuations with Clock triggers.
-
-**Blocker families enabled (information only).** delay-*, delayed-terrain,
-triggered-terrain-creation, zone-regeneration, terrain-move-lifecycle,
-duration-fly-state, mark-detonation-window, pre-ability-* (continuation
-half), turn-start/turn-end-summon, effect-expiry-trigger.
-
----
-
 ### U13 Window / Decision Point
 
-**Semantic responsibility.** ONE generic decision/reaction window
-vocabulary, specialized by typed window kind: triggering Fact (U10);
-eligible responders/query (U3); decision maker (U2); eligible registered
-source rules; held payload (U12 held result / deferred continuation);
-ordering policy (U17); action/choice (U4); close/resume. Used for:
-interrupts; post-roll rerolls; post-damage-determination decisions;
-Vigilance; simultaneous-owner ordering when mechanically interactive;
-future post-result choices. Automatic triggered effects are NOT windows.
-
-**Non-responsibilities.** Not automatic triggered effects (lifecycle
-recipes, movement-entry triggers, reactive trigger folds are fact-driven
-execution, not decisions); not the choice validator itself (U4); not the
-continuation storage (U12).
+[Responsibility and vocabulary](generic-underlays.md#u13-window--decision-point).
 
 **Source evidence.** Interrupt windows on when-damaged/defeated
 (p.105/p.107; the two `TRIGGER_WINDOW_RECIPES` rows cite p.107/p.128
@@ -2145,56 +385,6 @@ Righteous Disdain and p.107/p.138 Boiling Blood); save-reroll window
 (Sucker Punch, p.143 — same-window reroll); Vigilance trigger windows
 (p.105); interrupt priority/nesting and turn-order rules (p.107);
 Masquerade interrupt legality (p.151); gamble windows (p.150/p.179).
-
-**Current state.** `AUTHORITATIVE (T5c, 2026-08-30)` — the FULL declared
-U13 scope now has ONE authority: `kernels/decision-window.ts`
-(`DecisionWindowRecord`). The old quasi-window schemas are gone:
-`kernels/trigger-window.ts` is DELETED (its registry moved in as
-`DAMAGE_WINDOW_RECIPES` + `decideDamageWindow` +
-`openDamageWindowFromLedger`); the `EncounterPendingInterrupt` schema is
-DELETED (a compatibility alias remains); the per-window
-`heldDamage`/`heldSave`/`heldResult` fields are gone — every window carries
-its already-determined outcome as a U12 HELD-RESULT `heldPayload`
-continuation; `pendingInterrupts` in encounter state is replaced by
-`decisionWindows` (schema 8→9, migrated); the `choice` kind carries a U4
-`RuleChoice` and answers through the new `ANSWER_DECISION_WINDOW` command
-(recorded decision, never an engine default).
-
-**Locations partially owning/duplicating.** NONE at the record level —
-`primitives/save-window.ts` still owns rolling/formatting a save (the
-save-RESOLUTION primitive, not a window) and `primitives/gamble-window.ts`
-still owns the deterministic recorded dice operation (a Gamble roll is NOT
-a window); `kernels/runtime.ts::rerollSaveMutations` still owns the
-reroll computation and consumes the window's held payload through
-`windowHeldSave`. These are distinct domain responsibilities, documented
-boundaries, not duplicate window schemas.
-
-**Intended authority.** `kernels/decision-window.ts` (the U13 home):
-`DecisionWindowRecord` (durable id, typed `DecisionWindowKind`, actorId,
-triggeredAt/order, U10 `openedBy` fact-kind provenance with the U12
-`instanceId` correlation seam, held payload as U12 `ArmedContinuation`,
-held ability effects, retarget, U4 choice spec, U17 ordering policy, U11
-flow `resume`); `openDecisionWindow`/`closeDecisionWindow`;
-`popDecisionWindowStack` (LIFO by triggeredAt — the p.107 stack rule);
-`orderDecisionWindows` (p.107 turn-order alternation);
-`DAMAGE_WINDOW_RECIPES` (the closed when-damaged/defeated eligibility
-registry, p.107/p.128/p.138); `windowHeldDamage`/`windowHeldSave`
-(projections of the held payload — the payload is the authority).
-Dependencies: U2, U4, U10, U12, U17. Consumed by the interrupt/save
-command paths and the U11 flow-suspension seam. T5c.1 (corrective
-2026-08-31): durable window ids are minted by `nextWindowId` from the
-per-encounter monotonic `windowSerial` (`EncounterState.windowSerial`, schema
-10, migrated, snapshot-validated) so a closed window's id is never reused in
-a revision (never the collection length); `when-damaged` (p.128 Righteous
-Disdain) answers for an ALLY in range — the interrupt owner is DISTINCT from
-the damaged character, and `windowHeldDamage`/the held payload carry the
-`targetId` the determined amount was decided against.
-
-**Typed vocabulary.** `DecisionWindowKind` (when-damaged, defeated,
-save-rolled, uses-ability, area-inclusion, targeted-by-ability, choice);
-one record shape; held payload is a U12 `ArmedContinuation` (held-result
-damage/save, or a deferred decision continuation); U4 choice on `choice`
-windows; U17 ordering identity on the record.
 
 **Replay semantics.** The window opens from a recorded ledger entry /
 recorded event (`openDamageWindowFromLedger`, the reducer's `applyDamage`
@@ -2218,40 +408,9 @@ invented destination); two same-kind windows never answer each other;
 replay of held damage + save reroll is byte-identical with zero fresh
 RNG/decisions.
 
-**Consumers to migrate.** DONE for the window layer: trigger-window.ts
-(deleted), pendingInterrupts (→ decisionWindows), damage-ledger window
-side, save-rolled window, and the deferred-rule decision seam
-(Great Giorgios may-rush). `ability-use-choices.ts` remains an opaque
-fold NOT part of U13's record layer (a documented specialist).
-
-**Blocker families enabled (information only).** interrupt-rider/grant/
-timing/rank, post-roll-reactive-choice, gamble-result-selection, damage-
-preview, damage-maximize, entry-save-gate, player-choice (window half),
-Vigilance (B4), mark-detonation-window, aura-trigger-grant,
-foe-trigger-expansion, save-or-stun (window half).
-
----
-
 ### U14 Modifier / Policy
 
-**Semantic responsibility.** How an attached rule alters a typed query
-point: `ModifierRule { source, owner/reference, queryPoint, scope,
-operation, value, predicate, priority/ordering if required }`. Query points
-stay TYPED: listed range; internal range; area size; movement distance;
-target count; action cost/type; damage dealt; damage taken; damage die;
-attack boon/curse; attack threshold; save boon/curse; save threshold; use
-cap; interrupt rank; duration; resource cap; permission; immunity; cover;
-LoS/LoE permission; trigger permission. PERMISSION/IMMUNITY is a typed
-policy/modifier query, NOT a separate underlay — but can/cannot/ignore/
-immune stay DISTINCT typed query points, never one collapsed boolean.
-Deterministic fold order; ownership gate (U2); closed negatives (never
-alias every bypass to Divine).
-
-**Non-responsibilities.** Not the domain authorities that consume modifiers
-(range/area/damage/attack/save kernels keep their folds but read the shared
-recipe); not U18 Attachment (the attachment registry/equipment predicate is
-a candidate, not this underlay — though U14 is its core contribution kind);
-not bespoke per-source resolver modifiers.
+[Responsibility and vocabulary](generic-underlays.md#u14-modifier--policy).
 
 **Source evidence.** Listed-range changes (Dark Sliver t2 "Sacrifice 2:
 Ability gains range 6", p.187); area shape/size overrides (line→arc,
@@ -2260,79 +419,6 @@ boons/curses, save boons/curses (p.102, p.105); unerring/cover/dodge
 permissions (p.104/p.105); immunity/resist/deny on damage (p.102 glossary);
 use caps ("use count override"); interrupt rank; duration modifiers;
 "cannot/ignore/immune" distinct (p.102, p.104).
-
-**Current state.** `PARTIAL (T3 recipe shape landed; corrected 2026-08-31 by the T6 audit)` — the ONE recipe shape
-exists and the value/override fold registries fold through it, but the
-`RuleModifier` stat bag (a stat/op/value bag without a typed query point,
-consumed by `encounter-adapter.ts`/effect-instance mutations) is NOT yet
-migrated onto typed query points and has no parity proof.
-`primitives/modifiers.ts` (barrel re-exported) owns: `ModifierRule`
-`{ sourceId, ownerId, queryPoint, scope, operation, value, gates, talent,
-actionId, from, ordering }`; `registerModifierRule` (unknown query points
-reject at registration); `applicableModifierRules` / `foldNumberModifiers` /
-`foldEnumeratedModifiers` (registration order, `add` accumulates, last
-`set`/`override` wins, `from`-guarded chained conversions); ONE shared gate
-evaluator (`modifierGateHolds` over the shared `ModifierGate` union:
-always/stealth/comeback/round-at-least/mastery/choice/self-bloodied/
-target-bloodied/target-has-condition); and the typed `PermissionQueryPoint`
-kinds (`cannot`/`ignore`/`immune`) with the CLOSED negative registry
-`PERMISSION_NEGATIVES` — a (queryPoint, kind) pair outside it rejects at
-registration, so a wildcard bypass is unrepresentable. The range
-(`listed-range`, per declared scope), area (`area-size` + `area-shape`),
-mastery (`interrupt-rank`/`damage-type` + the `range-bound` permission,
-with the equipped+mastered requirement baked into every row), and
-bonus-damage (`bonus-damage-dice`) registries convert their content rows to
-shared rows at registration and fold through the shared discipline; the
-kernels keep their public surfaces (`effectiveScopedRange`,
-`effectiveAreaFor`, `effectiveInterruptRank`, `convertedDamageType`,
-`hasUnlimitedRange`, `bonusDamageDiceForUse`) as thin adapters. Numeric
-modifier VALUES are U5 `RuleNumber` expressions (`ModifierValue =
-{ kind: 'number', value: RuleNumber } | { kind: 'enumerated', value: string }`)
-— corrected contract: the primitive owns NO special dynamic literals (the
-old `'round'` special case is the U5 `{ kind: 'round' }` expression, and the
-range adapter's `'round'` shorthand translates to it at the kernel
-boundary). Resolution is INJECTED: the primitive folds take a
-`ModifierNumberResolver`, and `kernels/evaluate-modifiers.ts`
-(`resolveModifierNumber`) is the thin kernel-layer evaluator projecting the
-fold view onto the representable U5 subset (constant, round, pure scalar
-compositions: add/multiply/minimum/maximum/clamp/percent) — any
-context-dependent expression (stat/resource/input/distance/die) FAILS
-CLOSED at resolution, never a guessed value. Enumerated replacements (area
-shape, damage type) stay typed separately and are never folded
-arithmetically. Retained
-specialists with written boundaries: `CostModifierRule` (function-shaped
-cost-list rewriting — a list transformation, not a value fold; the
-`action-cost`/`action-cost-type` query points are where numeric folds
-apply), the attack-modifiers armed one-shot fold (`armedKey`/`attachmentKey`/
-`exactRange` consumption — armed state is not a value fold), the
-scaled/recipient bonus-damage function rows, aura boon/curses and
-save-window boon/curse (domain-authority consumption sites), and the
-damage-exception mutation fields (`bypassVigor`/`ignoreArmor`/
-`ignoreDefiance`/`ignoreAetherwall`/`ignoreCover`/`ignoreDodge` stay
-distinct program-emitted delivery fields; the permission registry exists
-for content-registered permission rows and the unerring → cover-ignore +
-aetherwall-ignore mapping stays explicit — never one aliased Divine
-bypass).
-
-**Locations partially owning/duplicating.** The six registries listed
-above + `primitives/types.ts::RuleModifier` (a stat/op/value bag without a
-typed query point) + `kernels/hp-threshold.ts` + `passive-projection.ts`
-(projected modifiers).
-
-**Intended authority.** `primitives/modifiers.ts` (barrel re-exported):
-`ModifierRule` one recipe shape `{source, owner, queryPoint, scope, op,
-value, predicate, priority}`; `foldModifiers(queryPoint, scope, context)`
-per query point; typed `PermissionQueryPoint` kinds
-(`can/cannot/ignore/immune` distinct, closed negative sets per query
-point); ownership gate. Dependencies: U1 (owner/ref), U2 (ownership gate),
-U5 (value), U6 (predicate gate), U8 (scope). Consumed by range/area/
-attack/damage/save/cost/usage domain kernels (they keep folds, read the
-shape).
-
-**Typed vocabulary.** `QueryPoint` union (the list above); `ModifierRule`;
-permission kinds; fold order contract (registration order, `add` accumulates,
-last `override` wins — matching today's range kernel discipline); closed
-negative registries per query point (no wildcard bypass).
 
 **Replay semantics.** Fold order is deterministic (registration order);
 the fold reads durable state (equip/mastery/talent/choice) at the query
@@ -2347,38 +433,9 @@ conflicting rules at the same query point (deterministic winner); scope
 filtering; predicate-gated rules flipping on/off with state. Replay:
 fold-dependent attack/damage fixtures replay byte-identical.
 
-**Consumers to migrate.** `RangeModifierRule`/`AreaModifierRule`/
-`CostModifierRule` rows → `ModifierRule` rows (content registration
-rewrites, behavior-preserving); `RuleModifier` (stat bag) → typed query
-points; `attack-modifiers.ts`/`mastery-fold.ts`/`bonus-damage.ts`/aura/
-save-window folds read the shared shape; `ignoreAetherwall`/`ignoreCover`/
-`ignoreDodge`/`bypassVigor`/`ignoreArmor`/`ignoreDefiance` → distinct
-permission query points (no aliasing).
-
-**Blocker families enabled (information only).** range-modifier,
-unlimited-range, active-effect-range-modifier, aura-range-override,
-*fly/dash/rush/teleport/movement-distance-modifier, attack-modifier,
-ability-attack-modifier, attack-result-modifier, damage-modifier,
-damage-taken-modifier, save-modifier, save-result-modifier,
-dice-result-modifier, threshold-modifier, trigger-threshold-override,
-target-count-override, use-count-override, resource-cap-override,
-delivery-immunity, defense-bypass, pierce, condition-* suppression,
-end-turn-suppress, turn-end-no-attack, fly-benefit-rider.
-
----
-
 ### U15 Transaction / Atomic Commit
 
-**Semantic responsibility.** ATOMIC GROUPING + COMMIT SEMANTICS: propose
-intents → validate against ONE authoritative/intermediate snapshot → if all
-required legs legal, emit mutations; else reject / source-defined fallback.
-Shared by: costs; resource spends; sacrifice; resolve split across
-party/personal pools; atomic swaps; exact-count creation; multi-leg required
-movement; grouped choices/effects where the source says all-or-nothing.
-
-**Non-responsibilities.** NOT one merged validation algorithm (spatial stays
-spatial; payment stays economy; creation stays creation) — the underlay is
-the grouping + commit, not the per-domain legality.
+[Responsibility and vocabulary](generic-underlays.md#u15-transaction--atomic-commit).
 
 **Source evidence.** Masquerade: "If you or your ally can't make a valid
 teleport, this interrupt can't be made" (p.151 — `requiresLegalSpatialBatch`
@@ -2386,57 +443,6 @@ prior art); swap groups every-leg-or-none (p.151, p.163, p.300); exact-count
 entity creation (p.95/p.107/p.108 — `countMode: 'exact'`); costs validated
 before any effect or RNG (p.99, p.102/103 — `assertRuleCostsPayable`);
 resolve split across party pool + personal resolve (p.99).
-
-**Current state.** `LANDED (T3, 2026-08-30)` — the generic atomic-grouping
-underlay exists and the source-declared spatial batch routes through it.
-`primitives/transaction.ts` (barrel re-exported) owns `TransactionLeg`
-(intent + per-leg validate), `TransactionSpec` (legs + declared
-validation mode + deterministic provisional-state projection),
-`validateTransaction` (all-or-nothing verdict naming the first failing
-leg), `proposeAtomicGroup` (intents-for-commit on `ok`), and
-`legWithCheck`. Corrected contract — COLLECTIVE DEPENDENCE: a transaction
-is not only a bag of independent validators over one snapshot. Two
-families are BOTH representable via the declared `mode`: `simultaneous`
-(default) validates every leg against the ORIGINAL common pre-state
-(source-defined swaps: each swap leg judged pre-swap, never against the
-other legs' projected effects — the Masquerade gate composes this mode),
-and `sequential` validates leg i against the state projected by the
-EARLIER proposed legs (`project(snapshot, applied)`), the cumulative
-family: multiple spends against one pool, split pools, creation
-conflicts, sacrifice + payoff. The projection is the CALLER's domain
-projection (payment stays economy, creation stays creation) — the generic
-authority never guesses how an intent changes state, and a `sequential`
-transaction WITHOUT a `project` fails (a programming error, never a
-silent fallback to simultaneous semantics).
-The command boundary's `assertLegalSpatialBatch` (ICON p.151 Masquerade)
-now composes the source-declared atomic spatial group through
-`validateTransaction`: every move leg is validated against the SAME
-pre-swap snapshot via the spatial gateway
-(`encounter-adapter.ts::deniedAtomicSpatialLegIndices` — U15 owns the
-grouping, never the geometry) and a single denied leg rejects the whole
-action before any event is emitted. The cost-payment
-validate-then-commit, the swap `spatialBatchId` groups, and entity
-creation `countMode: 'exact'` remain the per-domain legality authorities
-(their all-or-nothing contracts are the same shape and are documented as
-U15 instantiations); the seam exists for future grouped flow steps and
-multi-leg costs/spends.
-
-**Locations partially owning/duplicating.** `kernels/cost-payment.ts`;
-`primitives/spatial-intent.ts` + `encounter-adapter.ts` (spatial batch);
-`kernels/entity-creation.ts` (exact count); `RuleAction.requiresLegalSpatialBatch`
-(`primitives/types.ts`); `swapMutations` (`primitives/job-kit.ts`).
-
-**Intended authority.** `primitives/transaction.ts` (barrel re-exported):
-`TransactionGroup` (intents, validation against one snapshot, commit /
-reject / source-defined fallback); `proposeTransaction` /
-`commitTransaction`. Dependencies: U1 (refs), U6 (conditional legs),
-U8 (scope). Consumed by U11 (flow steps that group), resource/economy,
-spatial/movement, placement/entity domain authorities.
-
-**Typed vocabulary.** `TransactionGroup`; intent shapes (typed per domain,
-validated by the domain's authority); commit/reject/fallback results;
-snapshot semantics (clone-based pure prevalidation — the swap-group
-pattern generalized).
 
 **Replay semantics.** The prevalidation happens once at the command
 boundary against the authoritative snapshot; the emitted mutations (all-or-
@@ -2450,28 +456,9 @@ Boundary: empty group; cap-reduced success (legitimate partial per source
 cap); source-defined fallback path. Replay: swap + exact-creation fixtures
 replay byte-identical.
 
-**Consumers to migrate.** `cost-payment.ts` commit path → transaction
-machinery; `spatialBatchId` groups → `TransactionGroup`; `countMode: 'exact'`
-→ transaction commit semantics; `requiresLegalSpatialBatch` gate → group
-prevalidation.
-
-**Blocker families enabled (information only).** resource-management,
-heroics-economy, vigor-grant, variable-cost, sacrifice-percent, wound-cost,
-charge-combo-activation, combo token folds, movement-entry-cost,
-multi-actor-teleport (group half), forced-placement (atomic half).
-
----
-
 ### U16 Usage / Entitlement Ledger
 
-**Semantic responsibility.** "How many times has/may this rule be used/
-triggered within Scope X?" — distinct from spendable RESOURCE. Represent:
-key/source; owner/reference; optional target/reference; scope (U8); count;
-cap; reset Clock; increment/consume; refresh; de-duplication identity.
-
-**Non-responsibilities.** Not resource spend (economy domain); not the fact
-record itself (U10 records outcomes; U16 counts entitlements — the de-dup
-identity reads both).
+[Responsibility and vocabulary](generic-underlays.md#u16-usage--entitlement-ledger).
 
 **Source evidence.** once-per-turn / once-per-round / N-per-round /
 N-per-combat / first-use (p.99, p.105); "once per ability even when
@@ -2480,97 +467,6 @@ once per turn; slashed once per turn; one attack-tag ability per turn
 (p.129 Special); no-repeat ability rule; limit break once/combat; Vigilance
 once per trigger (p.105); interrupt refresh; per-use magnitude ("2nd/3rd use
 dashes 3/2/1").
-
-**Current state.** `COMPLETE/AUTHORITATIVE` (2026-09-01). Core landed in T3,
-U10 de-dup in T4, and the T6.4/T6.4a/T6.4b repairs migrated raw usage fields,
-No Repeats, standard-move, interrupt, movement, terrain, and residual
-once-per-scope marks onto typed ledger identities. The residual-state census
-proved `damage-immune` and armed/charged/pending fields are mode or fact state,
-not entitlement. The last unresolved consumer, Monogatari's once-per-song
-grant, now composes U16 `applyLifecycleScopedUsage` with U8's generic
-source-defined lifecycle identity; re-singing opens a new instance and two
-owners never alias. `monogatari:granted` has no production reader. A fresh
-residual census found no competing usage authority. See
-`docs/u8-monogatari-u16-report.md`.
-
-`primitives/usage.ts` (barrel re-exported) owns the core ledger:
-`UsageKeySpec`/`usageKey` (byte-identical `ledger:<scope>:<sourceId>`
-format, extended per-target — the STORAGE key, actor-local by design), and
-`usageIdentity`/`usageIdentityKey`/`usageIdentitiesEqual` (the typed
-DE-DUP IDENTITY, corrected contract: DISTINCT from the storage key and
-ALWAYS carrying the owner — two different owners of the same
-source/scope/target have different identities, proven by negative test,
-so T4's U10 fact-backed de-duplication cannot inherit the storage key's
-owner collision; the U10 fact read completes the full trigger-family
-identity in T4), `usageCount`, `ledgerAvailable`,
-`consumeUsageMutation` (one-shot boolean mark or N-per-scope count
-increment), `refreshUsageMutation`, `usageRead` (per-use magnitude
-ordinal), `holdsUsageKey`, `resetBoundaryFor` (turn/round/combat onto U8
-boundaries), and `usageCap` (folds the U14 `use-cap` query point for
-count-override caps). `kernels/use-ledger.ts` is now a thin adapter
-preserving the byte-identical keys/marks (the F9 once-per-round gate's
-`ledger:round:*` byte-contract still holds via the U16 `applyOncePerRoundUsage`
-operation — the old `roundLedgerKey` adapter is deleted), and the U6
-`used-scope` predicate evaluates against
-the durable ledger. **T4 (2026-08-30) completed U16's U10-backed
-de-duplication** (`primitives/facts.ts`), then corrected by the T4
-corrective pass (2026-08-30): the de-dup identity is RESOLUTION-scoped —
-`{ sourceId, ownerId, scope, resolutionId, trigger }` — implementing ICON's
-triggered-effect once-per-ability rule (p.107). U10 `trigger-resolved`
-markers (ID-scoped under a durable, replay-stable resolution identity owned
-by the command/event boundary) are consulted through `hasResolvedAsFact`
-and are WIRED into the real reactive continuation
-(`executeRuleProgramWithReactiveTriggers`): one ability's multiple routing
-facts (three Collides) open ONE triggered step; a second ability use
-(different `resolutionId`) may trigger again. Per-target de-dup is keyed in
-ONLY where a source declares once-per-target; distinct triggered STEPS stay
-distinct. The `trigger-resolved` markers themselves RIDE the event's U10
-fact list (one per resolution + triggered step, keyed by the canonical
-resolve identity), so replay consumes the RECORDED once-per-ability
-decision — `RuleContinuationState.derivedTriggers`/`executedStepIds` are
-FLOW bookkeeping only, never the semantic substitute. The typed U10 fact
-history RIDES the durable `RULE_MUTATIONS_APPLIED` event (with its
-`resolutionId`, derived from the durable `resolutionSerial`), so replay
-consumes the recorded outcomes and their identities — it never re-derives
-them.
-Ordinary entitlement COUNTS stay in the ledger (`used-scope`); event
-de-duplication is the fact read — semantically distinct. **T6.4 (2026-08-31)
-closed the raw-field consolidation**: the `interrupt-uses` counter,
-`interrupt-uses-this-turn`, `slashed`/`dangerous-terrain` once-per-turn
-flags, and the one-attack-per-turn gate now live ONLY on typed `ledger:*`
-entries (owner-relative `turn` pools + the per-actor `any-turn` windows),
-and the raw `EncounterActor` fields were REMOVED (schema 11 folds legacy
-values 1:1 and drops them deterministically). **T6.4a (this tranche, 2026-08-31)
-completed U16's closure: (1)** the one-interrupt-per-turn restriction is
-ACTOR-LOCAL (p.91 subject is the character; the rejected battlefield-global
-`interruptWindowUsedBy` scan is removed; Black Rock Vanguard is an
-actor-scoped cap); **(2)** `usedAbilityIds` (No Repeats) and `standardMoveUsed`
-were re-audited and MIGRATED to typed `ledger:*` keys (schema 12) instead of
-being retained as raw/scheduler specialists; **(3)** the dangerous-terrain
-once-per-turn vs the p.183 Harvester once-per-round reprint is recorded as
-adopted adjudication `icon-1.5:dangerous-terrain:damage-cadence`. The
-`attackedThisTurn` resolution FACT is retained as a documented U10
-specialist (onset resolution record, read by Soul Blade / Carnevale /
-Hissatsu / Monogatari / VM).
-
-**Retained specialists (not duplicate authority).** `kernels/use-ledger.ts`
-is the adapter over U16; `trait-reactions.ts` consumes U16's atomic
-`applyOncePerRoundUsage` result. `RuleContinuationState` is U11 flow
-bookkeeping, `attackedThisTurn` is a U10 fact, and `end-turn` is scheduler
-state; none can authorize or consume a use.
-
-**Intended authority.** `primitives/usage.ts` (barrel re-exported):
-`UsageLedger` record (key/source/owner/target ref/scope/count/cap/reset
-Clock/refresh hook); `ledgerAvailable` / `consumeUsage` / `refreshUsage`;
-one de-dup identity (`usageKey(source, owner, target, scope, fact)`).
-Dependencies: U1 (refs), U8 (scope/Clock), U10 (de-dup fact identity).
-Consumed by U5 (usage reads), U6 (usage predicates), U13 (once-per-trigger
-windows), U17 (ordering of simultaneous uses), lifecycle/movement/terrain
-authorities.
-
-**Typed vocabulary.** `UsageLedger`; `UsageScope` over the U8 Clock;
-per-use magnitude (`usageRead(key, ordinal)`); refresh hooks; de-dup
-identity type shared with U10 facts.
 
 **Replay semantics.** The ledger decision is made once at the command
 boundary and recorded as a durable state mutation (today's bar); replay
@@ -2584,30 +480,9 @@ unequipped source never consumes. Boundary: cap reduced by an override;
 refresh-vs-combat boundary; shared-turn-ledger across two actors. Replay:
 reactive-trigger de-dup + interrupt-use fixtures replay byte-identical.
 
-**Consumers to migrate.** None for the declared U16 contract. All known
-entitlement gates route through typed U16 operations; U10/U11/scheduler
-records remain documented disjoint facts/bookkeeping.
-
-**Blocker families enabled (information only).** use-count-override,
-interrupt-use-scaling, first-use-gate, auto-refresh, shared-turn-ledger,
-turn-end-no-attack, mark-activation-gate, once-per-round-fly-grant (usage
-face), movement-trigger (dedup face), dangerous-terrain once-per-turn,
-limit-break once/combat, no-repeat ability rule.
-
----
-
 ### U17 Ordering / Arbitration
 
-**Semantic responsibility.** Typed policies for "when multiple operations
-are simultaneously eligible, what determines their order" — NOT one
-`priority: number`: source-order; stack/LIFO; turn-order;
-hostile-before-beneficial; non-active-owner-before-active-owner;
-controller-choice; explicit ordered list. A policy may YIELD A CHOICE (U4)
-when the source gives someone authority to order.
-
-**Non-responsibilities.** Not the scheduler's turn election (scheduler
-stays); not array-iteration as an implicit rule; not the decision window
-itself (U13 consumes ordering policies).
+[Responsibility and vocabulary](generic-underlays.md#u17-ordering--arbitration).
 
 **Source evidence.** Listed effect order (p.85, p.107 §4 — `orderedSelectedSteps`);
 explicitly overridden effect order; interrupt nesting (most-recent trigger
@@ -2616,87 +491,11 @@ first) and same-trigger turn-order rules (p.107); turn-boundary ordering
 player determines order — p.107); Delay ordering at slow-turn start (p.87);
 turn alternation; player ordering choices (p.107).
 
-**Current state.** `COMPLETE/AUTHORITATIVE (T6.2 + T6.3, 2026-08-31)` —
-typed policies + the policy→CHOICE seam exist and every §1 consumer now
-routes through them. **T6.2 landed the recorded SAME-OWNER simultaneous
-ordering decision**: `sameOwnerOrderingDecision` classifies a tie as
-determined / unresolved / yields a chooser decision; U4 validates the answer
-as a FULL PERMUTATION of the exact pending set (`resolveChoice` `ordering`
-kind); U13 opens the ONE ordering decision window
-(`openOrderingDecisionWindow`, chooser derived through U2); the recorded
-order stamps durable `resolvedOrder` ranks (`recordOrderingDecision`) and
-the U17 LIFO pop / boundary projection consume exactly that order on replay
-— zero fresh choice, zero inferred tie-break, zero array-order dependence
-(`t6-2-u17-recorded-ordering.test.ts`, 30 cases; room responder
-authorization in `rooms.test.ts`). **T6.3 landed the remaining turn-boundary
-consumers**: `turnBoundaryOrdering` composes the p.108 rules (non-turn-owner
-first → hostile-before-beneficial within each ownership group → the first
-same-owner tie becomes a recorded U4/U13 ordering decision → any remaining
-cross-owner/missing-owner tie fails closed). The command boundary records a
-durable per-phase lifecycle candidate plan (source id + mechanical owner +
-owner side) in the F3 intent; `runLifecyclePhase` / `expireBoundaryEffects`
-route it through `turnBoundaryOrdering`, a same-owner tie defers onto the
-ONE U13 ordering window (`heldBoundary`), and the DECISION_ANSWERED reducer
-resolves the deferred effects in the recorded order. The lifecycle registry
-insertion order is demoted to discovery/enumeration (and the pre-T6.3
-legacy-replay fallback); `orderCrossCharacterEffects` delegates to U17 and no
-longer holds a listing-order tie-break (`t6-3-turn-boundary-ordering.test.ts`,
-27 cases). `primitives/ordering.ts` (barrel re-exported) owns `OrderingPolicy`
-(source-order | stack | turn-order | hostile-before-beneficial |
-non-active-owner-first | controller-choice | explicit-list),
-`applyOrdering(policy, candidates, context)` (pure — a function of the
-recorded policy + durable context, returning `OrderingResult`),
-`policyYieldsChoice` (controller-choice yields a typed U4 choice spec;
-the engine never invents an order), `orderingKey` (durable identity),
-and the side/owner policy reads. Corrected contract — FAIL CLOSED:
-`applyOrdering` returns `{ ok: true, ordered }` or `{ ok: false, problem }
-` with typed problems (`missing-source-order`, `missing-turn-order`,
-`missing-perspective`, `missing-active-owner`, `yields-choice`,
-`unknown-candidate`); a policy whose required context is absent, or whose
-candidates are not fully covered by its declared authority
-(source-order/turn-order/explicit-list audit candidate ids against the
-declared list), is UNRESOLVED and the command/window boundary REJECTS —
-"fail closed" means reject, never "use whatever order the caller
-supplied". `controller-choice` is never resolved by `applyOrdering`: it
-returns `yields-choice` carrying the typed choice and the caller routes
-it through U4.
-`orderedSelectedSteps` (the engine's ability-step order, p.85/p.107 §4)
-now applies the `source-order` policy against the ability's step listing;
-`decideDamageWindow` applies the `source-order` policy against
-`TRIGGER_WINDOW_RECIPES`; the pending-interrupt LIFO pop (p.107 most-
-recent-trigger-first) applies the `stack` policy. The scheduler's turn
-election remains the scheduler authority (documented as a U17 consumer).
-T6.3 landed the turn-boundary consumers: the lifecycle phases and boundary
-expiries route through `turnBoundaryOrdering` (T6.3) and the recorded
-same-owner decision seams route through U4/U13 (T6.2).
-
-**Locations partially owning/duplicating.** `kernels/runtime.ts`
-(`orderedSelectedSteps` — source-order adapter); `kernels/trigger-window.ts`
-(recipe order — source-order adapter); `encounter-adapter.ts` (pending-interrupt
-order — stack adapter); `turn-scheduler.ts` (turn order — scheduler
-authority, reads policies where needed). `kernels/lifecycle.ts` (registry
-order) is demoted to discovery/enumeration order + the legacy-replay
-fallback for pre-T6.3 event logs — it is NO LONGER a boundary ordering
-authority (the durable per-phase candidate plan through `turnBoundaryOrdering`
-decides).
-
-**Intended authority.** `primitives/ordering.ts` (barrel re-exported):
-`OrderingPolicy` union (source-order | stack | turn-order |
-hostile-before-beneficial | non-active-owner-first | controller-choice |
-explicit-list); `applyOrdering(policy, candidates, context)`;
-`policyYieldsChoice` → U4 `ChoiceSpec`. Dependencies: U2 (role-based
-policies), U4 (policy→CHOICE seam). Consumed by U11 (flow order), U12
-(ordering identity on continuations), U13 (window ordering), lifecycle,
-interrupt engine.
-
-**Typed vocabulary.** `OrderingPolicy` union; per-policy arguments (explicit
-lists, choice specs); `orderingKey` for durable identity.
-
 **Replay semantics.** Ordering is a pure function of the recorded policy +
 durable state; replay never depends on array construction order;
 controller-choice ordering records the player's ordering decision.
 
-**Acceptance tests (all PASS).** Positive: hostile-before-beneficial at a
+**Acceptance tests.** Positive: hostile-before-beneficial at a
 turn boundary + non-turn-owner-first (T6.3); LIFO interrupt nesting;
 controller-choice ordering yields a recorded decision (T6.2); explicit-list
 policy. Negative: undefined policy rejects; unorderable candidates (no
@@ -2709,134 +508,53 @@ ordering; the recorded same-owner order replays with zero fresh decision
 and zero input-order dependence (T6.2 `t6-2-…` 30 cases, T6.3
 `t6-3-turn-boundary-ordering.test.ts` 27 cases).
 
-**Consumers to migrate.** None — all listed consumers are landed: `orderedSelectedSteps`
-consumes the `source-order` policy; the lifecycle registry order is demoted
-to discovery/enumeration (T6.3) with the phases routed through a recorded
-per-phase candidate plan; `TRIGGER_WINDOW_RECIPES` order consumes the
-`source-order` policy; `pendingInterrupts` order consumes the `stack`
-policy; the scheduler reads policies where mechanically interactive.
-
-**Blocker families enabled (information only).** interrupt-timing/rank
-(ordering half), Delay ordering, turn-boundary effect ordering,
-simultaneous-owner ordering, player ordering choices, foe phase transition
-order (Part C).
-
----
-
 ## 2. Candidates: U18 Attachment and U19 Intent (evaluate, do not assume)
 
-Both stay candidates until the design test is passed with code evidence.
-This plan's phases generate that evidence; the decision point is in Phase T6.
+Both remain candidates. Reopen either decision only when code evidence passes
+[the design test](generic-underlays.md#design-test-apply-before-any-new-underlay-or-primitive).
 
 ### U18 Attachment / Contribution — CANDIDATE, do not promote yet
 
-**What it would be.** A generic recipe: `source attachment` + `ownership/
-equipment predicate` + `attachesTo query` + `contributions: modifiers |
-extra flow steps | triggers/windows | action grants | policy grants |
-choices`, eliminating independent fold architectures (`mastery-fold.ts` +
-trait fold + talent fold + fortune).
+A proposed attachment record combines source ownership/equipment, an
+`attachesTo` query, and contributions. Its parts already map to existing
+contracts:
 
-**Design-test walk-through (generic-underlays.md §Design test).**
+| Proposed part | Existing owner |
+| --- | --- |
+| Identity and ownership/equipment perspective | U1 references + U2 roles |
+| Attachment target and contribution choice | U3 query + U4 choice |
+| Modifiers and policy grants | U14 ModifierRule |
+| Extra steps and action grants | U11 flow |
+| Triggers, windows, held work | U12 continuation + U13 window |
 
-1. New REFERENCE kind? → No, refs are U1.
-2. ROLE distinction? → The ownership/equipment predicate is U2-shaped
-   (owner/controller) + U1 refs, not a new algebra.
-3. QUERY? → `attachesTo` is a U3 query.
-4. CHOICE? → contribution choices are U4.
-5–10. VALUE/PREDICATE/ANCHOR/SCOPE/PROVENANCE/FACT? → No.
-11. FLOW operation? → "extra flow steps" and "action grants" are U11
-   contributions.
-12. CONTINUATION? → "triggers/windows" are U12/U13 contributions.
-13. WINDOW? → Same as 12.
-14. MODIFIER/POLICY query point? → "modifiers" and "policy grants" are
-   exactly U14 contributions.
-15–17. TRANSACTION/USAGE/ORDERING? → No.
-18. Operation of an existing DOMAIN AUTHORITY? → Partially: the folds live
-   at attack/damage/range/area query points (Part B authorities).
-19. Genuinely new STRUCTURAL STATE MODEL? → No.
+Attachment registration is currently a content-authoring pattern. The shared
+modifier registry and the U11/U12/U13 contribution paths are the existing
+composition; armed-state consumption and cost/aura/save specialists retain
+written boundaries in the foundation and consumer census.
 
-**Assessment.** Every contribution KIND maps onto an existing underlay
-(U14/U11/U13/U12/U4/U3). What is genuinely new is the **attachment
-registry + equipment predicate** — but that is content registration glue
-plus U2-role/U1-ref reads, not new algebra. U18 should be promoted only if,
-during the U14 consolidation (Phase T3) and U11/U13 work (Phase T5), a
-single shared attachment record actually eliminates duplicated fold
-authority that the one-recipe-shape ModifierRule cannot.**Decision rule:** promote U18 iff, after T3/T5, `mastery-fold.ts` + `attack-modifiers.ts` trait fold + talent folds + fortune still require a common record that is not just U14 ModifierRule + U11 flow steps + U13 windows registered from content. Otherwise fold consolidation is a U14/U11/U13 migration and U18 stays a content-registration pattern.
-
-**T3 evaluation (2026-08-30):** the U14 consolidation did NOT produce a
-need for a new attachment record. `mastery-fold.ts` now reads the shared
-`ModifierRule` registry (`interrupt-rank`/`damage-type` rows + the
-`range-bound` permission), and range/area/bonus-damage fold through the
-same one-shape rows; the attack-modifiers armed one-shot fold, the
-cost function rows, and the fortune/aura/save-window folds remain
-documented retained specialists with written boundaries (their remaining
-duplication is the armed-state consumption seam and the U11/U13 consumer
-migrations, not a missing record kind). **Verdict: U18 stays a candidate;
-no promotion.** The decision point re-opens at T6 after the U11/U13 work,
-per this rule.
-
-**T6 evaluation (2026-08-31, after T5c.1 landed):** re-ran the design test
-against current HEAD. The U11/U13 work is now landed: `open-window`/
-`suspend` route decision carriage through a U13 `choice` window (U4
-evaluated choice spec + U12 binder/resume), and armed/held continuations
-(U12) carry their refs/captured values and exact-window triggers. Every
-contribution KIND named in the U18 sketch resolves onto an existing
-underlay — U14 `ModifierRule` (one shared recipe shape, folded by the six
-registries), U11 flow steps/action grants, U13 windows / U11 suspend,
-U12 continuations, U4 choices, U3 queries — and the only "new" facet (an
-attachment/equipment registry + U2-owner predicate) is content-registration
-glue over U1 refs + U2 roles, not a new algebra. `mastery-fold.ts` still
-reads the shared `ModifierRule` registry; the attack-modifiers armed
-one-shot fold, cost function rows, and aura/save-window folds remain the
-same documented retained specialists. No post-T5/T6 code demonstrated a
-shared attachment/contribution record that the existing composition cannot
-express. **Verdict: U18 NOT PROMOTED.** Attachment stays a
-content-registration pattern; the evidence is the U14 one-recipe-shape
-fold + the U13/U12/U11/U4/U3 contribution seams above.
+**Decision rule:** introduce U18 only if mastery, trait, talent, or fortune
+folds demonstrate a common missing record that cannot be expressed as U14
+modifiers plus U11 flow and U13 windows registered from content. An equipment
+predicate or registration wrapper alone does not establish a new underlay.
 
 ### U19 Intent — CANDIDATE, do not promote yet
 
-**What it would be.** A typed layer between FLOW and mutations:
-`source rule → Flow ops → typed mechanical Intent → domain authority
-validates/resolves → durable Mutation/Event`. Partial evidence exists
-(entity `creation-spatial` intent, `SpatialIntent`, `resolveSaveWindow`
-spec).
+An intent is a typed proposed operation validated before mutation, such as a
+move, entity creation, attack, save, or resource spend. Existing
+`SpatialIntent`, paired `creationSpatial`, and `SaveWindowSpec` are contracts
+of their domain authorities; command-time validation and application of
+recorded authority have distinct responsibilities.
 
-**Design-test walk-through.** Q11 (FLOW operation?): intents are emitted by
-flow ops and consumed by domain authorities — they are the flow/domain
-boundary, i.e. a convention INSIDE the existing layers. Q18 (operation of an
-existing DOMAIN AUTHORITY?): validation/resolution already lives in the
-domain authorities (entity-creation, spatial gateway, save window). Q15
-(TRANSACTION?): U15's propose→validate→commit is intent-shaped.
+**Decision rule:** introduce U19 only when validation of the same typed intent
+is duplicated at command/reducer boundaries, the implementations can drift,
+and a common intent layer removes that duplication without competing with
+U15 transactions or the existing domain authority. Otherwise retain the typed
+domain contracts. No wrapper is required merely to make every operation
+share a common name.
 
-**Assessment.** The existing intent evidence is domain-authority validation
-discipline (paired `creationSpatial`, `SpatialIntent`, `SaveWindowSpec`),
-not a missing algebra. U19 should be promoted only if Phase T5 (U11/U12/U13)
-+ U15 reveal duplicated validation authority that a typed intent layer
-removes (e.g. the same legality re-checked at command time AND reducer time
-for the same intent). **Decision rule:** promote U19 iff after T3/T5 the
-command-boundary validation and the reducer validation of the same typed
-intent still drift; otherwise keep intents as the domain authorities'
-validation contracts and do not add a wrapper layer.
-
-**T6 evaluation (2026-08-31):** re-inspected command-boundary vs reducer
-validation for the same typed intents. The candidate-reading
-command boundary validates candidate/save/entity/placement legality (U3/U7
-`validateActorCandidate`, `resolveSaveWindow`, `validateEntityCreation`,
-`creationSpatial`), while the reducer applies the RECORDED mutations to
-durable state and never re-derives a command-time decision — the two have
-different responsibilities (command-time legality vs replay-safe state
-application), and the typed intents that do exist are the domain
-authorities' validation contracts (`SpatialIntent`, `creationSpatial`,
-`SaveWindowSpec`), not a missing shared layer. No same-intent legality is
-re-checked by two drifting implementations. **Verdict: U19 NOT PROMOTED.**
-Intents remain the domain authorities' typed validation contracts; a
-wrapper layer adds nothing.
-
-Neither U18 nor U19 is on the critical path to the UNDERLAY PHASE COMPLETE
-gate. The gate (§4) can close with both still candidates.
-
----
+Both decisions must be checked against current consumers when evaluating §4.
+The gate may close with U18/U19 retained as candidates, provided that decision
+and the specialist boundaries are supported by evidence.
 
 ## 3. Dependency DAG and implementation order
 
@@ -2878,284 +596,16 @@ Notes.
 
 ### 3.2 Implementation order (objective: all underlays complete)
 
-The generic-underlays.md tranche list is a suggested sequence; this order
-replaces it with a dependency-respecting phase plan. After EACH phase:
-re-run the full verification suite (§5); update this document's per-underlay
-state rows and any affected generated docs; do NOT regenerate or promote
-from the blocker census (census work is post-gate). Existing wiring must
-pass unchanged at every phase boundary.
+Use the dependency DAG to choose the smallest missing shared capability from
+fresh consumer evidence. The historical T1–T6 sequence established vocabulary
+and execution slices; it does not certify whole-underlay closure.
 
-**Phase T1 — Vocabulary foundation: U1, U2, U8.** — **LANDED (2026-08-30).**
-New typed modules (`primitives/reference.ts`, `primitives/roles.ts`,
-`primitives/scope.ts`) re-exported from the `primitives/types.ts` barrel;
-`RuleDuration`/`RuleTiming` boundary reads gain the Clock surface
-(`clockForTiming`/`scopeForDuration`/`currentClock`/`boundaryReached`);
-`RuleChoice` gains chooser/controller role fields (typed, optional —
-behavior-neutral until U4 consumes them); `RuleExecutionContext.boundNames`
-carries the U1 Binder (optional, behavior-neutral). No behavior change,
-zero existing test deltas (1318 tests green, +31 new vocabulary tests:
-`reference.test.ts`/`roles.test.ts`/`scope.test.ts`), U3 residual
-classification corrected by the pre-flight audit (actor-domain operator
-gaps + the p.108 teleport-LoS boundary, see §0). U1/U2 moved ABSENT →
-PARTIAL; U8 stays PARTIAL (vocabulary + boundary-read surface landed;
-consumer migration remains). Exit met: vocabulary types + unit tests;
-zero existing test deltas.
-
-**Phase T2 — Query & expression algebra: U7, U3, U5, U6 (core), U4.** —
-**LANDED (2026-08-30).** `primitives/anchor.ts` (SpatialAnchor,
-LIVE/CAPTURED) landed earlier; T2 added the LIVE ENTITY anchor.
-`kernels/evaluate-query.ts` (extracted from `selectActors` with real
-`rangeOrigin` resolution) owns the actor/position/entity/terrain domain
-operators — the query TYPES now live in `primitives/query.ts` (split-plan
-home); `selectActors` migrated, the direct-target gate's base eligibility
-routed through the candidate authority, and area actor-inclusion routed
-through the `insideArea` operator (all landed earlier, behavior-
-preserving). T2 completed the actor-domain operator list (LoS/LoE from
-the anchor, occupying, terrain predicate, owned-by, set composition with
-distinct-by-identity), added the entity + terrain domains, and resolved
-the p.108 placement-LoS boundary through the shared legality operator +
-position query policy (`move.line-of-sight`; behind-the-wall + control
-fixtures). `kernels/evaluate-value.ts` + `kernels/evaluate-predicate.ts`
-extracted from the runtime barrel (which re-exports them) and extended
-(`count-query` over all domains, distance between refs/anchors,
-percent-base-max; mark-exists / in-stance / inside-aura /
-acted-this-round predicates); `choice.ts` completes the U2
-chooser/controller seam and routes position legality through a U7
-`rangeOrigin` anchor. **U6 lands in CORE form here** — the predicate
-algebra without the `effect-still-exists` read, which consumes U10 facts
-(see the U6 row); U6's U10-backed completion lands in T4. Exit met for
-the T2 scope: one eligibility authority; `rangeOrigin` resolved (actor /
-entity / captured-position); expression/predicate core covers the §1
-lists for the T2 contract; choice position legality routes through the
-shared predicates + anchor. Honest residuals: area/persistent-instance/
-rule-source query domains (U10/U12-scoped), ordering beyond the
-min-distance set + opt-in cell order, direction-choice candidate domain,
-the opaque ability/talent choice folds, used-scope (U16) and
-effect-still-exists (U10) predicates, and the range/area gate body
-folding.
-
-**Phase T3 — Policy, state, ledger: U14, U16 (core), U15, U17 — LANDED
-(2026-08-30).** `primitives/modifiers.ts` landed (one recipe shape, typed
-permission query points, closed negatives, shared gate evaluator); the
-range/area/mastery/bonus-damage fold registries convert onto it
-(behavior-preserving; cost + attack-modifiers retained as documented
-specialists); `primitives/usage.ts` landed as the CORE ledger (keys,
-caps incl. the `use-cap` fold, counts, consume/refresh, per-use
-magnitude, de-dup identity CORE without the U10 fact read) with the
-use-ledger kernel as an adapter and the U6 `used-scope` predicate
-consuming it; `primitives/transaction.ts` landed (all-or-nothing verdict,
-wired into the Masquerade spatial-batch gate); `primitives/ordering.ts`
-landed (all seven policies + the policy→CHOICE seam, wired into
-`orderedSelectedSteps`, `decideDamageWindow`, and the pending-interrupt
-stack pop). **U16 landed in CORE-ledger form here** (gates/caps/reset need
-only U1+U8, per the DAG note); U16's U10-backed de-dup identity completes
-in T4. U18 evaluated under the §2 decision rule: NOT promoted (see the
-U18 row). Exit met: one ModifierRule shape folded everywhere; one usage
-ledger vocabulary; one commit seam; typed ordering policies.
-
-**Phase T4 — Time and outcome: U9, U10 (completes U6 and U16) — LANDED
-(2026-08-30).** `primitives/provenance.ts` (dimension vocabulary,
-`DeliverySourceKind`, `sameCausalOrigin`, `provenanceOfMutation`) and
-`primitives/facts.ts` (the closed `Fact` union, `recordFacts`, the LIVE
-`effectExistsLive` instance read, and the `trigger-resolved` de-dup marker +
-`hasResolvedAsFact` read) LANDED and are barrel re-exported. U6 was
-COMPLETED with `effect-still-exists` reading U10 instances via the
-fact/instance seam (fail-closed on unrepresentable instance identity). U16
-was COMPLETED with the U10-backed de-dup identity and WIRED into the real
-reactive continuation (`executeRuleProgramWithReactiveTriggers`).
-`kernels/resolution-triggers.ts` migrated onto U9/U10: it records facts,
-merges the domain collide/slay facts, and projects the byte-compatible
-`ResolutionTriggerFacts` surface encounter.ts consumes (behavior-preserving
-— all existing ability fixtures pass unchanged). The damage/held/window +
-save records ledgers remain domain-specific authorities (documented
-retained specialists) whose fuller fact composition is U12-scoped.
-
-**T4 corrective pass (2026-08-30) — four contract refinements.** (1) U10
-facts are now GENUINELY durable and replay-authoritative: every resolution
-gets a deterministic `resolutionId` owned by the command/event boundary,
-fact `instanceId`s are scoped under it (two uses of one ability differ;
-replay reproduces them), and the typed facts + `resolutionId` RIDE the
-`RULE_MUTATIONS_APPLIED` event. Historical events without facts fail closed
-(no fabricated identity). (2) `damage-applied` facts record the DETERMINED
-(post-mitigation) amount from the damage authority, never a raw proposal;
-fully-prevented damage emits no false fact. (3) U16 de-dup is RESOLUTION-
-scoped with ICON's once-per-ability semantics (p.107): multiple routing
-facts open ONE triggered step; a second ability use may trigger again;
-per-target only where the source declares it — and it is wired into the
-actual reactive continuation. (4) The live `RuleActorView` carries the
-authoritative durable instance id + ownership, so `effectExistsLive`
-answers specific-instance reads EXACTLY and effect lifecycle facts
-(apply/refresh/remove) reference the ORIGINAL instance.
-
-**T4 final contract fix (2026-08-30) — the four contracts made true IN THE
-IMPLEMENTATION (not only in comments/tests).** (1) **Monotonic durable
-resolution identity**: `nextResolutionId` now derives from a durable
-unbounded `resolutionSerial` on `EncounterState` (advanced by applyEvents
-per recorded RULE_MUTATIONS_APPLIED event, migrated deterministically from
-legacy logs), so resolution ids never repeat after event-log truncation
-and survive save/load. (2) **Single determined-damage handoff**: the
-command/window boundary determines each damage instance ONCE
-(`resolveMutationOutcomes`, a reducer-faithful sequential dry run over the
-mutation list), stamps the recorded post-mitigation amount on the mutation
-(`determined.amount`), and the reducer consumes the stamp — U10 facts and
-reducer application read the SAME recorded amount, a no-op (target
-defeated/immunized by an earlier mutation) records no false fact, and
-replay never re-decides. (3) **Durable U16 markers**: `trigger-resolved`
-facts (one per resolution + triggered step, keyed by the canonical resolve
-identity) ride the event's U10 fact list, so replay consumes the recorded
-marker instead of re-inferring eligibility; `continuation.derivedTriggers`
-remains FLOW bookkeeping only. (4) **Canonical effect-instance identity**:U10 effect facts carry the exact LIVE instance id the reducer
-creates/removes (`effectInstanceId`, stamped at the boundary; removal
-resolves the specific instance it addresses), and the reducer consumes the
-stamp instead of minting its own id — removing instance A leaves
-coexisting instance B alive, owner-A mark removal leaves owner-B's
-same-named mark intact, and the U6 `effect-still-exists` chain is
-end-to-end exact. 1660 tests green; census byte-stable at 427; no
-source-unit promotion.
-
-**T4 closeout (2026-08-30) — the remaining correctness edges closed.** (1)
-**Idempotent outcome stamping**: `resolveMutationOutcomes` treats an
-already-stamped damage instance as authoritative — re-running it over an
-already-resolved mutation list performs ZERO new damage determinations and
-reproduces the identical stamps/state sequence, so the reactive
-continuation's repeated `deriveResolutionTriggers` passes never re-decide
-the base damage; only newly-added unstamped damage may invoke the damage
-authority. (2) **Safe legacy resolution-serial migration**: a legacy
-checkpoint (no `resolutionSerial`) derives a conservative lower bound from
-ALL recoverable durable evidence — retained RMA count, every parseable
-retained `resolutionId` (parsed from the FINAL numeric segment, so
-colon-bearing source ids are safe; malformed ids are ignored
-individually), and the encounter `revision` floor — so a saturated
-pre-fix checkpoint can never reuse a historical serial (the migrated
-counter may jump forward; it never fabricates exact unknown identities).
-(3) **Injective fact identity**: every fact of a resolution is allocated
-its final `instanceId` from ONE deterministic ordered sequence at assembly
-(`renumberFactIds`), so an explicit `actor-defeated` mutation fact and a
-Slay-derived `actor-defeated` fact in the same resolution never share an
-id, and replay reproduces the identical identities byte-for-byte. 1671
-tests green; census byte-stable at 427; no source-unit promotion.
-
-**Phase T5 — Execution: U11, U12, U13.**
-**T5a landed (2026-08-30): U11 core FLOW / SEQUENCE.**
-`kernels/execute-flow.ts` (simulated intermediate state, bind/for-each/
-invoke/emit-fact — the U11 row above states exactly what landed and the
-documented boundaries); the remaining T5 work was U12 armed continuations,
-then U13 unified windows, then U11's `open-window`/`suspend` wired through
-them.
-
-**T5b landed (2026-08-30): U12 CONTINUATION / SUSPENSION core.**
-`primitives/continuation.ts` (barrel re-exported) owns the typed
-`ArmedContinuation` record with the explicit deferred-rule vs held-result
-payload discriminant, LIVE/CAPTURED refs (U1), captured values, the U2
-owner role, the U8 Clock / U10 Fact trigger spec, expiry, and the U17
-ordering identity; `armContinuation` / `resumeContinuation` are pure and
-replay-exact. `EncounterState.continuations` (schema 8) is the durable
-collection; the reducer is the single arming point (mark apply arms,
-mark remove cancels). `kernels/continuation-runtime.ts` dispatches
-deferred-rule resolvers (content rows keyed by program id) through the
-shared mutation authority. Wired migrations: Great Giorgios (p.124) is a
-deferred-rule continuation (the marked foe's turn-end resolves the
-rush/shove/damage against THEN-CURRENT state — the old `delayed` lifecycle
-recipe is gone); the save-rolled window (Sucker Punch, p.143) carries the
-held save as a U12 held-result continuation. NOT landed: U13
-`kernels/decision-window.ts` (the window kernels stay separate; they may
-temporarily adapt to U12 payloads), `rerollSaveMutations` → resume path
-(the command-layer reroll remains), U11 `open-window`/`suspend` (their
-dependency order is unchanged: U12 core → U13 → wire them). The terrain
-retraction lesson (`554d8ca`) stays the held-result fixture's recorded
-lesson. Full suite green (1693 tests), census byte-stable at 427, no
-source-unit promotion.
-
-**Phase T6 — Consolidation and gate: U18/U19 decision, migration
-completion, gate.**
-Apply the §2 decision rules (promote U18/U19 only with code evidence);
-complete every listed consumer migration that still has duplicate
-authority; regenerate generated docs affected by behavior-preserving
-changes; run the complete suite; assert the §4 gate. No source-unit
-promotion here.
-
-Rationale (dependency-driven, not census-driven): vocabulary first because
-every other underlay reads refs/roles/clocks; query/expression second
-because targeting/choices/predicates/modifiers all consume them; policy/
-state third because modifiers/usage/transactions/ordering are the
-deterministic folds the execution layer needs; time/outcome fourth because
-continuations/windows trigger on facts with provenance; execution last
-because U11/U12/U13 compose everything above. Blocker-family frequency was
-NOT an input (information-only per §1).
-
-**Phase T6.1 — U8 Scope/Clock consolidation (use-ledger reset seam).** —
-**LANDED (2026-08-31).** Made `primitives/scope.ts` the one authoritative
-answer to "which usage period does this recorded boundary refresh?"
-(`usagePeriodForResetBoundary`, the inverse of the existing
-`resetBoundaryFor`), and rerouted the lifecycle once-per-turn /
-once-per-round reset recipes through it — the recipes name the boundary
-(`turn-start` / `round-start`) and call `refreshUsageLedgerForBoundary` /
-`usageLedgerHoldsForBoundary` instead of hard-coding `ledger:turn:*` /
-`ledger:round:*` prefix interpretation. Behavior-preserving: the full
-suite (1739) is green with zero existing-test deltas; new consumer
-parity + replay proofs in `t6-u8-scope-consolidation.test.ts` (8 cases:
-turn-start refreshes `ledger:turn:*`, round-start `ledger:round:*`,
-turn-end / round-end / combat-end refresh nothing, and the recorded
-turn-boundary transition replays to an identical ledger). U8 stays
-PARTIAL on its remaining duplicates: `RuleDuration` consumers,
-`RuleTiming` boundary reads, lifecycle phase-duration expiry, and the
-scheduler's round counters.
-
-**Phase T6.2 — recorded same-owner ordering seam (U17).** — **LANDED
-(2026-08-31).** The §1 contract's recorded-decision obligation is now wired
-end-to-end: `primitives/ordering.ts` `sameOwnerOrderingDecision` answers
-whether a simultaneous tie is determined / unresolved / yields a same-owner
-chooser decision (problems: `missing-candidate-owner`, `cross-owner`,
-`not-a-tie` — unknown ownership never silently means same-owner); U4
-validates the answer through `resolveChoice` as a FULL PERMUTATION of the
-exact pending set (omitted/duplicate/unknown/partial/extra candidates
-reject with typed violation codes); U13 opens the ONE ordering decision
-window (`openOrderingDecisionWindow` — the entitled chooser is derived
-through U2 `resolveRoleSelector` over the durable role frame, underivable
-choosers FAIL CLOSED, cross-owner groups never open a same-owner window);
-the recorded order rides the `DECISION_ANSWERED` event and stamps durable
-`resolvedOrder` ranks (`recordOrderingDecision` — corrupt recordings fail
-closed); the U17 LIFO pop and `orderDecisionWindows` projection consume
-exactly the recorded ranks on replay — zero fresh choice, zero inferred
-tie-break, zero array/registration-order dependence. The room boundary
-authorizes the answer by the window responder's recorded controller
-(`server/rooms.ts`). Suite: `t6-2-u17-recorded-ordering.test.ts` (30
-adversarial cases: positive, permutation validation, boundaries,
-suspension/state, stack-policy, replay), `rooms.test.ts` responder
-authorization, `t5c1` pinned cases.
-
-**Phase T6.3 — U17 turn-boundary consumers (lifecycle integration).** —
-**LANDED (2026-08-31), U17 now COMPLETE/AUTHORITATIVE.** The remaining
-§1 obligations are wired at a real call site. `primitives/ordering.ts` gains
-`turnBoundaryOrdering`, a pure composition of the p.108 turn-boundary rules:
-non-active-owner-first (effects not owned by the turn character resolve
-first), hostile-before-beneficial applied WITHIN each ownership group (bullet
-1 is the stronger rule and is never reversed), and the first remaining
-SAME-OWNER tie yields the recorded U4/U13 ordering decision (the T6.2 seam);
-a remaining CROSS-OWNER tie or a MISSING owner/side FAILS CLOSED. The command
-boundary records a durable per-phase lifecycle candidate plan (source id +
-mechanical owner + owner side) in the F3 intent; `runLifecyclePhase` and
-`runLifecyclePhaseForAll` route that plan through `turnBoundaryOrdering`,
-defers exactly a same-owner tie onto ONE U13 ordering window (the `heldBoundary`
-field on the window record), and the DECISION_ANSWERED reducer resolves the
-deferred effects in the recorded order (each exactly once, never re-derived,
-never registry-ordered). `expireBoundaryEffects` and `orderCrossCharacterEffects`
-delegate to the same authority. The lifecycle registry insertion order is
-demoted to discovery/enumeration + the legacy pre-T6.3 replay fallback — it
-is not a mechanical boundary-order authority anymore (the registration
-order-as-boundary-order AND the expiry listing-order tie-break are REMOVED).
-Suite: `t6-3-turn-boundary-ordering.test.ts` (27 adversarial cases: bullet-1/2
-determinism + registration-order permutation invariance, same-owner A→B/B→A
-recorded choice, 3+-candidate permutation, wrong responder, permutation
-validation, fail-closed cross-owner + missing-owner, suspension/exact-once,
-replay with permuted input, interrupt/phase boundary), plus pinned
-`aura.test.ts` (Dervish expiry now a same-owner recorded decision),
-`turn-transition.test.ts` + `conditions.test.ts` (F3 phases plan),
-`rooms.test.ts` (heldBoundary window seed). U17 is COMPLETE: a fresh audit
-confirmed the interrupt-order, damage-window, and step-order consumers already
-consume U17 policies and no genuine U17 consumer remains.
-
----
+The current task is the U4 residual audit in [TODO](../TODO.md#current-execution-plan-ordered),
+following [recorded placement](tranche-33-placement.md). Re-audit actor/resource,
+remaining summon, and continuation choices before selecting the next migration.
+For each slice, verify the prerequisite contracts, migrate consumers through
+the owning authority, and reconcile the foundation/census evidence. Continue
+until every condition below holds.
 
 ## 4. Phase gate
 
@@ -3163,20 +613,20 @@ consume U17 policies and no genuine U17 consumer remains.
 
 The underlay phase is complete **only when all of the following hold**:
 
-1. **U1–U17 have source-backed contracts.** Each underlay's §1 row
+1. **U1–U17 have source-backed contracts.** Each underlay's linked ontology definition and §1 obligations
    (responsibility, source evidence with verified page references, typed
    vocabulary, replay semantics, acceptance tests) is current and true of
    the code at HEAD — not of a tranche document.
 2. **One clearly owned semantic authority each.** For every U1–U17 there is
    exactly one owning module/API listed as its authority, and every location
-   named under "Locations partially owning/duplicating" has either migrated
+   identified in the foundation and consumer-census evidence has either migrated
    onto it or been explicitly documented as a retained specialist with a
    written boundary.
 3. **Required tests.** The acceptance tests named in each §1 row exist and
    pass: positive, negative, boundary, and replay where the underlay is
    stateful/random/timing-dependent.
 4. **No known duplicate competing authority within declared scope.** The
-   §1 migration lists are empty of unresolved duplicates: no second
+   consumer-census migration lists are empty of unresolved duplicates: no second
    eligibility authority beside U3, no second choice validator beside U4,
    no second usage ledger beside U16, no second decision-window record
    beside U13, no second ordering source beside U17, one ModifierRule
@@ -3200,7 +650,7 @@ The underlay phase is complete **only when all of the following hold**:
 
 **Only after this gate** do we regenerate the blocker census as the
 wiring-order input and begin source-content wiring (exact source units,
-source fixtures, positive/negative/replay tests, per §9/§11 of AGENTS.md).
+source fixtures, positive/negative/replay tests, per §§8–10 of AGENTS.md).
 Until the gate closes, the census is not regenerated for promotion purposes
 and the greedy family sequence in TODO/roadmap remains superseded.
 
@@ -3208,35 +658,9 @@ and the greedy family sequence in TODO/roadmap remains superseded.
 
 ## 5. Verification discipline during the phase
 
-- After every tranche (T1–T6), run the §4.5 suite. Do not report success
-  while relevant introduced failures remain.
-- Regenerate byte-stable artifacts the generators own
-  (`audit:class-job-census`, `audit:source-fidelity -- --write`) when the
-  change affects them; never hand-edit generated docs.
-- Behavior-preserving migrations: existing fixtures are the oracle. A
-  migration that changes a fixture's meaning is a semantic change — stop and
-  classify it, do not paper over it.
-- Update `docs/rules-foundations.md` maturity rows and this document's
-  state rows as tranches land; delete stale claims rather than layering
-  contradictory prose (AGENTS §15).
-- `primitives/types.ts` and `kernels/runtime.ts` stay compatibility barrels
-  (`export *`) for the duration; extraction goes to semantic modules the
-  barrels re-export. No flag-day file-layout refactor.
-
----
-
-## 6. Do-not list (phase-specific restatement)
-
-- Do not wire, promote, or make executable any unresolved source unit.
-- Do not add source-ID branches to kernels/primitives.
-- Do not create bespoke mechanics for a rule the substrate cannot express;
-  decompose or leave unresolved.
-- Do not approximate rules to move census numbers.
-- Do not follow the TODO/roadmap greedy family sequence; the order in §3.2
-  supersedes it for this phase.
-- Do not invent underlays past U17 without the design test; U18/U19 follow
-  §2 decision rules.
-- Do not refactor `src/rules/encounter.ts` wholesale; extract only along
-  real reusable mechanic seams (AGENTS §7).
-- Do not treat a tranche document as evidence of a landed underlay; the
-  code + tests at HEAD are the evidence.
+Run the §4 suite for each rules tranche and the additional task-class checks
+in [AGENTS.md](../AGENTS.md#10-verification-matrix). Regenerate generated reports
+through their owning commands. Record current maturity once, in the foundation
+document, and reconcile the affected consumer-census entries. A fixture change
+that alters semantics requires explicit source review; green tests alone do
+not establish fidelity or underlay closure.

@@ -10,7 +10,7 @@ import {
 import { useCharacters } from '../context/CharacterContext.js';
 import { currentE2EIdentity, e2eRealtimeAccessToken } from '../services/e2e-auth.js';
 import { supabase } from '../services/supabase.js';
-import { VttRoomBoard } from './Sandbox.js';
+import { VttRoomBoard } from '../vtt/room-board.js';
 
 const realtimeUrl = import.meta.env.VITE_REALTIME_URL?.trim() ?? '';
 const multiplayerPreviewEnabled = PHASE_THREE_COVERAGE_READY

@@ -20,3 +20,8 @@ export function assetBackground(input: string): { backgroundImage: string } | un
   const url = safeAssetUrl(input);
   return url ? { backgroundImage: `url("${url.replaceAll('"', '%22')}")` } : undefined;
 }
+
+/** IDs for user-created table records; creation remains a room command. */
+export function makeTableId(prefix: string): string {
+  return `${prefix}:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+}

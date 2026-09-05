@@ -464,14 +464,7 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     subject: 'Encounter closure Slice A (baseline)',
     binding: legacy('closure rests on the P1 integration suites; slice semantics are not yet a strict fidelity scope'),
   },
-  {
-    id: 'claim:slice-a-todo-mirror',
-    file: 'TODO.md',
-    anchor: '- **Slice A (baseline)**: CLOSED',
-    strength: 'closed',
-    subject: 'Encounter closure Slice A (baseline), TODO mirror',
-    binding: legacy('mirror of claim:slice-a-baseline'),
-  },
+
   {
     id: 'claim:slice-d-mechanics',
     file: 'docs/deliverables.md',
@@ -660,9 +653,6 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     anchor: '### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)',
     anchors: [
       { file: 'docs/rules-foundations.md', anchor: 'genuine U17 consumer remains. U17 is COMPLETE. The blocking families it' },
-      { file: 'TODO.md', anchor: '  U17 now COMPLETE/AUTHORITATIVE.** Finished the remaining U17' },
-      { file: 'TODO.md', anchor: '  audit confirmed no other genuine U17 consumer remains — U17 is COMPLETE.' },
-      { file: 'docs/roadmap.md', anchor: 'COMPLETE/AUTHORITATIVE.** `primitives/ordering.ts` gains' },
     ],
     strength: 'complete',
     subject: 'Ordering / Arbitration (U17 underlay)',
@@ -683,10 +673,6 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     id: 'claim:foundations:u7-authoritative',
     file: 'docs/rules-foundations.md',
     anchor: '### Anchor / Spatial Frame (U7 underlay) — AUTHORITATIVE (completion audit + teleport fail-closed repair, 2026-09-02)',
-    anchors: [
-      { file: 'TODO.md', anchor: 'completion audit; U7 becomes AUTHORITATIVE; next = U5-core (2026-09-02)' },
-      { file: 'TODO.md', anchor: 'DEPENDENCY-DRIVEN TRANCHE: **U5-core** — with U7 authoritative' },
-    ],
     strength: 'authoritative',
     subject: 'Anchor / Spatial Frame (U7 underlay)',
     binding: legacy('U7 HUMAN-CERTIFIED 2026-09-02 (twenty-first tranche): fresh end-to-end audit establishes ONE generic spatial-frame vocabulary (primitives/anchor.ts SpatialAnchor — LIVE actor footprint named by the typed U1 Reference, LIVE entity footprint, CAPTURED position) and ONE resolution authority (resolveSpatialAnchor composing the ONE resolveReference) for the DECLARED SCOPE (vocabulary + resolution + the canonical p.92 footprint metric); every generic range/distance/LoS/legality consumer either resolves through it or receives an already-resolved frame with a written specialist boundary; the teleport mover-footprint seam measures range from the mover p.92 footprint edge with a fail-closed missing-mover guard (select.actor-missing before any destination legality; u7-teleport-footprint-origin rejects a restored point-frame or optional-chained mover-size read); specialist carriers (aura origin records, creationSpatial, RuleArea.origin, rebound provenance, runtime.ts context.actorId-for-cost) store already-resolved frames and do not reinterpret LIVE vs CAPTURED semantics, map selectors to frames, or define a second distance metric; the ResolvedReference strict-vs-weak bound is documented, not redesigned. NOT machine-verified: no strict fidelity scope.'),
@@ -738,14 +724,7 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
     subject: 'Combat settlement slice (P1)',
     binding: legacy('mirrors claim:deliverables:combat-settlement'),
   },
-  {
-    id: 'claim:roadmap:p2-slice-a-closed',
-    file: 'docs/roadmap.md',
-    anchor: 'is close (Slice A closed) but Slice B/C closure',
-    strength: 'closed',
-    subject: 'P2 Slice A (foe-complexity repair slice)',
-    binding: legacy('roadmap progress note; tracked by the deliverables census, no fidelity scope'),
-  },
+
 ];
 
 // ---------------------------------------------------------------------------

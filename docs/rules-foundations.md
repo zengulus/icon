@@ -1175,7 +1175,6 @@ Debt classes: **A** correctness-threatening · **B** high-cost scaling debt ·
 | `createFoeFromProfile` parses HP out of `traitsText` via regex | C | Fragile extraction seam; move to generated stats when extraction changes |
 | Module-level mutable registries (`registerTurnEntitlementSource`, slow-eligibility, manual allowlist, lifecycle recipes) | C | Deterministic at import; observed test-only hazard: registrations leak across tests within a file (newer tests must use unique names/keys). Consider a reset hook for tests only |
 | `vtt-room.ts` mixes table domain, validation, and encounter projection (≈1.2k lines) | C | Split if it grows further |
-| Duplicated Lab/Sandbox fixture construction | C | BrowserVtt vs Sandbox both define `createLabFixture`; consolidate opportunistically |
 
 Nothing currently rises to class **A**: no correctness-threatening coupling
 was found between universal orchestration and source-specific IDs (the
