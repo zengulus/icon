@@ -285,8 +285,10 @@ export interface ConsumerRegistration {
   id: string;
   /** Repo-root-relative implementation file. Must exist. */
   file: string;
-  /** Exported symbol implementing the consumer. When set, the audit verifies
-   * the file actually exports it (stale registrations fail). */
+  /** Public name of an explicit runtime export implementing the consumer.
+   * Named re-exports/import aliases must resolve to a value implementation;
+   * erased types, ambient declarations and wildcard-only barrels do not
+   * establish this identity. Omit only for a file-level registration. */
   symbol?: string;
   /** Human-facing prose location, derived for output only. */
   location?: string;

@@ -350,8 +350,18 @@ describe('fidelity hardening: required self-tests', () => {
     writeFileSync(join(dir, 'good.ts'), 'export function goodImpl() { return 1; }\n');
     expect(resolveConsumerRegistrations([{ id: 'ok', file: 'good.ts', symbol: 'goodImpl', description: '' }], { root: dir })).toEqual([]);
 
-    // And the engine downgrades an obligation whose consumer did NOT resolve.
-    const unresolvedCase = provenWorld({ resolvedConsumerIds: [] });
+    // A ghost export must break the same resolution → computed-status chain
+    // even when its independent semantic contract still passes.
+    const unresolvedCase = provenWorld();
+    const ghostViolations = resolveConsumerRegistrations(unresolvedCase.world.consumers, {
+      root: dir,
+      exists: () => true,
+      readFile: () => '// export function awardXp() {}',
+    });
+    expect(ghostViolations.map(({ check }) => check)).toContain('consumer-symbol-missing');
+    unresolvedCase.inputs.resolvedConsumerIds = unresolvedCase.world.consumers
+      .filter((consumer) => !ghostViolations.some((violation) => violation.detail.startsWith(`consumer ${consumer.id}:`)))
+      .map(({ id }) => id);
     const unresolved = computeFidelityAudit(unresolvedCase.world, unresolvedCase.inputs);
     expect(unresolved.findings[0].status).toBe('unimplemented');
     expect(unresolved.findings[0].blockers.join(' ')).toMatch(/does not resolve/);

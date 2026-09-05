@@ -45,6 +45,14 @@ Key semantics:
   the documented migration state for legacy coverage.
 - Source conflicts are executable only via an ADOPTED record in
   `src/rules/source-adjudications.ts`, linked from the obligation.
+- Consumer symbols resolve through TypeScript's static module/export graph,
+  using their public export names. Named re-exports and imported aliases must
+  reach a runtime value declaration; comments, strings, private/renamed names,
+  erased types, ambient declarations, missing targets and alias cycles fail
+  resolution. Each module edge must name the export explicitly: register the
+  defining module or a named re-export instead of a wildcard-only barrel.
+  Resolution never executes a module and does not prove its game semantics;
+  independent contract evaluations still supply that evidence.
 - The audit distinguishes legitimate incompleteness (lowers status) from
   inconsistent claims of completeness (fails strict mode): dangling
   references, executable claims without consumers/contracts/proofs,
@@ -55,6 +63,9 @@ Key semantics:
   failure classes A–I (`src/rules/__tests__/fidelity-audit.test.ts`),
   including mutants that pass naive positive-only test suites but violate an
   exhaustive semantic contract.
+  `fidelity-consumers.test.ts` additionally exercises export-resolution
+  mutations; the audit suite checks that a ghost export leaves its obligation
+  unimplemented even when its semantic contract passes.
 
 ## Persisted player-selection identity contract
 
