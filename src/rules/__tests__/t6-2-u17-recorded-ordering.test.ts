@@ -308,15 +308,15 @@ describe('U13 — the recorded ordering decision seam (openOrderingDecisionWindo
       id: 'ordering:test:5',
       candidates: windows.map((candidate) => ({ id: candidate.id, ownerId: candidate.actorId })),
     });
-    recordOrderingDecision(state, ordering, [b!.id, a!.id]);
+    recordOrderingDecision(state, ordering, { kind: 'ordering', ids: [b!.id, a!.id] });
     expect(state.decisionWindows.find((candidate) => candidate.id === a!.id)!.resolvedOrder).toBe(1);
     expect(state.decisionWindows.find((candidate) => candidate.id === b!.id)!.resolvedOrder).toBe(0);
     // A corrupt recorded value fails closed — never a partial or invented order.
-    expect(() => recordOrderingDecision(state, ordering, [a!.id])).toThrow(/permutation/);
-    expect(() => recordOrderingDecision(state, ordering, ['foreign', a!.id])).toThrow(/not in the pending set/);
-    expect(() => recordOrderingDecision(state, ordering, [a!.id, a!.id])).toThrow(/repeats a candidate/);
-    expect(() => recordOrderingDecision(state, ordering, [a!.id, b!.id, 'extra'])).toThrow(/permutation/);
-    expect(() => recordOrderingDecision(state, ordering, true)).toThrow(/ordered candidate ids/);
+    expect(() => recordOrderingDecision(state, ordering, { kind: 'ordering', ids: [a!.id] })).toThrow(/permutation/);
+    expect(() => recordOrderingDecision(state, ordering, { kind: 'ordering', ids: ['foreign', a!.id] })).toThrow(/not in the pending set/);
+    expect(() => recordOrderingDecision(state, ordering, { kind: 'ordering', ids: [a!.id, a!.id] })).toThrow(/repeats a candidate/);
+    expect(() => recordOrderingDecision(state, ordering, { kind: 'ordering', ids: [a!.id, b!.id, 'extra'] })).toThrow(/permutation/);
+    expect(() => recordOrderingDecision(state, ordering, { kind: 'boolean', value: true })).toThrow(/ordered candidate ids/);
     // The hero is the entitled chooser; the answerer authorization lives at
     // the network boundary (the window's actorId's controllerId).
     void hero;
@@ -362,7 +362,7 @@ describe('End-to-end: the same-owner tie opens the ordering window and the answe
     expect(answeredAB.state.decisionWindows).toHaveLength(2);
     expect(answeredAB.state.decisionWindows.some((window) => window.kind === 'choice')).toBe(false);
     expect(answeredAB.events.find((event) => event.type === 'DECISION_ANSWERED')).toMatchObject({
-      decision: { key: 'ordering', value: [ab.tied[0]!.id, ab.tied[1]!.id] },
+      decision: { key: 'ordering', value: { kind: 'ordering', ids: [ab.tied[0]!.id, ab.tied[1]!.id] } },
     });
     // The recorded ranks stamp the exact order; the pop consumes it.
     expect(popDecisionWindowStack(answeredAB.state, ab.hero.id, true)!.id).toBe(ab.tied[0]!.id);
@@ -566,7 +566,7 @@ describe('Replay (20–22): the recorded order rides the durable events; replay 
     const answered = answerOrdering(damaged, ordering.id, chosen);
     // The decision rode the recorded event.
     const decisionEvent = answered.events.find((event) => event.type === 'DECISION_ANSWERED');
-    expect(decisionEvent).toMatchObject({ windowId: ordering.id, decision: { key: 'ordering', value: chosen } });
+    expect(decisionEvent).toMatchObject({ windowId: ordering.id, decision: { key: 'ordering', value: { kind: 'ordering', ids: chosen } } });
     // Replay the full recorded history: byte-identical state, and the pop
     // consumes the SAME recorded order.
     const replayed = applyEvents(state, [...damageEvents, ...answered.events]);

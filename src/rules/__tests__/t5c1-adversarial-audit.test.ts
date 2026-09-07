@@ -94,7 +94,7 @@ describe('T5c.1 H3 — the window-answer boundary validates; omission is never a
     expect(declined.state.actors[hero.id].position).toEqual({ x: 1, y: 1 });
     // The recorded decision carries the EXPLICIT value; replay consumes it.
     const answeredEvent = declined.events.find((event) => event.type === 'DECISION_ANSWERED');
-    expect(answeredEvent).toMatchObject({ decision: { key: 'rush', value: false } });
+    expect(answeredEvent).toMatchObject({ decision: { key: 'rush', value: { kind: 'boolean', value: false } } });
     expect(applyEvents(ended, declined.events)).toEqual(declined.state);
   });
 
@@ -437,16 +437,16 @@ describe('T5c.1 H8 — suspension inside loops resumes the EXACT unexecuted comp
     // iteration 1) + [damage, suspend, damage] (iteration 2) + [damage,
     // suspend, damage] (iteration 3) — 9 nodes: the tail of the current
     // iteration plus the two full unexecuted iterations.
-    const resumed = executeFlowResume({ remaining, binder: planned.window!.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: true } });
+    const resumed = executeFlowResume({ remaining, binder: planned.window!.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: { kind: 'boolean', value: true } } });
     // The resumed flow re-enters the loop bodies; the SECOND suspend (in the
     // resumed iteration-1 tail) suspends again — the nested-window seam.
     expect(resumed.window).toBeDefined();
     // Total damage mutations across the full execution: 3 iterations × 2
     // damage nodes = 6. After the first suspension 1 already planned; the
     // remaining must reach 6 when fully walked.
-    const resumed2 = executeFlowResume({ remaining: resumed.window!.remaining, binder: resumed.window!.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: true } });
+    const resumed2 = executeFlowResume({ remaining: resumed.window!.remaining, binder: resumed.window!.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: { kind: 'boolean', value: true } } });
     const resumed3 = resumed2.window
-      ? executeFlowResume({ remaining: resumed2.window.remaining, binder: resumed2.window.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: true } })
+      ? executeFlowResume({ remaining: resumed2.window.remaining, binder: resumed2.window.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: { kind: 'boolean', value: true } } })
       : resumed2;
     const allDamage = [...planned.mutations, ...resumed.mutations, ...resumed2.mutations, ...(resumed3 === resumed2 ? [] : resumed3.mutations)].filter((mutation) => mutation.kind === 'damage');
     expect(allDamage).toHaveLength(6);
@@ -471,11 +471,11 @@ describe('T5c.1 H8 — suspension inside loops resumes the EXACT unexecuted comp
     expect(planned.mutations.filter((mutation) => mutation.kind === 'damage')).toHaveLength(1);
     // Resuming must walk the current item's tail and then BOTH remaining
     // items (each re-bound) — the second suspend proves the loop re-entry.
-    const resumed = executeFlowResume({ remaining: planned.window!.remaining, binder: planned.window!.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: true } });
+    const resumed = executeFlowResume({ remaining: planned.window!.remaining, binder: planned.window!.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: { kind: 'boolean', value: true } } });
     expect(resumed.window).toBeDefined();
-    const resumed2 = executeFlowResume({ remaining: resumed.window!.remaining, binder: resumed.window!.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: true } });
+    const resumed2 = executeFlowResume({ remaining: resumed.window!.remaining, binder: resumed.window!.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: { kind: 'boolean', value: true } } });
     const resumed3 = resumed2.window
-      ? executeFlowResume({ remaining: resumed2.window.remaining, binder: resumed2.window.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: true } })
+      ? executeFlowResume({ remaining: resumed2.window.remaining, binder: resumed2.window.binder }, contextFor(state, hero.id), { decision: { key: 'go', value: { kind: 'boolean', value: true } } })
       : resumed2;
     const allDamage = [...planned.mutations, ...resumed.mutations, ...resumed2.mutations, ...(resumed3 === resumed2 ? [] : resumed3.mutations)].filter((mutation) => mutation.kind === 'damage');
     // 3 items × 1 damage node = 3 damage mutations total.

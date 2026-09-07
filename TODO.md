@@ -26,7 +26,8 @@ supersede the underlay dependency order.
 
 1. **Fresh U4 residual audit.** After [recorded use-time placement](docs/tranche-33-placement.md),
    inspect current actor/resource decisions, remaining automatic summons, and
-   held/window choices. Read exact source passages, trace their active callers,
+   remaining source continuation choices. The generic [recorded-answer seam](docs/recorded-choice-seam.md)
+   is complete; it is no longer a missing U4 capability. Read exact source passages, trace their active callers,
    and distinguish missing choice ownership from missing candidate legality.
    Reconcile the U4 consumer-census entry before choosing an implementation.
 2. **Implement the smallest reusable choice capability the audit identifies.**

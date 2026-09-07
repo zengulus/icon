@@ -1,4 +1,4 @@
-import type { ArmedContinuation, RuleChoice, RuleContinuationState, RuleDuration, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
+import type { ArmedContinuation, RuleChoiceAnswer, RuleChoice, RuleContinuationState, RuleDuration, RuleExecutionInput, RuleModifier, RuleMutation, RuleResolutionFacts, RuleTiming } from './automation/primitives/types.js';
 import type { TriggerProvenance } from './automation/primitives/trigger-provenance.js';
 import type { Fact } from './automation/primitives/facts.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
@@ -584,7 +584,7 @@ export interface EncounterHeldDamage {
  * legacy entries field-for-field onto the U13 record (the old `trigger`
  * becomes `kind`, `heldDamage`/`heldSave`/`heldResult` become the U12
  * `heldPayload` held-result continuation). */
-export type { DecisionWindowRecord, WindowDecisionValue };
+export type { DecisionWindowRecord, WindowDecisionValue, RuleChoiceAnswer };
 /** Re-export the U13 record type under its durable home for consumers. */
 export type EncounterPendingInterrupt = DecisionWindowRecord;
 
@@ -852,7 +852,7 @@ export type EncounterEvent =
    * performs zero fresh decisions (accepting a Great Giorgios rush re-plans
    * against then-current state at the command boundary and records the
    * mutations; declining records none). */
-  | { type: 'DECISION_ANSWERED'; windowId: string; decision: { key: string; value: WindowDecisionValue }; sourceId: string; sourceActorId: string; mutations: RuleMutation[] }
+  | { type: 'DECISION_ANSWERED'; windowId: string; decision: { key: string; value: RuleChoiceAnswer }; sourceId: string; sourceActorId: string; mutations: RuleMutation[] }
 
 export interface CommandResult {
   state: EncounterState;

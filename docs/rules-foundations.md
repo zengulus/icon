@@ -250,7 +250,11 @@ spacing constraints, and character placement queries that delegate full
 footprint legality to F1. Ordinary recorded creations use the existing
 creation authority and cap allowance; queries after earlier effects consume
 U11's existing simulation. See [the placement contract](tranche-33-placement.md)
-for the migrated consumers and remaining U4 boundaries. U4 remains PARTIAL.
+for the migrated consumers and remaining U4 boundaries. The [recorded-choice
+seam](recorded-choice-seam.md) now preserves every U4 answer kind through U13
+events, flow resumes, and held continuations. Great Giorgios and Spite use
+the complete answer; command buckets retain their wire shape. U4 remains
+PARTIAL for the remaining source consumers and authoring folds.
 
 ### Reference / Binding (U1 underlay) — AUTHORITATIVE within its declared scope (2026-09-02; content-adapter tranches 1–18)
 

@@ -65,6 +65,7 @@
  * No source IDs, no source-unit wiring: content rows may compose these
  * nodes, but the engine never branches on a source id here.
  */
+import { choiceAnswerInput } from './choice.js';
 import type { EncounterState, Position } from '../../types.js';
 import { resolveAuthoritativeAttack } from './attack-resolution.js';
 import { applyRuleMutation, coMovedActorIdsForMove, deniedAtomicSpatialLegIndices, encounterRuleState } from './encounter-adapter.js';
@@ -86,6 +87,7 @@ import { RuleProgramViolation } from './violations.js';
 import type {
   Fact,
   RuleChoice,
+  RuleChoiceAnswer,
   RuleEffect,
   RuleExecutionContext,
   RuleMutation,
@@ -671,24 +673,25 @@ export function contextAfterMutations(context: RuleExecutionContext, mutations: 
 export function executeFlowResume(
   resume: { remaining: FlowNode[]; binder: Binder },
   context: RuleExecutionContext,
-  options: { decision?: { key: string; value: string | number | boolean | readonly string[] }; preEmitted?: readonly RuleMutation[] } = {},
+  options: { decision?: { key: string; value: RuleChoiceAnswer }; preEmitted?: readonly RuleMutation[] } = {},
 ): FlowExecution {
   // The recorded U4 decision rides the input surface under the choice key
   // (the same seam every other recorded choice consumes — booleans for
   // boolean choices, options for option choices, etc.).
   let input = context.input;
   if (options.decision) {
-    const key = options.decision.key;
-    const value = options.decision.value;
-    if (typeof value === 'boolean') input = { ...input, booleans: { ...(input.booleans ?? {}), [key]: value } };
-    else if (typeof value === 'number') input = { ...input, numbers: { ...(input.numbers ?? {}), [key]: value } };
-    else if (typeof value === 'string') input = { ...input, options: { ...(input.options ?? {}), [key]: value } };
-    else {
-      // T6.2: a recorded ORDERING decision (the ordered candidate id list)
-      // never resumes a suspended flow — an ordering window gates the U17
-      // pop/projection, not a flow. Reject rather than misroute the ids into
-      // a scalar bucket.
-      throw new Error('flow.resume: an ordering decision cannot resume a suspended flow.');
+    // Clear the answered key in every compatibility bucket first: decline
+    // must not fall back to an ambient command value.
+    input = { ...input };
+    for (const bucket of ['actorIds', 'positions', 'directions', 'options', 'numbers', 'booleans'] as const) {
+      if (input[bucket]) {
+        input[bucket] = { ...input[bucket] } as never;
+        delete input[bucket]![options.decision.key];
+      }
+    }
+    const recorded = choiceAnswerInput(options.decision.key, options.decision.value);
+    for (const bucket of ['actorIds', 'positions', 'directions', 'options', 'numbers', 'booleans'] as const) {
+      if (recorded[bucket]) input[bucket] = { ...input[bucket], ...recorded[bucket] } as never;
     }
   }
   // Re-run the remaining nodes through the SAME flow authority against

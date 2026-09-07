@@ -684,7 +684,7 @@ describe('Replay: the recorded order is authoritative (tests 8–10, 20–22)', 
     void ended;
     const [a, b] = window.choice!.candidateIds ?? [];
     const decisionEvent = answered.events.find((event) => event.type === 'DECISION_ANSWERED');
-    expect(decisionEvent).toMatchObject({ windowId: window.id, decision: { key: 'ordering:turn-end', value: [a, b] } });
+    expect(decisionEvent).toMatchObject({ windowId: window.id, decision: { key: 'ordering:turn-end', value: { kind: 'ordering', ids: [a, b] } } });
     const result = executeCommand(state, { type: 'END_TURN', actorId: hero.id }, scriptedDice());
     const replayed = applyEvents(state, [...result.events, ...answered.events]);
     expect(replayed).toEqual(answered.state);

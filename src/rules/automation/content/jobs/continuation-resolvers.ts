@@ -201,7 +201,12 @@ registerDecisionContinuation({
       state: {},
     }];
   },
-  resolve: greatGiorgiosRushMutations,
+  resolve: (state, continuation) => {
+    if (continuation.choiceAnswer?.kind !== 'boolean' || continuation.choiceAnswer.value !== true) {
+      throw new Error('great-giorgios: rush requires a recorded affirmative answer.');
+    }
+    return greatGiorgiosRushMutations(state, continuation);
+  },
 });
 // The reducer arms the deferred continuation when this program's mark is
 // applied — the single arming point for command and replay alike.

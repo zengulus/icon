@@ -218,7 +218,7 @@ function spiteConsequenceMutations(ownerId: string, hatedId: string, durationTur
  *   `autoResolve` branch applies WITHOUT asking (`windowRequired` false).
  * - Equidistant tie → the U13 window opens (`windowRequired` true) and the
  *   owner records the choice among the tied foes; the recorded answer rides
- *   the held continuation (`capturedValues.decision`) and `resolve` applies
+ *   the held continuation (`choiceAnswer`) and `resolve` applies
  *   it — never an invented tie-break.
  */
 registerDecisionContinuation({
@@ -253,7 +253,8 @@ registerDecisionContinuation({
   resolve: (state, continuation) => {
     const ownerId = continuation.ownerRef.kind === 'captured-actor' ? continuation.ownerRef.actorId : '';
     if (!ownerId) throw new Error('spite.post-resolution: the continuation owner is not a single actor.');
-    const chosenId = continuation.capturedValues?.decision;
+    const answer = continuation.choiceAnswer;
+    const chosenId = answer?.kind === 'actors' ? answer.ids[0] : undefined;
     const closest = closestFoesOf(state, ownerId);
     if (typeof chosenId !== 'string' || !closest.some((foe) => foe.id === chosenId)) {
       throw new Error('spite.post-resolution: the recorded closest-foe choice is not among the equidistant closest foes — fail closed, never an invented tie-break.');

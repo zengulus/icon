@@ -70,7 +70,7 @@ import type { Binder } from '../primitives/reference.js';
 import { sameOwnerOrderingDecision, type OrderingCandidate, type OrderingPolicy } from '../primitives/ordering.js';
 import { deriveRoles, resolveRoleSelector, type RoleFrame } from '../primitives/roles.js';
 import type { SaveWindowKind } from '../primitives/save-window.js';
-import type { RuleChoice, RuleEffect, RuleMutation } from '../primitives/types.js';
+import type { RuleChoice, RuleChoiceAnswer, RuleEffect, RuleMutation } from '../primitives/types.js';
 import type { FlowNode } from './execute-flow.js';
 import type { DamageLedgerEntry } from './damage-ledger.js';
 import type { EncounterActor, EncounterHeldDamage, EncounterState } from '../../types.js';
@@ -110,12 +110,10 @@ export type WindowResponse =
   | { kind: 'interrupted'; sourceId: string }
   | { kind: 'rerolled'; sourceId: string }
   | { kind: 'declined' }
-  | { kind: 'accepted'; sourceId: string; decision?: WindowDecisionValue };
+  | { kind: 'accepted'; sourceId: string; decision?: RuleChoiceAnswer };
 
-/** A recorded U4 decision value for a `choice` window. An ordering decision
- * (T6.2) records the ORDERED candidate ids — the durable order the U17 pop /
- * projection consume on replay (never re-derived, never re-sorted). */
-export type WindowDecisionValue = string | number | boolean | readonly string[];
+/** @deprecated Compatibility name; all answers use the complete U4 type. */
+export type WindowDecisionValue = RuleChoiceAnswer;
 
 /** The one U13 window record. Durable, JSON-clean, deterministic. */
 export interface DecisionWindowRecord {
@@ -322,14 +320,17 @@ export function openOrderingDecisionWindow(
  * recorded value — the answer can never be a plausible-looking subset, a
  * foreign id list, or an extra candidate. Returns the validated ordered
  * ids (never raw input). */
-export function validateOrderingValue(choice: RuleChoice, value: WindowDecisionValue): string[] {
+export function validateOrderingValue(choice: RuleChoice, value: RuleChoiceAnswer): string[] {
   if (choice.kind !== 'ordering') {
     throw new Error('decision-window.ordering: a recorded ordering decision requires the answered window to carry an ordering choice.');
   }
-  if (!Array.isArray(value)) {
+  // Historical ordering events stored the ID array directly. Decode only
+  // that unambiguous legacy shape; all new events use RuleChoiceAnswer.
+  const answer: RuleChoiceAnswer = Array.isArray(value) ? { kind: 'ordering', ids: value } : value;
+  if (!answer || answer.kind !== 'ordering' || !Array.isArray(answer.ids)) {
     throw new Error('decision-window.ordering: the recorded ordering decision must carry the ordered candidate ids.');
   }
-  const ordered = value as readonly string[];
+  const ordered = answer.ids;
   const candidates = choice.candidateIds ?? [];
   if (candidates.length !== ordered.length) {
     throw new Error('decision-window.ordering: the recorded ordering is not a permutation of the exact candidate set.');
@@ -352,7 +353,7 @@ export function validateOrderingValue(choice: RuleChoice, value: WindowDecisionV
  * FAILS CLOSED on a corrupt recorded value: the order must be a permutation
  * of the exact candidate set the window offered, and every named window
  * must still be open. */
-export function recordOrderingDecision(state: EncounterState, window: DecisionWindowRecord, value: WindowDecisionValue): void {
+export function recordOrderingDecision(state: EncounterState, window: DecisionWindowRecord, value: RuleChoiceAnswer): void {
   if (window.choice?.kind !== 'ordering') {
     throw new Error('decision-window.ordering: a recorded ordering decision requires the answered window to carry an ordering choice.');
   }

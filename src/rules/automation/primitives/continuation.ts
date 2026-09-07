@@ -41,7 +41,7 @@ import type { Binder, Reference } from './reference.js';
 import type { ClockObservation, Scope } from './scope.js';
 import { boundaryEquals, boundaryReached, scopeSatisfied, type BoundaryRef } from './scope.js';
 import { orderingKey, type OrderingPolicy } from './ordering.js';
-import type { RuleEffect, RuleMutation } from './types.js';
+import type { RuleChoiceAnswer, RuleEffect, RuleMutation } from './types.js';
 
 /** What makes an armed continuation become due. Either a U8 Clock boundary
  * (relative clocks need the epoch recorded at arm time) or a recorded U10
@@ -108,6 +108,8 @@ export interface ArmedContinuation {
   trigger: ContinuationTrigger;
   /** U1 references with explicit LIVE vs CAPTURED semantics (ordered). */
   refs: readonly Reference[];
+  /** Complete validated U4 answer supplied at the U13 answer boundary. */
+  choiceAnswer?: RuleChoiceAnswer;
   /** Explicitly captured literal values, keyed by name (durable literals). */
   capturedValues?: Readonly<Record<string, string | number | boolean | Position | null>>;
   /** U1 names bound at arm time (earlier-operation outputs). */

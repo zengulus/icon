@@ -139,7 +139,9 @@ durable choice window (U12/U13), not legality — the evidence the ontology's
 
 **Replay semantics.** Choices ride the initiating command (pre choices) or
 the window's durable record (post choices); replay never re-asks. The
-supplied values are what execute — legality only.
+supplied values are what execute — legality only. The generic [recorded-answer
+seam](recorded-choice-seam.md) is complete: U4 validates both timings, and U13
+records the full typed answer without list truncation or scalar defaults.
 
 **Acceptance tests.** Preserve the existing choice cases and verify: chooser-role derivation;
 position choice legality through U3 (parity with `teleport-choice` where

@@ -1,4 +1,4 @@
-import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type DecisionWindowRecord, type EncounterActiveEffect, type EncounterActor, type EncounterCommand, type EncounterCondition, type EncounterEvent, type EncounterHeldDamage, type EncounterState, type IconCharacter, type Position, type StatusId, type StatusSaveCommandInput, type TurnEndCause, type WindowDecisionValue } from './types.js';
+import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type CommandResult, type DecisionWindowRecord, type EncounterActiveEffect, type EncounterActor, type EncounterCommand, type EncounterCondition, type EncounterEvent, type EncounterHeldDamage, type EncounterState, type IconCharacter, type Position, type StatusId, type StatusSaveCommandInput, type TurnEndCause, type RuleChoiceAnswer } from './types.js';
 import { findAbility, findClass, findJob } from './catalog.js';
 import { FOE_PROFILES, findFoeProfile, findFoeRole } from './foes.js';
 import { characterStats } from './character.js';
@@ -11,7 +11,7 @@ import { applyDeterminedEncounterDamage, applyHeldDamage, applyRuleMutations, co
 import { REPEATABLE_TAG, attackOncePerTurnKey, chainReactionOncePerRoundKey, dangerousOncePerTurnKey, interruptLegality, interruptUseKey, noRepeatKey, noRepeatsApplies, oneInterruptPerTurnWindowKey, recordUsageKey, refreshAnyTurnLedgersForAll, refreshUsageLedgerForBoundary, resetBoundaryFor, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount, useLedgerAvailable } from './automation/kernels/use-ledger.js';
 import { applyDamageLedger, type DamageWindowLedger } from './automation/kernels/damage-ledger.js';
 import { validateActorCandidate } from './automation/kernels/candidate.js';
-import { resolveChoice, type ChosenValue } from './automation/kernels/choice.js';
+import { resolveChoice, choiceAnswerDeclined } from './automation/kernels/choice.js';
 import { turnBoundaryOrdering, type TurnBoundaryCandidate } from './automation/primitives/ordering.js';
 import { validateTransaction } from './automation/primitives/transaction.js';
 import { closeDecisionWindow, decideDamageWindow, isInterruptWindowKind, nextWindowId, openDecisionWindow, openOrderingDecisionForSameOwnerTies, openTurnBoundaryOrderingWindow, orderDecisionWindows, popDecisionWindowStack, recordOrderingDecision, validateOrderingValue, windowHeldDamage, windowHeldSave, type TurnBoundaryHeldEffect } from './automation/kernels/decision-window.js';
@@ -2178,7 +2178,7 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
       const input = command.input ?? {};
       // The recorded U4 decision: the choice spec names the input key; a pure
       // `suspend` gate (no choice) records the plain resume decision.
-      let decision: { key: string; value: WindowDecisionValue };
+      let decision: { key: string; value: RuleChoiceAnswer };
       if (window.choice) {
         // U4 validation at the window-answer boundary — the SAME choice
         // kernel every command-side choice consumes. A REQUIRED answer must
@@ -2200,9 +2200,9 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
           dice,
         };
         const validated = resolveChoice(window.choice, choiceContext);
-        decision = { key: window.choice.key, value: windowDecisionValueFor(window.choice, validated) };
+        decision = { key: window.choice.key, value: validated };
       } else {
-        decision = { key: 'resume', value: true };
+        decision = { key: 'resume', value: { kind: 'boolean', value: true } };
       }
       let mutations: RuleMutation[] = [];
       if (window.choice?.kind === 'ordering') {
@@ -2237,18 +2237,13 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         // window-open). The engine never chooses a default.
         const row = decisionContinuationFor(window.heldPayload.programId);
         if (!row) throw new RuleViolation('window.no-resolver', 'That decision window has no registered resolution.');
-        // A VALUE-carrying answer (actors/positions/direction/number/option)
-        // rides a LOCAL copy of the held continuation so the resolver
-        // consumes EXACTLY what the player recorded — never re-queries the
-        // choice. A required value choice cannot be declined, so the
-        // resolver always runs. The copy keeps the durable window record
-        // pristine: a resolver rejection fails closed WITHOUT mutating the
-        // still-open window.
-        if (window.choice && window.choice.kind !== 'boolean') {
-          const heldPayload = { ...window.heldPayload, capturedValues: { ...(window.heldPayload.capturedValues ?? {}), decision: decision.value as string | number | boolean } };
+        // Carry the full U4 answer on a local continuation copy. Optional
+        // absence never invokes the resolver; boolean false is the explicit
+        // no branch. Failure leaves the original open window untouched.
+        const answer = decision.value;
+        if (!choiceAnswerDeclined(answer) && (answer.kind !== 'boolean' || answer.value === true)) {
+          const heldPayload = { ...window.heldPayload, choiceAnswer: answer };
           mutations = row.resolve(state, heldPayload);
-        } else if (decision.value === true || decision.value === 'accept' || decision.value === 1) {
-          mutations = row.resolve(state, window.heldPayload);
         }
       } else {
         throw new RuleViolation('window.malformed', 'That decision window cannot be resolved.');
@@ -2827,7 +2822,7 @@ function resolveHeldBoundaryExpiry(state: EncounterState, effect: TurnBoundaryHe
  * registry-ordered). The recorded value was already validated as a full
  * permutation of the exact tied set by the U4 choice authority; this re-checks
  * against the window's heldBoundary so a corrupt recorded value fails closed. */
-function resolveHeldBoundaryOrdering(state: EncounterState, window: NonNullable<DecisionWindowRecord>, value: WindowDecisionValue): void {
+function resolveHeldBoundaryOrdering(state: EncounterState, window: NonNullable<DecisionWindowRecord>, value: RuleChoiceAnswer): void {
   const held = window.heldBoundary;
   if (!held) throw new Error('decision-window.ordering: the answered ordering window carries no held boundary effects.');
   const ordered = validateOrderingValue(window.choice!, value);
@@ -2911,25 +2906,6 @@ function resolveHeldEffects(state: EncounterState, window: DecisionWindowRecord,
     && closingSourceId === window.retargetProgramId;
   const effects = redirects ? retargetEffects(window.heldEffects, window.retarget!.fromActorId, window.retarget!.toActorId) : window.heldEffects;
   applyRuleMutations(state, effects);
-}
-
-/** The recorded U4 decision value for a VALIDATED `ChosenValue` (the output
- * of the shared choice kernel — never raw input). A required choice always
- * resolves to a present value; the fallbacks here fire only for an OPTIONAL
- * choice the player declined (`null` from the kernel), never for malformed
- * or missing required input (which the kernel rejected). */
-function windowDecisionValueFor(choice: RuleChoice, validated: ChosenValue): WindowDecisionValue {
-  switch (validated.kind) {
-    case 'boolean': return validated.value ?? false;
-    case 'number': return validated.value ?? 0;
-    case 'option': return validated.value ?? '';
-    case 'actors': return validated.ids[0] ?? '';
-    case 'positions': return validated.positions[0] ? JSON.stringify(validated.positions[0]) : '';
-    case 'direction': return validated.direction ? JSON.stringify(validated.direction) : '';
-    // T6.2: the recorded ordering IS the ordered candidate list — the
-    // durable order replay consumes (never re-derived, never re-sorted).
-    case 'ordering': return validated.ids;
-  }
 }
 
 /** ICON p.143 Sucker Punch: when the interrupt executes and a `save-rolled`

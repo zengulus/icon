@@ -31,7 +31,7 @@
  * boundary.
  */
 import type { Position } from '../../types.js';
-import type { RuleChoice, RuleExecutionContext } from '../primitives/types.js';
+import type { RuleChoice, RuleChoiceAnswer, RuleExecutionInput, RuleExecutionContext } from '../primitives/types.js';
 import type { PositionLegalityQuery } from '../primitives/query.js';
 import { defaultActorAnchor } from '../primitives/anchor.js';
 import { deriveRoles, resolveRoleSelector, roleFrameFromContext, type RoleFrame } from '../primitives/roles.js';
@@ -42,14 +42,7 @@ import { RuleProgramViolation, evaluateNumber } from './runtime.js';
 /** The validated value for one `RuleChoice`: what the player supplied,
  * already checked against the row's constraints. `null` means the choice was
  * optional and declined — never a default. */
-export type ChosenValue =
-  | { kind: 'actors'; ids: string[] }
-  | { kind: 'positions'; positions: Position[] }
-  | { kind: 'direction'; direction: Position | null }
-  | { kind: 'option'; value: string | null }
-  | { kind: 'number'; value: number | null }
-  | { kind: 'boolean'; value: boolean | null }
-  | { kind: 'ordering'; ids: string[] };
+export type ChosenValue = RuleChoiceAnswer;
 
 /** A captured list choice whose candidate domain has already been produced by
  * its owning U3 query. U4 owns only presence/cardinality/distinctness and
@@ -206,12 +199,68 @@ export function validateCapturedPositionChoice(
   throw new RuleProgramViolation('choice.position-unavailable', `${label}: position is not legal.`);
 }
 
+const CHOICE_BUCKET = { actors: 'actorIds', ordering: 'actorIds', positions: 'positions', direction: 'directions', option: 'options', number: 'numbers', boolean: 'booleans' } as const;
+
+/** Project a durable answer into the existing command buckets, preserving
+ * lists and explicit decline. Consumes validated answers in resumed flows. */
+export function choiceAnswerInput(key: string, answer: RuleChoiceAnswer): RuleExecutionInput {
+  switch (answer.kind) {
+    case 'actors': case 'ordering': return { actorIds: { [key]: [...answer.ids] } };
+    case 'positions': return { positions: { [key]: answer.positions.map(({ x, y }) => ({ x, y })) } };
+    case 'direction': return answer.direction === null ? {} : { directions: { [key]: { ...answer.direction } } };
+    case 'option': return answer.value === null ? {} : { options: { [key]: answer.value } };
+    case 'number': return answer.value === null ? {} : { numbers: { [key]: answer.value } };
+    case 'boolean': return answer.value === null ? {} : { booleans: { [key]: answer.value } };
+  }
+}
+
+/** Durable answers and command buckets share all U4 semantics. */
+export function resolveChoiceAnswer(choice: RuleChoice, answer: RuleChoiceAnswer, context: RuleExecutionContext): RuleChoiceAnswer {
+  if (!answer || answer.kind !== choice.kind) throw choiceViolation('choice.kind-invalid', choice, 'answer kind does not match the choice.');
+  const field = answer.kind === 'actors' || answer.kind === 'ordering' ? 'ids'
+    : answer.kind === 'positions' ? 'positions' : answer.kind === 'direction' ? 'direction' : 'value';
+  const raw = (answer as unknown as Record<string, unknown>)[field];
+  if (raw === undefined) throw choiceViolation('choice.answer-invalid', choice, 'answer payload is missing.');
+  const input = raw === null && !['actors', 'ordering', 'positions'].includes(answer.kind)
+    ? {} : { [CHOICE_BUCKET[answer.kind]]: { [choice.key]: raw } };
+  return resolveChoice(choice, { ...context, input });
+}
+
+export function choiceAnswerDeclined(answer: RuleChoiceAnswer): boolean {
+  switch (answer.kind) {
+    case 'actors': case 'ordering': return answer.ids.length === 0;
+    case 'positions': return answer.positions.length === 0;
+    case 'direction': return answer.direction === null;
+    default: return answer.value === null;
+  }
+}
+
+/** Reject malformed in-process commands too, before U3 sees their values.
+ * Copying validated coordinates below ensures recorded answers are JSON-clean. */
+function validateChoiceShape(choice: RuleChoice, context: RuleExecutionContext): void {
+  const value: unknown = context.input[CHOICE_BUCKET[choice.kind]]?.[choice.key];
+  if (value === undefined) return;
+  const position = (v: unknown): boolean => typeof v === 'object' && v !== null
+    && Number.isSafeInteger((v as Position).x) && Number.isSafeInteger((v as Position).y);
+  let valid: boolean;
+  switch (choice.kind) {
+    case 'actors': case 'ordering': valid = Array.isArray(value) && Array.from(value).every(v => typeof v === 'string'); break;
+    case 'positions': valid = Array.isArray(value) && Array.from(value).every(position); break;
+    case 'direction': valid = position(value); break;
+    case 'option': valid = typeof value === 'string'; break;
+    case 'number': valid = typeof value === 'number' && Number.isFinite(value); break;
+    case 'boolean': valid = typeof value === 'boolean'; break;
+  }
+  if (!valid) throw choiceViolation(`choice.${choice.kind === 'actors' ? 'actor' : choice.kind === 'positions' ? 'position' : choice.kind}-invalid`, choice, 'malformed recorded choice.');
+}
+
 /** Validate one choice row against the command's typed input buckets.
  *
  * Throws `RuleProgramViolation` when a required choice is missing or a
  * supplied value breaks the row's declared constraints. Returns the chosen
  * value, or `null` for a declined optional choice. */
 export function resolveChoice(choice: RuleChoice, context: RuleExecutionContext): ChosenValue {
+  validateChoiceShape(choice, context);
   switch (choice.kind) {
     case 'actors': return resolveActors(choice, context);
     case 'positions': return resolvePositions(choice, context);
@@ -291,7 +340,7 @@ function resolvePositions(choice: RuleChoice, context: RuleExecutionContext): Ch
     if (!candidate.legal) {
       throw choiceViolation('move.range', choice, `position (${cell.x},${cell.y}) is outside range ${maximumRange}.`);
     }
-    positions.push(cell);
+    positions.push({ x: cell.x, y: cell.y });
   }
   const minimum = choice.minimum ?? (choice.required ? 1 : 0);
   const maximum = choice.maximum ?? Number.POSITIVE_INFINITY;
@@ -313,7 +362,7 @@ function resolveDirection(choice: RuleChoice, context: RuleExecutionContext): Ch
     // direction vocabulary here; a later closed candidate set belongs in U3.
     throw choiceViolation('choice.direction-invalid', choice, 'direction cannot be (0,0).');
   }
-  return { kind: 'direction', direction: supplied };
+  return { kind: 'direction', direction: { x: supplied.x, y: supplied.y } };
 }
 
 function resolveOption(choice: RuleChoice, context: RuleExecutionContext): ChosenValue {

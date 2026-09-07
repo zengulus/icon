@@ -183,10 +183,22 @@ export type RulePredicate =
      the read (marks from another owner with an identical markId never do). */
     ownerSensitive?: boolean };
 
+/** JSON-clean durable U4 answer for every choice kind. Empty lists and null
+ * scalar/vector payloads record optional absence; false, zero and empty string
+ * remain explicit supplied values. Requiredness is validated by U4. */
+export type RuleChoiceAnswer =
+  | { kind: 'actors'; ids: string[] }
+  | { kind: 'positions'; positions: Position[] }
+  | { kind: 'direction'; direction: Position | null }
+  | { kind: 'option'; value: string | null }
+  | { kind: 'number'; value: number | null }
+  | { kind: 'boolean'; value: boolean | null }
+  | { kind: 'ordering'; ids: string[] };
+
 export interface RuleChoice {
   key: string;
   label: string;
-  kind: 'actors' | 'positions' | 'direction' | 'option' | 'number' | 'boolean' | 'ordering';
+  kind: RuleChoiceAnswer['kind'];
   required: boolean;
   /** U17 same-owner ordering (T6.2): the EXACT pending candidate set an
    * `ordering` choice orders. The U4 validator requires the answer to be a
