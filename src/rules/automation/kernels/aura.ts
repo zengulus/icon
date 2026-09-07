@@ -184,11 +184,6 @@ export function auraDefinitionFor(sourceId: string): AuraDefinition | null {
   return auraDefinitions.find((definition) => definition.sourceId === sourceId) ?? null;
 }
 
-/** The closed registry (registration order = projection order). */
-export function registeredAuraDefinitions(): readonly AuraDefinition[] {
-  return auraDefinitions;
-}
-
 /** The durable `aura`-grant radius of an active effect, or null when the
  * effect carries none. Supports the numeric `RuleNumber` constant form the
  * ability programs emit. Exported so the rule-runtime adapter can project

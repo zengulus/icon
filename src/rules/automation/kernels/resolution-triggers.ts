@@ -21,19 +21,6 @@ export interface ResolutionTriggerFacts {
   resolutionId: string;
 }
 
-export function resolutionFactsFromRecorded(
-  facts: { triggers: readonly string[]; attackTargets: readonly string[]; collidedActorIds: readonly string[]; slainActorIds: readonly string[] },
-): ResolutionTriggerFacts {
-  return {
-    triggers: new Set(facts.triggers),
-    attackTargets: [...facts.attackTargets],
-    collidedActorIds: [...facts.collidedActorIds],
-    slainActorIds: [...facts.slainActorIds],
-    facts: [],
-    resolutionId: '',
-  };
-}
-
 /** The resolution's causal context (source + initiating owner) derived from
  * the resolved mutation list — the owner is the mutation's own initiating
  * actor (U9), so reflected/secondary outcomes keep the originating identity. */

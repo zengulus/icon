@@ -53,11 +53,6 @@ export interface CloudCharacterTransport {
   write(input: CloudCharacterWrite): Promise<number>;
 }
 
-export interface CloudCharacterWriteResult {
-  acceptedRevision: number;
-  requestedRevision: number;
-}
-
 /**
  * Pure compare-and-set decision shared (conceptually) with the Supabase
  * `save_character_cas` RPC: a cloud write is accepted only when it never moves
@@ -107,11 +102,6 @@ export function loadOrCreateCreatorInstanceId(): string {
   const fresh = globalThis.crypto?.randomUUID?.();
   if (!fresh) throw new Error('crypto.randomUUID is unavailable for the local instance id.');
   return fresh;
-}
-
-export function recordSaveState(record: LocalCharacterRecord): SaveState {
-  if (record.cloudState === 'synced' && record.cloudRevision === record.localRevision) return 'cloud';
-  return 'local';
 }
 
 /**

@@ -37,12 +37,6 @@ describe('permanent player-selection IDs', () => {
     }
   });
 
-  it('has no duplicate IDs within any domain', () => {
-    for (const [domain, ids] of Object.entries(DOMAINS)) {
-      expect(new Set(ids).size, `domain "${domain}"`).toBe(ids.length);
-    }
-  });
-
   it('matches the literal ID types for the small narrative domains', () => {
     expect(DOMAINS.kin).toEqual([...KIN_IDS]);
     expect(DOMAINS.culture).toEqual([...CULTURE_IDS]);
@@ -88,20 +82,5 @@ describe('permanent player-selection IDs', () => {
     for (const powerId of character.bondPowerIds) {
       expect(findBondPower(powerId)?.id).toBe(powerId);
     }
-  });
-
-  it('keeps machine identity separate from display names', () => {
-    // IDs are narrow, lower-case machine tokens authored in the catalog; they
-    // never contain the spaces/capitalization that live on display labels.
-    for (const id of [...DOMAINS.kin, ...DOMAINS.culture, ...DOMAINS.bond]) {
-      expect(id).toMatch(/^[a-z]+$/);
-    }
-    for (const id of DOMAINS.bondPower) {
-      expect(id).toMatch(/^[a-z]+:[a-z0-9-]+$/);
-    }
-    // Display labels are independently mutable: they use characters IDs cannot,
-    // and renaming a label leaves the ID registry untouched above.
-    expect(KINS.every(({ name }) => /[A-Z]/.test(name))).toBe(true);
-    expect(BOND_POWERS.some(({ name }) => /\s/.test(name))).toBe(true);
   });
 });

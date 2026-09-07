@@ -186,9 +186,3 @@ export function compileFoeTraitKeywordRecipe(unit: RuleSourceUnit): RuleProgramC
     unsupportedClauses: complete ? [] : [clause],
   };
 }
-
-/** Backwards-compatible projection alias for the movement-only manifest
- * (renamed `projectedFoeTraitConditions`). */
-export function projectedFoeTraitMovementConditions(sourceId: string): readonly string[] {
-  return projectedFoeTraitConditions(sourceId);
-}

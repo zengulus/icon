@@ -340,10 +340,6 @@ export async function listCharactersWithReport(userId: string | null): Promise<C
   };
 }
 
-export async function listCharacters(userId: string | null): Promise<IconCharacter[]> {
-  return (await listCharactersWithReport(userId)).characters;
-}
-
 /**
  * Local-first save. This commits durably to the local envelope (blue) and
  * never performs an eager network write; the sync controller owns debounced
@@ -370,14 +366,6 @@ export async function saveCharacter(character: IconCharacter, _userId: string | 
   }
   writeLocalRecordsUnchecked(records);
   return updated;
-}
-
-export async function deleteCharacter(id: string, _userId: string | null) {
-  const local = readLocalCharacters();
-  if (!local.safeToWrite) {
-    throw new CharacterPersistenceError('Local character recovery could not be completed, so this archive action was cancelled to protect existing records.');
-  }
-  writeLocalRecordsUnchecked(local.records.filter((record) => record.character.id !== id));
 }
 
 /**

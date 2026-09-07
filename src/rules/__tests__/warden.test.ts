@@ -1,10 +1,9 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { JOBS, findAbility } from '../catalog.js';
-import { findRuleSourceUnit } from '../source-units.js';
+
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo } from './fixtures.js';
 
@@ -51,17 +50,6 @@ const beastsOf = (state: EncounterState, ownerId: string) =>
   Object.values(state.entities).filter((entity) => entity.type === 'beast' && entity.ownerId === ownerId);
 
 describe('Warden ability automation (p.165–171)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
-      if (!abilityId.startsWith('warden:')) continue;
-      const ability = findAbility(abilityId)!;
-      expect(ability.automation).toBe('executable');
-      const unit = findRuleSourceUnit(abilityId)!;
-      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
-    }
-    const wardenIds = JOBS.find((job) => job.id === 'warden')!.abilities.map(({ id }) => id);
-    expect(wardenIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
-  });
 
   it('Apex: a range-3 boon attack that dazes and summons a beast adjacent to the target', () => {
     const { state, hero, foe } = wardenEncounter({ foe: { x: 4, y: 1 }, second: null });

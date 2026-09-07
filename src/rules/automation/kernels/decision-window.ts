@@ -64,7 +64,7 @@
  * `openDecisionWindow` with its own kind/choice; the engine never branches
  * on a source id here.
  */
-import type { ArmedContinuation, HeldResult } from '../primitives/continuation.js';
+import type { ArmedContinuation } from '../primitives/continuation.js';
 import { heldDamageContinuation, heldSaveContinuation } from '../primitives/continuation.js';
 import type { Binder } from '../primitives/reference.js';
 import { sameOwnerOrderingDecision, type OrderingCandidate, type OrderingPolicy } from '../primitives/ordering.js';
@@ -111,9 +111,6 @@ export type WindowResponse =
   | { kind: 'rerolled'; sourceId: string }
   | { kind: 'declined' }
   | { kind: 'accepted'; sourceId: string; decision?: RuleChoiceAnswer };
-
-/** @deprecated Compatibility name; all answers use the complete U4 type. */
-export type WindowDecisionValue = RuleChoiceAnswer;
 
 /** The one U13 window record. Durable, JSON-clean, deterministic. */
 export interface DecisionWindowRecord {
@@ -634,15 +631,6 @@ export function popDecisionWindowStack(state: EncounterState, actorId: string, h
  * Choice windows are never selected (they are answered by id). */
 export function peekDecisionWindowStack(state: EncounterState, actorId: string, heldOnly: boolean): DecisionWindowRecord | undefined {
   return topDecisionWindowStack(state, actorId, heldOnly);
-}
-
-/** The U12 held-result of a window's held payload (the determined save or
- * damage) — the durable authority the command boundary injects into an
- * interrupt's planning context. Absent for windows that hold nothing. */
-export function windowHeldResult(window: DecisionWindowRecord): HeldResult | undefined {
-  const payload = window.heldPayload;
-  if (!payload || payload.payload.kind !== 'held-result') return undefined;
-  return payload.payload.result;
 }
 
 /** The deterministic total order for simultaneous windows (ICON p.107):

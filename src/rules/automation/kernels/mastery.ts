@@ -23,8 +23,6 @@
  * command and replay read the same gate.
  */
 
-import type { EncounterState } from '../../types.js';
-
 /**
  * How a mastery attaches to its parent ability — the four families already
  * present in the engine:
@@ -67,21 +65,6 @@ export function registerMasteryRecipe(recipe: MasteryRecipe): void {
   masteryRecipes[recipe.sourceId] = recipe;
 }
 
-/** The registered recipe for a mastery source unit, or null. */
-export function masteryRecipeFor(sourceId: string): MasteryRecipe | null {
-  return masteryRecipes[sourceId] ?? null;
-}
-
-/** The executable mastery ids — the allowlist that makes each mastery's
- * compilation complete (audit authority: allowlist + source fixture + replay
- * test). Only `implemented` rows are executable; documented rows stay
- * source-visible with their remaining kernel need. */
-export function getExecutableMasteryIds(): ReadonlySet<string> {
-  return new Set(Object.values(masteryRecipes)
-    .filter((recipe) => recipe.status === 'implemented')
-    .map((recipe) => recipe.sourceId));
-}
-
 /** True when the mastery source unit is registered as implemented. */
 export const isExecutableMastery = (sourceId: string): boolean =>
   masteryRecipes[sourceId]?.status === 'implemented';
@@ -108,10 +91,4 @@ export interface MasteryOwnerView {
  */
 export function hasMastery(owner: MasteryOwnerView, abilityId: string): boolean {
   return Boolean(owner.abilityIds?.includes(abilityId) && owner.masteredAbilityIds?.includes(abilityId));
-}
-
-/** The same gate against the authoritative encounter state. */
-export function isMastered(state: EncounterState, actorId: string, abilityId: string): boolean {
-  const actor = state.actors[actorId];
-  return Boolean(actor && hasMastery(actor, abilityId));
 }

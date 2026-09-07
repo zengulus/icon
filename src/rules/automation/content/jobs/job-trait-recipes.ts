@@ -417,9 +417,3 @@ export const COMBAT_START_TRAIT_RECIPES: Readonly<Record<string, CombatStartTrai
 export const EXECUTABLE_JOB_TRAIT_IDS: ReadonlySet<string> = new Set(
   Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'wired').map((recipe) => recipe.sourceId),
 );
-
-/** Exposed for the closed-registry fixtures: every documented row stays
- * source-visible and must never gain a guessed resolver. */
-export const DOCUMENTED_JOB_TRAIT_IDS: ReadonlySet<string> = new Set(
-  Object.values(JOB_TRAIT_RECIPES).filter((recipe) => recipe.status === 'documented').map((recipe) => recipe.sourceId),
-);

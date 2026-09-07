@@ -433,32 +433,6 @@ export const isExecutableTalent = (sourceId: string): boolean =>
   || Object.prototype.hasOwnProperty.call(markModifierTalentRecipes, sourceId)
   || Object.prototype.hasOwnProperty.call(preUseTalentAugmentations, sourceId);
 
-/** The mechanic text of a program-level talent implementation, or undefined
- * for a fold-wired or documented talent. */
-export function getProgramLevelTalentMechanic(sourceId: string): string | undefined {
-  return programLevelTalentRecipes[sourceId];
-}
-
-/** The mechanic text of a range-modifier talent implementation, or undefined. */
-export function getRangeModifierTalentMechanic(sourceId: string): string | undefined {
-  return rangeModifierTalentRecipes[sourceId];
-}
-
-/** The mechanic text of an area-modifier talent implementation, or undefined. */
-export function getAreaModifierTalentMechanic(sourceId: string): string | undefined {
-  return areaModifierTalentRecipes[sourceId];
-}
-
-/** The mechanic text of a bonus-damage talent implementation, or undefined. */
-export function getBonusDamageTalentMechanic(sourceId: string): string | undefined {
-  return bonusDamageTalentRecipes[sourceId];
-}
-
-/** The mechanic text of a mark-modifier talent implementation, or undefined. */
-export function getMarkModifierTalentMechanic(sourceId: string): string | undefined {
-  return markModifierTalentRecipes[sourceId];
-}
-
 /** The post-application trigger targets a wired slay/collide talent needs.
  * The caller computes them from the ability's recorded mutations via the
  * shared reactive dry run (`collidingShoveTargets` / `reactiveSlayTargets`)

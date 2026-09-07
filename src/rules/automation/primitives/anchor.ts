@@ -128,11 +128,6 @@ export function anchorFromPosition(position: Position, size = 1): SpatialAnchor 
   return { kind: 'captured-position', position: { ...position }, size };
 }
 
-/** Pure constructor: a live entity footprint anchor. */
-export function anchorFromEntity(entityId: string): SpatialAnchor {
-  return { kind: 'entity', entityId };
-}
-
 /**
  * The explicit singular U7 anchor of an entity whose complete geometry is a
  * region. Existing entity-centered rules use the first recorded cell as the

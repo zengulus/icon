@@ -661,10 +661,7 @@ export const PROJECT_CLAIMS: readonly ProjectClaim[] = [
   {
     id: 'claim:foundations:u16-complete',
     file: 'docs/rules-foundations.md',
-    anchor: '### Usage / Entitlement Ledger (U16 underlay, CORE) — COMPLETE (T3 core',
-    anchors: [
-      { file: 'docs/rules-foundations.md', anchor: 'U16 is therefore recertified **COMPLETE** (2026-09-01)' },
-    ],
+    anchor: '### Usage / Entitlement Ledger (U16) — COMPLETE',
     strength: 'complete',
     subject: 'Usage / Entitlement Ledger (U16 underlay)',
     binding: legacy('U16 HUMAN-CERTIFIED recertification 2026-09-01: fresh residual census found no remaining unresolved U16 consumer and no competing usage authority after the Monogatari once-per-song consumer was integrated onto the U8 lifecycle scope (proven by monogatari-u8-u16.test.ts); 2026-09-01 multi-owner correction re-audited the same contract — every active song runs its own U16 applyLifecycleScopedUsage transaction, multiple simultaneous Chanters stay independent ledger identities, and no content path reconstructs a lifecycle ledger key. NOT machine-verified: no strict fidelity scope.'),

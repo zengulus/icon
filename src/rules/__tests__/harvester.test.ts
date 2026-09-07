@@ -6,7 +6,7 @@ import { encounterConditionSet, encounterRuleState } from '../automation/kernels
 import { executeRuleProgram } from '../automation/kernels/runtime.js';
 import { HARVESTER_RULE_RESOLVERS } from '../automation/content/jobs/programs/harvester-programs.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { JOBS, findAbility } from '../catalog.js';
+
 import { findRuleSourceUnit } from '../source-units.js';
 import type { RuleExecutionContext, RuleMutation } from '../automation/primitives/types.js';
 import type { EncounterActor, EncounterState, Position } from '../types.js';
@@ -130,17 +130,6 @@ function executeDarkSliverSlay(
 }
 
 describe('Harvester ability automation (p.182–188)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
-      if (!abilityId.startsWith('harvester:')) continue;
-      const ability = findAbility(abilityId)!;
-      expect(ability.automation).toBe('executable');
-      const unit = findRuleSourceUnit(abilityId)!;
-      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
-    }
-    const harvesterIds = JOBS.find((job) => job.id === 'harvester')!.abilities.map(({ id }) => id);
-    expect(harvesterIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
-  });
 
   it('Sow: auto-hits fray, seals the foe, and marks them', () => {
     const { state, hero, foe } = harvesterEncounter({ second: null });

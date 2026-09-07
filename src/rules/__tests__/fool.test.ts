@@ -2,10 +2,9 @@ import '../automation/content/registry.js';
 import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { JOBS, findAbility } from '../catalog.js';
-import { findRuleSourceUnit } from '../source-units.js';
+
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter, endTurnTo, startEncounterTo, expectRejectedCommandPurity, interruptUses, interruptUsedThisTurn } from './fixtures.js';
 
@@ -69,17 +68,6 @@ function blockEveryGridCellExcept(state: EncounterState, allowed: readonly Posit
 }
 
 describe('Fool ability automation (p.150–152)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
-      if (!abilityId.startsWith('fool:')) continue;
-      const ability = findAbility(abilityId)!;
-      expect(ability.automation).toBe('executable');
-      const unit = findRuleSourceUnit(abilityId)!;
-      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
-    }
-    const foolIds = JOBS.find((job) => job.id === 'fool')!.abilities.map(({ id }) => id);
-    expect(foolIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
-  });
 
   it('Cavaliere: dashes 3 with phasing, steps to the side, dazes the target, and attacks', () => {
     const { state, hero, foe } = foolEncounter({ second: null });

@@ -229,28 +229,6 @@ function postTurnEligibility(state: EncounterState, endingActorId: string): { no
   return sets as { normal: Record<TurnSide, boolean>; slow: Record<TurnSide, boolean> };
 }
 
-/** The ICON p.87 pass rule applied to a proposed opening slot: a side with no
- * eligible actors in the current phase yields the slot — to the other side in
- * the normal phase, or to the Slow mini-round when no normal actors remain on
- * either side. Pure; the reducer applies the returned decision. */
-export function resolveEligiblePhase(state: EncounterState, eligibleSide: TurnSide, turnPhase: TurnPhase): { eligibleSide: TurnSide; turnPhase: TurnPhase } {
-  if (turnPhase === 'slow') {
-    if (slowEligibleActors(state, eligibleSide).length > 0) return { eligibleSide, turnPhase };
-    const other = opposite(eligibleSide);
-    if (slowEligibleActors(state, other).length > 0) return { eligibleSide: other, turnPhase };
-    return { eligibleSide, turnPhase };
-  }
-  if (normalEligibleActors(state, eligibleSide).length > 0) return { eligibleSide, turnPhase };
-  const other = opposite(eligibleSide);
-  if (normalEligibleActors(state, other).length > 0) return { eligibleSide: other, turnPhase };
-  // Neither side has normal actors left: the Slow mini-round begins when slow
-  // actors remain (the side with them opens it).
-  const slowSide: TurnSide = slowEligibleActors(state, eligibleSide).length > 0 ? eligibleSide
-    : slowEligibleActors(state, other).length > 0 ? other
-    : eligibleSide;
-  return { eligibleSide: slowSide, turnPhase: 'slow' };
-}
-
 /** The opening slot of the NEXT round, computed from the pre-turn state: the
  * side opposite the side whose actor ended the round opens, in the normal
  * phase unless the pass rule moves it (a side whose whole roster is

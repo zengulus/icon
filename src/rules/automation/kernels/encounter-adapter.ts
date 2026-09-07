@@ -2,7 +2,7 @@ import type { EncounterActor, EncounterEntity, EncounterHeldDamage, DecisionWind
 import { seededDice } from '../../dice.js';
 import { resourceMaximum } from '../../core.js';
 import { applyDeterminedDamageToVitals, determineDamage, type AppliedDamage, type DamageDelivery, type DeterminedDamage } from '../primitives/damage-resolution.js';
-import { projectedAuraSelfGrants, projectedMarkConditionGrants, projectedMarkConditionPotencies, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
+import { projectedMarkConditionGrants, projectedMarkConditionPotencies, projectedMarkConditionSuppressions, projectedPassiveConditions, projectedRoleConditions } from './passive-projection.js';
 import { auraEffectRadius, auraStateView, projectedAuraArmorBonus, projectedAuraConditions, projectedAuraConditionPotencies } from './aura.js';
 import { projectedHpThresholdConditions } from './hp-threshold.js';
 import type { RangeStateView } from './range.js';
@@ -191,12 +191,6 @@ export function encounterConditionSet(actor: EncounterActor, state?: EncounterSt
   // (e.g. Rot's noDefiance) the same way, so every consumer sees the same
   // projected condition set.
   for (const condition of projectedPassiveConditions(actor.traitIds)) conditions.add(condition);
-  // Aura-conditional self-grants (ICON Aura X): a bearer projects a condition
-  // onto itself while it has an active aura persistent effect from a
-  // registered source (e.g. Rook's "you also have counter while the aura is
-  // active"). Derives from the durable activeEffects record — replay-safe.
-  const activeAuraSourceIds = actor.activeEffects.filter((effect) => effect.effectId === 'aura').map((effect) => effect.sourceId);
-  for (const condition of projectedAuraSelfGrants(activeAuraSourceIds, actor.abilityIds, actor.talents)) conditions.add(condition);
   for (const condition of projectedRoleConditions(actor.roleId)) conditions.add(condition);
   for (const condition of projectedMarkConditionGrants(actor.marks, actor, state)) conditions.add(condition);
   for (const condition of projectedMarkConditionSuppressions(actor.marks, actor, state)) conditions.delete(condition);
@@ -1923,11 +1917,4 @@ export function reactiveSlayTargets(state: EncounterState, mutations: RuleMutati
     if (before && !before.defeated && actor.defeated) slain.push(id);
   }
   return slain;
-}
-
-export function reactiveRuleTriggers(state: EncounterState, mutations: RuleMutation[]): Set<'collide' | 'slay'> {
-  const reactive = new Set<'collide' | 'slay'>();
-  if (collidingShoveTargets(state, mutations).length > 0) reactive.add('collide');
-  if (reactiveSlayTargets(state, mutations).length > 0) reactive.add('slay');
-  return reactive;
 }

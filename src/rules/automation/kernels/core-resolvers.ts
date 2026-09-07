@@ -59,7 +59,3 @@ const passiveResolver: RuleResolver = (context) => [{ kind: 'state', sourceId: c
 for (const rule of CORE_RULES) coreResolvers[`core:${rule.id}`] ??= passiveResolver;
 
 export const CORE_RULE_RESOLVERS: RuleResolverRegistry = coreResolvers;
-
-export function hasCoreRuleResolver(id: string) {
-  return Boolean(CORE_RULE_RESOLVERS[id]);
-}

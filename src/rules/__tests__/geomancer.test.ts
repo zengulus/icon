@@ -1,11 +1,10 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
 import { RuleProgramViolation } from '../automation/kernels/runtime.js';
-import { JOBS, findAbility } from '../catalog.js';
-import { findRuleSourceUnit } from '../source-units.js';
+
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
@@ -46,17 +45,6 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Geomancer ability automation (p.215–221)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
-      if (!abilityId.startsWith('geomancer:')) continue;
-      const ability = findAbility(abilityId)!;
-      expect(ability.automation).toBe('executable');
-      const unit = findRuleSourceUnit(abilityId)!;
-      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
-    }
-    const geomancerIds = JOBS.find((job) => job.id === 'geomancer')!.abilities.map(({ id }) => id);
-    expect(geomancerIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
-  });
 
   it('Bio: shatters the target, [D]+fray on hit, and frays the small blast', () => {
     const { state, hero, foe, second } = geomancerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 } });

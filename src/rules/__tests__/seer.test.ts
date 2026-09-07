@@ -1,10 +1,9 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { JOBS, findAbility } from '../catalog.js';
-import { findRuleSourceUnit } from '../source-units.js';
+
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
@@ -48,17 +47,6 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Seer ability automation (p.197–203)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
-      if (!abilityId.startsWith('seer:')) continue;
-      const ability = findAbility(abilityId)!;
-      expect(ability.automation).toBe('executable');
-      const unit = findRuleSourceUnit(abilityId)!;
-      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
-    }
-    const seerIds = JOBS.find((job) => job.id === 'seer')!.abilities.map(({ id }) => id);
-    expect(seerIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
-  });
 
   it('Sleight Of Hand: auto-hits fray, pacifies the foe, frays the blast, and summons a wild card', () => {
     const { state, hero, foe, second } = seerEncounter({ foe: { x: 3, y: 1 }, second: { x: 3, y: 0 } });

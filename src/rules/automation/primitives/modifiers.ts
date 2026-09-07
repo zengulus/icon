@@ -519,14 +519,3 @@ export function effectivePermission(
   }
   return effective;
 }
-
-/** Convenience: is the named permission currently granted (any kind)? */
-export function permissionGranted(
-  queryPoint: PermissionQueryPoint,
-  ownerAbilityId: string,
-  view: ModifierFoldView,
-  scope: string = 'default',
-  options: { actionId?: string } = {},
-): boolean {
-  return effectivePermission(queryPoint, ownerAbilityId, view, scope, options) !== null;
-}

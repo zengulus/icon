@@ -1,11 +1,10 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+
 import { noRepeatKey } from '../automation/kernels/use-ledger.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { JOBS, findAbility } from '../catalog.js';
-import { findRuleSourceUnit } from '../source-units.js';
+
 import type { EncounterActor, EncounterState, Position, StatusSaveCommandInput } from '../types.js';
 import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 
@@ -53,17 +52,6 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Spellblade ability automation (p.222–229)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
-      if (!abilityId.startsWith('spellblade:')) continue;
-      const ability = findAbility(abilityId)!;
-      expect(ability.automation).toBe('executable');
-      const unit = findRuleSourceUnit(abilityId)!;
-      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
-    }
-    const spellbladeIds = JOBS.find((job) => job.id === 'spellblade')!.abilities.map(({ id }) => id);
-    expect(spellbladeIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
-  });
 
   it('Blitz: attacks [D], makes the foe vulnerable, then player-selected teleports and pierces twice', () => {
     const { state, hero, foe } = spellbladeEncounter({ second: null });

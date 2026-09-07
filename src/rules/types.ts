@@ -3,7 +3,7 @@ import type { TriggerProvenance } from './automation/primitives/trigger-provenan
 import type { Fact } from './automation/primitives/facts.js';
 import type { AttackResolutionLedger, DamageLedgerEntry } from './automation/kernels/damage-ledger.js';
 import type { TurnBoundaryPhasePlan, TurnTransitionIntent } from './automation/kernels/lifecycle.js';
-import type { DecisionWindowRecord, WindowDecisionValue } from './automation/kernels/decision-window.js';
+import type { DecisionWindowRecord } from './automation/kernels/decision-window.js';
 import type { FlowNode } from './automation/kernels/execute-flow.js';
 import type { Binder } from './automation/primitives/reference.js';
 
@@ -584,7 +584,7 @@ export interface EncounterHeldDamage {
  * legacy entries field-for-field onto the U13 record (the old `trigger`
  * becomes `kind`, `heldDamage`/`heldSave`/`heldResult` become the U12
  * `heldPayload` held-result continuation). */
-export type { DecisionWindowRecord, WindowDecisionValue, RuleChoiceAnswer };
+export type { DecisionWindowRecord, RuleChoiceAnswer };
 /** Re-export the U13 record type under its durable home for consumers. */
 export type EncounterPendingInterrupt = DecisionWindowRecord;
 

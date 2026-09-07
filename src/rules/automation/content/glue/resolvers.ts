@@ -43,7 +43,3 @@ export const RULE_RESOLVERS: RuleResolverRegistry = {
   ...STORMBENDER_RULE_RESOLVERS,
   ...buildFoeRuleResolvers(FOE_ABILITY_RECIPES),
 };
-
-export function hasRuleResolver(id: string) {
-  return Boolean(RULE_RESOLVERS[id]);
-}

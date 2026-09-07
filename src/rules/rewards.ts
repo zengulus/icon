@@ -46,6 +46,3 @@ export const REWARD_RULES: readonly RewardRuleDefinition[] = [
   rewardRule('camp-reset', 'Camp Recovery', 238, 'Camping clears all Strain, restores all Effort and HP, and clears all accumulated personal Resolve.'),
   rewardRule('interlude-reset', 'Interlude Recovery', 239, 'Entering an interlude restores Strain, Effort, HP, and Wounds, then awards completed expedition rewards.'),
 ];
-
-export const findTrophy = (id: string) => GENERAL_TROPHIES.find((trophy) => trophy.id === id);
-export const findCampFixture = (id: string) => CAMP_FIXTURES.find((fixture) => fixture.id === id);

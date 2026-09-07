@@ -370,12 +370,6 @@ export function applyBullStrengthCollide(options: {
  * The reducer's turn-start sweep clears exactly these keys on every actor. */
 export const ANY_TURN_LEDGER_PREFIX = usageKey({ sourceId: '', ownerId: '', scope: 'any-turn' });
 
-/** True when ANY actor holds an `any-turn` battlefield window key (the
- * reducer's cheap precondition for the turn-start sweep). */
-export function anyActorHoldsAnyTurnLedger(state: EncounterState): boolean {
-  return Object.values(state.actors).some((actor) => holdsUsageKey(actor, 'any-turn'));
-}
-
 /** U16/U8 ANY-TURN SWEEP: refresh every actor's battlefield `any-turn` window
  * (one-interrupt-during-any-turn, slashed once per turn, dangerous terrain
  * once per turn, and the per-target Bull's Strength collide gates) at a

@@ -1,8 +1,6 @@
 # ICON Remaining Work
 
-This file owns actionable work and its order. Historical tranche narratives
-live in the focused evidence reports and Git history; they are not a second
-current-state backlog.
+This file owns actionable work and its order. Historical tranche narratives live in Git history.
 
 | Question | Canonical document |
 | --- | --- |

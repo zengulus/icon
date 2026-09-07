@@ -50,46 +50,6 @@ export interface LocalRoomPersistence {
   remove(roomId: string): void;
 }
 
-export function browserRoomPersistence(
-  storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
-  namespace = 'icon.vtt.room.v1',
-): LocalRoomPersistence {
-  const keyFor = (roomId: string) => `${namespace}:${roomId}`;
-  const preserveCorruptRecord = (key: string, raw: string) => {
-    // Keep the original bytes recoverable before a later local save replaces
-    // the active key with a new room. Never overwrite the first forensic copy.
-    const backupKey = `${key}.corrupt`;
-    if (storage.getItem(backupKey) === null) storage.setItem(backupKey, raw);
-  };
-  return {
-    load(roomId) {
-      const key = keyFor(roomId);
-      const raw = storage.getItem(key);
-      if (!raw) return null;
-      try {
-        return restorePersistedVttRoom(JSON.parse(raw));
-      } catch {
-        // A corrupt browser cache must never be elevated over a valid new room,
-        // nor silently lost when that room is next saved.
-        try {
-          preserveCorruptRecord(key, raw);
-        } catch {
-          // Storage can itself be unavailable or full. The original active
-          // value remains untouched in that case.
-        }
-        return null;
-      }
-    },
-    save(roomId, state) {
-      assertValidVttRoomState(state);
-      storage.setItem(keyFor(roomId), JSON.stringify(state));
-    },
-    remove(roomId) {
-      storage.removeItem(keyFor(roomId));
-    },
-  };
-}
-
 export interface LocalEncounterSessionOptions {
   roomId: string;
   initialState?: VttRoomState;

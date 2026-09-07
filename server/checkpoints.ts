@@ -677,10 +677,3 @@ function validatePolicy(policy: VttCheckpointPolicy): void {
     throw new Error('Checkpoint policy retryMaxMs must be at least retryInitialMs.');
   }
 }
-
-/** Factory form for consumers that prefer not to reference the class directly. */
-export function createVttCheckpointRuntime<State>(
-  options: VttCheckpointRuntimeOptions<State>,
-): VttCheckpointRuntime<State> {
-  return new VttCheckpointRuntime(options);
-}

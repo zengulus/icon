@@ -96,22 +96,6 @@ export type Reference<D extends ReferenceDomain = ReferenceDomain> =
   | { kind: 'collection'; refs: readonly Reference<D>[] }
   | { kind: 'plural-slot'; domain: 'actor'; slot: 'trigger-targets' };
 
-/** A CAPTURED actor whose remembered identity may have legitimately expired
- * (the reference means "the actor originally associated with this fact, if
- * that actor still exists"). Resolves to the actor when present, or to an
- * explicit `{ kind: 'absent' }` result when the remembered actor no longer
- * exists — a VALID lifecycle-expiration outcome, never an error. This is a
- * genuinely distinct contract from the strict `captured-actor` (present id +
- * missing actor = fail closed `missing-actor`): the caller (a lifecycle
- * authority consuming a durable fact, mark, mote, continuation, or terrain
- * effect) picks which contract the carrier declares. Absence of the ID
- * itself (no reference ever recorded) is a caller-side presence decision at
- * the adapter border, not part of this kind. */
-export interface CapturedActorWeakReference {
-  kind: 'captured-actor-weak';
-  actorId: string;
-}
-
 /** A resolved reference value. `id` is the identity-level resolution for
  * domains whose state reads belong to their consuming kernel (mark/stance/
  * terrain/area/resource/rule/roll); actor/entity/position/value resolve
@@ -234,11 +218,6 @@ function liveNameKey(name: LiveReferenceName): string {
     case 'id': return `id:${name.id}`;
     case 'bound': return `bound:${name.name}`;
   }
-}
-
-/** Structural reference equality (canonical-key compare). */
-export function referenceEquals(a: Reference, b: Reference): boolean {
-  return referenceKey(a) === referenceKey(b);
 }
 
 /** Resolve the id a LIVE reference names from a singular slot or direct id.

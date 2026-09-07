@@ -1,4 +1,4 @@
-import { applyEvents, createEncounter, executeCommand, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter, RuleViolation } from './encounter.js';
+import { applyEvents, createEncounter, executeCommand, MAX_ENCOUNTER_EVENT_LOG, migrateEncounter } from './encounter.js';
 import type { DiceSource } from './dice.js';
 import { ENCOUNTER_SCHEMA_VERSION, RULES_VERSION, type EncounterCommand, type EncounterEvent, type EncounterState, type Position } from './types.js';
 import { windowHeldDamage, windowHeldSave } from './automation/kernels/decision-window.js';
@@ -1203,11 +1203,4 @@ export function roomVisibleToRole(room: VttRoomState, role: 'gm' | 'player'): Vt
   // nested historical event is safe to disclose.
   encounter.eventLog = [];
   return { ...clone(room), encounter, table };
-}
-
-/** Convert low-level invalid command errors into the familiar rules violation shape. */
-export function asRuleViolation(error: unknown): never {
-  if (error instanceof RuleViolation) throw error;
-  if (error instanceof VttRoomViolation) throw new RuleViolation(error.code, error.message);
-  throw error;
 }

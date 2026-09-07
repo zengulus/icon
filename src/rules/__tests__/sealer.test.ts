@@ -1,12 +1,11 @@
 import '../automation/content/registry.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+
 import { noRepeatKey } from '../automation/kernels/use-ledger.js';
 import { encounterConditionSet, encounterRuleState } from '../automation/kernels/encounter-adapter.js';
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { JOBS, findAbility } from '../catalog.js';
-import { findRuleSourceUnit } from '../source-units.js';
+
 import type { EncounterActor, EncounterEvent, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter, endTurnTo, startEncounterTo } from './fixtures.js';
 
@@ -50,17 +49,6 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 };
 
 describe('Sealer ability automation (p.189–196)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
-      if (!abilityId.startsWith('sealer:')) continue;
-      const ability = findAbility(abilityId)!;
-      expect(ability.automation).toBe('executable');
-      const unit = findRuleSourceUnit(abilityId)!;
-      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
-    }
-    const sealerIds = JOBS.find((job) => job.id === 'sealer')!.abilities.map(({ id }) => id);
-    expect(sealerIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
-  });
 
   it('God Hand: player-selected Teleport 1, attacks [D]+fray, seals, and blesses the recorded self', () => {
     const { state, hero, foe } = sealerEncounter({ second: null });

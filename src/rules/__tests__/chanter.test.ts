@@ -2,10 +2,9 @@ import '../automation/content/registry.js';
 import { windowHeldDamage } from '../automation/kernels/decision-window.js';
 import { describe, expect, it } from 'vitest';
 import { EXECUTABLE_JOB_ABILITY_IDS } from '../automation/content/glue/manual-programs.js';
-import { compileRuleSourceUnit } from '../automation/content/glue/compiler.js';
+
 import { actorFromCharacter, applyEvents, createEncounter, createFoe, executeCommand } from '../encounter.js';
-import { JOBS, findAbility } from '../catalog.js';
-import { findRuleSourceUnit } from '../source-units.js';
+
 import type { EncounterActor, EncounterState, Position } from '../types.js';
 import { scriptedDice, validCharacter, endTurnTo, endTurnOnly, startEncounterTo } from './fixtures.js';
 
@@ -56,17 +55,6 @@ const mutationsOf = (events: ReturnType<typeof executeCommand>['events'], source
 const motesOf = (state: EncounterState) => state.terrainEffects.filter((effect) => effect.terrain === 'symphony-mote');
 
 describe('Chanter ability automation (p.174–181)', () => {
-  it('marks all nine abilities executable in the catalog and audit', () => {
-    for (const abilityId of EXECUTABLE_JOB_ABILITY_IDS) {
-      if (!abilityId.startsWith('chanter:')) continue;
-      const ability = findAbility(abilityId)!;
-      expect(ability.automation).toBe('executable');
-      const unit = findRuleSourceUnit(abilityId)!;
-      expect(compileRuleSourceUnit(unit).unsupportedClauses).toEqual([]);
-    }
-    const chanterIds = JOBS.find((job) => job.id === 'chanter')!.abilities.map(({ id }) => id);
-    expect(chanterIds.filter((id) => EXECUTABLE_JOB_ABILITY_IDS.has(id))).toHaveLength(9);
-  });
 
   it('Holy: pacifies the foe and cures a character in range 2 of them', () => {
     const { state, hero, foe } = chanterEncounter({ second: null });

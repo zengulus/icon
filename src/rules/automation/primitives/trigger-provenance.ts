@@ -55,12 +55,6 @@ export interface TriggerActivation {
   provenance: TriggerProvenance;
 }
 
-export const TRIGGER_PROVENANCES: readonly TriggerProvenance[] = [
-  'natural',
-  'source-forced',
-  'validated-player-activation',
-] as const;
-
 /** Record one activation into a provenance map. The effective trigger set is
  * the map's key set; a trigger already recorded keeps its earlier provenance
  * (the activation collapsed — never double-fired), and a trigger arriving

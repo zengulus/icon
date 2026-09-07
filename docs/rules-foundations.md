@@ -323,7 +323,7 @@ identical-literal + Binder purity).
 > authority with the origin FACTS, and the same content seam
 > (`chanter-programs.ts` Gentleness) routes through it; the `u2-perspective-
 > authority` guard is upgraded to call-form routing so a symbol-presence bypass
-> is CAUGHT. See `docs/t8b-audit-integrity-report.md`.
+> is CAUGHT.
 >
 > **T8c re-cert (2026-08-31):** T8b's call-form proof was still insufficient on
 > its own — *"called" is not *"result used"*. A contributor could keep the U2
@@ -626,190 +626,41 @@ event is emitted. U15 owns the grouping; per-domain legality stays in the
 domain authorities (spatial, payment, creation). Tests:
 `t3-transaction.test.ts`.
 
-### Usage / Entitlement Ledger (U16 underlay, CORE) — COMPLETE (T3 core + T4 de-dup + T6.4 raw-field consolidation + T6.4a + T6.4b + T9g operation-boundary repair + U16 residual-marks census migration; semantic correction 2026-08-31: per-recipient Bull's Strength gate; Monogatari once-per-song consumer integrated via the U8 source-defined lifecycle scope 2026-09-01)
+### Usage / Entitlement Ledger (U16) — COMPLETE
 
-"How many times has/may this rule be used within scope X?" — distinct from
-spendable resources. `primitives/usage.ts` owns the core ledger:
-`usageKey` (byte-identical `ledger:<scope>:<sourceId>` format, shared with
-the F9 reactive fold — the STORAGE key, actor-local by design), and
-`usageIdentity`/`usageIdentityKey`/`usageIdentitiesEqual` (the typed
-DE-DUP IDENTITY, corrected contract: DISTINCT from the storage key and
-ALWAYS carrying the owner — two different owners of the same
-source/scope/target have different identities, proven by negative test, so
-the T4 U10 fact-backed de-duplication cannot inherit the storage key's
-owner collision; the U10 fact read completes the full trigger-family
-identity in T4), `usageCount`/`ledgerAvailable`,
-`consumeUsageMutation` (one-shot boolean mark or N-per-scope count
-increment — decided once at the command boundary, riding the recorded
-event), `refreshUsageMutation`, `usageRead` (per-use magnitude ordinal),
-`holdsUsageKey`, `resetBoundaryFor` (turn/round/combat onto U8
-boundaries), and `usageCap` (folds the U14 `use-cap` query point for
-count-override caps). `kernels/use-ledger.ts` is a thin adapter; the U6
-`used-scope` predicate reads the durable ledger (entitlement COUNTS). U16
-was COMPLETED in T4 with the U10 fact-backed DE-DUP identity
-(`primitives/facts.ts`), then corrected to RESOLUTION-SCOPED
-once-per-ability semantics (p.107): the resolve identity (`resolveIdentityKey`)
-is `{ sourceId, ownerId, scope, resolutionId, trigger }` — NOT per-fact — so
-one ability's multiple routing facts open ONE triggered step while a second
-ability use (different `resolutionId`) may trigger again. Per-target is
-keyed only where a source declares once-per-target. `triggerResolvedFact`
-records the marker and `hasResolvedAsFact` answers "has this logical trigger
-step already resolved within this resolution?" over the recorded fact
-history — never current state, never a broad once-per-scope mark — and is
-WIRED into the real reactive continuation
-(`executeRuleProgramWithReactiveTriggers`). Event de-duplicationis semantically DISTINCT from the `used-scope` entitlement counts. **T6.4
-(2026-08-31) completed the raw-field consolidation**: the interrupt-use counter,
-interrupt-uses-per-turn, slashed/dangerous-terrain once-per-turn flags, and
-the one-attack-per-turn gate live ONLY on typed `ledger:*` entries (`turn`
-owner-relative pools + the per-actor `any-turn` period for the ACTOR-LOCAL
-one-interrupt-during-any-turn window, No Repeats, Slashed, and dangerous
-terrain — storage is actor-local, never a battlefield scan), and the raw
-`EncounterActor` fields were REMOVED (schema 11 folds the four T6.4
-fields; schema 12 folds the No Repeats `usedAbilityIds` array onto
-per-source any-turn marks and the `standardMoveUsed` boolean onto an
-owner-relative `turn` gate, then drops them). The one-interrupt-per-turn
-entitlement is ACTOR-LOCAL by design (p.91 subject is the character; Black
-Rock Vanguard is an actor-scoped override; Alice and Carol each interrupt
-during Bob's turn independently). The `attackedThisTurn` resolution FACT is
-a documented retained U10 specialist (read by Soul Blade / Carnevale /
-Hissatsu / Monogatari / VM); the `end-turn`/scheduler flags stay scheduler
-state. The dangerous-terrain damage-cadence contradiction (p.89 once-per-turn
-vs the p.183 Harvester reprint once-per-round) is recorded as adopted
-adjudication `icon-1.5:dangerous-terrain:damage-cadence`. Lifecycle reset
-recipes are ownerless maintenance noops so they never fabricate a U17
-same-owner tie. **T6.4b** resolved the remaining command/window-authority
-seams: generic `EXECUTE_RULE` interrupts authorize through the ONE
-`interruptLegality` gate (window + pool + No Repeats) BEFORE effects/RNG;
-p.290 Repeatable is an ACTION-TAG decision (`noRepeatsApplies` — foe
-Bull Rush/Bash/Hurl plus a new generic `repeatable` mastery-modifier
-family, so mastered Phantom Bolts' same-turn retrigger is legal and the
-reducer records no fabricated usage mark); reactive window discovery keys
-No Repeats by the interrupt's own sub-action id (a used stance never
-blocks its distinct interrupt); Black Rock Vanguard provably lifts only
-its actor's per-turn cap. No durable shape changed (schema stays 12).
-Tests: `t3-usage.test.ts` + `t4-dedup.test.ts` +
-`t4-corrective.test.ts` + `use-ledger.test.ts` +
-`t6-4-usage-global-ledger.test.ts`.
+`primitives/usage.ts` owns usage keys, counts, availability, consume/refresh
+mutations, and typed identity. Storage keys are actor-local; de-duplication
+identity always includes the owner. `kernels/use-ledger.ts` composes U8 reset
+boundaries and U14 cap overrides. Once-per-ability trigger de-duplication is a
+separate U10 fact identity keyed by resolution and trigger, not each routing fact.
 
-**Corrective re-audit (this tranche, 2026-08-31) — U16 demoted from
-AUTHORITATIVE to PARTIAL, then the concrete duplicate repaired.** The
-underlay-repair audit found a REAL executing duplicate that the prior
-T6.4a/b "zero competing authority" claim over-looked: `kernels/trait-reactions.ts`
-(the F9 once-per-round reactive job-trait fold) independently implemented
-its own round ledger — it reconstructed the canonical `ledger:round:<id>`
-key, read availability straight off `ruleState`, and wrote its own one-shot
-`set true` mark (its own key/availability/consume), instead of routing the
-"has this reaction already fired this round?" entitlement through the U16
-core. That violates the authoritative invariant (a competing executing
-implementation, even with identical results). The fold now routes the
-ENTIRE once-per-round entitlement transaction through U16's
-`applyOncePerRoundUsage` COMMIT operation (`kernels/use-ledger.ts`): the
-operation owns the typed owner identity, the round usage scope, the
-physical key derivation (`usageKey` round — byte-identical
-`ledger:round:<sourceId>`), the availability check (`ledgerAvailable`), the
-consume mark (`consumeUsageMutation`), and the grouping of that consume
-with the allowed reaction effects into one commit bundle. F9 PROPOSES only
-the reaction's ordinary effect mutations; U16 decides whether the
-entitlement is available and returns the exact bundle to commit. This is
-the final narrow F9 corrective (2026-08-31, U16/F9 operation-boundary
-repair): F9 can propose effects, but only U16 can turn them into an
-allowed once-per-round transaction — the fold exposes no key, availability,
-consume, or usage identity of its own to reconstruct or forge (behavior-
-preserving durable marks; 8 trait-reaction tests incl. once-per-round
-exact-once, round-boundary reset, replay, and two-owner isolation stay
-green). The `u16-usage-ledger-routing` architecture guard now flags any
-non-U16 primitives/kernels file that reconstructs a `ledger:<scope>:…` key,
-and pins the F9 fold to the U16 `applyOncePerRoundUsage` operation
-(availability and commit pins: the fold must gate on the returned
-`available` and commit the returned `mutations` bundle verbatim). **T8b corrected the fabricated
-typed-owner seam**: `roundLedgerKey` originated with `ownerId: ''` in the
-typed U16 call; it now passes the REAL owning actor (`actor.id`) while
-`usageKey` keeps the actor-local storage format byte-identical
-(`ledger:round:<sourceId>`). The typed semantic identity carries the owner;
-the storage address omits it by design — the two are never conflated. See
-`docs/t8b-audit-integrity-report.md`. U16 is therefore PARTIAL: the
-generic canonical-ledger authority is single again, but a census of the
-remaining actor-level once-per-round/turn trigger marks
-(`chain-reaction-used`, `incubus:triggered`, `stampede:triggered`,
-`gates-of-hell:vigilance-rushed`, `damage-immune`, and per-source `:used`
-flags) must prove each is a U10/mark de-dup or content-owned state rather
-than a second usage ledger before AUTHORITATIVE can be re-certified. See
-`docs/t6-gate-report.md` and the tranche report.
+F9 proposes effects to `applyOncePerRoundUsage`; U16 returns either unavailable
+or the complete effects-plus-consume bundle. Consumers commit that bundle verbatim.
+The architecture guard rejects local key reconstruction, availability decisions,
+and replacement consume mutations. Replay applies recorded bundles without
+rechecking entitlement.
 
-**Final narrow F9 corrective (2026-08-31, U16/F9 operation-boundary repair).**
-The prior branded-data-object proof (`OncePerRoundGate`, a module-private
-`unique symbol` brand stamped by `oncePerRoundGate`) was still forgeable
-through object spread — a caller could `{ ...real, available: local,
-consume: localMutation }` and preserve the hidden brand while replacing the
-semantic answers. The fix moves the semantic DECISION itself behind the
-boundary instead of proving a result object unforgeable: the branded plan
-is DELETED, and the once-per-round gate exposes no per-piece key /
-availability / consume / usage identity. A consumer (the F9 job-trait fold)
-calls U16's single COMMIT operation `applyOncePerRoundUsage({ actor,
-sourceId, mutations })` and receives either `{ available: false }` or
-`{ available: true, mutations }` — the latter being the proposed effects
-PLUS the U16 consume mark, committed verbatim. The five adversarial paths
-(raw-`ruleState` availability, hand-built consume, locally rejoined key
-incl. `['ledger','round',sourceId].join(':')`, fabricated/missing owner, and
-spread/alias replacement of a genuine result) are closed architecturally:
-the operation takes the ACTOR (no owner to fabricate), the key and availability
-are decided inside U16 and never exposed to the caller, the consume mark
-exists only inside the returned bundle, and a spread/alias that replaces
-entitlement semantics must hand-build the commit (M2) or re-decide
-availability (raw state / dropped result pins), both flagged by the
-`u16-usage-ledger-routing` guard. Replay stays pure: the command boundary
-calls the operation once, and `applyEvents` applies the recorded bundle
-without rechecking entitlement. See `docs/t8f-operation-boundary-report.md`.
+Interrupt pools, No Repeats, Slashed and dangerous-terrain gates use actor-local
+`any-turn` keys; Standard Move uses the owner's `turn`. Interrupt legality is
+checked before effects/RNG. Repeatable is an action-tag policy; one actor's cap
+override never changes another's. Character/checkpoint migrations retain the
+explicit old-field mappings. `attackedThisTurn` remains a U10 outcome fact;
+scheduler flags remain scheduler state. Dangerous-terrain cadence follows the
+adopted adjudication in [source adjudications](source-adjudications.md).
 
-**U16 residual-marks census & migration (2026-08-31) + semantic correction
-(2026-08-31).** The residual actor-level once-per-round/turn marks are
-censused and migrated off raw booleans/counters onto typed U16 ledger keys:
-`chain-reaction-used` → `chainReactionOncePerRoundKey` (round, actor-local),
-`incubus:triggered` → `incubusOncePerRoundKey` (round, mark owner),
-`stampede:triggered` → `stampedeOncePerRoundKey` (round, mark owner),
-`gates-of-hell:vigilance-rushed` → `vigilanceRushOncePerTurnKey` (any-turn),
-`midas:used` → `midasOncePerCombatKey` (combat, cap 2), and
-`bull-s-strength:collided` → `bullStrengthCollideKey(targetId)` — corrected
-from the census's owner-relative `turn` gate to the per-RECIPIENT identity:
-"Characters can't take this damage more than once a turn" (p.149) restricts
-the character RECEIVING the damage, so the gate is keyed on the trait OWNER's
-ledger with a U16 `:target:<id>` suffix (owner = storage actor, target = key
-suffix — separate Bastions never alias) and scoped to the battlefield
-`any-turn` window (reopens at EVERY actor's turn start; no owner-turn
-dependency; the bespoke turn-end clear stays removed). `damage-immune` is
-RETAINED as MODE/immune state with a disjointness proof (the negative-
-substitute and boundary tests show it never reads a ledger count and never
-functions as a usage gate); `sucker-punch:used` is a recorded fact with no
-production reader (not entitlement); armed/charged/pending modes
-(`wicked-sheath:charged`, `riposte:armed`, `revenge:active`, `hissatsu:armed`,
-`ace:armed`, `trick-shot:armed`, `carnevale:armed`, `morrigan:pending`,
-`aria:pending`, `eclipse:pending`, `implode:pending`) are content-owned MODE
-state — each answers "is the next attack/effect armed or pending?", never
-"may this use occur again?" — not competing U16 authorities.
-`monogatari:granted` is NOT retained content state: it answers "may this
-character receive the Monogatari fulfillment reward again during the current
-song?" and is classified UNRESOLVED U16 CONSUMER, blocked on the U8
-source-defined lifecycle scope. **Integration (2026-09-01):** the U8
-source-defined lifecycle scope (`scope.ts` `LifecycleIdentity`, "until this
-source is used/replaced again") now EXISTS and Monogatari is its first real
-consumer — a song is a U8 lifecycle INSTANCE (`owner` = the Chanter,
-`source` = `chanter:monogatari`, advanced every time Monogatari is used
-again), and the once-per-song blessing is a U16 `applyLifecycleScopedUsage`
-entitlement keyed by that identity (so it reopens only under a NEW song,
-never a global clear; two Chanters never alias and replacing one Chanter's
-song leaves the other's usage untouched — proven by
-`monogatari-u8-u16.test.ts`). `monogatari:granted` has no remaining
-production reader (the chanter test now asserts its absence). A freshU16 residual census finds NO remaining unresolved U16 consumer and NO competing
-usage/entitlement authority: every once-per-X gate lives on typed U16 ledger
-keys, and the sole former gap is now a generic U8×U16 lifecycle-scoped
-entitlement. U16 is therefore recertified **COMPLETE** (2026-09-01). See `docs/u8-monogatari-u16-report.md`. A multi-owner correction (2026-09-01)
-re-audited the same contract: the once-per-song consumer enumerates EVERY
-active song owner and runs an independent U16 `applyLifecycleScopedUsage`
-transaction per song lifecycle identity (owner × source × instance), so two
-simultaneous Chanters' songs never alias, consuming one song never marks the
-other consumed, and replacing one song reopens only that song — iteration
-order of `state.actors` cannot change the outcome (proven by the multi-owner
-matrix in `monogatari-u8-u16.test.ts`).
+Chain Reaction, Incubus and Stampede use round entitlements; Vigilance Rush uses
+any-turn; Midas uses a combat cap of two. Bull's Strength stores a target-suffixed
+key on each trait owner's ledger and refreshes at every battlefield turn start.
+Distinct owners and recipients do not alias. Monogatari rewards independently
+compose each active song's U8 owner/source/instance identity with
+`applyLifecycleScopedUsage`: replacing one song reopens only that song.
+
+Armed/charged/pending modes, `damage-immune`, and recorded outcomes are retained
+specialists: they describe an effect or fact, not permission to repeat a use.
+No unresolved competing usage authority is recorded in the current census.
+Proofs: `t3-usage`, `t4-dedup`, `t4-corrective`, `use-ledger`,
+`t6-4-usage-global-ledger`, `trait-reactions`, `u16-residual-census`, and
+`monogatari-u8-u16` tests cover identity, caps, reset boundaries and replay.
 
 ### Ordering / Arbitration (U17 underlay) — LANDED/COMPLETE (T3 + T6.2 + T6.3, 2026-08-31)
 
@@ -1203,25 +1054,3 @@ closed-manifest pattern; the foe declarative recipe factories; the held-window
 protocol; the turn-scheduler decision-recording shape.
 
 ---
-
-## Appendix A — historical numbering map
-
-Code and test comments across the repository cite this document with the
-foundation IDs (F0–F14) and section numbers of the pre-2026-08 rewrite. Those
-references remain meaningful through this map:
-
-| Historical ID / section | Current family |
-| --- | --- |
-| F1 / "Damage and defeat kernel" | Damage |
-| F2 / §3 | Saves (SaveWindow) |
-| F3 / §4 | Lifecycle (turn/round boundaries) |
-| F4 / §5 | Interrupt / window engine (trigger provenance) |
-| F5 / §6 | Passive projection (+ role baselines, HP thresholds) |
-| F6 / §7 | Job-trait wiring homes, combat-start grants, summons, attack-path modifiers |
-| F7 / §8 | Talent fold; gamble seam; ability-use choice seam |
-| F8 / §Mastery | Mastery fold (now K-P5 under Missing kernels) |
-| F9 | Reactive once-per-round folds; range semantics |
-| F10 | Gamble window; ability-use choices |
-| F14 / §10 item 1 | Cost/payment |
-| Settlement (was TODO B1 / roadmap P1) | Combat settlement family above |
-| §Area / §Range / §Aura / §"Power dice & stances" | Spatial geometry · Attacks · Statuses/stances · Power-die kernel |

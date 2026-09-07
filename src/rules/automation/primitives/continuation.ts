@@ -232,11 +232,6 @@ export function continuationOrderKey(continuation: ArmedContinuation): string {
   return continuation.ordering ? orderingKey(continuation.ordering) : continuation.id;
 }
 
-/** The durable identity under which a continuation is stored/resumed. */
-export function continuationIdentity(continuation: ArmedContinuation): string {
-  return continuation.id;
-}
-
 /** Whether a continuation has reached its expiry clock (a `permanent` scope
  * never expires). Pure: relative expiries compare the recorded epoch against
  * the current observation — never an absolute round number. */
@@ -428,6 +423,3 @@ export function heldDamageContinuation(input: {
     },
   });
 }
-
-/** The expiry scope type (U8). */
-export type ContinuationExpiryScope = Scope;

@@ -324,18 +324,3 @@ export function verifyPassageProvenance(world: FidelityWorld, corpus: CanonicalC
   }
   return violations;
 }
-
-// ---------------------------------------------------------------------------
-// Frontier coverage computation (pure; consumed by engine.ts via inputs)
-// ---------------------------------------------------------------------------
-
-/** True when the obligation's passages cover the clause: some passage cites
- * the same page and contains the clause under the shared correspondence
- * policy. */
-export function clauseCoveredBy(clause: SourceClause, obligations: readonly SourceObligation[]): boolean {
-  return obligations.some((obligation) =>
-    obligation.passages.some(
-      (passage) => passage.page === clause.page && sourceTextContains(passage.quote, clause.text),
-    ),
-  );
-}
