@@ -196,8 +196,21 @@ describe('U4 ↔ U13 durable answer contract', () => {
     expect(ambient.input.actorIds.answer).toEqual([hero.id]);
   });
 
-  it('tagged answers reject missing payloads, wrong kinds, and malformed values through U4', () => {
+  it('tagged answers reject truncation, missing payloads, wrong kinds, and malformed values through U4', () => {
     const { context } = fixture();
+    const truncated: [RuleChoice, RuleChoiceAnswer][] = [
+      [row('number', false), { kind: 'number' } as RuleChoiceAnswer],
+      [row('option', false), { kind: 'option' } as RuleChoiceAnswer],
+      [row('boolean', false), { kind: 'boolean' } as RuleChoiceAnswer],
+      [row('direction', false), { kind: 'direction' } as RuleChoiceAnswer],
+      [row('actors', false), { kind: 'actors', ids: 'not-a-list' } as unknown as RuleChoiceAnswer],
+      [row('positions', false), { kind: 'positions', positions: 'not-a-list' } as unknown as RuleChoiceAnswer],
+    ];
+    for (const [choice, answer] of truncated) {
+      // The projection rejects a truncated answer before U4: a missing bucket
+      // must never misread truncation as optional absence (decline).
+      expect(resultCode(() => resolveChoiceAnswer(choice, answer, context))).toBe('choice.answer-invalid');
+    }
     for (const answer of [{ kind: 'number' }, { kind: 'number', value: NaN }, { kind: 'number', value: '1' }, { kind: 'boolean', value: true }]) {
       expect(resultCode(() => resolveChoiceAnswer(row('number', false), answer as RuleChoiceAnswer, context))).not.toBe('accepted');
     }

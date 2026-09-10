@@ -51,10 +51,12 @@ export interface ContinuationResolver {
  *   deterministic mutations that retire the triggering resource (e.g. the
  *   Great Giorgios mark — the challenge's opportunity passed at the marked
  *   foe's turn end, whether the user rushes or not).
- * - `resolve` runs at answer time when the user accepts: deterministic
+ * - `resolve` runs at answer time with the recorded answer: deterministic
  *   mutations computed against THEN-CURRENT state at the command boundary
  *   and recorded on the answer event (no dice, no choices — the decision
- *   itself is the recorded command input).
+ *   itself is the recorded command input). The dispatcher skips resolvers
+ *   only for genuine optional absence; every explicit answer, including
+ *   boolean false, reaches the row, which owns its consequence semantics.
  * - `windowRequired` (optional): a content-declared gate over THEN-CURRENT
  *   state at trigger time. When it returns FALSE the deterministic
  *   `autoResolve` branch runs INSTEAD of opening the window — the source's
@@ -73,7 +75,8 @@ export interface DecisionContinuationRow {
   choice: RuleChoice;
   /** Applied at window-open: deterministic consumption mutations. */
   consume(state: EncounterState, continuation: ArmedContinuation): RuleMutation[];
-  /** Applied at answer time on accept: deterministic THEN-CURRENT mutations. */
+  /** Applied at answer time with the recorded answer: deterministic
+   * THEN-CURRENT mutations (the row owns the explicit-decline branch). */
   resolve(state: EncounterState, continuation: ArmedContinuation): RuleMutation[];
   /** Optional gate: when FALSE at trigger time, the deterministic
    * `autoResolve` branch runs instead of opening the window. */

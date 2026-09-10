@@ -12,7 +12,8 @@
  * `applyRuleMutations` applies the returned list through the shared mutation
  * authority. A DECISION continuation (U13) gates the same pure computation
  * behind a recorded player/GM choice: `consume` retires the trigger at
- * window-open; `resolve` runs on accept at the command boundary.
+ * window-open; `resolve` runs at the command boundary with the recorded
+ * answer (the row owns its explicit-decline branch).
  */
 import type { ArmedContinuation, RuleMutation } from '../../../automation/primitives/types.js';
 import type { EncounterState, Position } from '../../../types.js';
@@ -30,8 +31,9 @@ const distance = (first: Position, second: Position) => Math.max(Math.abs(first.
  * is a genuine player decision — T5b's automatic rush was a known
  * approximation (it predated T5b; T5b preserved it). U13 now provides the
  * correct seam: the armed continuation opens a CHOICE window at the marked
- * foe's turn-end; the user accepts (rush) or declines (nothing), and the
- * engine never chooses a default.
+ * foe's turn-end; the user's recorded answer decides (the row owns both the
+ * accept and explicit-decline branches), and the engine never chooses a
+ * default.
  *
  * The mark is CONSUMED at window-open — the challenge's opportunity passed
  * at the end of the marked foe's turn whether or not the user rushes. The
