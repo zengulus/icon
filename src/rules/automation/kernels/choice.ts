@@ -202,8 +202,20 @@ export function validateCapturedPositionChoice(
 const CHOICE_BUCKET = { actors: 'actorIds', ordering: 'actorIds', positions: 'positions', direction: 'directions', option: 'options', number: 'numbers', boolean: 'booleans' } as const;
 
 /** Project a durable answer into the existing command buckets, preserving
- * lists and explicit decline. Consumes validated answers in resumed flows. */
+ * lists and explicit decline. This is the ONE answer→bucket adaptation
+ * path: `resolveChoiceAnswer` and resumed flow inputs both project through
+ * it, and neither re-derives the mapping. A truncated answer (a missing
+ * scalar payload, a non-array list payload) is malformed and rejects here —
+ * it must never reach U4, where a missing bucket would misread truncation
+ * as optional absence. */
 export function choiceAnswerInput(key: string, answer: RuleChoiceAnswer): RuleExecutionInput {
+  const payload: unknown = answer.kind === 'actors' || answer.kind === 'ordering' ? answer.ids
+    : answer.kind === 'positions' ? answer.positions
+    : answer.kind === 'direction' ? answer.direction
+    : answer.value;
+  const truncated = payload === undefined
+    || ((answer.kind === 'actors' || answer.kind === 'ordering' || answer.kind === 'positions') && !Array.isArray(payload));
+  if (truncated) throw new RuleProgramViolation('choice.answer-invalid', `${key}: answer payload is missing.`);
   switch (answer.kind) {
     case 'actors': case 'ordering': return { actorIds: { [key]: [...answer.ids] } };
     case 'positions': return { positions: { [key]: answer.positions.map(({ x, y }) => ({ x, y })) } };
@@ -214,16 +226,14 @@ export function choiceAnswerInput(key: string, answer: RuleChoiceAnswer): RuleEx
   }
 }
 
-/** Durable answers and command buckets share all U4 semantics. */
+/** Durable answers and command buckets share all U4 semantics: the tagged
+ * answer projects onto the SAME buckets through `choiceAnswerInput` (the
+ * one adaptation path) and resolves through the SAME U4 validator every
+ * command consumes. A declined answer projects to an empty input, so it
+ * resolves exactly as optional absence — never a default. */
 export function resolveChoiceAnswer(choice: RuleChoice, answer: RuleChoiceAnswer, context: RuleExecutionContext): RuleChoiceAnswer {
   if (!answer || answer.kind !== choice.kind) throw choiceViolation('choice.kind-invalid', choice, 'answer kind does not match the choice.');
-  const field = answer.kind === 'actors' || answer.kind === 'ordering' ? 'ids'
-    : answer.kind === 'positions' ? 'positions' : answer.kind === 'direction' ? 'direction' : 'value';
-  const raw = (answer as unknown as Record<string, unknown>)[field];
-  if (raw === undefined) throw choiceViolation('choice.answer-invalid', choice, 'answer payload is missing.');
-  const input = raw === null && !['actors', 'ordering', 'positions'].includes(answer.kind)
-    ? {} : { [CHOICE_BUCKET[answer.kind]]: { [choice.key]: raw } };
-  return resolveChoice(choice, { ...context, input });
+  return resolveChoice(choice, { ...context, input: choiceAnswerInput(choice.key, answer) });
 }
 
 export function choiceAnswerDeclined(answer: RuleChoiceAnswer): boolean {

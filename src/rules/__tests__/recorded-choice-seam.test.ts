@@ -147,6 +147,41 @@ describe('U4 ↔ U13 durable answer contract', () => {
     expect(calls).toBe(1);
   });
 
+  it('explicit boolean false reaches the held-continuation resolver; only optional absence skips it', () => {
+    const { state, hero, context } = fixture();
+    let calls = 0;
+    const received: (RuleChoiceAnswer | undefined)[] = [];
+    const choice = row('boolean', false);
+    registerDecisionContinuation({ programId: 'test:recorded-boolean', choice, consume: () => [],
+      resolve: (_state, continuation) => {
+        calls++;
+        received.push(continuation.choiceAnswer);
+        return [{ kind: 'state', sourceId: 'test:recorded-boolean', sourceActorId: hero.id, operation: 'set', actorId: hero.id, key: 'recorded-boolean', value: JSON.stringify(continuation.choiceAnswer) }];
+      },
+    });
+    openDecisionWindow(state, { id: 'held-boolean', kind: 'choice', actorId: hero.id, choice,
+      heldPayload: { id: 'held:boolean-payload', programId: 'test:recorded-boolean', ownerRef: capturedActor(hero.id), refs: [],
+        trigger: { kind: 'window', windowId: 'held-boolean' }, payload: { kind: 'deferred-rule' } },
+    });
+    // The explicit no answer is a supplied value: it reaches the resolver,
+    // and the ROW owns the consequence (here: the recorded marker mutation).
+    const explicitFalse = executeCommand(state, { type: 'ANSWER_DECISION_WINDOW', windowId: 'held-boolean', input: { booleans: { answer: false } } }, context.dice);
+    expect(calls).toBe(1);
+    expect(received[0]).toEqual({ kind: 'boolean', value: false });
+    expect(explicitFalse.events[0]).toMatchObject({ decision: { value: { kind: 'boolean', value: false } } });
+    expect(applyEvents(state, JSON.parse(JSON.stringify(explicitFalse.events)))).toEqual(explicitFalse.state);
+    // Genuine optional absence stays dispatcher-owned: decline records, the
+    // resolver never runs, and no consequence applies.
+    openDecisionWindow(explicitFalse.state, { id: 'held-boolean-absent', kind: 'choice', actorId: hero.id, choice,
+      heldPayload: { id: 'held:boolean-payload-absent', programId: 'test:recorded-boolean', ownerRef: capturedActor(hero.id), refs: [],
+        trigger: { kind: 'window', windowId: 'held-boolean-absent' }, payload: { kind: 'deferred-rule' } },
+    });
+    const absent = executeCommand(explicitFalse.state, { type: 'ANSWER_DECISION_WINDOW', windowId: 'held-boolean-absent' }, context.dice);
+    expect(calls).toBe(1);
+    expect(absent.events[0]).toMatchObject({ decision: { value: { kind: 'boolean', value: null } }, mutations: [] });
+    expect(applyEvents(explicitFalse.state, JSON.parse(JSON.stringify(absent.events)))).toEqual(absent.state);
+  });
+
   it('flow resume uses the recorded actor list and clears ambient input on decline', () => {
     const { hero, foe, context } = fixture();
     const resume = { binder: EMPTY_BINDER, remaining: [{ kind: 'apply' as const, effect: {

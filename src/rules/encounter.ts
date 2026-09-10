@@ -2232,16 +2232,18 @@ export function executeCommand(state: EncounterState, command: EncounterCommand,
         mutations = resumed.mutations;
       } else if (window.heldPayload) {
         // U13 decision continuation (e.g. Great Giorgios "may rush"): the
-        // recorded accept runs the deterministic THEN-CURRENT resolution; a
-        // decline records nothing (the trigger was already consumed at
-        // window-open). The engine never chooses a default.
+        // recorded answer decides through the row's resolver — the dispatcher
+        // owns ONLY genuine optional absence. An explicit answer (including
+        // boolean false) reaches the resolver so consequence semantics stay
+        // with the content row, never in generic dispatch. The trigger was
+        // already consumed at window-open; the engine never chooses a default.
         const row = decisionContinuationFor(window.heldPayload.programId);
         if (!row) throw new RuleViolation('window.no-resolver', 'That decision window has no registered resolution.');
-        // Carry the full U4 answer on a local continuation copy. Optional
-        // absence never invokes the resolver; boolean false is the explicit
-        // no branch. Failure leaves the original open window untouched.
+        // Optional absence is decline: the resolver is skipped and the answer
+        // carries no consequence. Failure leaves the original open window
+        // untouched.
         const answer = decision.value;
-        if (!choiceAnswerDeclined(answer) && (answer.kind !== 'boolean' || answer.value === true)) {
+        if (!choiceAnswerDeclined(answer)) {
           const heldPayload = { ...window.heldPayload, choiceAnswer: answer };
           mutations = row.resolve(state, heldPayload);
         }

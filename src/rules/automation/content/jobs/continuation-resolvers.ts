@@ -170,8 +170,11 @@ function greatGiorgiosRushMutations(state: EncounterState, continuation: ArmedCo
  * opens a U13 choice window. The user's recorded answer decides whether the
  * rush resolves — the engine never chooses "yes" automatically and never
  * invents a destination/path. The mark is consumed at window-open (the
- * challenge's opportunity passed); accepting resolves the pure rush against
- * THEN-CURRENT state. */
+ * challenge's opportunity passed); the row owns the consequence semantics:
+ * the recorded affirmative resolves the pure rush against THEN-CURRENT state,
+ * and the explicit decline (boolean false) is the no branch that resolves
+ * nothing — the dispatcher passes it through untouched (only optional
+ * absence skips resolvers at the dispatch layer). */
 registerDecisionContinuation({
   programId: 'bastion:great-giorgios',
   choice: {
@@ -202,8 +205,13 @@ registerDecisionContinuation({
     }];
   },
   resolve: (state, continuation) => {
+    // The recorded answer IS the branch: the affirmative resolves the rush;
+    // the explicit decline (false) is the no branch — no mutations, exactly
+    // as the source's "may" grants. The dispatcher only skips genuine
+    // optional absence, so false reaches this resolver and the row owns
+    // what false means.
     if (continuation.choiceAnswer?.kind !== 'boolean' || continuation.choiceAnswer.value !== true) {
-      throw new Error('great-giorgios: rush requires a recorded affirmative answer.');
+      return [];
     }
     return greatGiorgiosRushMutations(state, continuation);
   },

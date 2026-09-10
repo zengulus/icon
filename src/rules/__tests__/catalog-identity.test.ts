@@ -37,6 +37,18 @@ describe('permanent player-selection IDs', () => {
     }
   });
 
+  it('has no duplicate IDs within any domain', () => {
+    // Global persistent-ID uniqueness for every player-selection domain: a
+    // duplicated released ID would corrupt the compatibility contract (the
+    // snapshot guard above pins order, but cannot distinguish one legit id
+    // from the same id twice). The canonical Class/Job census proves
+    // uniqueness only for its own census-scoped source units — nothing else
+    // covers these domains, so this tiny invariant stays.
+    for (const [domain, ids] of Object.entries(DOMAINS)) {
+      expect(new Set(ids).size, `domain "${domain}"`).toBe(ids.length);
+    }
+  });
+
   it('matches the literal ID types for the small narrative domains', () => {
     expect(DOMAINS.kin).toEqual([...KIN_IDS]);
     expect(DOMAINS.culture).toEqual([...CULTURE_IDS]);
