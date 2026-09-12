@@ -14,7 +14,8 @@ import { decideDamageWindow, nextWindowId, openDecisionWindow } from './decision
 import { entityKind, entityKindOf, validateEntityCreation } from './entity-creation.js';
 import { armContinuation, heldDamageContinuation, heldSaveContinuation } from '../primitives/continuation.js';
 import { capturedActor } from '../primitives/reference.js';
-import type { RuleActorView, RuleExecutionContext, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
+import type { RuleActorView, RuleExecutionContext, RuleExecutionInput, RuleMutation, RuleRuntimeState } from '../primitives/types.js';
+import { modifierApplicabilityHolds } from './evaluate-modifiers.js';
 
 const statusIds = new Set<StatusId>(['slashed', 'blind', 'dazed', 'hatred', 'pacified', 'sealed', 'shattered', 'stunned', 'weakened', 'vulnerable']);
 const samePosition = (first: Position, second: Position) => first.x === second.x && first.y === second.y;
@@ -111,10 +112,38 @@ export function registerOnDamageDealtHook(hook: OnDamageDealtHook): void {
  * pass the encounter state; the actor-only form is kept for tests and for
  * contexts without a spatial state (no aura is projected there).
  */
+/**
+ * The U6 predicate context for a fold view projected from encounter state.
+ * The context carries the SAME `encounterRuleState` projection every other
+ * kernel reads (never a second, narrower view) plus the durable
+ * declared-choice input the fold was given, so a modifier applicability
+ * predicate is answered by the ONE predicate authority against durable
+ * state. Built LAZILY — an ungated modifier row never pays for it.
+ */
+export function modifierApplicabilityContext(
+  state: EncounterState,
+  input: RuleExecutionInput = {},
+): (actorId: string, attackTargetId?: string) => RuleExecutionContext {
+  return (actorId, attackTargetId) => ({
+    state: encounterRuleState(state),
+    encounterState: state,
+    actorId,
+    sourceId: '',
+    actionId: '',
+    timing: 'use',
+    input,
+    dice: seededDice(0),
+    ...(attackTargetId === undefined ? {} : { attackTargetId }),
+  });
+}
+
 /** Adapt the reducer state to the range kernel's read surface (the same
  * positions/sizes/mastery the encounter authority carries, so the effective
  * ability range and the distance predicates are evaluated from authoritative
- * command-time state). */
+ * command-time state). The declared talent choices are carried BOTH as the
+ * legacy `selectedTalentSourceIds` read and as the durable U6 predicate
+ * context input — the validated set the pre-use augmentation authority
+ * produced, never the raw command declaration. */
 export function rangeStateView(state: EncounterState, selectedTalentSourceIds?: ReadonlySet<string>): RangeStateView {
   const actors: RangeStateView['actors'] = Object.fromEntries(
     Object.values(state.actors).map((actor): [string, RangeStateView['actors'][string]] => [actor.id, {
@@ -135,10 +164,20 @@ export function rangeStateView(state: EncounterState, selectedTalentSourceIds?: 
       slowTurn: actor.ruleState['slow-turn'] === true,
     }]),
   );
-  return { round: state.round, actors, conditionsFor: (actorId) => {
-    const actor = state.actors[actorId];
-    return actor ? encounterConditionSet(actor, state) : new Set<string>();
-  }, ...(selectedTalentSourceIds ? { selectedTalentSourceIds } : {}) };
+  return {
+    round: state.round,
+    actors,
+    conditionsFor: (actorId) => {
+      const actor = state.actors[actorId];
+      return actor ? encounterConditionSet(actor, state) : new Set<string>();
+    },
+    ...(selectedTalentSourceIds ? { selectedTalentSourceIds } : {}),
+    applies: modifierApplicabilityHolds,
+    applicabilityContext: modifierApplicabilityContext(
+      state,
+      selectedTalentSourceIds ? { talentChoices: [...selectedTalentSourceIds] } : {},
+    ),
+  };
 }
 
 /** Adapt the reducer state to the area kernel's read surface for one actor
@@ -159,6 +198,8 @@ export function areaStateView(state: EncounterState, actorId: string): AreaState
       talents: actor?.talents,
       conditions: actor ? encounterConditionSet(actor, state) : undefined,
     },
+    applies: modifierApplicabilityHolds,
+    applicabilityContext: modifierApplicabilityContext(state),
   };
 }
 
@@ -175,7 +216,12 @@ export function masteryFoldStateView(state: EncounterState): MasteryFoldStateVie
       masteredAbilityIds: actor.masteredAbilityIds,
     }]),
   );
-  return { round: state.round, actors };
+  return {
+    round: state.round,
+    actors,
+    applies: modifierApplicabilityHolds,
+    applicabilityContext: modifierApplicabilityContext(state),
+  };
 }
 
 export function encounterConditionSet(actor: EncounterActor, state?: EncounterState) {

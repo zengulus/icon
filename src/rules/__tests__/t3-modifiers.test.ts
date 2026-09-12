@@ -3,7 +3,9 @@
  *
  * The ONE ModifierRule recipe shape (`primitives/modifiers.ts`) drives the
  * previously bespoke fold registries (range/area/mastery/bonus-damage) with
- * a shared gate evaluator and a deterministic fold discipline, and the typed
+ * one U6 applicability authority (the authoring gate shorthand lowers onto
+ * `RulePredicate`; `evaluatePredicate` decides) and a deterministic fold
+ * discipline, and the typed
  * PERMISSION query points carry CLOSED negatives (never a wildcard bypass,
  * never every-bypass-aliased-to-Divine).
  *
@@ -23,7 +25,6 @@ import {
   enumeratedModifierValue,
   foldEnumeratedModifiers,
   foldNumberModifiers,
-  modifierGateHolds,
   modifierRulesForSource,
   registerModifierRule,
   registerPermissionRule,
@@ -32,9 +33,11 @@ import {
   type ModifierFoldView,
   type ModifierGate,
 } from '../automation/primitives/modifiers.js';
-import { resolveModifierNumber } from '../automation/kernels/evaluate-modifiers.js';
+import { modifierApplicabilityHolds, modifierGatePredicate, resolveModifierNumber } from '../automation/kernels/evaluate-modifiers.js';
 import { registerRangeModifierRule, effectiveScopedRange, type RangeStateView } from '../automation/kernels/range.js';
 import { registerMasteryModifierRule, effectiveInterruptRank, hasUnlimitedRange } from '../automation/kernels/mastery-fold.js';
+import { predicateContext, ruleActorView } from './fixtures.js';
+import type { RuleActorView } from '../automation/primitives/types.js';
 
 /** Unique owner ability per test (the registry is module-global). */
 let ownerSequence = 0;
@@ -45,6 +48,44 @@ interface ViewOverrides {
   actor?: Partial<ModifierFoldView['actor']>;
   selectedTalentSourceIds?: ReadonlySet<string>;
   target?: ModifierFoldView['target'];
+}
+
+/**
+ * A fold view carrying the REAL U6 applicability pair (authority + durable
+ * predicate context) exactly as the production adapters project it, so a
+ * gated row's truth is decided by `evaluatePredicate` — never locally. The
+ * state the predicates read is the same typed `RuleActorView`/`RuntimeState`
+ * projection the encounter adapters build.
+ */
+function gatedView(overrides: {
+  round?: number;
+  actor?: Partial<RuleActorView>;
+  target?: Partial<RuleActorView>;
+  selectedTalentSourceIds?: ReadonlySet<string>;
+} = {}): ModifierFoldView {
+  const actor = ruleActorView({ id: 'hero', ...(overrides.actor ?? {}) });
+  const target = overrides.target === undefined ? undefined : ruleActorView({ id: 'foe', side: 'foes', ...overrides.target });
+  const context = predicateContext(target === undefined ? [actor] : [actor, target], {
+    actorId: actor.id,
+    ...(overrides.round === undefined ? {} : { round: overrides.round }),
+    ...(target === undefined ? {} : { attackTargetId: target.id }),
+    ...(overrides.selectedTalentSourceIds === undefined ? {} : { talentChoices: [...overrides.selectedTalentSourceIds] }),
+  });
+  return {
+    round: overrides.round ?? 1,
+    actor: { id: actor.id },
+    conditionsFor: () => actor.conditions,
+    applies: modifierApplicabilityHolds,
+    applicabilityContext: () => context,
+    ...(target === undefined ? {} : {
+      target: { id: target.id, side: target.side, hp: target.hp, maxHp: target.baseMaxHp ?? 0, conditions: target.conditions },
+    }),
+  };
+}
+
+/** The lowered gate decided by the ONE U6 authority. */
+function gateHolds(gate: ModifierGate, view: ModifierFoldView): boolean {
+  return modifierApplicabilityHolds(modifierGatePredicate(gate), view);
 }
 
 function view(overrides: ViewOverrides = {}): ModifierFoldView {
@@ -113,111 +154,122 @@ describe('U14 — one ModifierRule shape drives numeric folds', () => {
   });
 });
 
-describe('U14 — gates flip deterministically with state', () => {
-  it('stealth / comeback / mastery / choice gates evaluate against the shared view', () => {
+describe('U14 — the authoring gates lower losslessly onto U6 predicates', () => {
+  it('maps every authoring gate onto its exact U6 predicate (syntax, never truth)', () => {
     const ability = owner();
-    const stealth: ModifierGate = { kind: 'stealth' };
-    const comeback: ModifierGate = { kind: 'comeback' };
-    const mastery: ModifierGate = { kind: 'mastery', abilityId: ability };
-    const choice: ModifierGate = { kind: 'choice', sourceId: 'fixture:talent-choice' };
-
-    expect(modifierGateHolds(stealth, view())).toBe(false);
-    expect(modifierGateHolds(stealth, view({ actor: { conditions: new Set(['stealth']) } }))).toBe(true);
-
-    expect(modifierGateHolds(comeback, view())).toBe(false);
-    expect(modifierGateHolds(comeback, view({ actor: { hp: 8 } }))).toBe(true);
-
-    expect(modifierGateHolds(mastery, view())).toBe(false);
-    expect(modifierGateHolds(mastery, view({ actor: { abilityIds: [ability], masteredAbilityIds: [ability] } }))).toBe(true);
-
-    expect(modifierGateHolds(choice, view())).toBe(false);
-    expect(modifierGateHolds(choice, view({ selectedTalentSourceIds: new Set(['fixture:talent-choice']) }))).toBe(true);
-  });
-
-  it('characterizes every retained gate before any U6 migration', () => {
-    const ability = owner();
-    const foe = (overrides: Partial<NonNullable<ModifierFoldView['target']>> = {}): NonNullable<ModifierFoldView['target']> => ({
-      id: 'foe', side: 'foes', hp: 4, maxHp: 10, conditions: new Set(['burning']), ...overrides,
+    expect(modifierGatePredicate({ kind: 'always' })).toEqual({ kind: 'always' });
+    expect(modifierGatePredicate({ kind: 'stealth' })).toEqual({ kind: 'has-condition', target: { kind: 'self' }, conditionId: 'stealth' });
+    expect(modifierGatePredicate({ kind: 'comeback' })).toEqual({ kind: 'bloodied', target: { kind: 'self' } });
+    expect(modifierGatePredicate({ kind: 'self-bloodied' })).toEqual({ kind: 'bloodied', target: { kind: 'self' } });
+    expect(modifierGatePredicate({ kind: 'charge' })).toEqual({ kind: 'slow-turn', target: { kind: 'self' } });
+    expect(modifierGatePredicate({ kind: 'round-at-least', value: 4 })).toEqual({
+      kind: 'compare', left: { kind: 'round' }, operator: '>=', right: { kind: 'constant', value: 4 },
     });
-
-    expect(modifierGateHolds({ kind: 'always' }, view())).toBe(true);
-    expect(modifierGateHolds({ kind: 'charge' }, view({ actor: { slowTurn: true } }))).toBe(true);
-    expect(modifierGateHolds({ kind: 'charge' }, view({ actor: { slowTurn: false } }))).toBe(false);
-    expect(modifierGateHolds({ kind: 'round-at-least', value: 4 }, view({ round: 3 }))).toBe(false);
-    expect(modifierGateHolds({ kind: 'round-at-least', value: 4 }, view({ round: 4 }))).toBe(true);
-    expect(modifierGateHolds({ kind: 'self-bloodied' }, view({ actor: { hp: 10 } }))).toBe(true);
-    expect(modifierGateHolds({ kind: 'target-bloodied' }, view({ target: foe() }))).toBe(true);
-    expect(modifierGateHolds({ kind: 'target-has-condition' }, view({ target: foe() }))).toBe(true);
-    expect(modifierGateHolds({ kind: 'target-has-condition', conditionId: 'burning' }, view({ target: foe() }))).toBe(true);
-
-    // Mastery is conjunctive: mastered-but-unequipped and
-    // equipped-but-unmastered both remain false.
-    const mastery: ModifierGate = { kind: 'mastery', abilityId: ability };
-    expect(modifierGateHolds(mastery, view({ actor: { masteredAbilityIds: [ability] } }))).toBe(false);
-    expect(modifierGateHolds(mastery, view({ actor: { abilityIds: [ability] } }))).toBe(false);
-  });
-
-  it('fails target gates closed for missing/allied/malformed targets and never gains truth vacuously', () => {
-    const targetBloodied: ModifierGate = { kind: 'target-bloodied' };
-    const targetCondition: ModifierGate = { kind: 'target-has-condition' };
-    const allied = { id: 'ally', side: 'heroes', hp: 1, maxHp: 10, conditions: new Set(['burning']) };
-    const malformed = { id: 'foe', side: 'foes', hp: 0, maxHp: 0, conditions: new Set<string>() };
-
-    for (const gate of [targetBloodied, targetCondition]) {
-      expect(modifierGateHolds(gate, view())).toBe(false);
-      expect(modifierGateHolds(gate, view({ target: allied }))).toBe(false);
-    }
-    expect(modifierGateHolds(targetBloodied, view({ target: malformed }))).toBe(false);
-    expect(modifierGateHolds(targetCondition, view({ target: malformed }))).toBe(false);
-    expect(modifierGateHolds(targetBloodied, view({ target: { ...malformed, hp: 8, maxHp: 10 } }))).toBe(false);
-    expect(modifierGateHolds(targetCondition, view({ target: { ...malformed, maxHp: 10 } }))).toBe(false);
-
-    // The intended U6 composition must preserve this existential target
-    // requirement; `all([])` alone would incorrectly return true.
-    expect([].every(() => false)).toBe(true);
-    expect(modifierGateHolds(targetBloodied, view())).toBe(false);
-  });
-
-  it('bloodied gates require complete finite HP state before testing the half-HP boundary', () => {
-    for (const kind of ['comeback', 'self-bloodied'] as const) {
-      const gate: ModifierGate = { kind };
-      expect(modifierGateHolds(gate, view({ actor: { hp: 10, maximumHp: 20 } }))).toBe(true);
-      expect(modifierGateHolds(gate, view({ actor: { hp: 9, maximumHp: 20 } }))).toBe(true);
-      expect(modifierGateHolds(gate, view({ actor: { hp: 11, maximumHp: 20 } }))).toBe(false);
-      expect(modifierGateHolds(gate, view({ actor: { hp: undefined, maximumHp: 20 } }))).toBe(false);
-      expect(modifierGateHolds(gate, view({ actor: { hp: 5, maximumHp: undefined } }))).toBe(false);
-      expect(modifierGateHolds(gate, view({ actor: { hp: 0, maximumHp: 0 } }))).toBe(false);
-      expect(modifierGateHolds(gate, view({ actor: { hp: Number.NaN, maximumHp: 20 } }))).toBe(false);
-      expect(modifierGateHolds(gate, view({ actor: { hp: 5, maximumHp: Number.POSITIVE_INFINITY } }))).toBe(false);
-    }
-  });
-
-  it('target-bloodied requires an existing hostile target with complete finite HP state', () => {
-    const gate: ModifierGate = { kind: 'target-bloodied' };
-    const target = (hp: number, maxHp: number): NonNullable<ModifierFoldView['target']> => ({
-      id: 'foe', side: 'foes', hp, maxHp, conditions: new Set(),
+    expect(modifierGatePredicate({ kind: 'mastery', abilityId: ability })).toEqual({ kind: 'has-mastery', target: { kind: 'self' }, abilityId: ability });
+    expect(modifierGatePredicate({ kind: 'choice', sourceId: 't3:choice' })).toEqual({ kind: 'declared-choice', sourceId: 't3:choice' });
+    // Target gates compose the state read WITH the hostile-relation read, so a
+    // same-side actor can never satisfy "your foe is bloodied" (`all([])`
+    // vacuity is not reachable: the relation half is non-vacuous).
+    expect(modifierGatePredicate({ kind: 'target-bloodied' })).toEqual({
+      kind: 'all',
+      predicates: [
+        { kind: 'bloodied', target: { kind: 'attack-target' } },
+        { kind: 'relation', target: { kind: 'attack-target' }, relation: 'foe' },
+      ],
     });
-    expect(modifierGateHolds(gate, view({ target: target(10, 20) }))).toBe(true);
-    expect(modifierGateHolds(gate, view({ target: target(9, 20) }))).toBe(true);
-    expect(modifierGateHolds(gate, view({ target: target(11, 20) }))).toBe(false);
-    expect(modifierGateHolds(gate, view())).toBe(false);
-    expect(modifierGateHolds(gate, view({ target: { ...target(1, 20), side: 'heroes' } }))).toBe(false);
-    expect(modifierGateHolds(gate, view({ target: target(0, 0) }))).toBe(false);
-    expect(modifierGateHolds(gate, view({ target: target(Number.NaN, 20) }))).toBe(false);
-    expect(modifierGateHolds(gate, view({ target: target(5, Number.POSITIVE_INFINITY) }))).toBe(false);
-    expect(modifierGateHolds(gate, view({
-      target: { ...target(1, 20), hp: undefined } as unknown as NonNullable<ModifierFoldView['target']>,
-    }))).toBe(false);
-    expect(modifierGateHolds(gate, view({
-      target: { ...target(1, 20), maxHp: undefined } as unknown as NonNullable<ModifierFoldView['target']>,
-    }))).toBe(false);
+    expect(modifierGatePredicate({ kind: 'target-has-condition' })).toEqual({
+      kind: 'all',
+      predicates: [
+        { kind: 'has-condition', target: { kind: 'attack-target' } },
+        { kind: 'relation', target: { kind: 'attack-target' }, relation: 'foe' },
+      ],
+    });
+    expect(modifierGatePredicate({ kind: 'target-has-condition', conditionId: 'burning' })).toEqual({
+      kind: 'all',
+      predicates: [
+        { kind: 'has-condition', target: { kind: 'attack-target' }, conditionId: 'burning' },
+        { kind: 'relation', target: { kind: 'attack-target' }, relation: 'foe' },
+      ],
+    });
   });
 
-  it('a predicate-gated rule flips on and off as state changes (never a stale fold)', () => {
+  it('every authoring gate is decided by the ONE U6 authority against durable state', () => {
     const ability = owner();
-    registerModifierRule({ sourceId: 't3:gated', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set', value: constantModifierValue(5), gates: [{ kind: 'comeback' }] });
-    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view(), {}, resolveModifierNumber)).toBe(2);
-    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view({ actor: { hp: 8 } }), {}, resolveModifierNumber)).toBe(5);
+    expect(gateHolds({ kind: 'always' }, gatedView())).toBe(true);
+
+    expect(gateHolds({ kind: 'stealth' }, gatedView())).toBe(false);
+    expect(gateHolds({ kind: 'stealth' }, gatedView({ actor: { conditions: new Set(['stealth']) } }))).toBe(true);
+
+    // Bloodied is measured against the BASE maximum (p.81): exactly half is in.
+    expect(gateHolds({ kind: 'comeback' }, gatedView({ actor: { hp: 10, baseMaxHp: 20 } }))).toBe(true);
+    expect(gateHolds({ kind: 'comeback' }, gatedView({ actor: { hp: 11, baseMaxHp: 20 } }))).toBe(false);
+
+    expect(gateHolds({ kind: 'charge' }, gatedView({ actor: { state: { 'slow-turn': true } } }))).toBe(true);
+    expect(gateHolds({ kind: 'charge' }, gatedView({ actor: { state: { 'slow-turn': false } } }))).toBe(false);
+
+    expect(gateHolds({ kind: 'round-at-least', value: 4 }, gatedView({ round: 3 }))).toBe(false);
+    expect(gateHolds({ kind: 'round-at-least', value: 4 }, gatedView({ round: 4 }))).toBe(true);
+
+    const mastery: ModifierGate = { kind: 'mastery', abilityId: ability };
+    expect(gateHolds(mastery, gatedView())).toBe(false);
+    expect(gateHolds(mastery, gatedView({ actor: { abilityIds: [ability] } }))).toBe(false);
+    expect(gateHolds(mastery, gatedView({ actor: { masteredAbilityIds: [ability] } }))).toBe(false);
+    expect(gateHolds(mastery, gatedView({ actor: { abilityIds: [ability], masteredAbilityIds: [ability] } }))).toBe(true);
+
+    const choice: ModifierGate = { kind: 'choice', sourceId: 't3:declared' };
+    expect(gateHolds(choice, gatedView())).toBe(false);
+    expect(gateHolds(choice, gatedView({ selectedTalentSourceIds: new Set(['t3:declared']) }))).toBe(true);
+
+    expect(gateHolds({ kind: 'target-bloodied' }, gatedView({ target: { hp: 4, baseMaxHp: 10 } }))).toBe(true);
+    expect(gateHolds({ kind: 'target-bloodied' }, gatedView({ target: { hp: 6, baseMaxHp: 10 } }))).toBe(false);
+    expect(gateHolds({ kind: 'target-has-condition' }, gatedView({ target: { conditions: new Set(['burning']) } }))).toBe(true);
+    expect(gateHolds({ kind: 'target-has-condition' }, gatedView({ target: { conditions: new Set() } }))).toBe(false);
+    expect(gateHolds({ kind: 'target-has-condition', conditionId: 'burning' }, gatedView({ target: { conditions: new Set(['burning']) } }))).toBe(true);
+    expect(gateHolds({ kind: 'target-has-condition', conditionId: 'weakened' }, gatedView({ target: { conditions: new Set(['burning']) } }))).toBe(false);
+    // An ALLIED attack target never satisfies a target-scoped gate, however
+    // bloodied/statused it is — the relation half of the composition.
+    expect(gateHolds({ kind: 'target-bloodied' }, gatedView({ target: { side: 'heroes', hp: 1, baseMaxHp: 10 } }))).toBe(false);
+    expect(gateHolds({ kind: 'target-has-condition' }, gatedView({ target: { side: 'heroes', conditions: new Set(['burning']) } }))).toBe(false);
+    // No attack target at all: false, never a vacuous truth.
+    expect(gateHolds({ kind: 'target-bloodied' }, gatedView())).toBe(false);
+    expect(gateHolds({ kind: 'target-has-condition' }, gatedView())).toBe(false);
+  });
+
+  it('fails closed when the applicability authority or its context is missing', () => {
+    // A gated rule folded against a view with no injected U6 authority must
+    // reject rather than silently apply (or silently skip).
+    expect(() => foldNumberModifiers(
+      'listed-range', 'attack', 2, owner(), view(), {}, resolveModifierNumber,
+    )).not.toThrow();
+    const ability = owner();
+    registerModifierRule({ sourceId: 't3:ungated', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: constantModifierValue(1) });
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, view(), {}, resolveModifierNumber)).toBe(3);
+
+    const gated = owner();
+    registerModifierRule({ sourceId: 't3:gated-no-context', ownerId: gated, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: constantModifierValue(1), applicability: { kind: 'always' } });
+    expect(() => foldNumberModifiers('listed-range', 'attack', 2, gated, view(), {}, resolveModifierNumber))
+      .toThrow(/no applicability authority/);
+    // The authority is present but the durable context is not: the boundary
+    // reports the missing read rather than guessing.
+    const noContext: ModifierFoldView = { ...view(), applies: modifierApplicabilityHolds };
+    expect(() => foldNumberModifiers('listed-range', 'attack', 2, gated, noContext, {}, resolveModifierNumber))
+      .toThrow(/no U6 predicate context/);
+    // A predicate outside the lowered gate vocabulary rejects too — the seam
+    // cannot be used to smuggle an unrepresentable clause in.
+    const smuggled = owner();
+    registerModifierRule({ sourceId: 't3:smuggled', ownerId: smuggled, queryPoint: 'listed-range', scope: 'attack', operation: 'add', value: constantModifierValue(1), applicability: { kind: 'in-terrain', target: { kind: 'self' }, terrain: 'pit' } });
+    expect(() => foldNumberModifiers('listed-range', 'attack', 2, smuggled, gatedView(), {}, resolveModifierNumber))
+      .toThrow(/not part of the lowered modifier-gate vocabulary/);
+  });
+
+  it('a gated rule flips on and off as durable state changes (never a stale fold)', () => {
+    const ability = owner();
+    registerModifierRule({
+      sourceId: 't3:gated', ownerId: ability, queryPoint: 'listed-range', scope: 'attack', operation: 'set',
+      value: constantModifierValue(5), applicability: modifierGatePredicate({ kind: 'comeback' }),
+    });
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, gatedView({ actor: { hp: 15, baseMaxHp: 20 } }), {}, resolveModifierNumber)).toBe(2);
+    expect(foldNumberModifiers('listed-range', 'attack', 2, ability, gatedView({ actor: { hp: 8, baseMaxHp: 20 } }), {}, resolveModifierNumber)).toBe(5);
   });
 });
 
@@ -260,6 +312,10 @@ describe('U14 — the range and mastery kernels fold through the shared registry
       value: 6,
       gate: { kind: 'choice', sourceId: 't3:range-rule' },
     });
+    const rangeContext = (talentChoices: readonly string[]) => predicateContext(
+      [ruleActorView({ id: 'hero', abilityIds: [ability] })],
+      { actorId: 'hero', round: 2, talentChoices },
+    );
     const rangeView: RangeStateView = {
       round: 2,
       actors: {
@@ -267,10 +323,17 @@ describe('U14 — the range and mastery kernels fold through the shared registry
       },
       conditionsFor: () => new Set<string>(),
       selectedTalentSourceIds: new Set<string>(),
+      // The U6 applicability pair the production adapter projects.
+      applies: modifierApplicabilityHolds,
+      applicabilityContext: () => rangeContext([]),
     };
     expect(effectiveScopedRange(rangeView, 'hero', ability, 2, 'attack')).toBe(2);
     // The choice gate holds → the shared fold applies the override.
-    const opted = { ...rangeView, selectedTalentSourceIds: new Set(['t3:range-rule']) };
+    const opted = {
+      ...rangeView,
+      selectedTalentSourceIds: new Set(['t3:range-rule']),
+      applicabilityContext: () => rangeContext(['t3:range-rule']),
+    };
     expect(effectiveScopedRange(opted, 'hero', ability, 2, 'attack')).toBe(6);
     // The rule is registered as a shared row at the listed-range query point.
     expect(modifierRulesForSource('t3:range-rule', 'listed-range').length).toBe(1);
@@ -284,16 +347,26 @@ describe('U14 — the range and mastery kernels fold through the shared registry
       gate: { kind: 'always' },
       modifier: { kind: 'interrupt-rank', rank: 3 },
     });
+    const masteryContext = (actor: RuleActorView) => predicateContext([actor], { actorId: actor.id });
+    const masteredActor = ruleActorView({ id: 'hero', abilityIds: [ability], masteredAbilityIds: [ability] });
     const foldView = {
       round: 1,
       actors: {
         hero: { abilityIds: [ability], masteredAbilityIds: [ability], hp: 20, maximumHp: 20 },
       },
+      applies: modifierApplicabilityHolds,
+      applicabilityContext: () => masteryContext(masteredActor),
     };
     expect(effectiveInterruptRank(foldView, 'hero', ability, 1)).toBe(3);
     // Unequipped/unmastered → the baked-in mastery gate holds nothing, so an
     // `always` gate still never fires for an unmastered parent.
-    const unequipped = { round: 1, actors: { hero: { abilityIds: [], masteredAbilityIds: [], hp: 20, maximumHp: 20 } } };
+    const unequippedActor = ruleActorView({ id: 'hero' });
+    const unequipped = {
+      round: 1,
+      actors: { hero: { abilityIds: [], masteredAbilityIds: [], hp: 20, maximumHp: 20 } },
+      applies: modifierApplicabilityHolds,
+      applicabilityContext: () => masteryContext(unequippedActor),
+    };
     expect(effectiveInterruptRank(unequipped, 'hero', ability, 1)).toBe(1);
     expect(hasUnlimitedRange(foldView, 'hero', ability)).toBe(false);
   });

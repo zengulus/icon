@@ -429,15 +429,24 @@ use caps ("use count override"); interrupt rank; duration modifiers;
 **Replay semantics.** Fold order is deterministic (registration order);
 the fold reads durable state (equip/mastery/talent/choice) at the query
 point; replay folds identically; the ownership gate is a pure function of
-the record.
+the record. APPLICABILITY is U6's: `ModifierRule.applicability` is a
+`RulePredicate`, lowered losslessly from the authoring gate shorthand, and
+decided by `evaluatePredicate` over the durable context the fold adapter
+projects — so a gate's answer is a pure function of recorded state (no
+ambient UI/session input) and the same state yields the same answer on
+replay. Missing authority/context, or a predicate outside the closed lowered
+vocabulary, FAILS CLOSED.
 
 **Acceptance tests.** Positive: one recipe shape drives range, area, cost,
 attack, damage, save folds (parity fixtures); typed permission distinctness
 (cannot ≠ ignore ≠ immune). Negative: unowned modifier never folds; unknown
 query point rejects; wildcard bypass impossible (closed negative). Boundary:
 conflicting rules at the same query point (deterministic winner); scope
-filtering; predicate-gated rules flipping on/off with state. Replay:
-fold-dependent attack/damage fixtures replay byte-identical.
+filtering; predicate-gated rules flipping on/off with state; non-vacuous
+selector reads (an absent target never satisfies a target gate); base-max
+bloodied with wounds; equipped+mastered composition; declared choice only
+from durable input. Replay: fold-dependent attack/damage fixtures replay
+byte-identical with zero fresh decisions.
 
 ### U15 Transaction / Atomic Commit
 

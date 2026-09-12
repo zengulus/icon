@@ -12,8 +12,8 @@ import {
   type ModifierFoldView,
   type ModifierGate,
 } from '../primitives/modifiers.js';
-import { resolveModifierNumber } from './evaluate-modifiers.js';
-import type { RuleExecutionContext } from '../primitives/types.js';
+import { modifierApplicabilityHolds, modifierGatePredicates, resolveModifierNumber } from './evaluate-modifiers.js';
+import type { RuleExecutionContext, RulePredicate } from '../primitives/types.js';
 
 /**
  * Mastery modifier-fold kernel (docs/rules-foundations.md K-P5).
@@ -90,14 +90,29 @@ export interface MasteryFoldActorView extends MasteryOwnerView {
 export interface MasteryFoldStateView {
   round: number;
   actors: Readonly<Record<string, MasteryFoldActorView>>;
+  /** U6 applicability authority + predicate context (see RangeStateView): a
+   * gated mastery row is decided by `evaluatePredicate`, never locally. */
+  applies?: ModifierFoldView['applies'];
+  applicabilityContext?: ModifierFoldView['applicabilityContext'];
 }
 
 /** The fold read for a rule-program execution: resolvers inside an ability
  * program ask the same authority the command gates do, built from the runtime
  * actor views (which carry `abilityIds`/`masteredAbilityIds`/hp surfaces
- * structurally). */
+ * structurally). The U6 predicate context is the resolution's OWN context
+ * (re-scoped to the queried actor), so a mastery row's applicability is
+ * decided against exactly the state the resolver is executing over. */
 export function masteryFoldRuleRuntimeView(context: RuleExecutionContext): MasteryFoldStateView {
-  return { round: context.state.round, actors: context.state.actors };
+  return {
+    round: context.state.round,
+    actors: context.state.actors,
+    applies: modifierApplicabilityHolds,
+    applicabilityContext: (actorId, attackTargetId) => ({
+      ...context,
+      actorId,
+      ...(attackTargetId === undefined ? {} : { attackTargetId }),
+    }),
+  };
 }
 
 export interface MasteryModifierRule {
@@ -118,11 +133,13 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
   // Every mastery row REQUIRES the parent ability equipped AND mastered
   // (`hasMastery`) — that ownership requirement is part of the mastery
   // semantics independent of the source gate, so it is baked into the shared
-  // row's gates as the `mastery` gate (the shared evaluator's mastery gate IS
-  // `hasMastery`). A `{ kind: 'always' }` source gate then means "no extra
-  // round condition", never "applies without mastering".
+  // row's applicability as the `mastery` authoring gate (lowered to the U6
+  // `has-mastery` predicate, which composes the SHARED `hasMastery`
+  // authority). A `{ kind: 'always' }` source gate then means "no extra round
+  // condition", never "applies without mastering".
   const gates: ModifierGate[] = [{ kind: 'mastery', abilityId: rule.abilityId }];
   if (rule.gate && rule.gate.kind !== 'always') gates.push(rule.gate);
+  const applicability: RulePredicate | undefined = modifierGatePredicates(gates);
   switch (rule.modifier.kind) {
     case 'interrupt-rank':
       registerModifierRule({
@@ -132,7 +149,7 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
         scope: 'default',
         operation: 'set',
         value: constantModifierValue(rule.modifier.rank),
-        ...(gates.length > 0 ? { gates } : {}),
+        ...(applicability !== undefined ? { applicability } : {}),
       });
       break;
     case 'damage-type':
@@ -144,7 +161,7 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
         operation: 'set',
         value: enumeratedModifierValue(rule.modifier.to),
         from: rule.modifier.from,
-        ...(gates.length > 0 ? { gates } : {}),
+        ...(applicability !== undefined ? { applicability } : {}),
       });
       break;
     case 'unlimited-range':
@@ -153,7 +170,7 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
         ownerId: rule.abilityId,
         queryPoint: 'range-bound',
         kind: 'immune',
-        ...(gates.length > 0 ? { gates } : {}),
+        ...(applicability !== undefined ? { applicability } : {}),
       });
       break;
     case 'repeatable':
@@ -162,7 +179,7 @@ export function registerMasteryModifierRule(rule: MasteryModifierRule): void {
         ownerId: rule.abilityId,
         queryPoint: 'repeatable',
         kind: 'immune',
-        ...(gates.length > 0 ? { gates } : {}),
+        ...(applicability !== undefined ? { applicability } : {}),
       });
       break;
   }
@@ -181,6 +198,8 @@ function masteryFoldView(view: MasteryFoldStateView, actorId: string): ModifierF
       masteredAbilityIds: actor?.masteredAbilityIds,
     },
     conditionsFor: () => new Set<string>(),
+    ...(view.applies ? { applies: view.applies } : {}),
+    ...(view.applicabilityContext ? { applicabilityContext: view.applicabilityContext } : {}),
   };
 }
 
@@ -191,7 +210,7 @@ function masteryFoldView(view: MasteryFoldStateView, actorId: string): ModifierF
  * parent resolver (PERFECT BATTLEMENT's "deals 4 damage instead of 2") ask
  * this instead of re-stating the gate locally, so the source conditions
  * live in exactly one place — the registered rows. Reads the shared
- * registry through the shared gate evaluator.
+ * registry through the ONE U6 applicability authority.
  */
 export function masteryModifierActive(
   view: MasteryFoldStateView,

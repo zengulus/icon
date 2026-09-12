@@ -9,8 +9,8 @@ import {
   type ModifierFoldView,
   type ModifierGate,
 } from '../primitives/modifiers.js';
-import { resolveModifierNumber } from './evaluate-modifiers.js';
-import type { RuleAction, RuleClauseCompilation, RuleProgramCompilation } from '../primitives/types.js';
+import { modifierApplicabilityHolds, modifierGatePredicates, resolveModifierNumber } from './evaluate-modifiers.js';
+import type { RuleAction, RuleClauseCompilation, RuleExecutionContext, RulePredicate, RuleProgramCompilation } from '../primitives/types.js';
 
 /**
  * Area modifier kernel (docs/rules-foundations.md §Area).
@@ -57,6 +57,10 @@ export interface AreaStateActor {
 export interface AreaStateView {
   round: number;
   actor: AreaStateActor;
+  /** U6 applicability authority + predicate context (see RangeStateView): a
+   * gated area rule is decided by `evaluatePredicate`, never locally. */
+  applies?: ModifierFoldView['applies'];
+  applicabilityContext?: ModifierFoldView['applicabilityContext'];
 }
 
 // ── Area modifier registry (U14 shared shape) ───────────────────────────────
@@ -66,7 +70,8 @@ export interface AreaStateView {
 // (shape override) query points: content rows registered through
 // `registerAreaModifierRule` are converted to shared-shape rows, and
 // `effectiveAreaFor` folds through the shared `foldNumberModifiers` /
-// `foldEnumeratedModifiers` discipline with the shared gate evaluator. The
+// `foldEnumeratedModifiers` discipline, with each row's source gate lowered
+// onto a U6 `RulePredicate` at registration. The
 // `AreaStateActor` / `AreaStateView` read surfaces stay the kernel's public
 // API — no consumer changes. The area kernel's historical `talent` gate kind
 // maps to the shared rule-level `talent` field (a talent gate reads the
@@ -75,8 +80,10 @@ export interface AreaStateView {
 export type AreaModifierShape = 'line' | 'arc';
 
 /** The source-defined conditions under which an area rule applies — the
- * shared U14 gate union plus the area kernel's historical `talent` gate
- * kind (extracted to the shared rule-level `talent` field at registration). */
+ * shared U14 authoring gate union plus the area kernel's historical `talent`
+ * gate kind (extracted to the shared rule-level `talent` field at
+ * registration). The remaining gates are LOWERED to U6 predicates by
+ * `modifierGatePredicate` — the area kernel keeps no gate semantics. */
 export type AreaModifierGate = ModifierGate | { kind: 'talent'; talent: 1 | 2 };
 
 /** A registered area-modifier rule: how one content unit changes its parent
@@ -98,9 +105,11 @@ export interface AreaModifierRule {
   gates?: AreaModifierGate[];
 }
 
-/** Split a content row's gates into the shared gate list + the extracted
- * rule-level talent rank (the area kernel's `talent` gate kind). */
-function splitAreaGates(rule: AreaModifierRule): { gates?: ModifierGate[]; talent?: 1 | 2 } {
+/** Split a content row's gates into the lowered U6 applicability predicate +
+ * the extracted rule-level talent rank (the area kernel's authoring `talent`
+ * gate kind, which is a rule-level field rather than a predicate because it
+ * selects the equipped rank of the OWNER ability). */
+function splitAreaGates(rule: AreaModifierRule): { applicability?: RulePredicate; talent?: 1 | 2 } {
   const gates: ModifierGate[] = [];
   let talent: 1 | 2 | undefined;
   for (const gate of rule.gates ?? []) {
@@ -110,8 +119,9 @@ function splitAreaGates(rule: AreaModifierRule): { gates?: ModifierGate[]; talen
       gates.push(gate as ModifierGate);
     }
   }
+  const applicability = modifierGatePredicates(gates);
   return {
-    ...(gates.length > 0 ? { gates } : {}),
+    ...(applicability !== undefined ? { applicability } : {}),
     ...(talent !== undefined ? { talent } : {}),
   };
 }
@@ -153,13 +163,13 @@ export function hasAreaModifierRule(sourceId: string): boolean {
     || modifierRulesForSource(sourceId, 'area-shape').length > 0;
 }
 
-/** Project an AreaStateView onto the shared U14 fold view. */
-function areaFoldView(view: AreaStateView): ModifierFoldView {
+/** Project an AreaStateView + acting actor onto the shared U14 fold view. */
+function areaFoldView(view: AreaStateView, actorId: string): ModifierFoldView {
   const actor = view.actor;
   return {
     round: view.round,
     actor: {
-      id: '',
+      id: actorId,
       hp: actor.hp,
       maximumHp: actor.maximumHp,
       abilityIds: actor.abilityIds,
@@ -168,6 +178,37 @@ function areaFoldView(view: AreaStateView): ModifierFoldView {
       conditions: actor.conditions,
     },
     conditionsFor: () => actor.conditions ?? new Set<string>(),
+    ...(view.applies ? { applies: view.applies } : {}),
+    ...(view.applicabilityContext ? { applicabilityContext: view.applicabilityContext } : {}),
+  };
+}
+
+/**
+ * The area fold state for a rule-program resolver: the same area read surface
+ * the command gate uses, built from the resolver's OWN execution context, plus
+ * the U6 applicability pair. A resolver that folds a gated area modifier
+ * (Soul Shot's round gate, Sturmreiten's mastery) therefore decides it against
+ * the SAME durable state it is executing over — never a hand-rolled,
+ * context-free view that would fail the applicability boundary closed.
+ */
+export function areaStateFromRuleContext(context: RuleExecutionContext, actorId: string): AreaStateView {
+  const actor = context.state.actors[actorId];
+  return {
+    round: context.state.round,
+    actor: {
+      hp: actor?.hp,
+      maximumHp: actor?.baseMaxHp,
+      abilityIds: actor?.abilityIds,
+      masteredAbilityIds: actor?.masteredAbilityIds,
+      talents: actor?.talents,
+      conditions: actor?.conditions,
+    },
+    applies: modifierApplicabilityHolds,
+    applicabilityContext: (queriedActorId, attackTargetId) => ({
+      ...context,
+      actorId: queriedActorId,
+      ...(attackTargetId === undefined ? {} : { attackTargetId }),
+    }),
   };
 }
 
@@ -187,7 +228,7 @@ export function effectiveAreaFor(
   baseLength: number,
   actionId?: string,
 ): { shape: AreaModifierShape; length: number } {
-  const foldView = areaFoldView(view);
+  const foldView = areaFoldView(view, actorId);
   const length = foldNumberModifiers('area-size', 'default', baseLength, abilityId, foldView, { actionId }, resolveModifierNumber);
   const shape = foldEnumeratedModifiers('area-shape', 'default', baseShape, abilityId, foldView, { actionId });
   return {

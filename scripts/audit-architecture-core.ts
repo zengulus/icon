@@ -220,6 +220,93 @@ export function choiceCandidateRoutingProblems(choiceCode: string): string[] {
   return problems;
 }
 
+// U14 → U6 (modifier applicability): ONE semantic authority answers "does this
+// modifier apply in the current rule context?". The authoring shorthand
+// (`ModifierGate`) lowers losslessly onto U6 `RulePredicate` vocabulary and the
+// boolean decision is `evaluatePredicate`'s. This guard rejects a future
+// reintroduction of a COMPETING gate evaluator — structurally, not by one
+// current function name:
+//
+//   1. the U14 primitive must make no applicability decision (no executable
+//      switch over gate kinds — the gate union is authoring vocabulary only);
+//   2. the declared boundary module must exist and must call `evaluatePredicate`
+//      (so the final boolean really is U6's);
+//   3. the lowering function must TRANSLATE, never decide (no boolean literal
+//      returns in its body);
+//   4. no other primitives/kernels file may switch on the modifier gate kinds.
+const MODIFIER_GATE_KINDS = ['always', 'stealth', 'comeback', 'self-bloodied', 'charge', 'round-at-least', 'mastery', 'choice', 'target-bloodied', 'target-has-condition'];
+const MODIFIER_GATE_CASE_RE = new RegExp(`\\bcase\\s*'(?:${MODIFIER_GATE_KINDS.join('|')})'\\s*:`);
+const MODIFIER_GATE_CASE_GLOBAL_RE = new RegExp(`\\bcase\\s*'(?:${MODIFIER_GATE_KINDS.join('|')})'\\s*:`, 'g');
+
+/** The ONE declared modifier applicability boundary (U14 → U6). */
+export const MODIFIER_APPLICABILITY_AUTHORITY = 'kernels/evaluate-modifiers.ts';
+
+export function modifierApplicabilityAuthorityProblems(codeByFile: Readonly<Record<string, string>>): Violation[] {
+  const problems: Violation[] = [];
+  const modifierPrimitive = codeByFile['primitives/modifiers.ts'];
+
+  // (1) The primitive owns vocabulary + fold discipline only.
+  if (modifierPrimitive !== undefined && MODIFIER_GATE_CASE_RE.test(modifierPrimitive)) {
+    problems.push({
+      check: 'u14-u6-applicability-authority',
+      file: 'primitives/modifiers.ts',
+      detail: 'the U14 primitive decides modifier gate truth again; lower the gate onto a U6 RulePredicate and let evaluatePredicate decide (kernels/evaluate-modifiers.ts)',
+    });
+  }
+
+  const authority = codeByFile[MODIFIER_APPLICABILITY_AUTHORITY];
+  if (authority === undefined) {
+    problems.push({
+      check: 'u14-u6-applicability-authority',
+      file: MODIFIER_APPLICABILITY_AUTHORITY,
+      detail: 'the declared modifier applicability boundary is missing; modifier applicability has no U6 authority',
+    });
+  } else {
+    // (2) The boundary must route the boolean decision through U6.
+    if (!authority.includes('evaluatePredicate(')) {
+      problems.push({
+        check: 'u14-u6-applicability-authority',
+        file: MODIFIER_APPLICABILITY_AUTHORITY,
+        detail: 'the modifier applicability boundary no longer calls evaluatePredicate; the final boolean must be decided by the U6 predicate authority',
+      });
+    }
+    // (3) The lowering translates syntax; it must not decide truth.
+    const source = ts.createSourceFile('evaluate-modifiers.ts', authority, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+    const lowering = source.statements.find((statement): statement is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === 'modifierGatePredicate');
+    const body = lowering?.body?.getText(source) ?? '';
+    if (lowering === undefined) {
+      problems.push({
+        check: 'u14-u6-applicability-authority',
+        file: MODIFIER_APPLICABILITY_AUTHORITY,
+        detail: 'modifierGatePredicate is missing; the authoring gate vocabulary no longer lowers onto U6 predicates',
+      });
+    } else if (/\breturn\s+(?:true|false)\b/.test(body)) {
+      problems.push({
+        check: 'u14-u6-applicability-authority',
+        file: MODIFIER_APPLICABILITY_AUTHORITY,
+        detail: 'modifierGatePredicate decides gate truth instead of lowering syntax; it must only map a gate onto a RulePredicate',
+      });
+    }
+  }
+
+  // (4) No competing gate switch anywhere else in the generic layers.
+  for (const [file, code] of Object.entries(codeByFile)) {
+    if (file === MODIFIER_APPLICABILITY_AUTHORITY) continue;
+    if (!file.startsWith('primitives/') && !file.startsWith('kernels/')) continue;
+    const matches = code.match(MODIFIER_GATE_CASE_GLOBAL_RE) ?? [];
+    // A single case label can be legitimate (e.g. the area kernel's authoring
+    // `talent` extraction); a switch over the gate family is the defect.
+    if (matches.length < 3) continue;
+    problems.push({
+      check: 'u14-u6-applicability-authority',
+      file,
+      detail: `a modifier gate switch (${matches.length} gate kinds) exists outside ${MODIFIER_APPLICABILITY_AUTHORITY}; modifier applicability must have exactly one semantic authority`,
+    });
+  }
+  return problems;
+}
+
 // U7 (anchor/spatial frame) — the TELEPORT legality boundary measures range
 // from the mover's own p.92 footprint edge, never from a degenerate size-1
 // point. The kernel must thread the resolved mover (`context.state.actors[
@@ -650,6 +737,7 @@ export function auditArchitecture(automationRoot: string): AuditResult {
     .filter((file) => ['primitives', 'kernels'].includes(layerFor(file, automationRoot)))
     .map((file) => [posixRelative(automationRoot, file), readFileSync(file, 'utf8')]));
   violations.push(...kernelAuthoringFacadeProblems(genericLayerCode));
+  violations.push(...modifierApplicabilityAuthorityProblems(genericLayerCode));
 
   const choiceCode = genericLayerCode['kernels/choice.ts'];
   if (choiceCode) {

@@ -45,8 +45,8 @@ state are respectively a domain value and structural model, not U18.
 | `RuleSelector` / `evaluate-value.ts` | Reference, query, recorded input identity | Compatibility adaptation only | U1 + U3 + U4 in one union | Medium | `TRANSITIONAL-COMPATIBILITY-SURFACE` | Erode callers toward `Reference<D>`, `Query<D>`, and captured U4 values; retain adapters meanwhile. |
 | `choice.ts` actor branch | Cardinality plus U3 membership | U4 over U3 | None at baseline: actor legality already called `validateActorCandidate` | Low | `ATOMIC` | Retain and guard. |
 | `choice.ts` position branch | Cardinality, bounds, footprint range | U4 over U3/U7 | U3 candidate legality | High | `DUPLICATE-AUTHORITY` | **Fixed in this tranche:** `validatePositionCandidate` is shared by U3 evaluation and U4. |
-| `ModifierGate` / `modifierGateHolds` | Modifier applicability | U14 fold composed with U6 predicate | Second predicate vocabulary/evaluator | High | `DUPLICATE-AUTHORITY` | Next tranche: migrate gates to a U6 predicate on `ModifierRule`; project each fold view into the one predicate evaluator; remove the switch only after range/area/mastery/permission/scaled-bonus consumers migrate. |
-| `bonus-damage.ts` scaled/trait gate fold | Scaled value plus shared applicability | Damage value specialist composed with U14 | Self/target bloodied/status gates now delegate to `modifierGateHolds`; elevation retains the canonical spatial metric | — | `MIGRATED` (2026-09-05, bounded seam) | Numeric, scaled, and trait rows share applicability, characterized in `bonus-damage-gates.test.ts`. The broader U14→U6 migration above remains open. |
+| `ModifierGate` / `modifierGateHolds` | Modifier applicability | U14 fold composed with U6 predicate | Second predicate vocabulary/evaluator | High | `CLOSED` (2026-09-12) | The gate switch is DELETED. `ModifierRule.applicability` / `PermissionRule.applicability` are U6 `RulePredicate`s; `kernels/evaluate-modifiers.ts` lowers the authoring shorthand (`modifierGatePredicate(s)` — pure translation) and decides via `evaluatePredicate` (`modifierApplicabilityHolds`) over the durable context the fold adapter projects. All consumers migrated (range/area/mastery/permissions/usage-cap/numeric+scaled+trait bonus-damage). New U6 vocabulary: `relation`, `slow-turn`, `has-mastery`, `declared-choice`, optional `has-condition.conditionId`; selector reads are non-vacuous. Retained specialists are value/state machinery, not gate authorities: cost-list rewriting, armed attack fold, scaled/recipient bonus-damage functions, the elevation metric, aura/save boon-curse sites, damage-exception flags. Guard: `modifierApplicabilityAuthorityProblems` (`audit-architecture`). Tests: `u14-u6-applicability.test.ts`. |
+| `bonus-damage.ts` scaled/trait gate fold | Scaled value plus shared applicability | Damage value specialist composed with U14 | Self/target bloodied/status gates now lower onto U6 predicates (elevation keeps the canonical spatial metric) | — | `MIGRATED` (2026-09-05 bounded seam; 2026-09-12 U6 authority) | Numeric, scaled, and trait rows share applicability, characterized in `bonus-damage-gates.test.ts`. |
 | `area-geometry.ts` | Footprint-independent pattern geometry | Region specification/validation domain surface | No fundamental underlay leak | Low | `ATOMIC` | Keep canonical Line/Arc validation; expose results as regions. |
 | `SpatialAreaIntent` / `computeSpatialArea` | Center legality, pattern derivation, LoS, actor inclusion | Region resolution; placement; U3 inclusion separately | Placement policy + region geometry + U3 query | High | `DUPLICATE-AUTHORITY` | Dedicated region tranche; return authoritative cells, then query actors through `insideArea`. |
 | Resolver-local `squareArea`/`lineCells` calls | Source effect resolution plus geometry | Consume a resolved/validated region | Repeated region construction and approximate blast sizing | High | `DUPLICATE-AUTHORITY` | Migrate family-by-family after region vocabulary lands; no flag day. |
@@ -117,15 +117,22 @@ authoritative.
 | `boolean` | Required/optional and literal boolean validation | No domain semantics are inferred. | `ATOMIC`. |
 | `ordering` | Exact, distinct permutation capture | U17 supplies the pending candidate set; U4 records the entitled owner's order. | Correct U4/U17 composition. |
 
-## U14 → U6 gate parity prerequisites
+## U14 → U6 gate parity (migrated 2026-09-12)
 
-No production gate is migrated by this review. The target U6 forms below are
-contracts, not currently available syntax. `exists-one(ref, predicate)` means
-the reference must resolve to exactly one actor before the predicate can hold;
-it cannot be implemented as `selectActors(...).every(...)`, because
-`every([])` is true.
+Every production gate below is MIGRATED: the authoring shorthand lowers onto
+the U6 predicate in the third column (`modifierGatePredicate`) and the boolean
+is `evaluatePredicate`'s. The non-vacuity requirement is implemented as
+`everySelected` (a selector must resolve to AT LEAST ONE actor; an empty
+selection is false), so an absent/unresolvable reference can no longer satisfy
+a clause as `every([])` would. The table is retained as the parity contract and
+the adversarial matrix is `u14-u6-applicability.test.ts`.
 
-| Gate | Exact source meaning | Current `modifierGateHolds` | Proposed exact U6 predicate | Missing vocabulary | Missing/malformed behavior to preserve | Adversarial parity test |
+The third column records the PRIOR evaluator's read for reference; the fourth
+is the exact U6 predicate form the gate now lowers to. The "non-vacuous
+exists-one reference" requirement is satisfied by the shared `everySelected`
+helper (selector resolves to at least one actor), not by reusing `.every`.
+
+| Gate | Exact source meaning | Prior read | Migrated U6 predicate (lowered) | Vocabulary added | Missing/malformed behavior preserved | Adversarial parity test |
 | --- | --- | --- | --- | --- | --- | --- |
 | `always` | No additional applicability clause. | `true`. | `true`. | None. | Cannot fail from absent optional view fields. | Empty/minimal view still true. |
 | `stealth` | Acting character has Stealth now. | `conditionsFor(actor.id).has('stealth')`. | `has-condition(live(source), stealth)`. | Exact live-reference condition projection may need adapter unification. | Missing actor/condition projection must fail closed, not throw or infer Stealth. | Empty set false; exact Stealth true; unrelated status false. |
@@ -138,10 +145,12 @@ it cannot be implemented as `selectActors(...).every(...)`, because
 | `target-bloodied` | An existing hostile attack target is Bloodied (at or below half its BASE maximum — p.81). | Target exists, side differs, HP/max HP are finite, max HP (the target's BASE bar) is positive, and HP is at/below half. | `exists-one(attack-target, all(hostile-to(source), bloodied))`. | Non-vacuous cardinality/reference existence plus hostility composition. | Missing/allied target, missing/non-finite HP, missing/non-finite/non-positive maximum, or unresolved reference → false. | Missing/allied/malformed false; hostile exact/below half of base true; hostile healthy false. |
 | `target-has-condition` | An existing hostile attack target has any status, or the named status. | Target exists, is not allied, then nonempty Set/array or exact ID membership. | `exists-one(attack-target, all(hostile-to(source), has-any-condition/has-condition(id)))`. | Non-vacuous target existence, hostility, and `has-any-condition`; normalize Set/record projections. | Missing/allied target and empty/malformed condition collection → false. | Missing false; allied with condition false; hostile matching true; hostile empty/nonmatching false. |
 
-The characterization suite now covers every retained gate and the hostile
-target matrix. Migration may remove `ModifierGate` only after every fold
-adapter can supply these exact predicates while preserving registration and
-fold order.
+The migration landed on 2026-09-12: every fold adapter supplies these exact
+predicates, registration and fold order are unchanged, and
+`u14-u6-applicability.test.ts` covers the whole matrix (including the
+hostile-target composition and the fail-closed context/vocabulary cases).
+`ModifierGate` survives only as content-facing authoring shorthand — no
+evaluator switches on it.
 
 ## Spatial source check and Region / ResolvedArea contract
 

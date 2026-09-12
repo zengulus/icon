@@ -141,7 +141,33 @@ export type RulePredicate =
   | { kind: 'not'; predicate: RulePredicate }
   | { kind: 'all' | 'any'; predicates: RulePredicate[] }
   | { kind: 'compare'; left: RuleNumber; operator: '<' | '<=' | '=' | '>=' | '>'; right: RuleNumber }
-  | { kind: 'has-condition'; target: RuleSelector; conditionId: string }
+  /** Condition presence: without `conditionId`, ANY condition/status qualifies
+   * ("if your foe is suffering from a status"); with one, that exact
+   * condition must be present. FAILS CLOSED for an empty selection. */
+  | { kind: 'has-condition'; target: RuleSelector; conditionId?: string }
+  /** Side relation (U2): every selected target stands in the named relation
+   * to the acting actor — `foe` = the other side, `ally` = another character
+   * on the same side. Composed with a state predicate (bloodied/condition)
+   * this expresses "your FOE is bloodied" without a clause-local side read;
+   * the relation perspective is derived through the U2 authority, never from
+   * an incidental actor id. Fails closed when the perspective is underivable. */
+  | { kind: 'relation'; target: RuleSelector; relation: 'foe' | 'ally' }
+  /** Slow-turn: the target is currently on a SLOW TURN — the durable ICON
+   * p.95 state flag `deriveTriggers` turns into the `charge` trigger. An
+   * ambient `trigger('charge')` read is explicitly NOT equivalent (Heroic is
+   * a different ICON triggered effect), so this reads only durable state. */
+  | { kind: 'slow-turn'; target: RuleSelector }
+  /** Has-mastery: the target has the named parent ability equipped AND
+   * mastered — the ONE ownership gate (`kernels/mastery.ts` `hasMastery`)
+   * every mastered modifier row composes. Equipped-only or mastered-only is
+   * never sufficient. */
+  | { kind: 'has-mastery'; target: RuleSelector; abilityId: string }
+  /** Declared-choice: the durable command input DECLARED the named source
+   * unit as a player-chosen talent use for this resolution (the recorded
+   * pre-use augmentation set the U4 choice seam validates). Replay reads the
+   * recorded input — never ambient UI/session state, never a source-id
+   * boolean on an actor. FAILS CLOSED when no declared-choice input exists. */
+  | { kind: 'declared-choice'; sourceId: string }
   | { kind: 'bloodied'; target: RuleSelector }
   | { kind: 'quarter'; target: RuleSelector }
   | { kind: 'defeated'; target: RuleSelector }

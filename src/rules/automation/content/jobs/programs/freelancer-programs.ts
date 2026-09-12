@@ -1,7 +1,7 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { auraDefinitionFor, auraRuntimeView, isInAura } from '../../../kernels/aura.js';
 import { hasMastery } from '../../../kernels/mastery.js';
-import { effectiveAreaFor } from '../../../kernels/area.js';
+import { areaStateFromRuleContext, effectiveAreaFor } from '../../../kernels/area.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
 import {
@@ -256,7 +256,7 @@ const soulShot: RuleResolver = (context) => {
   // choice and the current round, so the line generation (and the must-
   // include-the-target validation below) uses the authoritative descriptor.
   const { length } = effectiveAreaFor(
-    { round: context.state.round, actor: { ...source, maximumHp: source.baseMaxHp } },
+    areaStateFromRuleContext(context, source.id),
     source.id,
     'freelancer:soul-shot',
     'line',

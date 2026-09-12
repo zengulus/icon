@@ -14,7 +14,7 @@
  * ONE recipe shape + ONE deterministic fold discipline they all read:
  *
  *   ModifierRule { sourceId, ownerId, queryPoint, scope, operation,
- *                  value, gates, talent, actionId, ordering }
+ *                  value, applicability, talent, actionId, ordering }
  *
  * QUERY POINTS STAY TYPED. A listed range is never a damage die; an
  * interrupt rank is never a movement distance. Each query point folds
@@ -34,20 +34,23 @@
  * Ownership gate: a rule's `ownerId` is the opaque parent-ability key the
  * fold filters on (the acting actor's ability set — U2 role reads derive
  * WHO the acting actor is; the fold never applies a rule whose owner is
- * not the queried ability). Gates are evaluated against the shared
- * `ModifierFoldView` (conditions, hp ratio, mastery, round, talent,
- * declared choice, target state) — one gate evaluator, never a per-kernel
- * re-implementation.
+ * not the queried ability). APPLICABILITY is a U6 `RulePredicate`: the
+ * primitive holds NO gate semantics, it only asks the injected
+ * `ModifierApplicabilityResolver` (provided by the kernel layer,
+ * `kernels/evaluate-modifiers.ts`) whether the rule's recorded predicate
+ * holds against the projected fold view. The authoring shorthand
+ * (`ModifierGate`, kept below for content-facing kernel recipe types) is
+ * lowered losslessly to `RulePredicate` at the kernel boundary; the boolean
+ * decision is ALWAYS `evaluatePredicate`'s.
  *
  * Foundation: no source IDs (sourceId/ownerId are opaque provenance keys),
  * no kernel imports. Uses U1 Reference identity (ownerId is the U1
  * reference key form), U2 ownership (the fold is evaluated for the acting
- * actor), U5 values (numeric folds), U6 predicate gates (the shared gate
- * union is the U6-flavored gate surface), U8 scope (the `scope` string is
- * the named scope within a query point, e.g. 'attack' vs a source-declared
- * internal placement range).
+ * actor), U5 values (numeric folds), U6 predicate applicability (injected),
+ * U8 scope (the `scope` string is the named scope within a query point,
+ * e.g. 'attack' vs a source-declared internal placement range).
  */
-import type { RuleNumber } from './types.js';
+import type { RuleExecutionContext, RuleNumber, RulePredicate } from './types.js';
 
 // ── Query points ────────────────────────────────────────────────────────────
 
@@ -85,16 +88,18 @@ export type ModifierQueryPoint =
 /** How a rule alters its query point. `add` accumulates (range +1, one more
  * bonus die); `set`/`override` replace the current value (range becomes 6,
  * shape becomes arc, rank becomes 3). The fold applies `add` rules in
- * registration order; the LAST `set`/`override` rule whose gates hold wins,
+ * registration order; the LAST `set`/`override` rule whose applicability holds wins,
  * exactly the discipline the range/area kernels already used. */
 export type ModifierOperation = 'add' | 'set' | 'override';
 
-// ── Shared gate vocabulary ──────────────────────────────────────────────────
+// ── Shared authoring gate vocabulary (lowered to U6 predicates) ──────────────
 
-/** The source-defined conditions under which a modifier applies — ONE gate
- * union shared by every fold (range, area, mastery, bonus-damage, …).
- * `talent`/`actionId` are rule-level fields rather than gates because they
- * select the equipped talent rank / action scope of the OWNER ability. */
+/** The source-defined conditions under which a modifier applies — the
+ * modifier-authoring SHORTHAND shared by every modifier kernel's recipe type.
+ * It is NOT a second semantic authority: every variant lowers losslessly to a
+ * U6 `RulePredicate` (`kernels/evaluate-modifiers.ts` `modifierGatePredicate`),
+ * and the boolean decision is made by `evaluatePredicate`. Keep this union
+ * authoring-only — no evaluator may switch on it. */
 export type ModifierGate =
   /** Unconditional. */
   | { kind: 'always' }
@@ -125,10 +130,10 @@ export type ModifierGate =
    * condition. */
   | { kind: 'target-has-condition'; conditionId?: string };
 
-/** The shared view gates evaluate against. Every fold adapter (range,
+/** The shared view the applicability predicates are answered against. Every fold adapter (range,
  * area, mastery, bonus-damage) projects its own state onto this shape, so
- * the gate evaluator lives once. Optional members stay absent for the
- * gates that do not need them. */
+ * the applicability decision has ONE input. Optional members stay absent for
+ * the predicates that do not need them. */
 export interface ModifierFoldView {
   round: number;
   actor: {
@@ -143,18 +148,18 @@ export interface ModifierFoldView {
     talents?: Readonly<Record<string, 1 | 2>>;
     conditions?: ReadonlySet<string>;
     side?: string;
-    /** The actor is on a slow turn (the `charge` gate — projected by the
-     * range kernel from the durable slow-turn flag; other folds leave it
+    /** The actor is on a slow turn (the `slow-turn` predicate — projected by
+     * the range kernel from the durable slow-turn flag; other folds leave it
      * absent, so a charge-gated rule only ever folds where projected). */
     slowTurn?: boolean;
   };
-  /** Encounter condition lookup (the stealth gate). */
+  /** Encounter condition lookup (the condition-presence read). */
   conditionsFor(actorId: string): ReadonlySet<string>;
-  /** Player-declared talent-use source IDs at command time (the `choice`
-   * gate). Absent = no choices declared. */
+  /** Player-declared talent-use source IDs at command time (the
+   * `declared-choice` predicate). Absent = no choices declared. */
   selectedTalentSourceIds?: ReadonlySet<string>;
-  /** The attack target (the target-bloodied / target-has-condition gates).
-   * `maxHp` is the target's BASE maximum (the p.81 bloodied bar). */
+  /** The attack target (the target-scoped predicates). `maxHp` is the
+   * target's BASE maximum (the p.81 bloodied bar). */
   target?: {
     id: string;
     side: string;
@@ -162,7 +167,29 @@ export interface ModifierFoldView {
     maxHp: number;
     conditions: ReadonlySet<string> | ReadonlyArray<{ id: string }>;
   };
+  /** U6 APPLICABILITY AUTHORITY (kernel-injected): decides whether a rule's
+   * `applicability` predicate holds. The primitive never evaluates gate
+   * semantics itself. Absent = a rule carrying an applicability predicate
+   * FAILS CLOSED (throws), never silently applies.
+   */
+  applies?: ModifierApplicabilityResolver;
+  /** U6 PREDICATE CONTEXT (kernel-injected, lazy): the durable read context
+   * the applicability predicates evaluate against, projected by the adapter
+   * that built this view. The fold resolves it only when a rule actually
+   * carries an applicability predicate. Absent + applicability present =
+   * FAIL CLOSED (`modifier.applicability-context-missing`).
+   */
+  applicabilityContext?: (actorId: string, attackTargetId?: string) => RuleExecutionContext;
 }
+
+/** The U6 applicability decision for one rule: does the recorded predicate
+ * hold against this fold view? Implemented by the KERNEL layer
+ * (`kernels/evaluate-modifiers.ts`) over `evaluatePredicate` — the primitive
+ * holds no gate semantics of its own. */
+export type ModifierApplicabilityResolver = (
+  applicability: RulePredicate | undefined,
+  view: ModifierFoldView,
+) => boolean;
 
 // ── The one recipe shape ────────────────────────────────────────────────────
 
@@ -216,8 +243,10 @@ export interface ModifierRule {
   scope: string;
   operation: ModifierOperation;
   value: ModifierValue;
-  /** All listed gates must hold for the rule to apply (absent = always). */
-  gates?: readonly ModifierGate[];
+  /** U6 applicability: the rule applies only while this predicate holds (all
+   * of the source unit's listed gates, AND-composed at lowering). Absent =
+   * unconditional. Evaluated by the injected U6 authority — never locally. */
+  applicability?: RulePredicate;
   /** Optional talent-equip gate: applies only while the acting actor has
    * this rank selected for the owner ability. */
   talent?: 1 | 2;
@@ -256,64 +285,24 @@ const MODIFIER_QUERY_POINTS: ReadonlySet<string> = new Set<ModifierQueryPoint>([
   'bonus-damage-flat', 'damage-type',
 ]);
 
-/** Evaluate one gate against the shared view. Pure — a deterministic
- * function of the durable view; replay folds identically. */
-export function modifierGateHolds(gate: ModifierGate, view: ModifierFoldView): boolean {
-  const actor = view.actor;
-  switch (gate.kind) {
-    case 'always':
-      return true;
-    case 'stealth':
-      return view.conditionsFor(actor.id).has('stealth');
-    case 'charge':
-      // The durable slow-turn flag — the same flag `deriveTriggers` turns
-      // into the `charge` trigger, so the gate can never fire on a Heroic
-      // alone (Charge and Heroic are distinct ICON triggered effects).
-      return view.actor.slowTurn === true;
-    case 'comeback':
-    case 'self-bloodied': {
-      const hp = actor.hp;
-      const maximum = actor.maximumHp;
-      return typeof hp === 'number' && typeof maximum === 'number'
-        && Number.isFinite(hp) && Number.isFinite(maximum)
-        && maximum > 0 && hp <= maximum / 2;
-    }
-    case 'round-at-least':
-      return view.round >= gate.value;
-    case 'mastery':
-      // The shared mastery gate matches `kernels/mastery.ts` `hasMastery`:
-      // the parent ability must be equipped AND mastered — a mastery must
-      // never fire for an unequipped parent.
-      return Boolean((actor.abilityIds ?? []).includes(gate.abilityId)
-        && (actor.masteredAbilityIds ?? []).includes(gate.abilityId));
-    case 'choice':
-      return view.selectedTalentSourceIds?.has(gate.sourceId) ?? false;
-    case 'target-bloodied': {
-      const target = view.target;
-      return Boolean(target && target.side !== actor.side
-        && Number.isFinite(target.hp) && Number.isFinite(target.maxHp)
-        && target.maxHp > 0 && target.hp <= target.maxHp / 2);
-    }
-    case 'target-has-condition': {
-      const target = view.target;
-      if (!target || target.side === actor.side) return false;
-      const conditions = target.conditions;
-      // The target's condition surface is Set-shaped (rule view) or
-      // array-shaped (encounter actor) — one shared read either way.
-      if ('size' in conditions) {
-        if (gate.conditionId === undefined) return conditions.size > 0;
-        return conditions.has(gate.conditionId);
-      }
-      if (gate.conditionId === undefined) return conditions.length > 0;
-      return conditions.some((condition) => condition.id === gate.conditionId);
-    }
+/** Whether a rule's recorded U6 applicability predicate holds right now —
+ * delegated to the injected kernel evaluator (`evaluatePredicate` over the
+ * projected context). A rule carrying an applicability predicate whose
+ * evaluator/context is missing FAILS CLOSED: it throws rather than silently
+ * applying (which would grant the modifier unconditionally) or silently
+ * skipping (which would hide the missing authority). */
+function applicabilityHolds(applicability: RulePredicate | undefined, view: ModifierFoldView, evaluate: ModifierApplicabilityResolver | undefined): boolean {
+  if (applicability === undefined) return true;
+  if (!evaluate) {
+    throw new Error('A modifier rule carries a U6 applicability predicate but the fold view has no applicability authority (view.applies); the modifier applicability decision must run through kernels/evaluate-modifiers.ts.');
   }
+  return evaluate(applicability, view);
 }
 
 /** Whether ONE registered rule applies right now (owner matches, action
- * scope matches, talent rank matches, every gate holds). The shared gate
- * evaluator — exported so the mastery-fold's whole-source check and any
- * other kernel read the same holds test. */
+ * scope matches, talent rank matches, U6 applicability holds). The shared
+ * selection authority — exported so the mastery-fold's whole-source check and
+ * any other kernel read the same holds test. */
 export function modifierRuleHolds(
   rule: ModifierRule,
   view: ModifierFoldView,
@@ -323,7 +312,7 @@ export function modifierRuleHolds(
   if (rule.ownerId !== ownerAbilityId) return false;
   if (rule.actionId !== undefined && rule.actionId !== options.actionId) return false;
   if (rule.talent !== undefined && view.actor.talents?.[ownerAbilityId] !== rule.talent) return false;
-  return (rule.gates ?? []).every((gate) => modifierGateHolds(gate, view));
+  return applicabilityHolds(rule.applicability, view, view.applies);
 }
 
 /** The registered rules that apply to `queryPoint` at `scope` for `ownerId`
@@ -459,7 +448,7 @@ export const PERMISSION_NEGATIVES: Readonly<Record<PermissionQueryPoint, readonl
 };
 
 /** A registered permission rule: one source unit grants/denies one typed
- * permission under its gates. */
+ * permission under its applicability predicate. */
 export interface PermissionRule {
   /** Exact source unit id that owns this rule (provenance only). */
   sourceId: string;
@@ -469,7 +458,8 @@ export interface PermissionRule {
   kind: PermissionKind;
   /** Named scope within the query point (default 'default'). */
   scope?: string;
-  gates?: readonly ModifierGate[];
+  /** U6 applicability — see `ModifierRule.applicability`. */
+  applicability?: RulePredicate;
   talent?: 1 | 2;
   actionId?: string;
 }
@@ -495,7 +485,7 @@ function permissionHolds(rule: PermissionRule, view: ModifierFoldView, ownerAbil
   if (rule.ownerId !== ownerAbilityId) return false;
   if (rule.actionId !== undefined && rule.actionId !== options.actionId) return false;
   if (rule.talent !== undefined && view.actor.talents?.[ownerAbilityId] !== rule.talent) return false;
-  return (rule.gates ?? []).every((gate) => modifierGateHolds(gate, view));
+  return applicabilityHolds(rule.applicability, view, view.applies);
 }
 
 /** The effective permission at a query point: the LAST applicable rule's

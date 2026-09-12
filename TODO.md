@@ -46,10 +46,14 @@ supersede the underlay dependency order.
    Keep U4 PARTIAL; do not promote it.
 2. **Finish the remaining underlay contracts in dependency order.** Use the
    [DAG](docs/underlay-completion-plan.md#3-dependency-dag-and-implementation-order)
-   and fresh consumer evidence. Retained U14 modifier applicability vocabulary
-   still needs consolidation with U6; the numeric/scaled/trait bonus-damage
-   gate evaluator has already been shared. Do not infer whole-underlay closure
-   from one migrated consumer or green tests.
+   and fresh consumer evidence. Modifier applicability is single-authority
+   (U6 `evaluatePredicate`); the parallel `ModifierGate` switch is deleted and
+   guarded by `audit:architecture`. What remains for U14 is the retained
+   value/state specialists (cost-list rewriting, the armed attack fold,
+   scaled/recipient bonus-damage functions, the elevation metric, aura/save
+   boon-curse sites, damage-exception flags) and the untyped
+   `RuleModifier` stat-bag consumers — not a second applicability evaluator. Do
+   not infer whole-underlay closure from one migrated consumer or green tests.
 3. **Evaluate the underlay phase gate against current evidence.** Run the
    required checks, reconcile every remaining duplicate and specialist
    boundary, and regenerate the owning audit reports.

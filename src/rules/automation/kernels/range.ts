@@ -9,8 +9,8 @@ import {
   roundModifierValue,
   type ModifierFoldView,
 } from '../primitives/modifiers.js';
-import { resolveModifierNumber } from './evaluate-modifiers.js';
-import type { RuleAction, RuleClauseCompilation, RuleProgramCompilation } from '../primitives/types.js';
+import { modifierApplicabilityHolds, modifierGatePredicate, resolveModifierNumber } from './evaluate-modifiers.js';
+import type { RuleAction, RuleClauseCompilation, RuleExecutionContext, RuleProgramCompilation } from '../primitives/types.js';
 
 /**
  * Range/distance kernel (docs/rules-foundations.md §Range).
@@ -68,6 +68,11 @@ export interface RangeStateView {
   /** Player-declared talent-use source IDs at command time (Dark Sliver
    * talent 2's sacrifice-gated range, etc.). Absent = no choices declared. */
   selectedTalentSourceIds?: ReadonlySet<string>;
+  /** U6 applicability authority + predicate context — projected by the
+   * adapter so a gated range rule is decided by `evaluatePredicate`, never by
+   * a local gate switch. Absent = a gated rule FAILS CLOSED. */
+  applies?: ModifierFoldView['applies'];
+  applicabilityContext?: ModifierFoldView['applicabilityContext'];
 }
 
 /** The canonical distance between two actors: the shared p.92 footprint
@@ -101,7 +106,7 @@ export function isExactlyRange(view: RangeStateView, fromId: string, toId: strin
 // rows registered through `registerRangeModifierRule` are converted to
 // shared-shape rows, and `effectiveScopedRange` folds through the shared
 // `foldNumberModifiers` discipline (registration order, add accumulates,
-// last override wins, shared gate evaluator). The gate vocabulary and the
+// last override wins, U6 applicability authority). The gate vocabulary and the
 // `RangeStateView` read surface stay the range kernel's public API — no
 // consumer changes.
 
@@ -110,8 +115,8 @@ export function isExactlyRange(view: RangeStateView, fromId: string, toId: strin
 export type RangeModifierMode = 'add' | 'override';
 
 /** The source-defined conditions under which a range rule applies — the
- * shared U14 gate union (stealth / comeback / mastery / choice, plus the
- * other gates the shared evaluator understands). */
+ * shared U14 authoring gate union (stealth / comeback / mastery / choice, plus
+ * the other gates it lowers to U6 predicates). */
 export type RangeModifierGate = import('../primitives/modifiers.js').ModifierGate;
 
 /** A registered range-modifier rule: how one content unit modifies its parent
@@ -134,7 +139,8 @@ export interface RangeModifierRule {
    * unit never applies to an actor who did not choose it). */
   talent?: 1 | 2;
   /** Optional condition gate evaluated against the acting actor at command
-   * time. Without a gate the rule always applies. */
+   * time (lowered onto a U6 predicate; `evaluatePredicate` decides). Without
+   * a gate the rule always applies. */
   gate?: RangeModifierGate;
   /** Optional named range scopes the rule modifies. A rule without an
    * explicit scope list modifies the top-level attack range (`'attack'`).
@@ -168,7 +174,10 @@ export function registerRangeModifierRule(rule: RangeModifierRule): void {
       // the U5 `{ kind: 'round' }` RuleNumber at the boundary — the shared
       // fold itself never special-cases a dynamic literal.
       value: rule.value === 'round' ? roundModifierValue() : constantModifierValue(rule.value),
-      ...(rule.gate ? { gates: [rule.gate] } : {}),
+      // The source gate is LOWERED to its U6 predicate here (lossless
+      // translation): the applicability decision itself belongs to
+      // `evaluatePredicate` via the shared fold view.
+      ...(rule.gate ? { applicability: modifierGatePredicate(rule.gate) } : {}),
       ...(rule.talent !== undefined ? { talent: rule.talent } : {}),
       ...(rule.actionId !== undefined ? { actionId: rule.actionId } : {}),
     });
@@ -201,6 +210,8 @@ function rangeFoldView(view: RangeStateView, actorId: string): ModifierFoldView 
     },
     conditionsFor: (id) => view.conditionsFor(id),
     ...(view.selectedTalentSourceIds ? { selectedTalentSourceIds: view.selectedTalentSourceIds } : {}),
+    ...(view.applies ? { applies: view.applies } : {}),
+    ...(view.applicabilityContext ? { applicabilityContext: view.applicabilityContext } : {}),
   };
 }
 

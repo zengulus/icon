@@ -24,17 +24,16 @@
  */
 import type { EncounterActor, EncounterState } from '../../types.js';
 import type { DiceSource } from '../../dice.js';
-import { encounterRuleState } from './encounter-adapter.js';
+import { encounterRuleState, modifierApplicabilityContext } from './encounter-adapter.js';
 import { rollDamageDice } from '../primitives/damage-roll.js';
 import {
   constantModifierValue,
   foldNumberModifiers,
   modifierRulesForSource,
-  modifierGateHolds,
   registerModifierRule,
   type ModifierFoldView,
 } from '../primitives/modifiers.js';
-import { resolveModifierNumber } from './evaluate-modifiers.js';
+import { modifierApplicabilityHolds, modifierGatePredicate, resolveModifierNumber } from './evaluate-modifiers.js';
 import { isBloodied } from './hp-threshold.js';
 
 export { isBloodied };
@@ -89,9 +88,9 @@ export interface BonusDamageRule {
 const scaledBonusDamageRules: BonusDamageRule[] = [];
 
 /** Whether a bonus-damage gate can ride the shared U14 modifier registry
- * (the shared `ModifierGate` evaluator covers every gate except the
- * elevation metric, whose canonical p.89 evaluation needs the raw
- * encounter state's `elevationAt` — the local fold owns it). */
+ * (every gate except the elevation metric lowers onto a U6 predicate; the
+ * elevation metric stays a retained specialist because its canonical p.89
+ * evaluation needs the raw encounter state's `elevationAt`). */
 function isSharedGate(gate: BonusDamageGate): gate is Extract<BonusDamageGate, import('../primitives/modifiers.js').ModifierGate> {
   return gate.kind !== 'elevation-above-target';
 }
@@ -133,7 +132,9 @@ export function registerBonusDamageRule(rule: BonusDamageRule): void {
       scope: 'default',
       operation: 'add',
       value: constantModifierValue(rule.dice),
-      ...(rule.gate ? { gates: [rule.gate] } : {}),
+      // The source gate is LOWERED to its U6 predicate at registration — the
+      // applicability decision is `evaluatePredicate`'s, never local.
+      ...(rule.gate ? { applicability: modifierGatePredicate(rule.gate) } : {}),
       ...(rule.talent !== undefined ? { talent: rule.talent } : {}),
     });
   } else {
@@ -184,6 +185,12 @@ function bonusDamageFoldView(state: EncounterState, actor: EncounterActor, targe
         conditions: target.conditions,
       },
     } : {}),
+    // U6 applicability: the ONE predicate authority decides whether a gated
+    // bonus-damage row applies, over the durable encounter-state context — the
+    // SAME projection every other kernel reads, so a bonus-damage gate can
+    // never drift from the command and replay state.
+    applies: modifierApplicabilityHolds,
+    applicabilityContext: modifierApplicabilityContext(state),
   };
 }
 
@@ -240,7 +247,10 @@ function bonusDamageFoldGateHolds(
   actor: EncounterActor,
   targetIds: readonly string[],
 ): boolean {
-  if (isSharedGate(gate)) return modifierGateHolds(gate, foldView);
+  // Shared-shape gates are decided by the ONE U6 applicability authority over
+  // the lowered predicate (never by a local gate switch); the elevation metric
+  // below stays a spatial specialist.
+  if (isSharedGate(gate)) return modifierApplicabilityHolds(modifierGatePredicate(gate), foldView);
   const target = targetActor(state, targetIds);
   if (!target || !actor.position || !target.position) return false;
   // The canonical p.89 elevation metric (a pit counts one lower) — the

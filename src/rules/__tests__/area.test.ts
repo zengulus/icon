@@ -4,8 +4,9 @@ import type { EncounterActor, EncounterState, Position } from '../types.js';
 import '../automation/content/registry.js';
 import { arcCells } from '../area-geometry.js';
 import { effectiveAreaFor, type AreaStateView } from '../automation/kernels/area.js';
-import type { RuleMutation } from '../automation/primitives/types.js';
-import { scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
+import { modifierApplicabilityHolds } from '../automation/kernels/evaluate-modifiers.js';
+import type { RuleActorView, RuleMutation } from '../automation/primitives/types.js';
+import { predicateContext, ruleActorView, scriptedDice, validCharacter, startEncounterTo } from './fixtures.js';
 import { turnEligibleActorIds } from '../turn-scheduler.js';
 
 /** The shove mutations inside an ability's recorded mutation stream. */
@@ -32,18 +33,39 @@ interface AreaFixture {
   second: EncounterActor | null;
 }
 
-/** A bare-bones area view for the kernel unit tests (round + actor reads). */
-const view = (overrides: { round?: number; hp?: number; maximumHp?: number; talents?: Record<string, 1 | 2>; mastered?: string[]; conditions?: string[] } = {}): AreaStateView => ({
-  round: overrides.round ?? 1,
-  actor: {
+/**
+ * A bare-bones area view for the kernel unit tests (round + actor reads). The
+ * view also carries the real U6 applicability pair (authority + durable
+ * predicate context) exactly as `areaStateView`/`areaStateFromRuleContext`
+ * project it, so a gated area modifier (round gate, mastery gate) is decided
+ * by `evaluatePredicate` against the same typed state the command path uses.
+ */
+const view = (overrides: { round?: number; hp?: number; maximumHp?: number; talents?: Record<string, 1 | 2>; mastered?: string[]; conditions?: string[] } = {}): AreaStateView => {
+  const round = overrides.round ?? 1;
+  const actor: RuleActorView = ruleActorView({
+    id: 'hero',
     hp: overrides.hp ?? 40,
-    maximumHp: overrides.maximumHp ?? 40,
+    baseMaxHp: overrides.maximumHp ?? 40,
     abilityIds: ['spellblade:sturmreiten', 'freelancer:soul-shot'],
     masteredAbilityIds: overrides.mastered ?? [],
     talents: overrides.talents ?? {},
     conditions: new Set(overrides.conditions ?? []),
-  },
-});
+  });
+  const context = predicateContext([actor], { actorId: actor.id, round });
+  return {
+    round,
+    actor: {
+      hp: actor.hp,
+      maximumHp: actor.baseMaxHp,
+      abilityIds: actor.abilityIds,
+      masteredAbilityIds: actor.masteredAbilityIds,
+      talents: actor.talents,
+      conditions: actor.conditions,
+    },
+    applies: modifierApplicabilityHolds,
+    applicabilityContext: () => context,
+  };
+};
 
 describe('Area geometry — Arc paths (ICON p.97)', () => {
   it('a legal orthogonal arc with turns returns the exact cells in order', () => {
@@ -101,14 +123,13 @@ describe('Area modifier authority (effectiveAreaFor)', () => {
   });
 
   it('Soul Shot talent 2: line 3, and only line 6 from round 4 with the talent selected', () => {
-    const base = { round: 1, actor: { hp: 40, maximumHp: 40, abilityIds: ['freelancer:soul-shot'], masteredAbilityIds: [], talents: { 'freelancer:soul-shot': 2 as const }, conditions: new Set<string>() } };
+    const talents = { 'freelancer:soul-shot': 2 as const };
     // Round 1: the round gate does not hold — stays line 3.
-    expect(effectiveAreaFor(base, 'hero', 'freelancer:soul-shot', 'line', 3)).toEqual({ shape: 'line', length: 3 });
+    expect(effectiveAreaFor(view({ round: 1, talents }), 'hero', 'freelancer:soul-shot', 'line', 3)).toEqual({ shape: 'line', length: 3 });
     // Round 4: the override applies.
-    expect(effectiveAreaFor({ ...base, round: 4 }, 'hero', 'freelancer:soul-shot', 'line', 3)).toEqual({ shape: 'line', length: 6 });
+    expect(effectiveAreaFor(view({ round: 4, talents }), 'hero', 'freelancer:soul-shot', 'line', 3)).toEqual({ shape: 'line', length: 6 });
     // Without the talent selected, even at round 4 the base stays.
-    const unselected = { round: 4, actor: { hp: 40, maximumHp: 40, abilityIds: ['freelancer:soul-shot'], masteredAbilityIds: [], talents: {}, conditions: new Set<string>() } };
-    expect(effectiveAreaFor(unselected, 'hero', 'freelancer:soul-shot', 'line', 3)).toEqual({ shape: 'line', length: 3 });
+    expect(effectiveAreaFor(view({ round: 4 }), 'hero', 'freelancer:soul-shot', 'line', 3)).toEqual({ shape: 'line', length: 3 });
   });
 
   it('Sturmreiten mastery: line 3 without the mastery, arc 5 with it', () => {

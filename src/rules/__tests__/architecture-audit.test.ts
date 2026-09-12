@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { auditArchitecture, choiceCandidateRoutingProblems, kernelAuthoringFacadeProblems, teleportFootprintOriginProblems, isBespokeU16FieldName, u1ReferenceRoutingProblems, u8EncounterRoutingProblems, parseImports, layerFor } from '../../../scripts/audit-architecture-core.js';
+import { auditArchitecture, choiceCandidateRoutingProblems, kernelAuthoringFacadeProblems, teleportFootprintOriginProblems, isBespokeU16FieldName, modifierApplicabilityAuthorityProblems, MODIFIER_APPLICABILITY_AUTHORITY, u1ReferenceRoutingProblems, u8EncounterRoutingProblems, parseImports, layerFor } from '../../../scripts/audit-architecture-core.js';
 import {
   buildU1ResidualInventory,
   categorizeSourceActorArgument,
@@ -112,6 +112,82 @@ describe('auditArchitecture (real codebase)', () => {
       'kernels/query.ts': "import {\n  occupied,\n} from '../primitives/job-kit.js';",
       'content/jobs/example.ts': "import { occupied } from '../../primitives/job-kit.js';",
     })).toEqual([expect.objectContaining({ check: 'kernel-authoring-facade-import', file: 'kernels/query.ts' })]);
+  });
+
+  it('semantic atomicity: modifier applicability has exactly ONE authority (U6)', () => {
+    // The declared boundary is present in the real codebase and the guard
+    // accepts it (the wiring check above already proves zero violations).
+    expect(MODIFIER_APPLICABILITY_AUTHORITY).toBe('kernels/evaluate-modifiers.ts');
+
+    const authority = `
+      export function modifierApplicabilityHolds(applicability, view) {
+        if (applicability === undefined) return true;
+        return evaluatePredicate(applicability, view.applicabilityContext());
+      }
+      export function modifierGatePredicate(gate) {
+        switch (gate.kind) {
+          case 'always':
+            return { kind: 'always' };
+          case 'charge':
+            return { kind: 'slow-turn', target: { kind: 'self' } };
+        }
+      }
+    `;
+    expect(modifierApplicabilityAuthorityProblems({
+      'primitives/modifiers.ts': 'export function modifierRuleHolds(rule, view) { return true; }',
+      [MODIFIER_APPLICABILITY_AUTHORITY]: authority,
+    })).toEqual([]);
+
+    // The U14 primitive deciding gate truth again is the defect.
+    const reintroduced = `
+      export function modifierGateHolds(gate, view) {
+        switch (gate.kind) {
+          case 'comeback':
+          case 'self-bloodied':
+            return view.actor.hp <= view.actor.maximumHp / 2;
+          case 'stealth':
+            return view.conditionsFor(view.actor.id).has('stealth');
+          case 'choice':
+            return view.selectedTalentSourceIds?.has(gate.sourceId) ?? false;
+        }
+      }
+    `;
+    expect(modifierApplicabilityAuthorityProblems({
+      'primitives/modifiers.ts': reintroduced,
+      [MODIFIER_APPLICABILITY_AUTHORITY]: authority,
+    })).toEqual(expect.arrayContaining([expect.objectContaining({ file: 'primitives/modifiers.ts' })]));
+
+    // A second gate switch elsewhere in the generic layers is the defect.
+    expect(modifierApplicabilityAuthorityProblems({
+      'primitives/modifiers.ts': 'export const x = 1;',
+      [MODIFIER_APPLICABILITY_AUTHORITY]: authority,
+      'kernels/rogue-fold.ts': reintroduced,
+    })).toEqual(expect.arrayContaining([expect.objectContaining({ file: 'kernels/rogue-fold.ts' })]));
+
+    // The lowering must translate, never decide.
+    expect(modifierApplicabilityAuthorityProblems({
+      'primitives/modifiers.ts': 'export const x = 1;',
+      [MODIFIER_APPLICABILITY_AUTHORITY]: `
+        export function modifierApplicabilityHolds(p, v) { return evaluatePredicate(p, v); }
+        export function modifierGatePredicate(gate) {
+          switch (gate.kind) {
+            case 'stealth':
+              return false;
+          }
+        }
+      `,
+    })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ detail: expect.stringContaining('decides gate truth instead of lowering syntax') }),
+    ]));
+
+    // The boundary dropping evaluatePredicate (a second evaluator) is caught.
+    expect(modifierApplicabilityAuthorityProblems({
+      'primitives/modifiers.ts': 'export const x = 1;',
+      [MODIFIER_APPLICABILITY_AUTHORITY]: 'export function modifierApplicabilityHolds() { return true; }',
+    })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ detail: expect.stringContaining('no longer calls evaluatePredicate') }),
+      expect.objectContaining({ detail: expect.stringContaining('modifierGatePredicate is missing') }),
+    ]));
   });
 
   it('semantic atomicity: U4 actor and position decisions remain routed through U3', () => {

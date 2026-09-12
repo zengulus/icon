@@ -560,17 +560,32 @@ composition is U12-scoped. Tests: `t4-facts-provenance.test.ts` +
 
 One recipe shape for "how an attached rule alters a typed query point":
 `primitives/modifiers.ts` (barrel re-exported) owns `ModifierRule`
-(`{ sourceId, ownerId, queryPoint, scope, operation, value, gates,
+(`{ sourceId, ownerId, queryPoint, scope, operation, value, applicability,
 talent, actionId, from, ordering }`), `registerModifierRule` (unknown
 query points reject at registration), `applicableModifierRules` /
 `foldNumberModifiers` / `foldEnumeratedModifiers` (registration order,
 `add` accumulates, last `set`/`override` wins, `from`-guarded chained
-conversions), ONE shared gate evaluator (`modifierGateHolds` over the
-shared `ModifierGate` union: always/stealth/comeback/round-at-least/
-mastery/choice/self-bloodied/target-bloodied/target-has-condition), and
-typed `PermissionQueryPoint` kinds (`cannot`/`ignore`/`immune`) with the
-enumerated negative registry `PERMISSION_NEGATIVES` (an unlisted pair
-rejects at registration — a wildcard bypass is unrepresentable). The range
+conversions), and typed `PermissionQueryPoint` kinds
+(`cannot`/`ignore`/`immune`) with the enumerated negative registry
+`PERMISSION_NEGATIVES` (an unlisted pair rejects at registration — a
+wildcard bypass is unrepresentable). **APPLICABILITY has exactly ONE
+semantic authority: U6.** `ModifierRule.applicability` (and
+`PermissionRule.applicability`) is a U6 `RulePredicate`; the authoring
+shorthand `ModifierGate` is lowered LOSSLESSLY by
+`kernels/evaluate-modifiers.ts` `modifierGatePredicate(s)` — a pure
+translation that never decides truth — and the boolean comes from
+`evaluatePredicate` (`modifierApplicabilityHolds`) over the durable
+predicate context the fold adapter projects (`view.applies` +
+`view.applicabilityContext`; missing authority/context or a predicate
+outside the closed lowered vocabulary THROWS rather than guessing). The
+lowered vocabulary adds four source-general U6 predicates: `relation` (U2
+hostile/ally, composed with the target gates), `slow-turn` (the durable
+p.95 flag — `trigger('charge')` is explicitly NOT equivalent),
+`has-mastery` (the shared `hasMastery` authority), and `declared-choice`
+(the durable command input); `has-condition` gained an optional
+`conditionId` ("suffering from a status" = any condition). Selector-based
+U6 state predicates are NON-VACUOUS: an empty selection is FALSE, so an
+absent/unresolvable reference can never satisfy a clause. The range
 (`listed-range` per declared scope), area (`area-size` + `area-shape`),
 mastery (`interrupt-rank`/`damage-type` + the `range-bound` permission,
 with equipped+mastered baked into every row), and bonus-damage
@@ -588,19 +603,38 @@ fold view onto the representable U5 subset (constant, round, pure scalar
 compositions) — a context-dependent expression REJECTS at resolution
 (unrepresentable, never a guessed value); enumerated replacements stay
 typed separately.
-The 2026-09-05 cleanup also routes scaled and trait bonus-damage applicability
-through `modifierGateHolds`, removing their duplicate bloodied/status switch.
-`bonus-damage-gates.test.ts` characterizes parity at HP boundaries, with wounds,
-allied/absent targets, and status filters. Elevation remains a spatial metric
-specialist; the broader U14 gate vocabulary migration to U6 remains open.
-Retained specialists with written boundaries:
+The 2026-09-05 cleanup routed scaled and trait bonus-damage applicability
+through the shared gate evaluator; the 2026-09-12 consolidation REPLACED that
+evaluator with the U6 authority: the parallel `ModifierGate` switch is deleted,
+every fold (range, area, mastery, usage-cap, bonus-damage, permissions) selects
+through the shared `modifierRuleHolds` and the injected U6 evaluator, and the
+content resolvers that hand-rolled area fold views
+(`areaStateFromRuleContext`) now carry the real applicability pair. The
+architecture audit guard `modifierApplicabilityAuthorityProblems` rejects a
+reintroduced gate switch (in the primitive or anywhere else in the generic
+layers), a boundary that stops calling `evaluatePredicate`, and a lowering that
+starts deciding truth. `bonus-damage-gates.test.ts` characterizes parity at HP
+boundaries, with wounds, allied/absent targets, and status filters;
+`u14-u6-applicability.test.ts` is the adversarial matrix (non-vacuity, base-max
+bloodied with wounds, self vs target, target status pos/neg, round boundary,
+slow-turn vs ambient Charge, equipped+mastered, recorded declared choice,
+unrelated actors, fail-closed context/vocabulary, composition, replay) plus the
+production-consumer proofs; `t3-modifiers.test.ts` pins the lossless lowering.
+Retained specialists with written boundaries — none of which is a competing
+APPLICABILITY authority (each is value/state machinery with no gate vocabulary):
 cost-modifier function rows (cost-list rewriting), the attack-modifiers
-armed one-shot fold, scaled/recipient bonus-damage function rows, aura /
-save-window boon-curse consumption sites, and the damage-exception
+armed one-shot fold, scaled bonus-damage function rows (a deterministic count
+read, whose shared-shaped rows DO route applicability through U6), the
+recipient-scoped bonus-damage `gate(view)` function (per-recipient state read,
+never a rule-level gate union), the elevation-above-target metric (the
+canonical p.89 spatial read, deliberately outside the lowered vocabulary),
+aura / save-window boon-curse consumption sites, and the damage-exception
 mutation fields (`bypassVigor`/`ignoreArmor`/`ignoreDefiance`/
 `ignoreAetherwall`/`ignoreCover`/`ignoreDodge` stay distinct
 program-emitted fields; the permission registry is where content-registered
-permission rows fold). Tests: `t3-modifiers.test.ts`. Sequencing owner:
+permission rows fold). U14 stays PARTIAL for those retained specialists — not
+for a duplicated applicability evaluator. Tests: `t3-modifiers.test.ts` +
+`u14-u6-applicability.test.ts`. Sequencing owner:
 [`generic-underlays.md`](generic-underlays.md).
 
 ### Transaction / Atomic Commit (U15 underlay) — PARTIAL (T3 landed `transaction.ts`; repair re-audit 2026-08-31 conservatively demoted: every flow deciding "which proposed state changes validate together before commit" — cost/payment, spatial batches/swaps, exact-count creation, grouped movement/flow — must be proven to route through the single grouping/snapshot/atomicity authority before AUTHORITATIVE)

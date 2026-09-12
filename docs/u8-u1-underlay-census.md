@@ -21,7 +21,7 @@ owns acceptance and the source-promotion gate. Historical audits live in Git.
 | U11 Flow / Sequence | PARTIAL | hand-sequenced named resolver bodies |
 | U12 Continuation / Suspension | PARTIAL | remaining resolver-delayed/save-window consumers |
 | U13 Window / Decision Point | AUTHORITATIVE | none |
-| U14 Modifier / Policy | PARTIAL | untyped `RuleModifier` stat-bag consumers |
+| U14 Modifier / Policy | PARTIAL | untyped `RuleModifier` stat-bag consumers + retained value/state specialists (cost-list rewriting, armed attack fold, scaled/recipient bonus-damage functions, elevation metric, boon-curse sites, damage-exception flags). Applicability itself is single-authority: U6 `evaluatePredicate` (gate switch deleted, guarded) |
 | U15 Transaction / Atomic Commit | PARTIAL | exhaustive atomic-group routing proof remains incomplete |
 | U16 Usage / Entitlement | COMPLETE/AUTHORITATIVE | none after Monogatari lifecycle integration |
 | U17 Ordering / Arbitration | COMPLETE/AUTHORITATIVE | none |

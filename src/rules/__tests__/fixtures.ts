@@ -7,6 +7,7 @@ import type { EncounterCommand, EncounterState, IconCharacter } from '../types.j
 
 import type { EncounterActor } from '../types.js';
 import { dangerousOncePerTurnKey, interruptUseKey, noRepeatKey, oneInterruptPerTurnWindowKey, slashedOncePerTurnKey, standardMoveOncePerTurnKey, usageCount } from '../automation/kernels/use-ledger.js';
+import type { RuleActorView, RuleExecutionContext, RuleRuntimeState } from '../automation/primitives/types.js';
 
 /** T6.4 ledger read helpers — tests assert the typed U16 authority instead of
  * the migrated-away raw usage/entitlement fields. */
@@ -34,6 +35,77 @@ export function usedAbilityThisTurn(actor: Pick<EncounterActor, 'ruleState'>, so
  * `ledger:turn:core:standard-move` key that replaced the raw boolean. */
 export function standardMoveUsedThisTurn(actor: Pick<EncounterActor, 'ruleState' | 'id'>, ownerId?: string): boolean {
   return usageCount(actor, standardMoveOncePerTurnKey(ownerId ?? actor.id)) >= 1;
+}
+
+// ── U6 predicate-context fixtures ────────────────────────────────────────────
+// A minimal but REAL `RuleRuntimeState` / `RuleExecutionContext` for unit
+// tests of the U6 predicate authority and the modifier applicability seam.
+// Tests supply exactly the context the production adapters project from
+// encounter state, so the SAME typed predicate read surface decides in both
+// places — never a second, narrower view.
+
+export function ruleActorView(overrides: Partial<RuleActorView> = {}): RuleActorView {
+  return {
+    id: 'actor',
+    side: 'heroes',
+    position: { x: 1, y: 1 },
+    hp: 20,
+    maxHp: 20,
+    baseMaxHp: 20,
+    vitality: 5,
+    vigor: 0,
+    defense: 10,
+    armor: 0,
+    speed: 4,
+    dash: 2,
+    fray: 1,
+    damageDie: 6,
+    actions: 2,
+    attacked: false,
+    traitIds: [],
+    abilityIds: [],
+    talents: {},
+    masteredAbilityIds: [],
+    size: 1,
+    defeated: false,
+    stance: null,
+    conditions: new Set<string>(),
+    statuses: [],
+    statusSavePolicy: { cureDenied: false, statusSaveDenied: false, saveBoon: 0, saveCurse: 0 },
+    resources: {},
+    state: {},
+    marks: [],
+    ...overrides,
+  };
+}
+
+export function ruleRuntimeState(actors: readonly RuleActorView[], round = 1): RuleRuntimeState {
+  return {
+    round,
+    grid: { width: 12, height: 12 },
+    actors: Object.fromEntries(actors.map((actor) => [actor.id, actor])),
+    entities: {},
+    terrainAt: () => new Set<string>(),
+    elevationAt: () => 0,
+    terrainEffects: [],
+  };
+}
+
+/** A U6 evaluation context over `actors` for the acting actor `actorId`. */
+export function predicateContext(
+  actors: readonly RuleActorView[],
+  options: { actorId: string; round?: number; attackTargetId?: string; talentChoices?: readonly string[]; sourceId?: string },
+): RuleExecutionContext {
+  return {
+    state: ruleRuntimeState(actors, options.round ?? 1),
+    actorId: options.actorId,
+    sourceId: options.sourceId ?? 'fixture:predicate',
+    actionId: 'default',
+    timing: 'use',
+    input: options.talentChoices ? { talentChoices: [...options.talentChoices] } : {},
+    dice: scriptedDice(),
+    ...(options.attackTargetId === undefined ? {} : { attackTargetId: options.attackTargetId }),
+  };
 }
 
 export function validCharacter(name = 'Aster'): IconCharacter {

@@ -1,6 +1,6 @@
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
 import { baseMaximumHp } from '../../../kernels/evaluate-value.js';
-import { effectiveAreaFor } from '../../../kernels/area.js';
+import { areaStateFromRuleContext, effectiveAreaFor } from '../../../kernels/area.js';
 import type { RuleSourceUnit } from '../../../../source-units.js';
 import type { Position } from '../../../../types.js';
 import type { RuleExecutionContext, RuleMutation, RuleProgramCompilation, RuleResolver, RuleResolverRegistry } from '../../../primitives/types.js';
@@ -317,7 +317,7 @@ const sturmreitenEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   if (!source.position) return [];
   const { shape, length } = effectiveAreaFor(
-    { round: context.state.round, actor: { ...source, maximumHp: source.baseMaxHp } },
+    areaStateFromRuleContext(context, source.id),
     source.id,
     'spellblade:sturmreiten',
     'line',
