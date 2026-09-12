@@ -58,6 +58,31 @@ export interface CapturedListChoice {
   repetition?: 'reject' | 'collapse';
 }
 
+/** A recorded allocation of UNITS over a U3-supplied candidate domain: each
+ * recorded entry names one candidate and denotes ONE unit taken from it, so a
+ * repeated entry is a second unit rather than a duplicate of the same one.
+ * This is the seam for source language like Symphony's p.178 "Remove up to
+ * four blessings from characters anywhere" — the player chooses BOTH which
+ * characters supply units and how many units each supplies, and each unit
+ * independently drives one consequence (one created mote). It is not a
+ * generic points-budget abstraction: it derives nothing about the consequence
+ * and never chooses a supplier or an amount. */
+export interface CapturedUnitAllocation {
+  key: string;
+  label: string;
+  required: boolean;
+  minimum?: number;
+  maximum?: number;
+}
+
+/** One candidate that can supply units, with the number it can currently
+ * supply. The capacity is domain data supplied by the caller (a resource
+ * count, an available pool) — U4 validates against it, it never reads it. */
+export interface UnitCandidate {
+  id: string;
+  units: number;
+}
+
 function choiceViolation(code: string, choice: RuleChoice, detail: string): RuleProgramViolation {
   return new RuleProgramViolation(code, `${choice.label}: ${detail}`);
 }
@@ -131,6 +156,48 @@ export function resolveCapturedOptionListChoice(
     }
   }
   return values;
+}
+
+/** Resolve a recorded UNIT ALLOCATION against a U3-produced candidate domain.
+ * One list entry denotes one unit, so `["a", "a", "b"]` means two units from
+ * `a` and one from `b` — repeats are distinct units, not a duplicate. U4 owns
+ * presence, the total-unit bounds, supplier membership, and per-supplier
+ * capacity; it never generates, ranks, or top-up-fills suppliers and never
+ * decides how many units to take ("up to" stays the player's call — an
+ * absent allocation is the explicit zero-unit decision). Returns the
+ * per-supplier unit counts in first-appearance order. */
+export function resolveCapturedUnitAllocation(
+  choice: CapturedUnitAllocation,
+  candidates: readonly UnitCandidate[],
+  context: RuleExecutionContext,
+): UnitCandidate[] {
+  const supplied = context.input.actorIds?.[choice.key];
+  if (supplied !== undefined && !Array.isArray(supplied)) {
+    throw capturedListViolation('choice.units-invalid', choice, 'the recorded allocation is malformed.');
+  }
+  for (const id of supplied ?? []) {
+    if (typeof id !== 'string' || id.length === 0) throw capturedListViolation('choice.units-invalid', choice, 'the recorded allocation is malformed.');
+  }
+  const units = supplied ?? [];
+  if (units.length === 0) {
+    if (!choice.required) return [];
+    throw capturedListViolation('choice.units-required', choice, 'requires a recorded allocation.');
+  }
+  const minimum = choice.minimum ?? (choice.required ? 1 : 0);
+  const maximum = choice.maximum ?? Number.POSITIVE_INFINITY;
+  if (units.length < minimum || units.length > maximum) {
+    throw capturedListViolation('choice.units-count', choice, `requires ${minimum}–${maximum === Number.POSITIVE_INFINITY ? 'any' : maximum} unit(s) (got ${units.length}).`);
+  }
+  const capacity = new Map(candidates.map(({ id, units: available }) => [id, available] as const));
+  const taken = new Map<string, number>();
+  for (const id of units) {
+    const available = capacity.get(id);
+    if (available === undefined) throw capturedListViolation('choice.unit-ineligible', choice, `"${id}" cannot supply a unit.`);
+    const next = (taken.get(id) ?? 0) + 1;
+    if (next > available) throw capturedListViolation('choice.unit-capacity', choice, `"${id}" can supply at most ${available} unit(s).`);
+    taken.set(id, next);
+  }
+  return [...taken].map(([id, count]) => ({ id, units: count }));
 }
 
 /** Read one durable position decision without supplying any default. Source

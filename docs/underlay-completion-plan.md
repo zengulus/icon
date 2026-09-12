@@ -145,9 +145,13 @@ records the full typed answer without list truncation or scalar defaults.
 
 **Acceptance tests.** Preserve the existing choice cases and verify: chooser-role derivation;
 position choice legality through U3 (parity with `teleport-choice` where
-expressible); `abilityUseChoices`/`talentChoices` fold-through cases;
-window-carried `ChoiceSpec` resolution; optional-decline never defaults
-(already covered, extended to window timing).
+expressible); the recorded unit allocation's total bounds, supplier membership,
+per-supplier capacity, repeated-entry-as-distinct-unit, malformed input, and
+optional zero-unit absence (`recorded-allocation.test.ts`), with Symphony as the
+production consumer (an unfunded supplier keeps its units, the mote count is the
+recorded total, replay uses zero fresh choices); `abilityUseChoices`/`talentChoices`
+fold-through cases; window-carried `ChoiceSpec` resolution; optional-decline never
+defaults (already covered, extended to window timing).
 
 ### U5 Value / Expression
 

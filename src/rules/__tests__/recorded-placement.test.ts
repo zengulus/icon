@@ -167,17 +167,20 @@ describe('recorded terrain subsets and regions', () => {
     expect(code(() => f.use('enochian:blackstar', { positions: { 'blackstar-terrain': [{ x: 8, y: 6 }] } }, [f.foe.id], [12, 4, 4, 4]))).toBe('choice.position-unavailable');
     expect(applyEvents(f.state, result.events)).toEqual(result.state);
   });
-  it('Symphony requires separated recorded motes and creates only the number funded by blessings', () => {
+  it('Symphony requires separated recorded motes and creates only the number funded by recorded blessings', () => {
     const f = fixture(); f.state.actors[f.hero.id].resources.blessing = 2;
-    expect(code(() => f.use('chanter:symphony'))).toBe('choice.position-required');
-    expect(code(() => f.use('chanter:symphony', { positions: { 'mote-positions': [{ x: 1, y: 1 }, { x: 2, y: 1 }] } }))).toBe('choice.position-separation');
+    const funded = { actorIds: { 'symphony-blessings': [f.hero.id, f.hero.id] } };
+    // The mote count is DERIVED from the recorded allocation, so two funded
+    // motes still require two recorded positions.
+    expect(code(() => f.use('chanter:symphony', funded))).toBe('choice.position-required');
+    expect(code(() => f.use('chanter:symphony', { ...funded, positions: { 'mote-positions': [{ x: 1, y: 1 }, { x: 2, y: 1 }] } }))).toBe('choice.position-separation');
     const cells = [{ x: 1, y: 1 }, { x: 8, y: 8 }];
-    const result = f.use('chanter:symphony', { positions: { 'mote-positions': cells } });
+    const result = f.use('chanter:symphony', { ...funded, positions: { 'mote-positions': cells } });
     expect(result.state.terrainEffects.filter((e) => e.terrain === 'symphony-mote').flatMap((e) => e.positions)).toEqual(cells);
     expect(result.state.actors[f.hero.id].resources.blessing).toBe(0);
     expect(applyEvents(f.state, result.events)).toEqual(result.state);
     f.state.terrainEffects = result.state.terrainEffects;
-    expect(code(() => f.use('chanter:symphony', { positions: { 'mote-positions': [{ x: 2, y: 1 }, { x: 9, y: 9 }] } }))).toBe('choice.position-unavailable');
+    expect(code(() => f.use('chanter:symphony', { ...funded, positions: { 'mote-positions': [{ x: 2, y: 1 }, { x: 9, y: 9 }] } }))).toBe('choice.position-unavailable');
   });
 });
 

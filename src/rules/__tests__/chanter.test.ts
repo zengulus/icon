@@ -301,7 +301,7 @@ describe('Chanter ability automation (p.174–181)', () => {
   it('Symphony: consumes four blessings to create non-adjacent pulsing motes', () => {
     const { state, hero } = chanterEncounter({ second: null });
     state.actors[hero.id].resources.blessing = 4;
-    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { positions: { 'mote-positions': [{ x: 3, y: 3 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [] }, scriptedDice());
+    const result = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { actorIds: { 'symphony-blessings': [hero.id, hero.id, hero.id, hero.id] }, positions: { 'mote-positions': [{ x: 3, y: 3 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [] }, scriptedDice());
     expect(result.state.actors[hero.id].resources.blessing).toBe(0);
     expect(motesOf(result.state)).toHaveLength(4);
     const cells = motesOf(result.state).flatMap((effect) => effect.positions);
@@ -317,7 +317,7 @@ describe('Chanter ability automation (p.174–181)', () => {
   it('Symphony: a foe that starts a turn on a mote detonates it', () => {
     const { state, hero, foe } = chanterEncounter({ foe: { x: 2, y: 1 }, second: null });
     state.actors[hero.id].resources.blessing = 4;
-    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { positions: { 'mote-positions': [{ x: 2, y: 0 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [] }, scriptedDice()).state;
+    const placed = executeCommand(state, { type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { actorIds: { 'symphony-blessings': [hero.id, hero.id, hero.id, hero.id] }, positions: { 'mote-positions': [{ x: 2, y: 0 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [] }, scriptedDice()).state;
     placed.actors[foe.id].position = { x: 2, y: 0 }; // a mote cell
     const resolved = endTurnTo(placed, foe.id, scriptedDice());
     expect(resolved.actors[foe.id].hp).toBe(28); // 32 - fray 4 (the foe is in its own blast)
@@ -492,7 +492,7 @@ describe('Chanter ability automation (p.174–181)', () => {
       });
       base.actors[hero.id].resources.blessing = 4;
       const placed = executeCommand(base, {
-        type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { positions: { 'mote-positions': [{ x: 3, y: 3 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [],
+        type: 'USE_ABILITY', actorId: hero.id, abilityId: 'chanter:symphony', input: { actorIds: { 'symphony-blessings': [hero.id, hero.id, hero.id, hero.id] }, positions: { 'mote-positions': [{ x: 3, y: 3 }, { x: 5, y: 3 }, { x: 7, y: 3 }, { x: 9, y: 3 }] } }, targetIds: [],
       }, scriptedDice()).state;
       const motes = motesOf(placed);
       expect(motes.length).toBeGreaterThanOrEqual(1);

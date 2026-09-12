@@ -38,6 +38,8 @@ resolves nothing — the dispatcher never interprets the value. Spite's existing
 closest-foe continuation consumes the actor-list answer instead of the old first-ID
 scalar. Their movement, damage, timing, and candidate semantics are unchanged.
 
+The seam also owns UNIT ALLOCATIONS, the one composite the plain actor/option/position lists could not express: `resolveCapturedUnitAllocation` reads a recorded list where each entry is ONE unit rather than an identity, so a repeated entry means a second unit from the same supplier (`["a","a","b"]` = two units from `a`, one from `b`). The caller declares the U3 supplier domain and each supplier's capacity; U4 owns presence, the total-unit bounds, supplier membership, and per-supplier capacity, and never picks a supplier or tops the remainder up. Symphony (ICON 1.5 p.178, "Remove up to four blessings from characters anywhere") is the production consumer: the recorded allocation is the spend, and the mote count is its total (plus two on Charge) — an absent allocation is the explicit zero-unit decision, not an automatic spend.
+
 Compatibility: existing command/protocol input buckets are unchanged.
 `ChosenValue` is an alias of the complete
 answer type, with no separate semantics. Newly emitted decision events use the
@@ -54,10 +56,11 @@ boolean false reaches the resolver; optional absence skips it), ambient-input
 clearing, JSON round trips, exact replay, and duplicate-answer rejection. Existing
 Great Giorgios, Spite, flow, and ordering regressions retain production coverage.
 
-Census reconciliation: the generic window-carried answer gap is closed. The
-canonical Class/Job blocker census was regenerated with no artifact or executable
-membership delta. Dervish actor selection/initial flight, Symphony blessing
-payer/quantity, remaining summon/continuation composition, and authoring folds
+Census reconciliation: the generic window-carried answer gap and Symphony's
+blessing payer/quantity gap are closed. The canonical Class/Job blocker census
+was regenerated with no artifact or executable membership delta. Dervish actor
+selection/initial flight, ordinary summon placement, Underway portal 2, Demon
+Claw Talent I/II, the `rushTowardFoes` direction fallbacks, and authoring folds
 remain unresolved; this change does not promote source units or close phase gates.
 
 Verification: architecture and automation audits, strict source fidelity, canonical

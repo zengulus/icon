@@ -1,4 +1,4 @@
-import { resolveCapturedPositionListChoice } from '../../../kernels/choice.js';
+import { resolveCapturedPositionListChoice, resolveCapturedUnitAllocation } from '../../../kernels/choice.js';
 import { contextAfterMutations } from '../../../kernels/execute-flow.js';
 import { positionSetSeparated } from '../../../kernels/evaluate-query.js';
 import { RuleProgramViolation } from '../../../kernels/runtime.js';
@@ -56,8 +56,9 @@ import { resolveCapturedSelectedActors, resolveAttackTarget, resolveSourceActor 
  *   choose\" are documented — the Charge gamble takes the higher of two rolls.
  * - Symphony's motes detonate on voluntary-MOVE/DASH entry via the movement-
  *   entry trigger fold and on turn-start via the lifecycle hook; forced-
- *   movement entry is an incomplete semantic boundary. The mote creation
- *   consumes up to four blessings deterministically.
+ *   movement entry is an incomplete semantic boundary. The mote count is the
+ *   RECORDED blessing allocation (player-chosen holders and amounts, up to
+ *   four) plus two on Charge — never an engine-picked payer.
  */
 
 /** Resolver-driven autohit attack: the standard attack mutation with no roll. */
@@ -363,17 +364,24 @@ const symphonyEffects: RuleResolver = (context) => {
   const source = resolveSourceActor(context);
   if (!source.position) return [];
   const mutations: RuleMutation[] = [];
-  let remaining = 4;
+  // p.178 "Remove up to four blessings from characters anywhere" — the player
+  // chooses WHICH characters lose blessings and HOW MANY each loses; the
+  // source's "up to" makes the total the player's call (zero legal), and each
+  // removed blessing independently creates one mote. The recorded allocation
+  // (one entry per blessing) replaces the former greedy sort-by-count spend:
+  // the engine never picks a payer, never tops up the remainder, and never
+  // treats a smaller spend as "however many were available". Allocation
+  // capacity is each character's current blessing count; the p.92 CHARACTER
+  // umbrella has no side filter (blessings can sit on any character).
   const holders = Object.values(context.state.actors)
     .filter((character) => (character.resources.blessing ?? 0) > 0)
-    .sort((a, b) => (b.resources.blessing ?? 0) - (a.resources.blessing ?? 0) || a.id.localeCompare(b.id));
-  for (const holder of holders) {
-    if (remaining <= 0) break;
-    const take = Math.min(remaining, holder.resources.blessing ?? 0);
-    mutations.push(resourceMutation(context, holder.id, 'blessing', 'spend', take));
-    remaining -= take;
-  }
-  const count = (4 - remaining) + (context.triggers?.has('charge') ? 2 : 0);
+    .map((character) => ({ id: character.id, units: character.resources.blessing ?? 0 }));
+  const allocation = resolveCapturedUnitAllocation(
+    { key: 'symphony-blessings', label: 'Symphony blessings removed', required: false, maximum: 4 },
+    holders, context);
+  for (const holder of allocation) mutations.push(resourceMutation(context, holder.id, 'blessing', 'spend', holder.units));
+  const removed = allocation.reduce((total, holder) => total + holder.units, 0);
+  const count = removed + (context.triggers?.has('charge') ? 2 : 0);
   const existingMotes = context.state.terrainEffects.filter((effect) => effect.terrain === 'symphony-mote').flatMap((effect) => [...effect.positions]);
   const placed = resolveCapturedPositionListChoice({ key: 'mote-positions', label: 'Symphony motes',
     required: count > 0, minimum: count, maximum: count,

@@ -22,28 +22,38 @@ source units until the [underlay gate](docs/underlay-completion-plan.md#4-phase-
 passes. The census remains a verification input; its greedy ranking does not
 supersede the underlay dependency order.
 
-1. **Fresh U4 residual audit.** After [recorded use-time placement](docs/tranche-33-placement.md),
-   inspect current actor/resource decisions, remaining automatic summons, and
-   remaining source continuation choices. The generic [recorded-answer seam](docs/recorded-choice-seam.md)
-   is complete; it is no longer a missing U4 capability. Read exact source passages, trace their active callers,
-   and distinguish missing choice ownership from missing candidate legality.
-   Reconcile the U4 consumer-census entry before choosing an implementation.
-2. **Implement the smallest reusable choice capability the audit identifies.**
-   Known boundaries include Dervish's actor selection/initial flight,
-   Symphony's blessing holders/spend amounts, ordinary summons outside the
-   recorded-placement migration, and Underway portal 2/continuation decisions.
-   Preserve optional decisions and durable replay; migrate existing consumers
-   through shared U1/U3/U4 and U12/U13 authorities as appropriate.
-3. **Finish the remaining underlay contracts in dependency order.** Use the
+1. **Record the remaining U4 residuals as bounded consumer migrations.** The
+   fresh audit and the smallest missing reusable capability have landed: the
+   [recorded-answer seam](docs/recorded-choice-seam.md) gained
+   `resolveCapturedUnitAllocation` (one recorded entry per UNIT over a U3
+   supplier domain with per-supplier capacity), and Symphony's p.178 blessing
+   removal now records its holders and amounts instead of greedily sorting
+   holders and topping up the remainder. Its mote count is that recorded total.
+   The remaining residuals share no further missing primitive; each is a
+   consumer migration onto existing U1/U3/U4 or U12/U13 authorities:
+   - Dervish's initial `fly 1` (a player-chosen destination the resolver still
+     defaults through `rushTowardFoes`) and its required ally-selection
+     cardinality;
+   - ordinary summons' own placement outside the tranche-33 recorded table;
+   - Underway portal 2 — a deferred end-of-turn placement that first needs
+     U12/U13 continuation timing;
+   - Demon Claw Talent I (per-rush "instead of any rush … gain 2 vigor") and
+     Talent II (census-classified `new-shove-effect`, not U4);
+   - the `rushTowardFoes` direction fallbacks (they fail closed on ambiguous
+     ties but still default when no direction is recorded);
+   - `abilityUseChoices`/`talentChoices` — parallel fold authorities; document
+     the boundary or fold through U4 only where a concrete defect is proven.
+   Keep U4 PARTIAL; do not promote it.
+2. **Finish the remaining underlay contracts in dependency order.** Use the
    [DAG](docs/underlay-completion-plan.md#3-dependency-dag-and-implementation-order)
    and fresh consumer evidence. Retained U14 modifier applicability vocabulary
    still needs consolidation with U6; the numeric/scaled/trait bonus-damage
    gate evaluator has already been shared. Do not infer whole-underlay closure
    from one migrated consumer or green tests.
-4. **Evaluate the underlay phase gate against current evidence.** Run the
+3. **Evaluate the underlay phase gate against current evidence.** Run the
    required checks, reconcile every remaining duplicate and specialist
    boundary, and regenerate the owning audit reports.
-5. **After the gate, resume product work.** Recompute the blocker graph before
+4. **After the gate, resume product work.** Recompute the blocker graph before
    selecting exact content rows. Prioritize one player-complexity encounter
    slice, Relic runtime, triggered Vigilance, a phased Legend, and the Mob
    member model. Each promotion needs full source-clause coverage and replay

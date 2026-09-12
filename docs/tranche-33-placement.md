@@ -39,7 +39,7 @@ Position keys below live in the existing `input.positions` bucket.
 | Mist Strider | pp.169–170 | `area-center`, plus `charge-cloud` when charged: one free center each within range 3 of the source; each uses the five-cell small-blast template |
 | Underway portal 1 | pp.170–171 | `portal-position`: one free adjacent cell, after replacing the user's previous portals; ordinary creator LoS applies |
 | Dervish passengers | p.178 | `dervish-landing:<actorId>` for each selected passenger: one legal adjacent landing after the source's actual flight and earlier landings |
-| Symphony | p.178 | `mote-positions`: distinct nonadjacent free cells anywhere; count equals consumed blessings plus two on Charge |
+| Symphony | p.178 | `mote-positions`: distinct nonadjacent free cells anywhere; count equals the RECORDED blessing allocation (`symphony-blessings`, one entry per removed blessing) plus two on Charge |
 | Strongarm talent I | p.143 | `strongarm-adjacency`: one legal adjacent cell before the spin when Comeback applies; `input.options.direction` explicitly selects `clockwise` or `counter-clockwise` for the spin |
 | Geyser | p.234 | `geyser-position`: one legal object cell within footprint range 4 and creator LoS |
 | Waterspout | pp.92/235 | `waterspout-position`: existing difficult terrain in adjacency (no listed range means adjacency), with ordinary creation legality |
@@ -60,9 +60,9 @@ ruling about every zero-capacity ability.
 
 - U4 remains partial. Dervish still has the prior actor multi-select and
   initial-flight decision gaps; this slice changes passenger landings only.
-- Symphony still automatically chooses blessing holders/spend amounts. Its
-  payer/quantity decision requires a separate resource-choice migration;
-  the placement count now reflects the amount actually consumed.
+- Symphony's blessing holders/spend amounts are now a recorded allocation
+  (`resolveCapturedUnitAllocation`); this bullet's residual was closed after
+  the tranche-33 placement migration, so only placement is recertified here.
 - Underway portal 2, held/window choices, and other U12/U13 continuations
   retain their separate tranche. Automatic ordinary summons outside the
   exact table above (including Tarot's wild card) remain in the residual set.
